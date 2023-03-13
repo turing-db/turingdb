@@ -11,18 +11,18 @@ namespace db {
 
 class ValueType;
 class Network;
-class Link;
-class ObjectType;
-class LinkType;
+class Edge;
+class NodeType;
+class EdgeType;
 
 class DB {
 public:
     friend Network;
-    friend Link;
-    friend ObjectType;
-    friend LinkType;
+    friend Edge;
+    friend NodeType;
+    friend EdgeType;
     using Networks = std::vector<Network*>;
-    using Links = std::vector<Link*>;
+    using Edges = std::vector<Edge*>;
 
     ~DB();
 
@@ -30,7 +30,7 @@ public:
 
     StringRef getString(const std::string& str);
 
-    // Types
+    // Value types
     ValueType* getInt() const { return _int; }
     ValueType* getUnsigned() const { return _unsigned; }
     ValueType* getBool() const { return _bool; }
@@ -38,14 +38,14 @@ public:
     ValueType* getString() const { return _string; }
 
 private:
-    using ObjectTypes = std::vector<ObjectType*>;
-    using LinkTypes = std::vector<LinkType*>;
+    using NodeTypes = std::vector<NodeType*>;
+    using EdgeTypes = std::vector<EdgeType*>;
 
     StringIndex _strIndex;
     Networks _networks;
-    Links _links;
-    ObjectTypes _objTypes;
-    LinkTypes _linkTypes;
+    Edges _edges;
+    NodeTypes _nodeTypes;
+    EdgeTypes _edgeTypes;
 
     ValueType* _int {nullptr};
     ValueType* _unsigned {nullptr};
@@ -55,9 +55,9 @@ private:
 
     DB();
     void addNetwork(Network* net);
-    void addLink(Link* link);
-    void addObjectType(ObjectType* obj);
-    void addLinkType(LinkType* link);
+    void addEdge(Edge* edge);
+    void addNodeType(NodeType* nodeType);
+    void addEdgeType(EdgeType* edgeType);
 };
 
 }

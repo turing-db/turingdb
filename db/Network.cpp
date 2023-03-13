@@ -3,7 +3,7 @@
 #include "Network.h"
 
 #include "DB.h"
-#include "Object.h"
+#include "Node.h"
 
 using namespace db;
 
@@ -17,8 +17,8 @@ Network::~Network() {
         delete net;
     }
 
-    for (Object* obj : _objects) {
-        delete obj;
+    for (Node* node : _nodes) {
+        delete node;
     }
 }
 
@@ -43,18 +43,6 @@ void Network::addSubNet(Network* subNet) {
     _subNets.push_back(subNet);
 }
 
-void Network::addObject(Object* obj) {
-    _objects.push_back(obj);
-}
-
-void Network::addInternalLink(Link* link) {
-    _internalLinks.push_back(link);
-}
-
-void Network::addInLink(Link* link) {
-    _inLinks.push_back(link);
-}
-
-void Network::addOutLink(Link* link) {
-    _outLinks.push_back(link);
+void Network::addNode(Node* node) {
+    _nodes.push_back(node);
 }

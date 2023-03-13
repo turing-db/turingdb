@@ -4,9 +4,9 @@
 
 #include "Network.h"
 #include "ValueType.h"
-#include "Link.h"
-#include "ObjectType.h"
-#include "LinkType.h"
+#include "Edge.h"
+#include "NodeType.h"
+#include "EdgeType.h"
 
 using namespace db;
 
@@ -25,22 +25,6 @@ DB::~DB() {
     delete _bool;
     delete _decimal;
     delete _string;
-
-    for (Network* net : _networks) {
-        delete net;
-    }
-
-    for (Link* link : _links) {
-        delete link;
-    }
-
-    for (ObjectType* objType : _objTypes) {
-        delete objType;
-    }
-
-    for (LinkType* linkType : _linkTypes) {
-        delete linkType;
-    }
 }
 
 DB* DB::create() {
@@ -56,14 +40,14 @@ void DB::addNetwork(Network* net) {
     _networks.push_back(net);
 }
 
-void DB::addLink(Link* link) {
-    _links.push_back(link);
+void DB::addEdge(Edge* link) {
+    _edges.push_back(link);
 }
 
-void DB::addObjectType(ObjectType* obj) {
-    _objTypes.push_back(obj);
+void DB::addNodeType(NodeType* nodeType) {
+    _nodeTypes.push_back(nodeType);
 }
 
-void DB::addLinkType(LinkType* link) {
-    _linkTypes.push_back(link);
+void DB::addEdgeType(EdgeType* edgeType) {
+    _edgeTypes.push_back(edgeType);
 }
