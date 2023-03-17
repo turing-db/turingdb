@@ -7,13 +7,13 @@
 class Name : public Log::Message {                  \
 public:                                             \
     Name()                                          \
-        : Message(Code, Message::Type, #MsgStr)     \
+        : Message(Code, Message::Type, MsgStr)      \
     {}                                              \
 };                                                  \
 
-#define MESSAGE_FATAL(Name, Code, MsgStr) DEFINE_MESSAGE(Name, FATAL, Code, MsgStr)
-#define MESSAGE_ERROR(Name, Code, MsgStr) DEFINE_MESSAGE(Name, ERROR, Code, MsgStr)
-#define MESSAGE_INFO(Name, Code, MsgStr) DEFINE_MESSAGE(Name, INFO, Code, MsgStr)
+#define MSG_FATAL(Name, Code, MsgStr) DEFINE_MESSAGE(Name, FATAL, Code, MsgStr)
+#define MSG_ERROR(Name, Code, MsgStr) DEFINE_MESSAGE(Name, ERROR, Code, MsgStr)
+#define MSG_INFO(Name, Code, MsgStr) DEFINE_MESSAGE(Name, INFO, Code, MsgStr)
 
 // MsgCommon 1000
 // MsgImport 2000
