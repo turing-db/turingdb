@@ -142,7 +142,7 @@ void BioLog::_printSummary() {
     out << _errorCount;
     out << ((_errorCount == 1) ? " Error, " : " Errors, ");
     out << _warningCount;
-    out << ((_warningCount == 1) ? " Warning, " : " Warnings, ");
+    out << ((_warningCount == 1) ? " Warning" : " Warnings");
     out << ".\n";
     out << "-------------------------------------------------------------------";
     print(out.str());
