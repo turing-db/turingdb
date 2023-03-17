@@ -43,7 +43,7 @@ bool Neo4JInstance::setup() {
     }
 
     if (!files::createDirectory(_neo4jDir)) {
-        BioLog::log(msg::FATAL_FAILED_TO_CREATE_DIRECTORY() << _neo4jDir);
+        BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _neo4jDir);
         return false;
     }
 
