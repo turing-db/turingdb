@@ -16,7 +16,9 @@ archive_path=$output_dir/site.tar
 base_site_dir=$(dirname $site_dir)
 relative_site_dir=$(basename $site_dir)
 
-cd $site_dir && ./clean.sh
+cd $site_dir && ./build.sh
+
+#cd $site_dir && ./clean.sh
 cd $base_site_dir && tar -cf $archive_path $relative_site_dir > /dev/null
 echo "
 #ifndef _UI_SITE_ARCHIVE_DATA_

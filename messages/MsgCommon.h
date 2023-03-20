@@ -21,7 +21,7 @@ MSG_INFO(INFO_READING_FILE, 1005,
     "Reading file '$0'")
 
 MSG_ERROR(ERROR_FAILED_TO_REMOVE_DIRECTORY, 1006,
-    "Failed to remove the directory '$0'.")
+    "Impossible to remove the directory '$0'.")
 
 MSG_ERROR(ERROR_FAILED_TO_OPEN_FOR_WRITE, 1007,
     "Failed to open file '$0' for write.")
@@ -31,6 +31,9 @@ MSG_FATAL(FATAL_NO_TCL_INTERP, 1008,
 
 MSG_ERROR(ERROR_NOT_A_DIRECTORY, 1009,
     "The file '$0' was expected to be a directory.")
+
+MSG_ERROR(ERROR_FAILED_TO_REMOVE_FILE, 1010,
+    "Impossible to remove the file '$0'.")
 
 }
 

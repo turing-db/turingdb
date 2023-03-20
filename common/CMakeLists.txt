@@ -12,4 +12,5 @@ target_include_directories(common_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(common_s PRIVATE ${BUILD_INFO_INCLUDE_DIR})
 
 target_link_libraries(common_s
+    turing_log_s
     ${Boost_LIBRARIES})

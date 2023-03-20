@@ -13,7 +13,7 @@ int main(int argc, const char** argv) {
     ToolInit toolInit(BIOCAULDRON_TOOL_NAME);
     toolInit.init();
 
-    TuringUIServer server;
+    TuringUIServer server(toolInit.getOutputsDir());
     server.start();
 
     BioLog::printSummary();

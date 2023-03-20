@@ -2,10 +2,10 @@
 # Next.js UI site
 file(GLOB_RECURSE site_files site)
 
-add_custom_target(turing_ui_site 
+add_custom_command(OUTPUT site.tar SiteArchiveData.h
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_archive.sh ${CMAKE_CURRENT_SOURCE_DIR}/site ${CMAKE_CURRENT_BINARY_DIR}
-    BYPRODUCTS site.tar SiteArchiveData.h
-    SOURCES ${site_files})
+    DEPENDS ${site_files})
+add_custom_target(turing_ui_site DEPENDS site.tar SiteArchiveData.h)
 
 # UI web server library
 set(ui_server_sources

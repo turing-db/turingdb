@@ -51,6 +51,7 @@ public:
 
     Message& operator<<(const std::string& value);
     Message& operator<<(std::string&& value);
+    Message& operator<<(long int value);
 
 protected:
     Message(MessageID msgID, Severity severity, const std::string& format);

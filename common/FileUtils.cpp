@@ -20,6 +20,12 @@ bool files::removeDirectory(const files::Path& path) {
     return !(bool)removeDirError;
 }
 
+bool files::removeFile(const files::Path& path) {
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+    return !(bool)removeError;
+}
+
 bool files::copy(const files::Path& from, const files::Path& to) {
     try {
         std::filesystem::copy(from, to);

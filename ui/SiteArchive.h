@@ -7,9 +7,10 @@ namespace ui {
 
 class SiteArchive {
 public:
-    static void decompress(const std::filesystem::path& outDir);
+    static bool decompress(const std::filesystem::path& outDir);
 
-    static void clean(const std::filesystem::path& outDir);
+    static std::string getSiteArchiveName();
+    static std::string getSiteDirectoryName();
 
 private:
     SiteArchive();
