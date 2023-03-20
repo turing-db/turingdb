@@ -38,9 +38,30 @@ bool BioLog::isOk() const {
 void BioLog::open(const std::string& logFile) {
     _outStream.open(logFile);
     if (!_outStream.is_open()) {
-        std::cerr << "Error: failed to open the log file '" << logFile << "' for write.\n";
-        abort();
+        std::cerr << "ERROR: failed to open the log file '" << logFile << "' for write.\n";
+        exit(EXIT_FAILURE);
+        return;
     }
+
+    const int stdoutRes = dup(STDOUT_FILENO);
+    if (stdoutRes < 0) {
+        std::cerr << "ERROR: failed to manipulate standard output stream.\n";
+        exit(EXIT_FAILURE);
+        return;
+    }
+
+    const int stderrRes = dup(STDERR_FILENO);
+    if (stderrRes < 0) {
+        std::cerr << "ERROR: failed to manipulate standard error stream.\n";
+        exit(EXIT_FAILURE);
+        return;
+    }
+
+    _stdoutFd = stdoutRes;
+    _stderrFd = stderrRes;
+
+    ::close(STDOUT_FILENO);
+    ::close(STDERR_FILENO);
 }
 
 void BioLog::close() {
@@ -65,14 +86,22 @@ void BioLog::log(const Message& msg) {
     _instance->emit(msg);
 }
 
-void BioLog::echo(const std::string& str) {
+void BioLog::echo(const std::string& str, bool newline) {
     bioassert(_instance);
     _instance->print(str);
+    if (newline) {
+        _instance->print("\n");
+    }
+
+    _instance->flush();
 }
 
 void BioLog::print(const std::string& str) {
-    _outStream << str << '\n';
-    std::cout << str << '\n';
+    _outStream << str;
+    const int writeRes = write(_stdoutFd, str.c_str(), str.size());
+    if (writeRes < 0) {
+        _outStream << "ERROR: BioLog failed to write string to standard output.\n";
+    }
 }
 
 void BioLog::emit(const Message& msg) {
@@ -122,10 +151,9 @@ void BioLog::emit(const Message& msg) {
         }
     }
 
-    _outStream << errorStr << '\n';
-    _outStream.flush();
-
-    std::cout << errorStr << '\n';
+    print(errorStr);
+    print("\n");
+    flush();
 
     if (_fatalCount >= 1) {
         printSummary();
@@ -160,4 +188,11 @@ void BioLog::_printSummary() {
     out << ".\n";
     out << "-------------------------------------------------------------------";
     print(out.str());
+    print("\n");
+    flush();
+}
+
+void BioLog::flush() {
+    _outStream.flush();
+    fsync(_stdoutFd);
 }
