@@ -1,6 +1,6 @@
 
 # Next.js UI site
-file(GLOB_RECURSE site_files site)
+file(GLOB_RECURSE site_files site/package.json site/package-lock.json)
 
 add_custom_command(OUTPUT site.tar SiteArchiveData.h
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_archive.sh ${CMAKE_CURRENT_SOURCE_DIR}/site ${CMAKE_CURRENT_BINARY_DIR}

@@ -27,12 +27,11 @@ void TuringUIServer::start() {
         return;
     }
 
-    const auto sitePath = _outDir/SiteArchive::getSiteDirectoryName();
-
     // Run node server
+    const auto sitePath = _outDir/SiteArchive::getSiteDirectoryName();
     std::string nodeStartCmd = "cd ";
     nodeStartCmd += sitePath.string();
-    nodeStartCmd += " && npm run start";
+    nodeStartCmd += " && npx serve -s build";
 
     BioLog::log(msg::INFO_RUN_NODE_SERVER() << 3000);
     System::runCommand(nodeStartCmd);
