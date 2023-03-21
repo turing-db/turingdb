@@ -3,7 +3,7 @@
 #include <filesystem>
 
 #include "SiteArchive.h"
-#include "System.h"
+#include "Command.h"
 #include "FileUtils.h"
 
 #include "BioLog.h"
@@ -29,12 +29,14 @@ void TuringUIServer::start() {
 
     // Run node server
     const auto sitePath = _outDir/SiteArchive::getSiteDirectoryName();
-    std::string nodeStartCmd = "cd ";
-    nodeStartCmd += sitePath.string();
-    nodeStartCmd += " && npx serve -s build";
+    Command serverCmd("npx");
+    serverCmd.addArg("serve");
+    serverCmd.addArg("-s");
+    serverCmd.addArg("build");
+    serverCmd.setWorkingDir(sitePath);
 
     BioLog::log(msg::INFO_RUN_NODE_SERVER() << 3000);
-    System::runCommand(nodeStartCmd);
+    serverCmd.run();
     BioLog::log(msg::INFO_STOPPING_NODE_SERVER());
 
     cleanSite();

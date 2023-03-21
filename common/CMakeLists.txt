@@ -1,6 +1,6 @@
 
 set(common_sources
-        System.cpp
+        Command.cpp
         StringBuffer.cpp
         CmdParser.cpp
         BannerDisplay.cpp

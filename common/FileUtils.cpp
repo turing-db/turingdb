@@ -1,5 +1,8 @@
 #include "FileUtils.h"
 
+#include <unistd.h>
+#include <fcntl.h>
+
 bool files::exists(const files::Path& path) {
     try {
         return std::filesystem::exists(path);
@@ -41,4 +44,42 @@ bool files::isDirectory(const Path& path) {
     } catch (const std::filesystem::filesystem_error& e) {
         return false;
     }
+}
+
+files::Path files::cwd() {
+    std::error_code error;
+    const auto path = std::filesystem::current_path(error);
+    if (error) {
+        return Path();
+    }
+    return path;
+}
+
+bool files::writeFile(const Path& path, const std::string& content) {
+    int fd = open(path.string().c_str(),
+                  O_WRONLY | O_TRUNC | O_CREAT,
+                  S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        return false;
+    }
+
+    const size_t contentSize = content.size();
+    ssize_t bytesWritten = write(fd, content.c_str(), contentSize);
+    if (bytesWritten < 0 || bytesWritten < (ssize_t)contentSize) {
+        return false;
+    }
+
+    close(fd);
+    
+    return true;
+}
+
+files::Path files::abspath(const Path& relativePath) {
+    std::error_code error;
+    const auto path = std::filesystem::absolute(relativePath, error);
+    if (error) {
+        return Path();
+    }
+
+    return path;
 }

@@ -13,6 +13,10 @@ bool removeDirectory(const Path& path);
 bool copy(const Path& from, const Path& to);
 bool isDirectory(const Path& path);
 bool removeFile(const Path& path);
+Path cwd();
+Path abspath(const Path& relativePath);
+
+bool writeFile(const Path& path, const std::string& content);
 
 }
 

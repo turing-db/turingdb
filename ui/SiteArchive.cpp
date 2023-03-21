@@ -5,7 +5,7 @@
 
 #include "SiteArchiveData.h"
 
-#include "System.h"
+#include "Command.h"
 #include "FileUtils.h"
 #include "BioLog.h"
 
@@ -46,15 +46,15 @@ bool SiteArchive::decompress(const std::filesystem::path& outDir) {
     archiveFile.write((const char*)globfs_site_data, globfs_site_size);
 
     // Decompress archive file
-    std::string untarCmd = "cd ";
-    untarCmd += outDir.string(); 
-    untarCmd += " && tar -xf ";
-    untarCmd += SiteArchiveName;
+    Command untarCmd("tar");
+    untarCmd.setWorkingDir(outDir);
+    untarCmd.addArg("-xf");
+    untarCmd.addArg(SiteArchiveName);
 
     BioLog::log(msg::INFO_DECOMPRESSING_SITE());
-    const int decompressResult = System::runCommand(untarCmd);
-    if (decompressResult != 0) {
-        BioLog::log(msg::ERROR_FAILED_TO_DECOMPRESS_SITE() << outDir.string()); 
+    if (!untarCmd.run()) {
+        BioLog::log(msg::ERROR_FAILED_TO_DECOMPRESS_SITE()
+                    << outDir.string()); 
         return false;
     }
 
