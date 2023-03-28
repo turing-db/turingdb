@@ -6,3 +6,4 @@ if [[ -z "$TURING_HOME" ]] ; then
 fi
 
 export PATH=$TURING_HOME/bin:$PATH
+export PYTHONPATH=$TURING_HOME/lib/python:$PYTHONPATH
