@@ -9,8 +9,9 @@
 
 using namespace Log;
 
-NotebookRunner::NotebookRunner(const Path& outDir)
-    : _outDir(outDir)
+NotebookRunner::NotebookRunner(const Path& outDir, const Path& reportsDir)
+    : _outDir(outDir),
+    _reportsDir(reportsDir)
 {
 }
 
@@ -46,9 +47,11 @@ bool NotebookRunner::run() {
 }
 
 bool NotebookRunner::runNotebook(const Path& path) {
-    if (!executeNotebook(path)) {
-        BioLog::log(msg::ERROR_FAILED_TO_RUN_NOTEBOOK() << path.string());
-        return false;
+    if (_execNotebooks) {
+        if (!executeNotebook(path)) {
+            BioLog::log(msg::ERROR_FAILED_TO_RUN_NOTEBOOK() << path.string());
+            return false;
+        }
     }
 
     if (_exportHTML) {
@@ -99,14 +102,22 @@ bool NotebookRunner::executeNotebook(const Path& path) {
 bool NotebookRunner::exportNotebook(const Path& path, const std::string& toDest) {
     Command jupyterCmd("jupyter");
     jupyterCmd.addArg("nbconvert");
+    jupyterCmd.addArg("--output-dir");
+    jupyterCmd.addArg(_reportsDir);
     jupyterCmd.addArg("--to");
     jupyterCmd.addArg(toDest);
     jupyterCmd.addArg(path.string());
+
     jupyterCmd.setWorkingDir(_outDir);
     jupyterCmd.setScriptPath(_outDir/("jupyter_convert_"+toDest+".sh"));
     jupyterCmd.setLogFile(_outDir/("jupyter_convert_"+toDest+".log"));
 
     BioLog::log(msg::INFO_CONVERTING_NOTEBOOK() << path.string() << toDest);
+
+    const std::string notebookName = path.stem().string();
+    const auto reportPath = _reportsDir/(notebookName+"."+toDest);
+    BioLog::log(msg::INFO_NOTEBOOK_REPORT()
+                << reportPath.string());
 
     if (!jupyterCmd.run()) {
         return false;

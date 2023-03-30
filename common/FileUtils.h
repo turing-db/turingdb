@@ -15,6 +15,7 @@ bool isDirectory(const Path& path);
 bool removeFile(const Path& path);
 Path cwd();
 Path abspath(const Path& relativePath);
+Path getFilename(const Path& path);
 
 bool writeFile(const Path& path, const std::string& content);
 bool writeBinary(const Path& path, const char* data, size_t size);

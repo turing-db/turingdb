@@ -101,3 +101,11 @@ bool files::writeBinary(const Path& path, const char* data, size_t size) {
     
     return true;
 }
+
+files::Path files::getFilename(const Path& path) {
+    if (path.empty()) {
+        return Path();
+    }
+
+    return path.filename();
+}

@@ -20,6 +20,9 @@ MSG_INFO(INFO_CONVERTING_NOTEBOOK, 4004,
 MSG_INFO(INFO_JUPYTER_LOG_FILE, 4005,
          "The notebook log file is $0")
 
+MSG_INFO(INFO_NOTEBOOK_REPORT, 4006,
+         "Notebook report written in $0")
+
 }
 
 #endif

@@ -9,12 +9,13 @@ public:
     using Path = std::filesystem::path;
     using Notebooks = std::vector<Path>;
 
-    NotebookRunner(const Path& outDir);
+    NotebookRunner(const Path& outDir, const Path& reportsDir);
     ~NotebookRunner();
 
     void setQuiet(bool quiet) { _silent = quiet; }
     void setExportHTML(bool enable) { _exportHTML = enable; }
     void setExportPDF(bool enable) { _exportPDF = enable; }
+    void setExecEnabled(bool enable) { _execNotebooks = enable; }
 
     void addNotebook(const Path& path);
 
@@ -22,8 +23,10 @@ public:
 
 private:
     Path _outDir;
+    Path _reportsDir;
     Notebooks _notebooks;
     bool _silent {false};
+    bool _execNotebooks {true};
     bool _exportHTML {false};
     bool _exportPDF {false};
 

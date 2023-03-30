@@ -11,19 +11,35 @@ int main(int argc, const char** argv) {
     ArgParser& argParser = toolInit.getArgParser();
     argParser.setArgsDesc("notebook.ipynb ...");
     argParser.addOption("q", "Launch the notebooks in quiet mode.", false);
+    argParser.addOption("convertonly", "Only convert the notebooks to a report, do not execute notebooks", false);
+    argParser.addOption("html", "Export each notebook as an html report", false);
+    argParser.addOption("pdf", "Export each notebook as a pdf report.", false);
 
     toolInit.init(argc, argv);
 
     bool quiet = false;
+    bool exportHTML = false;
+    bool exportPDF = false;
+    bool execNotebooks = true;
     for (const auto& option : argParser.options()) {
-        if (option.first == "q") {
+        const auto& optName = option.first;
+        if (optName == "q") {
             quiet = true;
+        } else if (optName == "html") {
+            exportHTML = true;
+        } else if (optName == "pdf") {
+            exportPDF = true;
+        } else if (optName == "convertonly") {
+            execNotebooks = false;
         }
     }
 
     // Run notebooks
-    NotebookRunner notebookRunner(toolInit.getOutputsDir());
+    NotebookRunner notebookRunner(toolInit.getOutputsDir(), toolInit.getReportsDir());
     notebookRunner.setQuiet(quiet);
+    notebookRunner.setExecEnabled(execNotebooks);
+    notebookRunner.setExportHTML(exportHTML);
+    notebookRunner.setExportPDF(exportPDF);
     for (const auto& arg : argParser.args()) {
         notebookRunner.addNotebook(arg);
     }

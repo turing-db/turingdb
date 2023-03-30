@@ -79,11 +79,11 @@ void ArgParser::printHelp() const {
 
     std::cout << "\n\n";
     std::cout << "Options:\n";
-    std::cout << INDENT << "-h, -help" << INDENT << "Display this help\n";
+    std::cout << INDENT << "-h, -help" << "\t" << "Display this help\n";
 
     for (const auto& option : _optionMap) {
         std::cout << INDENT << "-" << option.first
-                  << INDENT << option.second._desc << "\n";
+                  << INDENT << "\t" << option.second._desc << "\n";
     }
 
     std::cout << "\n";
