@@ -42,17 +42,21 @@ bool SiteArchive::decompress(const std::filesystem::path& outDir) {
 
     // Write archive file in output directory
     const auto archiveFileName = outDir/SiteArchiveName;
-    std::ofstream archiveFile(archiveFileName, std::ios_base::binary);
-    archiveFile.write((const char*)globfs_site_data, globfs_site_size);
+    if (!files::writeBinary(archiveFileName, (const char*)globfs_site_data, globfs_site_size)) {
+        BioLog::log(msg::ERROR_FAILED_TO_WRITE_FILE() << archiveFileName.string());
+        return false;
+    }
 
     // Decompress archive file
     Command untarCmd("tar");
+    untarCmd.setScriptPath(outDir/"decompress.sh");
+    untarCmd.setLogFile(outDir/"decompress.log");
     untarCmd.setWorkingDir(outDir);
     untarCmd.addArg("-xf");
-    untarCmd.addArg(SiteArchiveName);
+    untarCmd.addArg(archiveFileName);
 
     BioLog::log(msg::INFO_DECOMPRESSING_SITE());
-    if (!untarCmd.run()) {
+    if (!untarCmd.run() || untarCmd.getReturnCode() != 0) {
         BioLog::log(msg::ERROR_FAILED_TO_DECOMPRESS_SITE()
                     << outDir.string()); 
         return false;

@@ -13,17 +13,15 @@ public:
     ToolInit(const std::string& toolName);
     ~ToolInit();
 
-    void setToolDir(const Path& path) { _toolDir = path; }
+    void setOutputDir(const Path& outDir) { _outputsDir = outDir; }
 
     void init(int argc, const char** argv);
 
-    const Path& getToolDir() const { return _toolDir; }
     const Path& getOutputsDir() const { return _outputsDir; }
     const Path& getReportsDir() const { return _reportsDir; }
 
 private:
     const std::string _toolName;
-    Path _toolDir;
     Path _outputsDir;
     Path _reportsDir;
     ArgParser _argParser;

@@ -17,6 +17,7 @@ Path cwd();
 Path abspath(const Path& relativePath);
 
 bool writeFile(const Path& path, const std::string& content);
+bool writeBinary(const Path& path, const char* data, size_t size);
 
 }
 

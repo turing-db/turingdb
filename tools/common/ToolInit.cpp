@@ -10,7 +10,6 @@ using namespace Log;
 
 ToolInit::ToolInit(const std::string& toolName)
     : _toolName(toolName),
-    _toolDir(toolName+".out"),
     _argParser(toolName)
 {
 }
@@ -21,30 +20,30 @@ ToolInit::~ToolInit() {
 void ToolInit::init(int argc, const char** argv) {
     BioLog::init();
 
-    if (_toolDir.empty()) {
-        _toolDir = std::filesystem::current_path();
+    if (_outputsDir.empty()) {
+        _outputsDir = std::filesystem::current_path()/(_toolName + ".out");
     }
 
-    if (files::exists(_toolDir)) {
-        if (!files::isDirectory(_toolDir)) {
-            BioLog::log(msg::ERROR_NOT_A_DIRECTORY() << _toolDir.string());
+    if (files::exists(_outputsDir)) {
+        if (!files::isDirectory(_outputsDir)) {
+            BioLog::log(msg::ERROR_NOT_A_DIRECTORY()
+                        << _outputsDir.string());
             exit(EXIT_FAILURE);
             return;
         }
     } else {
-        const bool createRes = files::createDirectory(_toolDir);
+        const bool createRes = files::createDirectory(_outputsDir);
         if (!createRes) {
-            BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _toolDir.string());
+            BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY()
+                        << _outputsDir.string());
             exit(EXIT_FAILURE);
             return;
         }
     }
 
-    _toolDir = std::filesystem::absolute(_toolDir);
+    _outputsDir = std::filesystem::absolute(_outputsDir);
 
-    // Get outputs and reports path
-    _outputsDir = _toolDir/"outputs";
-    _reportsDir = _toolDir/"reports";
+    _reportsDir = _outputsDir/"reports";
 
     // Create outputs and reports directories
     std::filesystem::remove_all(_outputsDir);

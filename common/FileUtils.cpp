@@ -83,3 +83,21 @@ files::Path files::abspath(const Path& relativePath) {
 
     return path;
 }
+
+bool files::writeBinary(const Path& path, const char* data, size_t size) {
+    int fd = open(path.string().c_str(),
+                  O_WRONLY | O_TRUNC | O_CREAT,
+                  S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        return false;
+    }
+
+    ssize_t bytesWritten = write(fd, data, size);
+    if (bytesWritten < 0 || bytesWritten < (ssize_t)size) {
+        return false;
+    }
+
+    close(fd);
+    
+    return true;
+}

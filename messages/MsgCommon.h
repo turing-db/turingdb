@@ -35,6 +35,15 @@ MSG_ERROR(ERROR_NOT_A_DIRECTORY, 1009,
 MSG_ERROR(ERROR_FAILED_TO_REMOVE_FILE, 1010,
     "Impossible to remove the file '$0'.")
 
+MSG_ERROR(ERROR_EXECUTABLE_NOT_FOUND, 1011,
+          "Impossible to find executable '$0'.")
+
+MSG_ERROR(ERROR_FAILED_TO_WRITE_COMMAND_SCRIPT, 1012,
+          "Can not write command script '$0'.")
+
+MSG_ERROR(ERROR_FAILED_TO_WRITE_FILE, 1013,
+          "Writing file '$0' failed.")
+
 }
 
 #endif

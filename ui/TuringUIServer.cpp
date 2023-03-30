@@ -1,6 +1,7 @@
 #include "TuringUIServer.h"
 
 #include <filesystem>
+#include <stdlib.h>
 
 #include "SiteArchive.h"
 #include "Command.h"
@@ -34,6 +35,8 @@ void TuringUIServer::start() {
     serverCmd.addArg("-s");
     serverCmd.addArg("build");
     serverCmd.setWorkingDir(sitePath);
+    serverCmd.setScriptPath(sitePath/"serve.sh");
+    serverCmd.setLogFile(sitePath/"serve.log");
 
     BioLog::log(msg::INFO_RUN_NODE_SERVER() << 3000);
     serverCmd.run();
