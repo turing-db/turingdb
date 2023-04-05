@@ -2,3 +2,4 @@ turing_key*
 build
 turing_package
 *.tar.gz
+*.tar

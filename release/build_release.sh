@@ -59,7 +59,7 @@ ssh-keygen -q -P '' -N '' -t rsa -f turing_key
 echo 'Building turing-platform image'
 docker build -t turing-platform:latest --build-arg BASE_IMAGE=$turing_img --build-arg TURING_PACKAGE=$package_name .
 echo 'Saving turing-platform image to archive'
-#docker save -o turing-platform.tar turing-platform:latest
+docker save -o turing-platform.tar turing-platform:latest
 
 # Clean build files
 clean_build
