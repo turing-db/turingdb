@@ -49,6 +49,10 @@ $(aws ecr get-login --region eu-west-2 --no-include-email)
 
 build_package
 
+#
+rm -f turing_key*
+ssh-keygen -q -P '' -N '' -t rsa -f turing_key
+
 # Build delivery docker image
 echo 'Building turing-platform image'
 docker build -t turing-platform:latest --build-arg BASE_IMAGE=$turing_img --build-arg TURING_PACKAGE=$package_name .

@@ -6,7 +6,6 @@ EXPOSE 8088
 
 USER root
 RUN apt-get install -qqy openssh-server
-RUN service ssh start
 USER dev
 
 ARG TURING_PACKAGE
@@ -21,7 +20,9 @@ RUN rm -rf $TURING_PACKAGE.tar.gz
 COPY --chown=dev:dev image/setup.sh /turing/
 COPY --chown=dev:dev image/turing.setup.sh /turing/
 COPY --chown=dev:dev image/run_jupyter.sh /turing/
-
+COPY --chown=dev:dev turing_key.pub /home/dev/.ssh/authorized_keys
+COPY --chown=dev:dev image/run.sh /home/dev/
 
 USER dev
 WORKDIR /home/dev
+ENTRYPOINT ["/home/dev/run.sh"]
