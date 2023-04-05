@@ -30,6 +30,8 @@ function build_package() {
 	cp -r build/turing_package/lib $package_name/lib
 	rm -rf $package_name/lib/python/turing/db
 
+	cp -r build/turing_package/notebooks $package_name/notebooks
+
 	# Create package archive
 	tar -czvf $package_name.tar.gz $package_name
 }
