@@ -1,0 +1,137 @@
+// 
+// Widgets.scss
+// 
+
+.main-chart {
+    .chart-border-left {
+        border-left: 1.4px solid $border-color;
+        padding: 2px 20px;
+
+        &:last-child {
+            margin-right: 0px;
+        }
+    }
+}
+
+
+
+/* Activity */
+
+.activity-feed {
+    list-style: none;
+
+    .feed-item {
+        position: relative;
+        padding-bottom: 27px;
+        padding-left: 16px;
+        border-left: 2px solid $light;
+
+        &:after {
+            content: "";
+            display: block;
+            position: absolute;
+            top: 4px;
+            left: -6px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid $primary;
+            background-color: $card-bg;
+        }
+
+        &:last-child {
+            border-color: transparent;
+        }
+    }
+}
+
+// mini-stats-wid
+.mini-stats-wid {
+    position: relative;
+
+    .mini-stat-icon {
+        overflow: hidden;
+        position: relative;
+
+        &:before,
+        &:after {
+            content: "";
+            position: absolute;
+            width: 8px;
+            height: 69px;
+            background-color: rgba($success, .1);
+            left: 3px;
+            transform: rotate(32deg);
+            top: -8px;
+            transition: all 0.4s;
+        }
+
+        &::after {
+            left: 27px;
+            width: 8px;
+            transition: all 0.2s;
+        }
+    }
+
+    &:hover {
+        .mini-stat-icon {
+            &::after {
+                left: 60px;
+            }
+
+            &::before {
+                left: 50px;
+            }
+        }
+    }
+}
+
+// credit card widget
+.card-wrapper {
+    .jp-card {
+
+        .jp-card-back,
+        .jp-card-front {
+            background-color: $success;
+        }
+    }
+}
+
+.notification-elem {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: var(--#{$prefix}card-bg-custom);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: hidden;
+    opacity: 0;
+}
+
+//ecommerce widgets
+.clothes-size {
+    li {
+        input[type="radio"] {
+            display: none;
+        }
+
+        label {
+            display: inline-block;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid $border-color;
+            text-transform: none;
+            letter-spacing: 0;
+            color: $primary;
+        }
+
+        input[type="radio"]:checked+label {
+            background-color: $primary;
+            border-color: $primary;
+            color: $white;
+        }
+    }
+}

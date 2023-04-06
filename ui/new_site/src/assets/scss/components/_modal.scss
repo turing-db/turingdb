@@ -1,0 +1,165 @@
+//
+// _modal.scss
+//
+
+.modal-title {
+    font-weight: $font-weight-semibold;
+}
+
+.modal-dialog:not(.modal-dialog-scrollable) {
+    .modal-header {
+        padding-bottom: 0;
+    
+        .btn-close {
+            margin-top: -$modal-header-padding;
+        }
+    }
+    
+    .modal-footer {
+        padding-top: 0;
+    }
+}
+
+.modal {
+	&.fadeInRight {
+		.modal-dialog {
+			opacity: 0;
+			transform: translateX(20%);
+			transition: all .3s ease-in-out;
+		}
+
+		&.show {
+			.modal-dialog {
+				opacity: 1;
+				transform: translateX(0);
+			}
+		}
+	}
+
+	&.fadeInLeft {
+		.modal-dialog {
+			animation: fadeInLeft 0.3s ease-in-out;
+			transform: translate(-50%, 0);
+		}
+
+		&.show {
+			.modal-dialog {
+				transform: none;
+			}
+		}
+	}
+
+	&.fadeInUp {
+		.modal-dialog {
+			animation: fadeInUp 0.3s ease-in-out;
+			transform: translate(0, 30%);
+		}
+
+		&.show {
+			.modal-dialog {
+				transform: none;
+			}
+		}
+	}
+
+	&.flip {
+		perspective: 1300px;
+
+		.modal-dialog {
+			opacity: 0;
+			transform: rotateY(-70deg);
+			transition: all .3s;
+		}
+
+		&.show {
+			.modal-dialog {
+				opacity: 1;
+				transform: rotateY(0deg);
+			}
+		}
+	}
+
+	&.zoomIn {
+		.modal-dialog {
+			opacity: 0;
+			transform: scale(.7);
+			transition: all .3s ease;
+		}
+
+		&.show {
+			.modal-dialog {
+				opacity: 1;
+				transform: scale(1)
+			}
+		}
+	}
+}
+
+
+.modal-dialog-right {
+	margin-right: $modal-dialog-margin-y-sm-up;
+}
+
+// modal-dialog-bottom
+.modal-dialog-bottom {
+	display: flex;
+	align-items: flex-end;
+	min-height: calc(100% - #{$modal-dialog-margin-y-sm-up});
+
+	@media (min-width: 576px) {
+		min-height: calc(100% - #{$modal-dialog-margin-y-sm-up*2 });
+	}
+}
+
+.modal-dialog-bottom-right {
+	display: flex;
+	align-items: flex-end;
+	min-height: calc(100% - #{$modal-dialog-margin-y-sm-up});
+	margin-right: $modal-dialog-margin-y-sm-up;
+
+	@media (min-width: 576px) {
+		min-height: calc(100% - #{$modal-dialog-margin-y-sm-up*2 });
+	}
+}
+
+@keyframes fadeInLeft {
+	0% {
+		opacity: 0;
+		transform: translate3d(-30%, 0, 0);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateZ(0);
+	}
+}
+
+
+@keyframes fadeInUp {
+	0% {
+		opacity: 0;
+		transform: translate3d(0, 30%, 0);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateZ(0);
+	}
+}
+
+@keyframes zoomIn {
+	0% {
+		opacity: 0;
+		transform: scale3d(.3, .3, .3);
+	}
+
+	50% {
+		opacity: 1
+	}
+}
+
+.login-modal {
+	background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' version='1.1' xmlns:xlink='http://www.w3.org/1999/xlink' xmlns:svgjs='http://svgjs.com/svgjs' width='1440' height='560' preserveAspectRatio='none' viewBox='0 0 1440 560'%3e%3cg mask='url(%26quot%3b%23SvgjsMask1016%26quot%3b)' fill='none'%3e%3crect width='1440' height='560' x='0' y='0' fill='rgba(64%2c 81%2c 137%2c 1)'%3e%3c/rect%3e%3cpath d='M0%2c650.704C122.328%2c648.746%2c159.175%2c473.043%2c255.674%2c397.837C339.724%2c332.333%2c461.529%2c324.924%2c526.449%2c240.421C598.428%2c146.73%2c655.546%2c24.847%2c631.015%2c-90.726C606.666%2c-205.444%2c482.926%2c-263.497%2c401.565%2c-347.958C325.215%2c-427.217%2c275.543%2c-549.012%2c167.826%2c-571.563C60.344%2c-594.065%2c-27.703%2c-482.932%2c-135.163%2c-460.325C-256.336%2c-434.833%2c-401.929%2c-509.651%2c-497.972%2c-431.495C-592.807%2c-354.321%2c-579.865%2c-206.886%2c-595.603%2c-85.635C-611.133%2c34.016%2c-656.761%2c169.183%2c-588.884%2c268.934C-520.854%2c368.909%2c-362.458%2c340.324%2c-260.989%2c406.106C-158.875%2c472.306%2c-121.679%2c652.651%2c0%2c650.704' fill='%2333416e'%3e%3c/path%3e%3cpath d='M1440 995.672C1519.728 984.741 1563.12 899.779 1626.466 850.1469999999999 1682.6390000000001 806.135 1756.261 782.602 1791.2939999999999 720.431 1827.571 656.052 1835.537 577.6610000000001 1820.814 505.247 1806.518 434.933 1753.2640000000001 383.16999999999996 1710.941 325.228 1664.475 261.614 1634.992 175.16000000000003 1560.657 149.07999999999998 1485.96 122.87299999999999 1402.146 155.543 1332.03 192.289 1269.541 225.038 1232.754 287.251 1189.969 343.347 1149.925 395.849 1115.781 448.9 1089.96 509.672 1056 589.599 988.9680000000001 671.1659999999999 1015.557 753.837 1041.91 835.774 1142.714 863.61 1217.498 906.22 1288.388 946.611 1359.167 1006.755 1440 995.672' fill='%234d61a4'%3e%3c/path%3e%3c/g%3e%3cdefs%3e%3cmask id='SvgjsMask1016'%3e%3crect width='1440' height='560' fill='white'%3e%3c/rect%3e%3c/mask%3e%3c/defs%3e%3c/svg%3e");
+	background-size: cover;
+	background-position: center;
+}

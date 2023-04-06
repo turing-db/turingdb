@@ -1,0 +1,31 @@
+//
+// _invoice.scss
+//
+
+.invoice-table {
+    tbody {
+        &:last-child {
+            border: none;
+        }
+    }
+}
+
+.currency-select {
+    .choices__inner {
+        padding:0px;
+        padding-right: 15px;
+        min-height: 0px;
+    }
+    .choices__list--single {
+        padding: 0px 16px 0 4px;
+    }
+    .choices[data-type*=select-one]{
+        bottom: 0px;
+        :after { 
+            top: 4px;
+        }
+        .choices__inner {
+            padding-bottom: 0px;
+        }
+    }
+}

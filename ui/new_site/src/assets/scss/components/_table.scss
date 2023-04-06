@@ -1,0 +1,141 @@
+// 
+// _table.scss
+// 
+
+.table {
+    th {
+        font-weight: $font-weight-semibold;
+    }
+
+    >thead {
+        border-color: $table-border-color;
+    }
+    >:not(:first-child) {
+        border-top-width: $table-border-width;
+    }
+}
+
+
+.table-nowrap {
+
+    th,
+    td {
+        white-space: nowrap;
+    }
+}
+
+// card table
+
+.table-card{
+    margin: (-$card-spacer-y) (-$card-spacer-x);
+
+    th,
+    td {
+
+        &:first-child{
+            padding-left: 16px;
+        }
+
+        &:last-child{
+            padding-right: 16px;
+        }
+    }
+
+    .table > :not(:first-child) {
+        border-top-width: $table-border-width;
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .border-#{$color} {
+        &.table {
+            > thead {
+                border-color: $value !important;
+            }
+        }
+    }
+    .table-#{$color} {
+        &.table {
+            > thead {
+                border-bottom-color:lighten($value, 10%) !important;
+            }
+        }
+    }
+}
+
+.table {
+    .form-check {
+        padding-left: 0px;
+        margin-bottom: 0px;
+        .form-check-input {
+            margin-left: 0px;
+            margin-top: 0px;
+            float: none;
+            vertical-align: middle;
+        }
+    }
+    .sort {
+        position: relative;
+        &::before {
+            content: "\f035d";
+            position: absolute;
+            right: 0.5rem;
+            top: 18px;
+            font-size: 0.8rem;
+            font-family: "Material Design Icons";
+        }
+        &::after {
+            position:absolute;
+            right: 0.5rem;
+            content: "\f0360";
+            font-family: "Material Design Icons";
+            font-size: 0.8rem;
+            top: 12px;
+        }
+    }
+}
+
+[data-layout-mode="dark"] {
+    .table-light {
+        background-color: var(--#{$variable-prefix}light);
+        color: var(--#{$variable-prefix}body-color);
+        th,td {
+            background-color: var(--#{$variable-prefix}light);
+        }
+    }
+}
+
+.rdt_Table {
+    &.eSTlnH {
+        background-color: var(--#{$variable-prefix}card-bg) !important;
+        color: var(--#{$variable-prefix}body-color);
+    }
+
+    .gZWIKX,
+    .jVeafb {
+        color: var(--#{$variable-prefix}body-color);
+        background-color: var(--#{$variable-prefix}card-bg);
+    }
+
+    .jVeafb:not(:last-of-type),
+    .gZWIKX {
+        border-bottom-color: var(--#{$variable-prefix}border-color);
+    }
+}
+
+.rdt_Pagination {
+    &.jxflYm {
+        background-color: var(--#{$variable-prefix}card-bg);
+        color: var(--#{$variable-prefix}body-color);
+        border-top-color: var(--#{$variable-prefix}border-color);
+    }
+
+    .bvxQGL {
+        fill: var(--#{$variable-prefix}dark);
+    }
+
+    .bvxQGL:disabled {
+        fill: rgba(var(--#{$variable-prefix}dark-rgb), 0.25);
+    }
+}

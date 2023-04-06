@@ -1,0 +1,59 @@
+// 
+// _listjs.scss
+// 
+
+.listjs-pagination{
+    margin-bottom: 0;
+    justify-content: flex-end;
+    gap: 8px;
+    li{
+        .page{
+            display: block;
+            padding: $pagination-padding-y $pagination-padding-x;
+            color: $pagination-color;
+            background-color: $pagination-bg;
+            border: $pagination-border-width solid $pagination-border-color;
+            border-radius: $border-radius;
+        }
+
+        &.active{
+            .page{
+                color: $pagination-active-color;
+                @include gradient-bg($pagination-active-bg);
+                border-color: $pagination-active-border-color;
+            }
+        }
+    }
+}
+
+.pagination-wrap {
+    user-select: none;
+    display: flex;
+    align-items: center;
+    a {
+        text-decoration: none;
+        display: inline-block;
+    }
+}
+
+.pagination-next,
+.pagination-prev {
+    color: $primary;
+    font-weight: $font-weight-medium;
+    padding: $pagination-padding-y $pagination-padding-x;
+    background-color: $pagination-bg;
+    border: $pagination-border-width solid $pagination-border-color;
+    border-radius: $border-radius; 
+    &:hover {
+        color: lighten($primary, 20%);
+    }
+
+    &.disabled {
+        color: $text-muted;
+        cursor: default;
+
+        &:hover {
+            color: $text-muted;
+        }
+    }
+}

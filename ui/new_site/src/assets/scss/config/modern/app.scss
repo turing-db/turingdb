@@ -1,0 +1,122 @@
+/*
+Template Name: Velzon - Admin & Dashboard Template
+Author: Themesbrand
+Version: 2.4.0
+Website: https://themesbrand.com/
+Contact: support@themesbrand.com
+File: Main Css File
+*/
+
+
+//Fonts
+@import "../../fonts/fonts";
+
+//Core files
+@import "./node_modules/bootstrap/scss/functions";
+@import "./node_modules/bootstrap/scss/variables";
+@import "variables";
+@import "./node_modules/bootstrap/scss/mixins";
+
+@import "theme-light";
+@import "theme-dark";
+
+// Structure
+@import "../../structure/topbar";
+@import "../../structure/page-head";
+@import "../../structure/footer";
+@import "../../structure/vertical";
+@import "../../structure/horizontal";
+@import "../../structure/two-column";
+@import "../../structure/layouts";
+
+// Components
+@import "../../components/waves";
+@import "../../components/avatar";
+@import "../../components/accordion";
+@import "../../components/helper";
+@import "../../components/preloader";
+@import "../../components/forms";
+@import "../../components/widgets";
+@import "../../components/demos";
+@import "../../components/print";
+@import "../../components/ribbons";
+@import "../../components/toast";
+@import "../../components/scrollspy";
+
+// Bootstrap components
+@import "../../components/reboot";
+@import "../../components/alerts";
+@import "../../components/backgrounds";
+@import "../../components/badge";
+@import "../../components/buttons";
+@import "../../components/breadcrumb";
+@import "../../components/card";
+@import "../../components/dropdown";
+@import "../../components/nav";
+@import "../../components/table";
+@import "../../components/modal";
+@import "../../components/pagination";
+@import "../../components/progress";
+@import "../../components/popover";
+@import "../../components/type";
+@import "../../components/form-check";
+@import "../../components/form-control";
+@import "../../components/list-group";
+
+// Plugins
+@import "../../plugins/custom-scrollbar";
+@import "../../plugins/prismjs";
+@import "../../plugins/sweetalert2";
+@import "../../plugins/dropzone";
+@import "../../plugins/range-slider";
+@import "../../plugins/sortablejs";
+@import "../../plugins/tour";
+@import "../../plugins/swiper";
+@import "../../plugins/multijs";
+@import "../../plugins/colorpicker";
+@import "../../plugins/filepond";
+@import "../../plugins/form-input-spin";
+@import "../../plugins/ckeditor";
+@import "../../plugins/quilljs";
+@import "../../plugins/gridjs";
+@import "../../plugins/listjs";
+@import "../../plugins/apexcharts";
+@import "../../plugins/chartjs";
+@import "../../plugins/echarts";
+@import "../../plugins/google-map";
+@import "../../plugins/autocomplete";
+@import "../../plugins/vector-maps";
+@import "../../plugins/leaflet-maps";
+@import "../../plugins/fullcalendar";
+@import "../../plugins/emoji-picker";
+@import "../../plugins/datatables";
+@import "../../plugins/select2";
+
+// Plugins
+@import "../../plugins/toastify";
+@import "../../plugins/choices";
+@import "../../plugins/flatpicker";
+@import "../../plugins/flag-input";
+
+// Pages
+@import "../../pages/authentication";
+@import "../../pages/dashboard";
+@import "../../pages/timeline";
+@import "../../pages/gallery";
+@import "../../pages/errors";
+@import "../../pages/profile";
+@import "../../pages/sitemap";
+@import "../../pages/team";
+@import "../../pages/coming-soon";
+@import "../../pages/search-results";
+@import "../../pages/ecommerce";
+@import "../../pages/invoice";
+@import "../../pages/chat";
+@import "../../pages/email";
+@import "../../pages/kanban";
+@import "../../pages/landing";
+@import "../../pages/nft-landing";
+@import "../../pages/file-manager";
+@import "../../pages/to-do";
+@import "../../pages/jobs";
+@import "../../pages/job-landing";

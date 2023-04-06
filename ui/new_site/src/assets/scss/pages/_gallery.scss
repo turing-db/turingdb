@@ -1,0 +1,121 @@
+    //
+// _gallery.scss
+//
+
+.categories-filter {
+    .list-inline-item {
+        position: relative;
+        margin-right: 0;
+
+        a {
+            display: block;
+            color: var(--#{$prefix}body-color);
+            font-weight: $font-weight-semibold;
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    }
+}
+
+.gallery-box {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid transparent;
+    margin-bottom: 10px;
+    box-shadow: none;
+    background-color: transparent;
+    padding: 8px;
+
+    &::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        width: 100%;
+        height: 0;
+        background-color: var(--#{$prefix}card-bg-custom);
+        transition: all 0.4s;
+    }
+
+    .gallery-container {
+        position: relative;
+        overflow: hidden;
+        border-radius: 4px;
+
+        a {
+            display: block;
+        }
+
+        .gallery-overlay {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            bottom: 0px;
+            right: 0px;
+            opacity: 0;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 10%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, .5) 100%);
+            visibility: hidden;
+            overflow: hidden;
+            transition: all 0.4s ease-in-out 0s;
+            display: flex;
+            width: 100%;
+            align-items: flex-end;
+            padding: 16px;
+
+            .overlay-caption {
+                color: $white;
+                margin: 0;
+                font-size: 16px;
+            }
+        }
+    }
+
+    .gallery-img {
+        transition: all 0.2s ease-in-out;
+    }
+
+    .box-content {
+        position: relative;
+
+        .title {
+            font-size: 14px;
+            margin-bottom: 4px;
+            display: none;
+        }
+
+        .post {
+            margin: 0;
+            transition: all 0.2s;
+            color: $text-muted;
+        }
+    }
+
+    &:hover {
+        &::before {
+            height: 100%;
+        }
+
+        .box-content {
+            bottom: 0;
+
+            .post {
+                opacity: 1;
+            }
+        }
+
+        .gallery-overlay {
+            opacity: 1;
+            visibility: visible;
+        }
+    }
+}
+
+.gallery-light {
+    .gallery-box {
+        &::before {
+            background-color: var(--#{$prefix}light);
+        }
+    }
+}

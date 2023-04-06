@@ -1,0 +1,282 @@
+
+//
+// _range-slider.scss
+//
+
+.noUi-connect{
+  background: $success;
+}
+
+.noUi-handle{
+  background: $success;
+  border: 2px solid var(--#{$prefix}card-bg);
+  box-shadow: none;
+}
+
+.noUi-horizontal{
+  height: 4px;
+  .noUi-handle{
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    right: -10px !important;
+    top: -7px;
+
+    &::before, &::after{
+      display: none;
+    }
+    &:focus{
+      outline: 0;
+    }
+  }
+}
+
+.noUi-pips-horizontal{
+  height: 50px;
+}
+
+// tooltip
+
+.noUi-tooltip{
+  padding: $tooltip-padding-y $tooltip-padding-x;
+  border-color: $border-color;
+  border-radius: $tooltip-border-radius;
+  background-color: var(--#{$prefix}card-bg-custom);
+  color: var(--#{$prefix}body-color);
+}
+
+// Vertical Slider
+
+.noUi-vertical{
+  width: 4px;
+  .noUi-handle{
+    height: 16px;
+    width: 16px;
+    right: -8px;
+    top: -12px;
+    left: auto;
+    border-radius: 50%;
+    &::before, &::after{
+      display: none;
+    }
+    &:focus{
+      outline: 0;
+    }
+  }
+
+  .noUi-origin{
+    top: 0;
+  }
+}
+
+.noUi-value{
+  font-size: 12px;
+}
+
+.noUi-marker-horizontal{
+  &.noUi-marker-large{
+    height: 12px;
+  }
+}
+
+.noUi-value-horizontal{
+  padding-top: 4px;
+}
+
+.noUi-target{
+  box-shadow: none;
+  background-color: var(--#{$prefix}light);
+  border-color: var(--#{$prefix}light);
+}
+
+.noUi-touch-area{
+  &:focus{
+    outline: 0;
+  }
+}
+
+// Colorpicker
+
+#red, #green, #blue {
+	margin: 10px;
+	display: inline-block;
+	height: 200px;
+}
+
+#colorpicker {
+	height: 240px;
+	width: 310px;
+	margin: 0 auto;
+	padding: 10px;
+	border: 1px solid $border-color;
+}
+
+#result {
+	margin: 60px 26px;
+	height: 100px;
+	width: 100px;
+	display: inline-block;
+	vertical-align: top;
+	border: 1px solid $border-color;
+    box-shadow: 0 0 3px;
+    border-radius: 7px;
+}
+
+#red {
+    .noUi-connect {
+        background: $danger;
+    }
+}
+
+#green {
+    .noUi-connect {
+        background: $success;
+    }
+}
+
+#blue {
+    .noUi-connect {
+        background: $primary;
+    }
+}
+
+// Adding keyboard support
+
+.form-control{
+    &.keyboard{
+        max-width: 340px !important;
+    }
+}
+
+
+// Non linear slider
+
+.example-val{
+    font-size: 12px;
+    color: $text-muted;
+    display: block;
+    margin: 15px 0;
+    &:before{
+        content: "Value: ";
+        font-size: 12px;
+        font-weight: 600;
+    }
+}
+
+// showing tooltips
+
+.noUi-tooltip {
+    display: none;
+}
+.noUi-active .noUi-tooltip {
+    display: block;
+}
+
+// Colored Connect Elements
+
+.c-1-color { background: $danger; }
+.c-2-color { background: $warning; }
+.c-3-color { background: $success; }
+.c-4-color { background: $primary; }
+.c-5-color { background: $purple; }
+
+//  slider togle
+
+#slider-toggle {
+    height: 50px;
+    &.off{
+        .noUi-handle{
+            border-color: $danger;
+        }
+    }
+}
+
+// rangeslider color
+
+@each $color, $value in $theme-colors {
+  [data-slider-color="#{$color}"] {
+    .noUi-connect{
+      background: $value;
+    }
+
+    .noUi-handle{
+      background: $value;
+    }
+
+    &[data-slider-style="border"], &[data-slider-style="square"]{
+      .noUi-handle{
+        border-color: $value;
+      }
+    }
+  }
+}
+
+// rangeslider sizes
+
+[data-slider-size="lg"]{
+  &.noUi-horizontal{
+    height: 12px;
+
+    .noUi-handle{
+      width: 24px;
+      height: 24px;
+    }
+  }
+}
+
+[data-slider-size="md"]{
+  &.noUi-horizontal{
+    height: 8px;
+
+    .noUi-handle{
+      width: 20px;
+      height: 20px;
+    }
+  }
+}
+
+[data-slider-size="sm"]{
+  &.noUi-horizontal{
+    height: 4px;
+
+    .noUi-handle{
+      width: 16px;
+      height: 16px;
+    }
+  }
+}
+
+// rangeslider style
+
+[data-slider-style="line"]{
+  &.noUi-horizontal .noUi-handle{
+    width: 8px;
+    border-radius: 4px;
+    right: -8px;
+  }
+  &.noUi-vertical .noUi-handle{
+    height: 8px;
+    border-radius: 4px;
+    top: -3px;
+  }
+}
+
+[data-slider-style="border"]{
+  .noUi-handle{
+    border-color: $success;
+    background-color: $card-bg;
+  }
+}
+
+[data-slider-style="square"]{
+  .noUi-handle{
+    border-radius: 0px;
+    transform: rotate(45deg);
+    height: 10px;
+    width: 10px;
+    top: -4px;
+    border-color: $success;
+    background-color: $card-bg;
+  }
+}
+

@@ -1,0 +1,188 @@
+//
+// _datatables.scss
+//
+
+table.dataTable td.dataTables_empty,
+table.dataTable th.dataTables_empty {
+    text-align: center;
+    padding: 50px;
+    font-weight: $font-weight-semibold;
+    --vz-table-accent-bg: var(--#{$prefix}card-bg-custom);
+}
+
+table.dataTable>thead .sorting:before,
+table.dataTable>thead .sorting_asc:before,
+table.dataTable>thead .sorting_desc:before,
+table.dataTable>thead .sorting_asc_disabled:before,
+table.dataTable>thead .sorting_desc_disabled:before {
+    content:"\f0360";
+    position: absolute;
+    right: 0.5rem;
+    top: 12px;
+    font-size: .8rem;
+    font-family: "Material Design Icons";
+}
+
+table.dataTable>thead .sorting:after,
+table.dataTable>thead .sorting_asc:after,
+table.dataTable>thead .sorting_desc:after,
+table.dataTable>thead .sorting_asc_disabled:after,
+table.dataTable>thead .sorting_desc_disabled:after {
+    content: "\f035d";
+    position: absolute;
+    right: 0.5rem;
+    top: 18px;
+    font-size: .8rem;
+    font-family: "Material Design Icons";
+}
+
+table.dataTable>tbody>tr.child span.dtr-title {
+    font-weight: $font-weight-semibold;
+    min-width: 150px;
+}
+
+
+//responsive 
+table {
+    &.dataTable {
+        &.dtr-inline {
+            &.collapsed {
+                >tbody {
+                    >tr {
+
+                        >th,
+                        >td {
+                            &.dtr-control {
+                                &::before {
+                                    background-color: $primary;
+                                    border-color: var(--#{$prefix}card-bg-custom);
+                                }
+                            }
+                        }
+
+                        &.parent {
+                            &.parent {
+                                >th {
+                                    &.dtr-control {
+                                        &::before {
+                                            background-color: $danger;
+                                        }
+                                    }
+                                }
+                            }
+
+                            >td {
+                                &.dtr-control {
+                                    &::before {
+                                        background-color: $danger;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        >tbody {
+            >tr {
+                &.child {
+                    span {
+                        &.dtr-title {
+                            min-width: 135px;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+.table-card {
+
+    .dataTables_length,
+    .dataTables_filter {
+        padding: $card-cap-padding-y $card-cap-padding-x;
+        padding-bottom: 0px;
+    }
+
+    .dataTables_info,
+    .dataTables_paginate {
+        padding: $card-cap-padding-y $card-cap-padding-x;
+    }
+
+    div.dataTables_wrapper {
+        .col-md-6 {
+            width: 100%;
+        }
+
+        div {
+            &.dataTables_filter {
+                input {
+                    width: calc(100% - 52px);
+                }
+
+                label {
+                    display: block;
+                }
+            }
+        }
+    }
+}
+
+
+div{
+    &.dtr-modal {
+        div {
+            &.dtr-modal-display {
+                background-color: $modal-content-bg;
+                border-color: $border-color;
+                box-shadow: none;
+                height: 70%;
+            }
+            &.dtr-modal-content {
+                padding: $modal-inner-padding;
+                h2 {
+                    font-size: $font-size-lg;
+                    font-weight: $font-weight-semibold;
+                    margin-bottom: 15px;
+                }
+                .dtr-details{
+                    tr {
+                        td {
+                            padding: $table-cell-padding-y $table-cell-padding-x;
+                        }
+                    }
+                }
+            }
+            &.dtr-modal-close {
+                font-size: 24px;
+                top: 9px;
+                right: 11px;
+                width: 30px;
+                height: 30px;
+                line-height: 30px;
+                background-color: var(--#{$prefix}card-bg-custom);
+                border-color: $border-color;
+                &:hover {
+                    background-color: var(--#{$prefix}light);
+                }
+            }
+        }
+    }
+}
+
+
+
+
+.dt-buttons {
+    button.dt-button,
+    div.dt-button,
+    a.dt-button,
+    input.dt-button {
+        border-color: $border-color;
+        background: var(--#{$prefix}light);
+        color: var(--#{$prefix}gray-800);
+    }
+}

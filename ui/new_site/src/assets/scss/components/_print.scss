@@ -1,0 +1,42 @@
+// 
+// print.scss
+//
+
+// Used invoice page
+@media print {
+    .vertical-menu,
+    .right-bar,
+    .page-title-box,
+    .navbar-header,
+    .app-menu,
+    .footer,
+    #back-to-top {
+        display: none !important;
+    }
+    .card-body,
+    .main-content,
+    .right-bar,
+    .page-content,
+    body {
+        padding: 0;
+        margin: 0;
+    }
+
+    .card{
+        border: 0;
+        box-shadow: none !important;
+    }
+
+    .invoice-details{
+        .d-sm-flex{
+            display: flex !important;
+        }
+    }
+    .address{
+        &.col-sm-6 {
+            flex: 0 0 auto !important;
+            width: 50% !important;
+            max-width: 100% !important;
+        }
+    }
+}

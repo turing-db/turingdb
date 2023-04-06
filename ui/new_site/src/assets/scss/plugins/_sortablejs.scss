@@ -1,0 +1,33 @@
+// 
+// _sortablejs.scss
+// 
+
+
+.nested-list{
+    .list-group-item{
+        background-color: rgba($primary, 0.05);
+        border-color: rgba($primary, 0.05);
+    }
+}
+
+.nested-list, .nested-1, .nested-2, .nested-3{
+    margin-top: 5px;
+}
+
+
+.nested-sortable-handle{
+    .handle{
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 42px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: grab;
+    }
+    .list-group-item{
+        padding-left: 42px;
+    }
+}

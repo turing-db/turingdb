@@ -1,0 +1,122 @@
+/*
+Template Name: Velzon - Admin & Dashboard Template
+Author: Themesbrand
+Website: https://themesbrand.com/
+Contact: support@themesbrand.com
+File: Custom Css File
+*/
+
+.css-b62m3t-container {
+  .css-13cymwt-control {
+    background-color: var(--#{$prefix}gray-200);
+    border-color: var(--#{$prefix}border-color);
+    &:hover {
+      border-color: var(--#{$prefix}border-color);
+    }
+  }
+  .css-t3ipsp-control {
+    background-color: var(--#{$prefix}gray-200);
+    border-color: var(--#{$prefix}border-color);
+    box-shadow: none;
+    &:hover {
+      border-color: var(--#{$prefix}border-color) !important;
+    }
+  }
+  .css-1nmdiq5-menu {
+    background-color: var(--#{$prefix}gray-200);
+    .css-10wo9uf-option {
+      cursor: pointer;
+      background-color: var(--#{$prefix}gray-200);
+      &:active {
+        background-color: var(--#{$prefix}gray-200);
+      }
+    }
+    .css-d7l1ni-option {
+      cursor: pointer;
+      background-color: var(--#{$prefix}gray-100);
+    }
+  }
+  .css-1p3m7a8-multiValue {
+    background-color: var(--#{$variable-prefix}light);
+  }
+  .css-wsp0cs-MultiValueGeneric {
+    color: $heading-color;
+  }
+  .css-12jo7m5 {
+    color: $heading-color;
+  }
+  .css-6j8wv5-Input,
+  .css-qc6sy-singleValue {
+    color: $heading-color;
+  }
+
+  .css-1dimb5e-singleValue {
+    color: var(--vz-body-color);
+  }
+}
+
+.marketplace-swiper .swiper-button-next,
+.marketplace-swiper .swiper-button-prev {
+  top: 24px;
+}
+
+.marquee {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  height: 22px;
+  line-height: 2;
+}
+
+.marquee div {
+  display: block;
+  width: 200%;
+  height: 30px;
+  position: absolute;
+  overflow: hidden;
+  animation: marquee 35s linear infinite;
+}
+
+.marquee span {
+  float: left;
+  width: 50%;
+}
+
+@keyframes marquee {
+  0% {
+    left: 0;
+  }
+
+  100% {
+    left: -100%;
+  }
+}
+
+// Data Table
+
+.kVrXuC,
+.dwPlXY,
+.gKbhqU,
+.iSAVrt {
+  background-color: $table-bg !important;
+  color: $table-color !important;
+}
+
+.fyrdjl {
+  color: rgba(var(--#{$prefix}body-color-rgb), 0.54) !important;
+  fill: rgba(var(--#{$prefix}body-color-rgb), 0.54) !important;
+}
+
+.fyrdjl:disabled {
+  color: rgba(var(--#{$prefix}body-color-rgb), 0.18) !important;
+  fill: rgba(var(--#{$prefix}body-color-rgb), 0.18) !important;
+}
+
+.iSAVrt {
+  background-color: var(--#{$prefix}card-bg-custom) !important;
+  border-bottom-color: $table-border-color !important;
+}
+
+.dwPlXY:not(:last-of-type) {
+  border-bottom-color: $table-border-color !important;
+}

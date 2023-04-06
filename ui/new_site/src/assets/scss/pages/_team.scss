@@ -1,0 +1,213 @@
+//
+// _team.scss
+//
+
+.team-box .team-cover, .profile-offcanvas .team-cover, .modal-team-cover{
+    display: none;
+    position: relative;
+    margin-bottom: -140px;
+
+    img {
+        height: 140px;
+        width: 100%;
+        object-fit: cover;
+    }
+
+    &::before {
+        content: "";
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(to top, darken($primary, 25%), $primary);
+        opacity: 0.6;
+    }
+}
+
+.team-list {
+    &.grid-view-filter {
+        flex-flow: row wrap;
+
+        .col {
+            flex: 0 0 auto;
+            width: 25%;
+        }
+
+        .team-box {
+            overflow: hidden;
+
+            .team-row {
+                align-items: start;
+
+                .col {
+                    width: 100%;
+                }
+            }
+
+            .team-cover {
+                display: block;
+            }
+
+            .team-settings {
+                .col {
+                    width: 50% !important;
+                    flex: 0 0 auto;
+                }
+
+                .btn-star {
+                    color: $white;
+                }
+
+                .dropdown {
+                    >a {
+                        color: $white;
+                    }
+                }
+            }
+
+            .team-profile-img {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin-bottom: 25px;
+                margin-top: 36px;
+
+                .avatar-lg {
+                    font-size: 22px;
+                }
+
+                .team-content {
+                    margin-left: 0px;
+                    margin-top: 25px;
+                    text-align: center;
+                }
+            }
+
+            .view-btn {
+                width: 100%;
+                margin-top: 25px;
+            }
+        }
+
+        @media (min-width: 1200px) and (max-width: 1399.98px) {
+            .col {
+                flex: 0 0 auto;
+                width: 33.33%;
+            }
+        }
+
+        @media (max-width: 1199.98px) {
+            .col {
+                flex: 0 0 auto;
+                width: 50%;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .col {
+                flex: 0 0 auto;
+                width: 100%;
+            }
+        }
+    }
+
+    &.list-view-filter {
+        flex-direction: column;
+
+        .team-box {
+            margin-bottom: 10px;
+
+            .team-row {
+                align-items: center;
+                justify-content: space-between;
+            }
+
+            .team-profile-img {
+                display: flex;
+                align-items: center;
+
+                .avatar-lg {
+                    height: 4rem;
+                    width: 4rem;
+                    font-size: 16px;
+                }
+
+                .team-content {
+                    margin-left: 15px;
+                }
+            }
+
+            .team-settings {
+                width: auto;
+                flex: 0 0 auto;
+                -webkit-box-ordinal-group: 7;
+                order: 6;
+            }
+
+            .btn-star {
+                color: $primary;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            flex-direction: row;
+            .col {
+                -webkit-box-flex: 0;
+                -ms-flex: 0 0 auto;
+                flex: 0 0 auto;
+                width: 100%;
+            }
+            .team-box {
+
+                .team-settings {
+                    width: 100%;
+                    flex: 0 0 auto;
+                    order: -1;
+                    margin-bottom: 10px;
+
+                    .col {
+                        width: 50%;
+                    }
+                }
+
+                .team-profile-img {
+                    margin-bottom: 25px;
+                }
+
+                .view-btn {
+                    width: 100%;
+                    margin-top: 25px;
+                }
+            }
+        }
+    }
+}
+
+.modal-team-cover{
+    display: block;
+}
+
+.list-grid-nav {
+    .nav-link {
+        &.active {
+            background-color: $info;
+            color: $white;
+        }
+    }
+}
+
+.profile-offcanvas  {
+    .team-cover {
+        margin-bottom: -132px;
+        display: block;
+        z-index: -1;
+    }
+    .btn-star {
+        color: $white;
+    }
+
+    .dropdown {
+        >a {
+            color: $white;
+        }
+    }
+}

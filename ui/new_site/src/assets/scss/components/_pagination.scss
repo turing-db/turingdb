@@ -1,0 +1,38 @@
+// 
+// _pagination.scss
+// 
+
+// Pagination Separated
+.pagination-separated {
+    .page-item {
+        .page-link {
+            margin-left: 0.35rem;
+            border-radius: $border-radius;
+        }
+    }
+}
+
+// Pagination rounded (Custom)
+.pagination-rounded {
+    .page-link {
+        border-radius: 30px !important;
+        margin: 0 3px !important;
+        border: none;
+        min-width: 32px;
+        min-height: 32px;
+        text-align: center;
+    }
+
+    &.pagination-sm {
+        .page-link {
+            min-width: 25px;
+            min-height: 25px;
+        }
+    }
+}
+
+.page-item.active {
+    .page-link{
+        box-shadow: $element-shadow;
+    }
+}

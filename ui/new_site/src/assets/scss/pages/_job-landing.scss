@@ -1,0 +1,212 @@
+.custom-container {
+    width: 90%;
+}
+
+//********** Navbar **********//
+.job-navbar {
+    .dropdown-menu {
+        .dropdown-item {
+            .avatar-sm {
+                height: 2.5rem;
+                width: 2.5rem;
+            }
+        }
+    }
+
+    @media (max-width: 991.98px) {
+        background-color: var(--#{$prefix}card-bg-custom);
+        padding: 16px 0;
+    }
+}
+
+//********** Home **********//
+.job-hero-section {
+    position: relative;
+    padding: 165px 0;
+    overflow-x: hidden;
+}
+
+.job-panel-filter {
+    background-color: var(--#{$prefix}card-bg-custom);
+    border-radius: $border-radius;
+    overflow: hidden;
+
+    .form-control {
+        height: 45px;
+        border: none;
+        border-radius: 0;
+        background-color: transparent;
+    }
+
+    .btn {
+        border-radius: 0;
+    }
+
+    input.form-control {
+        border-right: 1px solid $border-color;
+    }
+
+    @media (max-width: 767.98px) {
+        background-color: transparent;
+
+        .form-control {
+            background-color: $white;
+            border-radius: $input-border-radius;
+        }
+
+        input.form-control {
+            border: 0;
+        }
+
+        .btn {
+            border-radius: $btn-border-radius;
+        }
+    }
+}
+
+.circle-effect {
+    position: absolute;
+    top: 0;
+    z-index: 0;
+    right: -55px;
+    margin: 0 auto;
+
+    .circle {
+        border: 1px solid $border-color;
+        height: 240px;
+        width: 240px;
+        margin: 0 auto;
+        border-radius: 50%;
+    }
+
+    .circle2 {
+        position: absolute;
+        top: -20px;
+        right: -20px;
+        border: 1px solid $border-color;
+        height: 280px;
+        width: 280px;
+        margin: 0 auto;
+        border-radius: 50%;
+    }
+
+    .circle3 {
+        position: absolute;
+        top: -40px;
+        right: -40px;
+        border: 1px solid $border-color;
+        height: 320px;
+        width: 320px;
+        margin: 0 auto;
+        border-radius: 50%;
+    }
+
+    .circle4 {
+        position: absolute;
+        top: -60px;
+        right: -60px;
+        border: 1px solid $border-color;
+        height: 360px;
+        width: 360px;
+        margin: 0 auto;
+        border-radius: 50%;
+    }
+
+    @media (max-width: 991.98px) {
+        display: none;
+    }
+}
+
+.home-img {
+    .user-img {
+        position: relative;
+        z-index: 1;
+    }
+}
+
+//********** About **********//
+.application-box,
+.feedback-box,
+.inquiry-box {
+    max-width: 240px;
+    position: absolute;
+    z-index: 2;
+    transition: all 0.5s ease;
+
+    &:hover {
+        transform: translateY(-5px);
+    }
+}
+
+.inquiry-box {
+    left: -134px;
+    top: 90px;
+
+    @media (max-width: 991.98px) {
+        left: 0;
+    }
+}
+
+.application-box {
+    bottom: 50px;
+    right: -160px;
+
+    @media (max-width: 991.98px) {
+        right: 0;
+    }
+}
+
+.feedback-box {
+    right: -50px;
+    bottom: -54px;
+
+    @media (max-width: 576.98px) {
+        right: 0;
+        bottom: 0;
+    }
+}
+
+.job-icon-effect {
+    height: 30px;
+    width: 30px;
+    position: absolute;
+    top: 0px;
+    left: -2%;
+    border-radius: 50%;
+    background: repeating-linear-gradient(-55deg, rgba($white, 0) 0.8px, $success 1.6px, $success 2px, rgba($white, 0) 3.8px, rgba($white, 0) 5px);
+    z-index: 0;
+    opacity: 0.20;
+
+    span {
+        position: relative;
+        z-index: 1;
+    }
+}
+
+.about-img-section {
+    position: relative;
+
+    &::before {
+        content: "";
+        position: absolute;
+        left: 20px;
+        right: -20px;
+        top: -20px;
+        bottom: 20px;
+        border: 1px solid $info;
+        z-index: 0;
+        border-radius: $border-radius;
+
+        @media (max-width: 576.98px) {
+            right: 20px;
+            top: 20px;
+        }
+    }
+
+}
+
+.features-company-widgets {
+    position: absolute;
+    bottom: -18px;
+    right: -35px;
+}

@@ -1,0 +1,33 @@
+//
+// filepond
+//
+
+.filepond--root{
+  margin-bottom: 0;
+
+  &[data-style-panel-layout~=circle]{
+    .filepond--drop-label label{
+      font-size: 14px;
+    }
+  }
+}
+
+.filepond--panel-root{
+  border: 2px dashed var(--#{$prefix}border-color);
+  background: var(--#{$prefix}card-bg-custom);
+}
+
+.filepond--drop-label {
+  color: var(--#{$prefix}body-color);
+  label{
+    font-weight: $font-weight-medium;
+  }
+}
+
+.filepond--credits {
+  display: none;
+}
+
+.filepond--item-panel {
+  background-color: $primary !important;
+}

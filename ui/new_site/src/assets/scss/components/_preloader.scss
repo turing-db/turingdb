@@ -1,0 +1,27 @@
+// 
+// preloader.scss
+//
+
+#preloader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--#{$prefix}card-bg-custom);
+    z-index: 9999;
+}
+
+[data-preloader="disable"] #preloader {
+    opacity: 0;
+    visibility: hidden;
+}
+
+#status {
+    width: 40px;
+    height: 40px;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    margin: -20px 0 0 -20px;
+}

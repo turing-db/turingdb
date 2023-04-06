@@ -1,0 +1,118 @@
+//
+// _swiper.scss
+//
+
+.swiper-button-next, .swiper-button-prev {
+    height: 32px !important;
+    width: 32px !important;
+    background-color: rgba($primary, 0.2);
+    backdrop-filter: blur(2px);
+    border-radius: 8px;
+    &::after {
+        font-family: remixicon !important;
+        font-size: 28px !important;
+        color: rgba($primary, 1);
+        transition: all 0.3s ease;
+    }
+}
+
+.swiper-button-prev {
+    &::after {
+        content: "\ea64" !important;
+    }
+}
+.swiper-button-next {
+    &::after {
+        content: "\ea6e" !important;
+    }
+}
+
+.swiper-pagination-bullet{
+    width: 22px !important;
+    height: 5px !important;
+    background-color: $white !important;
+    border-radius: 50px !important;
+    box-shadow: $element-shadow;
+    .swiper-pagination-bullet-active{
+        opacity: 1;
+    }
+}
+
+.dynamic-pagination{
+    .swiper-pagination-bullet {
+        width: 8px;
+        height: 8px;
+        background-color: $white;
+        opacity: 0.5;
+        transition: all 0.5s ease;
+        &.swiper-pagination-bullet-active{
+            opacity: 1;
+            width: 20px;
+        }
+    }
+}
+
+.swiper-pagination-fraction {
+    color: $white;
+    font-size: 16px;
+    background-color: rgba($black, 0.3);
+    backdrop-filter: blur(2px);
+}
+
+
+.pagination-custom{
+    .swiper-pagination-bullet {
+        height: 25px !important;
+        width: 25px !important;
+        line-height: 25px !important;
+        border-radius: 8px !important;
+        background-color: $white !important;
+        opacity: 0.5 !important;
+        transition: all 0.5s ease;
+        &.swiper-pagination-bullet-active{
+            color: $secondary !important;
+            opacity: 1 !important;
+        }
+    }
+}
+
+.swiper-pagination-progressbar{
+    height: 6px !important;
+    background-color: rgba($success, 0.25) !important;
+    .swiper-pagination-progressbar-fill {
+        background-color: $success !important;
+    }
+}
+
+
+.swiper-scrollbar {
+    background-color: rgba($white, 0.35);
+    backdrop-filter: blur(2px);
+    padding: 1.2px;
+    height: 6px !important;
+    .swiper-scrollbar-drag {
+        background-color: $white;
+    }
+}
+
+.swiper-pagination-dark {
+    .swiper-pagination-bullet {
+        background-color: $secondary !important;
+    }
+    .dynamic-pagination{
+        .swiper-pagination-bullet { 
+            background-color: $secondary !important;
+        }
+    }
+    &.pagination-custom{
+        .swiper-pagination-bullet { 
+            color: $white;
+            &.swiper-pagination-bullet-active{
+                opacity: 1;
+            }
+        }
+    }
+    &.swiper-scrollbar { 
+        background-color: rgba($dark, 0.35); 
+    }
+}

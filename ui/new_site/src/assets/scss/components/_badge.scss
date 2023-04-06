@@ -1,0 +1,106 @@
+// 
+// badge.scss
+//
+
+// Soft badge
+@mixin badge-variant-soft($bg) {
+    color: $bg;
+    background-color: rgba($bg, 0.1);
+}
+
+
+// Outline badge
+@mixin badge-variant-outline($bg) {
+    color: $bg;
+    border: 1px solid $bg;
+    background-color: transparent;
+}
+
+@each $color, $value in $theme-colors {
+    .badge-outline-#{$color} {
+        @include badge-variant-outline($value);
+    }
+}
+
+// badge outline
+
+.badge-outline {
+    background-color: var(--#{$prefix}card-bg-custom);
+    border: 1px solid;
+}
+
+@each $color, $value in $theme-colors {
+    .badge-soft-#{$color} {
+        @include badge-variant-soft($value);
+    }
+
+    .badge-outline {
+        &.badge-#{$color} {
+            @include badge-variant-outline($value);
+        }
+    }
+
+    .badge-label {
+        &.bg-#{$color} {
+            &:before {
+                border-right-color: $value;
+            }
+        }
+    }
+}
+
+// badge-border
+
+.badge-border {
+    border-left: 2px solid;
+}
+
+// badge-label
+
+.badge-label {
+    margin-left: 8px;
+    position: relative;
+    &:before {
+        content: "";
+        position: absolute;
+        border: 8px solid transparent;
+        border-right-color: $primary;
+        left: -14px;
+        top: 0;
+    }
+}
+
+// [data-layout-mode="dark"]{
+//     .badge{
+//         &.bg-dark{
+//             background-color: var(--#{$prefix}light) !important;
+//         }
+
+//         &.bg-light{
+//             background-color: var(--#{$prefix}dark) !important;
+//             color: var(--#{$prefix}light) !important;
+//         }
+//     }
+// }
+
+//Badge Gradient Style
+$gradients: ();
+$gradients: map-merge((primary: linear-gradient(135deg, $primary 0%, $success 100%),
+        secondary: linear-gradient(135deg, $secondary 0%, $info 100%),
+        success: linear-gradient(135deg, $success 0%, $warning 100%),
+        danger: linear-gradient(135deg, $danger 0%, $secondary 100%),
+        warning: linear-gradient(135deg, $warning 0%, darken($warning, 15%) 100%),
+        info: linear-gradient(135deg, $info 0%, $success 100%),
+        dark: linear-gradient(135deg, $dark 0%, $primary 100%)),
+    $gradients);
+
+@mixin badge-gradient($parent, $gradient) {
+    #{$parent} {
+        background: $gradient;
+    }
+}
+
+@each $gradient,
+$value in $gradients {
+    @include badge-gradient(".badge-gradient-#{$gradient}", $value);
+}

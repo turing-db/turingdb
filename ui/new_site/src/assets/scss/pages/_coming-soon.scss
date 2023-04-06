@@ -1,0 +1,75 @@
+// 
+// _coming-soon.scss
+//
+
+// countdownlist
+
+.countdownlist {
+    text-align: center;
+    display: flex;
+    gap: 24px;
+
+
+    .countdownlist-item{
+        width: 25%;
+        &:last-of-type{
+            .count-num{
+                &::after{
+                    display: none;
+                }
+            }
+        }
+    }
+    .count-title{
+        font-size: 13px;
+        font-weight: $font-weight-medium;
+        display: block;
+        margin-bottom: 8px;
+        color: rgba(var(--#{$prefix}dark-rgb), 0.5);
+        text-transform: uppercase;
+    }
+
+    .count-num{
+        background-color: var(--#{$prefix}card-bg-custom);
+        padding: 16px 8px;
+        position: relative;
+        border-radius: $card-border-radius;
+        box-shadow: $box-shadow;
+        font-weight: $font-weight-semibold;
+        font-size: 32px;
+        @media (max-width: 575.98px) {
+            font-size: 18px;
+        }
+    
+        &::after{
+            content: ":";
+            font-size: 20px;
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--#{$prefix}dark);
+        }
+    }
+}
+// coming soon 
+
+.move-animation{
+    animation: mover 1s infinite  alternate;
+}
+
+@keyframes mover {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-16px); }
+}
+
+.coming-soon-text{
+    font-weight: $font-weight-semibold;
+    text-transform: uppercase;
+    color: $white;
+    text-shadow: 3px 4px $success;
+}
+
+.countdown-input-group{
+    max-width: 400px;
+}

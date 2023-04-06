@@ -1,0 +1,187 @@
+//
+// accordion.scss
+//
+
+.accordion {
+    .accordion-button {
+        font-weight: $font-weight-medium;
+    }
+
+    .accordion-body {
+        color: $text-muted;
+    }
+
+    &.accordion-icon-none {
+        .accordion-button {
+            &::after {
+                content: "";
+                background-image: none !important;
+            }
+
+            &:not(.collapsed) {
+                &::after {
+                    content: "";
+                }
+            }
+        }
+    }
+}
+
+// Accordion with icon
+
+.custom-accordionwithicon {
+    .accordion-button {
+        &::after {
+            background-image: none !important;
+            font-family: "Material Design Icons";
+            content: "\F0142";
+            font-size: 1.1rem;
+            vertical-align: middle;
+            line-height: 0.8;
+        }
+
+        &:not(.collapsed) {
+            &::after {
+                background-image: none !important;
+                content: "\F0140";
+                margin-right: -3px;
+            }
+        }
+    }
+}
+
+// Accordion with plus icon
+
+.custom-accordionwithicon-plus {
+    .accordion-button {
+        &::after {
+            background-image: none !important;
+            font-family: "Material Design Icons";
+            content: "\F0415";
+            font-size: 1.1rem;
+            vertical-align: middle;
+            line-height: 0.8;
+        }
+
+        &:not(.collapsed) {
+            &::after {
+                background-image: none !important;
+                content: "\F0374";
+                margin-right: -3px;
+            }
+        }
+    }
+}
+
+
+// left Icon accordion
+
+.lefticon-accordion {
+    .accordion-button {
+        padding-left: 2.75rem;
+
+        &::after {
+            position: absolute;
+            left: $accordion-button-padding-x;
+            top: 14px;
+        }
+
+        &:not(.collapsed) {
+            &::after {
+                top: 20px;
+            }
+        }
+    }
+}
+
+// border accordion
+
+.accordion-border-box {
+    .accordion-item {
+        border-top: $accordion-border-width solid $accordion-border-color;
+        border-radius: $accordion-border-radius;
+
+        &:not(:first-of-type) {
+            margin-top: 8px;
+        }
+
+        .accordion-button {
+            border-radius: $accordion-border-radius;
+
+            &:not(.collapsed) {
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+        }
+    }
+}
+
+.custom-accordion-border {
+    .accordion-item {
+        border-left: 3px solid $accordion-border-color;
+    }
+}
+
+//accordion Color 
+
+@each $color,
+$value in $theme-colors {
+    .accordion-#{$color} {
+        .accordion-item {
+            border-color: rgba($value, 0.6);
+
+            .accordion-button {
+                box-shadow: none;
+
+                &:not(.collapsed) {
+                    color: $value;
+                    background-color: rgba($value, 0.1) !important;
+                }
+
+                &::after {
+                    color: $value;
+                }
+            }
+        }
+    }
+
+    .accordion-fill-#{$color} {
+        .accordion-item {
+            .accordion-button {
+                box-shadow: none;
+
+                &:not(.collapsed) {
+                    color: $white;
+                    background-color: $value !important;
+                }
+            }
+        }
+    }
+}
+
+
+// theme dark
+
+[data-layout-mode="dark"]{
+    .accordion-button {
+        &:not(.collapsed) {
+            color: var(--#{$prefix}accordion-button-active-color);
+            &:after{
+                background-image: escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$white}'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>"));
+            }
+        }
+
+        &:after{
+            background-image: escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$gray-500}'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>"));
+        }
+    }
+}
+
+// rtl
+[dir="rtl"]{
+    .custom-accordionwithicon {
+        .accordion-button::after{
+            transform: rotate(180deg);
+        }
+    }
+}

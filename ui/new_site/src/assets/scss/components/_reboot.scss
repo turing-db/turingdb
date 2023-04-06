@@ -1,0 +1,79 @@
+// 
+// reboot.scss
+//
+
+html {
+    position: relative;
+    min-height: 100%;
+}
+
+:is(.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6, 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6) {
+    color: $heading-color;
+    font-family: $heading-font-family;
+}
+
+a {
+    text-decoration: none !important;
+}
+
+label {
+    font-weight: $font-weight-medium;
+    margin-bottom: $form-label-margin-bottom;
+}
+b,
+strong {
+  font-weight: $font-weight-semibold;
+}
+
+// blockquote
+
+.blockquote {
+    padding: 10px 20px;
+    border-left: 4px solid var(--#{$prefix}gray-300);
+}
+
+.blockquote-reverse {
+    border-left: 0;
+    border-right: 4px solid var(--#{$prefix}gray-300);
+    text-align: right;
+}
+
+// container
+
+:is(.container,
+.container-lg,
+.container-md,
+.container-sm,
+.container-xl,
+.container-xxl) {
+    @media (min-width: 1200px) {
+        max-width: 1140px;
+    }
+}
+
+// row
+.row>*{
+    position: relative;
+}
+
+// mixing
+
+@function set-color-from-background($color) {
+    @if (lightness($color) > 70) {
+        @return $color-contrast-dark;
+    }
+    @else {
+        @return $color-contrast-light;
+    }
+}

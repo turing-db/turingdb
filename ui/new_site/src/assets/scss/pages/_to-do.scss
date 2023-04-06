@@ -1,0 +1,66 @@
+//
+// _to-do.scss
+//
+
+.to-do-menu {
+    li {
+        .nav-link {
+            color: var(--#{$prefix}body-color);
+            padding-left: 0;
+            font-weight: $font-weight-medium;
+            background-color: var(--#{$prefix}light);
+            padding: 10px 12px;
+            border-radius: 4px;
+            display: block;
+            margin-bottom: 8px;
+            &:hover, &.active {
+                color: $success;
+            }
+        }
+    }
+}
+
+.todo-content {
+    height: calc(100vh - 362px);
+    overflow-y: auto;
+    &::-webkit-scrollbar {
+        -webkit-appearance: none;
+    }
+
+    &::-webkit-scrollbar:vertical {
+        width: 8px;
+    }
+
+    &::-webkit-scrollbar:horizontal {
+        height: 10px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: rgba(var(--#{$prefix}dark-rgb), .075);
+        border-radius: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+        border-radius: 8px;
+    }
+}
+
+.todo-task {
+    table{
+        .form-check{
+            .form-check-input {
+                &:checked+.form-check-label {
+                    text-decoration: line-through;
+                }
+            }
+        }
+    }
+}
+
+.task-handle{
+    cursor: move;
+}
+
+#task-error-msg{
+    display: none;
+}

@@ -1,0 +1,94 @@
+//
+// _kanban.scss
+//
+
+.tasks-board {
+    display: flex;
+    overflow-x: auto;
+    align-items: stretch;
+
+    .tasks-list {
+        min-width: 300px;
+        margin-right: 24px;
+    }
+
+    &::-webkit-scrollbar {
+        -webkit-appearance: none;
+    }
+
+    &::-webkit-scrollbar:vertical {
+        width: 10px;
+    }
+
+    &::-webkit-scrollbar:horizontal {
+        height: 8px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: rgba(var(--#{$prefix}dark-rgb), .075);
+        border-radius: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+        border-radius: 8px;
+    }
+}
+
+.tasks-box {
+    .progress {
+        border-radius: 0px 0px $card-border-radius $card-border-radius;
+    }
+
+    .tasks-img {
+        height: 135px;
+        width: 100%;
+        object-fit: cover;
+        object-position: center;
+        margin: 12px 0px;
+    }
+
+    &:last-child {
+        margin-bottom: 0px;
+    }
+}
+
+.tasks-wrapper {
+    max-height: calc(100vh - 418px);
+}
+
+
+.tasks {
+    min-height: 180px;
+    position: relative;
+
+    &.noTask{
+        &::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        height: 180px;
+        width: 270px;
+        margin: 0 auto;
+        background-image: url('../../images/file.png');
+        background-size: cover;
+        background-position: center;
+    }
+    }
+}
+
+#tasksList {
+    tr {
+        .tasks-list-menu {
+            opacity: 0;
+        }
+
+        &:hover {
+            .tasks-list-menu {
+                opacity: 1;
+            }
+        }
+    }
+}

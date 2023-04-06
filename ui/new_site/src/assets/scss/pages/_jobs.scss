@@ -1,0 +1,25 @@
+//
+// _invoice.scss
+//
+
+.bg-job {
+    background-image: url(../../images/new.png);
+    background-size: cover;
+    background-position: center;
+}
+
+.job-list-view-card{
+    .background {
+        height: 130px;
+    }
+}
+
+.job-list-row {
+    &.row {
+        .col-xxl-3 {
+            @media (min-width: 1400px) and (max-width: 1499.98px) {
+                width: 33%; 
+            }
+        }
+    }
+}

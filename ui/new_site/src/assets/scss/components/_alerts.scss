@@ -1,0 +1,200 @@
+//
+// alerts.scss
+//
+
+// alert solid
+
+.alert-solid {
+    .alert-link {
+        color: $white;
+    }
+}
+
+// alert outline
+
+.alert-outline {
+    background-color: var(--#{$prefix}card-bg-custom);
+    border-width: 2px;
+}
+
+// alert borderless
+
+.alert-borderless {
+    border-width: 0;
+}
+
+// alert-label-icon
+
+.alert-label-icon {
+    position: relative;
+    padding-left: 60px;
+    border: 0;
+
+    .label-icon {
+        position: absolute;
+        width: 45px;
+        height: 100%;
+        left: 0;
+        top: 0;
+        background-color: rgba($white, 0.15);
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    // label arrow
+    &.label-arrow {
+        overflow: hidden;
+        .label-icon {
+            &:after {
+                content: "";
+                position: absolute;
+                border: 6px solid transparent;
+                border-left-color: $primary;
+                right: -12px;
+            }
+        }
+    }
+}
+
+
+// Alert border left example
+
+.alert-border-left {
+    border-left: 3px solid;
+}
+
+// alert top border example
+
+.alert-top-border {
+    background-color: var(--#{$prefix}card-bg-custom);
+    border-color: $border-color;
+    border-top: 2px solid;
+    color: var(--#{$prefix}body-color);
+}
+
+//alert additional example
+
+.alert-additional { 
+    padding: 0;
+
+    .alert-body{
+        padding: $alert-padding-y $alert-padding-x;
+    }
+    .alert-content {
+        padding: $alert-padding-y $alert-padding-x;
+        border-bottom-left-radius: $alert-border-radius;
+        border-bottom-right-radius: $alert-border-radius;
+        margin: 0 (-$alert-border-width) (-$alert-border-width) (-$alert-border-width);
+    }
+}
+
+// rounded label example
+
+.rounded-label {
+    .label-icon {
+        width: 45px;
+        height: 26px;
+        left: 0px;
+        top: 50%;
+        transform: translateY(-50%);
+        border-radius: 0 30px 30px 0;
+    }
+}
+
+// Alert example loop
+
+@each $color, $value in $theme-colors {
+    // alert solid
+    .alert-solid {
+        &.alert-#{$color} {
+            background-color: $value;
+            border-color: $value;
+            color: set-color-from-background($value);
+        }
+    }
+
+    // alert outline
+    .alert-outline {
+        &.alert-#{$color} {
+            color: $value;
+        }
+    }
+
+    // alert border left
+    .alert-border-left {
+        &.alert-#{$color} {
+            border-left-color: $value;
+        }
+    }
+
+    // alert top border
+    .alert-top-border {
+        &.alert-#{$color} {
+            border-top-color: $value;
+        }
+    }
+    
+
+    // rounded label
+
+    .rounded-label {
+        &.alert-#{$color} {
+            .label-icon {
+                background-color: $value;
+                color: set-color-from-background($value);
+            }
+        }
+    }
+
+    // label arrow
+
+    .label-arrow {
+        &.alert-#{$color} {
+            .label-icon {
+                color: set-color-from-background($value);
+                background-color: $value;
+                &:after {
+                    border-left-color: $value !important;
+                }
+            }
+        }
+    }
+
+    .alert{
+        &.alert-#{$color} {
+            .btn-close::after{
+                color: $value;
+            }
+        }
+        
+    }
+
+    //alert additional example
+    .alert-additional {
+        &.alert-#{$color} {
+            .alert-content {
+                background-color: $value;
+                color: set-color-from-background($value);
+            }
+        }
+    }   
+}
+.alert-dismissible {
+    .btn-close {
+        background: transparent !important;
+        &::after {
+            background: transparent !important;
+            content: "\F0156" !important;
+            font-size: 18px;
+            line-height:15px;
+            font-family: "Material Design Icons" !important;
+        }
+    }
+}
+
+.alert-outline.alert-dark{
+    color: var(--#{$prefix}dark);
+}
+   

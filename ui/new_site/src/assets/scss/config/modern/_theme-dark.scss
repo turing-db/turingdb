@@ -1,0 +1,281 @@
+// :root CSS dark variables
+
+
+[data-layout-mode="dark"]{
+
+  // Color system - Dark Mode only
+  $gray-100: #1a1d21;
+  $gray-200: #212529;
+  $gray-300: #2a2f34;
+  $gray-400: #878a99;
+  $gray-500: #adb5bd;
+  $gray-600: #bfc8e2;
+  $gray-700: #ced4da;
+  $gray-800: #eff2f7;
+  $gray-900: #f3f6f9;
+
+  $grays: (
+      "100": $gray-100,
+      "200": $gray-200,
+      "300": $gray-300,
+      "400": $gray-400,
+      "500": $gray-500,
+      "600": $gray-600,
+      "700": $gray-700,
+      "800": $gray-800,
+      "900": $gray-900
+  );
+
+  // Prefix for :root CSS variables
+  @each $color, $value in $grays {
+      --#{$prefix}gray-#{$color}: #{$value};
+  }
+
+  // body
+  --#{$prefix}body-bg :  #{$gray-100};
+  --#{$prefix}body-bg-rgb :  #{to-rgb($gray-100)};
+  --#{$prefix}body-color: #{$gray-700};
+  --#{$prefix}body-color-rgb: #{to-rgb($gray-700)};
+  
+
+  //vertical light
+  --#{$prefix}vertical-menu-bg:                      #{$white};
+  --#{$prefix}vertical-menu-item-color:              #{darken($gray-400, 16%)};
+  --#{$prefix}vertical-menu-item-hover-color:        #{$primary};
+  --#{$prefix}vertical-menu-item-active-color:       #{$primary};
+  --#{$prefix}vertical-menu-sub-item-color:          #{darken($gray-400, 12%)};
+  --#{$prefix}vertical-menu-sub-item-hover-color:    #{$primary};
+  --#{$prefix}vertical-menu-sub-item-active-color:   #{$primary};
+  --#{$prefix}vertical-menu-title-color:             #{$gray-400};
+
+  //vertical dark
+  --#{$prefix}vertical-menu-bg-dark:                 #{darken($gray-300, 2.5%)};
+  --#{$prefix}vertical-menu-item-color-dark:        #89929b;
+  --#{$prefix}vertical-menu-item-hover-color-dark:   #{$white};
+  --#{$prefix}vertical-menu-item-active-color-dark:  #{$white};
+  --#{$prefix}vertical-menu-sub-item-color-dark:    #89929b;
+  --#{$prefix}vertical-menu-sub-item-hover-color-dark: #{$white};
+  --#{$prefix}vertical-menu-sub-item-active-color-dark: #{$white};
+  --#{$prefix}vertical-menu-title-color-dark:         #89929b;
+
+  // Topbar - (Default Light)
+  --#{$prefix}header-bg:  #292e32;
+  --#{$prefix}header-item-color:  #e9ecef;
+  // Topbar - Dark
+  --#{$prefix}header-bg-dark:   #{darken($gray-300, 4%)};
+  --#{$prefix}header-item-color-dark:  #89929b;
+
+  // Topbar Search
+  --#{$prefix}topbar-search-bg: #{darken($gray-200, 3%)};
+  // Topbar User
+  --#{$prefix}topbar-user-bg: #{lighten($gray-300, 3%)};
+  --#{$prefix}topbar-user-bg-dark: #{lighten($gray-300, 2%)};
+
+  //footer
+  --#{$prefix}footer-bg: #{$gray-200};
+  --#{$prefix}footer-color: #{$gray-400};
+
+  // Horizontal nav
+  --#{$prefix}topnav-bg: #{lighten($gray-200, 2.5%)};
+  --#{$prefix}topnav-item-color: #{$gray-400};
+  --#{$prefix}topnav-item-color-active: #{$white};
+
+  // twocolumn menu
+  --#{$prefix}twocolumn-menu-iconview-bg: #{$white};
+  --#{$prefix}twocolumn-menu-bg:  #{$white};
+    
+  // two column dark
+  --#{$prefix}twocolumn-menu-iconview-bg-dark: var(--#{$prefix}vertical-menu-bg-dark);
+  --#{$prefix}twocolumn-menu-bg-dark:  #{darken($gray-300, 1.5%)};
+  --#{$prefix}twocolumn-menu-item-color-dark: var(--#{$prefix}vertical-menu-item-color-dark);
+  --#{$prefix}twocolumn-menu-item-active-color-dark:  #{$white};
+  --#{$prefix}twocolumn-menu-item-active-bg-dark:  #{rgba($white, .15)};
+
+  // boxed 
+  --#{$prefix}boxed-body-bg: #{darken($gray-100, 4%)};
+
+  // heading-color
+  --#{$prefix}heading-color: #{$gray-700};
+
+  // component variable
+  --#{$prefix}light: #{$gray-300};
+  --#{$prefix}light-rgb: #{to-rgb($gray-300)};
+  --#{$prefix}dark: #{$gray-800};
+  --#{$prefix}dark-rgb: #{to-rgb($gray-800)};
+
+  // link
+  --#{$prefix}link-color: #{$gray-700};
+  --#{$prefix}link-hover-color: #{$gray-700};
+
+  // Border variable
+  --#{$prefix}border-color:  #{lighten($gray-300, 3.5%)};
+
+  // dropdown
+  .dropdown-menu {
+    --#{$prefix}dropdown-bg:                         #{lighten($gray-200, 3.5%)};
+    --#{$prefix}dropdown-link-color:                 #{$gray-500};
+    --#{$prefix}dropdown-link-hover-color:           #{shade-color($gray-700, 10%)};
+    --#{$prefix}dropdown-link-hover-bg:              #{lighten($gray-300, 2%)};
+    --#{$prefix}dropdown-border-width:               1px;
+    --#{$prefix}dropdown-link-active-bg:             #{lighten($gray-300, 2%)};
+    --#{$prefix}dropdown-link-active-color:          #{$gray-500};
+  }
+
+  //choices 
+  .choices, .flatpickr-calendar, .ck, .ql-toolbar, .select2-container, .menu-dropdown {
+    --#{$prefix}choices-bg:                          #{lighten($gray-200, 3.5%)};
+    --#{$prefix}choices-link-color:                  #{$gray-500};
+    --#{$prefix}choices-link-hover-bg:               #{lighten($gray-300, 2%)};
+    --#{$prefix}choices-link-active-color:           #{shade-color($gray-900, 10%)};
+  }
+  
+  //buttons
+  .btn-light {
+    --#{$prefix}btn-color:                           var(--#{$prefix}dark);
+    --#{$prefix}btn-bg:                              var(--#{$prefix}light);
+    --#{$prefix}btn-border-color:                    var(--#{$prefix}light);
+  }
+
+  .btn-outline-light {
+    --#{$prefix}btn-color:                           var(--#{$prefix}dark);
+    --#{$prefix}btn-bg:                              transparent;
+    --#{$prefix}btn-border-color:                    var(--#{$prefix}light);
+  }
+  
+  .btn-light, .btn-outline-light {
+    --#{$prefix}btn-hover-color:                     var(--#{$prefix}dark);
+    --#{$prefix}btn-hover-bg:                        rgba(var(--#{$prefix}light-rgb), 0.75);
+    --#{$prefix}btn-hover-border-color:              rgba(var(--#{$prefix}light-rgb), 0.75);
+  }
+
+  .btn-dark {
+    --#{$prefix}btn-color:                           var(--#{$prefix}light);
+    --#{$prefix}btn-bg:                              var(--#{$prefix}dark);
+    --#{$prefix}btn-border-color:                    var(--#{$prefix}dark);
+  }
+
+  .btn-outline-dark {
+    --#{$prefix}btn-color:                           var(--#{$prefix}dark);
+    --#{$prefix}btn-bg:                              transparent;
+    --#{$prefix}btn-border-color:                    var(--#{$prefix}dark);
+  }
+
+  .btn-dark, .btn-outline-dark {
+    --#{$prefix}btn-hover-color:                     var(--#{$prefix}light);
+    --#{$prefix}btn-hover-bg:                        rgba(var(--#{$prefix}dark-rgb), 0.75);
+    --#{$prefix}btn-hover-border-color:              rgba(var(--#{$prefix}dark-rgb), 0.75);
+  }
+
+  // card
+  .card {
+    --#{$prefix}card-bg:                             #{$gray-200};
+    --#{$prefix}card-cap-bg:                         #{$gray-200};
+  }
+  
+  --#{$prefix}card-bg-custom:                        #{$gray-200};
+  --#{$prefix}card-logo-dark:                        none;
+  --#{$prefix}card-logo-light:                       block;
+  
+  // modal
+  .modal {
+    --#{$prefix}modal-bg:                            #{$gray-200};
+  }
+  
+  // nav tabs
+  .nav-tabs {
+    --#{$prefix}nav-tabs-link-active-color:          #{$gray-900};
+    --#{$prefix}nav-tabs-link-active-bg:             #{$gray-300};
+  }
+
+  // accordion
+  .accordion{
+    --#{$prefix}accordion-button-active-color:       #{$white};
+    --#{$prefix}accordion-bg:                        #{$gray-200};
+    --#{$prefix}accordion-btn-bg:                    #{$gray-200};
+  }
+  
+  //offcanvas
+  :is(.offcanvas, .offcanvas-lg, .offcanvas-md, .offcanvas-sm, .offcanvas-xl, .offcanvas-xxl) {
+    --#{$prefix}offcanvas-bg:                        #{$gray-200};
+      
+  }
+
+  // progress
+  .progress{
+    --#{$prefix}progress-bg:                         #{$gray-300};
+  }
+
+  //table
+  .table {
+    --vz-table-striped-bg:                           #{rgba($white, .03)};
+    --vz-table-active-bg:                            #{rgba($white, .07)};
+    --vz-table-hover-bg:                             #{rgba($white, .07)};
+  }
+
+  .table-light{
+    --vz-table-color:                                #{$white};
+    --vz-table-bg:                                   #{rgba($white, .05)};
+    --vz-table-border-color:                         #{$border-color};
+    --vz-table-striped-bg:                           #{rgba($white, .07)};
+    --vz-table-striped-color:                        #{$white};
+  }
+
+  // toast
+  .toast {
+    --#{$prefix}toast-bg:                            #{rgba($gray-300, .85)};
+    --#{$prefix}toast-header-bg:                     #{rgba($gray-300, .85)};
+    --#{$prefix}toast-border-color:                  #{rgba($white, .1)};
+    --#{$prefix}toast-header-border-color:           #{rgba($white, .05)};
+  }
+
+  //list
+  --#{$prefix}list-group-hover-bg: #{lighten($gray-200, 2.5%)};
+
+  // popover
+  .popover{
+    --#{$prefix}popover-bg:                          #{lighten($gray-200, 1%)};
+  }
+
+  // pagination
+  .pagination{
+    --#{$prefix}pagination-hover-bg:                   #{lighten($gray-200, 4%)};
+    --#{$prefix}pagination-focus-bg:                   #{lighten($gray-200, 4%)};
+  }
+
+  //form
+  --#{$prefix}input-bg: #{lighten($gray-200, 2%)};
+  --#{$prefix}input-border: #{$gray-300};
+  --#{$prefix}input-focus-border: #{lighten($gray-300, 4%)};
+  --#{$prefix}input-disabled-bg: #{$gray-200};
+
+  // input-group-addon
+  --#{$prefix}input-group-addon-bg: #{$gray-300};
+
+  //check
+  --#{$prefix}input-check-border:  #{lighten($gray-300, 4%)};
+}
+
+//sidebar color
+[data-sidebar="gradient"] { 
+  --#{$prefix}vertical-menu-bg-gradient: linear-gradient(to right, var(--#{$prefix}primary), var(--#{$prefix}success));
+  --#{$prefix}vertical-menu-border-gradient: var(--#{$prefix}success);
+  --#{$prefix}twocolumn-menu-bg-dark: var(--#{$prefix}success);
+}
+
+[data-sidebar="gradient-2"] { 
+  --#{$prefix}vertical-menu-bg-gradient: linear-gradient(to right, var(--#{$prefix}info), var(--#{$prefix}secondary));
+  --#{$prefix}vertical-menu-border-gradient: var(--#{$prefix}secondary);
+  --#{$prefix}twocolumn-menu-bg-dark: var(--#{$prefix}secondary);
+}
+
+[data-sidebar="gradient-3"] { 
+  --#{$prefix}vertical-menu-bg-gradient: linear-gradient(to right, var(--#{$prefix}info), var(--#{$prefix}success));
+  --#{$prefix}vertical-menu-border-gradient: var(--#{$prefix}success);
+  --#{$prefix}twocolumn-menu-bg-dark: var(--#{$prefix}success);
+}
+
+[data-sidebar="gradient-4"] { 
+  --#{$prefix}vertical-menu-bg-gradient: linear-gradient(to right, #343a40, var(--#{$prefix}primary));
+  --#{$prefix}vertical-menu-border-gradient: var(--#{$prefix}primary);
+  --#{$prefix}twocolumn-menu-bg-dark: var(--#{$prefix}primary);
+}

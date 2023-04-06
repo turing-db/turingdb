@@ -1,0 +1,151 @@
+// 
+// _progress.scss
+// 
+
+// Progress height small
+.progress-sm {
+    height: 5px;
+}
+
+// Progress height large
+.progress-lg {
+    height: 12px;
+}
+
+// Progress height Extra large
+.progress-xl {
+    height: 16px;
+}
+
+.custom-progess {
+    position: relative;
+
+    .progress-icon {
+        position: absolute;
+        top: -12px;
+
+        .avatar-title {
+            background: var(--#{$prefix}card-bg-custom);
+        }
+    }
+}
+
+// animated-progress
+
+.animated-progress {
+    position: relative;
+
+    .progress-bar {
+        position: relative;
+        border-radius: 6px;
+        animation: animate-positive 2s;
+    }
+}
+
+@keyframes animate-positive {
+    0% {
+        width: 0;
+    }
+}
+
+// custom-progress
+
+.custom-progress {
+    height: 15px;
+    padding: 4px;
+    border-radius: 30px;
+
+    .progress-bar {
+        position: relative;
+        border-radius: 30px;
+
+        &::before {
+            content: "";
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background-color: $white;
+            border-radius: 7px;
+            right: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+
+        }
+    }
+}
+
+// progress withlabel
+.progress-label {
+    overflow: visible;
+
+    .progress-bar {
+        position: relative;
+        overflow: visible;
+
+        .label {
+            position: absolute;
+            top: -25px;
+            right: -9px;
+            background-color: $primary;
+            color: $white;
+            display: inline-block;
+            line-height: 18px;
+            padding: 0 4px;
+            border-radius: 4px;
+
+            &:after {
+                content: "";
+                position: absolute;
+                border: 4px solid transparent;
+                border-top-color: $primary;
+                bottom: -7px;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+        }
+    }
+}
+
+
+.progress-step-arrow {
+    height: 3.25rem;
+
+    .progress-bar {
+        position: relative;
+        overflow: initial;
+        font-size: .875rem;
+        color: $white;
+        &::after {
+            content: "";
+            position: absolute;
+            border: 10px solid transparent;
+            bottom: 15px;
+            right: -20px;
+            z-index: 1;
+        }
+    }
+}
+
+
+@mixin progress-variant($bg) {
+    .progress-bar {
+        background-color: $bg;
+        &::after { 
+            border-left-color: $bg;
+        }
+        &:nth-child(2) {
+            background-color: rgba($bg, 0.1) !important;
+            color: $bg !important;
+            &::after { 
+                border-left-color: rgba($bg, 0.1);
+            }
+        }
+    }
+}
+
+@each $color, $value in $theme-colors {
+    .progress-#{$color} {
+        @include progress-variant($value);
+    }
+}
+

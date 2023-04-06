@@ -1,0 +1,578 @@
+//
+// _nav.scss
+//
+
+:is(.nav-tabs, .nav-pills) {
+    >li {
+        >a {
+            color: var(--#{$prefix}gray-700);
+            font-weight: $font-weight-medium;
+        }
+    }
+}
+
+.nav-pills {
+    >a {
+        color: var(--#{$prefix}gray-700);
+        font-weight: $font-weight-medium;
+    }
+}
+
+.nav-pills {
+
+    :is(.nav-link.active, .show>.nav-link) {
+        box-shadow: $element-shadow;
+    }
+}
+
+.nav-tabs-custom {
+    border-bottom: 1px solid var(--#{$prefix}gray-300);
+
+    .nav-item {
+        position: relative;
+
+        .nav-link {
+            border: none;
+            font-weight: $font-weight-medium;
+
+            &::after {
+                content: "";
+                background: $primary;
+                height: 1px;
+                position: absolute;
+                width: 100%;
+                left: 0;
+                bottom: 0;
+                transition: all 250ms ease 0s;
+                transform: scale(0);
+            }
+
+            &.active {
+                color: $primary;
+
+                &:after {
+                    transform: scale(1);
+                }
+            }
+        }
+    }
+
+    &.card-header-tabs {
+        margin-top: -1rem;
+
+        .nav-link {
+            padding: $card-cap-padding-y $card-cap-padding-x;
+        }
+    }
+}
+
+// vertical nav
+
+.vertical-nav {
+    .nav {
+        .nav-link {
+            padding: 24px 16px;
+            text-align: center;
+            margin-bottom: 8px;
+
+            .nav-icon {
+                font-size: 24px;
+            }
+        }
+    }
+}
+
+//Navtab custom
+.navtab-bg {
+    li {
+        >a {
+            background-color: $gray-300;
+            margin: 0 5px;
+        }
+    }
+}
+
+// arrow-navtabs
+
+.arrow-navtabs {
+    .nav-item {
+        .nav-link {
+            position: relative;
+            text-align: center;
+
+            &:before {
+                content: "";
+                position: absolute;
+                border: 6px solid transparent;
+                bottom: -12px;
+                left: 50%;
+                transform: translateX(-50%);
+                @include transition($nav-link-transition);
+            }
+
+            &.active {
+                &:before {
+                    border-top-color: $primary;
+                }
+            }
+        }
+    }
+}
+
+// custom hover tab
+.custom-hover-nav-tabs {
+    .nav-item {
+        text-align: center;
+        overflow: hidden;
+
+        .nav-link {
+            width: 120px;
+            height: 45px;
+            position: relative;
+            border-radius: 0px;
+
+            .nav-icon {
+                font-size: 22px;
+            }
+
+            .nav-titl {
+                font-size: 14px;
+            }
+
+            &.active {
+                .nav-tab-position {
+                    color: $white;
+                }
+            }
+
+            .nav-tab-position {
+                position: absolute;
+                left: 0;
+                right: 0;
+                transition: all 0.4s;
+
+                &.nav-icon {
+                    top: 50%;
+                    transform: translateY(-50%);
+                }
+
+                &.nav-titl {
+                    bottom: -20px;
+                }
+            }
+
+            &:hover {
+                .nav-titl {
+                    bottom: 50%;
+                    transform: translateY(50%);
+                }
+
+                .nav-icon {
+                    top: -20px;
+                }
+            }
+        }
+    }
+}
+
+// custom vertical tab
+
+.custom-verti-nav-pills {
+    .nav-link {
+        background-color: var(--#{$prefix}light);
+        margin-top: 7px;
+        position: relative;
+
+        @media (min-width: 992px) {
+            &::before {
+                content: "";
+                position: absolute;
+                right: -20px;
+                top: 50%;
+                transform: translateY(-50%);
+                border: 12px solid transparent;
+                border-left-color: transparent;
+                transition: border-left-color 0.04 ease;
+            }
+
+            &.active {
+                &::before {
+                    border-left-color: $primary;
+                }
+            }
+        }
+    }
+}
+
+// animation nav
+.animation-nav {
+    li {
+        position: relative;
+
+        a {
+            color: var(--#{$prefix}body-color);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s;
+            z-index: 1;
+
+            span {
+                position: relative;
+            }
+
+            &::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                width: 0;
+                right: 0;
+                height: 100%;
+                transition: width 0.4s cubic-bezier(0.51, 0.18, 0, 0.88) 0.1s;
+                background-color: $primary;
+                z-index: -1;
+            }
+
+            &:hover,
+            &.active {
+                color: $white;
+                background-color: transparent !important;
+
+                &::before {
+                    width: 100%;
+                    left: 0;
+                }
+            }
+        }
+    }
+}
+
+.nav-border-top {
+    .nav-link {
+        border-top: 3px solid transparent;
+
+        &.active {
+            border-top-color: $primary;
+        }
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .nav-border-top-#{$color} {
+        .nav-link {
+            &.active {
+                color: $value;
+                border-top-color: $value;
+            }
+        }
+    }
+}
+
+.nav-custom {
+    background-color: $primary;
+    border-radius: $card-border-radius;
+
+    .nav-item {
+        .nav-link {
+            color: rgba($white, 0.75);
+
+            &.active {
+                color: $white;
+                background-color: rgba($white, 0.1);
+            }
+        }
+    }
+
+    &.nav-custom-light {
+        .nav-item {
+            .nav-link {
+                color: rgba(var(--#{$prefix}dark-rgb), 0.75);
+
+                &.active {
+                    color: $light;
+                    background-color: $primary;
+                }
+            }
+        }
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .nav-custom-#{$color} {
+        background-color: $value;
+    }
+}
+
+.nav-custom-light {
+    background-color: var(--#{$prefix}light);
+}
+
+@each $color,
+$value in $theme-colors {
+    .nav-#{$color} {
+        .nav-link {
+            &.active {
+                color: $white;
+                background-color: $value;
+            }
+        }
+
+        &.nav-tabs {
+            .nav-link {
+                &.active {
+                    color: $value;
+                    background-color: var(--#{$prefix}card-bg-custom);
+                }
+            }
+        }
+
+        &.nav-tabs-custom {
+            .nav-link {
+                &.active {
+                    color: $value;
+                    background-color: var(--#{$prefix}card-bg-custom);
+
+                    &::after {
+                        background-color: $value;
+                    }
+                }
+            }
+        }
+
+        &.arrow-navtabs {
+            .nav-link {
+                &.active {
+                    &::before {
+                        border-top-color: $value;
+                    }
+                }
+            }
+        }
+
+        &.custom-verti-nav-pills {
+            .nav-link {
+                &.active {
+                    &::before {
+                        border-left-color: $value;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// progress nav
+.progress-nav {
+    position: relative;
+    margin-right: 1rem;
+    margin-left: 1rem;
+
+    .progress {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 100%;
+    }
+
+    .nav {
+        margin-right: -1rem;
+        margin-left: -1rem;
+        justify-content: space-between;
+
+        .nav-link {
+            width: 2rem;
+            height: 2rem;
+            background-color: var(--#{$prefix}light);
+            padding: 0;
+            color: var(--#{$prefix}dark);
+            font-weight: $font-weight-medium;
+
+            &.active,
+            &.done {
+                background-color: $primary;
+                color: $white;
+            }
+        }
+    }
+}
+
+// Step arrow nav
+.step-arrow-nav {
+    .nav {
+        background-color: var(--#{$prefix}light);
+
+        .nav-link {
+            border-radius: 0;
+            position: relative;
+            font-weight: $font-weight-medium;
+            color: var(--#{$prefix}dark);
+
+            &::before {
+                content: "";
+                position: absolute;
+                border: 7px solid transparent;
+                right: -14px;
+                top: 50%;
+                transform: translateY(-50%);
+            }
+
+            &.done {
+                background-color: rgba($primary, 0.05);
+                color: $primary;
+
+                &::before {
+                    border-left-color: transparent;
+                }
+            }
+
+            &.active {
+                background-color: rgba($primary, 0.1);
+                color: $primary;
+                box-shadow: none;
+
+                &::before {
+                    border-left-color: rgba($primary, 0.1);
+                }
+            }
+        }
+
+        .nav-item {
+            &:last-child {
+                .nav-link {
+                    &:before {
+                        display: none;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// vertical nav step
+.vertical-navs-step {
+    .nav {
+        gap: 16px;
+
+        .nav-link {
+            text-align: left;
+            background-color: rgba(var(--#{$prefix}light-rgb), 0.4);
+            border: 1px solid var(--#{$prefix}border-color);
+            color: var(--#{$prefix}dark);
+
+            .step-title {
+                font-weight: $font-weight-semibold;
+            }
+
+            .step-icon {
+                color: $danger;
+                vertical-align: middle;
+                font-weight: $font-weight-medium;
+                float: left;
+            }
+
+            &.active,
+            &.done {
+                .step-icon {
+                    color: $success;
+
+                    &:before {
+                        content: "\eb80";
+                    }
+                }
+            }
+
+            &.active {
+                border-color: $primary;
+            }
+
+            &.done {
+                border-color: $success;
+            }
+        }
+    }
+}
+
+//Outline Border Nav
+.nav-custom-outline {
+    &.nav {
+        .nav-link {
+            border: 1px solid transparent;
+            border-bottom: 2px solid transparent;
+
+            &.active {
+                border-color: $primary;
+                background-color: transparent;
+                color: $primary;
+            }
+        }
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .nav-#{$color} {
+        &.nav-custom-outline {
+            .nav-link {
+                &.active {
+                    color: $value;
+                    border-color: $value;
+                }
+            }
+        }
+    }
+}
+
+//customs nav
+.nav-customs {
+    &.nav {
+        padding-left: 34px;
+        overflow: hidden;
+
+        .nav-link {
+            position: relative;
+            display: block;
+            float: right;
+            background-color: var(--#{$prefix}body-bg);
+            margin-right: 46px;
+            transition: all 0.5s ease;
+
+            &::before,
+            &::after {
+                display: block;
+                content: " ";
+                position: absolute;
+                top: -1px;
+                bottom: -1px;
+                width: 37px;
+                background-color: var(--#{$prefix}body-bg);
+                transition: all 0.5s ease;
+            }
+
+            &::before {
+                border-radius: 0 8px 0 0;
+                right: -24px;
+                transform: skew(30deg, 0deg);
+            }
+
+            &::after {
+                border-radius: 8px 0 0 0;
+                left: -24px;
+                transform: skew(-30deg, 0deg);
+            }
+
+            &.active,
+            &.active:before,
+            &.active:after {
+                background-color: $primary;
+                color: $white;
+            }
+
+            &.active {
+                z-index: 1;
+            }
+        }
+    }
+}

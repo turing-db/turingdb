@@ -1,0 +1,655 @@
+//
+// _components-rtl.scss
+//
+
+ol,
+ul {
+    padding-right: 0px;
+}
+
+// Margin and Padding
+
+@each $breakpoint in map-keys($grid-breakpoints) {
+    @include media-breakpoint-up($breakpoint) {
+        $infix: breakpoint-infix($breakpoint, $grid-breakpoints);
+
+        @each $prop,
+        $abbrev in (margin: m, padding: p) {
+
+            @each $size,
+            $length in $spacers {
+                .#{$abbrev}#{$infix}-#{$size} {
+                    #{$prop}: $length  !important;
+                }
+
+                .#{$abbrev}e#{$infix}-#{$size} {
+                    #{$prop}-left: $length  !important;
+                    #{$prop}-right: 0 !important;
+                }
+
+                .#{$abbrev}s#{$infix}-#{$size} {
+                    #{$prop}-right: $length  !important;
+                    #{$prop}-left: 0 !important;
+                }
+            }
+        }
+
+        // Negative margins (e.g., where `.mb-n1` is negative version of `.mb-1`)
+        @each $size,
+        $length in $spacers {
+            @if $size  !=0 {
+                .m#{$infix}-n#{$size} {
+                    margin: -$length  !important;
+                }
+
+                .mt#{$infix}-n#{$size},
+                .my#{$infix}-n#{$size} {
+                    margin-top: -$length  !important;
+                }
+
+                .me#{$infix}-n#{$size},
+                .mx#{$infix}-n#{$size} {
+                    margin-right: -$length  !important;
+                }
+
+                .mb#{$infix}-n#{$size},
+                .my#{$infix}-n#{$size} {
+                    margin-bottom: -$length  !important;
+                }
+
+                .ms#{$infix}-n#{$size},
+                .mx#{$infix}-n#{$size} {
+                    margin-left: -$length  !important;
+                }
+            }
+        }
+
+        // Some special margin utils
+        .m#{$infix}-auto {
+            margin: auto !important;
+        }
+
+        .mt#{$infix}-auto,
+        .my#{$infix}-auto {
+            margin-top: auto !important;
+        }
+
+        .me#{$infix}-auto,
+        .mx#{$infix}-auto {
+            margin-left: auto !important;
+            margin-right: inherit !important;
+        }
+
+        .mb#{$infix}-auto,
+        .my#{$infix}-auto {
+            margin-bottom: auto !important;
+        }
+
+        .mx#{$infix}-auto {
+            margin-right: auto !important;
+            margin-left: auto !important;
+        }
+
+        .ms#{$infix}-auto {
+            margin-right: auto !important;
+            margin-left: 0 !important;
+        }
+    }
+}
+
+
+// Responsive alignment
+
+@each $breakpoint in map-keys($grid-breakpoints) {
+    @include media-breakpoint-up($breakpoint) {
+        $infix: breakpoint-infix($breakpoint, $grid-breakpoints);
+
+        .text#{$infix}-start {
+            text-align: right !important;
+        }
+
+        .text#{$infix}-end {
+            text-align: left !important;
+        }
+
+        .text#{$infix}-center {
+            text-align: center !important;
+        }
+    }
+}
+
+
+// Float
+
+@each $breakpoint in map-keys($grid-breakpoints) {
+    @include media-breakpoint-up($breakpoint) {
+        $infix: breakpoint-infix($breakpoint, $grid-breakpoints);
+
+        .float#{$infix}-start {
+            float: right !important;
+        }
+
+        .float#{$infix}-end {
+            float: left !important;
+        }
+
+        .float#{$infix}-none {
+            float: none !important;
+        }
+    }
+}
+
+.end-0 {
+    left: 0;
+    right: auto !important;
+}
+
+.start-0 {
+    right: 0;
+    left: auto !important;
+}
+
+// Breadcrumb
+.breadcrumb-item {
+
+    // The separator between breadcrumbs (by default, a forward-slash: "/")
+    +.breadcrumb-item {
+        padding-right: $breadcrumb-item-padding-x;
+        padding-left: 0px;
+
+        &::before {
+            float: right; // Suppress inline spacings and underlining of the separator
+            padding-left: $breadcrumb-item-padding-x;
+            padding-right: 0px;
+            content: var(--#{$variable-prefix}breadcrumb-divider, escape-svg($breadcrumb-divider)) #{"/* rtl:"} var(--#{$variable-prefix}breadcrumb-divider, escape-svg($breadcrumb-divider-flipped)) #{"*/"};
+        }
+    }
+}
+
+
+//Buttons 
+
+//button with icon
+.btn-label {
+    position: relative;
+    padding-right: 44px;
+
+    .label-icon {
+        right: -$btn-border-width;
+    }
+
+    &.right {
+        padding-right: $btn-padding-x;
+        padding-left: 44px;
+
+        .label-icon {
+            left: -$btn-border-width;
+            right: auto;
+        }
+    }
+}
+
+.btn-group>:not(.btn-check)+.btn {
+    border-radius: 0px;
+    border-top-left-radius: $btn-border-radius;
+    border-bottom-left-radius: $btn-border-radius;
+}
+
+
+.btn-group>.btn:not(:last-child):not(.dropdown-toggle) {
+    border-radius: 0px;
+    border-top-right-radius: $btn-border-radius;
+    border-bottom-right-radius: $btn-border-radius;
+}
+
+
+// Dropdown
+
+.dropdown-toggle::after {
+    margin-right: .255em;
+    margin-left: auto;
+}
+
+// Nav
+
+.custom-verti-nav-pills {
+    .nav-link {
+        @media (min-width: 992px) {
+            &::before {
+                left: -20px;
+                right: auto;
+                border-right-color: transparent;
+                transition: border-right-color 0.04 ease;
+            }
+
+            &.active {
+                &::before {
+                    border-right-color: $primary;
+                    border-left-color: transparent;
+                }
+            }
+        }
+    }
+}
+
+// Accordion 
+.accordion-button::after {
+    margin-right: auto;
+    margin-left: 0px;
+}
+
+// Accordion with icon
+
+.custom-accordionwithicon,
+.custom-accordionwithicon-plus {
+    .accordion-button {
+        &:not(.collapsed) {
+            &::after {
+                margin-left: -3px;
+                margin-right: auto;
+            }
+        }
+    }
+}
+
+//modal
+.modal-header .btn-close {
+    margin: -.625rem auto -.625rem -.625rem
+}
+
+//Offcanvas
+.offcanvas-start {
+    top: 0;
+    right: 0;
+    left: 0px;
+    border-left: 1px solid var(--vz-border-color);
+    transform: translateX(100%)
+}
+
+.offcanvas-end {
+    top: 0;
+    left: 0;
+    right: auto !important;
+    border-right: 1px solid var(--vz-border-color);
+    transform: translateX(-100%)
+}
+
+
+//Progress
+.progress-step-arrow {
+    .progress-bar {
+        &::after {
+            content: "";
+            left: -20px;
+            right: auto;
+        }
+    }
+}
+
+
+@mixin progress-variant($bg) {
+    .progress-bar {
+        &::after {
+            border-right-color: $bg  !important;
+            border-left-color: transparent !important;
+        }
+
+        &:nth-child(2) {
+            &::after {
+                border-right-color: rgba($bg, 0.1) !important;
+                border-left-color: transparent !important;
+            }
+        }
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .progress-#{$color} {
+        @include progress-variant($value);
+    }
+}
+
+
+.toast-header {
+    .btn-close {
+        margin-left: $toast-padding-x * -.5;
+        margin-right: $toast-padding-x;
+    }
+}
+
+// Blockquote
+.custom-blockquote {
+    &.blockquote {
+        border-right: 3px solid;
+        border-left: none;
+
+        &.blockquote-outline {
+            background-color: $card-bg  !important;
+            border: 1px solid;
+            border-right: 3px solid;
+        }
+    }
+}
+
+.list-group {
+    padding-right: 0px;
+}
+
+.list-group-horizontal-md>.list-group-item:first-child {
+    border-bottom-right-radius: $border-radius;
+    border-top-right-radius: $border-radius;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.list-group-horizontal-md>.list-group-item:last-child {
+    border-top-left-radius: $border-radius;
+    border-bottom-left-radius: $border-radius;
+    border-bottom-right-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.list-group-horizontal-md>.list-group-item+.list-group-item {
+    border-top-width: 1px;
+    border-right-width: 0;
+    border-left-width: 1px;
+}
+
+.list-group-horizontal-md>.list-group-item+.list-group-item.active {
+    margin-right: -1px;
+    border-right-width: 1px;
+}
+
+.page-item {
+    &:not(:first-child) {
+        .page-link {
+            margin-right: -1px;
+        }
+    }
+}
+
+// ribbons.scss
+.ribbon-box {
+    .ribbon {
+        right: -1px;
+        left: auto;
+
+        &.round-shape {
+            border-radius: 30px 0px 0px 30px;
+        }
+
+        &.ribbon-shape {
+            &::before {
+                content: "";
+                left: -17px;
+                right: auto;
+            }
+
+            &::after {
+                left: -17px;
+                right: auto;
+            }
+        }
+
+    }
+
+    // ribbon circle
+    &.ribbon-circle {
+        .ribbon {
+            right: 20px;
+            left: auto;
+        }
+    }
+
+    // ribbon fill
+
+    &.ribbon-fill {
+        .ribbon {
+            transform: rotate(45deg);
+            right: -36px;
+            left: auto;
+        }
+    }
+
+    // right
+    &.right {
+        .ribbon {
+            left: 0;
+            right: auto;
+
+            &.round-shape {
+                border-radius: 0 30px 30px 0;
+            }
+
+            &.ribbon-shape {
+                text-align: left;
+
+                &::before,
+                &::after {
+                    left: auto;
+                    right: -17px;
+                    border-right-color: transparent;
+                }
+            }
+        }
+
+        &.ribbon-circle {
+            .ribbon {
+                right: auto;
+                left: 20px;
+            }
+        }
+
+        .icon-ribbon {
+            left: 24px;
+            right: auto;
+        }
+
+        &.ribbon-fill {
+            .ribbon {
+                transform: rotate(-45deg);
+                left: -38px;
+                right: auto;
+            }
+        }
+
+        &.ribbon-box {
+            .ribbon-two {
+                right: auto;
+                left: -5px;
+
+                span {
+                    right: auto;
+                    left: -21px;
+                    transform: rotate(-45deg);
+                }
+            }
+        }
+
+    }
+
+    @each $color,
+    $value in $theme-colors {
+        .ribbon-#{$color} {
+            &.ribbon-shape {
+                &::before {
+                    border-right-color: ($value);
+                    border-left-color: transparent;
+                }
+
+                &::after {
+                    border-right-color: ($value);
+                    border-left-color: transparent;
+                }
+            }
+        }
+
+        &.right {
+            .ribbon-#{$color} {
+                &.ribbon-shape {
+                    &::before {
+                        border-left-color: ($value);
+                        border-right-color: transparent;
+                    }
+
+                    &::after {
+                        border-left-color: ($value);
+                        border-right-color: transparent;
+                    }
+                }
+            }
+        }
+    }
+
+
+    // Icon ribbon
+
+    .icon-ribbon {
+        right: 24px;
+        left: auto;
+    }
+
+
+    /* Ribbon two */
+    .ribbon-two {
+        right: -5px;
+        left: auto;
+        text-align: left;
+
+        span {
+            transform: rotate(45deg);
+            right: -21px;
+            left: auto;
+
+            &:before {
+                left: auto;
+                right: 0;
+                border-left: 3px solid transparent;
+                border-right: none;
+            }
+
+            &:after {
+                left: 0;
+                right: auto;
+                border-right: 3px solid transparent;
+                border-left: none;
+            }
+        }
+    }
+
+    @each $color,
+    $value in $theme-colors {
+        .ribbon-two-#{$color} {
+
+            span {
+                &:before {
+                    border-right: 3px solid darken(($value), 15%);
+                }
+
+                &:after {
+                    border-left: 3px solid darken(($value), 15%);
+                }
+            }
+        }
+    }
+
+}
+
+.ribbon-box {
+    &.right {
+        .ribbon-three {
+            left: 10px;
+            right: auto;
+        }
+    }
+}
+
+.ribbon-three {
+    right: 10px;
+    left: 0px;
+
+    span {
+        border-top-right-radius: 8px;
+
+        &::before {
+            left: -6px;
+            right: auto;
+        }
+
+        &::after {
+            left: -8px;
+            right: auto;
+        }
+    }
+
+    &::after {
+        border-right: 44px solid transparent;
+        border-left: 44px solid transparent;
+    }
+}
+
+//Ribbon Hover
+.ribbon-box {
+    .trending-ribbon {
+        transform: translateX(50px);
+    }
+
+    &.right {
+        .trending-ribbon {
+            transform: translateX(-50px);
+        }
+    }
+}
+
+
+.form-icon {
+    .form-control-icon {
+        padding-right: $input-padding-x*3;
+        padding-left: $input-padding-x;
+    }
+
+    i {
+        right: 18px;
+        left: auto;
+    }
+
+    &.right {
+        .form-control-icon {
+            padding-left: $input-padding-x*3;
+            padding-right: $input-padding-x;
+        }
+
+        i {
+            right: auto;
+            left: 18px;
+        }
+    }
+}
+
+
+.input-group:not(.has-validation)>:not(:last-child):not(.dropdown-toggle):not(.dropdown-menu) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: $border-radius;
+    border-top-right-radius: $border-radius;
+}
+
+.input-group>:not(:first-child):not(.dropdown-menu):not(.valid-tooltip):not(.valid-feedback):not(.invalid-tooltip):not(.invalid-feedback) {
+    margin-right: -1px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: $border-radius;
+    border-top-left-radius: $border-radius;
+}
+
+.input-group.has-validation>:nth-last-child(n+3):not(.dropdown-toggle):not(.dropdown-menu) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: $border-radius;
+    border-top-right-radius: $border-radius;
+}
+
+.dropdown-menu{
+    text-align: right;
+}

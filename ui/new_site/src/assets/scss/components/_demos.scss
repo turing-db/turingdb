@@ -1,0 +1,141 @@
+// 
+// _demos.scss
+// 
+
+// Buttons demo
+.button-items {
+    margin-left: -8px;
+    margin-bottom: -12px;
+
+    .btn {
+        margin-bottom: 12px;
+        margin-left: 8px;
+    }
+}
+
+// Modals
+.bs-example-modal {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    z-index: 1;
+    display: block;
+}
+
+[dir="rtl"] {
+    .modal-open {
+        padding-left: 0px !important;
+    }
+}
+
+// Icon demo ( Demo only )
+.icon-demo-content {
+    color: var(--#{$prefix}gray-500);
+
+    i {
+        font-size: 24px;
+        margin-right: 10px;
+        color: var(--#{$prefix}gray-600);
+        transition: all 0.4s;
+        vertical-align: middle;
+    }
+
+    svg {
+        margin-right: 10px;
+        transition: all 0.4s;
+        height: 20px;
+    }
+
+    .col-lg-4 {
+        margin-top: 24px;
+
+        &:hover {
+            i, svg {
+                color: $primary;
+                transform: scale(1.5);
+            }
+        }
+    }
+}
+
+// Grid
+
+.grid-structure {
+    .grid-container {
+        background-color: $gray-100;
+        margin-top: 10px;
+        font-size: .8rem;
+        font-weight: $font-weight-medium;
+        padding: 10px 20px;
+    }
+}
+
+// customizer switch
+
+.img-switch{
+    .card-radio{
+        .form-check-input {
+            display: none;
+    
+            &:checked+.form-check-label {
+                &::before{
+                    content: "";
+                    position: absolute;
+                    top: 0;
+                    right: 0;
+                    bottom: 0;
+                    left: 0;
+                    background-color: rgba($primary, 0.5);
+                }
+                &::after{
+                    content: '\eb80';
+                    font-family: "remixicon";
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translateY(-50%) translateX(-50%);
+                    font-size: 18px;
+                    color: $white;
+                }
+            }
+        }
+    }
+}
+
+[data-bs-target="#collapseBgGradient"]{
+    &.active{
+        border-color: $primary !important;
+        &::before{
+            content: "\eb80";
+            font-family: remixicon;
+            position: absolute;
+            top: 2px;
+            right: 6px;
+            font-size: 16px;
+            color: $primary;
+        }
+    }
+}
+
+[data-layout-mode="dark"]{
+    .colorscheme-cardradio{
+        .form-check-label{
+            background-color: var(--#{$prefix}dark);
+        }
+        .bg-light{
+            background-color: rgba(var(--#{$prefix}light-rgb), 0.1)!important;
+        }
+
+        .bg-soft-light {
+            background-color: rgba(var(--#{$prefix}dark-rgb),.1)!important;
+        }
+
+        .dark{
+            .bg-dark{
+                background-color: var(--#{$prefix}card-bg-custom)!important;
+            }
+        }
+    }
+}

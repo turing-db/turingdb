@@ -1,0 +1,65 @@
+// 
+// _footer.scss
+// 
+
+.footer {
+    bottom: 0;
+    padding: 20px calc(#{$grid-gutter-width} * 0.5);
+    position: absolute;
+    right: 0;
+    color: $footer-color;
+    left: $vertical-menu-width;
+    height: $footer-height;
+    background-color: $footer-bg;
+
+    @media (max-width: 991.98px) {
+        left: 0;
+    }
+}
+
+[data-layout="vertical"] {
+
+    &:is([data-sidebar-size="sm"], [data-sidebar-size="sm-hover"]) {
+        .footer {
+            left: $vertical-menu-width-sm;
+
+            @media (max-width: 767.98px) {
+                left: 0;
+            }
+        }
+    }
+    &[data-sidebar-size="md"] {
+        .footer {
+            left: $vertical-menu-width-md;
+
+            @media (max-width: 991.98px) {
+                left: 0;
+            }
+        }
+    }
+
+}
+
+[data-layout="horizontal"]{
+    .footer {
+        left: 0 !important;
+    } 
+}
+
+[data-layout="vertical"][data-layout-style="detached"] {
+
+    @media (min-width: 1024.1px) {
+        .footer {
+            left: 0 !important;
+            background-color: transparent;
+        } 
+    }
+}
+
+[data-layout="twocolumn"] { 
+    .footer {
+        @media (min-width: 768.1px) {
+            left: calc(#{$twocolumn-menu-iconview-width} + #{$twocolumn-menu-width});
+        }
+    }
+}

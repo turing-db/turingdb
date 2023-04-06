@@ -1,0 +1,98 @@
+
+//
+// _multijs.scss
+//
+
+.multi-wrapper{
+  border: none;
+  position: relative;
+
+  &::before{
+    content: "\ea61";
+    position: absolute;
+    font-family: "remixicon";
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 86px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    border-radius: 50%;
+    color: $text-muted;
+    background-color: var(--#{$prefix}light);
+    z-index: 1;
+  }
+  
+  .non-selected-wrapper{
+    border: 1px solid $input-border-color;
+    background-color: $input-bg;
+    border-top-left-radius: $border-radius;
+    border-bottom-left-radius: $border-radius;
+  }
+
+  .selected-wrapper, .non-selected-wrapper{
+    &::-webkit-scrollbar {
+      -webkit-appearance: none;
+    }
+  
+    &::-webkit-scrollbar:vertical {
+      width: 10px;
+    }
+  
+    &::-webkit-scrollbar:horizontal {
+      height: 9px;
+    }
+  
+    &::-webkit-scrollbar-thumb {
+      background-color: rgba(var(--#{$prefix}dark-rgb), .2);
+      border-radius: 10px;
+      border: 2px solid $input-bg;
+    }
+  
+    &::-webkit-scrollbar-track {
+      border-radius: 10px;  
+      background-color: $input-bg; 
+    }
+}
+
+  .item-group .group-label{
+    font-size: 12px;
+  }
+
+  .item{
+    color: $input-color;
+    &:hover{
+      background-color: rgba($primary, 0.1);
+    }
+  }
+
+  .selected-wrapper{
+    border: 1px solid $input-border-color;
+    background: $input-bg;
+    border-top-right-radius: $border-radius;
+    border-bottom-right-radius: $border-radius;
+  }
+
+  .search-input{
+    flex: 0 0 auto;
+    padding: $input-padding-y $input-padding-x;
+    font-family: $input-font-family;
+    font-size: $input-font-size;
+    color: $input-color;
+    background-color: $input-bg;
+    border: $input-border-width solid $input-border-color;
+    border-radius: $input-border-radius;
+    margin-bottom: 16px;
+    &::placeholder{
+      color: $input-placeholder-color;
+    }
+  }
+
+  .header{
+    font-weight: $font-weight-semibold;
+    color: var(--#{$prefix}gray-600);
+  }
+}

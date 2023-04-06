@@ -1,0 +1,61 @@
+//
+// _ecommerce.scss
+//
+
+// product list
+
+#selection-element { 
+    display: none;
+}
+
+.filter-choices-input{
+    .choices__inner{
+        padding: 0;
+        border: none;
+        background-color: var(--#{$prefix}card-bg-custom);
+    }
+
+    .choices__input{
+        background-color: var(--#{$prefix}card-bg-custom);
+    }
+}
+
+//  product detail
+
+.sticky-side-div{
+    @media (min-width: 992px){
+        position: sticky;
+        top: calc(#{$header-height} + #{$grid-gutter-width});
+    }
+}
+
+.product-img-slider{
+    .product-nav-slider{
+        .nav-slide-item{
+            border: 1px solid $border-color;
+            border-radius: $border-radius;
+            padding: 0.5rem;
+            cursor: pointer;
+        }
+
+        .swiper-slide-thumb-active{
+            .nav-slide-item{
+                background-color: var(--#{$prefix}light);
+            }
+        }
+    }
+}
+
+.filter-list{
+    a {
+        &.active {
+            .listname {
+                color: $success;
+            }
+        }   
+    }
+}
+
+#remove-actions {
+    display: none;
+}

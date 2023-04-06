@@ -1,0 +1,138 @@
+// 
+// _dropdown.scss
+// 
+
+.dropdown-toggle::after {
+    display: inline-block;
+    margin-left: .255em;
+    font-size: 15px;
+    line-height: 15px;
+    content: "\F0140";
+    font-family: "Material Design Icons";
+}
+
+.dropdown-menu {
+    box-shadow: $box-shadow-lg;
+    animation-name: DropDownSlide;
+    animation-duration: .3s;
+    animation-fill-mode: both;
+    position: absolute;
+    z-index: 1000;
+
+    &.dropdown-megamenu {
+        padding: 20px;
+        left: 0 !important;
+        right: 0 !important;
+    }
+
+    &[data-popper-placement="top-start"] {
+        animation-name: DropDownSlideDown;
+    }
+}
+
+@keyframes DropDownSlide {
+    100% {
+        margin-top: -1px;
+    }
+
+    0% {
+        margin-top: 8px;
+    }
+}
+
+@keyframes DropDownSlideDown {
+    100% {
+        margin-bottom: 0;
+    }
+
+    0% {
+        margin-bottom: 8px;
+    }
+}
+
+@media (min-width: 600px) {
+    .dropdown-menu-xl {
+        width: 420px;
+    }
+
+    .dropdown-menu-lg {
+        width: 320px;
+    }
+
+    .dropdown-menu-md {
+        width: 240px;
+    }
+}
+
+.dropdown-toggle-split {
+    border-left: none;
+    &::after {
+        margin-left: 0px;
+    }
+
+    &:before {
+        content: "";
+        position: absolute;
+        background-color: rgba($white,0.12);
+        top: -$btn-border-width;
+        bottom: -$btn-border-width;
+        right: -$btn-border-width;
+        left: 0;
+        border-radius: 0 $btn-border-radius $btn-border-radius 0;
+    }
+}
+
+// Dropdown Mega Menu
+
+.dropdown-mega {
+    position: static !important;
+}
+
+
+
+// Dropdown size
+
+.dropdown-mega-menu-xl {
+    width: 38rem;
+}
+
+.dropdown-mega-menu-lg {
+    width: 26rem;
+}
+
+[dir="ltr"] {
+    .dropdown-menu-start {
+        --bs-position: end;
+    }
+
+    .dropdown-menu-end {
+        --bs-position: start;
+    }
+}
+// Custom Dropdown with Tabs
+.dropdown-head{
+    .nav-tabs-custom{
+        border: 0;
+        .nav-link  {
+            color: rgba($white, 0.6);
+            &.active {
+                background-color: var(--#{$prefix}dropdown-bg);
+            }
+            &:hover {
+                color: $white;
+            }
+        }
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .dropdownmenu-#{$color} {
+      .dropdown-item{
+        &:is(:focus, :hover, .active){
+          background-color: rgba(($value), 0.07);
+          color: $value;
+        }
+      }
+    }
+}

@@ -1,0 +1,150 @@
+//
+// _file-manager.scss
+//
+
+.file-manager-menu {
+    max-height: calc(100vh - 296px);
+
+    @media (max-width: 991.98px) {
+        height: calc(100vh - 296px);
+    }
+
+    li {
+        padding: 5px 0px;
+
+        a {
+            color: var(--#{$prefix}dark);
+            font-weight: $font-weight-medium;
+            transition: all 0.5s ease;
+
+            &.active,
+            &:hover,
+            &[aria-expanded="true"]{
+                color: $success;
+            }
+        }
+
+        .sub-menu {
+            li {
+                padding-left: 25px;
+                position: relative;
+
+                &::before {
+                    content: "\f0374";
+                    position: absolute;
+                    left: 0px;
+                    font-family: Material Design Icons;
+                    color: rgba(var(--#{$prefix}dark-rgb), 0.4);
+                }
+            }
+        }
+    }
+}
+
+.file-manager-sidebar {
+    position: relative;
+    background-color: var(--#{$prefix}card-bg-custom);
+
+    @media (min-width: 992px) {
+        min-width: 300px;
+        max-width: 300px;
+        height: calc(100vh - #{$header-height} - #{$footer-height} - 8px);
+    }
+
+    @media (max-width: 991.98px) {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 200px;
+        max-width: 100%;
+        z-index: 1003;
+        box-shadow: $box-shadow-lg;
+        transform: translateX(-100%);
+        visibility: hidden;
+        height: 100vh;
+
+        &.menubar-show {
+            visibility: visible;
+            transform: none;
+        }
+    }
+}
+
+.file-menu-sidebar-scroll{
+    height: calc(100vh - 375px);
+    @media (max-width: 991.98px) {
+        height: calc(100vh - 190px);
+    }
+}
+
+.file-manager-content {
+    background-color: var(--#{$prefix}card-bg-custom);
+}
+
+.file-manager-content-scroll{
+    height: calc(100vh - 185px);
+    @media (max-width: 991.98px) {
+        height: calc(100vh - 144px);
+    }
+
+    .simplebar-content{
+        height: 100%;
+    }
+}
+
+.file-detail-content-scroll{
+    height: calc(100vh - 180px);
+    @media (max-width: 991.98px) {
+        height: 100vh;
+    }
+
+    .simplebar-content{
+        height: 100%;
+    }
+}
+
+.file-manager-detail-content {
+    width: 32%;
+    max-width: 100%;
+    background-color: var(--#{$prefix}card-bg-custom);
+    display: none;
+}
+
+.file-detail-show{
+    .file-manager-detail-content{
+        display: block;
+    }
+}
+
+#file-overview{
+    display: none;
+}
+
+@media (max-width: 1399.98px) {
+    .file-manager-detail-content {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: auto;
+        right: 0;
+        width: 400px;
+        max-width: 100%;
+        z-index: 1003;
+        box-shadow: $box-shadow-lg;
+        transform: translateX(100%);
+    }
+
+    .file-detail-show {
+        .file-manager-detail-content {
+            transform: none;
+        }
+    }
+}
+
+.file-details-box {
+    height: 195px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

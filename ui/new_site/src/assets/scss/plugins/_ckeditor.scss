@@ -1,0 +1,200 @@
+//
+// _ckeditor.scss
+//
+
+.ck {
+    font-family: $font-family-base !important;
+
+    &.ck-reset_all, &.ck-reset_all *{
+        color: var(--#{$prefix}body-color) !important;
+    }
+    &.ck-toolbar{
+        background: #{rgba(var(--#{$prefix}light-rgb), .75)} !important;
+    }
+
+    p {
+        margin-bottom: 0;
+    }
+
+    &.ck-toolbar {
+        border: 1px solid $input-border-color !important;
+
+        &.ck-toolbar_grouping>.ck-toolbar__items {
+            flex-wrap: wrap !important;
+        }
+
+        .ck.ck-toolbar__separator {
+            background: transparent !important;
+        }
+    }
+
+    &.ck-editor__main>.ck-editor__editable {
+        border-top: 0 !important;
+        background-color: var(--#{$prefix}card-bg-custom) !important;
+        border-color: $input-border-color !important;
+        box-shadow: none !important;
+    }
+
+    &.ck-dropdown__panel{
+        background: var(--#{$prefix}choices-bg) !important;
+        box-shadow: $box-shadow-lg;
+        animation-name: DropDownSlide;
+        animation-duration: .3s;
+        animation-fill-mode: both;
+        border-radius: $dropdown-border-radius;
+    }
+
+    &.ck-list {
+        background: var(--#{$prefix}choices-bg) !important;
+    }
+
+    &.ck-dropdown {
+        .ck-dropdown__panel {
+            &.ck-dropdown__panel_ne,
+            &.ck-dropdown__panel_se {
+                left: 0;
+                right: auto !important;
+            }
+        }
+    }
+
+    &.ck-editor__editable_inline {
+        &[dir=ltr] {
+            text-align: left !important;
+        }
+    }
+
+    &.ck-dropdown__panel {
+        box-shadow: $dropdown-box-shadow !important;
+        border-radius: $dropdown-border-radius !important;
+        border: 1px solid $dropdown-border-color !important;
+    }
+}
+
+.ck.ck-button, 
+a.ck.ck-button{
+
+    &:focus, &:active{
+        box-shadow: none !important;
+        border: 1px solid var(--#{$prefix}light) !important;
+    }
+
+    &:not(.ck-disabled){
+        &:hover{
+            background: var(--#{$prefix}light) !important;
+        }
+    }
+
+    &.ck-on{
+        background: var(--#{$prefix}light) !important;
+    }
+}
+
+.ck-rounded-corners .ck.ck-editor__top .ck-sticky-panel .ck-toolbar, 
+.ck.ck-editor__top .ck-sticky-panel .ck-toolbar.ck-rounded-corners{
+    border-radius: $border-radius !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+
+.ck-rounded-corners .ck.ck-editor__main>.ck-editor__editable, 
+.ck.ck-editor__main>.ck-editor__editable.ck-rounded-corners{
+    border-radius: $border-radius !important;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+}
+
+.ck-editor__editable {
+    min-height: 245px !important;
+}
+
+.ck[class*=ck-heading_heading] {
+    font-weight: $font-weight-medium !important;
+}
+
+.ck,
+a.ck {
+    &.ck-button {
+        &.ck-on:not(.ck-disabled) {
+            &:hover,
+            &:active {
+                box-shadow: none !important;
+            }
+        }
+    }
+}
+
+.ck{
+    &.ck-tooltip{
+        .ck-tooltip__text {
+            background: $dark !important;
+            color: $light !important;
+        }
+    }
+
+    &.ck-input-text{
+        background: $input-bg !important;
+        border: 1px solid $input-border-color !important;
+        &:focus{
+            border: 1px solid $input-focus-border-color !important;
+            box-shadow: none !important;
+        }
+    }
+
+    &.ck-balloon-panel{
+        background: $dropdown-bg !important;
+        border: 1px solid $dropdown-border-color !important;
+
+        &[class*=arrow_n]{
+            &:after{
+                border-bottom-color: $dropdown-bg !important;
+            }
+
+            &::before{
+                border-bottom-color: $dropdown-border-color !important;
+            }
+        }
+    }
+}
+
+
+
+.ck.ck-labeled-field-view>.ck.ck-labeled-field-view__input-wrapper>.ck.ck-label{
+    background: $dropdown-bg !important;
+}
+
+// ck-editor-reverse
+
+.ck-editor-reverse{
+    .ck-editor{
+      display: flex;
+      flex-direction: column-reverse;
+    }
+  
+    .ck{
+      &.ck-editor__main>.ck-editor__editable{
+        border: 1px solid $input-border-color !important;
+        border-bottom: 0 !important;
+      }
+    }
+  
+    .ck-rounded-corners .ck.ck-editor__main>.ck-editor__editable, 
+    .ck.ck-editor__main>.ck-editor__editable.ck-rounded-corners{
+      border-radius: $border-radius !important;
+      border-bottom-left-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+    }
+  
+    .ck-rounded-corners .ck.ck-editor__top .ck-sticky-panel .ck-toolbar, 
+    .ck.ck-editor__top .ck-sticky-panel .ck-toolbar.ck-rounded-corners{
+      border-radius: $border-radius !important;
+      border-top-left-radius: 0 !important;
+      border-top-right-radius: 0 !important;
+    }
+}
+
+[dir="rtl"] {
+    .ck.ck-toolbar>.ck-toolbar__items {
+        flex-direction: row-reverse;
+    }
+}

@@ -1,0 +1,44 @@
+//
+// _form-control.scss
+//
+
+
+.form-icon{
+    position: relative;
+    .form-control-icon {
+        padding-left: $input-padding-x*3;
+        position: relative;
+    }
+    i {
+        position: absolute;
+        top: 0px;
+        bottom: 0px;
+        left: 18px;
+        display: flex;
+        align-items: center;
+    }
+    &.right{
+        .form-control-icon {
+            padding-right: $input-padding-x*3;
+            padding-left: $input-padding-x;
+            position: relative;
+        }
+        i {
+            left: auto;
+            right: 18px;
+        }
+    }
+}
+
+[data-layout-mode="dark"]{
+    .form-select {
+        background-image: escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='#{$gray-400}' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/></svg>"));
+        background-color: var(--#{$prefix}gray-200) !important;
+        border-color: var(--#{$prefix}border-color) !important;
+    }
+
+    .form-control {
+        background-color: var(--#{$prefix}gray-200) !important;
+        border-color: var(--#{$prefix}border-color) !important;
+    }
+  }

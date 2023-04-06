@@ -1,0 +1,170 @@
+// 
+// _card.scss
+// 
+
+.card {
+    margin-bottom: $grid-gutter-width;
+    box-shadow: $card-box-shadow;
+}
+
+.card-header {
+    border-bottom: 1px solid $border-color;
+}
+
+//Card Header Dropdown
+.card-header-dropdown {
+    .dropdown-btn {
+        padding: $card-cap-padding-y 0;
+    }
+}
+
+.card-footer {
+    border-top: 1px solid $border-color;
+}
+
+.card-drop {
+    color: $body-color;
+}
+
+.card-title {
+    font-size: 16px;
+    margin: 0 0 7px 0;
+}
+
+.card-title-desc {
+    margin-bottom: 24px;
+}
+
+.card-height-100 {
+    height: calc(100% - #{$grid-gutter-width});
+}
+
+.card-animate{
+    transition: all 0.4s;
+
+    &:hover{
+        transform: translateY(calc(#{-$grid-gutter-width} / 5));
+        box-shadow: $box-shadow-lg;
+    }
+}
+
+
+// card color variant
+
+@mixin card-variant($bg) {
+    color: $white;
+    background-color: $bg;
+}
+
+@each $color,
+$value in $theme-colors {
+    .card-#{$color} {
+        @include card-variant($value);
+
+        .card-header, .card-footer {
+            background-color: rgba($white, 0.1);
+            color: $white;
+            border-color: transparent;
+        }
+
+        .card-title {
+            color: $white;
+        }
+    }
+}
+
+@each $color,
+$value in $theme-colors {
+    .card-border-#{$color} {
+        border-color: $value !important;
+        .card-header, .card-footer {
+            border-color: $value;
+        }
+
+    }
+}
+
+.card-light{
+    background-color: var(--#{$prefix}light);
+    .card-header, .card-footer{
+        color: var(--#{$prefix}body-color) !important;
+        background-color: rgba(var(--#{$prefix}dark-rgb), 0.1);
+    }
+    .card-title, .card-text { 
+        color: var(--#{$prefix}body-color) !important;
+    }
+}
+
+.stretched-link {
+    position: static;
+}
+
+
+// Loader
+
+.card-preloader {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(var(--#{$prefix}light-rgb), 0.6);
+    z-index: 9999;
+}
+
+.card-status {
+    width: 40px;
+    height: 40px;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%)!important;
+}
+
+.custom-loader {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg) }
+}
+
+.card-overlay{
+    position: relative;
+    overflow: hidden;
+    &:before {
+        content: "";
+        background-color: rgba($primary, 0.20);
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        bottom: 0;
+    }
+    :is(.card-header, .card-footer) {
+        border-color: rgba($white, 0.15) !important;
+    }
+}
+
+.card-toolbar-menu {
+    line-height: 0.8;
+    a {
+        font-size: 17px;
+    }
+    .minimize-card {
+        .plus{
+            display: none;
+        }  
+        .minus {
+            display: block;
+        }
+        &.collapsed{
+            .plus{
+                display: block;
+            }  
+            .minus {
+                display: none;
+            }
+        }
+    }
+}

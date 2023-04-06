@@ -1,0 +1,193 @@
+//
+// _profile.scss
+//
+
+.error-text {
+    text-shadow: 4px 4px rgba($success, 0.4);
+
+    @media (min-width: 1200px) {
+        font-size: 10rem;
+    }
+}
+
+
+// profile
+
+.profile-wid-bg {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 320px;
+    @media (max-width: 575.98px) {
+        height: 445px;
+    }
+
+    &::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        opacity: 0.9;
+        background: $primary;
+        background: linear-gradient(to top, darken($primary, 25%), $primary);
+
+    }
+
+    .profile-wid-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.profile-nav {
+    &.nav-pills {
+        .nav-link {
+            color: rgba($white, 0.8);
+
+            &::before {
+                background-color: rgba($white, 0.1);
+            }
+        }
+    }
+}
+
+.profile-project-card {
+    border: 1px solid $border-color;
+    border-left: 3px solid $border-color;
+}
+
+@each $color,
+$value in $theme-colors {
+    .profile-project-card {
+        &.profile-project-#{$color} {
+            border-left-color: $value;
+        }
+    }
+}
+
+.user-profile-img {
+    position: relative;
+
+    .profile-img {
+        width: 100%;
+        height: 250px;
+        object-fit: cover;
+
+        @media (max-width:991px) {
+            height: 160px;
+        }
+    }
+
+    .profile-foreground-img-file-input {
+        display: none;
+    }
+
+    .profile-photo-edit {
+        cursor: pointer;
+    }
+}
+
+.profile-user {
+    position: relative;
+    display: inline-block;
+
+    .profile-photo-edit {
+        position: absolute;
+        right: 0;
+        left: auto;
+        bottom: 0;
+        cursor: pointer;
+    }
+
+    .user-profile-image {
+        object-fit: cover;
+    }
+
+    .profile-img-file-input {
+        display: none;
+    }
+}
+
+.profile-timeline {
+    .accordion-item {
+        position: relative;
+
+        .accordion-button {
+            background-color: transparent;
+
+            &::after {
+                background: none;
+            }
+        }
+
+        &::before {
+            content: "";
+            border-left: 2px dashed $border-color;
+            position: absolute;
+            height: 100%;
+            left: 23px;
+        }
+
+        &:first-child {
+            &::before {
+                top: 8px;
+            }
+        }
+
+        &:last-child {
+            &::before {
+                height: 20px;
+                top: 3px;
+            }
+        }
+    }
+}
+
+.profile-setting-img {
+    position: relative;
+    height: 260px;
+
+    .overlay-content {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+    }
+
+    .profile-img {
+        width: 100%;
+        height: 250px;
+        object-fit: cover;
+
+        @media (max-width:991.98px) {
+            height: 160px;
+        }
+    }
+
+    .profile-foreground-img-file-input {
+        display: none;
+    }
+
+    .profile-photo-edit {
+        cursor: pointer;
+    }
+}
+
+@media (max-width:575.98px) {
+
+    [data-layout="horizontal"]{
+        .profile-foreground{
+            margin-top: 0 !important;
+        }
+    }
+}
+
+[data-layout="semibox"] {
+    .profile-wrapper {
+        padding: 0 $card-spacer-x;
+    }
+}

@@ -1,0 +1,445 @@
+//
+// _timeline.scss
+//
+
+.timeline {
+  position: relative;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+
+  &::after {
+    content: "";
+    position: absolute;
+    width: 2px;
+    background: $timeline-color;
+    top: 57px;
+    bottom: 166px;
+    left: 50%;
+    margin-left: -1.5px;
+  }
+}
+
+.timeline-item {
+  padding: 30px 60px;
+  position: relative;
+  background: inherit;
+  width: 50%;
+
+  .icon {
+    position: absolute;
+    display: inline-flex;
+    width: 60px;
+    height: 60px;
+    align-items: center;
+    justify-content: center;
+    font-size: 25px;
+    top: 30px;
+    right: -30px;
+    padding: 9px 0;
+    background: var(--#{$prefix}card-bg-custom);
+    border: 1px solid $border-color;
+    border-radius: 50px;
+    color: $success;
+    z-index: 1;
+  }
+
+  .date {
+    position: absolute;
+    display: inline-block;
+    width: calc(100% - 48px);
+    top: 50px;
+    font-size: 14px;
+    font-weight: 500;
+    font-style: italic;
+  }
+
+  .content {
+    padding: 20px;
+    background: var(--#{$prefix}card-bg-custom);
+    position: relative;
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    box-shadow: $box-shadow-sm;
+  }
+
+  &.left {
+    left: 0;
+
+    .date {
+      left: calc(100% + 48px);
+      text-align: start;
+    }
+  }
+
+  &.right {
+    left: 50%;
+
+    .icon {
+      left: -30px;
+    }
+
+    .date {
+      right: calc(100% + 48px);
+      text-align: end;
+    }
+
+    &::before {
+      left: 28px;
+      border-color: transparent transparent transparent $white;
+    }
+  }
+}
+
+@media (max-width: 991.98px) {
+  .timeline {
+    &::after {
+      left: 24px;
+      bottom: 180px;
+    }
+  }
+
+  .timeline-item {
+    width: 100%;
+    padding-left: 48px;
+    padding-right: 0px;
+
+    &.right,
+    &.left {
+      left: 0%;
+
+      .icon {
+        width: 45px;
+        height: 45px;
+        top: 0;
+        font-size: 18px;
+        left: 0;
+      }
+
+      &::before {
+        left: 110px;
+        border-color: transparent transparent transparent $border-color;
+      }
+
+      .date {
+        right: auto;
+        left: 48px;
+        width: 79px;
+        top: 8px;
+        text-align: left;
+      }
+    }
+  }
+}
+
+.timeline-2 {
+  position: relative;
+
+  &::after {
+    position: absolute;
+    content: "";
+    width: 2px;
+    height: 83%;
+    top: 50px;
+    left: 40px;
+    margin-left: -1px;
+    background: $timeline-color;
+  }
+
+  .timeline-year {
+    position: relative;
+    width: 100%;
+    text-align: left;
+    z-index: 1;
+
+    p {
+      display: inline-flex;
+      width: 80px;
+      height: 80px;
+      margin: 0;
+      padding: 23px 10px;
+      background: $timeline-color;
+      border-radius: 50px;
+      text-transform: uppercase;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      span {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+
+  .timeline-date {
+    font-size: 14px;
+    font-weight: $font-weight-medium;
+    margin: 24px 0 0 0;
+    margin-left: 55px;
+
+    &::after {
+      content: "";
+      display: block;
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      top: 26px;
+      left: 45px;
+      align-items: left;
+      background: $success;
+      border: 3px solid $timeline-color;
+      border-radius: 50px;
+      z-index: 1;
+    }
+  }
+
+  .timeline-box {
+    position: relative;
+    display: inline-block;
+    margin: 23px 62px;
+    padding: 20px;
+    border: 1px solid $border-color;
+    border-radius: 6px;
+    background: var(--#{$prefix}card-bg-custom);
+    max-width: 695px;
+    @media (max-width: 991.98px) {
+      margin-right: 0;
+    }
+    
+    &::after {
+      content: "";
+      display: block;
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      top: 26px;
+      right: 100%;
+      border-color: transparent var(--#{$prefix}card-bg-custom) transparent
+        transparent;
+      border-width: 10px;
+    }
+
+    &::before {
+      content: "";
+      display: block;
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      right: 100%;
+      top: 24px;
+      border-color: transparent $border-color transparent transparent;
+      border-width: 12px;
+    }
+
+    .timeline-text {
+      position: relative;
+      float: left;
+    }
+  }
+
+  .timeline-launch {
+    position: relative;
+    display: inline-block;
+    border: 1px solid $border-color;
+    border-radius: 6px;
+    background: $white;
+    width: 100%;
+    margin-top: 15px;
+    padding: 0;
+    border: none;
+    text-align: left;
+    background: transparent;
+
+    .timeline-box {
+      margin-left: 0;
+
+      &::after {
+        left: 30px;
+        margin-left: 0px;
+        top: -20px;
+        border-color: transparent transparent $border-color transparent;
+      }
+
+      &::before {
+        left: 30px;
+        margin-left: 0px;
+        top: -19px;
+        border-color: transparent transparent var(--#{$prefix}card-bg-custom)
+          transparent;
+        border-width: 10px;
+        z-index: 1;
+      }
+    }
+  }
+}
+
+// Horizontal Timeline
+.horizontal-timeline {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+
+  &::before {
+    content: "";
+    position: absolute;
+    width: 100%;
+    top: 174px;
+    left: 0;
+    height: 2px;
+    background-color: $timeline-color;
+  }
+
+  .swiper-slide {
+    .item-box {
+      margin: 227px 0px 0px;
+      background-color: transparent;
+      box-shadow: none;
+
+      &::after {
+        content: "";
+        position: absolute;
+        left: 0px;
+        right: 0px;
+        margin: 0px auto;
+        background: $primary;
+        width: 13px;
+        height: 13px;
+        top: -59px;
+        border-radius: 50px;
+        border: 3px solid $timeline-color;
+      }
+    }
+
+    .timeline-content {
+      min-height: 110px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      background-color: $timeline-color;
+
+      &::before {
+        content: "";
+        display: block;
+        position: absolute;
+        width: 0;
+        height: 0;
+        border-style: solid;
+        left: 0px;
+        top: -23px;
+        border-color: transparent transparent $timeline-color transparent;
+        border-width: 12px;
+        right: 0;
+        margin: 0 auto;
+      }
+    }
+
+    .time {
+      position: absolute;
+      top: -86px;
+      right: 0px;
+      left: 0px;
+      margin: 0px auto;
+    }
+
+    &:nth-child(even) {
+      margin-top: 5px;
+      transform: rotate(-180deg);
+
+      .timeline-content {
+        transform: rotate(180deg);
+
+        &::before {
+          bottom: -23px;
+          top: auto;
+          border-color: $timeline-color transparent transparent transparent;
+        }
+      }
+
+      .time {
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  .swiper-button-next,
+  .swiper-button-prev {
+    height: 40px;
+    width: 40px;
+    line-height: 40px;
+    border-radius: 50%;
+    background-color: lighten($primary, 2.5%);
+
+    &::after {
+      font-size: 24px;
+      color: $white;
+    }
+    &.swiper-button-disabled {
+      background-color: rgba($primary, 0.5);
+      opacity: 1;
+      cursor: auto;
+      backdrop-filter: blur(25px);
+      pointer-events: none;
+    }
+  }
+
+  .swiper-button-next {
+    right: 0;
+
+    &::after {
+      content: "\EA6E";
+      font-family: remixicon;
+    }
+  }
+
+  .swiper-button-prev {
+    left: 0;
+
+    &::after {
+      content: "\EA64";
+      font-family: remixicon;
+    }
+  }
+}
+
+//activity-timeline
+
+.acitivity-timeline {
+  position: relative;
+  overflow: hidden;
+
+  .acitivity-item {
+    position: relative;
+
+    .flex-shrink-0 {
+      z-index: 2;
+    }
+
+    .acitivity-avatar {
+      background-color: var(--#{$prefix}card-bg-custom);
+      border: 3px solid var(--#{$prefix}card-bg-custom);
+      height: 32px;
+      width: 32px;
+    }
+
+    &:before {
+      content: "";
+      position: absolute;
+      border-left: 1px dashed $border-color;
+      left: 16px;
+      height: 100%;
+      top: 5px;
+      z-index: 0;
+    }
+    &:last-child {
+      &::before {
+        border-color: transparent;
+      }
+    }
+  }
+}
