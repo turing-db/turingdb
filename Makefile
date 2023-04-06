@@ -7,7 +7,14 @@ all: build
 .PHONY: build
 build: JOBS=$(filter -j%,$(MAKEFLAGS))
 build:
-	@mkdir -p $(BUILD_DIR) && cd $(BUILD_DIR) && $(BUILD_ENV) cmake -DCMAKE_INSTALL_PREFIX=$(TURING_HOME) $(SRC_DIR) && make -s $(JOBS) && make install
+	@mkdir -p $(BUILD_DIR) && cd $(BUILD_DIR) \
+	&& date +%s > .build_start \
+	&& $(BUILD_ENV) cmake -DCMAKE_INSTALL_PREFIX=$(TURING_HOME) $(SRC_DIR) \
+	&& make -s $(JOBS) \
+	&& make install \
+	&& date +%s > .build_end \
+	&& echo $$(expr $$(cat .build_end) - $$(cat .build_start)) > .build_time \
+	&& echo "Build passed in $$(cat .build_time) seconds."
 
 .PHONY: debug
 debug: BUILD_ENV += DEBUG_BUILD=1
