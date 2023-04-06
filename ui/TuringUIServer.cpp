@@ -35,6 +35,7 @@ void TuringUIServer::start() {
     serverCmd.addArg("-s");
     serverCmd.addArg("build");
     serverCmd.setWorkingDir(sitePath);
+    serverCmd.setEnvVar("WDS_SOCKET_PORT", "443");
     serverCmd.setScriptPath(sitePath/"serve.sh");
     serverCmd.setLogFile(sitePath/"serve.log");
 
@@ -42,7 +43,9 @@ void TuringUIServer::start() {
     serverCmd.run();
     BioLog::log(msg::INFO_STOPPING_NODE_SERVER());
 
-    cleanSite();
+    if (_cleanEnabled) {
+        cleanSite();
+    }
 }
 
 void TuringUIServer::cleanSite() {

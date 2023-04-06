@@ -15,6 +15,7 @@ public:
     void start();
 
 private:
+    bool _cleanEnabled {true};
     Path _outDir;
 
     void cleanSite();
