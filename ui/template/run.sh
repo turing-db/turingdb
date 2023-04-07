@@ -1,4 +1,4 @@
 #!/bin/bash
 
 npm install --legacy-peer-deps
-npm run start
+WDS_SOCKET_PORT='443' npm run start
