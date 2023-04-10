@@ -181,7 +181,7 @@ import CoverPasswCreate from "../pages/AuthenticationInner/PasswordCreate/CoverP
 import Offlinepage from "../pages/AuthenticationInner/Errors/Offlinepage";
 
 //login
-//import Login from "../pages/Authentication/Login";
+import Login from "../pages/Authentication/Login";
 import ForgetPasswordPage from "../pages/Authentication/ForgetPassword";
 import Logout from "../pages/Authentication/Logout";
 import Register from "../pages/Authentication/Register";
@@ -232,7 +232,7 @@ import UserProfile from "../pages/Authentication/user-profile";
 import FileManager from "../pages/FileManager";
 import ToDoList from "../pages/ToDo";
 
-import Login from "../pages/Login/SignIn";
+//import Login from "../pages/Login/SignIn";
 
 const authProtectedRoutes = [
   { path: "/dashboard", component: <Dashboard /> },

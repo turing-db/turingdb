@@ -12,10 +12,8 @@ const AuthProtected = (props) => {
   const { userProfile, loading, token } = useProfile();
   useEffect(() => {
     if (userProfile && !loading && token) {
-      console.log("Hello1");
       setAuthorization(token);
     } else if (!userProfile && loading && !token) {
-      console.log("Hello2");
       dispatch(logoutUser());
     }
   }, [token, userProfile, loading, dispatch]);
