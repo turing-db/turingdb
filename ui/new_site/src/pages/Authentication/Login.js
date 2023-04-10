@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardBody, Col, Container, Input, Label, Row, Button, Form, FormFeedback, Alert, Spinner } from 'reactstrap';
-import ParticlesAuth from "../AuthenticationInner/ParticlesAuth";
 
 //redux
 import { useSelector, useDispatch } from "react-redux";
@@ -106,24 +105,13 @@ const Login = (props) => {
         }
     }, [dispatch, errorFlag]);
 
-    document.title = "Basic SignIn | Velzon - React Admin & Dashboard Template";
+    document.title = "Turing Platform";
     return (
         <React.Fragment>
-            <ParticlesAuth>
-                <div className="auth-page-content">
+            <div className="auth-page-wrapper auth-bg-cover py-5 d-flex justify-content-center align-items-center min-vh-100">
+                <div className="bg-overlay"></div>
+                <div className="auth-page-content overflow-hidden pt-lg-5">
                     <Container>
-                        <Row>
-                            <Col lg={12}>
-                                <div className="text-center mt-sm-5 mb-4 text-white-50">
-                                    <div>
-                                        <Link to="/" className="d-inline-block auth-logo">
-                                            <img src={logoLight} alt="" height="20" />
-                                        </Link>
-                                    </div>
-                                    <p className="mt-3 fs-15 fw-medium">Premium Admin & Dashboard Template</p>
-                                </div>
-                            </Col>
-                        </Row>
 
                         <Row className="justify-content-center">
                             <Col md={8} lg={6} xl={5}>
@@ -131,7 +119,6 @@ const Login = (props) => {
                                     <CardBody className="p-4">
                                         <div className="text-center mt-2">
                                             <h5 className="text-primary">Welcome Back !</h5>
-                                            <p className="text-muted">Sign in to continue to Velzon.</p>
                                         </div>
                                         {error && error ? (<Alert color="danger"> {error} </Alert>) : null}
                                         <div className="p-2 mt-4">
@@ -244,15 +231,22 @@ const Login = (props) => {
                                     </CardBody>
                                 </Card>
 
-                                <div className="mt-4 text-center">
-                                    <p className="mb-0">Don't have an account ? <Link to="/register" className="fw-semibold text-primary text-decoration-underline"> Signup </Link> </p>
-                                </div>
-
                             </Col>
                         </Row>
                     </Container>
                 </div>
-            </ParticlesAuth>
+                <footer className="footer start-0">
+                    <Container>
+                        <Row>
+                            <Col lg={12}>
+                                <div className="text-center">
+                                    <p className="mb-0">&copy; {new Date().getFullYear()} Turing Biosystems</p>
+                                </div>
+                            </Col>
+                        </Row>
+                    </Container>
+                </footer>
+            </div>
         </React.Fragment>
     );
 };
