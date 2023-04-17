@@ -12,13 +12,6 @@ class StringRef {
 public:
     using iterator = const char*;
 
-    struct Hash {
-        std::size_t operator()(const StringRef& str) const {
-            const SharedString* sharedStr = str._sharedStr;
-            return std::hash<std::size_t>()(sharedStr ? sharedStr->getID() : 0);
-        }
-    };
-
     struct Comparator {
         bool operator()(StringRef lhs, StringRef rhs) const {
             if (!lhs._sharedStr) {
@@ -35,7 +28,9 @@ public:
     StringRef(const SharedString* sharedStr);
     ~StringRef() = default;
 
-    bool operator==(const StringRef& other) const { return _sharedStr == other._sharedStr; }
+    bool operator==(const StringRef& other) const {
+        return _sharedStr == other._sharedStr; 
+    }
 
     bool empty() const { return _sharedStr == nullptr; }
 
@@ -43,6 +38,8 @@ public:
 
     iterator begin() const;
     iterator end() const;
+
+    const SharedString* getSharedString() const { return _sharedStr; }
 
     std::string toStdString() const {
         return _sharedStr ? _sharedStr->getString() : std::string();
@@ -52,4 +49,14 @@ private:
     const SharedString* _sharedStr {nullptr};
 };
 
+}
+
+namespace std {
+    template <>
+    struct hash<db::StringRef> {
+        size_t operator()(const db::StringRef& str) const {
+            const db::SharedString* sharedStr = str.getSharedString();
+            return hash<size_t>()(sharedStr ? sharedStr->getID() : 0);
+        }
+    };
 }

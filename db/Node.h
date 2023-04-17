@@ -1,28 +1,28 @@
 // Copyright 2023 Turing Biosystems Ltd.
 
-#ifndef _DB_NODE_
-#define _DB_NODE_
+#pragma once
 
-#include <vector>
+#include <unordered_map>
+
+#include "StringRef.h"
+#include "Value.h"
 
 namespace db {
 
 class NodeType;
-class Component;
+class NodeDescriptor;
+class Writeback;
 
 class Node {
 public:
-    NodeType* getType() const { return _type; }
+    friend Writeback;
 
 private:
-    NodeType* _type {nullptr};
-    Component* _base {nullptr};
-    std::vector<Component*> _components;
+    NodeDescriptor* _desc {nullptr};
+    std::unordered_map<StringRef, Value> _properties;
 
-    Node(NodeType* type);
+    Node(NodeDescriptor* desc);
     ~Node();
 };
 
 }
-
-#endif

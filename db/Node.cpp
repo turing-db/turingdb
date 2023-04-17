@@ -4,8 +4,8 @@
 
 using namespace db;
 
-Node::Node(NodeType* type)
-    : _type(type)
+Node::Node(NodeDescriptor* desc)
+    : _desc(desc)
 {
 }
 

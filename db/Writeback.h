@@ -6,6 +6,8 @@ namespace db {
 
 class DB;
 class Network;
+class Node;
+class NodeType;
 
 class Writeback {
 public:
@@ -13,6 +15,10 @@ public:
     ~Writeback();
 
     Network* createNetwork(StringRef name);
+
+    Node* createNode(Network* net, NodeType* type);
+
+    NodeType* createNodeType(StringRef name);
 
 private:
     DB* _db {nullptr};

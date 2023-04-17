@@ -11,3 +11,7 @@ Network::Network(StringRef name)
 
 Network::~Network() {
 }
+
+void Network::addNode(Node* node) {
+    _nodes.push_back(node);
+}

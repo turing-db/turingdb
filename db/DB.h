@@ -11,6 +11,7 @@ namespace db {
 
 class ValueType;
 class Network;
+class NodeType;
 class Writeback;
 
 class DB {
@@ -30,11 +31,14 @@ public:
     ValueType* getDecimal() const { return _decimal; }
     ValueType* getString() const { return _string; }
 
+    NodeType* getNodeType(StringRef name) const;
+
     Network* getNetwork(StringRef name) const;
 
 private:
     StringIndex _strIndex;
     std::map<StringRef, Network*, StringRef::Comparator> _networks;
+    std::map<StringRef, NodeType*, StringRef::Comparator> _nodeTypes;
 
     ValueType* _int {nullptr};
     ValueType* _unsigned {nullptr};
@@ -44,6 +48,7 @@ private:
 
     DB();
     void addNetwork(Network* net);
+    void addNodeType(NodeType* nodeType);
 };
 
 }

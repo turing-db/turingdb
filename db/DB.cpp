@@ -4,6 +4,7 @@
 
 #include "ValueType.h"
 #include "Network.h"
+#include "NodeType.h"
 
 using namespace db;
 
@@ -44,4 +45,17 @@ Network* DB::getNetwork(StringRef name) const {
     }
 
     return foundIt->second;
+}
+
+NodeType* DB::getNodeType(StringRef name) const {
+    const auto foundIt = _nodeTypes.find(name);
+    if (foundIt == _nodeTypes.end()) {
+        return nullptr;
+    }
+
+    return foundIt->second;
+}
+
+void DB::addNodeType(NodeType* nodeType) {
+    _nodeTypes[nodeType->getName()] = nodeType;
 }

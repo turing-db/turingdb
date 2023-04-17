@@ -2,9 +2,13 @@
 set(db_sources 
             DB.cpp
             Network.cpp
+            Node.cpp
+            NodeDescriptor.cpp
 
             ValueType.cpp
             Value.cpp
+
+            NodeType.cpp
 
             Writeback.cpp
 
