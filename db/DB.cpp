@@ -5,6 +5,7 @@
 #include "ValueType.h"
 #include "Network.h"
 #include "NodeType.h"
+#include "ComponentType.h"
 
 using namespace db;
 
@@ -56,6 +57,19 @@ NodeType* DB::getNodeType(StringRef name) const {
     return foundIt->second;
 }
 
+ComponentType* DB::getComponentType(StringRef name) const {
+    const auto foundIt = _compTypes.find(name);
+    if (foundIt == _compTypes.end()) {
+        return nullptr;
+    }
+
+    return foundIt->second;
+}
+
 void DB::addNodeType(NodeType* nodeType) {
     _nodeTypes[nodeType->getName()] = nodeType;
+}
+
+void DB::addComponentType(ComponentType* compType) {
+    _compTypes[compType->getName()] = compType;
 }

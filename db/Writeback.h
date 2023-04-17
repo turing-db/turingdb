@@ -8,6 +8,7 @@ class DB;
 class Network;
 class Node;
 class NodeType;
+class ComponentType;
 
 class Writeback {
 public:
@@ -19,6 +20,7 @@ public:
     Node* createNode(Network* net, NodeType* type);
 
     NodeType* createNodeType(StringRef name);
+    ComponentType* createComponentType(StringRef name);
 
 private:
     DB* _db {nullptr};

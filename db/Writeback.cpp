@@ -4,6 +4,7 @@
 #include "Network.h"
 #include "Node.h"
 #include "NodeType.h"
+#include "ComponentType.h"
 
 using namespace db;
 
@@ -45,4 +46,15 @@ NodeType* Writeback::createNodeType(StringRef name) {
     _db->addNodeType(nodeType);
 
     return nodeType;
+}
+
+ComponentType* Writeback::createComponentType(StringRef name) {
+    if (_db->getComponentType(name)) {
+        return nullptr;
+    }
+
+    ComponentType* compType = new ComponentType(name);
+    _db->addComponentType(compType);
+
+    return compType;
 }
