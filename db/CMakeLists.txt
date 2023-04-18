@@ -5,12 +5,14 @@ set(db_sources
             Node.cpp
             NodeDescriptor.cpp
             Property.cpp
+            Edge.cpp
 
             ValueType.cpp
             Value.cpp
 
             NodeType.cpp
             ComponentType.cpp
+            EdgeType.cpp
 
             Writeback.cpp
 

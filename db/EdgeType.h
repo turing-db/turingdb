@@ -1,42 +1,32 @@
 // Copyright 2023 Turing Biosystems Ltd.
 
-#ifndef _DB_EDGE_TYPE_
-#define _DB_EDGE_TYPE_
-
-#include <vector>
+#pragma once
 
 #include "StringRef.h"
 
 namespace db {
 
-class DB;
-class NodeType;
+class ComponentType;
+class Writeback;
 
 class EdgeType {
 public:
-    friend DB;
+    friend Writeback;
 
     StringRef getName() const { return _name; }
 
-    NodeType* getSourceType() const { return _sourceType; }
-    NodeType* getTargetType() const { return _targetType; }
-
-    static EdgeType* create(DB* db,
-                            StringRef name,
-                            NodeType* source,
-                            NodeType* target);
+    ComponentType* getSourceType() const { return _sourceType; }
+    ComponentType* getTargetType() const { return _targetType; }
 
 private:
     StringRef _name;
-    NodeType* _sourceType {nullptr};
-    NodeType* _targetType {nullptr};
+    ComponentType* _sourceType {nullptr};
+    ComponentType* _targetType {nullptr};
 
     EdgeType(StringRef name,
-             NodeType* sourceType,
-             NodeType* targetType);
+             ComponentType* sourceType,
+             ComponentType* targetType);
     ~EdgeType();
 };
 
 }
-
-#endif

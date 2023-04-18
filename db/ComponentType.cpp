@@ -1,6 +1,7 @@
 #include "ComponentType.h"
 
 #include "Property.h"
+#include "EdgeType.h"
 
 using namespace db;
 
@@ -24,4 +25,11 @@ Property* ComponentType::getProperty(StringRef name) const {
 void ComponentType::addProperty(Property* prop) {
     _properties.push_back(prop);
     _propMap[prop->getName()] = prop;
+}
+
+void ComponentType::addEdgeType(EdgeType* edgeType) {
+    _edgeMap[edgeType->getName()] = edgeType;
+    
+    auto& edgeTypeVector = (edgeType->getSourceType() == this) ? _outEdgeTypes : _inEdgeTypes;
+    edgeTypeVector.push_back(edgeType);
 }

@@ -4,8 +4,9 @@
 
 using namespace db;
 
-Edge::Edge(Component* source, Component* target)
-    : _source(source),
+Edge::Edge(EdgeType* type, Node* source, Node* target)
+    : _type(type),
+    _source(source),
     _target(target)
 {
 }

@@ -5,6 +5,7 @@
 #include "DB.h"
 #include "Writeback.h"
 #include "NodeType.h"
+#include "EdgeType.h"
 
 using namespace db;
 
@@ -91,6 +92,16 @@ TEST(NodeTypeTest, create2) {
                                                  db->getString("UnPrognostic_OK_HPA"),
                                                  db->getDecimalType());
     EXPECT_TRUE(unprognosticOkHPA);
+
+    // Protein
+    NodeType* protein = wb.createNodeType(db->getString("Protein"));
+    EXPECT_TRUE(protein);
+
+    // EdgeTypes
+    EdgeType* locatedInsideCell = wb.createEdgeType(db->getString("LocatedInsideCell"),
+                                                    protein->getBaseComponent(),
+                                                    cellularLoc->getBaseComponent());
+    EXPECT_TRUE(locatedInsideCell);
 
     delete db;
 }

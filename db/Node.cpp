@@ -2,8 +2,9 @@
 
 #include "Node.h"
 
-#include "Property.h"
 #include "NodeDescriptor.h"
+#include "Property.h"
+#include "Edge.h"
 
 using namespace db;
 
@@ -30,4 +31,12 @@ Value Node::getProperty(const Property* prop) const {
 
 void Node::setDescriptor(NodeDescriptor* desc) {
     _desc = desc;
+}
+
+void Node::addInEdge(Edge* edge) {
+    _inEdges[edge->getType()].push_back(edge);
+}
+
+void Node::addOutEdge(Edge* edge) {
+    _outEdges[edge->getType()].push_back(edge);
 }

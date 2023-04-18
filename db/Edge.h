@@ -1,26 +1,28 @@
 // Copyright 2023 Turing Biosystems Ltd.
 
-#ifndef _DB_EDGE_
-#define _DB_EDGE_
+#pragma once
 
 namespace db {
 
-class Component;
-class DB;
+class Node;
+class EdgeType;
+class Writeback;
 
 class Edge {
 public:
-    Component* getSource() const { return _source; }
-    Component* getTarget() const { return _target; }
+    friend Writeback;
+
+    EdgeType* getType() const { return _type; }
+    Node* getSource() const { return _source; }
+    Node* getTarget() const { return _target; }
 
 private:
-    Component* _source {nullptr};
-    Component* _target {nullptr};
+    EdgeType* _type {nullptr};
+    Node* _source {nullptr};
+    Node* _target {nullptr};
 
-    Edge(Component* source, Component* target);
+    Edge(EdgeType* type, Node* source, Node* target);
     ~Edge();
 };
 
 }
-
-#endif

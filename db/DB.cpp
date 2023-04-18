@@ -6,6 +6,7 @@
 #include "Network.h"
 #include "NodeType.h"
 #include "ComponentType.h"
+#include "EdgeType.h"
 
 using namespace db;
 
@@ -57,6 +58,15 @@ NodeType* DB::getNodeType(StringRef name) const {
     return foundIt->second;
 }
 
+EdgeType* DB::getEdgeType(StringRef name) const {
+    const auto foundIt = _edgeTypes.find(name);
+    if (foundIt == _edgeTypes.end()) {
+        return nullptr;
+    }
+
+    return foundIt->second;
+}
+
 ComponentType* DB::getComponentType(StringRef name) const {
     const auto foundIt = _compTypes.find(name);
     if (foundIt == _compTypes.end()) {
@@ -72,4 +82,8 @@ void DB::addNodeType(NodeType* nodeType) {
 
 void DB::addComponentType(ComponentType* compType) {
     _compTypes[compType->getName()] = compType;
+}
+
+void DB::addEdgeType(EdgeType* edgeType) {
+    _edgeTypes[edgeType->getName()] = edgeType;
 }

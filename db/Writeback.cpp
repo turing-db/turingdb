@@ -7,6 +7,8 @@
 #include "ComponentType.h"
 #include "Property.h"
 #include "NodeDescriptor.h"
+#include "Edge.h"
+#include "EdgeType.h"
 
 using namespace db;
 
@@ -57,6 +59,17 @@ bool Writeback::addComponent(Node* node, ComponentType* compType) {
     return true;
 }
 
+Edge* Writeback::createEdge(EdgeType* type, Node* source, Node* target) {
+    if (!type || !source || !target) {
+        return nullptr;
+    }
+
+    Edge* edge = new Edge(type, source, target);
+    source->addOutEdge(edge);
+    target->addInEdge(edge);
+    return edge;
+}
+
 NodeType* Writeback::createNodeType(StringRef name) {
     if (_db->getNodeType(name)) {
         return nullptr;
@@ -78,6 +91,24 @@ NodeType* Writeback::createNodeType(StringRef name) {
     rootDesc->addComponent(baseComp);
 
     return nodeType;
+}
+
+EdgeType* Writeback::createEdgeType(StringRef name,
+                                    ComponentType* sourceComp,
+                                    ComponentType* targetComp) {
+    if (!sourceComp || !targetComp) {
+        return nullptr;
+    }
+
+    if (_db->getEdgeType(name)) {
+        return nullptr;
+    }
+
+    EdgeType* edgeType = new EdgeType(name, sourceComp, targetComp);
+    _db->addEdgeType(edgeType);
+    sourceComp->addEdgeType(edgeType);
+    targetComp->addEdgeType(edgeType);
+    return edgeType;
 }
 
 ComponentType* Writeback::createComponentType(StringRef name) {
