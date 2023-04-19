@@ -1,11 +1,12 @@
-#ifndef _COMMON_STRING_BUFFER_
-#define _COMMON_STRING_BUFFER_
+#pragma once
 
 #include <stdint.h>
-#include <string>
+#include <filesystem>
 
 class StringBuffer {
 public:
+    using Path = std::filesystem::path;
+
     enum BufferKind {
         MALLOC_BUFFER,
         MMAP_BUFFER
@@ -19,7 +20,7 @@ public:
 
     size_t getSize() const { return _size; }
 
-    static StringBuffer* readFromFile(const std::string& filename);
+    static StringBuffer* readFromFile(const Path& filePath);
 
 protected:
     char* const _data;
@@ -27,5 +28,3 @@ protected:
 
     StringBuffer(char* data, size_t size);
 };
-
-#endif

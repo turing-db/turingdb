@@ -103,9 +103,9 @@ StringBuffer::StringBuffer(char* data, size_t size)
 {
 }
 
-StringBuffer* StringBuffer::readFromFile(const std::string& filename) {
+StringBuffer* StringBuffer::readFromFile(const Path& filePath) {
     // Open file descriptor to source file
-    int fd = open(filename.c_str(), O_RDONLY);
+    int fd = open(filePath.string().c_str(), O_RDONLY);
     if (fd < 0) {
         return nullptr;
     }
