@@ -5,6 +5,7 @@
 #include "DB.h"
 #include "Network.h"
 #include "Writeback.h"
+#include "DBAccessor.h"
 
 using namespace db;
 
@@ -12,9 +13,16 @@ TEST(NetworkTest, createEmpty) {
     DB* db = DB::create();
 
     Writeback wb(db);
-    Network* net = wb.createNetwork(db->getString("my net"));
-    ASSERT_TRUE(net);
-    EXPECT_EQ(net->getName(), db->getString("my net"));
+    Network* myNet = wb.createNetwork(db->getString("my net"));
+    ASSERT_TRUE(myNet);
+    EXPECT_EQ(myNet->getName(), db->getString("my net"));
+
+    DBAccessor dbAcc(db);
+    EXPECT_EQ(dbAcc.networks().size(), 1);
+
+    std::vector<Network*> nets(dbAcc.networks().begin(),
+                               dbAcc.networks().end());
+    ASSERT_EQ(nets, std::vector{myNet});
 
     delete db;
 }
@@ -27,6 +35,9 @@ TEST(NetworkTest, createEmptyNameCollision) {
     ASSERT_TRUE(net);
     Network* net2 = wb.createNetwork(db->getString("my net"));
     ASSERT_FALSE(net2);
+
+    DBAccessor dbAcc(db);
+    EXPECT_EQ(dbAcc.networks().size(), 1);
 
     delete db;
 }

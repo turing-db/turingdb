@@ -32,6 +32,10 @@ public:
         return _sharedStr == other._sharedStr; 
     }
 
+    bool operator<(const StringRef& other) const {
+        return Comparator()(*this, other);
+    }
+
     bool empty() const { return _sharedStr == nullptr; }
 
     std::size_t size() const;

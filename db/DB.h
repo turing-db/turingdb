@@ -15,10 +15,12 @@ class Network;
 class NodeType;
 class ComponentType;
 class EdgeType;
+class DBNetworkRange;
 class Writeback;
 
 class DB {
 public:
+    friend DBNetworkRange;
     friend Writeback;
 
     ~DB();
@@ -41,12 +43,14 @@ public:
     Network* getNetwork(StringRef name) const;
 
 private:
+    using Networks = std::map<StringRef, Network*>;
+
     StringIndex _strIndex;
     DBIndex::ID _nextFreeNetID {0};
-    std::map<StringRef, Network*, StringRef::Comparator> _networks;
-    std::map<StringRef, NodeType*, StringRef::Comparator> _nodeTypes;
-    std::map<StringRef, EdgeType*, StringRef::Comparator> _edgeTypes;
-    std::map<StringRef, ComponentType*, StringRef::Comparator> _compTypes;
+    Networks _networks;
+    std::map<StringRef, NodeType*> _nodeTypes;
+    std::map<StringRef, EdgeType*> _edgeTypes;
+    std::map<StringRef, ComponentType*> _compTypes;
 
     ValueType* _int {nullptr};
     ValueType* _unsigned {nullptr};

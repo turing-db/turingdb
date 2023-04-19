@@ -18,6 +18,10 @@ set(db_sources
 
             Writeback.cpp
 
+            DBAccessor.cpp
+
+            DBAccessor.cpp
+            DBNetworkRange.cpp
             NetworkAccessor.cpp
             NetworkNodeRange.cpp
             NetworkEdgeRange.cpp

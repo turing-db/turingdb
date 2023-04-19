@@ -2,19 +2,19 @@
 
 #include "Range.h"
 
-#include "Network.h"
+#include "DB.h"
 
 namespace db {
 
-class NetworkAccessor;
+class DBAccessor;
 
-class NetworkNodeRange {
+class DBNetworkRange {
 public:
-    friend NetworkAccessor;
-    using BaseRange = STLRange<Network::Nodes>;
-    using Iterator = typename BaseRange::Iterator;
+    friend DBAccessor;
+    using BaseRange = STLValueMapRange<StringRef, Network*>;
+    using Iterator = BaseRange::Iterator;
 
-    NetworkNodeRange() = default;
+    DBNetworkRange() = default;
 
     bool empty() const { return _range.empty(); }
     size_t size() const { return _range.size(); }
@@ -25,7 +25,7 @@ public:
 private:
     BaseRange _range;
 
-    NetworkNodeRange(const Network* net);
+    DBNetworkRange(DB* db);
 };
 
 }
