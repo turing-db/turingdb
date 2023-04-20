@@ -26,14 +26,17 @@ bool GMLDumper::dump() {
     _gml << "graph [\n";
     for (const Node* node : netAcc.nodes()) {
         _gml << "    node [\n";
-        _gml << "        id " << node->getIndex().toString() << "\n";
+        _gml << "        id "
+             << std::to_string(node->getIndex().getObjectID()) << "\n";
         _gml << "    ]\n";
     }
 
     for (const Edge* edge : netAcc.edges()) {
         _gml << "    edge [\n";
-        _gml << "        source " << edge->getSource()->getIndex().toString() << "\n";
-        _gml << "        target " << edge->getTarget()->getIndex().toString() << "\n";
+        _gml << "        source "
+             << std::to_string(edge->getSource()->getIndex().getObjectID()) << "\n";
+        _gml << "        target "
+             << std::to_string(edge->getTarget()->getIndex().getObjectID()) << "\n";
         _gml << "    ]\n";
     }
     _gml << "]\n";
