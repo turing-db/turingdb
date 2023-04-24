@@ -7,7 +7,11 @@
 #include "StringBuffer.h"
 #include "StringToNumber.h"
 
+#include "BioLog.h"
+#include "MsgImport.h"
+
 using namespace db;
+using namespace Log;
 
 GMLImport::GMLImport(const StringBuffer* buffer,
                      db::DB* db,
@@ -27,10 +31,12 @@ GMLImport::~GMLImport() {
 
 bool GMLImport::run() {
     if (!_nodeType) {
+        BioLog::log(msg::ERROR_NODE_TYPE_CREATE_FAILED());
         return false;
     }
 
     if (!_edgeType) {
+        BioLog::log(msg::ERROR_EDGE_TYPE_CREATE_FAILED());
         return false;
     }
 
@@ -40,6 +46,8 @@ bool GMLImport::run() {
     const auto& token = _lexer.getToken();
     while (!token.isEnd() && !token.isError()) {
         if (!parseCommand()) {
+            BioLog::log(msg::ERROR_FAILED_PARSE_GML_COMMAND()
+                        << _lexer.getLine());
             return false;
         }
         _lexer.nextToken();
@@ -50,6 +58,9 @@ bool GMLImport::run() {
 
 bool GMLImport::parseCommand() {
     if (_lexer.getToken().getType() != GMLToken::TK_STRING) {
+        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                    << _lexer.getToken().getData()
+                    << _lexer.getLine());
         return false;
     }
 
@@ -72,6 +83,9 @@ bool GMLImport::parseNodeCommand() {
     _lexer.nextToken();
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
+        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                    << _lexer.getToken().getData()
+                    << _lexer.getLine());
         return false;
     }
 
@@ -90,11 +104,14 @@ bool GMLImport::parseNodeCommand() {
     }
 
     if (errorID) {
+        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
+                    << _lexer.getLine());
         return false;
     }
 
     Node* node = _wb.createNode(_outNet, _nodeType);
     if (!node) {
+        BioLog::log(msg::ERROR_FAILED_TO_CREATE_NODE() << _lexer.getLine());
         return false;
     }
 
@@ -114,6 +131,9 @@ bool GMLImport::parseEdgeCommand() {
     _lexer.nextToken();
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
+        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                    << _lexer.getToken().getData()
+                    << _lexer.getLine());
         return false;
     }
 
@@ -122,6 +142,8 @@ bool GMLImport::parseEdgeCommand() {
     }
 
     if (_source.empty() || _target.empty()) {
+        BioLog::log(msg::ERROR_NO_SOURCE_OR_NO_EDGE()
+                    << _lexer.getLine());
         return false;
     }
 
@@ -130,9 +152,17 @@ bool GMLImport::parseEdgeCommand() {
     bool errorSource = true;
     bool errorTarget = true;
     sourceID = StringToNumber<size_t>(_source, errorSource);
-    targetID = StringToNumber<size_t>(_source, errorTarget);
+    targetID = StringToNumber<size_t>(_target, errorTarget);
     
-    if (errorSource || errorTarget) {
+    if (errorSource) {
+        BioLog::log(msg::ERROR_IMPOSSIBLE_TO_CONVERT_ID()
+                    << _source << _lexer.getLine());
+        return false;
+    }
+
+    if (errorTarget) {
+        BioLog::log(msg::ERROR_IMPOSSIBLE_TO_CONVERT_ID()
+                    << _target << _lexer.getLine());
         return false;
     }
 
@@ -140,16 +170,21 @@ bool GMLImport::parseEdgeCommand() {
     Node* sourceNode = getNodeFromID(sourceID);
     Node* targetNode = getNodeFromID(targetID);
     if (!sourceNode) {
+        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
+                    << sourceID << _lexer.getLine());
         return false;
     }
 
     if (!targetNode) {
+        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
+                    << targetID << _lexer.getLine());
         return false;
     }
 
     // Create edge
     Edge* edge = _wb.createEdge(_edgeType, sourceNode, targetNode);
     if (!edge) {
+        BioLog::log(msg::ERROR_FAILED_TO_CREATE_EDGE() << _lexer.getLine());
         return false;
     }
 
@@ -162,6 +197,9 @@ bool GMLImport::parseGraphCommand() {
     _lexer.nextToken();
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
+        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                    << _lexer.getToken().getData()
+                    << _lexer.getLine());
         return false;
     }
 
@@ -177,6 +215,7 @@ bool GMLImport::parseGenericCommand(std::string_view keyword) {
     switch (_lexer.getToken().getType()) {
         case GMLToken::TK_STRING:
         case GMLToken::TK_INT:
+        case GMLToken::TK_DOUBLE:
             return handleCommand(keyword, _lexer.getToken().getData());
         break;
 
@@ -185,6 +224,8 @@ bool GMLImport::parseGenericCommand(std::string_view keyword) {
         break;
 
         default:
+            BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                        << _lexer.getToken().getData() << _lexer.getLine());
             return false;
             break;
     }
@@ -209,6 +250,9 @@ bool GMLImport::handleCommand(std::string_view keyword,
 
 bool GMLImport::parseList() {
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
+        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                    << _lexer.getToken().getData()
+                    << _lexer.getLine());
         return false;
     }
 
@@ -222,6 +266,9 @@ bool GMLImport::parseList() {
     }
 
     if (!token.isCSBRACK()) {
+        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
+                    << token.getData()
+                    << _lexer.getLine());
         return false;
     }
 

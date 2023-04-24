@@ -2,6 +2,7 @@
 #define _BIO_LOG_MESSAGE_
 
 #include <string>
+#include <string_view>
 
 #define DEFINE_MESSAGE(Name, Type, Code, MsgStr) \
 class Name : public Log::Message {                  \
@@ -52,6 +53,7 @@ public:
 
     Message& operator<<(const std::string& value);
     Message& operator<<(std::string&& value);
+    Message& operator<<(std::string_view str);
     Message& operator<<(long int value);
 
 protected:

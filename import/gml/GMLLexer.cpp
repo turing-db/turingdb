@@ -62,12 +62,22 @@ void GMLLexer::lexInt() {
         _current++;
     }
 
-    const size_t tokSize = _current-start;
-    if (_current < _end && isalpha(*_current)) {
-        _token.setToken(GMLToken::TK_STRING, start, tokSize);
-    } else {
-        _token.setToken(GMLToken::TK_INT, start, tokSize);
+    GMLToken::TokenType tokenType = GMLToken::TK_INT;
+    if (_current < _end && *_current == '.') {
+        _current++;
+        if (_current >= _end || !isdigit(*_current)) {
+            _token.setToken(GMLToken::TK_ERROR, start, _current-start-1);
+            return;
+        }
+
+        tokenType = GMLToken::TK_DOUBLE;
+        while (_current < _end && isdigit(*_current)) {
+            _current++;
+        }
     }
+
+    const size_t tokSize = _current-start;
+    _token.setToken(tokenType, start, tokSize);
 }
 
 void GMLLexer::lexString() {
