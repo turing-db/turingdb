@@ -1,6 +1,6 @@
 build-job:
   stage: build
-  before-script:
+  before_script:
     - eval $(ssh-agent -s)
     - chmod 400 "$GIT_PRIVATE_KEY"
     - ssh-add "$GIT_PRIVATE_KEY"
