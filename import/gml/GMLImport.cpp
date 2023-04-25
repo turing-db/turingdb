@@ -59,7 +59,7 @@ bool GMLImport::run() {
 bool GMLImport::parseCommand() {
     if (_lexer.getToken().getType() != GMLToken::TK_STRING) {
         BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << _lexer.getToken().getData()
+                    << std::string(_lexer.getToken().getData())
                     << _lexer.getLine());
         return false;
     }
@@ -84,7 +84,7 @@ bool GMLImport::parseNodeCommand() {
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
         BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << _lexer.getToken().getData()
+                    << std::string(_lexer.getToken().getData())
                     << _lexer.getLine());
         return false;
     }
@@ -132,7 +132,7 @@ bool GMLImport::parseEdgeCommand() {
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
         BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << _lexer.getToken().getData()
+                    << std::string(_lexer.getToken().getData())
                     << _lexer.getLine());
         return false;
     }
@@ -156,13 +156,13 @@ bool GMLImport::parseEdgeCommand() {
     
     if (errorSource) {
         BioLog::log(msg::ERROR_IMPOSSIBLE_TO_CONVERT_ID()
-                    << _source << _lexer.getLine());
+                    << std::string(_source) << _lexer.getLine());
         return false;
     }
 
     if (errorTarget) {
         BioLog::log(msg::ERROR_IMPOSSIBLE_TO_CONVERT_ID()
-                    << _target << _lexer.getLine());
+                    << std::string(_target) << _lexer.getLine());
         return false;
     }
 
@@ -198,7 +198,7 @@ bool GMLImport::parseGraphCommand() {
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
         BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << _lexer.getToken().getData()
+                    << std::string(_lexer.getToken().getData())
                     << _lexer.getLine());
         return false;
     }
@@ -225,7 +225,8 @@ bool GMLImport::parseGenericCommand(std::string_view keyword) {
 
         default:
             BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                        << _lexer.getToken().getData() << _lexer.getLine());
+                        << std::string(_lexer.getToken().getData()) 
+                        << _lexer.getLine());
             return false;
             break;
     }
@@ -251,7 +252,7 @@ bool GMLImport::handleCommand(std::string_view keyword,
 bool GMLImport::parseList() {
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
         BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << _lexer.getToken().getData()
+                    << std::string(_lexer.getToken().getData())
                     << _lexer.getLine());
         return false;
     }
@@ -267,7 +268,7 @@ bool GMLImport::parseList() {
 
     if (!token.isCSBRACK()) {
         BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << token.getData()
+                    << std::string(token.getData())
                     << _lexer.getLine());
         return false;
     }

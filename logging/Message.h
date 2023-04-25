@@ -53,7 +53,6 @@ public:
 
     Message& operator<<(const std::string& value);
     Message& operator<<(std::string&& value);
-    Message& operator<<(std::string_view str);
     Message& operator<<(long int value);
 
 protected:

@@ -10,10 +10,6 @@ Message::Message(MessageID msgID, Severity severity, const std::string& format)
 Message::~Message() {
 }
 
-Message& Message::operator<<(std::string_view str) {
-    return (*this << std::string(str));
-}
-
 Message& Message::operator<<(const std::string& value) {
     _argStorage._args[_argStorage._size] = value;
     _argStorage._size++;
