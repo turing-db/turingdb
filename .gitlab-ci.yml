@@ -6,5 +6,11 @@ build-job:
   script:
     - source /turing/setup.sh
     - make -j4
-    - make test
+    - GTEST_OUTPUT="xml:$(pwd)/unit_tests.xml" make test
+  artifacts:
+    when: always
+    paths:
+      - unit_tests.xml
+    reports:
+      junit: unit_tests.xml
 
