@@ -1,6 +1,11 @@
 stages:
   - build
 
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+
 build-job:
   stage: build
   script:
