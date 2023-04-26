@@ -1,10 +1,10 @@
 stages:
   - build
-  - test
 
 build-job:
   stage: build
   script:
     - source /turing/setup.sh
     - make -j4
+    - make test
 
