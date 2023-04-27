@@ -4,11 +4,13 @@ import sys
 import csv
 import json
 
+
 def decomment(csvfile):
     for row in csvfile:
         raw = row.split('#')[0].strip()
         if raw:
             yield row
+
 
 if len(sys.argv) < 3:
     print("ERROR: please give a data file and the name of an output file !")
