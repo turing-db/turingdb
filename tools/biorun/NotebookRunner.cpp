@@ -19,7 +19,7 @@ NotebookRunner::~NotebookRunner() {
 }
 
 void NotebookRunner::addNotebook(const Path& path) {
-    _notebooks.emplace_back(path);
+    _notebooks.emplace_back(std::filesystem::canonical(path));
 }
 
 bool NotebookRunner::run() {
