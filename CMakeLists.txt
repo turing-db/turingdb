@@ -29,6 +29,7 @@ if (${DEBUG_BUILD})
     set(OPTIMIZE_FLAGS "-O0 -g")
 else()
     message(STATUS "Optimized build")
+    add_definitions(-DNDEBUG)
     set(OPTIMIZE_FLAGS "-O3")
 endif()
 

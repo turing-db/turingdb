@@ -33,7 +33,7 @@ class MmapStringBuffer : public StringBuffer {
         }
 
         ~MmapStringBuffer() {
-            int res = munmap(_data, _size);
+            [[maybe_unused]] int res = munmap(_data, _size);
             assert(res == 0);
         }
 
