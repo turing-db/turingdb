@@ -103,7 +103,7 @@ bool NotebookRunner::exportNotebook(const Path& path, const std::string& toDest)
     Command jupyterCmd("jupyter");
     jupyterCmd.addArg("nbconvert");
     jupyterCmd.addArg("--output-dir");
-    jupyterCmd.addArg(_reportsDir);
+    jupyterCmd.addArg(toDest);
     jupyterCmd.addArg("--to");
     jupyterCmd.addArg(toDest);
     jupyterCmd.addArg(path.string());
