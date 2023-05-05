@@ -1,8 +1,9 @@
 #include "ArgParser.h"
 
-#include <string>
-#include <stdlib.h>
+#include <cassert>
 #include <iostream>
+#include <stdlib.h>
+#include <string>
 
 #define INDENT "    "
 
@@ -42,7 +43,7 @@ void ArgParser::parse(int argc, const char** argv) {
             }
 
             optionName.assign(argStr, 1, std::string::npos);
-            
+
             if (optionName == "h" || optionName == "help") {
                 printHelp();
             } else {
@@ -71,7 +72,7 @@ void ArgParser::parse(int argc, const char** argv) {
 
 void ArgParser::printHelp() const {
     std::cout << "Usage:\n";
-    std::cout << INDENT<< _toolName << " [options]";
+    std::cout << INDENT << _toolName << " [options]";
 
     if (!_argsDesc.empty()) {
         std::cout << " " << _argsDesc;
@@ -96,6 +97,7 @@ void ArgParser::handleUnknownOption(const std::string& name) const {
 }
 
 void ArgParser::handleOptionArgExpected(const std::string& optionName) const {
-    std::cerr << "ERROR: an argument was expected to be given to option " << optionName << "\n";
+    std::cerr << "ERROR: an argument was expected to be given to option "
+              << optionName << "\n";
     printHelp();
 }

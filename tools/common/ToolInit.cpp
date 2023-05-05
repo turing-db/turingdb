@@ -20,29 +20,40 @@ ToolInit::~ToolInit() {
 void ToolInit::init(int argc, const char** argv) {
     BioLog::init();
 
+    // Option to change the output directory
+    _argParser.addOption("o", "Changes the default output directory", true);
+    _argParser.parse(argc, argv);
+
+    for (const auto& option : _argParser.options()) {
+        const auto& optName = option.first;
+
+        if (optName == "o") {
+            _outputsDir = option.second;
+            break;
+        }
+    }
+
+    // If the option is not present, defaults the output dir to toolname + .out
     if (_outputsDir.empty()) {
         _outputsDir = std::filesystem::current_path()/(_toolName + ".out");
     }
 
     if (FileUtils::exists(_outputsDir)) {
         if (!FileUtils::isDirectory(_outputsDir)) {
-            BioLog::log(msg::ERROR_NOT_A_DIRECTORY()
-                        << _outputsDir.string());
+            BioLog::log(msg::ERROR_NOT_A_DIRECTORY() << _outputsDir.string());
             exit(EXIT_FAILURE);
             return;
         }
     } else {
         const bool createRes = FileUtils::createDirectory(_outputsDir);
         if (!createRes) {
-            BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY()
-                        << _outputsDir.string());
+            BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _outputsDir.string());
             exit(EXIT_FAILURE);
             return;
         }
     }
 
     _outputsDir = std::filesystem::absolute(_outputsDir);
-
     _reportsDir = _outputsDir/"reports";
 
     // Create outputs and reports directories
@@ -54,8 +65,5 @@ void ToolInit::init(int argc, const char** argv) {
     // Init logging
     const auto logFilePath = _reportsDir/(_toolName + ".log");
     BioLog::openFile(logFilePath.string());
-
     BioLog::echo(BannerDisplay::getBannerString());
-
-    _argParser.parse(argc, argv);
 }

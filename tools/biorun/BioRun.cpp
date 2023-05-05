@@ -8,6 +8,7 @@ using namespace Log;
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("biorun");
+
     ArgParser& argParser = toolInit.getArgParser();
     argParser.setArgsDesc("notebook.ipynb ...");
     argParser.addOption("q", "Launch the notebooks in quiet mode.", false);
@@ -21,6 +22,7 @@ int main(int argc, const char** argv) {
     bool exportHTML = false;
     bool exportPDF = false;
     bool execNotebooks = true;
+
     for (const auto& option : argParser.options()) {
         const auto& optName = option.first;
         if (optName == "q") {
@@ -40,6 +42,7 @@ int main(int argc, const char** argv) {
     notebookRunner.setExecEnabled(execNotebooks);
     notebookRunner.setExportHTML(exportHTML);
     notebookRunner.setExportPDF(exportPDF);
+
     for (const auto& arg : argParser.args()) {
         notebookRunner.addNotebook(arg);
     }
@@ -48,5 +51,6 @@ int main(int argc, const char** argv) {
 
     BioLog::printSummary();
     BioLog::destroy();
+
     return EXIT_SUCCESS;
 }
