@@ -1,7 +1,7 @@
 #include "ToolInit.h"
 
-#include "BannerDisplay.h"
 #include "FileUtils.h"
+#include "BannerDisplay.h"
 
 #include "BioLog.h"
 #include "MsgCommon.h"
@@ -9,29 +9,33 @@
 using namespace Log;
 
 ToolInit::ToolInit(const std::string& toolName)
-    : _toolName(toolName), _argParser(toolName) {}
+    : _toolName(toolName),
+    _argParser(toolName)
+{
+}
 
-ToolInit::~ToolInit() {}
+ToolInit::~ToolInit() {
+}
 
 void ToolInit::init(int argc, const char** argv) {
     BioLog::init();
 
     // Option to change the output directory
-    _argParser.addOption("output", "Changes the default output directory", true);
+    _argParser.addOption("o", "Changes the default output directory", true);
     _argParser.parse(argc, argv);
 
     for (const auto& option : _argParser.options()) {
         const auto& optName = option.first;
 
-        if (optName == "output") {
-            _outputsDir = _argParser.getOption("output");
+        if (optName == "o") {
+            _outputsDir = option.second;
             break;
         }
     }
 
     // If the option is not present, defaults the output dir to toolname + .out
     if (_outputsDir.empty()) {
-        _outputsDir = std::filesystem::current_path() / (_toolName + ".out");
+        _outputsDir = std::filesystem::current_path()/(_toolName + ".out");
     }
 
     if (files::exists(_outputsDir)) {
@@ -50,7 +54,7 @@ void ToolInit::init(int argc, const char** argv) {
     }
 
     _outputsDir = std::filesystem::absolute(_outputsDir);
-    _reportsDir = _outputsDir / "reports";
+    _reportsDir = _outputsDir/"reports";
 
     // Create outputs and reports directories
     std::filesystem::remove_all(_outputsDir);
@@ -59,7 +63,7 @@ void ToolInit::init(int argc, const char** argv) {
     std::filesystem::create_directory(_reportsDir);
 
     // Init logging
-    const auto logFilePath = _reportsDir / (_toolName + ".log");
+    const auto logFilePath = _reportsDir/(_toolName + ".log");
     BioLog::openFile(logFilePath.string());
     BioLog::echo(BannerDisplay::getBannerString());
 }
