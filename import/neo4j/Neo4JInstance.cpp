@@ -32,17 +32,17 @@ bool Neo4JInstance::setup() {
 
     // Check that neo4j archive exists in installation
     const auto neo4jArchivePath = std::filesystem::path(bioHome)/"share"/NEO4J_FILE;
-    if (!files::exists(neo4jArchivePath)) {
+    if (!FileUtils::exists(neo4jArchivePath)) {
         BioLog::log(msg::ERROR_IMPORT_FAILED_FIND_NEO4J_ARCHIVE() << neo4jArchivePath.string());
         return false;
     }
 
     // Create neo4j directory
-    if (files::exists(_neo4jDir)) {
-        files::removeDirectory(_neo4jDir);
+    if (FileUtils::exists(_neo4jDir)) {
+        FileUtils::removeDirectory(_neo4jDir);
     }
 
-    if (!files::createDirectory(_neo4jDir)) {
+    if (!FileUtils::createDirectory(_neo4jDir)) {
         BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _neo4jDir);
         return false;
     }
@@ -64,7 +64,7 @@ bool Neo4JInstance::setup() {
 }
 
 bool Neo4JInstance::stop() {
-    if (files::exists(_neo4jDir)) {
+    if (FileUtils::exists(_neo4jDir)) {
         BioLog::log(msg::INFO_STOPPING_NEO4J());
         const int stopRes = boost::process::system(getNeo4jBinary().string(), "stop");
         if (stopRes != 0) {
@@ -77,12 +77,12 @@ bool Neo4JInstance::stop() {
 }
 
 void Neo4JInstance::destroy() {
-    if (files::exists(_neo4jDir)) {
+    if (FileUtils::exists(_neo4jDir)) {
         stop();
 
         // Remove neo4j directory
         BioLog::log(msg::INFO_CLEAN_NEO4J_SETUP());
-        files::removeDirectory(_neo4jDir);
+        FileUtils::removeDirectory(_neo4jDir);
     }
 }
 
@@ -127,7 +127,7 @@ bool Neo4JInstance::importDBDir(const std::string& dbPath) {
     
     // Get neo4j databases directory
     const auto neo4jDBDir = _neo4jDir/"data"/"databases";
-    if (!files::exists(neo4jDBDir)) {
+    if (!FileUtils::exists(neo4jDBDir)) {
         BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS() << neo4jDBDir.string());
         return false;
     }
@@ -141,13 +141,13 @@ bool Neo4JInstance::importDBDir(const std::string& dbPath) {
 
     // Remove a db with the same name if it already exists
     const auto pathInDBDir = neo4jDBDir/dbName;
-    if (files::exists(pathInDBDir)) {
-        files::removeDirectory(pathInDBDir);
+    if (FileUtils::exists(pathInDBDir)) {
+        FileUtils::removeDirectory(pathInDBDir);
     }
 
     // Copy db to database directory
     BioLog::log(msg::INFO_COPY_DB() << dbPath << pathInDBDir.string());
-    if (!files::copy(dbPath, pathInDBDir)) {
+    if (!FileUtils::copy(dbPath, pathInDBDir)) {
         BioLog::log(msg::ERROR_FAILED_TO_COPY() << dbPath << pathInDBDir.string());
         return false;
     }

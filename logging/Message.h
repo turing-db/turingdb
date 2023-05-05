@@ -20,6 +20,7 @@ public:                                             \
 // MsgImport    2000
 // MsgUIServer  3000
 // MsgRun       4000
+// MsgDB        5000
 
 namespace Log {
 

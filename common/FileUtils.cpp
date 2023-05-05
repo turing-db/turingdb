@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-bool files::exists(const files::Path& path) {
+bool FileUtils::exists(const FileUtils::Path& path) {
     try {
         return std::filesystem::exists(path);
     } catch (const std::filesystem::filesystem_error& e) {
@@ -11,25 +11,25 @@ bool files::exists(const files::Path& path) {
     }
 }
 
-bool files::createDirectory(const files::Path& path) {
+bool FileUtils::createDirectory(const FileUtils::Path& path) {
     std::error_code createDirError;
-    std::filesystem::create_directory(path, createDirError);
+    std::filesystem::create_directories(path, createDirError);
     return !(bool)createDirError;
 }
 
-bool files::removeDirectory(const files::Path& path) {
+bool FileUtils::removeDirectory(const FileUtils::Path& path) {
     std::error_code removeDirError;
     std::filesystem::remove_all(path, removeDirError);
     return !(bool)removeDirError;
 }
 
-bool files::removeFile(const files::Path& path) {
+bool FileUtils::removeFile(const FileUtils::Path& path) {
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
     return !(bool)removeError;
 }
 
-bool files::copy(const files::Path& from, const files::Path& to) {
+bool FileUtils::copy(const FileUtils::Path& from, const FileUtils::Path& to) {
     try {
         std::filesystem::copy(from, to);
         return true;
@@ -38,7 +38,7 @@ bool files::copy(const files::Path& from, const files::Path& to) {
     }
 }
 
-bool files::isDirectory(const Path& path) {
+bool FileUtils::isDirectory(const Path& path) {
     try {
         return std::filesystem::is_directory(path);
     } catch (const std::filesystem::filesystem_error& e) {
@@ -46,7 +46,7 @@ bool files::isDirectory(const Path& path) {
     }
 }
 
-files::Path files::cwd() {
+FileUtils::Path FileUtils::cwd() {
     std::error_code error;
     const auto path = std::filesystem::current_path(error);
     if (error) {
@@ -55,7 +55,7 @@ files::Path files::cwd() {
     return path;
 }
 
-bool files::writeFile(const Path& path, const std::string& content) {
+bool FileUtils::writeFile(const Path& path, const std::string& content) {
     int fd = open(path.string().c_str(),
                   O_WRONLY | O_TRUNC | O_CREAT,
                   S_IRUSR | S_IWUSR);
@@ -74,7 +74,7 @@ bool files::writeFile(const Path& path, const std::string& content) {
     return true;
 }
 
-files::Path files::abspath(const Path& relativePath) {
+FileUtils::Path FileUtils::abspath(const Path& relativePath) {
     std::error_code error;
     const auto path = std::filesystem::absolute(relativePath, error);
     if (error) {
@@ -84,7 +84,7 @@ files::Path files::abspath(const Path& relativePath) {
     return path;
 }
 
-bool files::writeBinary(const Path& path, const char* data, size_t size) {
+bool FileUtils::writeBinary(const Path& path, const char* data, size_t size) {
     int fd = open(path.string().c_str(),
                   O_WRONLY | O_TRUNC | O_CREAT,
                   S_IRUSR | S_IWUSR);
@@ -102,7 +102,7 @@ bool files::writeBinary(const Path& path, const char* data, size_t size) {
     return true;
 }
 
-files::Path files::getFilename(const Path& path) {
+FileUtils::Path FileUtils::getFilename(const Path& path) {
     if (path.empty()) {
         return Path();
     }

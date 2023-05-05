@@ -26,7 +26,7 @@ bool NotebookRunner::run() {
     // Check that all notebooks exist
     bool found = true;
     for (const auto& notebook : _notebooks) {
-        if (!files::exists(notebook)) {
+        if (!FileUtils::exists(notebook)) {
             BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << notebook.string());
             found = false;
         }
@@ -103,7 +103,7 @@ bool NotebookRunner::exportNotebook(const Path& path, const std::string& toDest)
     Command jupyterCmd("jupyter");
     jupyterCmd.addArg("nbconvert");
     jupyterCmd.addArg("--output-dir");
-    jupyterCmd.addArg(_reportsDir);
+    jupyterCmd.addArg(toDest);
     jupyterCmd.addArg("--to");
     jupyterCmd.addArg(toDest);
     jupyterCmd.addArg(path.string());

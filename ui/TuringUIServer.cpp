@@ -52,14 +52,14 @@ void TuringUIServer::cleanSite() {
     BioLog::log(msg::INFO_CLEANING_SITE());
 
     const auto sitePath = _outDir/SiteArchive::getSiteDirectoryName();
-    if (!files::removeDirectory(sitePath)) {
+    if (!FileUtils::removeDirectory(sitePath)) {
         BioLog::log(msg::ERROR_FAILED_TO_REMOVE_DIRECTORY()
                     << sitePath.string());
         return;
     }
 
     const auto archivePath = _outDir/SiteArchive::getSiteArchiveName();
-    if (!files::removeFile(archivePath)) {
+    if (!FileUtils::removeFile(archivePath)) {
         BioLog::log(msg::ERROR_FAILED_TO_REMOVE_FILE()
                     << archivePath.string());
     }

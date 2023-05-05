@@ -35,14 +35,14 @@ std::string SiteArchive::getSiteDirectoryName() {
 }
 
 bool SiteArchive::decompress(const std::filesystem::path& outDir) {
-    if (!files::exists(outDir) || !files::isDirectory(outDir)) {
+    if (!FileUtils::exists(outDir) || !FileUtils::isDirectory(outDir)) {
         BioLog::log(msg::ERROR_NOT_A_DIRECTORY() << outDir.string());
         return false;
     }
 
     // Write archive file in output directory
     const auto archiveFileName = outDir/SiteArchiveName;
-    if (!files::writeBinary(archiveFileName, (const char*)globfs_site_data, globfs_site_size)) {
+    if (!FileUtils::writeBinary(archiveFileName, (const char*)globfs_site_data, globfs_site_size)) {
         BioLog::log(msg::ERROR_FAILED_TO_WRITE_FILE() << archiveFileName.string());
         return false;
     }

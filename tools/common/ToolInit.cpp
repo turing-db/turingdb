@@ -38,14 +38,14 @@ void ToolInit::init(int argc, const char** argv) {
         _outputsDir = std::filesystem::current_path()/(_toolName + ".out");
     }
 
-    if (files::exists(_outputsDir)) {
-        if (!files::isDirectory(_outputsDir)) {
+    if (FileUtils::exists(_outputsDir)) {
+        if (!FileUtils::isDirectory(_outputsDir)) {
             BioLog::log(msg::ERROR_NOT_A_DIRECTORY() << _outputsDir.string());
             exit(EXIT_FAILURE);
             return;
         }
     } else {
-        const bool createRes = files::createDirectory(_outputsDir);
+        const bool createRes = FileUtils::createDirectory(_outputsDir);
         if (!createRes) {
             BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _outputsDir.string());
             exit(EXIT_FAILURE);

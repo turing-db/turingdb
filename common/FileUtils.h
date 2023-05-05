@@ -1,25 +1,20 @@
-#ifndef _BIO_COMMON_FILE_UTILS_
-#define _BIO_COMMON_FILE_UTILS_
+#pragma once
 
 #include <filesystem>
 
-namespace files {
+class FileUtils {
+public:
+    using Path = std::filesystem::path;
 
-using Path = std::filesystem::path;
-
-bool exists(const Path& path);
-bool createDirectory(const Path& path);
-bool removeDirectory(const Path& path);
-bool copy(const Path& from, const Path& to);
-bool isDirectory(const Path& path);
-bool removeFile(const Path& path);
-Path cwd();
-Path abspath(const Path& relativePath);
-Path getFilename(const Path& path);
-
-bool writeFile(const Path& path, const std::string& content);
-bool writeBinary(const Path& path, const char* data, size_t size);
-
-}
-
-#endif
+    static bool exists(const Path& path);
+    static bool createDirectory(const Path& path);
+    static bool removeDirectory(const Path& path);
+    static bool copy(const Path& from, const Path& to);
+    static bool isDirectory(const Path& path);
+    static bool removeFile(const Path& path);
+    static Path cwd();
+    static Path abspath(const Path& relativePath);
+    static Path getFilename(const Path& path);
+    static bool writeFile(const Path& path, const std::string& content);
+    static bool writeBinary(const Path& path, const char* data, size_t size);
+};

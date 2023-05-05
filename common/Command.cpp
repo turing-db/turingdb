@@ -40,30 +40,30 @@ void Command::setEnvVar(const std::string& var, const std::string& value) {
 bool Command::run() {
     // Working directory
     if (_workingDir.empty()) {
-        _workingDir = files::cwd();
+        _workingDir = FileUtils::cwd();
     }
 
-    if (!files::exists(_workingDir)) {
+    if (!FileUtils::exists(_workingDir)) {
         BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
                     << _workingDir.string());
         return false;
     }
 
-    _workingDir = files::abspath(_workingDir);
+    _workingDir = FileUtils::abspath(_workingDir);
 
     // Stdout and stderr log file
     if (_writeLogFile) {
         if (_logFile.empty()) {
             _logFile = _workingDir/"cmd.log";
         }
-        _logFile = files::abspath(_logFile);
+        _logFile = FileUtils::abspath(_logFile);
     } else {
         _logFile = "/dev/null";
     }
 
     // Command executable
-    if (files::exists(_cmd)) {
-        _cmd = files::abspath(_cmd);
+    if (FileUtils::exists(_cmd)) {
+        _cmd = FileUtils::abspath(_cmd);
     } else {
         if (!searchCmd()) {
             BioLog::log(msg::ERROR_EXECUTABLE_NOT_FOUND() << _cmd);
@@ -80,7 +80,7 @@ bool Command::run() {
         }
 
         cmdStr.push_back('\n');
-        if (!files::writeFile(_scriptPath, cmdStr)) {
+        if (!FileUtils::writeFile(_scriptPath, cmdStr)) {
             BioLog::log(msg::ERROR_FAILED_TO_WRITE_COMMAND_SCRIPT()
                         << _scriptPath.string());
             return false;
