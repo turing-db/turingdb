@@ -2,13 +2,17 @@
 
 #include "StringIndex.h"
 
+#include <cassert>
+
 using namespace db;
 
 StringIndex::StringIndex()
 {
 }
 
+
 StringIndex::~StringIndex() {
+    clear();
 }
 
 StringRef StringIndex::getString(const std::string& str) {
@@ -27,3 +31,14 @@ StringRef StringIndex::getString(const std::string& str) {
     return StringRef(sharedStr);
 }
 
+void StringIndex::clear() {
+    for (const auto& [rstr, sstr] : _strMap) {
+        delete sstr;
+    }
+    _strMap.clear();
+}
+
+void StringIndex::insertString(const std::string& str, std::size_t id) {
+    assert(_strMap.find(str) == _strMap.end());
+    _strMap[str] = new SharedString(id, str);
+}

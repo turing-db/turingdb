@@ -1,26 +1,30 @@
 #pragma once
 
+#include "SerializerResult.h"
 #include <filesystem>
 #include <string>
 
 namespace db {
+class DB;
 
-class DBDumper {
+class DBSerializer {
 public:
     using Path = std::filesystem::path;
 
-    DBDumper(const Path& outDir);
-    ~DBDumper();
+    DBSerializer(DB** db, const Path& outDir);
+    ~DBSerializer();
 
     void setDBDirectoryName(const std::string& dirName);
 
-    bool dump();
+    Serializer::Result load();
+    Serializer::Result dump();
 
     static std::string getDefaultDBDirectoryName();
 
 private:
     const Path _outDir;
     std::string _dbDirName;
+    DB** _db{nullptr};
 };
 
-}
+} // namespace db

@@ -17,4 +17,6 @@ public:
     static Path getFilename(const Path& path);
     static bool writeFile(const Path& path, const std::string& content);
     static bool writeBinary(const Path& path, const char* data, size_t size);
+    static int openForRead(const Path& path);
+    static int openForWrite(const Path& path);
 };
