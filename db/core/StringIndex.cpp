@@ -2,8 +2,6 @@
 
 #include "StringIndex.h"
 
-#include <cassert>
-
 using namespace db;
 
 StringIndex::StringIndex()
@@ -31,6 +29,10 @@ StringRef StringIndex::getString(const std::string& str) {
     return StringRef(sharedStr);
 }
 
+bool StringIndex::stringExists(const std::string& str) const {
+    return _strMap.find(str) != _strMap.end();
+}
+
 void StringIndex::clear() {
     for (const auto& [rstr, sstr] : _strMap) {
         delete sstr;
@@ -39,6 +41,5 @@ void StringIndex::clear() {
 }
 
 void StringIndex::insertString(const std::string& str, std::size_t id) {
-    assert(_strMap.find(str) == _strMap.end());
     _strMap[str] = new SharedString(id, str);
 }

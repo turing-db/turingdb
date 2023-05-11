@@ -3,19 +3,21 @@
 
 set(ENV{PKG_CONFIG_PATH} "/turing/tools/lib/pkgconfig/")
 find_package(CapnProto REQUIRED)
-capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS capnp_src/StringIndex.capnp)
+capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS capnp/StringIndex.capnp)
 
-set(serializer_sources
-    DBSerializer.cpp
-    StringIndexSerializer.cpp)
+set(dumper_sources
+    DBLoader.cpp
+    DBDumper.cpp
+    StringIndexLoader.cpp
+    StringIndexDumper.cpp)
 
-add_library(turing_db_serializer_s STATIC
+add_library(turing_db_dumper_s STATIC
     ${CAPNP_SRCS}
     ${CAPNP_HDRS}
-    ${serializer_sources}
+    ${dumper_sources}
 )
 
-target_include_directories(turing_db_serializer_s
+target_include_directories(turing_db_dumper_s
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 
@@ -24,7 +26,7 @@ target_include_directories(turing_db_serializer_s
     ${CMAKE_CURRENT_BINARY_DIR} # CapnProto generated files
 )
 
-target_link_libraries(turing_db_serializer_s PRIVATE
+target_link_libraries(turing_db_dumper_s PRIVATE
     turing_db_core_s
     common_s
     turing_log_s

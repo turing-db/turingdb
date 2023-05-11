@@ -17,13 +17,15 @@ class ComponentType;
 class EdgeType;
 class DBNetworkRange;
 class Writeback;
-class DBSerializer;
+class DBLoader;
+class DBDumper;
 
 class DB {
 public:
     friend DBNetworkRange;
     friend Writeback;
-    friend DBSerializer;
+    friend DBLoader;
+    friend DBDumper;
 
     ~DB();
 
