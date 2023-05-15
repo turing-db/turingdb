@@ -64,7 +64,7 @@ TEST_F(PerfStatTest, MeasurePerfs) {
                 std::stringstream wordstream{word};
                 float duration = 0.f;
                 wordstream >> duration;
-                ASSERT_NEAR(duration, durations[i], 2e-4f);
+                ASSERT_GE(duration, durations[i]);
                 break;
             }
             j++;

@@ -20,6 +20,8 @@ class DBNodeTypeRange;
 class DBEdgeTypeRange;
 class DBComponentTypeRange;
 class Writeback;
+class DBLoader;
+class DBDumper;
 
 class DB {
 public:
@@ -28,6 +30,8 @@ public:
     friend DBEdgeTypeRange;
     friend DBComponentTypeRange;
     friend Writeback;
+    friend DBLoader;
+    friend DBDumper;
 
     ~DB();
 

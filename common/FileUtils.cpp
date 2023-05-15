@@ -109,3 +109,14 @@ FileUtils::Path FileUtils::getFilename(const Path& path) {
 
     return path.filename();
 }
+
+int FileUtils::openForRead(const Path& path) {
+    return open(path.string().c_str(), O_RDONLY);
+}
+
+int FileUtils::openForWrite(const Path& path) {
+    return open(path.string().c_str(),
+                O_WRONLY | O_TRUNC | O_CREAT,
+                S_IRUSR | S_IWUSR);
+}
+

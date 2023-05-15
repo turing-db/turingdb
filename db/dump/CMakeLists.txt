@@ -1,14 +1,34 @@
 
+# CapnProto dependency
+
+set(ENV{PKG_CONFIG_PATH} "/turing/tools/lib/pkgconfig/")
+find_package(CapnProto REQUIRED)
+capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS capnp/StringIndex.capnp)
+
 set(dumper_sources
-        DBDumper.cpp
-        DBLoader.cpp)
+    DBLoader.cpp
+    DBDumper.cpp
+    StringIndexLoader.cpp
+    StringIndexDumper.cpp)
 
-add_library(turing_db_dumper_s STATIC ${dumper_sources})
+add_library(turing_db_dumper_s STATIC
+    ${CAPNP_SRCS}
+    ${CAPNP_HDRS}
+    ${dumper_sources}
+)
 
-target_include_directories(turing_db_dumper_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(turing_db_dumper_s PRIVATE ${BIO_SOURCE_DIR}/messages)
+target_include_directories(turing_db_dumper_s
+    PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+
+    PRIVATE
+    ${BIO_SOURCE_DIR}/messages
+    ${CMAKE_CURRENT_BINARY_DIR} # CapnProto generated files
+)
 
 target_link_libraries(turing_db_dumper_s PRIVATE
     turing_db_core_s
     common_s
-    turing_log_s)
+    turing_log_s
+    CapnProto::capnp
+)
