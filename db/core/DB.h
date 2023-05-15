@@ -16,6 +16,9 @@ class NodeType;
 class ComponentType;
 class EdgeType;
 class DBNetworkRange;
+class DBNodeTypeRange;
+class DBEdgeTypeRange;
+class DBComponentTypeRange;
 class Writeback;
 class DBLoader;
 class DBDumper;
@@ -23,6 +26,9 @@ class DBDumper;
 class DB {
 public:
     friend DBNetworkRange;
+    friend DBNodeTypeRange;
+    friend DBEdgeTypeRange;
+    friend DBComponentTypeRange;
     friend Writeback;
     friend DBLoader;
     friend DBDumper;
@@ -48,13 +54,16 @@ public:
 
 private:
     using Networks = std::map<StringRef, Network*>;
+    using NodeTypes = std::map<StringRef, NodeType*>;
+    using EdgeTypes = std::map<StringRef, EdgeType*>;
+    using ComponentTypes = std::map<StringRef, ComponentType*>;
 
     StringIndex _strIndex;
     DBIndex::ID _nextFreeNetID {0};
     Networks _networks;
-    std::map<StringRef, NodeType*> _nodeTypes;
-    std::map<StringRef, EdgeType*> _edgeTypes;
-    std::map<StringRef, ComponentType*> _compTypes;
+    NodeTypes _nodeTypes;
+    EdgeTypes _edgeTypes;
+    ComponentTypes _compTypes;
 
     ValueType* _int {nullptr};
     ValueType* _unsigned {nullptr};

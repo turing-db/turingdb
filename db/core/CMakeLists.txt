@@ -22,6 +22,9 @@ set(db_sources
 
             DBAccessor.cpp
             DBNetworkRange.cpp
+            DBNodeTypeRange.cpp
+            DBEdgeTypeRange.cpp
+            DBComponentTypeRange.cpp
             NetworkAccessor.cpp
             NetworkNodeRange.cpp
             NetworkEdgeRange.cpp

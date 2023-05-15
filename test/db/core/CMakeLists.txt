@@ -1,34 +1,19 @@
+function(add_db_core_gtest exe_name cpp_file)
+    add_executable(${exe_name} ${cpp_file})
+    target_link_libraries(${exe_name} PRIVATE turing_db_core_s gtest_main)
+    gtest_discover_tests(${exe_name})
+endfunction()
 
-add_executable(db_string_tests StringRefTest.cpp)
-target_link_libraries(db_string_tests PRIVATE
-        turing_db_core_s
-        gtest_main)
+add_db_core_gtest(db_value_types_test ValueTypesTest.cpp)
+add_db_core_gtest(db_node_type_test NodeTypeTest.cpp)
 
-add_executable(db_value_types_test ValueTypesTest.cpp)
-target_link_libraries(db_value_types_test PRIVATE
-        turing_db_core_s
-        gtest_main)
+add_db_core_gtest(db_network_test NetworkTest.cpp)
+add_db_core_gtest(db_node_test NodeTest.cpp)
+add_db_core_gtest(db_edge_test EdgeTest.cpp)
+add_db_core_gtest(db_component_type_test ComponentTypeTest.cpp)
 
-add_executable(db_node_type_test NodeTypeTest.cpp)
-target_link_libraries(db_node_type_test PRIVATE
-        turing_db_core_s
-        gtest_main)
-
-add_executable(db_network_test NetworkTest.cpp)
-target_link_libraries(db_network_test PRIVATE turing_db_core_s gtest_main)
-
-add_executable(db_node_test NodeTest.cpp)
-target_link_libraries(db_node_test PRIVATE turing_db_core_s gtest_main)
-
-add_executable(db_edge_test EdgeTest.cpp)
-target_link_libraries(db_edge_test PRIVATE turing_db_core_s gtest_main)
-
-add_executable(db_component_type_test ComponentTypeTest.cpp)
-target_link_libraries(db_component_type_test PRIVATE turing_db_core_s gtest_main)
-
-gtest_discover_tests(db_string_tests)
-gtest_discover_tests(db_value_types_test)
-gtest_discover_tests(db_network_test)
-gtest_discover_tests(db_node_type_test)
-gtest_discover_tests(db_node_test)
-gtest_discover_tests(db_component_type_test)
+# Ranges
+add_db_core_gtest(db_network_range_test DBNetworkRangeTest.cpp)
+add_db_core_gtest(db_node_type_range_test DBNodeTypeRangeTest.cpp)
+add_db_core_gtest(db_edge_type_range_test DBEdgeTypeRangeTest.cpp)
+add_db_core_gtest(db_component_type_range_test DBComponentTypeRangeTest.cpp)
