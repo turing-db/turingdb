@@ -3,6 +3,7 @@
 #include "NotebookRunner.h"
 
 #include "BioLog.h"
+#include "PerfStat.h"
 
 using namespace Log;
 
@@ -51,6 +52,6 @@ int main(int argc, const char** argv) {
 
     BioLog::printSummary();
     BioLog::destroy();
-
+    PerfStat::destroy();
     return EXIT_SUCCESS;
 }
