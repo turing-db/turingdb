@@ -2,6 +2,9 @@
 
 #include "crow.h"
 
+#include "AuthGuard.h"
+#include "AuthRegister.h"
+
 #include "APIServerConfig.h"
 
 APIServer::APIServer(const APIServerConfig& config)
@@ -13,10 +16,18 @@ APIServer::~APIServer() {
 }
 
 bool APIServer::run() {
-    crow::SimpleApp app;
+    AuthRegister authRegister(_config);
 
-    CROW_ROUTE(app, "/")([]() {
-            return "Hello world!";
+    crow::App<AuthGuard> app;
+
+    AuthGuard& authGuard = app.get_middleware<AuthGuard>();
+    authGuard.setRegister(&authRegister);
+
+    CROW_ROUTE(app, "/")
+    .methods("POST"_method)
+    ([](const crow::request& req, crow::response& resp) {
+        resp.code = 200;
+        resp.end();
     });
 
     auto logLevel = crow::LogLevel::Warning;
