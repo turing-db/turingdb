@@ -1,7 +1,6 @@
 add_subdirectory(tinyxml2)
 add_subdirectory(linenoise)
 add_subdirectory(nlohmann_json)
-add_subdirectory(cpp-httplib)
 add_subdirectory(incbin)
 add_subdirectory(crow)
 
