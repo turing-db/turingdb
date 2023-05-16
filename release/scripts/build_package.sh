@@ -5,6 +5,9 @@ set -e
 build_dir=$HOME/turing/release/build
 package_dir=$HOME/turing/release/build/turing_package
 
+source /turing/setup.sh
+printenv
+
 rm -rf $build_dir
 mkdir -p $build_dir
 

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 prod_ready_bins=biorun
 
 package_name=turing
@@ -15,6 +13,7 @@ function build_package() {
 
 	if [ ! "$error" == "0" ] ; then
 		echo 'Build failed'
+		docker run -it -v $turing_dir:/home/dev/turing $turing_img bash
 		exit 1
 	fi
 
@@ -51,13 +50,12 @@ $(aws ecr get-login --region eu-west-2 --no-include-email)
 
 build_package
 
-#
-rm -f turing_key*
-ssh-keygen -q -P '' -N '' -t rsa -f turing_key
-
 # Build delivery docker image
 echo 'Building turing-platform image'
-docker build -t turing-platform:latest --build-arg BASE_IMAGE=$turing_img --build-arg TURING_PACKAGE=$package_name .
+docker build -t turing-platform-clb:latest --build-arg BASE_IMAGE=$turing_img --build-arg TURING_PACKAGE=$package_name .
+docker tag turing-platform-clb:latest 799170964164.dkr.ecr.eu-west-2.amazonaws.com/turing-platform-clb:latest
+aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin 799170964164.dkr.ecr.eu-west-2.amazonaws.com
+docker push 799170964164.dkr.ecr.eu-west-2.amazonaws.com/turing-platform-clb:latest
 
 # Clean build files
 clean_build
