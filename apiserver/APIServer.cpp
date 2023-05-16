@@ -19,14 +19,14 @@ bool APIServer::run() {
             return "Hello world!";
     });
 
-    auto logLevel = crow::LogLevel::Critical;
+    auto logLevel = crow::LogLevel::Warning;
     if (_config.isDebugEnabled()) {
         logLevel = crow::LogLevel::Info;
     }
 
     app.bindaddr(_config.getListenAddr())
        .port(_config.getPort())
-       .multithreaded()
+       .concurrency(_config.getThreadCount())
        .loglevel(logLevel)
        .run();
 
