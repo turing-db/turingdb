@@ -1,5 +1,7 @@
 
 set(apiserver_sources
+        AuthGuard.cpp
+        AuthRegister.cpp
         APIServerConfig.cpp
         APIServer.cpp)
 

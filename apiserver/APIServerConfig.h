@@ -13,9 +13,14 @@ public:
 
     unsigned getThreadCount() const { return _threads; }
 
+    const std::string& getDefaultAuthID() const { return _defaultAuthID; }
+    const std::string& getDefaultAuthSecret() const { return _defaultAuthSecret; }
+
 private:
     std::string _listenAddr {"127.0.0.1"};
     unsigned _port {6666};
     unsigned _threads {4};
     bool _debugEnabled {true};
+    std::string _defaultAuthID;
+    std::string _defaultAuthSecret;
 };
