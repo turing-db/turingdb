@@ -4,8 +4,8 @@
 
 using namespace db;
 
-DBEntity::DBEntity(DBIndex index)
-    : DBObject(index)
+DBEntity::DBEntity(DBIndex index, DBEntityType* type)
+    : DBObject(index), _type(type)
 {
 }
 

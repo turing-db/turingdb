@@ -28,6 +28,8 @@ set(db_sources
             NetworkNodeRange.cpp
             NetworkEdgeRange.cpp
 
+            TypeCheck.cpp
+
             StringIndex.cpp
             SharedString.cpp
             StringRef.cpp)

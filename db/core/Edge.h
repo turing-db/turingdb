@@ -14,12 +14,11 @@ class Edge : public DBEntity {
 public:
     friend Writeback;
 
-    EdgeType* getType() const { return _type; }
+    EdgeType* getType() const { return (EdgeType*)DBEntity::getType(); }
     Node* getSource() const { return _source; }
     Node* getTarget() const { return _target; }
 
 private:
-    EdgeType* _type {nullptr};
     Node* _source {nullptr};
     Node* _target {nullptr};
 

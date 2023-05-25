@@ -18,3 +18,11 @@ EdgeType::EdgeType(DBIndex index,
 
 EdgeType::~EdgeType() {
 }
+
+bool EdgeType::hasSourceType(const NodeType* nodeType) const {
+    return (_sourceTypes.find(const_cast<NodeType*>(nodeType)) != _sourceTypes.end());
+}
+
+bool EdgeType::hasTargetType(const NodeType* nodeType) const {
+    return (_targetTypes.find(const_cast<NodeType*>(nodeType)) != _targetTypes.end());
+}

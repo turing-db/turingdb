@@ -2,7 +2,6 @@
 
 #include "DB.h"
 
-#include "ValueType.h"
 #include "Network.h"
 #include "NodeType.h"
 #include "EdgeType.h"
@@ -11,19 +10,9 @@ using namespace db;
 
 DB::DB()
 {
-    _int = new ValueType(ValueType::VK_INT);
-    _unsigned = new ValueType(ValueType::VK_UNSIGNED);
-    _bool = new ValueType(ValueType::VK_BOOL);
-    _decimal = new ValueType(ValueType::VK_DECIMAL);
-    _string = new ValueType(ValueType::VK_STRING);
 }
 
 DB::~DB() {
-    delete _int;
-    delete _unsigned;
-    delete _bool;
-    delete _decimal;
-    delete _string;
 }
 
 DB* DB::create() {

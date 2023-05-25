@@ -11,24 +11,23 @@
 
 namespace db {
 
-class NodeType;
 class Edge;
 class Network;
 class EdgeType;
+class NodeType;
 class Writeback;
 
 class Node : public DBEntity {
 public:
     friend Writeback;
 
-    NodeType* getType() const { return _type; }
+    NodeType* getType() const { return (NodeType*)DBEntity::getType(); }
 
     Network* getNetwork() const { return _net; }
 
 private:
     using EdgeVector = std::vector<Edge*>;
 
-    NodeType* _type {nullptr};
     Network* _net {nullptr};
     std::map<const EdgeType*, EdgeVector, DBObject::Comparator> _inEdges;
     std::map<const EdgeType*, EdgeVector, DBObject::Comparator> _outEdges;

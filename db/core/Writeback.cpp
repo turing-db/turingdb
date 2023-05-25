@@ -8,6 +8,7 @@
 #include "Edge.h"
 #include "EdgeType.h"
 #include "PropertyType.h"
+#include "TypeCheck.h"
 
 using namespace db;
 
@@ -44,6 +45,11 @@ Node* Writeback::createNode(Network* net, NodeType* type) {
 
 Edge* Writeback::createEdge(EdgeType* type, Node* source, Node* target) {
     if (!type || !source || !target) {
+        return nullptr;
+    }
+
+    TypeCheck typeCheck(_db);
+    if (!typeCheck.checkEdge(type, source, target)) {
         return nullptr;
     }
 
@@ -99,20 +105,20 @@ EdgeType* Writeback::createEdgeType(StringRef name,
 
 PropertyType* Writeback::addPropertyType(NodeType* nodeType,
                                          StringRef name,
-                                         ValueType* type) {
+                                         ValueType type) {
     return addPropertyTypeBase(nodeType, name, type);
 }
 
 PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
                                          StringRef name,
-                                         ValueType* type) {
+                                         ValueType type) {
     return addPropertyTypeBase(edgeType, name, type);
 }
 
 PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
                                              StringRef name,
-                                             ValueType* type) {
-    if (!dbType || !type) {
+                                             ValueType type) {
+    if (!dbType || type.isValid()) {
         return nullptr;
     }
 
@@ -124,4 +130,22 @@ PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
     PropertyType* propType = new PropertyType(propertyTypeIndex, dbType, name, type);
     dbType->addPropertyType(propType);
     return propType;
+}
+
+bool Writeback::setProperty(DBEntity* entity, const Property& prop) {
+    if (!entity) {
+        return false;
+    }
+
+    if (!prop.isValid()) {
+        return false;
+    }
+
+    TypeCheck typeCheck(_db);
+    if (!typeCheck.checkEntityProperty(entity, prop)) {
+        return false;
+    }
+
+    entity->addProperty(prop);
+    return true;
 }

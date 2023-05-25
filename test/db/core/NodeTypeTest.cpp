@@ -42,17 +42,17 @@ TEST(NodeTypeTest, create2) {
     
     PropertyType* nameProp = wb.addPropertyType(cellularLoc,
                                                 db->getString("Name"),
-                                                db->getStringType());
+                                                ValueType::stringType());
     ASSERT_TRUE(nameProp);
 
     PropertyType* goIDProp = wb.addPropertyType(cellularLoc,
                                                 db->getString("GO_ID"),
-                                                db->getStringType());
+                                                ValueType::stringType());
     ASSERT_TRUE(goIDProp);
 
     PropertyType* typeProp = wb.addPropertyType(cellularLoc,
                                                 db->getString("LocationType"),
-                                                db->getStringType());
+                                                ValueType::stringType());
     ASSERT_TRUE(typeProp);
 
     // ClinicalInfo
@@ -61,35 +61,35 @@ TEST(NodeTypeTest, create2) {
 
     PropertyType* patientsHigh = wb.addPropertyType(clinicalInfo,
                                                     db->getString("Patients_High"),
-                                                    db->getDecimalType());
+                                                    ValueType::decimalType());
     EXPECT_TRUE(patientsHigh);
     PropertyType* patientsLow = wb.addPropertyType(clinicalInfo,
                                                    db->getString("Patients_Low"),
-                                                   db->getDecimalType());
+                                                   ValueType::decimalType());
     EXPECT_TRUE(patientsLow);
     PropertyType* patientsMedium = wb.addPropertyType(clinicalInfo,
                                                       db->getString("Patients_Medium"),
-                                                      db->getDecimalType());
+                                                      ValueType::decimalType());
     EXPECT_TRUE(patientsMedium);
     PropertyType* patientsNot = wb.addPropertyType(clinicalInfo,
                                                    db->getString("Patients_Not"),
-                                                   db->getDecimalType());
+                                                   ValueType::decimalType());
     EXPECT_TRUE(patientsNot);
     PropertyType* prognosticNotOk = wb.addPropertyType(clinicalInfo,
                                                        db->getString("Prognostic_NOT_OK"),
-                                                       db->getDecimalType());
+                                                       ValueType::decimalType());
     EXPECT_TRUE(prognosticNotOk);
     PropertyType* prognosticOk = wb.addPropertyType(clinicalInfo,
                                                     db->getString("Prognostic_OK"),
-                                                    db->getDecimalType());
+                                                    ValueType::decimalType());
     EXPECT_TRUE(prognosticOk);
     PropertyType* unprognosticNotOkHPA = wb.addPropertyType(clinicalInfo,
                                                             db->getString("UnPrognostic_NOT_OK_HPA"),
-                                                            db->getDecimalType());
+                                                            ValueType::decimalType());
     EXPECT_TRUE(unprognosticNotOkHPA);
     PropertyType* unprognosticOkHPA = wb.addPropertyType(clinicalInfo,
                                                          db->getString("UnPrognostic_OK_HPA"),
-                                                         db->getDecimalType());
+                                                         ValueType::decimalType());
     EXPECT_TRUE(unprognosticOkHPA);
 
     // Protein

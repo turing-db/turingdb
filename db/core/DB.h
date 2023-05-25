@@ -10,7 +10,6 @@
 
 namespace db {
 
-class ValueType;
 class Network;
 class NodeType;
 class EdgeType;
@@ -36,13 +35,6 @@ public:
 
     StringRef getString(const std::string& str);
 
-    // Value types
-    ValueType* getIntType() const { return _int; }
-    ValueType* getUnsignedType() const { return _unsigned; }
-    ValueType* getBoolType() const { return _bool; }
-    ValueType* getDecimalType() const { return _decimal; }
-    ValueType* getStringType() const { return _string; }
-
     NodeType* getNodeType(StringRef name) const;
     EdgeType* getEdgeType(StringRef name) const;
 
@@ -57,12 +49,6 @@ private:
     Networks _networks;
     NodeTypes _nodeTypes;
     EdgeTypes _edgeTypes;
-
-    ValueType* _int {nullptr};
-    ValueType* _unsigned {nullptr};
-    ValueType* _bool {nullptr};
-    ValueType* _decimal {nullptr};
-    ValueType* _string {nullptr};
 
     DBIndex::ID _nextFreeNetID {0};
     DBIndex::ID _nextFreeNodeID {0};

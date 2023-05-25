@@ -12,6 +12,8 @@ public:
     Property();
     ~Property();
 
+    bool isValid() const { return _type && _value.isValid(); }
+
     const PropertyType* getType() const { return _type; }
     Value getValue() const { return _value; }
 

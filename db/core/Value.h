@@ -21,6 +21,8 @@ public:
     static Value createDouble(double data);
     static Value createString(StringRef data);
 
+    ValueType getType() const { return _type; }
+
     bool isValid() const { return _type.isValid(); }
 
     int64_t getInt() const;

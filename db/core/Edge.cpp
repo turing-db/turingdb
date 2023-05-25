@@ -2,11 +2,12 @@
 
 #include "Edge.h"
 
+#include "EdgeType.h"
+
 using namespace db;
 
 Edge::Edge(DBIndex index, EdgeType* type, Node* source, Node* target)
-    : DBEntity(index),
-    _type(type),
+    : DBEntity(index, type),
     _source(source),
     _target(target)
 {

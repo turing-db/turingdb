@@ -2,14 +2,14 @@
 
 #include "Node.h"
 
+#include "NodeType.h"
 #include "Edge.h"
 #include "EdgeType.h"
 
 using namespace db;
 
 Node::Node(DBIndex index, NodeType* type, Network* net)
-    : DBEntity(index),
-    _type(type),
+    : DBEntity(index, type),
     _net(net)
 {
 }

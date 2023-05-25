@@ -17,8 +17,8 @@ public:
     friend Writeback;
     using NodeTypes = std::set<NodeType*, DBObject::Comparator>;
 
-    const NodeTypes& getSourceTypes() const { return _sourceTypes; }
-    const NodeTypes& getTargetTypes() const { return _targetTypes; }
+    bool hasSourceType(const NodeType* nodeType) const;
+    bool hasTargetType(const NodeType* nodeType) const;
 
 private:
     NodeTypes _sourceTypes;

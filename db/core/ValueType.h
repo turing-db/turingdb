@@ -25,6 +25,16 @@ public:
     bool isDecimal() const { return _kind == VK_DECIMAL; }
     bool isString() const { return _kind == VK_STRING; }
 
+    static ValueType intType() { return ValueType(VK_INT); }
+    static ValueType unsignedType() { return ValueType(VK_UNSIGNED); }
+    static ValueType boolType() { return ValueType(VK_BOOL); }
+    static ValueType decimalType() { return ValueType(VK_DECIMAL); }
+    static ValueType stringType() { return ValueType(VK_STRING); }
+
+    bool operator==(const ValueType& other) const {
+        return _kind == other._kind;
+    }
+    
 private:
     ValueKind _kind;
 };

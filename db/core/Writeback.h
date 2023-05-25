@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "StringRef.h"
+#include "ValueType.h"
 
 namespace db {
 
@@ -10,12 +11,12 @@ class DB;
 class Network;
 class Node;
 class NodeType;
-class ValueType;
 class PropertyType;
 class Edge;
 class EdgeType;
 class Property;
 class DBEntityType;
+class DBEntity;
 
 class Writeback {
 public:
@@ -34,27 +35,28 @@ public:
 
     // Types
     NodeType* createNodeType(StringRef name);
-    EdgeType* createEdgeType(StringRef name, NodeType* source, NodeType* target);
+    EdgeType* createEdgeType(StringRef name,
+                             NodeType* source,
+                             NodeType* target);
     EdgeType* createEdgeType(StringRef name,
                              const NodeTypes& sources,
                              const NodeTypes& targets);
     PropertyType* addPropertyType(NodeType* nodeType,
                                   StringRef name,
-                                  ValueType* type);
+                                  ValueType type);
     PropertyType* addPropertyType(EdgeType* nodeType,
                                   StringRef name,
-                                  ValueType* type);
+                                  ValueType type);
 
     // Properties
-    bool addProperty(Node* node, const Property& prop);
-    bool addProperty(Edge* edge, const Property& prop);
+    bool setProperty(DBEntity* entity, const Property& prop);
 
 private:
     DB* _db {nullptr};
 
     PropertyType* addPropertyTypeBase(DBEntityType* dbType,
                                       StringRef name,
-                                      ValueType* type);
+                                      ValueType type);
 };
 
 }
