@@ -52,9 +52,9 @@ public:
 private:
     DB* _db {nullptr};
 
-    PropertyType* addPropertyType(DBEntityType* dbType,
-                                  StringRef name,
-                                  ValueType* type);
+    PropertyType* addPropertyTypeBase(DBEntityType* dbType,
+                                      StringRef name,
+                                      ValueType* type);
 };
 
 }

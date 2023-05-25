@@ -76,7 +76,7 @@ NodeType* Writeback::createNodeType(StringRef name) {
 }
 
 EdgeType* Writeback::createEdgeType(StringRef name, NodeType* source, NodeType* target) {
-    return createEdgeType(name, {source}, {target});
+    return createEdgeType(name, std::vector{source}, std::vector{target});
 }
 
 EdgeType* Writeback::createEdgeType(StringRef name,
@@ -100,12 +100,18 @@ EdgeType* Writeback::createEdgeType(StringRef name,
 PropertyType* Writeback::addPropertyType(NodeType* nodeType,
                                          StringRef name,
                                          ValueType* type) {
-    return addPropertyType(nodeType, name, type);
+    return addPropertyTypeBase(nodeType, name, type);
 }
 
-PropertyType* Writeback::addPropertyType(DBEntityType* dbType,
+PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
                                          StringRef name,
                                          ValueType* type) {
+    return addPropertyTypeBase(edgeType, name, type);
+}
+
+PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
+                                             StringRef name,
+                                             ValueType* type) {
     if (!dbType || !type) {
         return nullptr;
     }
