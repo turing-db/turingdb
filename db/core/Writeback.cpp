@@ -118,7 +118,7 @@ PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
 PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
                                              StringRef name,
                                              ValueType type) {
-    if (!dbType || type.isValid()) {
+    if (!dbType || !type.isValid()) {
         return nullptr;
     }
 
