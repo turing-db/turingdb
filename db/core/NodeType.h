@@ -18,15 +18,15 @@ class NodeType : public DBEntityType {
 public:
     friend DB;
     friend Writeback;
-    using NodeTypes = std::set<EdgeType*, DBObject::Comparator>;
-    using NodeTypeRange = STLRange<NodeTypes>;
+    using EdgeTypes = std::set<EdgeType*, DBObject::Comparator>;
+    using EdgeTypeRange = STLRange<EdgeTypes>;
 
-    NodeTypeRange inEdgeTypes() const;
-    NodeTypeRange outEdgeTypes() const;
+    EdgeTypeRange inEdgeTypes() const;
+    EdgeTypeRange outEdgeTypes() const;
 
 private:
-    NodeTypes _inEdgeTypes;
-    NodeTypes _outEdgeTypes;
+    EdgeTypes _inEdgeTypes;
+    EdgeTypes _outEdgeTypes;
 
     NodeType(DBIndex index, StringRef name);
     ~NodeType();
