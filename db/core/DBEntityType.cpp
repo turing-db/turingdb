@@ -10,6 +10,10 @@ DBEntityType::DBEntityType(DBIndex index, StringRef name)
 }
 
 DBEntityType::~DBEntityType() {
+    for (const auto& propTypeEntry : _propTypes) {
+        delete propTypeEntry.second;
+    }
+    _propTypes.clear();
 }
 
 DBEntityType::PropertyTypeRange DBEntityType::propertyTypes() const {

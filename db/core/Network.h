@@ -12,10 +12,12 @@ namespace db {
 
 class Node;
 class Edge;
+class DB;
 class Writeback;
 
 class Network : public DBObject {
 public:
+    friend DB;
     friend Writeback;
     using Nodes = std::vector<Node*>;
     using Edges = std::vector<Edge*>;

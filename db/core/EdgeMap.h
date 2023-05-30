@@ -1,0 +1,42 @@
+#pragma once
+
+#include <vector>
+#include <map>
+
+#include "Range.h"
+#include "DBObject.h"
+
+namespace db {
+
+class Edge;
+class EdgeType;
+
+class EdgeMap {
+public:
+    using EdgeVector = std::vector<Edge*>;
+    using Edges = std::map<const EdgeType*, EdgeVector, DBObject::Comparator>;
+    using EdgeVectorRange = STLRange<EdgeVector>;
+
+    struct EdgeMapFlattener {
+        STLRange<EdgeVector> operator()(const auto& baseIt) const {
+            const EdgeVector& edgeVec = *baseIt;
+            return STLRange(&edgeVec);
+        }
+    };
+
+    using EdgeRange = FlatRange<STLIndexRange<Edges>, EdgeMapFlattener>;
+
+    EdgeMap();
+    ~EdgeMap();
+
+    EdgeRange edges() const;
+
+    EdgeVectorRange edges(const EdgeType* type) const;
+
+    void addEdge(Edge* edge);
+
+private:
+    Edges _edges;
+};
+
+}

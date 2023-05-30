@@ -29,6 +29,7 @@ public:
 
     // Nodes
     Node* createNode(Network* net, NodeType* type);
+    Node* createNode(Network* net, NodeType* type, StringRef name);
 
     // Edges
     Edge* createEdge(EdgeType* type, Node* source, Node* target);

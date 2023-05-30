@@ -13,6 +13,20 @@ DB::DB()
 }
 
 DB::~DB() {
+    for (const auto& netEntry : _networks) {
+        delete netEntry.second;
+    }
+    _networks.clear();
+
+    for (const auto& nodeTypeEntry : _nodeTypes) {
+        delete nodeTypeEntry.second;
+    }
+    _nodeTypes.clear();
+
+    for (const auto& edgeTypeEntry : _edgeTypes) {
+        delete edgeTypeEntry.second;
+    }
+    _edgeTypes.clear();
 }
 
 DB* DB::create() {

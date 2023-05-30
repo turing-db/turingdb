@@ -12,10 +12,12 @@
 namespace db {
 
 class NodeType;
+class DB;
 class Writeback;
 
 class EdgeType : public DBEntityType {
 public:
+    friend DB;
     friend Writeback;
     using NodeTypes = std::set<NodeType*, DBObject::Comparator>;
     using NodeTypeRange = STLRange<NodeTypes>;

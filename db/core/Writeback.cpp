@@ -32,12 +32,17 @@ Network* Writeback::createNetwork(StringRef name) {
 }
 
 Node* Writeback::createNode(Network* net, NodeType* type) {
+    return createNode(net, type, StringRef());
+}
+
+Node* Writeback::createNode(Network* net, NodeType* type, StringRef name) {
     if (!net || !type) {
         return nullptr;
     }
 
     const DBIndex nodeIndex = _db->allocNodeIndex();
     Node* node = new Node(nodeIndex, type, net);
+    node->setName(name);
     net->addNode(node);
 
     return node;

@@ -3,8 +3,6 @@
 #include "Node.h"
 
 #include "NodeType.h"
-#include "Edge.h"
-#include "EdgeType.h"
 
 using namespace db;
 
@@ -17,10 +15,30 @@ Node::Node(DBIndex index, NodeType* type, Network* net)
 Node::~Node() {
 }
 
+Node::EdgeMapRange Node::inEdges() const {
+    return _inEdges.edges();
+}
+
+Node::EdgeRange Node::inEdges(const EdgeType* type) const {
+    return _inEdges.edges(type);
+}
+
+Node::EdgeMapRange Node::outEdges() const {
+    return _outEdges.edges();
+}
+
+Node::EdgeRange Node::outEdges(const EdgeType* type) const {
+    return _outEdges.edges(type);
+}
+
+void Node::setName(StringRef name) {
+    _name = name;
+}
+
 void Node::addInEdge(Edge* edge) {
-    _inEdges[edge->getType()].push_back(edge);
+    _inEdges.addEdge(edge);
 }
 
 void Node::addOutEdge(Edge* edge) {
-    _outEdges[edge->getType()].push_back(edge);
+    _outEdges.addEdge(edge);
 }

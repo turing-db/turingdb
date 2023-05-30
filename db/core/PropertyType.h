@@ -6,10 +6,12 @@
 
 namespace db {
 
+class DBEntityType;
 class Writeback;
 
 class PropertyType : public DBType {
 public:
+    friend DBEntityType;
     friend Writeback;
 
     ValueType getValueType() const { return _valType; }

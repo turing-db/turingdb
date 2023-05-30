@@ -7,6 +7,7 @@ set(db_sources
             DBEntityType.cpp
             DBEntity.cpp
             DBIndex.cpp
+            EdgeMap.cpp
             Node.cpp
             Property.cpp
             Edge.cpp
