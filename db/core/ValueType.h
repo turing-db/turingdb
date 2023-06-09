@@ -13,13 +13,13 @@ public:
         VK_BOOL,
         VK_DECIMAL,
         VK_STRING_REF,
-        VK_STRING
+        VK_STRING,
     };
 
     ValueType(ValueKind valueKind);
 
     ValueKind getKind() const { return _kind; }
-    bool isValid() const { return _kind != VK_INVALID; }
+    bool isValid() const { return _kind != VK_INVALID && _kind; }
     bool isInt() const { return _kind == VK_INT; }
     bool isUnsigned() const { return _kind == VK_UNSIGNED; }
     bool isBool() const { return _kind == VK_BOOL; }
@@ -38,7 +38,7 @@ public:
     bool operator==(const ValueType& other) const {
         return _kind == other._kind;
     }
-    
+
 private:
     ValueKind _kind;
 };

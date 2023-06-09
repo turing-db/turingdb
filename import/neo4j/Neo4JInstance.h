@@ -1,5 +1,4 @@
-#ifndef _BIO_NEO4J_INSTANCE_
-#define _BIO_NEO4J_INSTANCE_
+#pragma once
 
 #include <filesystem>
 
@@ -24,5 +23,3 @@ private:
     const std::filesystem::path _neo4jBinary;
     const std::filesystem::path _neo4jAdminBinary;
 };
-
-#endif

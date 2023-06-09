@@ -3,9 +3,10 @@
 #include <cstdlib>
 
 #include "BioLog.h"
-#include "MsgImport.h"
-#include <curl/curl.h>
 #include "FileUtils.h"
+#include "MsgImport.h"
+#include "TimerStat.h"
+#include <curl/curl.h>
 
 using namespace Log;
 
@@ -20,19 +21,42 @@ Neo4JHttpRequest::Neo4JHttpRequest(Neo4JHttpRequest::RequestProps&& props)
     : _url(props.host + ":" + std::to_string(props.port) +
            "/db/data/transaction/commit"),
       _username(props.user),
-      _password(props.password)
+      _password(props.password),
+      _statement(props.statement),
+      _silent(props.silent)
+{
+}
+
+Neo4JHttpRequest::Neo4JHttpRequest(std::string&& statement)
+    : Neo4JHttpRequest({statement})
+{
+}
+
+Neo4JHttpRequest::Neo4JHttpRequest(Neo4JHttpRequest&& other)
+    : _url(other._url),
+      _username(other._username),
+      _password(other._password),
+      _statement(other._statement),
+      _jsonRequest(other._jsonRequest),
+      _data(other._data),
+      _result(static_cast<bool>(other._result)),
+      _finished(static_cast<bool>(other._finished)),
+      _silent(other._silent)
 {
 }
 
 Neo4JHttpRequest::~Neo4JHttpRequest() {
 }
 
-bool Neo4JHttpRequest::exec() {
+void Neo4JHttpRequest::exec() {
+    TimerStat timer{"Neo4j HTTP Request: " + _statement};
     _data = "";
     CURL* curl = curl_easy_init();
+
     if (!curl) {
-        // Could not initialize curl
-        return false;
+        _result = false;
+        _finished = true;
+        return;
     }
 
     _jsonRequest =
@@ -58,22 +82,33 @@ bool Neo4JHttpRequest::exec() {
     curl_easy_setopt(curl, CURLOPT_FTP_SKIP_PASV_IP, 1L);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
 
-    BioLog::log(msg::INFO_SEND_NEO4J_HTTP_REQUEST());
+    if (!_silent) {
+        BioLog::log(msg::INFO_NEO4J_HTTP_REQUEST() << _statement);
+    }
     CURLcode res = curl_easy_perform(curl);
 
     if (res != 0) {
         BioLog::log(msg::ERROR_NEO4J_HTTP_REQUEST() << _statement);
-        return false;
+        _result = false;
+        _finished = true;
+        return;
     }
 
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
-
-    return true;
+    _result = true;
+    _finished = true;
 }
 
 bool Neo4JHttpRequest::writeToFile(const std::filesystem::path& path) const {
     return FileUtils::writeFile(path, _data);
 }
 
+void Neo4JHttpRequest::clear() {
+    _data.clear();
+    _data.resize(0);
+}
 
+void Neo4JHttpRequest::reportError() const {
+    BioLog::log(msg::ERROR_NEO4J_BAD_CURL_REQUEST() << _statement);
+}

@@ -1,12 +1,9 @@
 
 set(import_neo4j_sources
             Neo4JInstance.cpp
-            Neo4JHttpRequest.cpp
-            Neo4JSchemaExtract.cpp)
+            Neo4JHttpRequest.cpp)
 
 add_library(bio_import_neo4j_s STATIC ${import_neo4j_sources})
-
-find_package(CURL REQUIRED)
 
 target_link_libraries(bio_import_neo4j_s
     common_s

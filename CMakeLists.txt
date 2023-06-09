@@ -44,6 +44,9 @@ find_package(Boost REQUIRED COMPONENTS regex filesystem system)
 # Threads
 find_package(Threads REQUIRED)
 
+# Curl
+find_package(CURL REQUIRED)
+
 # Root source directory
 set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${BIO_SOURCE_DIR})

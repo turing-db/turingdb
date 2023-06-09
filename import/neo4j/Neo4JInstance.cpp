@@ -1,16 +1,14 @@
 #include "Neo4JInstance.h"
+#include "BioLog.h"
+#include "FileUtils.h"
+#include "MsgCommon.h"
+#include "MsgImport.h"
 
 #include <boost/process.hpp>
 #include <chrono>
 #include <filesystem>
 #include <stdlib.h>
 #include <thread>
-
-#include "FileUtils.h"
-
-#include "BioLog.h"
-#include "MsgCommon.h"
-#include "MsgImport.h"
 
 #define NEO4J_BASE_DIR "/turing/neo4j"
 #define NEO4J_DIR "/turing/neo4j/neo4j"
@@ -32,7 +30,7 @@ Neo4JInstance::~Neo4JInstance() {
 bool Neo4JInstance::setup() {
     // Check that neo4j archive exists in installation
     if (!FileUtils::exists(_neo4jArchive)) {
-        BioLog::log(msg::ERROR_IMPORT_FAILED_FIND_NEO4J_ARCHIVE()
+        BioLog::log(msg::ERROR_NEO4J_CANNOT_FIND_ARCHIVE()
                     << _neo4jArchive.string());
         return false;
     }
@@ -48,13 +46,13 @@ bool Neo4JInstance::setup() {
     }
 
     // Decompress neo4j archive
-    BioLog::log(msg::INFO_DECOMPRESS_NEO4J_ARCHIVE() << _neo4jDir.string());
-    const int tarRes = boost::process::system(
-        "/usr/bin/tar", "xf", _neo4jArchive.string(), "-C", NEO4J_DIR,
-        "--strip-components=1");
+    BioLog::log(msg::INFO_NEO4J_DECOMPRESS_ARCHIVE() << _neo4jDir.string());
+    const int tarRes =
+        boost::process::system("/usr/bin/tar", "xf", _neo4jArchive.string(),
+                               "-C", NEO4J_DIR, "--strip-components=1");
 
     if (tarRes != 0) {
-        BioLog::log(msg::ERROR_IMPORT_FAILED_DECOMPRESS_NEO4J_ARCHIVE()
+        BioLog::log(msg::ERROR_NEO4J_CANNOT_DECOMPRESS_ARCHIVE()
                     << _neo4jArchive.string());
         return false;
     }
@@ -64,11 +62,11 @@ bool Neo4JInstance::setup() {
 
 bool Neo4JInstance::stop() {
     if (FileUtils::exists(_neo4jDir)) {
-        BioLog::log(msg::INFO_STOPPING_NEO4J());
+        BioLog::log(msg::INFO_NEO4J_STOPPING());
         const int stopRes =
             boost::process::system(_neo4jBinary.string(), "stop");
         if (stopRes != 0) {
-            BioLog::log(msg::ERROR_FAILED_TO_STOP_NEO4J());
+            BioLog::log(msg::ERROR_NEO4J_FAILED_TO_STOP());
             return false;
         }
     }
@@ -81,7 +79,7 @@ void Neo4JInstance::destroy() {
         stop();
 
         // Remove neo4j directory
-        BioLog::log(msg::INFO_CLEAN_NEO4J_SETUP());
+        BioLog::log(msg::INFO_NEO4J_CLEAN_SETUP());
         FileUtils::removeDirectory(_neo4jDir);
     }
 }
@@ -104,7 +102,7 @@ bool Neo4JInstance::start() {
                            "turing");
 
     // Start daemon
-    BioLog::log(msg::INFO_STARTING_NEO4J() << _neo4jBinary.string());
+    BioLog::log(msg::INFO_NEO4J_STARTING() << _neo4jBinary.string());
 
     if (!FileUtils::exists(_neo4jBinary)) {
         BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << _neo4jBinary.string());
@@ -113,12 +111,12 @@ bool Neo4JInstance::start() {
 
     const int startRes = boost::process::system(_neo4jBinary.string(), "start");
     if (startRes != 0) {
-        BioLog::log(msg::ERROR_FAILED_TO_START_NEO4J());
+        BioLog::log(msg::ERROR_NEO4J_FAILED_TO_START());
         return false;
     }
 
     // Wait for warmup
-    BioLog::log(msg::INFO_NEO4J_WAIT_WARMUP());
+    BioLog::log(msg::INFO_NEO4J_WARMING_UP());
     while (!isReady()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
@@ -142,7 +140,8 @@ bool Neo4JInstance::changePassword(const std::string& oldPassword,
     return true;
 }
 
-bool Neo4JInstance::importDumpedDB(const std::filesystem::path& dbFilePath) const {
+bool Neo4JInstance::importDumpedDB(
+    const std::filesystem::path& dbFilePath) const {
     if (!FileUtils::exists(dbFilePath)) {
         BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << dbFilePath.string());
         return false;
@@ -151,8 +150,8 @@ bool Neo4JInstance::importDumpedDB(const std::filesystem::path& dbFilePath) cons
     const std::string dbName = dbFilePath.stem();
 
     boost::process::system(_neo4jAdminBinary.string(), "load",
-                           "--database=neo4j",
-                           "--from=" + dbFilePath.string(), "--force");
+                           "--database=neo4j", "--from=" + dbFilePath.string(),
+                           "--force");
 
     return true;
 }

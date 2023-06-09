@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <fstream>
 
 bool FileUtils::exists(const FileUtils::Path& path) {
     try {
@@ -70,7 +71,7 @@ bool FileUtils::writeFile(const Path& path, const std::string& content) {
     }
 
     close(fd);
-    
+
     return true;
 }
 
@@ -98,7 +99,7 @@ bool FileUtils::writeBinary(const Path& path, const char* data, size_t size) {
     }
 
     close(fd);
-    
+
     return true;
 }
 
@@ -120,3 +121,35 @@ int FileUtils::openForWrite(const Path& path) {
                 S_IRUSR | S_IWUSR);
 }
 
+bool FileUtils::readContent(const Path& path, std::string& data) {
+    if (!std::filesystem::is_regular_file(path)) {
+        return false;
+    }
+
+    std::ifstream file(path, std::ios::in);
+
+    if (!file.is_open())
+        return false;
+
+    // Read contents
+    data = {std::istreambuf_iterator<char>(file),
+            std::istreambuf_iterator<char>()};
+
+    return true;
+}
+
+bool FileUtils::listFiles(const Path& dir, std::vector<Path>& paths) {
+    if (!FileUtils::exists(dir)) {
+        return false;
+    }
+
+    if (!FileUtils::isDirectory(dir)) {
+        return false;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        paths.push_back(entry);
+    }
+
+    return true;
+}
