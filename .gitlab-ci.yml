@@ -1,5 +1,5 @@
 default:
-  image: 799170964164.dkr.ecr.eu-west-2.amazonaws.com/turing@sha256:251bb1ec0b4af885c1911369abba202cd56f4788625f918aad9489c1d6a8cc01
+  image: 799170964164.dkr.ecr.eu-west-2.amazonaws.com/turing:latest
 
 stages:
   - build
