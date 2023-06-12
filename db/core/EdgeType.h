@@ -37,6 +37,9 @@ private:
              const std::vector<NodeType*>& sources,
              const std::vector<NodeType*>& targets);
     ~EdgeType();
+
+    void addSourceType(NodeType* nodeType);
+    void addTargetType(NodeType* nodeType);
 };
 
 }

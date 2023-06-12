@@ -18,6 +18,10 @@ TimerStat::TimerStat(const std::string& msg)
 }
 
 TimerStat::~TimerStat() {
+    if (!PerfStat::getInstance()) {
+        return;
+    }
+
     std::ofstream& file = PerfStat::getInstance()->_outStream;
     if (file.is_open()) {
         auto duration = Clock::now() - _start;

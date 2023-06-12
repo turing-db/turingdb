@@ -44,6 +44,9 @@ find_package(Boost REQUIRED COMPONENTS regex filesystem system)
 # Threads
 find_package(Threads REQUIRED)
 
+# Curl
+find_package(CURL REQUIRED)
+
 # Python
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 

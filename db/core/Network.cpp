@@ -2,6 +2,7 @@
 
 #include "Network.h"
 
+#include "BioAssert.h"
 #include "Node.h"
 #include "Edge.h"
 
@@ -25,6 +26,15 @@ Network::~Network() {
         delete node;
     }
     _nodes.clear();
+}
+
+size_t Network::getNodeCount() const {
+    return _nodes.size();
+}
+
+Node* Network::getNode(DBIndex id) const {
+    bioassert(_nodes.size() > id);
+    return _nodes[id];
 }
 
 Network::NodeRange Network::nodes() const {

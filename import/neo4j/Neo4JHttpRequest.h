@@ -1,30 +1,49 @@
-#ifndef _BIO_NEO4J_HTTP_REQUEST_
-#define _BIO_NEO4J_HTTP_REQUEST_
+#pragma once
 
-#include <string>
+#include <condition_variable>
+#include <filesystem>
+#include <mutex>
 
 class Neo4JHttpRequest {
 public:
-    Neo4JHttpRequest(const std::string& outFile);
+    struct RequestProps {
+        std::string statement;
+        std::string host = "localhost";
+        std::string user = "neo4j";
+        std::string password = "turing";
+        uint16_t port = 7474;
+        bool silent = false;
+    };
+
+    Neo4JHttpRequest(RequestProps&& props);
+    Neo4JHttpRequest(std::string&& statement);
+    Neo4JHttpRequest(const Neo4JHttpRequest&) = delete;
+    Neo4JHttpRequest(Neo4JHttpRequest&&);
     ~Neo4JHttpRequest();
 
-    void setHost(const std::string& host) { _host = host; }
-    void setPort(unsigned port) { _port = port; }
-    void setUser(const std::string& user) { _user = user; }
-    void setPassword(const std::string& password) { _password = password; }
-    void setStatement(const std::string& stmt) { _stmt = stmt; }
+    void setStatement(const std::string& s) { _statement = s; }
 
-    std::string getCurlString() const;
+    void exec();
+    bool writeToFile(const std::filesystem::path& path) const;
+    void clear();
+    void reportError() const;
+    void setReady();
+    void waitReady();
 
-    bool exec();
+    const std::string& getData() const { return _data; }
+
+    bool success() const { return _result; }
 
 private:
-    std::string _outFile;
-    std::string _host;
-    unsigned _port {0};
-    std::string _user;
+    std::string _url;
+    std::string _username;
     std::string _password;
-    std::string _stmt;
+    std::string _statement;
+    std::string _jsonRequest;
+    std::string _data;
+    std::mutex _readyMutex;
+    std::condition_variable _readyCond;
+    bool _isReady {false};
+    bool _result {false};
+    bool _silent {false};
 };
-
-#endif

@@ -34,3 +34,11 @@ EdgeType::NodeTypeRange EdgeType::sourceTypes() const {
 EdgeType::NodeTypeRange EdgeType::targetTypes() const {
     return NodeTypeRange(&_targetTypes);
 }
+
+void EdgeType::addSourceType(NodeType* nodeType) {
+    _sourceTypes.insert(nodeType);
+}
+
+void EdgeType::addTargetType(NodeType* nodeType) {
+    _targetTypes.insert(nodeType);
+}

@@ -25,6 +25,8 @@ public:
     using EdgeRange = STLRange<Edges>;
 
     StringRef getName() const { return _name; }
+    size_t getNodeCount() const;
+    Node* getNode(DBIndex id) const;
 
     NodeRange nodes() const;
     EdgeRange edges() const;

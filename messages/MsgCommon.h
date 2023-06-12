@@ -50,6 +50,9 @@ MSG_ERROR(ERROR_FILE_NOT_EXISTS, 1014,
 MSG_ERROR(ERROR_INCORRECT_CMD_USAGE, 1015,
           "The argument '$0' wat not used correctly.")
 
+MSG_ERROR(ERROR_INCORRECT_ENV_SETUP, 1015,
+          "The TURING_HOME env variable is not set")
+
 }
 
 #endif

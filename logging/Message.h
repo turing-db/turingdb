@@ -14,6 +14,7 @@ public:                                             \
 
 #define MSG_FATAL(Name, Code, MsgStr) DEFINE_MESSAGE(Name, FATAL, Code, MsgStr)
 #define MSG_ERROR(Name, Code, MsgStr) DEFINE_MESSAGE(Name, ERROR, Code, MsgStr)
+#define MSG_WARNING(Name, Code, MsgStr) DEFINE_MESSAGE(Name, WARNING, Code, MsgStr)
 #define MSG_INFO(Name, Code, MsgStr) DEFINE_MESSAGE(Name, INFO, Code, MsgStr)
 
 // MsgCommon    1000

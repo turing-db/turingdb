@@ -137,6 +137,32 @@ PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
     return propType;
 }
 
+bool Writeback::addSourceNodeType(EdgeType* edgeType, NodeType* nodeType) {
+    if (!edgeType) {
+        return false;
+    }
+
+    if (edgeType->hasSourceType(nodeType)) {
+        return false;
+    }
+
+    edgeType->addSourceType(nodeType);
+    return true;
+}
+
+bool Writeback::addTargetNodeType(EdgeType* edgeType, NodeType* nodeType) {
+    if (!edgeType) {
+        return false;
+    }
+
+    if (edgeType->hasTargetType(nodeType)) {
+        return false;
+    }
+
+    edgeType->addTargetType(nodeType);
+    return true;
+}
+
 bool Writeback::setProperty(DBEntity* entity, const Property& prop) {
     if (!entity) {
         return false;

@@ -28,6 +28,10 @@ public:
         return _objectID < other._objectID;
     }
 
+    operator size_t() const {
+        return _objectID;
+    }
+
     std::string toString() const;
 
 private:

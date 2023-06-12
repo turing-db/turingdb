@@ -1,25 +1,22 @@
-#ifndef _BIO_NEO4J_INSTANCE_
-#define _BIO_NEO4J_INSTANCE_
+#pragma once
 
-#include <filesystem>
+#include "FileUtils.h"
 
 class Neo4JInstance {
 public:
-    Neo4JInstance(const std::string& path);
+    Neo4JInstance(const FileUtils::Path& baseDir);
     ~Neo4JInstance();
 
     bool setup();
     bool start();
     bool stop();
     void destroy();
+    bool isReady() const;
 
-    bool importDBDir(const std::string& dbPath);
-    bool changePassword(const std::string& oldPassword, const std::string& newPassword);
+    bool importDumpedDB(const FileUtils::Path& dbFilePath) const;
 
 private:
-    const std::filesystem::path _neo4jDir;
-
-    std::filesystem::path getNeo4jBinary() const;
+    const FileUtils::Path _neo4jDir;
+    const FileUtils::Path _neo4jBinary;
+    const FileUtils::Path _neo4jAdminBinary;
 };
-
-#endif

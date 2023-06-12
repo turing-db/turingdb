@@ -1,8 +1,12 @@
-set(bioimport_sources BioImport.cpp)
+set(bioimport_sources
+    BioImport.cpp
+    ThreadHandler.cpp)
 
 add_executable(bioimport ${bioimport_sources})
 
 target_link_libraries(bioimport
+    bio_import_neo4j_s
+    bio_import_json_s
     turing_gml_s
     tools_common_s)
 

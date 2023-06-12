@@ -49,6 +49,9 @@ public:
                                   StringRef name,
                                   ValueType type);
 
+    bool addSourceNodeType(EdgeType* edgeType, NodeType* source);
+    bool addTargetNodeType(EdgeType* edgeType, NodeType* target);
+
     // Properties
     bool setProperty(DBEntity* entity, const Property& prop);
 
