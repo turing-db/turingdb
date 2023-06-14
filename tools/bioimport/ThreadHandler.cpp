@@ -10,7 +10,7 @@ bool ThreadHandler::start(JsonParser& parser) {
     }
 
     if (!parser.parse(requests.stats.getData(),
-                      JsonParser::Format::Neo4j4_Stats)) {
+                      JsonParser::FileFormat::Neo4j4_Stats)) {
         return false;
     }
 

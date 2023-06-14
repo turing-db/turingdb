@@ -2,10 +2,14 @@
 
 #pragma once
 
+#include "Comparator.h"
+
 namespace db {
 
 class ValueType {
 public:
+    friend Comparator<ValueType>;
+
     enum ValueKind {
         VK_INVALID = 0,
         VK_INT,
@@ -14,6 +18,8 @@ public:
         VK_DECIMAL,
         VK_STRING_REF,
         VK_STRING,
+
+        _SIZE
     };
 
     ValueType(ValueKind valueKind);

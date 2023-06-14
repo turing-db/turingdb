@@ -8,6 +8,7 @@
 
 #include "StringRef.h"
 #include "EdgeMap.h"
+#include "Comparator.h"
 
 namespace db {
 
@@ -19,9 +20,10 @@ class Node : public DBEntity {
 public:
     friend Network;
     friend Writeback;
+    friend Comparator<Node>;
     using EdgeMapRange = EdgeMap::EdgeRange;
     using EdgeRange = EdgeMap::EdgeVectorRange;
-    using Set = std::set<Node*, DBObject::Comparator>;
+    using Set = std::set<Node*, DBObject::ObjectComparator>;
 
     NodeType* getType() const { return (NodeType*)DBEntity::getType(); }
 

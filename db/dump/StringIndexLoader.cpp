@@ -17,8 +17,11 @@ StringIndexLoader::StringIndexLoader(const Path& dbPath)
 {
 }
 
-bool StringIndexLoader::load(StringIndex& index) {
+bool StringIndexLoader::load(StringIndex& index,
+                             std::vector<StringRef>& stringRefs) {
+
     index.clear();
+    stringRefs.clear();
 
     if (!FileUtils::exists(_indexPath)) {
         return false;
@@ -34,13 +37,14 @@ bool StringIndexLoader::load(StringIndex& index) {
     OnDisk::StringIndex::Reader strings =
         message.getRoot<OnDisk::StringIndex>();
 
+    stringRefs.resize(strings.getStrings().size());
 
     for (OnDisk::SharedString::Reader s : strings.getStrings()) {
-        index.insertString(s.getStr(), s.getId());
+        StringRef newString = index.insertString(s.getStr(), s.getId());
+        stringRefs[s.getId()] = newString;
     }
 
     close(stringIndexFD);
     return true;
 }
-
 }

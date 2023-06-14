@@ -19,7 +19,6 @@ void PerfStat::init(const Path& logFile) {
 }
 
 PerfStat* PerfStat::getInstance() {
-    bioassert(_instance);
     return _instance;
 }
 

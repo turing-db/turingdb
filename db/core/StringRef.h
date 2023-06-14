@@ -37,7 +37,10 @@ public:
     }
 
     bool operator==(const StringRef& other) const {
-        return _sharedStr == other._sharedStr; 
+        return _sharedStr != nullptr
+            && other._sharedStr != nullptr
+            && getID() == other.getID()
+            && _sharedStr->getString() == other._sharedStr->getString();
     }
 
     bool operator<(const StringRef& other) const {
@@ -53,6 +56,10 @@ public:
 
     const SharedString* getSharedString() const { return _sharedStr; }
 
+    SharedString::ID getID() const {
+        return _sharedStr ? _sharedStr->getID() : 0;
+    }
+
     std::string toStdString() const {
         return _sharedStr ? _sharedStr->getString() : std::string();
     }
@@ -64,11 +71,11 @@ private:
 }
 
 namespace std {
-    template <>
-    struct hash<db::StringRef> {
-        size_t operator()(const db::StringRef& str) const {
-            const db::SharedString* sharedStr = str.getSharedString();
-            return hash<size_t>()(sharedStr ? sharedStr->getID() : 0);
-        }
-    };
+template <>
+struct hash<db::StringRef> {
+    size_t operator()(const db::StringRef& str) const {
+        const db::SharedString* sharedStr = str.getSharedString();
+        return hash<size_t>()(sharedStr ? sharedStr->getID() : 0);
+    }
+};
 }

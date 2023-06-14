@@ -27,7 +27,7 @@ public:
 private:
     std::unordered_map<std::string, SharedString*> _strMap;
 
-    void insertString(const std::string& str, std::size_t id);
+    StringRef insertString(const std::string& str, size_t id);
 };
 
 }

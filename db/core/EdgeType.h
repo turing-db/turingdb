@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "DBEntityType.h"
-
+#include "Comparator.h"
 #include "Range.h"
 
 namespace db {
@@ -19,7 +19,8 @@ class EdgeType : public DBEntityType {
 public:
     friend DB;
     friend Writeback;
-    using NodeTypes = std::set<NodeType*, DBObject::Comparator>;
+    friend Comparator<EdgeType>;
+    using NodeTypes = std::set<NodeType*, DBObject::ObjectComparator>;
     using NodeTypeRange = STLRange<NodeTypes>;
 
     bool hasSourceType(const NodeType* nodeType) const;

@@ -2,21 +2,25 @@
 
 #include <map>
 
+#include "Comparator.h"
 #include "DBObject.h"
 
 #include "Property.h"
+#include "Range.h"
 
 namespace db {
 
-class PropertyType;
-class DBEntityType;
 class Writeback;
 
 class DBEntity : public DBObject {
 public:
     friend Writeback;
+    friend Comparator<DBEntity>;
+    using Properties = std::map<const PropertyType*, Value, DBObject::ObjectComparator>;
+    using PropertyRange = STLRange<Properties>;
 
     Property getProperty(const PropertyType* propType) const;
+    PropertyRange properties() const;
 
     DBEntityType* getType() const { return _type; }
 
@@ -25,7 +29,6 @@ protected:
     virtual ~DBEntity();
 
 private:
-    using Properties = std::map<const PropertyType*, Value, DBObject::Comparator>;
     DBEntityType* _type {nullptr};
     Properties _properties;
 

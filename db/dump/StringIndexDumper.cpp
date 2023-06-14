@@ -35,8 +35,8 @@ bool StringIndexDumper::dump(const StringIndex& index) {
     ::capnp::List<OnDisk::SharedString>::Builder listBuilder =
         strings.initStrings(index._strMap.size());
 
-    int stringIndexFD = FileUtils::openForWrite(_indexPath);
-    if (stringIndexFD < 0) {
+    int indexFD = FileUtils::openForWrite(_indexPath);
+    if (indexFD < 0) {
         return false;
     }
 
@@ -49,8 +49,8 @@ bool StringIndexDumper::dump(const StringIndex& index) {
         i++;
     }
 
-    ::capnp::writePackedMessageToFd(stringIndexFD, message);
-    close(stringIndexFD);
+    ::capnp::writePackedMessageToFd(indexFD, message);
+    close(indexFD);
 
     return true;
 }

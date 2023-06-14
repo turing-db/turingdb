@@ -7,6 +7,7 @@
 #include "DBObject.h"
 #include "StringRef.h"
 #include "Range.h"
+#include "Comparator.h"
 
 namespace db {
 
@@ -19,6 +20,7 @@ class Network : public DBObject {
 public:
     friend DB;
     friend Writeback;
+    friend Comparator<Network>;
     using Nodes = std::vector<Node*>;
     using Edges = std::vector<Edge*>;
     using NodeRange = STLRange<Nodes>;

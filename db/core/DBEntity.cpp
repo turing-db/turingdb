@@ -5,7 +5,8 @@
 using namespace db;
 
 DBEntity::DBEntity(DBIndex index, DBEntityType* type)
-    : DBObject(index), _type(type)
+    : DBObject(index),
+      _type(type)
 {
 }
 
@@ -19,6 +20,10 @@ Property DBEntity::getProperty(const PropertyType* propType) const {
     }
 
     return Property(it->first, it->second);
+}
+
+DBEntity::PropertyRange DBEntity::properties() const {
+    return PropertyRange {&_properties};
 }
 
 void DBEntity::addProperty(const Property& prop) {

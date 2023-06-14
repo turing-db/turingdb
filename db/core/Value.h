@@ -2,25 +2,25 @@
 
 #pragma once
 
-#include <variant>
 #include <stdint.h>
+#include <variant>
 
-#include "ValueType.h"
+#include "Comparator.h"
 #include "StringRef.h"
+#include "ValueType.h"
 
 namespace db {
 
 template <typename T>
 concept SupportedType =
-    std::same_as<T, int64_t> ||
-    std::same_as<T, uint64_t> ||
-    std::same_as<T, bool> ||
-    std::same_as<T, double> ||
-    std::same_as<T, StringRef> ||
-    std::same_as<T, std::string>;
+    std::same_as<T, int64_t> || std::same_as<T, uint64_t> ||
+    std::same_as<T, bool> || std::same_as<T, double> ||
+    std::same_as<T, StringRef> || std::same_as<T, std::string>;
 
 class Value {
 public:
+    friend Comparator<Value>;
+
     Value();
     ~Value();
 
@@ -36,6 +36,9 @@ public:
 
     bool isValid() const { return _type.isValid(); }
 
+    template <db::SupportedType T>
+    const T& get() const;
+
     int64_t getInt() const;
     uint64_t getUint() const;
     bool getBool() const;
@@ -44,7 +47,7 @@ public:
     const std::string& getString() const;
 
 private:
-    ValueType _type{ValueType::VK_INVALID};
+    ValueType _type {ValueType::VK_INVALID};
     std::variant<int64_t, uint64_t, bool, double, StringRef, std::string> _data;
 };
 

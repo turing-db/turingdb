@@ -4,10 +4,8 @@
 
 using namespace db;
 
-StringIndex::StringIndex()
-{
+StringIndex::StringIndex() {
 }
-
 
 StringIndex::~StringIndex() {
     clear();
@@ -40,6 +38,9 @@ void StringIndex::clear() {
     _strMap.clear();
 }
 
-void StringIndex::insertString(const std::string& str, std::size_t id) {
-    _strMap[str] = new SharedString(id, str);
+StringRef StringIndex::insertString(const std::string& str, size_t id) {
+    SharedString* newStr = new SharedString(id, str);
+    _strMap[str] = newStr;
+
+    return StringRef(newStr);
 }

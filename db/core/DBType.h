@@ -2,12 +2,15 @@
 
 #include "DBObject.h"
 
+#include "Comparator.h"
 #include "StringRef.h"
 
 namespace db {
 
 class DBType : public DBObject {
 public:
+    friend Comparator<DBType>;
+
     StringRef getName() const { return _name; }
 
 protected:
