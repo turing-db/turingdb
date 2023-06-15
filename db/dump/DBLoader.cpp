@@ -42,7 +42,7 @@ bool DBLoader::load() {
         return false;
     }
 
-    TypeLoader typeLoader {_db, entityIndexPath};
+    TypeLoader typeLoader {_db, typeIndexPath};
     if (!typeLoader.load(stringRefs)) {
         BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << dbPath);
         return false;

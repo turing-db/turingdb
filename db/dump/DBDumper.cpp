@@ -57,7 +57,7 @@ bool DBDumper::dump() {
 
     TypeDumper typeDumper {_db, typeIndexPath};
     if (!typeDumper.dump()) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << dbPath);
+        BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << dbPath);
         return false;
     }
 

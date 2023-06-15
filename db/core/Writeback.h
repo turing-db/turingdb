@@ -48,6 +48,14 @@ public:
     PropertyType* addPropertyType(EdgeType* nodeType,
                                   StringRef name,
                                   ValueType type);
+    PropertyType* addPropertyType(NodeType* nodeType,
+                                  StringRef name,
+                                  ValueType type,
+                                  size_t id);
+    PropertyType* addPropertyType(EdgeType* nodeType,
+                                  StringRef name,
+                                  ValueType type,
+                                  size_t id);
 
     bool addSourceNodeType(EdgeType* edgeType, NodeType* source);
     bool addTargetNodeType(EdgeType* edgeType, NodeType* target);
@@ -61,6 +69,11 @@ private:
     PropertyType* addPropertyTypeBase(DBEntityType* dbType,
                                       StringRef name,
                                       ValueType type);
+
+    PropertyType* addPropertyTypeBase(DBEntityType* dbType,
+                                      StringRef name,
+                                      ValueType type,
+                                      size_t id);
 };
 
 }

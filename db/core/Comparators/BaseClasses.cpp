@@ -21,8 +21,9 @@ bool Comparator<DBType>::same(const DBType* t1, const DBType* t2) {
 
 template <>
 bool Comparator<DBEntityType>::same(const DBEntityType* entt1, const DBEntityType* entt2) {
-    return Comparator<DBType>::same(entt1, entt2)
-        && Comparator<PropertyTypes>::same(&entt1->_propTypes, &entt2->_propTypes);
+    bool condition1 = Comparator<DBType>::same(entt1, entt2);
+    bool condition2 = Comparator<PropertyTypes>::same(&entt1->_propTypes, &entt2->_propTypes);
+    return condition1 && condition2;
 }
 
 template <>

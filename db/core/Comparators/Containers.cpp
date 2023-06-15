@@ -38,6 +38,10 @@ static inline bool compareStringMappedContainers(const T* c1, const T* c2) {
         }
 
         if (!Comparator<U>::same(it1->second, it2->second)) {
+            [[maybe_unused]] auto it1first = it1->first;
+            [[maybe_unused]] auto it1second = it1->second;
+            [[maybe_unused]] auto it2first = it2->first;
+            [[maybe_unused]] auto it2second = it2->second;
             return false;
         }
 

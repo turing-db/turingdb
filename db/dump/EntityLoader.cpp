@@ -8,6 +8,7 @@
 #include "NodeType.h"
 #include "Property.h"
 #include "StringIndex.h"
+#include "BioAssert.h"
 #include "Writeback.h"
 #include "capnp/EntityIndex.capnp.h"
 
@@ -116,10 +117,12 @@ bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
             Node* targetNode = net->getNode((DBIndex)targetId);
 
             Edge* e = wb.createEdge(et, sourceNode, targetNode);
+            bioassert(e);
 
             for (const auto& diskProp : diskEdge.getProperties()) {
+                const auto diskKind = diskProp.getKind();
                 const ValueType valType {
-                    (ValueType::ValueKind)diskProp.getKind()};
+                    static_cast<ValueType::ValueKind>(diskKind)};
                 const StringRef propName =
                     strIndex[diskProp.getPropertyTypeNameId()];
                 const PropertyType* propType = et->getPropertyType(propName);

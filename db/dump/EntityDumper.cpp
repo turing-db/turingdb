@@ -49,6 +49,7 @@ bool EntityDumper::dump() {
         Network::NodeRange nodes = net->nodes();
 
         auto diskNetwork = networksBuilder[i];
+        diskNetwork.setNameId(net->getName().getID());
         auto nodesBuilder = diskNetwork.initNodes(nodes.size());
 
         size_t j = 0;
@@ -64,11 +65,12 @@ bool EntityDumper::dump() {
             size_t k = 0;
             for (const auto& [propType, propValue] : props) {
                 auto diskProp = diskProperties[k];
-                diskProp.setKind(static_cast<OnDisk::ValueKind>(
-                    propType->getValueType().getKind()));
+                const auto kind = propType->getValueType().getKind();
+                const auto diskKind = static_cast<OnDisk::ValueKind>(kind);
+                diskProp.setKind(diskKind);
                 diskProp.setPropertyTypeNameId(propType->getName().getID());
 
-                switch (propType->getValueType().getKind()) {
+                switch (kind) {
                     case ValueType::VK_INT: {
                         diskProp.getValue().setInt(propValue.getInt());
                         break;
@@ -126,13 +128,18 @@ bool EntityDumper::dump() {
 
             diskEdge.setId(j);
             diskEdge.setEdgeTypeNameId(edge->getType()->getName().getID());
+            diskEdge.setSourceId(edge->getSource()->getIndex());
+            diskEdge.setTargetId(edge->getTarget()->getIndex());
 
             size_t k = 0;
             for (const auto& [propType, propValue] : props) {
                 auto diskProp = diskProperties[k];
+                const auto kind = propType->getValueType().getKind();
+                const auto diskKind = static_cast<OnDisk::ValueKind>(kind);
+                diskProp.setKind(diskKind);
                 diskProp.setPropertyTypeNameId(propType->getName().getID());
 
-                switch (propType->getValueType().getKind()) {
+                switch (kind) {
                     case ValueType::VK_INT: {
                         diskProp.getValue().setInt(propValue.getInt());
                         break;

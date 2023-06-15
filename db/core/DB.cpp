@@ -86,6 +86,13 @@ DBIndex DB::allocPropertyTypeIndex() {
     return DBIndex(propertyTypeID);
 }
 
+DBIndex DB::updateNextPropertyTypeIndex(DBIndex::ID id) {
+    if (id >= _nextFreePropertyTypeID) {
+        _nextFreePropertyTypeID = id + 1;
+    }
+    return DBIndex(id);
+}
+
 void DB::addNetwork(Network* net) {
     _networks[net->getName()] = net;
 }

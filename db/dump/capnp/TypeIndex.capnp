@@ -23,8 +23,9 @@ enum ValueKind {
 }
 
 struct PropertyType {
-    nameId @0 :UInt64;
-    kind @1 :ValueKind;
+    id @0 :UInt64;
+    nameId @1 :UInt64;
+    kind @2 :ValueKind;
 }
 
 struct NodeType {

@@ -14,9 +14,9 @@ using EdgeTypes = std::map<StringRef, EdgeType*>;
 
 template <>
 bool Comparator<DB>::same(const DB* db1, const DB* db2) {
-    return Comparator<Networks>::same(&db1->_networks, &db2->_networks)
-        && Comparator<NodeTypes>::same(&db1->_nodeTypes, &db2->_nodeTypes)
-        && Comparator<EdgeTypes>::same(&db1->_edgeTypes, &db2->_edgeTypes);
+    return Comparator<NodeTypes>::same(&db1->_nodeTypes, &db2->_nodeTypes)
+        && Comparator<EdgeTypes>::same(&db1->_edgeTypes, &db2->_edgeTypes)
+        && Comparator<Networks>::same(&db1->_networks, &db2->_networks);
 }
 
 template <>

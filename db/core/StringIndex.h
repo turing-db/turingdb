@@ -3,7 +3,7 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
+#include <map>
 
 #include "StringRef.h"
 
@@ -25,7 +25,7 @@ public:
     size_t getSize() const { return _strMap.size(); }
 
 private:
-    std::unordered_map<std::string, SharedString*> _strMap;
+    std::map<std::string, SharedString*> _strMap;
 
     StringRef insertString(const std::string& str, size_t id);
 };

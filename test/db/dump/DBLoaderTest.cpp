@@ -3,6 +3,9 @@
 #include "DB.h"
 #include "DBDumper.h"
 #include "FileUtils.h"
+#include "JsonExamples.h"
+#include "NodeType.h"
+#include "PropertyType.h"
 #include "Writeback.h"
 #include "gtest/gtest.h"
 
@@ -26,13 +29,7 @@ protected:
             FileUtils::removeDirectory(_outDir);
         }
 
-        _db = DB::create();
-        Writeback wb(_db);
-
-        for (size_t i = 0; i < 10; i++) {
-            //wb.createComponentType(
-                //_db->getString(std::to_string(i) + "_ComponentType"));
-        }
+        _db = cyberSecurityDB();
 
         DBDumper dumper(_db, _outDir);
         dumper.dump();
@@ -53,14 +50,58 @@ protected:
 TEST_F(DBLoaderTest, LoadDB) {
     DB* db = DB::create();
     DBLoader loader(db, _outDir);
-    // ASSERT_TRUE(loader.load());
+    Writeback wb1{_db};
+    Writeback wb2{db};
 
-    // for (size_t i = 0; i < 10; i++) {
-    //     std::string s = std::to_string(i) + "_ComponentType";
-    //     const SharedString* loadedString = db->getString(s).getSharedString();
-    //     const SharedString* dumpedString = _db->getString(s).getSharedString();
-    //     ASSERT_EQ(loadedString->getID(), dumpedString->getID());
-    // }
+    ASSERT_TRUE(loader.load());
+    ASSERT_TRUE(Comparator<DB>::same(_db, db));
+
+    Network* net1 = _db->getNetwork(_db->getString("Neo4jNetwork"));
+    Network* net2 = db->getNetwork(db->getString("Neo4jNetwork"));
+    ASSERT_TRUE(net1);
+    ASSERT_TRUE(net2);
+
+    NodeType* nt1 = wb1.createNodeType(_db->getString("NodeType"));
+    ASSERT_TRUE(nt1);
+    ASSERT_FALSE(Comparator<DB>::same(_db, db));
+    NodeType* nt2 = wb2.createNodeType(db->getString("NodeType"));
+    ASSERT_TRUE(nt2);
+    ASSERT_TRUE(Comparator<DB>::same(_db, db));
+
+    EdgeType* et1 = wb1.createEdgeType(_db->getString("EdgeType"), nt1, nt1);
+    ASSERT_TRUE(et1);
+    ASSERT_FALSE(Comparator<DB>::same(_db, db));
+    EdgeType* et2 = wb2.createEdgeType(db->getString("EdgeType"), nt2, nt2);
+    ASSERT_TRUE(et2);
+    ASSERT_TRUE(Comparator<DB>::same(_db, db));
+
+    Node* n11 = wb1.createNode(net1, nt1, _db->getString("Node1"));
+    Node* n12 = wb1.createNode(net1, nt1, _db->getString("Node2"));
+    ASSERT_TRUE(n11);
+    ASSERT_TRUE(n12);
+    ASSERT_FALSE(Comparator<DB>::same(_db, db));
+    Node* n21 = wb2.createNode(net2, nt2, db->getString("Node1"));
+    Node* n22 = wb2.createNode(net2, nt2, db->getString("Node2"));
+    ASSERT_TRUE(n21);
+    ASSERT_TRUE(n22);
+    ASSERT_TRUE(Comparator<DB>::same(_db, db));
+
+    Edge* e1 = wb1.createEdge(et1, n11, n12);
+    ASSERT_TRUE(e1);
+    ASSERT_FALSE(Comparator<DB>::same(_db, db));
+    Edge* e2 = wb2.createEdge(et2, n21, n22);
+    ASSERT_TRUE(e2);
+    ASSERT_TRUE(Comparator<DB>::same(_db, db));
+
+    // The order in which objects are pushed into the database matters1
+    // For example:
+    // NodeType first then EdgeType
+    wb1.createNodeType(_db->getString("NodeType2"));
+    wb1.createEdgeType(_db->getString("EdgeType2"), nt1, nt1);
+    // EdgeType then NodeType
+    wb2.createEdgeType(db->getString("EdgeType2"), nt2, nt2);
+    wb2.createNodeType(db->getString("NodeType2"));
+    ASSERT_FALSE(Comparator<DB>::same(_db, db));
 
     delete db;
 }

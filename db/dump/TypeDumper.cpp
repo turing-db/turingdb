@@ -10,6 +10,7 @@
 
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
+#include <iostream>
 #include <unistd.h>
 
 namespace db {
@@ -38,59 +39,95 @@ bool TypeDumper::dump() {
     OnDisk::TypeIndex::Builder types = message.initRoot<OnDisk::TypeIndex>();
 
     // Node Types
-    {
-        DB::NodeTypeRange nodeTypes = _db->nodeTypes();
-        ::capnp::List<OnDisk::NodeType>::Builder listBuilder =
-            types.initNodeTypes(nodeTypes.size());
+    DB::NodeTypeRange nodeTypes = _db->nodeTypes();
+    ::capnp::List<OnDisk::NodeType>::Builder ntListBuilder =
+        types.initNodeTypes(nodeTypes.size());
 
-        size_t i = 0;
-        for (const NodeType* nt : nodeTypes) {
-            OnDisk::NodeType::Builder onDisk = listBuilder[i];
-            onDisk.setNameId(nt->getName().getSharedString()->getID());
+    for (const NodeType* nt : nodeTypes) {
+        size_t i = nt->getIndex();
+        OnDisk::NodeType::Builder onDisk = ntListBuilder[i];
+        onDisk.setNameId(nt->getName().getSharedString()->getID());
 
-            auto propTypes = nt->propertyTypes();
+        auto propTypes = nt->propertyTypes();
 
-            ::capnp::List<OnDisk::PropertyType>::Builder propBuilder =
-                onDisk.initPropertyTypes(propTypes.size());
+        ::capnp::List<OnDisk::PropertyType>::Builder propBuilder =
+            onDisk.initPropertyTypes(propTypes.size());
 
-            size_t j = 0;
-            for (const auto& propType : propTypes) {
-                propBuilder[j].setNameId(
-                    propType->getName().getSharedString()->getID());
-                propBuilder[j].setKind(static_cast<OnDisk::ValueKind>(
-                    propType->getValueType().getKind()));
-                j++;
+        size_t currentPropTypeId = -1;
+        for (const PropertyType* propType : propTypes) {
+            if (currentPropTypeId > propType->getIndex()) {
+                currentPropTypeId = propType->getIndex();
             }
-            i++;
         }
+
+        for (const PropertyType* propType : propTypes) {
+            size_t j = propType->getIndex() - currentPropTypeId;
+
+            propBuilder[j].setId(propType->getIndex());
+            propBuilder[j].setNameId(propType->getName().getID());
+            const auto kind = static_cast<OnDisk::ValueKind>(
+                propType->getValueType().getKind());
+            propBuilder[j].setKind(kind);
+        }
+        currentPropTypeId += propTypes.size();
     }
 
     // Edge Types
-    {
-        DB::EdgeTypeRange edgeTypes = _db->edgeTypes();
-        ::capnp::List<OnDisk::EdgeType>::Builder listBuilder =
-            types.initEdgeTypes(edgeTypes.size());
+    DB::EdgeTypeRange edgeTypes = _db->edgeTypes();
+    ::capnp::List<OnDisk::EdgeType>::Builder etListBuilder =
+        types.initEdgeTypes(edgeTypes.size());
 
-        size_t i = 0;
-        for (const EdgeType* et : edgeTypes) {
-            OnDisk::EdgeType::Builder onDisk = listBuilder[i];
-            onDisk.setNameId(et->getName().getSharedString()->getID());
+    for (const EdgeType* et : edgeTypes) {
+        size_t i = et->getIndex();
+        OnDisk::EdgeType::Builder onDisk = etListBuilder[i];
+        onDisk.setNameId(et->getName().getSharedString()->getID());
 
-            auto propTypes = et->propertyTypes();
+        // Sources
+        const auto& sources = et->sourceTypes();
+        ::capnp::List<uint64_t>::Builder sourcesBuilder =
+            onDisk.initSources(sources.size());
 
-            ::capnp::List<OnDisk::PropertyType>::Builder propBuilder =
-                onDisk.initPropertyTypes(propTypes.size());
-
-            size_t j = 0;
-            for (const auto& propType : propTypes) {
-                propBuilder[j].setNameId(
-                    propType->getName().getSharedString()->getID());
-                propBuilder[j].setKind(static_cast<OnDisk::ValueKind>(
-                    propType->getValueType().getKind()));
-                j++;
-            }
-            i++;
+        size_t j = 0;
+        for (const auto& source : sources) {
+            sourcesBuilder.set(j, source->getName().getID());
+            j++;
         }
+
+        // Targets
+        const auto& targets = et->targetTypes();
+        ::capnp::List<uint64_t>::Builder targetsBuilder =
+            onDisk.initTargets(targets.size());
+
+        j = 0;
+        for (const auto& target : targets) {
+            targetsBuilder.set(j, target->getName().getID());
+            j++;
+        }
+
+        // PropertyTypes
+        auto propTypes = et->propertyTypes();
+
+        ::capnp::List<OnDisk::PropertyType>::Builder propBuilder =
+            onDisk.initPropertyTypes(propTypes.size());
+
+        size_t currentPropTypeId = -1;
+        for (const PropertyType* propType : propTypes) {
+            if (currentPropTypeId > propType->getIndex()) {
+                currentPropTypeId = propType->getIndex();
+            }
+        }
+
+        for (const auto& propType : propTypes) {
+            size_t j = propType->getIndex() - currentPropTypeId;
+
+            propBuilder[j].setId(propType->getIndex());
+            propBuilder[j].setNameId(
+                propType->getName().getSharedString()->getID());
+            const auto kind = static_cast<OnDisk::ValueKind>(
+                propType->getValueType().getKind());
+            propBuilder[j].setKind(kind);
+        }
+        currentPropTypeId += propTypes.size();
     }
 
     ::capnp::writePackedMessageToFd(indexFD, message);
