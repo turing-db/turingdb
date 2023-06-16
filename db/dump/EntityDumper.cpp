@@ -20,7 +20,8 @@ namespace db {
 
 EntityDumper::EntityDumper(db::DB* db, const FileUtils::Path& indexPath)
     : _indexPath(indexPath),
-      _db(db) {
+      _db(db)
+{
 }
 
 bool EntityDumper::dump() {
@@ -32,12 +33,12 @@ bool EntityDumper::dump() {
         }
     }
 
-    int indexFD = FileUtils::openForWrite(_indexPath);
+    const int indexFD = FileUtils::openForWrite(_indexPath);
     if (indexFD < 0) {
         return false;
     }
 
-    DB::NetworkRange networks = _db->networks();
+    const DB::NetworkRange networks = _db->networks();
 
     ::capnp::MallocMessageBuilder message;
     auto entities = message.initRoot<OnDisk::EntityIndex>();

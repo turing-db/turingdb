@@ -20,7 +20,8 @@ namespace db {
 
 EntityLoader::EntityLoader(db::DB* db, const FileUtils::Path& indexPath)
     : _indexPath(indexPath),
-      _db(db) {
+      _db(db)
+{
 }
 
 bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
@@ -28,7 +29,7 @@ bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
         return false;
     }
 
-    int indexFD = FileUtils::openForRead(_indexPath);
+    const int indexFD = FileUtils::openForRead(_indexPath);
 
     if (indexFD < 0) {
         return false;
@@ -37,20 +38,19 @@ bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
     Writeback wb(_db);
 
     ::capnp::PackedFdMessageReader message(indexFD);
-    OnDisk::EntityIndex::Reader entities =
-        message.getRoot<OnDisk::EntityIndex>();
+    const auto entityIndexReader = message.getRoot<OnDisk::EntityIndex>();
 
-    for (OnDisk::Network::Reader diskNetwork : entities.getNetworks()) {
+    for (auto diskNetwork : entityIndexReader.getNetworks()) {
         Network* net = wb.createNetwork(strIndex[diskNetwork.getNameId()]);
 
         // Nodes
-        for (const auto& diskNode : diskNetwork.getNodes()) {
+        for (const auto diskNode : diskNetwork.getNodes()) {
             const StringRef ntName = strIndex[diskNode.getNodeTypeNameId()];
             const StringRef nName = strIndex[diskNode.getNameId()];
             NodeType* nt = _db->getNodeType(ntName);
             Node* n = wb.createNode(net, nt, nName);
 
-            for (const auto& diskProp : diskNode.getProperties()) {
+            for (const auto diskProp : diskNode.getProperties()) {
                 const ValueType valType {
                     static_cast<ValueType::ValueKind>(diskProp.getKind())};
                 const StringRef propName =
@@ -59,27 +59,27 @@ bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
 
                 switch (valType.getKind()) {
                     case (ValueType::VK_INT): {
-                        int64_t v = diskProp.getValue().getInt();
+                        const int64_t v = diskProp.getValue().getInt();
                         wb.setProperty(n, {propType, Value::createInt(v)});
                         break;
                     }
                     case (ValueType::VK_UNSIGNED): {
-                        uint64_t v = diskProp.getValue().getUnsigned();
+                        const uint64_t v = diskProp.getValue().getUnsigned();
                         wb.setProperty(n, {propType, Value::createUnsigned(v)});
                         break;
                     }
                     case (ValueType::VK_BOOL): {
-                        bool v = diskProp.getValue().getBool();
+                        const bool v = diskProp.getValue().getBool();
                         wb.setProperty(n, {propType, Value::createBool(v)});
                         break;
                     }
                     case (ValueType::VK_DECIMAL): {
-                        double v = diskProp.getValue().getDecimal();
+                        const double v = diskProp.getValue().getDecimal();
                         wb.setProperty(n, {propType, Value::createDouble(v)});
                         break;
                     }
                     case (ValueType::VK_STRING_REF): {
-                        size_t v = diskProp.getValue().getStringRefId();
+                        const size_t v = diskProp.getValue().getStringRefId();
                         wb.setProperty(
                             n, {propType, Value::createStringRef(strIndex[v])});
                         break;
@@ -108,18 +108,17 @@ bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
         }
 
         // Edges
-        for (const auto& diskEdge : diskNetwork.getEdges()) {
-            StringRef etName = strIndex[diskEdge.getEdgeTypeNameId()];
+        for (const auto diskEdge : diskNetwork.getEdges()) {
+            const StringRef etName = strIndex[diskEdge.getEdgeTypeNameId()];
             EdgeType* et = _db->getEdgeType(etName);
-            size_t sourceId = diskEdge.getSourceId();
-            size_t targetId = diskEdge.getTargetId();
+            const size_t sourceId = diskEdge.getSourceId();
+            const size_t targetId = diskEdge.getTargetId();
             Node* sourceNode = net->getNode((DBIndex)sourceId);
             Node* targetNode = net->getNode((DBIndex)targetId);
 
             Edge* e = wb.createEdge(et, sourceNode, targetNode);
-            bioassert(e);
 
-            for (const auto& diskProp : diskEdge.getProperties()) {
+            for (const auto diskProp : diskEdge.getProperties()) {
                 const auto diskKind = diskProp.getKind();
                 const ValueType valType {
                     static_cast<ValueType::ValueKind>(diskKind)};
@@ -129,27 +128,27 @@ bool EntityLoader::load(const std::vector<StringRef>& strIndex) {
 
                 switch (valType.getKind()) {
                     case (ValueType::VK_INT): {
-                        int64_t v = diskProp.getValue().getInt();
+                        const int64_t v = diskProp.getValue().getInt();
                         wb.setProperty(e, {propType, Value::createInt(v)});
                         break;
                     }
                     case (ValueType::VK_UNSIGNED): {
-                        uint64_t v = diskProp.getValue().getUnsigned();
+                        const uint64_t v = diskProp.getValue().getUnsigned();
                         wb.setProperty(e, {propType, Value::createUnsigned(v)});
                         break;
                     }
                     case (ValueType::VK_BOOL): {
-                        bool v = diskProp.getValue().getBool();
+                        const bool v = diskProp.getValue().getBool();
                         wb.setProperty(e, {propType, Value::createBool(v)});
                         break;
                     }
                     case (ValueType::VK_DECIMAL): {
-                        double v = diskProp.getValue().getDecimal();
+                        const double v = diskProp.getValue().getDecimal();
                         wb.setProperty(e, {propType, Value::createDouble(v)});
                         break;
                     }
                     case (ValueType::VK_STRING_REF): {
-                        size_t v = diskProp.getValue().getStringRefId();
+                        const size_t v = diskProp.getValue().getStringRefId();
                         wb.setProperty(
                             e, {propType, Value::createStringRef(strIndex[v])});
                         break;

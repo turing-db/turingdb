@@ -27,24 +27,23 @@ bool StringIndexLoader::load(StringIndex& index,
         return false;
     }
 
-    int stringIndexFD = FileUtils::openForRead(_indexPath);
+    const int indexFD = FileUtils::openForRead(_indexPath);
 
-    if (stringIndexFD < 0) {
+    if (indexFD < 0) {
         return false;
     }
 
-    ::capnp::PackedFdMessageReader message(stringIndexFD);
-    OnDisk::StringIndex::Reader strings =
-        message.getRoot<OnDisk::StringIndex>();
+    ::capnp::PackedFdMessageReader message(indexFD);
+    const auto stringReader = message.getRoot<OnDisk::StringIndex>();
 
-    stringRefs.resize(strings.getStrings().size());
+    stringRefs.resize(stringReader.getStrings().size());
 
-    for (OnDisk::SharedString::Reader s : strings.getStrings()) {
-        StringRef newString = index.insertString(s.getStr(), s.getId());
+    for (OnDisk::SharedString::Reader s : stringReader.getStrings()) {
+        const StringRef newString = index.insertString(s.getStr(), s.getId());
         stringRefs[s.getId()] = newString;
     }
 
-    close(stringIndexFD);
+    close(indexFD);
     return true;
 }
 }

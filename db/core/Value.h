@@ -51,22 +51,4 @@ private:
     std::variant<int64_t, uint64_t, bool, double, StringRef, std::string> _data;
 };
 
-template <>
-Value Value::create(int64_t&& data);
-
-template <>
-Value Value::create(uint64_t&& data);
-
-template <>
-Value Value::create(bool&& data);
-
-template <>
-Value Value::create(double&& data);
-
-template <>
-Value Value::create(StringRef&& data);
-
-template <>
-Value Value::create(std::string&& data);
-
 }

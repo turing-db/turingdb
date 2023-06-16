@@ -19,7 +19,7 @@ public:
     friend Network;
     friend Writeback;
     friend Comparator<Edge>;
-    using Set = std::set<Edge*, DBObject::ObjectComparator>;
+    using Set = std::set<Edge*, DBObject::Sorter>;
 
     EdgeType* getType() const { return (EdgeType*)DBEntity::getType(); }
     Node* getSource() const { return _source; }

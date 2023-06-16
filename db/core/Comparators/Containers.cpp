@@ -8,19 +8,15 @@
 
 namespace db {
 
-// StringMappedContainers
 using PropertyTypes = std::map<StringRef, PropertyType*>;
 using Networks = std::map<StringRef, Network*>;
 using NodeTypes = std::map<StringRef, NodeType*>;
 using EdgeTypes = std::map<StringRef, EdgeType*>;
-
-using Properties = std::map<const PropertyType*, Value, DBObject::ObjectComparator>;
-
-// VectorContainers
+using Properties = std::map<const PropertyType*, Value, DBObject::Sorter>;
 using Nodes = std::vector<Node*>;
 using Edges = std::vector<Edge*>;
-using NodeTypeSet = std::set<NodeType*, DBObject::ObjectComparator>;
-using EdgeTypeSet = std::set<EdgeType*, DBObject::ObjectComparator>;
+using NodeTypeSet = std::set<NodeType*, DBObject::Sorter>;
+using EdgeTypeSet = std::set<EdgeType*, DBObject::Sorter>;
 
 template <typename T, typename U>
     requires std::same_as<T, std::map<StringRef, U*>>
@@ -33,15 +29,11 @@ static inline bool compareStringMappedContainers(const T* c1, const T* c2) {
     auto it2 = c2->cbegin();
 
     while (it1 != c1->cend()) {
-        if (it1->first != it2->first) {
+        if (!StringRef::same(it1->first, it2->first)) {
             return false;
         }
 
         if (!Comparator<U>::same(it1->second, it2->second)) {
-            [[maybe_unused]] auto it1first = it1->first;
-            [[maybe_unused]] auto it1second = it1->second;
-            [[maybe_unused]] auto it2first = it2->first;
-            [[maybe_unused]] auto it2second = it2->second;
             return false;
         }
 
@@ -54,7 +46,7 @@ static inline bool compareStringMappedContainers(const T* c1, const T* c2) {
 
 template <typename T, typename U>
     requires std::same_as<T, std::vector<U*>>
-          || std::same_as<T, std::set<U*, DBObject::ObjectComparator>>
+          || std::same_as<T, std::set<U*, DBObject::Sorter>>
 static inline bool compareVectorContainers(const T* c1, const T* c2) {
     if (c1->size() != c2->size()) {
         return false;

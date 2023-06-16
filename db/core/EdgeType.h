@@ -20,7 +20,7 @@ public:
     friend DB;
     friend Writeback;
     friend Comparator<EdgeType>;
-    using NodeTypes = std::set<NodeType*, DBObject::ObjectComparator>;
+    using NodeTypes = std::set<NodeType*, DBObject::Sorter>;
     using NodeTypeRange = STLRange<NodeTypes>;
 
     bool hasSourceType(const NodeType* nodeType) const;

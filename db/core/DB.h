@@ -70,7 +70,7 @@ private:
     DBIndex allocNodeTypeIndex();
     DBIndex allocEdgeTypeIndex();
     DBIndex allocPropertyTypeIndex();
-    DBIndex updateNextPropertyTypeIndex(DBIndex::ID id);
+    DBIndex propertyTypeIndexFromExisting(DBIndex::ID id);
 };
 
 }

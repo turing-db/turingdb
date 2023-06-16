@@ -10,14 +10,14 @@
 
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
-#include <iostream>
 #include <unistd.h>
 
 namespace db {
 
 TypeDumper::TypeDumper(db::DB* db, const FileUtils::Path& indexPath)
     : _indexPath(indexPath),
-      _db(db) {
+      _db(db)
+{
 }
 
 bool TypeDumper::dump() {
@@ -29,29 +29,24 @@ bool TypeDumper::dump() {
         }
     }
 
-    int indexFD = FileUtils::openForWrite(_indexPath);
+    const int indexFD = FileUtils::openForWrite(_indexPath);
     if (indexFD < 0) {
         return false;
     }
 
     ::capnp::MallocMessageBuilder message;
-
-    OnDisk::TypeIndex::Builder types = message.initRoot<OnDisk::TypeIndex>();
+    auto typeIndexBuilder = message.initRoot<OnDisk::TypeIndex>();
 
     // Node Types
-    DB::NodeTypeRange nodeTypes = _db->nodeTypes();
-    ::capnp::List<OnDisk::NodeType>::Builder ntListBuilder =
-        types.initNodeTypes(nodeTypes.size());
+    const DB::NodeTypeRange nodeTypes = _db->nodeTypes();
+    auto ntListBuilder = typeIndexBuilder.initNodeTypes(nodeTypes.size());
 
     for (const NodeType* nt : nodeTypes) {
-        size_t i = nt->getIndex();
-        OnDisk::NodeType::Builder onDisk = ntListBuilder[i];
-        onDisk.setNameId(nt->getName().getSharedString()->getID());
+        const size_t i = nt->getIndex();
+        const auto propTypes = nt->propertyTypes();
+        auto propBuilder = ntListBuilder[i].initPropertyTypes(propTypes.size());
 
-        auto propTypes = nt->propertyTypes();
-
-        ::capnp::List<OnDisk::PropertyType>::Builder propBuilder =
-            onDisk.initPropertyTypes(propTypes.size());
+        ntListBuilder[i].setNameId(nt->getName().getSharedString()->getID());
 
         size_t currentPropTypeId = -1;
         for (const PropertyType* propType : propTypes) {
@@ -61,7 +56,7 @@ bool TypeDumper::dump() {
         }
 
         for (const PropertyType* propType : propTypes) {
-            size_t j = propType->getIndex() - currentPropTypeId;
+            const size_t j = propType->getIndex() - currentPropTypeId;
 
             propBuilder[j].setId(propType->getIndex());
             propBuilder[j].setNameId(propType->getName().getID());
@@ -69,23 +64,21 @@ bool TypeDumper::dump() {
                 propType->getValueType().getKind());
             propBuilder[j].setKind(kind);
         }
+
         currentPropTypeId += propTypes.size();
     }
 
     // Edge Types
-    DB::EdgeTypeRange edgeTypes = _db->edgeTypes();
-    ::capnp::List<OnDisk::EdgeType>::Builder etListBuilder =
-        types.initEdgeTypes(edgeTypes.size());
+    const DB::EdgeTypeRange edgeTypes = _db->edgeTypes();
+    auto etListBuilder = typeIndexBuilder.initEdgeTypes(edgeTypes.size());
 
     for (const EdgeType* et : edgeTypes) {
-        size_t i = et->getIndex();
-        OnDisk::EdgeType::Builder onDisk = etListBuilder[i];
-        onDisk.setNameId(et->getName().getSharedString()->getID());
+        const size_t i = et->getIndex();
+        etListBuilder[i].setNameId(et->getName().getSharedString()->getID());
 
         // Sources
         const auto& sources = et->sourceTypes();
-        ::capnp::List<uint64_t>::Builder sourcesBuilder =
-            onDisk.initSources(sources.size());
+        auto sourcesBuilder = etListBuilder[i].initSources(sources.size());
 
         size_t j = 0;
         for (const auto& source : sources) {
@@ -95,8 +88,7 @@ bool TypeDumper::dump() {
 
         // Targets
         const auto& targets = et->targetTypes();
-        ::capnp::List<uint64_t>::Builder targetsBuilder =
-            onDisk.initTargets(targets.size());
+        auto targetsBuilder = etListBuilder[i].initTargets(targets.size());
 
         j = 0;
         for (const auto& target : targets) {
@@ -107,8 +99,7 @@ bool TypeDumper::dump() {
         // PropertyTypes
         auto propTypes = et->propertyTypes();
 
-        ::capnp::List<OnDisk::PropertyType>::Builder propBuilder =
-            onDisk.initPropertyTypes(propTypes.size());
+        auto propBuilder = etListBuilder[i].initPropertyTypes(propTypes.size());
 
         size_t currentPropTypeId = -1;
         for (const PropertyType* propType : propTypes) {
@@ -118,7 +109,7 @@ bool TypeDumper::dump() {
         }
 
         for (const auto& propType : propTypes) {
-            size_t j = propType->getIndex() - currentPropTypeId;
+            const size_t j = propType->getIndex() - currentPropTypeId;
 
             propBuilder[j].setId(propType->getIndex());
             propBuilder[j].setNameId(

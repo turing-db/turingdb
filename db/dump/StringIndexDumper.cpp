@@ -29,24 +29,18 @@ bool StringIndexDumper::dump(const StringIndex& index) {
 
     ::capnp::MallocMessageBuilder message;
 
-    OnDisk::StringIndex::Builder strings =
-        message.initRoot<OnDisk::StringIndex>();
+    auto stringIndexBuilder = message.initRoot<OnDisk::StringIndex>();
+    auto stringListBuilder = stringIndexBuilder.initStrings(index._strMap.size());
 
-    ::capnp::List<OnDisk::SharedString>::Builder listBuilder =
-        strings.initStrings(index._strMap.size());
-
-    int indexFD = FileUtils::openForWrite(_indexPath);
+    const int indexFD = FileUtils::openForWrite(_indexPath);
     if (indexFD < 0) {
         return false;
     }
 
     // Looping through all strings in the StringIndex
-    size_t i = 0;
     for (const auto& [rstr, sstr] : index._strMap) {
-        OnDisk::SharedString::Builder onDisk = listBuilder[i];
-        onDisk.setId(sstr->getID());
-        onDisk.setStr(rstr);
-        i++;
+        stringListBuilder[sstr->getID()].setId(sstr->getID());
+        stringListBuilder[sstr->getID()].setStr(rstr);
     }
 
     ::capnp::writePackedMessageToFd(indexFD, message);

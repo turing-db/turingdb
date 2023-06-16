@@ -16,7 +16,7 @@ class DBEntity : public DBObject {
 public:
     friend Writeback;
     friend Comparator<DBEntity>;
-    using Properties = std::map<const PropertyType*, Value, DBObject::ObjectComparator>;
+    using Properties = std::map<const PropertyType*, Value, DBObject::Sorter>;
     using PropertyRange = STLRange<Properties>;
 
     Property getProperty(const PropertyType* propType) const;

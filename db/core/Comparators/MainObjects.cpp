@@ -22,7 +22,7 @@ bool Comparator<DB>::same(const DB* db1, const DB* db2) {
 template <>
 bool Comparator<Network>::same(const Network* net1, const Network* net2) {
     return Comparator<DBObject>::same(net1, net2)
-        && net1->_name == net2->_name
+        && StringRef::same(net1->_name, net2->_name)
         && Comparator<Nodes>::same(&net1->_nodes, &net2->_nodes)
         && Comparator<Edges>::same(&net1->_edges, &net2->_edges);
 }

@@ -8,8 +8,7 @@ namespace db {
 class DBObject {
 public:
     friend Comparator<DBObject>;
-
-    struct ObjectComparator {
+    struct Sorter{
         bool operator()(const DBObject* obj1, const DBObject* obj2) const {
             return obj1->getIndex() < obj2->getIndex();
         }

@@ -14,7 +14,8 @@ using namespace Log;
 DBLoader::DBLoader(DB* db, const Path& outDir)
     : _outDir(outDir),
       _dbDirName(getDefaultDBDirectoryName()),
-      _db(db) {
+      _db(db)
+{
 }
 
 DBLoader::~DBLoader() = default;

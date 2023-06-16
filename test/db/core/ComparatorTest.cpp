@@ -119,12 +119,9 @@ TEST_F(ComparatorTest, NodeTypeComparison) {
     NodeType* nt3 = wb.createNodeType(db->getString("NodeType3"));
     NodeType* nt4 = wb.createNodeType(db->getString("NodeType4"));
 
-    wb.addPropertyType(nt1, db->getString("PropType1"),
-                       ValueType::stringType());
-    wb.addPropertyType(nt1, db->getString("PropType2"),
-                       ValueType::stringType());
-    wb.addPropertyType(nt2, db->getString("PropType1"),
-                       ValueType::stringType());
+    wb.addPropertyType(nt1, db->getString("PropType1"), ValueType::stringType());
+    wb.addPropertyType(nt1, db->getString("PropType2"), ValueType::stringType());
+    wb.addPropertyType(nt2, db->getString("PropType1"), ValueType::stringType());
 
     ASSERT_TRUE(Comparator<DBEntityType>::same((DBEntityType*)nt1, (DBEntityType*)nt1));
     ASSERT_FALSE(Comparator<DBEntityType>::same((DBEntityType*)nt1, (DBEntityType*)nt2));
@@ -152,12 +149,9 @@ TEST_F(ComparatorTest, NodeTypeComparison) {
     NodeType* nt3_2 = wb2.createNodeType(db2->getString("NodeType3"));
     NodeType* nt4_2 = wb2.createNodeType(db2->getString("NodeType4"));
 
-    wb2.addPropertyType(nt1_2, db2->getString("PropType1"),
-                        ValueType::stringType());
-    wb2.addPropertyType(nt1_2, db2->getString("PropType2"),
-                        ValueType::stringType());
-    wb2.addPropertyType(nt2_2, db2->getString("PropType1"),
-                        ValueType::stringType());
+    wb2.addPropertyType(nt1_2, db2->getString("PropType1"), ValueType::stringType());
+    wb2.addPropertyType(nt1_2, db2->getString("PropType2"), ValueType::stringType());
+    wb2.addPropertyType(nt2_2, db2->getString("PropType1"), ValueType::stringType());
 
     ASSERT_TRUE(Comparator<NodeType>::same(nt1, nt1_2));
     ASSERT_TRUE(Comparator<NodeType>::same(nt2, nt2_2));
@@ -445,20 +439,60 @@ TEST_F(ComparatorTest, EdgeComparison) {
 }
 
 TEST_F(ComparatorTest, DBComparison) {
-    DB* db = cyberSecurityDB();
-    {
-        DB* db2 = cyberSecurityDB();
-        ASSERT_TRUE(Comparator<DB>::same(db, db2));
-        delete db2;
-    }
+    DB* db1 = cyberSecurityDB();
+    DB* db2 = cyberSecurityDB();
 
-    {
-        DB* db2 = cyberSecurityDB();
-        Writeback wb{db2};
-        wb.createNodeType(db2->getString("TestNodeType"));
-        ASSERT_FALSE(Comparator<DB>::same(db, db2));
-        delete db2;
-    }
+    Writeback wb1{db1};
+    Writeback wb2{db2};
+    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
 
-    delete db;
+    Network* net1 = db1->getNetwork(db1->getString("Neo4jNetwork"));
+    Network* net2 = db2->getNetwork(db2->getString("Neo4jNetwork"));
+    ASSERT_TRUE(net1);
+    ASSERT_TRUE(net2);
+
+    NodeType* nt1 = wb1.createNodeType(db1->getString("NodeType"));
+    ASSERT_TRUE(nt1);
+    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    NodeType* nt2 = wb2.createNodeType(db2->getString("NodeType"));
+    ASSERT_TRUE(nt2);
+    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+
+    EdgeType* et1 = wb1.createEdgeType(db1->getString("EdgeType"), nt1, nt1);
+    ASSERT_TRUE(et1);
+    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    EdgeType* et2 = wb2.createEdgeType(db2->getString("EdgeType"), nt2, nt2);
+    ASSERT_TRUE(et2);
+    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+
+    Node* n11 = wb1.createNode(net1, nt1, db1->getString("Node1"));
+    Node* n12 = wb1.createNode(net1, nt1, db1->getString("Node2"));
+    ASSERT_TRUE(n11);
+    ASSERT_TRUE(n12);
+    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    Node* n21 = wb2.createNode(net2, nt2, db2->getString("Node1"));
+    Node* n22 = wb2.createNode(net2, nt2, db2->getString("Node2"));
+    ASSERT_TRUE(n21);
+    ASSERT_TRUE(n22);
+    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+
+    Edge* e1 = wb1.createEdge(et1, n11, n12);
+    ASSERT_TRUE(e1);
+    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    Edge* e2 = wb2.createEdge(et2, n21, n22);
+    ASSERT_TRUE(e2);
+    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+
+    // The order in which objects are pushed into the database matters1
+    // For example:
+    // NodeType first then EdgeType
+    wb1.createNodeType(db1->getString("NodeType2"));
+    wb1.createEdgeType(db1->getString("EdgeType2"), nt1, nt1);
+    // EdgeType then NodeType
+    wb2.createEdgeType(db2->getString("EdgeType2"), nt2, nt2);
+    wb2.createNodeType(db2->getString("NodeType2"));
+    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+
+    delete db1;
+    delete db2;
 }

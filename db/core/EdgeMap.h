@@ -15,7 +15,7 @@ class EdgeMap {
 public:
     friend Comparator<EdgeMap>;
     using EdgeVector = std::vector<Edge*>;
-    using Edges = std::map<const EdgeType*, EdgeVector, DBObject::ObjectComparator>;
+    using Edges = std::map<const EdgeType*, EdgeVector, DBObject::Sorter>;
     using EdgeVectorRange = STLRange<EdgeVector>;
 
     struct EdgeMapFlattener {

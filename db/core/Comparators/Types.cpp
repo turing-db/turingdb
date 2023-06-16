@@ -6,8 +6,8 @@
 
 namespace db {
 
-using NodeTypeSet = std::set<NodeType*, DBObject::ObjectComparator>;
-using EdgeTypeSet = std::set<EdgeType*, DBObject::ObjectComparator>;
+using NodeTypeSet = std::set<NodeType*, DBObject::Sorter>;
+using EdgeTypeSet = std::set<EdgeType*, DBObject::Sorter>;
 
 template <>
 bool Comparator<NodeType>::same(const NodeType* nt1, const NodeType* nt2) {

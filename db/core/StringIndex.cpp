@@ -4,7 +4,8 @@
 
 using namespace db;
 
-StringIndex::StringIndex() {
+StringIndex::StringIndex()
+{
 }
 
 StringIndex::~StringIndex() {

@@ -23,7 +23,7 @@ public:
     friend Comparator<Node>;
     using EdgeMapRange = EdgeMap::EdgeRange;
     using EdgeRange = EdgeMap::EdgeVectorRange;
-    using Set = std::set<Node*, DBObject::ObjectComparator>;
+    using Set = std::set<Node*, DBObject::Sorter>;
 
     NodeType* getType() const { return (NodeType*)DBEntity::getType(); }
 

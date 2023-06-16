@@ -12,7 +12,7 @@ class StringRef {
 public:
     using iterator = const char*;
 
-    struct Comparator {
+    struct Sorter {
         bool operator()(StringRef lhs, StringRef rhs) const {
             if (!lhs._sharedStr) {
                 return true;
@@ -36,15 +36,24 @@ public:
         return rhs._sharedStr ? lhs + rhs._sharedStr->getString() : lhs;
     }
 
+    static bool same(const StringRef& lhs, const StringRef& rhs) {
+        if (!lhs._sharedStr && !rhs._sharedStr) {
+            return true;
+        }
+        if (!lhs._sharedStr || !rhs._sharedStr) {
+            return false;
+        }
+
+        return lhs.getID() == rhs.getID()
+            && lhs._sharedStr->getString() == rhs._sharedStr->getString();
+    }
+
     bool operator==(const StringRef& other) const {
-        return _sharedStr != nullptr
-            && other._sharedStr != nullptr
-            && getID() == other.getID()
-            && _sharedStr->getString() == other._sharedStr->getString();
+        return _sharedStr == other._sharedStr;
     }
 
     bool operator<(const StringRef& other) const {
-        return Comparator()(*this, other);
+        return Sorter()(*this, other);
     }
 
     bool empty() const { return _sharedStr == nullptr; }

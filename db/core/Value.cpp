@@ -10,7 +10,13 @@
 using namespace db;
 
 static constexpr std::array<std::string_view, ValueType::_SIZE> valueKindNames {
-    "Invalid", "Int", "Unsigned", "Bool", "Decimal", "StringRef", "String",
+    "Invalid",
+    "Int",
+    "Unsigned",
+    "Bool",
+    "Decimal",
+    "StringRef",
+    "String",
 };
 
 static_assert(valueKindNames[(size_t)ValueType::VK_INVALID] == "Invalid");
@@ -45,7 +51,8 @@ consteval ValueType::ValueKind getKind() {
     }
 }
 
-Value::Value() {
+Value::Value()
+{
 }
 
 Value::~Value() {
@@ -164,15 +171,3 @@ StringRef Value::getStringRef() const {
 const std::string& Value::getString() const {
     return get<std::string>();
 }
-
-template const int64_t& Value::get() const;
-
-template const uint64_t& Value::get() const;
-
-template const bool& Value::get() const;
-
-template const double& Value::get() const;
-
-template const StringRef& Value::get() const;
-
-template const std::string& Value::get() const;

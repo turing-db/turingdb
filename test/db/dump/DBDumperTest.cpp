@@ -18,10 +18,16 @@ protected:
         _outDir += "_";
         _outDir += testInfo->name();
         _outDir += ".out";
-
         _logPath = FileUtils::Path(_outDir) / "log";
+
         _dbPath = FileUtils::abspath(FileUtils::Path(_outDir) /
                                      DBDumper::getDefaultDBDirectoryName());
+
+        // Remove the directory from the previous run
+        if (FileUtils::exists(_outDir)) {
+            FileUtils::removeDirectory(_outDir);
+        }
+        FileUtils::createDirectory(_outDir);
 
         _stringIndexPath = _dbPath / "smap";
         _typeIndexPath = _dbPath / "types";
