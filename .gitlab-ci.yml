@@ -5,6 +5,8 @@ stages:
   - build
 
 build-job:
+  tags:
+    - docker
   stage: build
   script:
     - source /turing/setup.sh
