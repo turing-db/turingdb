@@ -50,6 +50,10 @@ find_package(CURL REQUIRED)
 # Python
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
+# CapnProto
+set(ENV{PKG_CONFIG_PATH} "/turing/tools/lib/pkgconfig/")
+find_package(CapnProto REQUIRED)
+
 # Root source directory
 set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${BIO_SOURCE_DIR})

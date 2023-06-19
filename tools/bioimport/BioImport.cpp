@@ -8,6 +8,7 @@
 #include "PerfStat.h"
 #include "TimerStat.h"
 #include "ToolInit.h"
+#include "DBDumper.h"
 #include "tools/bioimport/ThreadHandler.h"
 
 #include <regex>
@@ -180,6 +181,9 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_NODE_COUNT() << stats.parsedNodes);
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_EDGE_COUNT() << stats.parsedEdges);
 
+    db::DBDumper dumper{parser.getDB(), outDir};
+    dumper.dump();
+
     handler.join();
     instance.destroy();
 
@@ -233,6 +237,9 @@ bool importJsonNeo4j(const ToolInit& tool, const FileUtils::Path& jsonDir) {
 
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_NODE_COUNT() << stats.parsedNodes);
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_EDGE_COUNT() << stats.parsedEdges);
+
+    db::DBDumper dumper{parser.getDB(), tool.getOutputsDir()};
+    dumper.dump();
 
     return true;
 }

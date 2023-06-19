@@ -1,7 +1,3 @@
-# CapnProto dependency
-
-set(ENV{PKG_CONFIG_PATH} "/turing/tools/lib/pkgconfig/")
-find_package(CapnProto REQUIRED)
 capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS
     capnp/StringIndex.capnp
     capnp/TypeIndex.capnp
