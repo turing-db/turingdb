@@ -5,6 +5,8 @@
 #include "MsgCommon.h"
 #include "MsgDB.h"
 #include "StringIndexDumper.h"
+#include "EntityDumper.h"
+#include "TypeDumper.h"
 
 using namespace db;
 using namespace Log;
@@ -29,6 +31,8 @@ void DBDumper::setDBDirectoryName(const std::string& dirName) {
 bool DBDumper::dump() {
     Path dbPath = FileUtils::abspath(_outDir / _dbDirName);
     Path stringIndexPath = dbPath / "smap";
+    Path typeIndexPath = dbPath / "types";
+    Path entityIndexPath = dbPath / "entities";
 
     BioLog::log(msg::INFO_DB_DUMPING_DATABASE() << dbPath);
 
@@ -47,6 +51,18 @@ bool DBDumper::dump() {
 
     StringIndexDumper strDumper{stringIndexPath};
     if (!strDumper.dump(_db->_strIndex)) {
+        BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << dbPath);
+        return false;
+    }
+
+    TypeDumper typeDumper {_db, typeIndexPath};
+    if (!typeDumper.dump()) {
+        BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << dbPath);
+        return false;
+    }
+
+    EntityDumper entityDumper {_db, entityIndexPath};
+    if (!entityDumper.dump()) {
         BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << dbPath);
         return false;
     }

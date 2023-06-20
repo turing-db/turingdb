@@ -120,6 +120,20 @@ PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
     return addPropertyTypeBase(edgeType, name, type);
 }
 
+PropertyType* Writeback::addPropertyType(NodeType* nodeType,
+                                         StringRef name,
+                                         ValueType type,
+                                         size_t id) {
+    return addPropertyTypeBase(nodeType, name, type, id);
+}
+
+PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
+                                         StringRef name,
+                                         ValueType type,
+                                         size_t id) {
+    return addPropertyTypeBase(edgeType, name, type, id);
+}
+
 PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
                                              StringRef name,
                                              ValueType type) {
@@ -132,6 +146,24 @@ PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
     }
 
     const DBIndex propertyTypeIndex = _db->allocPropertyTypeIndex();
+    PropertyType* propType = new PropertyType(propertyTypeIndex, dbType, name, type);
+    dbType->addPropertyType(propType);
+    return propType;
+}
+
+PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
+                                             StringRef name,
+                                             ValueType type,
+                                             size_t id) {
+    if (!dbType || !type.isValid()) {
+        return nullptr;
+    }
+
+    if (dbType->getPropertyType(name)) {
+        return nullptr;
+    }
+
+    const DBIndex propertyTypeIndex = _db->propertyTypeIndexFromExisting(id);
     PropertyType* propType = new PropertyType(propertyTypeIndex, dbType, name, type);
     dbType->addPropertyType(propType);
     return propType;

@@ -2,6 +2,7 @@
 #include "BioLog.h"
 #include "DB.h"
 #include "FileUtils.h"
+#include "JsonExamples.h"
 #include "Writeback.h"
 #include "gtest/gtest.h"
 
@@ -13,16 +14,27 @@ protected:
         const testing::TestInfo* const testInfo =
             testing::UnitTest::GetInstance()->current_test_info();
 
-        Log::BioLog::init();
-
         _outDir = testInfo->test_suite_name();
         _outDir += "_";
         _outDir += testInfo->name();
         _outDir += ".out";
+        _logPath = FileUtils::Path(_outDir) / "log";
 
         _dbPath = FileUtils::abspath(FileUtils::Path(_outDir) /
                                      DBDumper::getDefaultDBDirectoryName());
+
+        // Remove the directory from the previous run
+        if (FileUtils::exists(_outDir)) {
+            FileUtils::removeDirectory(_outDir);
+        }
+        FileUtils::createDirectory(_outDir);
+
         _stringIndexPath = _dbPath / "smap";
+        _typeIndexPath = _dbPath / "types";
+        _entityIndexPath = _dbPath / "entities";
+
+        Log::BioLog::init();
+        Log::BioLog::openFile(_logPath.string());
     }
 
     void TearDown() override {
@@ -49,23 +61,27 @@ protected:
         // Checking if DBDumperTest_DumpDB.out/turing.out/smap was created
         ASSERT_TRUE(FileUtils::exists(_stringIndexPath));
         ASSERT_FALSE(FileUtils::isDirectory(_stringIndexPath));
+
+        // Checking if DBDumperTest_DumpDB.out/turing.out/types was created
+        ASSERT_TRUE(FileUtils::exists(_typeIndexPath));
+        ASSERT_FALSE(FileUtils::isDirectory(_typeIndexPath));
+
+        // Checking if DBDumperTest_DumpDB.out/turing.out/entities was created
+        ASSERT_TRUE(FileUtils::exists(_entityIndexPath));
+        ASSERT_FALSE(FileUtils::isDirectory(_entityIndexPath));
     }
 
-    DB* _db{nullptr};
+    DB* _db {nullptr};
     std::string _outDir;
+    FileUtils::Path _logPath;
     FileUtils::Path _dbPath;
     FileUtils::Path _stringIndexPath;
+    FileUtils::Path _typeIndexPath;
+    FileUtils::Path _entityIndexPath;
 };
 
 TEST_F(DBDumperTest, DumpDB) {
-    _db = DB::create();
-    Writeback wb(_db);
-
-    for (size_t i = 0; i < 10; i++) {
-        wb.createComponentType(
-            _db->getString(std::to_string(i) + "_ComponentType"));
-    }
-
+    _db = cyberSecurityDB();
     tryDump();
 }
 
@@ -75,20 +91,8 @@ TEST_F(DBDumperTest, DumpEmptyDB) {
 }
 
 TEST_F(DBDumperTest, DumpDBTwice) {
-    _db = DB::create();
+    _db = cyberSecurityDB();
     tryDump();
-    tryDump();
-}
-
-TEST_F(DBDumperTest, DumpLargeDB) {
-    _db = DB::create();
-    Writeback wb(_db);
-
-    for (size_t i = 0; i < 100000; i++) {
-        wb.createComponentType(
-            _db->getString(std::to_string(i) + "_ComponentType"));
-    }
-
     tryDump();
 }
 

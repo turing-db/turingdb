@@ -12,7 +12,7 @@ class StringRef {
 public:
     using iterator = const char*;
 
-    struct Comparator {
+    struct Sorter {
         bool operator()(StringRef lhs, StringRef rhs) const {
             if (!lhs._sharedStr) {
                 return true;
@@ -36,12 +36,24 @@ public:
         return rhs._sharedStr ? lhs + rhs._sharedStr->getString() : lhs;
     }
 
+    static bool same(const StringRef& lhs, const StringRef& rhs) {
+        if (!lhs._sharedStr && !rhs._sharedStr) {
+            return true;
+        }
+        if (!lhs._sharedStr || !rhs._sharedStr) {
+            return false;
+        }
+
+        return lhs.getID() == rhs.getID()
+            && lhs._sharedStr->getString() == rhs._sharedStr->getString();
+    }
+
     bool operator==(const StringRef& other) const {
-        return _sharedStr == other._sharedStr; 
+        return _sharedStr == other._sharedStr;
     }
 
     bool operator<(const StringRef& other) const {
-        return Comparator()(*this, other);
+        return Sorter()(*this, other);
     }
 
     bool empty() const { return _sharedStr == nullptr; }
@@ -52,6 +64,10 @@ public:
     iterator end() const;
 
     const SharedString* getSharedString() const { return _sharedStr; }
+
+    SharedString::ID getID() const {
+        return _sharedStr ? _sharedStr->getID() : 0;
+    }
 
     std::string toStdString() const {
         return _sharedStr ? _sharedStr->getString() : std::string();
@@ -64,11 +80,11 @@ private:
 }
 
 namespace std {
-    template <>
-    struct hash<db::StringRef> {
-        size_t operator()(const db::StringRef& str) const {
-            const db::SharedString* sharedStr = str.getSharedString();
-            return hash<size_t>()(sharedStr ? sharedStr->getID() : 0);
-        }
-    };
+template <>
+struct hash<db::StringRef> {
+    size_t operator()(const db::StringRef& str) const {
+        const db::SharedString* sharedStr = str.getSharedString();
+        return hash<size_t>()(sharedStr ? sharedStr->getID() : 0);
+    }
+};
 }

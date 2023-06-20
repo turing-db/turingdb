@@ -8,6 +8,7 @@
 #include "StringRef.h"
 #include "DBIndex.h"
 #include "Range.h"
+#include "Comparator.h"
 
 namespace db {
 
@@ -23,6 +24,7 @@ public:
     friend Writeback;
     friend DBLoader;
     friend DBDumper;
+    friend Comparator<DB>;
     using Networks = std::map<StringRef, Network*>;
     using NodeTypes = std::map<StringRef, NodeType*>;
     using EdgeTypes = std::map<StringRef, EdgeType*>;
@@ -68,6 +70,7 @@ private:
     DBIndex allocNodeTypeIndex();
     DBIndex allocEdgeTypeIndex();
     DBIndex allocPropertyTypeIndex();
+    DBIndex propertyTypeIndexFromExisting(DBIndex::ID id);
 };
 
 }

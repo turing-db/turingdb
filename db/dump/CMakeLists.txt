@@ -1,15 +1,21 @@
-
 # CapnProto dependency
 
 set(ENV{PKG_CONFIG_PATH} "/turing/tools/lib/pkgconfig/")
 find_package(CapnProto REQUIRED)
-capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS capnp/StringIndex.capnp)
+capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS
+    capnp/StringIndex.capnp
+    capnp/TypeIndex.capnp
+    capnp/EntityIndex.capnp)
 
 set(dumper_sources
     DBLoader.cpp
     DBDumper.cpp
     StringIndexLoader.cpp
-    StringIndexDumper.cpp)
+    StringIndexDumper.cpp
+    TypeLoader.cpp
+    TypeDumper.cpp
+    EntityLoader.cpp
+    EntityDumper.cpp)
 
 add_library(turing_db_dumper_s STATIC
     ${CAPNP_SRCS}

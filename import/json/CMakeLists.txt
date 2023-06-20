@@ -1,4 +1,5 @@
 set(import_json_sources
+    JsonExamples.cpp
     JsonParser.cpp
     Neo4j4JsonParser.cpp)
 

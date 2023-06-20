@@ -21,6 +21,10 @@ Property DBEntity::getProperty(const PropertyType* propType) const {
     return Property(it->first, it->second);
 }
 
+DBEntity::PropertyRange DBEntity::properties() const {
+    return PropertyRange {&_properties};
+}
+
 void DBEntity::addProperty(const Property& prop) {
     _properties[prop.getType()] = prop.getValue();
 }

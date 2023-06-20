@@ -3,6 +3,9 @@
 #include "DB.h"
 #include "DBDumper.h"
 #include "FileUtils.h"
+#include "JsonExamples.h"
+#include "NodeType.h"
+#include "PropertyType.h"
 #include "Writeback.h"
 #include "gtest/gtest.h"
 
@@ -20,19 +23,18 @@ protected:
         _outDir += "_";
         _outDir += testInfo->name();
         _outDir += ".out";
+        _logPath = FileUtils::Path(_outDir) / "log";
 
         // Remove the directory from the previous run
         if (FileUtils::exists(_outDir)) {
             FileUtils::removeDirectory(_outDir);
         }
+        FileUtils::createDirectory(_outDir);
 
-        _db = DB::create();
-        Writeback wb(_db);
+        Log::BioLog::init();
+        Log::BioLog::openFile(_logPath.string());
 
-        for (size_t i = 0; i < 10; i++) {
-            wb.createComponentType(
-                _db->getString(std::to_string(i) + "_ComponentType"));
-        }
+        _db = cyberSecurityDB();
 
         DBDumper dumper(_db, _outDir);
         dumper.dump();
@@ -48,19 +50,17 @@ protected:
 
     DB* _db{nullptr};
     std::string _outDir;
+    FileUtils::Path _logPath;
 };
 
 TEST_F(DBLoaderTest, LoadDB) {
     DB* db = DB::create();
     DBLoader loader(db, _outDir);
-    ASSERT_TRUE(loader.load());
+    Writeback wb1{_db};
+    Writeback wb2{db};
 
-    for (size_t i = 0; i < 10; i++) {
-        std::string s = std::to_string(i) + "_ComponentType";
-        const SharedString* loadedString = db->getString(s).getSharedString();
-        const SharedString* dumpedString = _db->getString(s).getSharedString();
-        ASSERT_EQ(loadedString->getID(), dumpedString->getID());
-    }
+    ASSERT_TRUE(loader.load());
+    ASSERT_TRUE(Comparator<DB>::same(_db, db));
 
     delete db;
 }

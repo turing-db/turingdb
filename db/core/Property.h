@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Comparator.h"
 #include "Value.h"
 
 namespace db {
@@ -8,6 +9,8 @@ class PropertyType;
 
 class Property {
 public:
+    friend Comparator<Property>;
+
     Property(const PropertyType* type, Value value);
     Property();
     ~Property();

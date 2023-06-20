@@ -19,7 +19,7 @@ using namespace std::literals;
 
 bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
     BioLog::log(msg::INFO_NEO4J_IMPORT_DUMP_FILE() << filepath.string());
-    TimerStat timer{"Neo4j: import"};
+    TimerStat timer {"Neo4j: import"};
 
     const FileUtils::Path& outDir = tool.getOutputsDir();
     const FileUtils::Path jsonDir = outDir / "json";
@@ -27,7 +27,7 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
     const FileUtils::Path nodePropertiesFile = jsonDir / "nodeProperties.json";
     const FileUtils::Path edgePropertiesFile = jsonDir / "edgeProperties.json";
 
-    Neo4JInstance instance{outDir};
+    Neo4JInstance instance {outDir};
     instance.setup();
     instance.importDumpedDB(filepath);
     instance.start();
@@ -40,12 +40,12 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
     }
 
     // Initialization of the parser
-    JsonParser parser{};
+    JsonParser parser {};
     parser.setReducedOutput(true);
     const JsonParsingStats& stats = parser.getStats();
 
     // Preparing the requests
-    ThreadHandler handler{};
+    ThreadHandler handler {};
 
     // Start the request queue
     if (!handler.start(parser)) {
@@ -73,7 +73,7 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
 
     // Parsing node properties data
     if (!parser.parse(handler.requests.nodeProperties.getData(),
-                      JsonParser::Format::Neo4j4_NodeProperties)) {
+                      JsonParser::FileFormat::Neo4j4_NodeProperties)) {
         instance.destroy();
         return false;
     }
@@ -95,7 +95,7 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
 
         // Parsing the nodes data
         if (!parser.parse(nodeRequest.getData(),
-                          JsonParser::Format::Neo4j4_Nodes)) {
+                          JsonParser::FileFormat::Neo4j4_Nodes)) {
             instance.destroy();
             return false;
         }
@@ -121,7 +121,7 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
 
     // Parsing edge properties data
     if (!parser.parse(handler.requests.edgeProperties.getData(),
-                      JsonParser::Format::Neo4j4_EdgeProperties)) {
+                      JsonParser::FileFormat::Neo4j4_EdgeProperties)) {
         instance.destroy();
         return false;
     }
@@ -143,7 +143,7 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
 
         // Parsing the edges data
         if (!parser.parse(edgeRequest.getData(),
-                          JsonParser::Format::Neo4j4_Edges)) {
+                          JsonParser::FileFormat::Neo4j4_Edges)) {
             instance.destroy();
             return false;
         }
@@ -188,7 +188,7 @@ bool importNeo4j(const ToolInit& tool, const FileUtils::Path& filepath) {
 
 bool importJsonNeo4j(const ToolInit& tool, const FileUtils::Path& jsonDir) {
     BioLog::log(msg::INFO_NEO4J_IMPORT_JSON_FILES() << jsonDir.string());
-    TimerStat timer{"Neo4j: import"};
+    TimerStat timer {"Neo4j: import"};
 
     const FileUtils::Path statsFile = jsonDir / "stats.json";
     const FileUtils::Path nodePropertiesFile = jsonDir / "nodeProperties.json";
@@ -200,63 +200,16 @@ bool importJsonNeo4j(const ToolInit& tool, const FileUtils::Path& jsonDir) {
     }
 
     // Initialization of the parser
-    JsonParser parser{};
+    JsonParser parser {};
     parser.setReducedOutput(true);
     const JsonParsingStats& stats = parser.getStats();
-    std::string data;
 
-    FileUtils::readContent(statsFile, data);
-
-    if (!parser.parse(data, JsonParser::Format::Neo4j4_Stats)) {
+    if (!parser.parseJsonDir(jsonDir, JsonParser::DirFormat::Neo4j4)) {
         return false;
     }
 
     Log::BioLog::log(msg::INFO_NEO4J_NODE_COUNT() << stats.nodeCount);
     Log::BioLog::log(msg::INFO_NEO4J_EDGE_COUNT() << stats.edgeCount);
-
-    // Parsing node properties data
-    FileUtils::readContent(nodePropertiesFile, data);
-
-    if (!parser.parse(data, JsonParser::Format::Neo4j4_NodeProperties)) {
-        return false;
-    }
-
-    // Nodes
-    std::vector<FileUtils::Path> nodeFiles;
-    FileUtils::listFiles(jsonDir, nodeFiles);
-    std::regex nodeRegex{"nodes_[0-9]*.json"};
-
-    for (const FileUtils::Path& path : nodeFiles) {
-        if (std::regex_search(path.string(), nodeRegex)) {
-            FileUtils::readContent(path, data);
-
-            if (!parser.parse(data, JsonParser::Format::Neo4j4_Nodes)) {
-                return false;
-            }
-        }
-    }
-
-    // Parsing edge properties data
-    FileUtils::readContent(edgePropertiesFile, data);
-
-    if (!parser.parse(data, JsonParser::Format::Neo4j4_EdgeProperties)) {
-        return false;
-    }
-
-    // Edges
-    std::vector<FileUtils::Path> edgeFiles;
-    FileUtils::listFiles(jsonDir, edgeFiles);
-    std::regex edgeRegex{"edges_[0-9]*.json"};
-
-    for (const FileUtils::Path& path : edgeFiles) {
-        if (std::regex_search(path.string(), edgeRegex)) {
-            FileUtils::readContent(path, data);
-
-            if (!parser.parse(data, JsonParser::Format::Neo4j4_Edges)) {
-                return false;
-            }
-        }
-    }
 
     Log::BioLog::log(msg::INFO_NEO4J_NODE_PROP_ERROR_COUNT()
                      << stats.nodePropErrors);

@@ -5,6 +5,7 @@
 #include <set>
 
 #include "DBEntityType.h"
+#include "Comparator.h"
 
 #include "Range.h"
 
@@ -18,7 +19,8 @@ class NodeType : public DBEntityType {
 public:
     friend DB;
     friend Writeback;
-    using EdgeTypes = std::set<EdgeType*, DBObject::Comparator>;
+    friend Comparator<NodeType>;
+    using EdgeTypes = std::set<EdgeType*, DBObject::Sorter>;
     using EdgeTypeRange = STLRange<EdgeTypes>;
 
     EdgeTypeRange inEdgeTypes() const;

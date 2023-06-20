@@ -4,6 +4,7 @@
 
 #include <set>
 
+#include "Comparator.h"
 #include "DBEntity.h"
 
 namespace db {
@@ -17,7 +18,8 @@ class Edge : public DBEntity {
 public:
     friend Network;
     friend Writeback;
-    using Set = std::set<Edge*, DBObject::Comparator>;
+    friend Comparator<Edge>;
+    using Set = std::set<Edge*, DBObject::Sorter>;
 
     EdgeType* getType() const { return (EdgeType*)DBEntity::getType(); }
     Node* getSource() const { return _source; }
