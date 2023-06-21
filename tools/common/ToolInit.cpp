@@ -70,6 +70,4 @@ void ToolInit::init(int argc, const char** argv) {
 
     // Init PerfStat
     PerfStat::init(_reportsDir/(_toolName + ".perf"));
-
-    _argParser.parse(argc, argv);
 }

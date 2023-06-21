@@ -296,25 +296,15 @@ int main(int argc, const char** argv) {
 
     toolInit.init(argc, argv);
 
-    std::string neo4jFile;
-    std::string jsonNeo4jDir;
-
     for (const auto& option : argParser.options()) {
         const auto& optName = option.first;
         if (optName == "neo4j") {
-            neo4jFile = option.second;
+            importNeo4j(toolInit, option.second);
         }
+
         if (optName == "jsonNeo4j") {
-            jsonNeo4jDir = option.second;
+            importJsonNeo4j(toolInit, option.second);
         }
-    }
-
-    if (!neo4jFile.empty()) {
-        importNeo4j(toolInit, neo4jFile);
-    }
-
-    if (!jsonNeo4jDir.empty()) {
-        importJsonNeo4j(toolInit, jsonNeo4jDir);
     }
 
     BioLog::printSummary();
