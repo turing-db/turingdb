@@ -81,7 +81,7 @@ MSG_ERROR(ERROR_JSON_INCORRECT_TYPE, 2024,
 
 // Warnings
 MSG_WARNING(WARNING_JSON_INCORRECT_TYPE, 2025,
-            "During JSON parsing, type was interpreted as '$0' instead of '$1'")
+            "During JSON parsing, value '$0' of type '$1' was interpreted as '$2")
 
 
 

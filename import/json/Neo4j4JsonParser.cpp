@@ -79,10 +79,10 @@ static bool isExpectedType(const JsonObject& value) {
     if constexpr (std::is_same<T, std::string>()) {
         return value.type() == JsonType::string;
     } else if constexpr (std::is_same<T, int64_t>()) {
-        return value.type() == JsonType::number_integer;
+        return value.type() == JsonType::number_integer
+            || value.type() == JsonType::number_unsigned;
     } else if constexpr (std::is_same<T, uint64_t>()) {
-        return value.type() == JsonType::number_integer ||
-               value.type() == JsonType::number_unsigned;
+        return value.type() == JsonType::number_unsigned;
     } else if constexpr (std::is_same<T, double>()) {
         return value.type() == JsonType::number_float;
     } else if constexpr (std::is_same<T, bool>()) {
@@ -106,7 +106,11 @@ static T convert(const JsonObject& value) {
         return std::stoi(value.dump());
 
     } else if constexpr (std::is_same<T, uint64_t>()) {
-        return std::stoul(value.dump());
+        std::string val = value.dump();
+        if (std::stoi(val) < 0) {
+            throw std::bad_cast {};
+        }
+        return std::stoul(val);
 
     } else if constexpr (std::is_same<T, double>()) {
         return std::stof(value.dump());
@@ -129,10 +133,6 @@ static T castFromJsonType(JsonParsingStats& stats, const JsonObject& value) {
     T toReturn;
 
     if (!isExpectedType<T>(value)) {
-        Log::BioLog::log(msg::WARNING_JSON_INCORRECT_TYPE()
-                         << stlTypes.at(typeid(T).name())
-                         << jsonTypes.at(value.type()));
-
         toReturn = convert<T>(value);
         stats.nodePropWarnings++;
     } else {
@@ -166,10 +166,18 @@ static void handleProperty(const PropertyContext& c) {
             c.stats.illformedNodeProps += 1;
         }
     } catch (const std::exception& e) {
-        Log::BioLog::log(msg::ERROR_JSON_INCORRECT_TYPE()
-                         << c.val.dump() << c.propName
-                         << jsonTypes.at(c.val.type())
-                         << stlTypes.at(typeid(T).name()));
+        const std::string& jsonType = jsonTypes.at(c.val.type());
+        const std::string& stlType = stlTypes.at(typeid(T).name());
+        const std::string val = c.val.dump() + jsonType + stlType;
+
+        if (c.stats.propErrors.find(val) == c.stats.propErrors.end()) {
+            Log::BioLog::log(msg::ERROR_JSON_INCORRECT_TYPE()
+                             << c.val.dump()
+                             << c.propName
+                             << jsonType
+                             << stlType);
+            c.stats.propErrors.emplace(std::move(val));
+        }
         c.stats.nodePropErrors++;
     }
 }
@@ -227,8 +235,9 @@ bool Neo4j4JsonParser::parseNodeProperties(const std::string& data) {
         }
 
         if (!_wb->addPropertyType(nt, propName, valType)) {
-            Log::BioLog::echo("Problem with property type [" + propName +
-                              "] for node type [" + nt->getName() + "]");
+            Log::BioLog::echo(
+                "Problem with property type ["
+                + propName + "] for node type [" + nt->getName() + "]");
             _stats.nodePropErrors += 1;
         }
     }
@@ -318,8 +327,8 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data) {
                 default: {
                     // Something went wront
                     Log::BioLog::echo("FATAL ERROR, SHOULD NOT OCCUR: Invalid "
-                                      "property type: " +
-                                      propName);
+                                      "property type: "
+                                      + propName);
                     _stats.nodePropErrors += 1;
                     break;
                 }
@@ -406,8 +415,8 @@ bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
 
         if (!_wb->addPropertyType(et, propName, valType)) {
             Log::BioLog::echo(
-                "FATAL ERROR, SHOULD NOT OCCUR: Invalid property type: " +
-                propName + "for edge type: " + et->getName());
+                "FATAL ERROR, SHOULD NOT OCCUR: Invalid property type: "
+                + propName + "for edge type: " + et->getName());
 
             _stats.edgePropErrors += 1;
         }
@@ -501,8 +510,8 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
                 default: {
                     // Something went wront
                     Log::BioLog::echo("FATAL ERROR, SHOULD NOT OCCUR: Invalid "
-                                      "property type: " +
-                                      propName);
+                                      "property type: "
+                                      + propName);
 
                     _stats.nodePropErrors += 1;
                     break;

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <unordered_set>
+#include <string>
 
 struct JsonParsingStats {
     size_t nodeCount = 0;
@@ -18,6 +20,8 @@ struct JsonParsingStats {
     // necessary during parsing of a property
     size_t nodePropWarnings = 0;
     size_t edgePropWarnings = 0;
+
+    std::unordered_set<std::string> propErrors;
 
     // Amount of properties that were ignored due to unsupported type
     size_t unsupportedNodeProps = 0;
