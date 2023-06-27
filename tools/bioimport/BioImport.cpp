@@ -33,11 +33,11 @@ int main(int argc, const char** argv) {
     for (const auto& option : argParser.options()) {
         const auto& optName = option.first;
         if (optName == "neo4j") {
-            Neo4jImport::importNeo4j(toolInit.getOutputsDir(), neo4jFile);
+            Neo4jImport::importNeo4j(toolInit.getOutputsDir(), option.second);
         }
 
         if (optName == "jsonNeo4j") {
-            Neo4jImport::importJsonNeo4j(toolInit.getOutputsDir(), jsonNeo4jDir);
+            Neo4jImport::importJsonNeo4j(toolInit.getOutputsDir(), option.second);
         }
     }
 
