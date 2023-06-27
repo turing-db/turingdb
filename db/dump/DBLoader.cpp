@@ -7,6 +7,7 @@
 #include "MsgDB.h"
 #include "StringIndexLoader.h"
 #include "TypeLoader.h"
+#include "TimerStat.h"
 
 using namespace db;
 using namespace Log;
