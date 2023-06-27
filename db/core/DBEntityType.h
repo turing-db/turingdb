@@ -5,6 +5,7 @@
 #include "Comparator.h"
 #include "DBType.h"
 
+#include "PropertyType.h"
 #include "StringRef.h"
 #include "Range.h"
 
@@ -15,7 +16,7 @@ class Writeback;
 class DBEntityType : public DBType {
 public:
     friend Writeback;
-    friend Comparator<DBEntityType>;
+    friend DBComparator;
     using PropertyTypes = std::map<StringRef, PropertyType*>;
     using PropertyTypeRange = STLIndexRange<PropertyTypes>;
 

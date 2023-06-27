@@ -11,11 +11,7 @@ set(db_sources
             Node.cpp
             Property.cpp
             Edge.cpp
-            Comparators/Containers.cpp
-            Comparators/BaseClasses.cpp
-            Comparators/MainObjects.cpp
-            Comparators/Types.cpp
-            Comparators/Entities.cpp
+            Comparator.cpp
 
             ValueType.cpp
             Value.cpp

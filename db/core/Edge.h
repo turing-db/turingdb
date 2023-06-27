@@ -18,7 +18,7 @@ class Edge : public DBEntity {
 public:
     friend Network;
     friend Writeback;
-    friend Comparator<Edge>;
+    friend DBComparator;
     using Set = std::set<Edge*, DBObject::Sorter>;
 
     EdgeType* getType() const { return (EdgeType*)DBEntity::getType(); }

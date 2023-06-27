@@ -14,7 +14,7 @@
 
 namespace db {
 
-TypeDumper::TypeDumper(db::DB* db, const FileUtils::Path& indexPath)
+TypeDumper::TypeDumper(const db::DB* db, const FileUtils::Path& indexPath)
     : _indexPath(indexPath),
       _db(db)
 {

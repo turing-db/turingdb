@@ -163,7 +163,7 @@ PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
         return nullptr;
     }
 
-    const DBIndex propertyTypeIndex = _db->propertyTypeIndexFromExisting(id);
+    const DBIndex propertyTypeIndex = _db->allocPropertyTypeIndexFromExisting(id);
     PropertyType* propType = new PropertyType(propertyTypeIndex, dbType, name, type);
     dbType->addPropertyType(propType);
     return propType;

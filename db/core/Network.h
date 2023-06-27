@@ -21,7 +21,7 @@ class Network : public DBObject {
 public:
     friend DB;
     friend Writeback;
-    friend Comparator<Network>;
+    friend DBComparator;
     friend EntityDumper;
     using Nodes = std::vector<Node*>;
     using Edges = std::vector<Edge*>;

@@ -1,66 +1,33 @@
 #pragma once
 
-#include <concepts>
-
 namespace db {
-
-// BaseClasses
-class DBObject;
-class DBType;
-class DBEntityType;
-class DBEntity;
-
-// MainObjects
 class DB;
-class Network;
-class Value;
-class Property;
 
-// Types
-class NodeType;
-class EdgeType;
-class ValueType;
-class PropertyType;
+struct DBComparator {
+public:
+    static bool same(const DB* db1, const DB* db2);
 
-// Entities
-class Node;
-class Edge;
-
-template <typename T>
-concept IterableType = requires(T v) {
-    v.cbegin();
-    v.cend();
-};
-
-template <typename T>
-concept ComparableType = requires(T v) {
-    // Base classes
-       std::same_as<T, DBObject>
-    || std::same_as<T, DBType>
-    || std::same_as<T, DBEntityType>
-    || std::same_as<T, DBEntity>
-
-    // Main objects
-    || std::same_as<T, DB>
-    || std::same_as<T, Network>
-    || std::same_as<T, Value>
-    || std::same_as<T, Property>
-
-    // Types
-    || std::same_as<T, NodeType>
-    || std::same_as<T, EdgeType>
-    || std::same_as<T, ValueType>
-    || std::same_as<T, PropertyType>
-
-    // Entities
-    || std::same_as<T, Node>
-    || std::same_as<T, Edge>;
-};
-
-template <typename T>
-    requires IterableType<T> || ComparableType<T>
-struct Comparator {
+protected:
+    template <typename T>
     static bool same(const T* obj1, const T* obj2);
+
+    /* @brief Compares std::map<StringRef, U*> objects
+     *
+     * This is a deep comparison since DBComparator::same<U> is called
+     * For example, compareMappedContainers<PropertyTypes> compares
+     * the property types owners, value types and names. Note that the keys
+     * (StringRef) are not compared since DBComparator::same<U> already compares
+     * the names stored in U
+     * */
+    template <typename T>
+    static bool deepCompareMaps(const T* c1, const T* c2);
+
+    /* @brief Compares std::vector<U*> objects
+     *
+     * This is a deep comparison since DBComparator::same<U> is called
+     * */
+    template <typename T>
+    static bool deepCompareVectors(const T* c1, const T* c2);
 };
 
 } // namespace db

@@ -86,7 +86,7 @@ DBIndex DB::allocPropertyTypeIndex() {
     return DBIndex(propertyTypeID);
 }
 
-DBIndex DB::propertyTypeIndexFromExisting(DBIndex::ID id) {
+DBIndex DB::allocPropertyTypeIndexFromExisting(DBIndex::ID id) {
     if (id >= _nextFreePropertyTypeID) {
         _nextFreePropertyTypeID = id + 1;
     }

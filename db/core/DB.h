@@ -24,7 +24,7 @@ public:
     friend Writeback;
     friend DBLoader;
     friend DBDumper;
-    friend Comparator<DB>;
+    friend DBComparator;
     using Networks = std::map<StringRef, Network*>;
     using NodeTypes = std::map<StringRef, NodeType*>;
     using EdgeTypes = std::map<StringRef, EdgeType*>;
@@ -70,7 +70,7 @@ private:
     DBIndex allocNodeTypeIndex();
     DBIndex allocEdgeTypeIndex();
     DBIndex allocPropertyTypeIndex();
-    DBIndex propertyTypeIndexFromExisting(DBIndex::ID id);
+    DBIndex allocPropertyTypeIndexFromExisting(DBIndex::ID id);
 };
 
 }

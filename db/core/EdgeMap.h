@@ -13,7 +13,7 @@ class EdgeType;
 
 class EdgeMap {
 public:
-    friend Comparator<EdgeMap>;
+    friend DBComparator;
     using EdgeVector = std::vector<Edge*>;
     using Edges = std::map<const EdgeType*, EdgeVector, DBObject::Sorter>;
     using EdgeVectorRange = STLRange<EdgeVector>;

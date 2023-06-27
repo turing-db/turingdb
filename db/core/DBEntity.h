@@ -11,11 +11,12 @@
 namespace db {
 
 class Writeback;
+class DBEntityType;
 
 class DBEntity : public DBObject {
 public:
     friend Writeback;
-    friend Comparator<DBEntity>;
+    friend DBComparator;
     using Properties = std::map<const PropertyType*, Value, DBObject::Sorter>;
     using PropertyRange = STLRange<Properties>;
 

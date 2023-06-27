@@ -19,7 +19,7 @@ class EdgeType : public DBEntityType {
 public:
     friend DB;
     friend Writeback;
-    friend Comparator<EdgeType>;
+    friend DBComparator;
     using NodeTypes = std::set<NodeType*, DBObject::Sorter>;
     using NodeTypeRange = STLRange<NodeTypes>;
 

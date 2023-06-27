@@ -5,6 +5,7 @@
 #include "Edge.h"
 #include "EdgeType.h"
 #include "MsgCommon.h"
+#include "MsgDB.h"
 #include "Network.h"
 #include "Node.h"
 #include "NodeType.h"
@@ -20,7 +21,7 @@
 namespace db {
 static constexpr inline size_t entityCountLimit = 100000;
 
-EntityDumper::EntityDumper(db::DB* db, const FileUtils::Path& indexPath)
+EntityDumper::EntityDumper(const db::DB* db, const FileUtils::Path& indexPath)
     : _indexPath(indexPath),
       _db(db)
 {
@@ -51,8 +52,8 @@ bool EntityDumper::dump() {
         auto diskNetwork = networksBuilder[i];
         const auto& nodes = net->_nodes;
         const auto& edges = net->_edges;
-        size_t nodeCount = nodes.size();
-        size_t edgeCount = edges.size();
+        const size_t nodeCount = nodes.size();
+        const size_t edgeCount = edges.size();
         size_t nodeCountLeft = nodeCount;
         size_t edgeCountLeft = edgeCount;
 
@@ -124,15 +125,11 @@ bool EntityDumper::dump() {
                             break;
                         }
                         case ValueType::VK_INVALID: {
-                            Log::BioLog::echo(
-                                "[FATAL ERROR, SHOULD NOT OCCUR] An invalid "
-                                "property was encountered when dumping database");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
                             return false;
                         }
                         case ValueType::_SIZE: {
-                            Log::BioLog::echo(
-                                "[FATAL ERROR, SHOULD NOT OCCUR] An invalid "
-                                "property was encountered when dumping database");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
                             return false;
                         }
                     }
@@ -198,15 +195,11 @@ bool EntityDumper::dump() {
                             break;
                         }
                         case ValueType::VK_INVALID: {
-                            Log::BioLog::echo(
-                                "[FATAL ERROR, SHOULD NOT OCCUR] An invalid "
-                                "property was encountered when dumping database");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
                             return false;
                         }
                         case ValueType::_SIZE: {
-                            Log::BioLog::echo(
-                                "[FATAL ERROR, SHOULD NOT OCCUR] An invalid "
-                                "property was encountered when dumping database");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
                             return false;
                         }
                     }

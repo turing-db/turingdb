@@ -16,7 +16,7 @@
 
 using namespace db;
 
-class ComparatorTest : public ::testing::Test {
+class ComparatorTest : public ::testing::Test, protected DBComparator {
 protected:
     void SetUp() override {
         const testing::TestInfo* const testInfo =
@@ -50,19 +50,19 @@ TEST_F(ComparatorTest, ValueComparison) {
     Value v2 = Value::createUnsigned(5);
     Value v3 = Value::createInt(6);
     Value v4 = Value::createInt(5);
-    ASSERT_TRUE(Comparator<Value>::same(&v1, &v1));
-    ASSERT_FALSE(Comparator<Value>::same(&v1, &v2));
-    ASSERT_FALSE(Comparator<Value>::same(&v1, &v3));
-    ASSERT_TRUE(Comparator<Value>::same(&v1, &v4));
+    ASSERT_TRUE(DBComparator::same<Value>(&v1, &v1));
+    ASSERT_FALSE(DBComparator::same<Value>(&v1, &v2));
+    ASSERT_FALSE(DBComparator::same<Value>(&v1, &v3));
+    ASSERT_TRUE(DBComparator::same<Value>(&v1, &v4));
 }
 
 TEST_F(ComparatorTest, ValueTypeComparison) {
     ValueType vt1 {ValueType::VK_INT};
     ValueType vt2 {ValueType::VK_UNSIGNED};
     ValueType vt3 {ValueType::VK_INT};
-    ASSERT_TRUE(Comparator<ValueType>::same(&vt1, &vt1));
-    ASSERT_FALSE(Comparator<ValueType>::same(&vt1, &vt2));
-    ASSERT_TRUE(Comparator<ValueType>::same(&vt1, &vt3));
+    ASSERT_TRUE(DBComparator::same<ValueType>(&vt1, &vt1));
+    ASSERT_FALSE(DBComparator::same<ValueType>(&vt1, &vt2));
+    ASSERT_TRUE(DBComparator::same<ValueType>(&vt1, &vt3));
 }
 
 TEST_F(ComparatorTest, PropertyTypeComparison) {
@@ -79,15 +79,15 @@ TEST_F(ComparatorTest, PropertyTypeComparison) {
     PropertyType* pType3 = wb.addPropertyType(nt2, db->getString("PropType1"),
                                               ValueType::stringType());
 
-    ASSERT_TRUE(Comparator<DBType>::same((DBType*)pType1, (DBType*)pType1));
-    ASSERT_FALSE(Comparator<DBType>::same((DBType*)pType1, (DBType*)pType2));
+    ASSERT_TRUE(DBComparator::same<DBType>((DBType*)pType1, (DBType*)pType1));
+    ASSERT_FALSE(DBComparator::same<DBType>((DBType*)pType1, (DBType*)pType2));
 
-    ASSERT_TRUE(Comparator<DBObject>::same((DBObject*)pType1, (DBObject*)pType1));
-    ASSERT_FALSE(Comparator<DBObject>::same((DBObject*)pType1, (DBObject*)pType2));
+    ASSERT_TRUE(DBComparator::same<DBObject>((DBObject*)pType1, (DBObject*)pType1));
+    ASSERT_FALSE(DBComparator::same<DBObject>((DBObject*)pType1, (DBObject*)pType2));
 
-    ASSERT_TRUE(Comparator<PropertyType>::same(pType1, pType1));
-    ASSERT_FALSE(Comparator<PropertyType>::same(pType1, pType2));
-    ASSERT_FALSE(Comparator<PropertyType>::same(pType1, pType3));
+    ASSERT_TRUE(DBComparator::same<PropertyType>(pType1, pType1));
+    ASSERT_FALSE(DBComparator::same<PropertyType>(pType1, pType2));
+    ASSERT_FALSE(DBComparator::same<PropertyType>(pType1, pType3));
 
     // Second DB
     DB* db2 = DB::create();
@@ -102,9 +102,9 @@ TEST_F(ComparatorTest, PropertyTypeComparison) {
     PropertyType* pType3_2 = wb2.addPropertyType(nt2_2, db2->getString("PropType1"),
                                                  ValueType::stringType());
 
-    ASSERT_TRUE(Comparator<PropertyType>::same(pType1, pType1_2));
-    ASSERT_TRUE(Comparator<PropertyType>::same(pType2, pType2_2));
-    ASSERT_TRUE(Comparator<PropertyType>::same(pType3, pType3_2));
+    ASSERT_TRUE(DBComparator::same<PropertyType>(pType1, pType1_2));
+    ASSERT_TRUE(DBComparator::same<PropertyType>(pType2, pType2_2));
+    ASSERT_TRUE(DBComparator::same<PropertyType>(pType3, pType3_2));
 
     delete db;
     delete db2;
@@ -123,22 +123,22 @@ TEST_F(ComparatorTest, NodeTypeComparison) {
     wb.addPropertyType(nt1, db->getString("PropType2"), ValueType::stringType());
     wb.addPropertyType(nt2, db->getString("PropType1"), ValueType::stringType());
 
-    ASSERT_TRUE(Comparator<DBEntityType>::same((DBEntityType*)nt1, (DBEntityType*)nt1));
-    ASSERT_FALSE(Comparator<DBEntityType>::same((DBEntityType*)nt1, (DBEntityType*)nt2));
+    ASSERT_TRUE(DBComparator::same<DBEntityType>((DBEntityType*)nt1, (DBEntityType*)nt1));
+    ASSERT_FALSE(DBComparator::same<DBEntityType>((DBEntityType*)nt1, (DBEntityType*)nt2));
 
-    ASSERT_TRUE(Comparator<DBType>::same((DBType*)nt1, (DBType*)nt1));
-    ASSERT_FALSE(Comparator<DBType>::same((DBType*)nt1, (DBType*)nt2));
+    ASSERT_TRUE(DBComparator::same<DBType>((DBType*)nt1, (DBType*)nt1));
+    ASSERT_FALSE(DBComparator::same<DBType>((DBType*)nt1, (DBType*)nt2));
 
-    ASSERT_TRUE(Comparator<DBObject>::same((DBObject*)nt1, (DBObject*)nt1));
-    ASSERT_FALSE(Comparator<DBObject>::same((DBObject*)nt1, (DBObject*)nt2));
+    ASSERT_TRUE(DBComparator::same<DBObject>((DBObject*)nt1, (DBObject*)nt1));
+    ASSERT_FALSE(DBComparator::same<DBObject>((DBObject*)nt1, (DBObject*)nt2));
 
-    ASSERT_TRUE(Comparator<NodeType>::same(nt1, nt1));
-    ASSERT_TRUE(Comparator<NodeType>::same(nt2, nt2));
-    ASSERT_TRUE(Comparator<NodeType>::same(nt3, nt3));
-    ASSERT_TRUE(Comparator<NodeType>::same(nt4, nt4));
-    ASSERT_FALSE(Comparator<NodeType>::same(nt1, nt2));
-    ASSERT_FALSE(Comparator<NodeType>::same(nt1, nt3));
-    ASSERT_FALSE(Comparator<NodeType>::same(nt1, nt4));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt1, nt1));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt2, nt2));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt3, nt3));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt4, nt4));
+    ASSERT_FALSE(DBComparator::same<NodeType>(nt1, nt2));
+    ASSERT_FALSE(DBComparator::same<NodeType>(nt1, nt3));
+    ASSERT_FALSE(DBComparator::same<NodeType>(nt1, nt4));
 
     // Second DB
     DB* db2 = DB::create();
@@ -153,10 +153,10 @@ TEST_F(ComparatorTest, NodeTypeComparison) {
     wb2.addPropertyType(nt1_2, db2->getString("PropType2"), ValueType::stringType());
     wb2.addPropertyType(nt2_2, db2->getString("PropType1"), ValueType::stringType());
 
-    ASSERT_TRUE(Comparator<NodeType>::same(nt1, nt1_2));
-    ASSERT_TRUE(Comparator<NodeType>::same(nt2, nt2_2));
-    ASSERT_TRUE(Comparator<NodeType>::same(nt3, nt3_2));
-    ASSERT_TRUE(Comparator<NodeType>::same(nt4, nt4_2));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt1, nt1_2));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt2, nt2_2));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt3, nt3_2));
+    ASSERT_TRUE(DBComparator::same<NodeType>(nt4, nt4_2));
 
     delete db;
     delete db2;
@@ -181,22 +181,22 @@ TEST_F(ComparatorTest, EdgeTypeComparison) {
     wb.addPropertyType(et2, db->getString("PropType1"),
                        ValueType::stringType());
 
-    ASSERT_TRUE(Comparator<DBEntityType>::same((DBEntityType*)et1, (DBEntityType*)et1));
-    ASSERT_FALSE(Comparator<DBEntityType>::same((DBEntityType*)et1, (DBEntityType*)et2));
+    ASSERT_TRUE(DBComparator::same<DBEntityType>((DBEntityType*)et1, (DBEntityType*)et1));
+    ASSERT_FALSE(DBComparator::same<DBEntityType>((DBEntityType*)et1, (DBEntityType*)et2));
 
-    ASSERT_TRUE(Comparator<DBType>::same((DBType*)et1, (DBType*)et1));
-    ASSERT_FALSE(Comparator<DBType>::same((DBType*)et1, (DBType*)et2));
+    ASSERT_TRUE(DBComparator::same<DBType>((DBType*)et1, (DBType*)et1));
+    ASSERT_FALSE(DBComparator::same<DBType>((DBType*)et1, (DBType*)et2));
 
-    ASSERT_TRUE(Comparator<DBObject>::same((DBObject*)et1, (DBObject*)et1));
-    ASSERT_FALSE(Comparator<DBObject>::same((DBObject*)et1, (DBObject*)et2));
+    ASSERT_TRUE(DBComparator::same<DBObject>((DBObject*)et1, (DBObject*)et1));
+    ASSERT_FALSE(DBComparator::same<DBObject>((DBObject*)et1, (DBObject*)et2));
 
-    ASSERT_TRUE(Comparator<EdgeType>::same(et1, et1));
-    ASSERT_TRUE(Comparator<EdgeType>::same(et2, et2));
-    ASSERT_TRUE(Comparator<EdgeType>::same(et3, et3));
-    ASSERT_TRUE(Comparator<EdgeType>::same(et4, et4));
-    ASSERT_FALSE(Comparator<EdgeType>::same(et1, et2));
-    ASSERT_FALSE(Comparator<EdgeType>::same(et1, et3));
-    ASSERT_FALSE(Comparator<EdgeType>::same(et1, et4));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et1, et1));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et2, et2));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et3, et3));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et4, et4));
+    ASSERT_FALSE(DBComparator::same<EdgeType>(et1, et2));
+    ASSERT_FALSE(DBComparator::same<EdgeType>(et1, et3));
+    ASSERT_FALSE(DBComparator::same<EdgeType>(et1, et4));
 
     // Second DB
     DB* db2 = DB::create();
@@ -216,10 +216,10 @@ TEST_F(ComparatorTest, EdgeTypeComparison) {
     wb2.addPropertyType(et2_2, db2->getString("PropType1"),
                         ValueType::stringType());
 
-    ASSERT_TRUE(Comparator<EdgeType>::same(et1, et1_2));
-    ASSERT_TRUE(Comparator<EdgeType>::same(et2, et2_2));
-    ASSERT_TRUE(Comparator<EdgeType>::same(et3, et3_2));
-    ASSERT_TRUE(Comparator<EdgeType>::same(et4, et4_2));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et1, et1_2));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et2, et2_2));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et3, et3_2));
+    ASSERT_TRUE(DBComparator::same<EdgeType>(et4, et4_2));
 
     delete db;
     delete db2;
@@ -243,11 +243,6 @@ TEST_F(ComparatorTest, PropertyComparison) {
     Property p3 {pType3, Value::createUnsigned(5)};
     Property p4 {pType2, Value::createInt(5)};
 
-    ASSERT_TRUE(Comparator<Property>::same(&p1, &p1));
-    ASSERT_FALSE(Comparator<Property>::same(&p1, &p2));
-    ASSERT_FALSE(Comparator<Property>::same(&p1, &p3));
-    ASSERT_FALSE(Comparator<Property>::same(&p1, &p4));
-
     // Second DB
     DB* db2 = DB::create();
     Writeback wb2 {db2};
@@ -265,11 +260,6 @@ TEST_F(ComparatorTest, PropertyComparison) {
     Property p3_2 {pType3_2, Value::createUnsigned(5)};
     Property p4_2 {pType2_2, Value::createInt(5)};
 
-    ASSERT_TRUE(Comparator<Property>::same(&p1, &p1_2));
-    ASSERT_TRUE(Comparator<Property>::same(&p2, &p2_2));
-    ASSERT_TRUE(Comparator<Property>::same(&p3, &p3_2));
-    ASSERT_TRUE(Comparator<Property>::same(&p4, &p4_2));
-
     delete db;
     delete db2;
 }
@@ -280,16 +270,16 @@ TEST_F(ComparatorTest, NetworkComparison) {
     Writeback wb {db};
     Network* net1 = wb.createNetwork(db->getString("Network1"));
     Network* net2 = wb.createNetwork(db->getString("Network2"));
-    ASSERT_TRUE(Comparator<Network>::same(net1, net1));
-    ASSERT_FALSE(Comparator<Network>::same(net1, net2));
+    ASSERT_TRUE(DBComparator::same<Network>(net1, net1));
+    ASSERT_FALSE(DBComparator::same<Network>(net1, net2));
 
     // Second DB
     DB* db2 = DB::create();
     Writeback wb2 {db2};
     Network* net1_2 = wb2.createNetwork(db2->getString("Network1"));
     Network* net2_2 = wb2.createNetwork(db2->getString("Network2"));
-    ASSERT_TRUE(Comparator<Network>::same(net1, net1_2));
-    ASSERT_TRUE(Comparator<Network>::same(net2, net2_2));
+    ASSERT_TRUE(DBComparator::same<Network>(net1, net1_2));
+    ASSERT_TRUE(DBComparator::same<Network>(net2, net2_2));
 
     delete db;
     delete db2;
@@ -323,11 +313,11 @@ TEST_F(ComparatorTest, NodeComparison) {
     wb1.setProperty(n3_1, Property {pt1_1, Value::createInt(2)});
     wb1.setProperty(n3_1, Property {pt2_1, Value::createUnsigned(1)});
 
-    ASSERT_TRUE(Comparator<Node>::same(n1_1, n1_1));
-    ASSERT_TRUE(Comparator<Node>::same(n2_1, n2_1));
-    ASSERT_TRUE(Comparator<Node>::same(n3_1, n3_1));
-    ASSERT_FALSE(Comparator<Node>::same(n1_1, n2_1));
-    ASSERT_FALSE(Comparator<Node>::same(n1_1, n3_1));
+    ASSERT_TRUE(DBComparator::same<Node>(n1_1, n1_1));
+    ASSERT_TRUE(DBComparator::same<Node>(n2_1, n2_1));
+    ASSERT_TRUE(DBComparator::same<Node>(n3_1, n3_1));
+    ASSERT_FALSE(DBComparator::same<Node>(n1_1, n2_1));
+    ASSERT_FALSE(DBComparator::same<Node>(n1_1, n3_1));
 
     // Second DB
     DB* db2 = DB::create();
@@ -356,9 +346,9 @@ TEST_F(ComparatorTest, NodeComparison) {
     wb2.setProperty(n3_2, Property {pt1_2, Value::createInt(2)});
     wb2.setProperty(n3_2, Property {pt2_2, Value::createUnsigned(1)});
 
-    ASSERT_TRUE(Comparator<Node>::same(n1_1, n1_2));
-    ASSERT_TRUE(Comparator<Node>::same(n2_1, n2_2));
-    ASSERT_TRUE(Comparator<Node>::same(n3_1, n3_2));
+    ASSERT_TRUE(DBComparator::same<Node>(n1_1, n1_2));
+    ASSERT_TRUE(DBComparator::same<Node>(n2_1, n2_2));
+    ASSERT_TRUE(DBComparator::same<Node>(n3_1, n3_2));
 
     delete db1;
     delete db2;
@@ -396,9 +386,9 @@ TEST_F(ComparatorTest, EdgeComparison) {
     wb1.setProperty(e2_1, Property {pt3_1, Value::createInt(2)});
     wb1.setProperty(e2_1, Property {pt4_1, Value::createUnsigned(7)});
 
-    ASSERT_TRUE(Comparator<Edge>::same(e1_1, e1_1));
-    ASSERT_TRUE(Comparator<Edge>::same(e2_1, e2_1));
-    ASSERT_FALSE(Comparator<Edge>::same(e1_1, e2_1));
+    ASSERT_TRUE(DBComparator::same<Edge>(e1_1, e1_1));
+    ASSERT_TRUE(DBComparator::same<Edge>(e2_1, e2_1));
+    ASSERT_FALSE(DBComparator::same<Edge>(e1_1, e2_1));
 
     // Second DB
     DB* db2 = DB::create();
@@ -431,8 +421,8 @@ TEST_F(ComparatorTest, EdgeComparison) {
     wb2.setProperty(e2_2, Property {pt3_2, Value::createInt(2)});
     wb2.setProperty(e2_2, Property {pt4_2, Value::createUnsigned(7)});
 
-    ASSERT_TRUE(Comparator<Edge>::same(e1_1, e1_2));
-    ASSERT_TRUE(Comparator<Edge>::same(e2_1, e2_2));
+    ASSERT_TRUE(DBComparator::same<Edge>(e1_1, e1_2));
+    ASSERT_TRUE(DBComparator::same<Edge>(e2_1, e2_2));
 
     delete db1;
     delete db2;
@@ -442,9 +432,9 @@ TEST_F(ComparatorTest, DBComparison) {
     DB* db1 = cyberSecurityDB();
     DB* db2 = cyberSecurityDB();
 
-    Writeback wb1{db1};
-    Writeback wb2{db2};
-    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+    Writeback wb1 {db1};
+    Writeback wb2 {db2};
+    ASSERT_TRUE(DBComparator::same(db1, db2));
 
     Network* net1 = db1->getNetwork(db1->getString("Neo4jNetwork"));
     Network* net2 = db2->getNetwork(db2->getString("Neo4jNetwork"));
@@ -453,35 +443,35 @@ TEST_F(ComparatorTest, DBComparison) {
 
     NodeType* nt1 = wb1.createNodeType(db1->getString("NodeType"));
     ASSERT_TRUE(nt1);
-    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    ASSERT_FALSE(DBComparator::same(db1, db2));
     NodeType* nt2 = wb2.createNodeType(db2->getString("NodeType"));
     ASSERT_TRUE(nt2);
-    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+    ASSERT_TRUE(DBComparator::same(db1, db2));
 
     EdgeType* et1 = wb1.createEdgeType(db1->getString("EdgeType"), nt1, nt1);
     ASSERT_TRUE(et1);
-    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    ASSERT_FALSE(DBComparator::same(db1, db2));
     EdgeType* et2 = wb2.createEdgeType(db2->getString("EdgeType"), nt2, nt2);
     ASSERT_TRUE(et2);
-    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+    ASSERT_TRUE(DBComparator::same(db1, db2));
 
     Node* n11 = wb1.createNode(net1, nt1, db1->getString("Node1"));
     Node* n12 = wb1.createNode(net1, nt1, db1->getString("Node2"));
     ASSERT_TRUE(n11);
     ASSERT_TRUE(n12);
-    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    ASSERT_FALSE(DBComparator::same(db1, db2));
     Node* n21 = wb2.createNode(net2, nt2, db2->getString("Node1"));
     Node* n22 = wb2.createNode(net2, nt2, db2->getString("Node2"));
     ASSERT_TRUE(n21);
     ASSERT_TRUE(n22);
-    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+    ASSERT_TRUE(DBComparator::same(db1, db2));
 
     Edge* e1 = wb1.createEdge(et1, n11, n12);
     ASSERT_TRUE(e1);
-    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    ASSERT_FALSE(DBComparator::same(db1, db2));
     Edge* e2 = wb2.createEdge(et2, n21, n22);
     ASSERT_TRUE(e2);
-    ASSERT_TRUE(Comparator<DB>::same(db1, db2));
+    ASSERT_TRUE(DBComparator::same(db1, db2));
 
     // The order in which objects are pushed into the database matters1
     // For example:
@@ -491,7 +481,7 @@ TEST_F(ComparatorTest, DBComparison) {
     // EdgeType then NodeType
     wb2.createEdgeType(db2->getString("EdgeType2"), nt2, nt2);
     wb2.createNodeType(db2->getString("NodeType2"));
-    ASSERT_FALSE(Comparator<DB>::same(db1, db2));
+    ASSERT_FALSE(DBComparator::same(db1, db2));
 
     delete db1;
     delete db2;

@@ -1,11 +1,12 @@
 // Copyright 2023 Turing Biosystems Ltd.
 
-#include "Value.h"
-#include "BioAssert.h"
 #include <array>
 #include <string_view>
 #include <typeinfo>
 #include <unordered_map>
+
+#include "Value.h"
+#include "BioAssert.h"
 
 using namespace db;
 

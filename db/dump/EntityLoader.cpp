@@ -5,6 +5,7 @@
 #include "Edge.h"
 #include "EdgeType.h"
 #include "Network.h"
+#include "MsgDB.h"
 #include "Node.h"
 #include "NodeType.h"
 #include "Property.h"
@@ -98,15 +99,11 @@ bool EntityLoader::load(const StringIndexLoader& strLoader) {
                             break;
                         }
                         case (ValueType::VK_INVALID): {
-                            Log::BioLog::echo("[FATAL ERROR, SHOULD NOT OCCUR] An "
-                                              "invalid property "
-                                              "type was loaded from a dumped db");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
                             return false;
                         }
                         case (ValueType::_SIZE): {
-                            Log::BioLog::echo("[FATAL ERROR, SHOULD NOT OCCUR] An "
-                                              "invalid property "
-                                              "type was loaded from a dumped db");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
                             return false;
                         }
                     }
@@ -170,15 +167,11 @@ bool EntityLoader::load(const StringIndexLoader& strLoader) {
                             break;
                         }
                         case (ValueType::VK_INVALID): {
-                            Log::BioLog::echo("[FATAL ERROR, SHOULD NOT OCCUR] An "
-                                              "invalid property "
-                                              "type was loaded from a dumped db");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
                             return false;
                         }
                         case (ValueType::_SIZE): {
-                            Log::BioLog::echo("[FATAL ERROR, SHOULD NOT OCCUR] An "
-                                              "invalid property "
-                                              "type was loaded from a dumped db");
+                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
                             return false;
                         }
                     }

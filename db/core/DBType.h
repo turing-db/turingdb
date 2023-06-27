@@ -9,7 +9,7 @@ namespace db {
 
 class DBType : public DBObject {
 public:
-    friend Comparator<DBType>;
+    friend DBComparator;
 
     StringRef getName() const { return _name; }
 

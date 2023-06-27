@@ -23,4 +23,10 @@ MSG_INFO(ERROR_DB_DUMPING_DATABASE, 5006,
 MSG_INFO(ERROR_DB_LOADING_DATABASE, 5007,
          "Could not load Turing DB from $0")
 
+MSG_FATAL(FATAL_INVALID_PROPERTY_DUMP, 5008,
+         "Should not occur: Invalid property encountered while dumping db")
+
+MSG_FATAL(FATAL_INVALID_PROPERTY_LOAD, 5009,
+         "Should not occur: Invalid property encountered while loading db")
+
 }

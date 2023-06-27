@@ -8,7 +8,7 @@ namespace db {
 
 class ValueType {
 public:
-    friend Comparator<ValueType>;
+    friend DBComparator;
 
     enum ValueKind {
         VK_INVALID = 0,

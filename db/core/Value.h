@@ -19,7 +19,7 @@ concept SupportedType =
 
 class Value {
 public:
-    friend Comparator<Value>;
+    friend DBComparator;
 
     Value();
     ~Value();

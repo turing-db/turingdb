@@ -1,6 +1,5 @@
 set(bioimport_sources
-    BioImport.cpp
-    ThreadHandler.cpp)
+    BioImport.cpp)
 
 add_executable(bioimport ${bioimport_sources})
 

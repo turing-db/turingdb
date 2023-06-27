@@ -9,7 +9,7 @@ class PropertyType;
 
 class Property {
 public:
-    friend Comparator<Property>;
+    friend DBComparator;
 
     Property(const PropertyType* type, Value value);
     Property();

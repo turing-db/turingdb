@@ -60,7 +60,7 @@ TEST_F(DBLoaderTest, LoadDB) {
     Writeback wb2{db};
 
     ASSERT_TRUE(loader.load());
-    ASSERT_TRUE(Comparator<DB>::same(_db, db));
+    ASSERT_TRUE(DBComparator::same(_db, db));
 
     delete db;
 }

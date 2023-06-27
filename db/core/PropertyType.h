@@ -8,12 +8,13 @@
 namespace db {
 
 class Writeback;
+class DBEntityType;
 
 class PropertyType : public DBType {
 public:
     friend DBEntityType;
     friend Writeback;
-    friend Comparator<PropertyType>;
+    friend DBComparator;
 
     ValueType getValueType() const { return _valType; }
 

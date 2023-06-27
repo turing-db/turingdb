@@ -20,7 +20,7 @@ class Node : public DBEntity {
 public:
     friend Network;
     friend Writeback;
-    friend Comparator<Node>;
+    friend DBComparator;
     using EdgeMapRange = EdgeMap::EdgeRange;
     using EdgeRange = EdgeMap::EdgeVectorRange;
     using Set = std::set<Node*, DBObject::Sorter>;
