@@ -9,8 +9,6 @@ set(proto_headers ${CMAKE_CURRENT_BINARY_DIR}/APIService.pb.h)
 set(proto_grpc_srcs ${CMAKE_CURRENT_BINARY_DIR}/APIService.grpc.pb.cc)
 set(proto_grpc_headers ${CMAKE_CURRENT_BINARY_DIR}/APIService.grpc.pb.h)
 
-message(STATUS "Protobuf executable ${Protobuf_PROTOC_EXECUTABLE}")
-
 # Generate grpc cpp files
 add_custom_command(
     OUTPUT ${proto_srcs} ${proto_headers} ${proto_grpc_srcs} ${proto_grpc_headers}

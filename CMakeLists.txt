@@ -36,8 +36,6 @@ endif()
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_FEATURES} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "/turing/tools/lib/cmake")
-
 # Boost
 set(BOOST_VERSION boost-1.74)
 set(Boost_USE_STATIC_LIBS ON)
@@ -53,7 +51,10 @@ find_package(CURL REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
 # Protobuf
-find_package(protobuf REQUIRED)
+set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "")
+find_package(Protobuf REQUIRED
+    PATHS "/turing/tools/lib/cmake/protobuf")
+message(STATUS "Protobuf version ${Protobuf_VERSION}")
 
 # gRPC
 find_package(gRPC REQUIRED)
