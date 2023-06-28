@@ -22,13 +22,9 @@ void RPCServer::addService(grpc::Service* service) {
 }
 
 void RPCServer::run() {
-    grpc::ServerBuilder builder;
+    gpr_cpu_set_num_cores(_config.getConcurrency());
 
-    // Why gRPC does not take into account the number of threads??
-    grpc::ResourceQuota resQuota;
-    resQuota.SetMaxThreads(_config.getConcurrency());
-    resQuota.Resize(_config.getConcurrency());
-    builder.SetResourceQuota(resQuota);
+    grpc::ServerBuilder builder;
 
     // Configure server address and port
     const std::string addrStr = _config.getAddress() + ":" + std::to_string(_config.getPort());
