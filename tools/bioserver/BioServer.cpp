@@ -1,20 +1,17 @@
 #include "ToolInit.h"
 
 #include "APIServer.h"
-#include "APIServerConfig.h"
 
 #include "BioLog.h"
 
 using namespace Log;
 
 int main(int argc, const char** argv) {
-    ToolInit toolInit("bioapi");
+    ToolInit toolInit("bioserver");
 
     toolInit.init(argc, argv);
 
-    APIServerConfig config;
-
-    APIServer server(config);
+    APIServer server;
     server.run();
 
     BioLog::printSummary();

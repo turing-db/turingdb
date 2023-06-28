@@ -22,6 +22,7 @@ public:                                             \
 // MsgUIServer  3000
 // MsgRun       4000
 // MsgDB        5000
+// MsgRPCServer 6000
 
 namespace Log {
 

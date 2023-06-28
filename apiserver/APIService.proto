@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+service APIService {
+    rpc GetStatus (StatusRequest) returns (StatusReply) {}
+}
+
+message StatusRequest {
+}
+
+message StatusReply {
+    string msg = 1;
+}

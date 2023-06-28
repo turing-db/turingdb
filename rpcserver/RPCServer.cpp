@@ -1,0 +1,51 @@
+#include "RPCServer.h"
+
+#include <grpcpp/grpcpp.h>
+
+#include "RPCServerConfig.h"
+
+#include "BioLog.h"
+#include "MsgRPCServer.h"
+
+using namespace Log;
+
+RPCServer::RPCServer(const RPCServerConfig& config)
+    : _config(config)
+{
+}
+
+RPCServer::~RPCServer() {
+}
+
+void RPCServer::addService(grpc::Service* service) {
+    _services.push_back(service);
+}
+
+void RPCServer::run() {
+    grpc::ServerBuilder builder;
+
+    // Why gRPC does not take into account the number of threads??
+    grpc::ResourceQuota resQuota;
+    resQuota.SetMaxThreads(_config.getConcurrency());
+    resQuota.Resize(_config.getConcurrency());
+    builder.SetResourceQuota(resQuota);
+
+    // Configure server address and port
+    const std::string addrStr = _config.getAddress() + ":" + std::to_string(_config.getPort());
+    builder.AddListeningPort(addrStr, grpc::InsecureServerCredentials());
+
+    // Register services
+    for (auto service : _services) {
+        builder.RegisterService(service);
+    }
+
+    std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
+    if (!server) {
+        BioLog::log(msg::ERROR_RPC_SERVER_FAILED_TO_START() << addrStr);
+        return;
+    }
+
+    BioLog::log(msg::INFO_RPC_SERVER_STARTED() << addrStr);
+
+    server->Wait();
+}

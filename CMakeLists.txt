@@ -36,6 +36,8 @@ endif()
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_FEATURES} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "/turing/tools/lib/cmake")
+
 # Boost
 set(BOOST_VERSION boost-1.74)
 set(Boost_USE_STATIC_LIBS ON)
@@ -50,6 +52,12 @@ find_package(CURL REQUIRED)
 # Python
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
+# Protobuf
+find_package(protobuf REQUIRED)
+
+# gRPC
+find_package(gRPC REQUIRED)
+
 # Root source directory
 set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${BIO_SOURCE_DIR})
@@ -61,6 +69,7 @@ add_subdirectory(build)
 add_subdirectory(common)
 add_subdirectory(logging)
 add_subdirectory(db)
+add_subdirectory(rpcserver)
 add_subdirectory(apiserver)
 #add_subdirectory(demo)
 add_subdirectory(formats)
