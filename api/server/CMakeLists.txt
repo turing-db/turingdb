@@ -3,7 +3,7 @@ set(apiserver_sources
         APIServiceImpl.cpp
         APIServer.cpp)
 
-set(proto_schema ${CMAKE_CURRENT_SOURCE_DIR}/APIService.proto)
+set(proto_schema ${TURING_API_PROTO_DIR}/APIService.proto)
 set(proto_srcs ${CMAKE_CURRENT_BINARY_DIR}/APIService.pb.cc)
 set(proto_headers ${CMAKE_CURRENT_BINARY_DIR}/APIService.pb.h)
 set(proto_grpc_srcs ${CMAKE_CURRENT_BINARY_DIR}/APIService.grpc.pb.cc)
@@ -15,7 +15,7 @@ add_custom_command(
     COMMAND ${Protobuf_PROTOC_EXECUTABLE}
     ARGS --grpc_out ${CMAKE_CURRENT_BINARY_DIR}
         --cpp_out ${CMAKE_CURRENT_BINARY_DIR}
-        -I ${CMAKE_CURRENT_SOURCE_DIR}
+        -I ${TURING_API_PROTO_DIR}
         --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
         ${proto_schema}
     DEPENDS ${proto_schema})

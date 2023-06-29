@@ -36,6 +36,8 @@ endif()
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_FEATURES} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
 # Boost
 set(BOOST_VERSION boost-1.74)
 set(Boost_USE_STATIC_LIBS ON)
@@ -59,6 +61,9 @@ message(STATUS "Protobuf version ${Protobuf_VERSION}")
 # gRPC
 find_package(gRPC REQUIRED)
 
+# Cython utilities
+include(CythonLibrary)
+
 # Root source directory
 set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${BIO_SOURCE_DIR})
@@ -71,7 +76,7 @@ add_subdirectory(common)
 add_subdirectory(logging)
 add_subdirectory(db)
 add_subdirectory(rpcserver)
-add_subdirectory(apiserver)
+add_subdirectory(api)
 #add_subdirectory(demo)
 add_subdirectory(formats)
 add_subdirectory(import)
