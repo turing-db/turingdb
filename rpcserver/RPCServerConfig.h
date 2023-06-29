@@ -17,6 +17,6 @@ public:
 
 private:
     std::string _serverAddr {"127.0.0.1"};
-    unsigned _port {50057};
+    unsigned _port {6666};
     unsigned _concurrency {1};
 };

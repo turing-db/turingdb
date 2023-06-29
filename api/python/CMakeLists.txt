@@ -17,7 +17,7 @@ add_custom_command(
     COMMAND python3
     ARGS
         -m grpc_tools.protoc
-        -I .
+        -I ${CMAKE_CURRENT_BINARY_DIR}
         --python_out=${CMAKE_CURRENT_BINARY_DIR}
         --pyi_out=${CMAKE_CURRENT_BINARY_DIR}
         --grpc_python_out=${CMAKE_CURRENT_BINARY_DIR}
