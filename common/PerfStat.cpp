@@ -1,7 +1,10 @@
 #include "PerfStat.h"
-#include "BioAssert.h"
 
 #include <iostream>
+#include <fstream>
+#include <string>
+
+#include "BioAssert.h"
 
 PerfStat* PerfStat::_instance = nullptr;
 
@@ -24,6 +27,7 @@ PerfStat* PerfStat::getInstance() {
 
 void PerfStat::destroy() {
     if (_instance) {
+        _instance->reportTotalMem();
         _instance->close();
         delete _instance;
     }
@@ -44,4 +48,32 @@ void PerfStat::open(const Path& logFile) {
 
 void PerfStat::close() {
     _outStream.close();
+}
+
+void PerfStat::reportTotalMem() {
+    if (!_instance) {
+        return;
+    }
+
+    const size_t memAmount = getReservedMemInMegabytes();
+    _outStream << '\n' << "Total virtual memory reserved at exit: "
+               << memAmount << "MB\n";
+}
+
+size_t PerfStat::getReservedMemInMegabytes() {
+    std::ifstream statusFile("/proc/self/status");
+    bioassert(statusFile.is_open());
+
+    std::string str;
+    while (statusFile >> str) {
+        if (str == "VmSize:") {
+            statusFile >> str;
+            bioassert(!str.empty());
+            const size_t memKB = std::stoull(str);
+            return memKB/1024;
+        }
+    }
+
+    bioassert(false);
+    return 0;
 }

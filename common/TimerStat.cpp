@@ -22,12 +22,15 @@ TimerStat::~TimerStat() {
         return;
     }
 
-    std::ofstream& file = PerfStat::getInstance()->_outStream;
+    PerfStat* perfStatInst = PerfStat::getInstance();
+    std::ofstream& file = perfStatInst->_outStream;
     if (file.is_open()) {
-        auto duration = Clock::now() - _start;
-        float v = std::chrono::duration_cast<FloatSeconds>(duration).count();
+        const auto duration = Clock::now() - _start;
+        const float seconds = std::chrono::duration_cast<FloatSeconds>(duration).count();
+        const size_t memUsage = perfStatInst->getReservedMemInMegabytes();
 
-        file << '[' << _msg << "] " << std::to_string(v)
-               << " s\n";
+        file << '[' << _msg << "] " 
+             << "[ vmem " << memUsage << " MB] "
+             << std::to_string(seconds) << " s\n";
     }
 }

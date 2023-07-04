@@ -24,4 +24,6 @@ private:
 
     void open(const Path& path);
     void close();
+    void reportTotalMem();
+    size_t getReservedMemInMegabytes();
 };
