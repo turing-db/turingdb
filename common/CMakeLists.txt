@@ -6,7 +6,8 @@ set(common_sources
         FileUtils.cpp
         BioAssert.cpp
         TimerStat.cpp
-        PerfStat.cpp)
+        PerfStat.cpp
+        Report.cpp)
 
 add_library(common_s STATIC ${common_sources})
 target_include_directories(common_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

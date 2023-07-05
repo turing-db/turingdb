@@ -2,11 +2,22 @@
 
 #include "FileUtils.h"
 
+namespace db {
+class DB;
+}
+
 class Neo4jImport {
 public:
-    static bool importNeo4j(const FileUtils::Path& outDir,
-                            const FileUtils::Path& filepath);
+    using Path = FileUtils::Path;
 
-    static bool importJsonNeo4j(const FileUtils::Path& outDir,
-                                const FileUtils::Path& jsonDir);
+    Neo4jImport(db::DB* db, const Path& outDir);
+    ~Neo4jImport();
+
+    bool importNeo4j(const Path& filepath);
+
+    bool importJsonNeo4j(const Path& jsonDir);
+
+private:
+    db::DB* _db {nullptr};
+    const Path _outDir;
 };

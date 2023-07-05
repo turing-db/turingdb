@@ -18,7 +18,6 @@ public:
         Neo4j4 = 0,
     };
 
-    JsonParser();
     JsonParser(db::DB* db);
 
     bool parseJsonDir(const FileUtils::Path& jsonDir, DirFormat format);

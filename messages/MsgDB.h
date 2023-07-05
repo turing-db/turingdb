@@ -29,4 +29,7 @@ MSG_FATAL(FATAL_INVALID_PROPERTY_DUMP, 5008,
 MSG_FATAL(FATAL_INVALID_PROPERTY_LOAD, 5009,
          "Should not occur: Invalid property encountered while loading db")
 
+MSG_INFO(INFO_DB_GENERATING_SCHEMA_REPORT, 5010,
+         "Generating database schema report in $0")
+
 }
