@@ -19,7 +19,6 @@ namespace {
 
 void reportDBEntityType(const DBEntityType* entityType,
                         std::ostream& stream) {
-    stream << "=== " << entityType->getName().toStdString() << " ===\n";
     for (const PropertyType* propType : entityType->propertyTypes()) {
         stream << propType->getName().toStdString()
                << " : "
@@ -58,6 +57,7 @@ void SchemaReport::writeReport() {
     stream << '\n';
 
     for (const NodeType* nodeType : _db->nodeTypes()) {
+        stream << "=== " << nodeType->getName().toStdString() << " ===\n";
         reportDBEntityType(nodeType, stream);
         stream << '\n';
     }
@@ -73,6 +73,16 @@ void SchemaReport::writeReport() {
     stream << '\n';
 
     for (const EdgeType* edgeType : _db->edgeTypes()) {
+        stream << "=== " << edgeType->getName().toStdString() << " ===\n";
+        stream << "FROM:";
+        for (const NodeType* source : edgeType->sourceTypes()) {
+            stream << ' ' << source->getName().toStdString();
+        }
+        stream << "\nTO:";
+        for (const NodeType* target : edgeType->targetTypes()) {
+            stream << ' ' << target->getName().toStdString();
+        }
+        stream << '\n';
         reportDBEntityType(edgeType, stream);
         stream << '\n';
     }
