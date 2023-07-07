@@ -49,170 +49,177 @@ bool EntityDumper::dump() {
 
     size_t i = 0;
     for (const Network* net : networks) {
-        auto diskNetwork = networksBuilder[i];
-        const auto& nodes = net->_nodes;
-        const auto& edges = net->_edges;
-        const size_t nodeCount = nodes.size();
-        const size_t edgeCount = edges.size();
-        size_t nodeCountLeft = nodeCount;
-        size_t edgeCountLeft = edgeCount;
-
-        const size_t nodeModulo = (size_t)(entityCountLimit % nodeCountLeft != 0);
-        const size_t nodeSpanCount = nodeCountLeft / entityCountLimit
-                                   + nodeModulo;
-
-        const size_t edgeModulo = (size_t)(entityCountLimit % edgeCountLeft != 0);
-        const size_t edgeSpanCount = edgeCountLeft / entityCountLimit
-                                   + edgeModulo;
-
-        diskNetwork.setNameId(net->getName().getID());
-        diskNetwork.setNodeCount(nodeCountLeft);
-        diskNetwork.setEdgeCount(edgeCountLeft);
-        auto nodeSpans = diskNetwork.initNodeSpans(nodeSpanCount);
-        auto edgeSpans = diskNetwork.initEdgeSpans(edgeSpanCount);
-
-        // Nodes
-        size_t index = 0;
-        for (auto nodeSpan : nodeSpans) {
-            const size_t count = nodeCountLeft < entityCountLimit
-                                   ? nodeCountLeft
-                                   : entityCountLimit;
-
-            auto diskNodes = nodeSpan.initNodes(count);
-
-            for (size_t j = index; j < index + count; j++) {
-                const size_t localj = j - index;
-                const Node* node = nodes[j];
-                auto props = node->properties();
-                auto diskProperties = diskNodes[localj].initProperties(props.size());
-                diskNodes[localj].setId(j);
-                diskNodes[localj].setNameId(node->getName().getID());
-                diskNodes[localj].setNodeTypeNameId(node->getType()->getName().getID());
-
-                size_t k = 0;
-                for (const auto& [propType, propValue] : props) {
-                    auto diskProp = diskProperties[k];
-                    const auto kind = propType->getValueType().getKind();
-                    const auto diskKind = static_cast<OnDisk::ValueKind>(kind);
-                    diskProp.setKind(diskKind);
-                    diskProp.setPropertyTypeNameId(propType->getName().getID());
-
-                    switch (kind) {
-                        case ValueType::VK_INT: {
-                            diskProp.getValue().setInt(propValue.getInt());
-                            break;
-                        }
-                        case ValueType::VK_UNSIGNED: {
-                            diskProp.getValue().setUnsigned(propValue.getUint());
-                            break;
-                        }
-                        case ValueType::VK_BOOL: {
-                            diskProp.getValue().setBool(propValue.getBool());
-                            break;
-                        }
-                        case ValueType::VK_DECIMAL: {
-                            diskProp.getValue().setDecimal(propValue.getDouble());
-                            break;
-                        }
-                        case ValueType::VK_STRING: {
-                            diskProp.getValue().setString(propValue.getString());
-                            break;
-                        }
-                        case ValueType::VK_STRING_REF: {
-                            diskProp.getValue().setStringRefId(
-                                propValue.getStringRef().getID());
-                            diskProp.getValue().setStringRefId(0);
-                            break;
-                        }
-                        case ValueType::VK_INVALID: {
-                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
-                            return false;
-                        }
-                        case ValueType::_SIZE: {
-                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
-                            return false;
-                        }
-                    }
-                    k++;
-                }
-            }
-
-            nodeCountLeft -= entityCountLimit;
-            index += count;
-        }
-
-        // Edges
-        index = 0;
-        for (auto edgeSpan : edgeSpans) {
-            const size_t count = edgeCountLeft < entityCountLimit
-                                   ? edgeCountLeft
-                                   : entityCountLimit;
-            auto diskEdges = edgeSpan.initEdges(count);
-
-            for (size_t j = index; j < index + count; j++) {
-                const size_t localj = j - index;
-                const Edge* edge = edges[j];
-                auto props = edge->properties();
-                auto diskProperties = diskEdges[localj].initProperties(props.size());
-                const StringRef edgeTypeName = edge->getType()->getName();
-                diskEdges[localj].setId(localj);
-                diskEdges[localj].setEdgeTypeNameId(edgeTypeName.getID());
-                diskEdges[localj].setSourceId(edge->getSource()->getIndex());
-                diskEdges[localj].setTargetId(edge->getTarget()->getIndex());
-
-                size_t k = 0;
-                for (const auto& [propType, propValue] : props) {
-                    auto diskProp = diskProperties[k];
-                    const auto kind = propType->getValueType().getKind();
-                    const auto diskKind = static_cast<OnDisk::ValueKind>(kind);
-                    diskProp.setKind(diskKind);
-                    diskProp.setPropertyTypeNameId(propType->getName().getID());
-
-                    switch (kind) {
-                        case ValueType::VK_INT: {
-                            diskProp.getValue().setInt(propValue.getInt());
-                            break;
-                        }
-                        case ValueType::VK_UNSIGNED: {
-                            diskProp.getValue().setUnsigned(propValue.getUint());
-                            break;
-                        }
-                        case ValueType::VK_BOOL: {
-                            diskProp.getValue().setBool(propValue.getBool());
-                            break;
-                        }
-                        case ValueType::VK_DECIMAL: {
-                            diskProp.getValue().setDecimal(propValue.getDouble());
-                            break;
-                        }
-                        case ValueType::VK_STRING: {
-                            diskProp.getValue().setString(propValue.getString());
-                            break;
-                        }
-                        case ValueType::VK_STRING_REF: {
-                            diskProp.getValue().setStringRefId(
-                                propValue.getStringRef().getID());
-                            break;
-                        }
-                        case ValueType::VK_INVALID: {
-                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
-                            return false;
-                        }
-                        case ValueType::_SIZE: {
-                            Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
-                            return false;
-                        }
-                    }
-                    k++;
-                }
-            }
-
-            edgeCountLeft -= entityCountLimit;
-            index += count;
-        }
-
-        i++;
+        networksBuilder[i].setNameId(net->getName().getID());
     }
+
+    const auto& nodes = _db->_nodes;
+    const auto& edges = _db->_edges;
+    const size_t nodeCount = nodes.size();
+    const size_t edgeCount = edges.size();
+    size_t nodeCountLeft = nodeCount;
+    size_t edgeCountLeft = edgeCount;
+
+    size_t nodeSpanCount = 0;
+    size_t edgeSpanCount = 0;
+
+    if (nodeCountLeft != 0) {
+        const size_t nodeModulo = (size_t)(entityCountLimit % nodeCountLeft != 0);
+        nodeSpanCount = nodeCountLeft / entityCountLimit
+                      + nodeModulo;
+    }
+
+    if (edgeCountLeft != 0) {
+        const size_t edgeModulo = (size_t)(entityCountLimit % edgeCountLeft != 0);
+        edgeSpanCount = edgeCountLeft / entityCountLimit
+                      + edgeModulo;
+    }
+
+    auto nodeSpans = entities.initNodeSpans(nodeSpanCount);
+    auto edgeSpans = entities.initEdgeSpans(edgeSpanCount);
+
+    // Nodes
+    size_t spanIndex = 0;
+    for (auto nodeSpan : nodeSpans) {
+        const size_t count = nodeCountLeft < entityCountLimit
+                               ? nodeCountLeft
+                               : entityCountLimit;
+
+        auto diskNodes = nodeSpan.initNodes(count);
+
+        for (size_t j = spanIndex; j < spanIndex + count; j++) {
+            const size_t localj = j - spanIndex;
+            const Node* node = nodes.at((DBIndex)j);
+            const Network* net = node->getNetwork();
+            auto props = node->properties();
+            auto diskProperties = diskNodes[localj].initProperties(props.size());
+            diskNodes[localj].setId(j);
+            diskNodes[localj].setNameId(node->getName().getID());
+            diskNodes[localj].setNetworkId(net->getName().getID());
+            diskNodes[localj].setNodeTypeNameId(node->getType()->getName().getID());
+
+            size_t k = 0;
+            for (const auto& [propType, propValue] : props) {
+                auto diskProp = diskProperties[k];
+                const auto kind = propType->getValueType().getKind();
+                const auto diskKind = static_cast<OnDisk::ValueKind>(kind);
+                diskProp.setKind(diskKind);
+                diskProp.setPropertyTypeNameId(propType->getName().getID());
+
+                switch (kind) {
+                    case ValueType::VK_INT: {
+                        diskProp.getValue().setInt(propValue.getInt());
+                        break;
+                    }
+                    case ValueType::VK_UNSIGNED: {
+                        diskProp.getValue().setUnsigned(propValue.getUint());
+                        break;
+                    }
+                    case ValueType::VK_BOOL: {
+                        diskProp.getValue().setBool(propValue.getBool());
+                        break;
+                    }
+                    case ValueType::VK_DECIMAL: {
+                        diskProp.getValue().setDecimal(propValue.getDouble());
+                        break;
+                    }
+                    case ValueType::VK_STRING: {
+                        diskProp.getValue().setString(propValue.getString());
+                        break;
+                    }
+                    case ValueType::VK_STRING_REF: {
+                        diskProp.getValue().setStringRefId(
+                            propValue.getStringRef().getID());
+                        diskProp.getValue().setStringRefId(0);
+                        break;
+                    }
+                    case ValueType::VK_INVALID: {
+                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        return false;
+                    }
+                    case ValueType::_SIZE: {
+                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        return false;
+                    }
+                }
+                k++;
+            }
+        }
+
+        nodeCountLeft -= entityCountLimit;
+        spanIndex += count;
+    }
+
+    // Edges
+    spanIndex = 0;
+    for (auto edgeSpan : edgeSpans) {
+        const size_t count = edgeCountLeft < entityCountLimit
+                               ? edgeCountLeft
+                               : entityCountLimit;
+        auto diskEdges = edgeSpan.initEdges(count);
+
+        for (size_t j = spanIndex; j < spanIndex + count; j++) {
+            const size_t localj = j - spanIndex;
+            const Edge* edge = edges.at((DBIndex)j);
+            auto props = edge->properties();
+            auto diskProperties = diskEdges[localj].initProperties(props.size());
+            const StringRef edgeTypeName = edge->getType()->getName();
+            diskEdges[localj].setId(localj);
+            diskEdges[localj].setEdgeTypeNameId(edgeTypeName.getID());
+            diskEdges[localj].setSourceId(edge->getSource()->getIndex());
+            diskEdges[localj].setTargetId(edge->getTarget()->getIndex());
+
+            size_t k = 0;
+            for (const auto& [propType, propValue] : props) {
+                auto diskProp = diskProperties[k];
+                const auto kind = propType->getValueType().getKind();
+                const auto diskKind = static_cast<OnDisk::ValueKind>(kind);
+                diskProp.setKind(diskKind);
+                diskProp.setPropertyTypeNameId(propType->getName().getID());
+
+                switch (kind) {
+                    case ValueType::VK_INT: {
+                        diskProp.getValue().setInt(propValue.getInt());
+                        break;
+                    }
+                    case ValueType::VK_UNSIGNED: {
+                        diskProp.getValue().setUnsigned(propValue.getUint());
+                        break;
+                    }
+                    case ValueType::VK_BOOL: {
+                        diskProp.getValue().setBool(propValue.getBool());
+                        break;
+                    }
+                    case ValueType::VK_DECIMAL: {
+                        diskProp.getValue().setDecimal(propValue.getDouble());
+                        break;
+                    }
+                    case ValueType::VK_STRING: {
+                        diskProp.getValue().setString(propValue.getString());
+                        break;
+                    }
+                    case ValueType::VK_STRING_REF: {
+                        diskProp.getValue().setStringRefId(
+                            propValue.getStringRef().getID());
+                        break;
+                    }
+                    case ValueType::VK_INVALID: {
+                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        return false;
+                    }
+                    case ValueType::_SIZE: {
+                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        return false;
+                    }
+                }
+                k++;
+            }
+        }
+
+        edgeCountLeft -= entityCountLimit;
+        spanIndex += count;
+    }
+
+    i++;
 
     ::capnp::writeMessageToFd(indexFD, message);
     close(indexFD);

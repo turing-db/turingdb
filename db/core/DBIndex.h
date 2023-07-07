@@ -39,3 +39,12 @@ private:
 };
 
 }
+
+namespace std {
+template <>
+struct hash<db::DBIndex> {
+    size_t operator()(db::DBIndex id) const {
+        return (size_t)id;
+    }
+};
+}

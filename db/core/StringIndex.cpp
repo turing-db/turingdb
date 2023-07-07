@@ -22,10 +22,21 @@ StringRef StringIndex::getString(const std::string& str) {
         return StringRef(it->second);
     }
 
-    const std::size_t newID = _strMap.size();
+    const DBIndex newID{_strMap.size()};
     SharedString* sharedStr = new SharedString(newID, str);
     _strMap[str] = sharedStr;
+    _strIdMap[newID] = sharedStr;
+
     return StringRef(sharedStr);
+}
+
+StringRef StringIndex::getString(DBIndex id) const {
+    const auto it = _strIdMap.find(id);
+    if (it == _strIdMap.end()) {
+        return StringRef();
+    }
+
+    return StringRef(it->second);
 }
 
 bool StringIndex::hasString(const std::string& str) const {
@@ -36,12 +47,15 @@ void StringIndex::clear() {
     for (const auto& [rstr, sstr] : _strMap) {
         delete sstr;
     }
+
     _strMap.clear();
+    _strIdMap.clear();
 }
 
-StringRef StringIndex::insertString(const std::string& str, size_t id) {
+StringRef StringIndex::insertString(const std::string& str, DBIndex id) {
     SharedString* newStr = new SharedString(id, str);
     _strMap[str] = newStr;
+    _strIdMap[id] = newStr;
 
     return StringRef(newStr);
 }

@@ -44,10 +44,7 @@ public:
     EdgeType* createEdgeType(StringRef name,
                              const NodeTypes& sources,
                              const NodeTypes& targets);
-    PropertyType* addPropertyType(NodeType* nodeType,
-                                  StringRef name,
-                                  ValueType type);
-    PropertyType* addPropertyType(EdgeType* nodeType,
+    PropertyType* addPropertyType(DBEntityType* nodeType,
                                   StringRef name,
                                   ValueType type);
 
@@ -60,20 +57,7 @@ public:
 private:
     DB* _db {nullptr};
 
-    PropertyType* addPropertyTypeBase(DBEntityType* dbType,
-                                      StringRef name,
-                                      ValueType type);
-
-    PropertyType* addPropertyTypeBase(DBEntityType* dbType,
-                                      StringRef name,
-                                      ValueType type,
-                                      size_t id);
-
-    PropertyType* addPropertyType(NodeType* nodeType,
-                                  StringRef name,
-                                  ValueType type,
-                                  size_t id);
-    PropertyType* addPropertyType(EdgeType* nodeType,
+    PropertyType* addPropertyType(DBEntityType* nodeType,
                                   StringRef name,
                                   ValueType type,
                                   size_t id);

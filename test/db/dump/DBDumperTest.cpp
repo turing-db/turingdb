@@ -19,9 +19,7 @@ protected:
         _outDir += testInfo->name();
         _outDir += ".out";
         _logPath = FileUtils::Path(_outDir) / "log";
-
-        _dbPath = FileUtils::abspath(FileUtils::Path(_outDir) /
-                                     DBDumper::getDefaultDBDirectoryName());
+        _dbPath = FileUtils::abspath(FileUtils::Path(_outDir) / "turing.db");
 
         // Remove the directory from the previous run
         if (FileUtils::exists(_outDir)) {
@@ -46,7 +44,7 @@ protected:
     }
 
     void tryDump() {
-        DBDumper dumper(_db, _outDir);
+        DBDumper dumper(_db, _dbPath);
         // Checking if dump succesful
         ASSERT_TRUE(dumper.dump());
 

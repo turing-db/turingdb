@@ -210,6 +210,8 @@ public:
     {
     }
 
+    size_t size() const {return _baseRange.size(); }
+
     bool empty() const { return _baseRange.empty(); }
 
     Iterator begin() const {

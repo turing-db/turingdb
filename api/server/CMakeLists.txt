@@ -1,4 +1,5 @@
 
+set(TURING_API_PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../proto)
 set(apiserver_sources
         APIServiceImpl.cpp
         APIServer.cpp)
@@ -31,6 +32,8 @@ target_include_directories(turing_api_server_s PRIVATE ${CMAKE_CURRENT_BINARY_DI
 target_link_libraries(turing_api_server_s PRIVATE
     turing_rpc_server_s
     turing_log_s
+    turing_db_core_s
+    turing_db_dumper_s
     gRPC::grpc++)
 
 target_include_directories(turing_api_server_s PRIVATE ${BIO_SOURCE_DIR}/messages)

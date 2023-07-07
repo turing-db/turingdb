@@ -186,6 +186,56 @@ bool DBComparator::same<NodeType::EdgeTypes>(const NodeType::EdgeTypes* et1,
     return true;
 }
 
+/* Performes the following operation on two Network::Nodes containers:
+ * - Comparison of the element indices
+ * */
+template <>
+bool DBComparator::same<Network::Nodes>(const Network::Nodes* c1,
+                                        const Network::Nodes* c2) {
+    if (c1->size() != c2->size()) {
+        return false;
+    }
+
+    auto it1 = c1->cbegin();
+    auto it2 = c2->cbegin();
+
+    while (it1 != c1->cend()) {
+        if (!DBComparator::same<DBObject>(*it1, *it2)) {
+            return false;
+        }
+
+        ++it1;
+        ++it2;
+    }
+
+    return true;
+}
+
+/* Performes the following operation on two Network::Edges containers:
+ * - Comparison of the element indices
+ * */
+template <>
+bool DBComparator::same<Network::Edges>(const Network::Edges* c1,
+                                        const Network::Edges* c2) {
+    if (c1->size() != c2->size()) {
+        return false;
+    }
+
+    auto it1 = c1->cbegin();
+    auto it2 = c2->cbegin();
+
+    while (it1 != c1->cend()) {
+        if (!DBComparator::same<DBObject>(*it1, *it2)) {
+            return false;
+        }
+
+        ++it1;
+        ++it2;
+    }
+
+    return true;
+}
+
 /* Performes the following operations on two NodeTypes:
  * - Deep comparison of their PropertyTypes
  * - Comparison of their names
@@ -264,15 +314,17 @@ template <>
 bool DBComparator::same<Network>(const Network* net1, const Network* net2) {
     return DBComparator::same<DBObject>(net1, net2)
         && StringRef::same(net1->_name, net2->_name)
-        && deepCompareVectors(&net1->_nodes, &net2->_nodes)
-        && deepCompareVectors(&net1->_edges, &net2->_edges);
+        && DBComparator::same<Network::Nodes>(&net1->_nodes, &net2->_nodes)
+        && DBComparator::same<Network::Edges>(&net1->_edges, &net2->_edges);
 }
 
 
 bool DBComparator::same(const DB* db1, const DB* db2) {
     return deepCompareMaps(&db1->_nodeTypes, &db2->_nodeTypes)
         && deepCompareMaps(&db1->_edgeTypes, &db2->_edgeTypes)
-        && deepCompareMaps(&db1->_networks, &db2->_networks);
+        && deepCompareMaps(&db1->_networks, &db2->_networks)
+        && deepCompareMaps(&db1->_nodes, &db2->_nodes)
+        && deepCompareMaps(&db1->_edges, &db2->_edges);
 }
 
 }

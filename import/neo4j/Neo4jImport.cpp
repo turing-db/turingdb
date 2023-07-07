@@ -172,7 +172,7 @@ bool Neo4jImport::importNeo4j(const FileUtils::Path& outDir, const FileUtils::Pa
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_NODE_COUNT() << stats.parsedNodes);
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_EDGE_COUNT() << stats.parsedEdges);
 
-    db::DBDumper dumper{parser.getDB(), outDir};
+    db::DBDumper dumper{parser.getDB(), outDir / "turing.db"};
     dumper.dump();
 
     handler.join();
@@ -229,7 +229,7 @@ bool Neo4jImport::importJsonNeo4j(const FileUtils::Path& outDir, const FileUtils
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_NODE_COUNT() << stats.parsedNodes);
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_EDGE_COUNT() << stats.parsedEdges);
 
-    db::DBDumper dumper{parser.getDB(), outDir};
+    db::DBDumper dumper{parser.getDB(), outDir / "turing.db"};
     dumper.dump();
 
     return true;

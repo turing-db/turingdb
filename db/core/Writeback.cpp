@@ -44,6 +44,7 @@ Node* Writeback::createNode(Network* net, NodeType* type, StringRef name) {
     Node* node = new Node(nodeIndex, type, net);
     node->setName(name);
     net->addNode(node);
+    _db->addNode(node);
 
     return node;
 }
@@ -70,6 +71,8 @@ Edge* Writeback::createEdge(EdgeType* type, Node* source, Node* target) {
     if (sourceNet != targetNet) {
         targetNet->addEdge(edge);
     }
+
+    _db->addEdge(edge);
     
     return edge;
 }
@@ -108,35 +111,9 @@ EdgeType* Writeback::createEdgeType(StringRef name,
     return edgeType;
 }
 
-PropertyType* Writeback::addPropertyType(NodeType* nodeType,
+PropertyType* Writeback::addPropertyType(DBEntityType* dbType,
                                          StringRef name,
                                          ValueType type) {
-    return addPropertyTypeBase(nodeType, name, type);
-}
-
-PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
-                                         StringRef name,
-                                         ValueType type) {
-    return addPropertyTypeBase(edgeType, name, type);
-}
-
-PropertyType* Writeback::addPropertyType(NodeType* nodeType,
-                                         StringRef name,
-                                         ValueType type,
-                                         size_t id) {
-    return addPropertyTypeBase(nodeType, name, type, id);
-}
-
-PropertyType* Writeback::addPropertyType(EdgeType* edgeType,
-                                         StringRef name,
-                                         ValueType type,
-                                         size_t id) {
-    return addPropertyTypeBase(edgeType, name, type, id);
-}
-
-PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
-                                             StringRef name,
-                                             ValueType type) {
     if (!dbType || !type.isValid()) {
         return nullptr;
     }
@@ -151,10 +128,10 @@ PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
     return propType;
 }
 
-PropertyType* Writeback::addPropertyTypeBase(DBEntityType* dbType,
-                                             StringRef name,
-                                             ValueType type,
-                                             size_t id) {
+PropertyType* Writeback::addPropertyType(DBEntityType* dbType,
+                                         StringRef name,
+                                         ValueType type,
+                                         size_t id) {
     if (!dbType || !type.isValid()) {
         return nullptr;
     }
