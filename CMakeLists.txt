@@ -65,8 +65,8 @@ find_package(gRPC REQUIRED)
 include(CythonLibrary)
 
 # CapnProto
-set(ENV{PKG_CONFIG_PATH} "/turing/tools/lib/pkgconfig/")
-find_package(CapnProto REQUIRED)
+find_package(CapnProto REQUIRED
+    PATHS "/turing/tools/lib/cmake/CapnProto")
 
 # Root source directory
 set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})

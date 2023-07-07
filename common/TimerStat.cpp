@@ -30,7 +30,7 @@ TimerStat::~TimerStat() {
         const size_t memUsage = perfStatInst->getReservedMemInMegabytes();
 
         file << '[' << _msg << "] " 
-             << "[ vmem " << memUsage << " MB] "
+             << "[vmem " << memUsage << " MB] "
              << std::to_string(seconds) << " s\n";
     }
 }
