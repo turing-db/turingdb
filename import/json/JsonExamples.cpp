@@ -9,7 +9,8 @@
 #include <regex>
 
 db::DB* getNeo4j4DB(const std::string& dbName) {
-    JsonParser parser {};
+    db::DB* db = db::DB::create();
+    JsonParser parser(db);
     parser.setReducedOutput(true);
 
     std::string turingHome = std::getenv("TURING_HOME");
@@ -26,7 +27,7 @@ db::DB* getNeo4j4DB(const std::string& dbName) {
         return nullptr;
     }
 
-    return parser.getDB();
+    return db;
 }
 
 db::DB* cyberSecurityDB() {

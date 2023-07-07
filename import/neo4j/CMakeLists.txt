@@ -10,7 +10,6 @@ add_library(bio_import_neo4j_s STATIC ${import_neo4j_sources})
 target_link_libraries(bio_import_neo4j_s
     common_s
     turing_log_s
-    turing_db_dumper_s
     bio_import_json_s
     curl
     ${Boost_LIBRARIES})

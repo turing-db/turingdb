@@ -172,6 +172,10 @@ MSG_INFO(INFO_JSON_DISPLAY_NODES_STATUS, 2053,
 
 MSG_INFO(INFO_JSON_DISPLAY_EDGES_STATUS, 2054,
          "Parsing edges. Currently: $0/$1")
+
+MSG_ERROR(ERROR_IMPORT_NO_PATH_GIVEN, 2055,
+          "Please give the path of a Neo4J dump file using the -neo4j option or give the path of a previous json dump from bioimport using the -jsonNeo4j option")
+
 }
 
 #endif

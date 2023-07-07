@@ -18,6 +18,8 @@
 using JsonType = nlohmann::detail::value_t;
 using JsonObject = nlohmann::basic_json<>;
 
+namespace {
+
 const static std::unordered_map<std::string, db::ValueType> neo4jTypes = {
     {"String",         db::ValueType {db::ValueType::ValueKind::VK_STRING}  },
     {"StringArray",    db::ValueType {db::ValueType::ValueKind::VK_INVALID} },
@@ -55,24 +57,6 @@ const static std::unordered_map<JsonType, std::string> jsonTypes = {
     {JsonType::number_integer,  "number_integer" },
     {JsonType::number_unsigned, "number_unsigned"},
 };
-
-inline db::Network* Neo4j4JsonParser::getOrCreateNetwork() {
-    const db::StringRef netName = _db->getString("Neo4jNetwork");
-    db::Network* net = _wb->createNetwork(netName);
-    if (!net) {
-        net = _db->getNetwork(netName);
-    }
-    return net;
-}
-
-inline db::NodeType* Neo4j4JsonParser::getOrCreateNodeType(db::StringRef name) {
-    db::NodeType* obj = _wb->createNodeType(name);
-    if (!obj) {
-        obj = _db->getNodeType(name);
-    }
-
-    return obj;
-}
 
 template <db::SupportedType T>
 static bool isExpectedType(const JsonObject& value) {
@@ -182,6 +166,20 @@ static void handleProperty(const PropertyContext& c) {
     }
 }
 
+std::string convertNeo4jLabel(const std::string& label) {
+    if (label.size() < 3) {
+        return label;
+    }
+
+    if (label.rfind(":`", 0) != std::string::npos && label.back() == '`') {
+        return label.substr(2, label.size()-3);
+    }
+
+    return label;
+}
+
+}
+
 Neo4j4JsonParser::Neo4j4JsonParser(db::DB* db, JsonParsingStats& stats)
     : _db(db),
       _stats(stats),
@@ -219,7 +217,8 @@ bool Neo4j4JsonParser::parseNodeProperties(const std::string& data) {
     for (const auto& record : results) {
         const auto& row = record["row"];
 
-        const db::StringRef ntName = _db->getString(row.at(0));
+        const std::string ntNameStr = convertNeo4jLabel(row.at(0));
+        const db::StringRef ntName = _db->getString(ntNameStr);
         db::NodeType* nt = getOrCreateNodeType(ntName);
         msgbioassert(
             neo4jTypes.find(row.at(3).at(0)) != neo4jTypes.end(),
@@ -263,7 +262,7 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data) {
 
         // Getting NodeType
         for (const JsonObject& ntAliasStr : row.at(0)) {
-            label += ":`" + ntAliasStr.get<std::string>() + "`";
+            label += ntAliasStr.get<std::string>();
         }
         const db::StringRef ntName = _db->getString(label);
 
@@ -358,13 +357,14 @@ bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
     // property
     for (const auto& record : results) {
         const auto& row = record["row"];
-        const db::StringRef etName = _db->getString(row.at(0));
+        const std::string etNameStr = convertNeo4jLabel(row.at(0));
+        const db::StringRef etName = _db->getString(etNameStr);
         sourceLabel = "";
         targetLabel = "";
 
         // Getting source NodeType
         for (const JsonObject& ntAliasStr : row.at(1)) {
-            sourceLabel += ":`" + ntAliasStr.get<std::string>() + "`";
+            sourceLabel += ntAliasStr.get<std::string>();
         }
 
         db::NodeType* sourceNt = _db->getNodeType(_db->getString(sourceLabel));
@@ -376,7 +376,7 @@ bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
 
         // Getting target NodeType
         for (const JsonObject& ntAliasStr : row.at(2)) {
-            targetLabel += ":`" + ntAliasStr.get<std::string>() + "`";
+            targetLabel += ntAliasStr.get<std::string>();
         }
 
         db::NodeType* targetNt = _db->getNodeType(_db->getString(targetLabel));
@@ -441,7 +441,7 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
         const auto& row = record["row"];
 
         const db::StringRef etName =
-            _db->getString(":`" + row.at(0).get<std::string>() + "`");
+            _db->getString(row.at(0).get<std::string>());
         db::EdgeType* et = _db->getEdgeType(etName);
         db::Node* n1 = net->getNode(_nodeIdMap.at(row.at(1)));
         db::Node* n2 = net->getNode(_nodeIdMap.at(row.at(2)));
@@ -523,4 +523,22 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
     }
 
     return true;
+}
+
+inline db::Network* Neo4j4JsonParser::getOrCreateNetwork() {
+    const db::StringRef netName = _db->getString("Neo4jNetwork");
+    db::Network* net = _wb->createNetwork(netName);
+    if (!net) {
+        net = _db->getNetwork(netName);
+    }
+    return net;
+}
+
+inline db::NodeType* Neo4j4JsonParser::getOrCreateNodeType(db::StringRef name) {
+    db::NodeType* obj = _wb->createNodeType(name);
+    if (!obj) {
+        obj = _db->getNodeType(name);
+    }
+
+    return obj;
 }

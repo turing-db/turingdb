@@ -5,12 +5,6 @@
 #include "Neo4j4JsonParser.h"
 #include <regex>
 
-JsonParser::JsonParser()
-    : _db(db::DB::create()),
-      _neo4j4Parser(_db, _stats)
-{
-}
-
 JsonParser::JsonParser(db::DB* db)
     : _db(db),
       _neo4j4Parser(_db, _stats)

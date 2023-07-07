@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "Comparator.h"
 
 namespace db {
@@ -32,6 +34,8 @@ public:
     bool isDecimal() const { return _kind == VK_DECIMAL; }
     bool isStringRef() const { return _kind == VK_STRING_REF; }
     bool isString() const { return _kind == VK_STRING; }
+
+    std::string toString() const;
 
     static ValueType getType(ValueKind kind) { return ValueType(kind); }
     static ValueType intType() { return ValueType(VK_INT); }
