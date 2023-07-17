@@ -10,13 +10,14 @@
 namespace db {
 
 class Node;
+class DB;
 class EdgeType;
 class Network;
 class Writeback;
 
 class Edge : public DBEntity {
 public:
-    friend Network;
+    friend DB;
     friend Writeback;
     friend DBComparator;
     using Set = std::set<Edge*, DBObject::Sorter>;

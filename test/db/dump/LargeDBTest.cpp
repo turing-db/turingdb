@@ -23,7 +23,7 @@ protected:
         _outDir += "_";
         _outDir += testInfo->name();
         _outDir += ".out";
-        _logPath = FileUtils::Path(_outDir) / "log";
+        _logPath = _outDir / "log";
 
         // Remove the directory from the previous run
         if (FileUtils::exists(_outDir)) {
@@ -35,7 +35,7 @@ protected:
         Log::BioLog::openFile(_logPath.string());
 
         _db = DB::create();
-        DBLoader loader {_db, "/home/dev/reactome.out"};
+        DBLoader loader {_db, "/home/dev/reactome.out/turing.db"};
         loader.load();
     }
 
@@ -48,16 +48,16 @@ protected:
     }
 
     DB* _db {nullptr};
-    std::string _outDir;
+    FileUtils::Path _outDir;
     FileUtils::Path _logPath;
 };
 
 TEST_F(LargeDBTest, LoadDB) {
-    DBDumper dumper(_db, _outDir);
+    DBDumper dumper(_db, _outDir / "turing.db");
     dumper.dump();
 
     db::DB* db = db::DB::create();
-    DBLoader loader(db, _outDir);
+    DBLoader loader(db, _outDir / "turing.db");
 
     ASSERT_TRUE(loader.load());
     ASSERT_TRUE(DBComparator::same(_db, db));

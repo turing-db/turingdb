@@ -427,7 +427,6 @@ bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
 
 bool Neo4j4JsonParser::parseEdges(const std::string& data) {
     TimerStat timer {"JSON Parser: parsing Neo4J edges"};
-    db::Network* net = getOrCreateNetwork();
 
     if (!_reducedOutput) {
         Log::BioLog::log(msg::INFO_NEO4J_READING_EDGES());
@@ -443,8 +442,8 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
         const db::StringRef etName =
             _db->getString(row.at(0).get<std::string>());
         db::EdgeType* et = _db->getEdgeType(etName);
-        db::Node* n1 = net->getNode(_nodeIdMap.at(row.at(1)));
-        db::Node* n2 = net->getNode(_nodeIdMap.at(row.at(2)));
+        db::Node* n1 = _db->getNode(_nodeIdMap.at(row.at(1)));
+        db::Node* n2 = _db->getNode(_nodeIdMap.at(row.at(2)));
 
         if (!et) {
             // Edge type was not created when reading edge properties. This can

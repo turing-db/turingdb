@@ -41,7 +41,7 @@ protected:
     }
 
     void tryDump(DB* db, const FileUtils::Path& outDir) {
-        FileUtils::Path dbPath = outDir / "turing.db";
+        FileUtils::Path dbPath = outDir;
         DBDumper dumper(db, outDir);
         // Checking if dump succesful
         ASSERT_TRUE(dumper.dump());
@@ -55,8 +55,8 @@ protected:
                             const FileUtils::Path& dir2) {
         std::vector<FileUtils::Path> paths1;
         std::vector<FileUtils::Path> paths2;
-        FileUtils::listFiles(dir1 / "turing.db", paths1);
-        FileUtils::listFiles(dir2 / "turing.db", paths2);
+        FileUtils::listFiles(dir1, paths1);
+        FileUtils::listFiles(dir2, paths2);
 
         for (size_t i = 0; i < 3; i++) {
             uint64_t s1 = FileUtils::fileSize(paths1[i]);
@@ -77,7 +77,7 @@ protected:
 
         tryDump(db2, dir3);
         DB* db3 = DB::create();
-        DBLoader loader3(db3, dir3);
+        DBLoader loader3(db3, dir3 );
         ASSERT_TRUE(loader3.load());
         ASSERT_TRUE(DBComparator::same(db1, db3));
 

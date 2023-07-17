@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <vector>
+#include <map>
 
 #include "DBObject.h"
 #include "StringRef.h"
@@ -15,22 +15,22 @@ class Node;
 class Edge;
 class DB;
 class Writeback;
-class EntityDumper;
 
 class Network : public DBObject {
 public:
     friend DB;
     friend Writeback;
     friend DBComparator;
-    friend EntityDumper;
-    using Nodes = std::vector<Node*>;
-    using Edges = std::vector<Edge*>;
+    using Nodes = std::map<DBIndex, Node*>;
+    using Edges = std::map<DBIndex, Edge*>;
     using NodeRange = STLRange<Nodes>;
     using EdgeRange = STLRange<Edges>;
 
     StringRef getName() const { return _name; }
     size_t getNodeCount() const;
+
     Node* getNode(DBIndex id) const;
+    Edge* getEdge(DBIndex id) const;
 
     NodeRange nodes() const;
     EdgeRange edges() const;

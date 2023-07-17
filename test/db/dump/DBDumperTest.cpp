@@ -19,9 +19,7 @@ protected:
         _outDir += testInfo->name();
         _outDir += ".out";
         _logPath = FileUtils::Path(_outDir) / "log";
-
-        _dbPath = FileUtils::abspath(FileUtils::Path(_outDir) /
-                                     DBDumper::getDefaultDBDirectoryName());
+        _dbPath = FileUtils::abspath(FileUtils::Path(_outDir) / "turing.db");
 
         // Remove the directory from the previous run
         if (FileUtils::exists(_outDir)) {
@@ -46,7 +44,7 @@ protected:
     }
 
     void tryDump() {
-        DBDumper dumper(_db, _outDir);
+        DBDumper dumper(_db, _dbPath);
         // Checking if dump succesful
         ASSERT_TRUE(dumper.dump());
 
@@ -54,19 +52,19 @@ protected:
         ASSERT_TRUE(FileUtils::exists(_outDir));
         ASSERT_TRUE(FileUtils::isDirectory(_outDir));
 
-        // Checking if DBDumperTest_DumpDB.out/turing.out/ was created
+        // Checking if DBDumperTest_DumpDB.out/turing.db/ was created
         ASSERT_TRUE(FileUtils::exists(_dbPath));
         ASSERT_TRUE(FileUtils::isDirectory(_dbPath));
 
-        // Checking if DBDumperTest_DumpDB.out/turing.out/smap was created
+        // Checking if DBDumperTest_DumpDB.out/turing.db/smap was created
         ASSERT_TRUE(FileUtils::exists(_stringIndexPath));
         ASSERT_FALSE(FileUtils::isDirectory(_stringIndexPath));
 
-        // Checking if DBDumperTest_DumpDB.out/turing.out/types was created
+        // Checking if DBDumperTest_DumpDB.out/turing.db/types was created
         ASSERT_TRUE(FileUtils::exists(_typeIndexPath));
         ASSERT_FALSE(FileUtils::isDirectory(_typeIndexPath));
 
-        // Checking if DBDumperTest_DumpDB.out/turing.out/entities was created
+        // Checking if DBDumperTest_DumpDB.out/turing.db/entities was created
         ASSERT_TRUE(FileUtils::exists(_entityIndexPath));
         ASSERT_FALSE(FileUtils::isDirectory(_entityIndexPath));
     }

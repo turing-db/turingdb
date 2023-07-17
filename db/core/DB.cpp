@@ -2,6 +2,8 @@
 
 #include "DB.h"
 
+#include "Node.h"
+#include "Edge.h"
 #include "Network.h"
 #include "NodeType.h"
 #include "EdgeType.h"
@@ -27,6 +29,14 @@ DB::~DB() {
         delete edgeTypeEntry.second;
     }
     _edgeTypes.clear();
+
+    for (const auto& nodeEntry : _nodes) {
+        delete nodeEntry.second;
+    }
+
+    for (const auto& edgeEntry : _edges) {
+        delete edgeEntry.second;
+    }
 }
 
 DB* DB::create() {
@@ -106,6 +116,11 @@ Network* DB::getNetwork(StringRef name) const {
     return foundIt->second;
 }
 
+Network* DB::getNetwork(DBIndex id) const {
+    const StringRef netName = _strIndex.getString(id);
+    return getNetwork(netName);
+}
+
 NodeType* DB::getNodeType(StringRef name) const {
     const auto foundIt = _nodeTypes.find(name);
     if (foundIt == _nodeTypes.end()) {
@@ -113,6 +128,11 @@ NodeType* DB::getNodeType(StringRef name) const {
     }
 
     return foundIt->second;
+}
+
+NodeType* DB::getNodeType(DBIndex id) const {
+    const StringRef ntName = _strIndex.getString(id);
+    return getNodeType(ntName);
 }
 
 EdgeType* DB::getEdgeType(StringRef name) const {
@@ -124,10 +144,55 @@ EdgeType* DB::getEdgeType(StringRef name) const {
     return foundIt->second;
 }
 
+EdgeType* DB::getEdgeType(DBIndex id) const {
+    const StringRef etName = _strIndex.getString(id);
+    return getEdgeType(etName);
+}
+
+Node* DB::getNode(DBIndex id) const {
+    const auto foundIt = _nodes.find(id);
+    if (foundIt == _nodes.end()) {
+        return nullptr;
+    }
+    return foundIt->second;
+}
+
+Edge* DB::getEdge(DBIndex id) const {
+    const auto foundIt = _edges.find(id);
+    if (foundIt == _edges.end()) {
+        return nullptr;
+    }
+    return foundIt->second;
+}
+
+size_t DB::getNodeCount() const {
+    return _nodes.size();
+}
+
+size_t DB::getEdgeCount() const {
+    return _edges.size();
+}
+
+DB::NodeRange DB::nodes() const {
+    return NodeRange(&_nodes);
+}
+
+DB::EdgeRange DB::edges() const {
+    return EdgeRange(&_edges);
+}
+
 void DB::addNodeType(NodeType* nodeType) {
     _nodeTypes[nodeType->getName()] = nodeType;
 }
 
 void DB::addEdgeType(EdgeType* edgeType) {
     _edgeTypes[edgeType->getName()] = edgeType;
+}
+
+void DB::addNode(Node* node) {
+    _nodes.emplace(node->getIndex(), node);
+}
+
+void DB::addEdge(Edge* edge) {
+    _edges[edge->getIndex()] = edge;
 }

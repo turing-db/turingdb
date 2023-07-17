@@ -12,13 +12,14 @@
 
 namespace db {
 
-class Network;
+class DB;
 class NodeType;
 class Writeback;
+class Network;
 
 class Node : public DBEntity {
 public:
-    friend Network;
+    friend DB;
     friend Writeback;
     friend DBComparator;
     using EdgeMapRange = EdgeMap::EdgeRange;

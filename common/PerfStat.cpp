@@ -60,7 +60,7 @@ void PerfStat::reportTotalMem() {
                << memAmount << "MB\n";
 }
 
-size_t PerfStat::getReservedMemInMegabytes() {
+size_t PerfStat::getReservedMemInMegabytes() const {
     std::ifstream statusFile("/proc/self/status");
     bioassert(statusFile.is_open());
 

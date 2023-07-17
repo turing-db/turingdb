@@ -73,7 +73,7 @@ int main(int argc, const char** argv) {
     }
 
     {
-        db::DBDumper dbDumper(db, toolInit.getOutputsDir());
+        db::DBDumper dbDumper(db, toolInit.getOutputsDir() / "turing.db");
         dbDumper.dump();
     }
 

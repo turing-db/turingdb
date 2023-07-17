@@ -15,9 +15,9 @@ APIServer::~APIServer() {
 void APIServer::run() {
     RPCServerConfig config;
 
-    APIServiceImpl apiService;
-
     RPCServer rpcServer(config);
+    APIServiceImpl apiService{config};
+
     rpcServer.addService(&apiService);
     rpcServer.run();
 }

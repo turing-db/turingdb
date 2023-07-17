@@ -20,16 +20,18 @@ struct Property {
 struct Node {
     id @0 :UInt64;
     nameId @1 :UInt64;
-    nodeTypeNameId @2 :UInt64;
-    properties @3 :List(Property);
+    networkId @2 :UInt64;
+    nodeTypeNameId @3 :UInt64;
+    properties @4 :List(Property);
 }
 
 struct Edge {
     id @0 :UInt64;
-    edgeTypeNameId @1 :UInt64;
-    sourceId @2 :UInt64;
-    targetId @3 :UInt64;
-    properties @4 :List(Property);
+    networkId @1 :UInt64;
+    edgeTypeNameId @2 :UInt64;
+    sourceId @3 :UInt64;
+    targetId @4 :UInt64;
+    properties @5 :List(Property);
 }
 
 struct NodeSpan {
@@ -42,12 +44,10 @@ struct EdgeSpan {
 
 struct Network {
     nameId @0 :UInt64;
-    nodeCount @1 :UInt64;
-    edgeCount @2 :UInt64;
-    nodeSpans @3 :List(NodeSpan);
-    edgeSpans @4 :List(EdgeSpan);
 }
 
 struct EntityIndex {
     networks @0 :List(Network);
+    nodeSpans @1 :List(NodeSpan);
+    edgeSpans @2 :List(EdgeSpan);
 }

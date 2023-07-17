@@ -42,7 +42,7 @@ bool StringIndexLoader::load(StringIndex& index) {
     _stringIdMapping.resize(stringReader.getStrings().size());
 
     for (OnDisk::SharedString::Reader s : stringReader.getStrings()) {
-        const StringRef newString = index.insertString(s.getStr(), s.getId());
+        const StringRef newString = index.insertString(s.getStr(), (DBIndex)s.getId());
         _stringIdMapping[s.getId()] = newString;
     }
 

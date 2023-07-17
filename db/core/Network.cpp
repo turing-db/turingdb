@@ -15,16 +15,7 @@ Network::Network(DBIndex index, StringRef name)
 }
 
 Network::~Network() {
-    for (Edge* edge : _edges) {
-        if (edge->getSource()->getNetwork() == this) {
-            delete edge;
-        }
-    }
     _edges.clear();
-
-    for (Node* node : _nodes) {
-        delete node;
-    }
     _nodes.clear();
 }
 
@@ -33,8 +24,19 @@ size_t Network::getNodeCount() const {
 }
 
 Node* Network::getNode(DBIndex id) const {
-    bioassert(_nodes.size() > id);
-    return _nodes[id];
+    const auto foundIt = _nodes.find(id);
+    if (foundIt == _nodes.end()) {
+        return nullptr;
+    }
+    return foundIt->second;
+}
+
+Edge* Network::getEdge(DBIndex id) const {
+    const auto foundIt = _edges.find(id);
+    if (foundIt == _edges.end()) {
+        return nullptr;
+    }
+    return foundIt->second;
 }
 
 Network::NodeRange Network::nodes() const {
@@ -46,9 +48,9 @@ Network::EdgeRange Network::edges() const {
 }
 
 void Network::addNode(Node* node) {
-    _nodes.push_back(node);
+    _nodes[node->getIndex()] = node;
 }
 
 void Network::addEdge(Edge* edge) {
-    _edges.push_back(edge);
+    _edges[edge->getIndex()] = edge;
 }

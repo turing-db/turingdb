@@ -22,14 +22,14 @@ bool GMLDumper::dump() {
     }
 
     _gml << "graph [\n";
-    for (const Node* node : _net->nodes()) {
+    for (const auto& [id, node] : _net->nodes()) {
         _gml << "    node [\n";
         _gml << "        id "
              << std::to_string(node->getIndex().getObjectID()) << "\n";
         _gml << "    ]\n";
     }
 
-    for (const Edge* edge : _net->edges()) {
+    for (const auto& [id, edge] : _net->edges()) {
         _gml << "    edge [\n";
         _gml << "        source "
              << std::to_string(edge->getSource()->getIndex().getObjectID()) << "\n";

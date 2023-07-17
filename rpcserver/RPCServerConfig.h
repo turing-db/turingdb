@@ -10,6 +10,7 @@ public:
     const std::string& getAddress() const { return _serverAddr; }
     unsigned getPort() const { return _port; }
     unsigned getConcurrency() const { return _concurrency; }
+    const std::string& getDatabasesPath() const { return _databasesPath; }
 
     void setAddress(const std::string& addr) { _serverAddr = addr; }
     void setPort(unsigned port) { _port = port; }
@@ -19,4 +20,5 @@ private:
     std::string _serverAddr {"127.0.0.1"};
     unsigned _port {6666};
     unsigned _concurrency {1};
+    std::string _databasesPath;
 };

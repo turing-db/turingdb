@@ -12,55 +12,45 @@
 using namespace db;
 using namespace Log;
 
-DBLoader::DBLoader(DB* db, const Path& outDir)
-    : _outDir(outDir),
-      _dbDirName(getDefaultDBDirectoryName()),
+DBLoader::DBLoader(DB* db, const Path& dbDir)
+    : _dbDir(dbDir),
       _db(db)
 {
 }
 
 DBLoader::~DBLoader() = default;
 
-std::string DBLoader::getDefaultDBDirectoryName() {
-    return "turing.db";
-}
-
-void DBLoader::setDBDirectoryName(const std::string& dirName) {
-    _dbDirName = dirName;
-}
-
 bool DBLoader::load() {
     if (!_db) {
         return false;
     }
 
-    Path dbPath = FileUtils::abspath(_outDir / _dbDirName);
-    TimerStat timer {"Loading Turing db: " + dbPath.string() };
+    TimerStat timer {"Loading Turing db: " + _dbDir.string() };
 
-    Path stringIndexPath = dbPath / "smap";
-    Path typeIndexPath = dbPath / "types";
-    Path entityIndexPath = dbPath / "data";
+    Path stringIndexPath = _dbDir / "smap";
+    Path typeIndexPath = _dbDir / "types";
+    Path entityIndexPath = _dbDir / "data";
 
-    BioLog::log(msg::INFO_DB_LOADING_DATABASE() << dbPath);
+    BioLog::log(msg::INFO_DB_LOADING_DATABASE() << _dbDir);
 
     BioLog::log(msg::INFO_DB_LOADING_STRING_INDEX());
     StringIndexLoader strLoader {stringIndexPath};
     if (!strLoader.load(_db->_strIndex)) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << dbPath);
+        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << _dbDir);
         return false;
     }
 
     BioLog::log(msg::INFO_DB_LOADING_TYPE_INDEX());
     TypeLoader typeLoader {_db, typeIndexPath};
     if (!typeLoader.load(strLoader)) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << dbPath);
+        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << _dbDir);
         return false;
     }
 
     BioLog::log(msg::INFO_DB_LOADING_ENTITY_INDEX());
     EntityLoader entityLoader {_db, entityIndexPath};
     if (!entityLoader.load(strLoader)) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << dbPath);
+        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << _dbDir);
         return false;
     }
 
