@@ -14,6 +14,7 @@
 #include "Writeback.h"
 
 #include <nlohmann/json.hpp>
+#include <regex>
 
 using JsonType = nlohmann::detail::value_t;
 using JsonObject = nlohmann::basic_json<>;
@@ -167,15 +168,8 @@ static void handleProperty(const PropertyContext& c) {
 }
 
 std::string convertNeo4jLabel(const std::string& label) {
-    if (label.size() < 3) {
-        return label;
-    }
-
-    if (label.rfind(":`", 0) != std::string::npos && label.back() == '`') {
-        return label.substr(2, label.size()-3);
-    }
-
-    return label;
+    std::regex pattern {"`:`|`:|:`|`$"};
+    return std::regex_replace(label, pattern, "");
 }
 
 }
@@ -217,27 +211,26 @@ bool Neo4j4JsonParser::parseNodeProperties(const std::string& data) {
     for (const auto& record : results) {
         const auto& row = record["row"];
 
-        const std::string ntNameStr = convertNeo4jLabel(row.at(0));
-        const db::StringRef ntName = _db->getString(ntNameStr);
-        db::NodeType* nt = getOrCreateNodeType(ntName);
-        msgbioassert(
-            neo4jTypes.find(row.at(3).at(0)) != neo4jTypes.end(),
-            (row.at(3).at(0).get<std::string>() + " type is not supported")
-                .c_str());
+        std::string ntNameStr = "";
 
-        const db::StringRef propName = _db->getString(row.at(2));
-        const db::ValueType valType = neo4jTypes.find(row.at(3).at(0))->second;
+        for (const auto& labelPart : row.at(1)) {
+            ntNameStr += labelPart;
+            const db::StringRef ntName = _db->getString(ntNameStr);
+            db::NodeType* nt = getOrCreateNodeType(ntName);
+            msgbioassert(
+                neo4jTypes.find(row.at(3).at(0)) != neo4jTypes.end(),
+                (row.at(3).at(0).get<std::string>() + " type is not supported")
+                    .c_str());
 
-        if (valType == db::ValueType::VK_INVALID) {
-            _stats.unsupportedNodeProps += 1;
-            continue;
-        }
+            const db::StringRef propName = _db->getString(row.at(2));
+            const db::ValueType valType = neo4jTypes.find(row.at(3).at(0))->second;
 
-        if (!_wb->addPropertyType(nt, propName, valType)) {
-            Log::BioLog::echo(
-                "Problem with property type ["
-                + propName + "] for node type [" + nt->getName() + "]");
-            _stats.nodePropErrors += 1;
+            if (valType == db::ValueType::VK_INVALID) {
+                _stats.unsupportedNodeProps += 1;
+                continue;
+            }
+
+            _wb->addPropertyType(nt, propName, valType);
         }
     }
 
@@ -259,21 +252,29 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data) {
     for (const auto& record : results) {
         const auto& row = record["row"];
         label = "";
+        db::NodeType* baseNt {nullptr};
+        db::NodeType* tempNt {nullptr};
 
         // Getting NodeType
         for (const JsonObject& ntAliasStr : row.at(0)) {
             label += ntAliasStr.get<std::string>();
+            tempNt = _db->getNodeType(_db->getString(label));
+            if (tempNt) {
+                baseNt = tempNt;
+            }
         }
         const db::StringRef ntName = _db->getString(label);
 
-        // If the NodeType does not exist, it means it was not created while
-        // gathering node properties (due to having no properties or only
-        // unsupported ones)
-        db::NodeType* nt = getOrCreateNodeType(ntName);
+        db::NodeType* nt = _db->getNodeType(ntName);
+        if (!nt) {
+            nt = _wb->createNodeType(ntName);
+            for ([[maybe_unused]] const db::PropertyType* pt : baseNt->propertyTypes()) {
+                _wb->addPropertyType(nt, pt->getName(), pt->getValueType());
+            }
+        }
 
         // Creating node
         const size_t nodeId = row.at(1).get<uint64_t>();
-
         const db::StringRef nodeName = _db->getString(std::to_string(nodeId));
         db::Node* n = _wb->createNode(net, nt, nodeName);
         _nodeIdMap.emplace(nodeId, n->getIndex());
@@ -285,8 +286,9 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data) {
 
             // if the propType is invalid, it means the PropertyType was not
             // registered due to invalid (unsupported) type
-            if (!propType)
+            if (!propType) {
                 continue;
+            }
 
             PropertyContext context = {
                 .stats = _stats,
@@ -511,7 +513,6 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
                     Log::BioLog::echo("FATAL ERROR, SHOULD NOT OCCUR: Invalid "
                                       "property type: "
                                       + propName);
-
                     _stats.nodePropErrors += 1;
                     break;
                 }
