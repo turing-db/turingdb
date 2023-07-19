@@ -1,8 +1,8 @@
 from __future__ import annotations
 from collections.abc import Iterable, Mapping
-from turingapi.proto.APIService_pb2_grpc import APIServiceStub
-from turingapi.core import Database
-from turingapi.Request import Request, TuringError
+from turingdb.proto.DBService_pb2_grpc import DBServiceStub
+from turingdb.core import Database
+from turingdb.Request import Request, TuringError
 import grpc
 
 
@@ -11,10 +11,11 @@ class Turing:
         self.channel = grpc.insecure_channel(
             connection_str, options=(("grpc.enable_http_proxy", 0),)
         )
-        self.stub = APIServiceStub(self.channel)
+        self.stub = DBServiceStub(self.channel)
 
     @property
     def running(self) -> bool:
+        Request(self, "GetStatus")
         try:
             Request(self, "GetStatus")
             return True

@@ -1,8 +1,8 @@
 import sys
-import turingapi
+from turingdb import Turing, ValueType
 
 if __name__ == "__main__":
-    turing = turingapi.Turing("localhost:6666")
+    turing = Turing("localhost:6666")
 
     # Checking if server is up and running
     if not turing.running:
@@ -62,8 +62,8 @@ if __name__ == "__main__":
     et1 = edge_types["ET"]
     et2 = edge_types["ET2"]
 
-    pt1 = nt1.add_property_type("PT", turingapi.ValueType.INT)
-    pt2 = nt1.add_property_type("PT2", turingapi.ValueType.STRING)
+    pt1 = nt1.add_property_type("PT", ValueType.INT)
+    pt2 = nt1.add_property_type("PT2", ValueType.STRING)
 
     print("Listing node type property types")
     property_types = nt1.list_property_types()

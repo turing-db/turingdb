@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='turingapi',
+    name='turingdb',
     #version='0.0.0',
     #url='https://github.com/mypackage.git',
     #author='Author Name',

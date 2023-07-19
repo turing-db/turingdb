@@ -1,4 +1,4 @@
-from turingapi.proto import APIService_pb2
+from turingdb.proto import DBService_pb2
 import grpc
 
 
@@ -28,10 +28,10 @@ class Request:
         try:
             method = getattr(turing.stub, rpc_method)
             if len(kwargs) != 0:
-                request = getattr(APIService_pb2, rpc_method + "Request")(**kwargs)
+                request = getattr(DBService_pb2, rpc_method + "Request")(**kwargs)
                 self.data = method(request)
             else:
-                request = getattr(APIService_pb2, rpc_method + "Request")()
+                request = getattr(DBService_pb2, rpc_method + "Request")()
                 self.data = method(request)
 
         except grpc.RpcError as err:

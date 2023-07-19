@@ -1,17 +1,21 @@
 #pragma once
 
-#include "APIService.grpc.pb.h"
+#include "DBService.grpc.pb.h"
 
 namespace db {
 class DB;
 }
 
-class RPCServerConfig;
+class DBServerConfig;
 
-class APIServiceImpl : public APIService::Service {
+class DBServiceImpl : public DBService::Service {
 public:
-    APIServiceImpl(const RPCServerConfig& config);
-    ~APIServiceImpl() override;
+    DBServiceImpl(const DBServerConfig& config);
+    ~DBServiceImpl() override;
+
+    grpc::Status ExecuteQuery(grpc::ServerContext* ctxt,
+                              const QueryRequest* request,
+                              grpc::ServerWriter<QueryRowReply>* writer) override;
 
     grpc::Status GetStatus(grpc::ServerContext* ctxt,
                            const GetStatusRequest* request,
@@ -122,7 +126,7 @@ public:
                                    ListPropertyTypesReply* reply) override;
 
 private:
-    const RPCServerConfig& _config;
+    const DBServerConfig& _config;
     std::map<size_t, db::DB*> _databases;
     std::map<std::string, size_t> _dbNameMapping;
     size_t _nextAvailableId = 0;

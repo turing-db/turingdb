@@ -1,11 +1,11 @@
 from __future__ import annotations
-from turingapi.Request import Request
+from turingdb.Request import Request
 
 from typing import TYPE_CHECKING, Mapping
 if TYPE_CHECKING:
-    from turingapi.Turing import Turing
+    from turingdb.Turing import Turing
 
-import turingapi.proto.APIService_pb2 as APIService_pb2
+import turingdb.proto.DBService_pb2 as dbService_pb2
 import enum
 
 
@@ -114,11 +114,11 @@ class Database(DBObject):
 
 
 class ValueType(enum.Enum):
-    INT = APIService_pb2.ValueType.INT
-    UNSIGNED = APIService_pb2.ValueType.UNSIGNED
-    BOOL = APIService_pb2.ValueType.BOOL
-    STRING = APIService_pb2.ValueType.STRING
-    DECIMAL = APIService_pb2.ValueType.DECIMAL
+    INT = dbService_pb2.ValueType.INT
+    UNSIGNED = dbService_pb2.ValueType.UNSIGNED
+    BOOL = dbService_pb2.ValueType.BOOL
+    STRING = dbService_pb2.ValueType.STRING
+    DECIMAL = dbService_pb2.ValueType.DECIMAL
 
     def __repr__(self) -> str:
         return f'<ValueType {self.value}>'
@@ -126,7 +126,7 @@ class ValueType(enum.Enum):
 
 class EntityType(DBObject):
     def __init__(
-        self, db: Database, id: int, name: str, entity_type: APIService_pb2.EntityType
+        self, db: Database, id: int, name: str, entity_type: dbService_pb2.EntityType
     ):
         super().__init__(id)
         self._db = db
@@ -152,7 +152,7 @@ class EntityType(DBObject):
             db_id=self._db.id,
             entity_type_id=self.id,
             entity_type=self._entity_type,
-            property_type=APIService_pb2.PropertyType(
+            property_type=dbService_pb2.PropertyType(
                 name=name, value_type=value_type.value
             ),
         )
@@ -164,7 +164,7 @@ class EntityType(DBObject):
 
 class NodeType(EntityType):
     def __init__(self, db: Database, nt):
-        super().__init__(db, nt.id, nt.name, APIService_pb2.EntityType.NODE)
+        super().__init__(db, nt.id, nt.name, dbService_pb2.EntityType.NODE)
 
     def __repr__(self) -> str:
         return f'<NodeType "{self._name}" id={self.id}>'
@@ -172,7 +172,7 @@ class NodeType(EntityType):
 
 class EdgeType(EntityType):
     def __init__(self, db: Database, et):
-        super().__init__(db, et.id, et.name, APIService_pb2.EntityType.EDGE)
+        super().__init__(db, et.id, et.name, dbService_pb2.EntityType.EDGE)
 
     def __repr__(self) -> str:
         return f'<EdgeType "{self._name}" id={self.id}>'
@@ -255,7 +255,7 @@ class Property:
 
 
 class Entity(DBObject):
-    def __init__(self, id: int, db: Database, entity_type: APIService_pb2.EntityType):
+    def __init__(self, id: int, db: Database, entity_type: dbService_pb2.EntityType):
         super().__init__(id)
         self._db = db
         self._entity_type = entity_type
@@ -271,15 +271,15 @@ class Entity(DBObject):
         return {p.property_type_name: Property(p) for p in res.data.properties}
 
     def add_property(self, pt: PropertyType, value) -> Property:
-        if pt.value_type == APIService_pb2.ValueType.INT:
+        if pt.value_type == dbService_pb2.ValueType.INT:
             oneof = "int64"
-        elif pt.value_type == APIService_pb2.ValueType.UNSIGNED:
+        elif pt.value_type == dbService_pb2.ValueType.UNSIGNED:
             oneof = "uint64"
-        elif pt.value_type == APIService_pb2.ValueType.STRING:
+        elif pt.value_type == dbService_pb2.ValueType.STRING:
             oneof = "string"
-        elif pt.value_type == APIService_pb2.ValueType.BOOL:
+        elif pt.value_type == dbService_pb2.ValueType.BOOL:
             oneof = "bool"
-        elif pt.value_type == APIService_pb2.ValueType.DECIMAL:
+        elif pt.value_type == dbService_pb2.ValueType.DECIMAL:
             oneof = "decimal"
 
         res = Request(
@@ -288,7 +288,7 @@ class Entity(DBObject):
             db_id=self._db.id,
             entity_id=self.id,
             entity_type=self._entity_type,
-            property=APIService_pb2.Property(
+            property=dbService_pb2.Property(
                 property_type_name=pt.name, value_type=pt.value_type, **{oneof: value}
             ),
         )
@@ -300,7 +300,7 @@ class Entity(DBObject):
 
 class Node(Entity):
     def __init__(self, net: Network, node):
-        super().__init__(node.id, net._db, APIService_pb2.EntityType.NODE)
+        super().__init__(node.id, net._db, dbService_pb2.EntityType.NODE)
         self._net = net
         self._name = node.name
         self._in_edges_ids = node.in_edge_ids
@@ -312,7 +312,7 @@ class Node(Entity):
 
 class Edge(Entity):
     def __init__(self, db: Database, edge):
-        super().__init__(edge.id, db, APIService_pb2.EntityType.EDGE)
+        super().__init__(edge.id, db, dbService_pb2.EntityType.EDGE)
         self._source_id = edge.source_id
         self._target_id = edge.target_id
 
