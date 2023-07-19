@@ -45,9 +45,17 @@ public:
                                const ListNodeTypesRequest* request,
                                ListNodeTypesReply* reply) override;
 
+    grpc::Status ListNodeTypesByID(grpc::ServerContext* ctxt,
+                                   const ListNodeTypesByIDRequest* request,
+                                   ListNodeTypesByIDReply* reply) override;
+
     grpc::Status ListEdgeTypes(grpc::ServerContext* ctxt,
                                const ListEdgeTypesRequest* request,
                                ListEdgeTypesReply* reply) override;
+
+    grpc::Status ListEdgeTypesByID(grpc::ServerContext* ctxt,
+                                   const ListEdgeTypesByIDRequest* request,
+                                   ListEdgeTypesByIDReply* reply) override;
 
     grpc::Status ListNetworks(grpc::ServerContext* ctxt,
                               const ListNetworksRequest* request,

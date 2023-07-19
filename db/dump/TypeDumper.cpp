@@ -41,12 +41,12 @@ bool TypeDumper::dump() {
     const DB::NodeTypeRange nodeTypes = _db->nodeTypes();
     auto ntListBuilder = typeIndexBuilder.initNodeTypes(nodeTypes.size());
 
+    size_t i = 0;
     for (const NodeType* nt : nodeTypes) {
-        const size_t i = nt->getIndex();
+        auto ntBuilder = ntListBuilder[i];
+        ntBuilder.setNameId((uint64_t)nt->getName().getSharedString()->getID());
         const auto propTypes = nt->propertyTypes();
-        auto propBuilder = ntListBuilder[i].initPropertyTypes(propTypes.size());
-
-        ntListBuilder[i].setNameId(nt->getName().getSharedString()->getID());
+        auto propTypeListBuilder = ntBuilder.initPropertyTypes(propTypes.size());
 
         size_t currentPropTypeId = -1;
         for (const PropertyType* propType : propTypes) {
@@ -55,25 +55,28 @@ bool TypeDumper::dump() {
             }
         }
 
+        size_t j = 0;
         for (const PropertyType* propType : propTypes) {
-            const size_t j = propType->getIndex() - currentPropTypeId;
+            auto propTypeBuilder = propTypeListBuilder[j];
 
-            propBuilder[j].setId(propType->getIndex());
-            propBuilder[j].setNameId(propType->getName().getID());
+            propTypeBuilder.setId(propType->getIndex());
+            propTypeBuilder.setNameId((uint64_t)propType->getName().getID());
             const auto kind = static_cast<OnDisk::ValueKind>(
                 propType->getValueType().getKind());
-            propBuilder[j].setKind(kind);
+            propTypeBuilder.setKind(kind);
+            j++;
         }
 
         currentPropTypeId += propTypes.size();
+        i++;
     }
 
     // Edge Types
     const DB::EdgeTypeRange edgeTypes = _db->edgeTypes();
     auto etListBuilder = typeIndexBuilder.initEdgeTypes(edgeTypes.size());
 
+    i = 0;
     for (const EdgeType* et : edgeTypes) {
-        const size_t i = et->getIndex();
         etListBuilder[i].setNameId(et->getName().getSharedString()->getID());
 
         // Sources
@@ -98,8 +101,7 @@ bool TypeDumper::dump() {
 
         // PropertyTypes
         auto propTypes = et->propertyTypes();
-
-        auto propBuilder = etListBuilder[i].initPropertyTypes(propTypes.size());
+        auto propTypeListBuilder = etListBuilder[i].initPropertyTypes(propTypes.size());
 
         size_t currentPropTypeId = -1;
         for (const PropertyType* propType : propTypes) {
@@ -108,17 +110,19 @@ bool TypeDumper::dump() {
             }
         }
 
+        size_t k = 0;
         for (const auto& propType : propTypes) {
-            const size_t j = propType->getIndex() - currentPropTypeId;
-
-            propBuilder[j].setId(propType->getIndex());
-            propBuilder[j].setNameId(
+            auto propTypeBuilder = propTypeListBuilder[k];
+            propTypeBuilder.setId(propType->getIndex());
+            propTypeBuilder.setNameId(
                 propType->getName().getSharedString()->getID());
             const auto kind = static_cast<OnDisk::ValueKind>(
                 propType->getValueType().getKind());
-            propBuilder[j].setKind(kind);
+            propTypeBuilder.setKind(kind);
+            k++;
         }
         currentPropTypeId += propTypes.size();
+        i++;
     }
 
     ::capnp::writeMessageToFd(indexFD, message);

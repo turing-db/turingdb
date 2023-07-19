@@ -13,10 +13,12 @@ service APIService {
 
     // NodeTypes
     rpc ListNodeTypes (ListNodeTypesRequest) returns (ListNodeTypesReply) {}
+    rpc ListNodeTypesByID (ListNodeTypesByIDRequest) returns (ListNodeTypesByIDReply) {}
     rpc CreateNodeType (CreateNodeTypeRequest) returns (CreateNodeTypeReply) {}
 
     // EdgeTypes
     rpc ListEdgeTypes (ListEdgeTypesRequest) returns (ListEdgeTypesReply) {}
+    rpc ListEdgeTypesByID (ListEdgeTypesByIDRequest) returns (ListEdgeTypesByIDReply) {}
     rpc CreateEdgeType (CreateEdgeTypeRequest) returns (CreateEdgeTypeReply) {}
 
     // PropertyTypes
@@ -256,11 +258,29 @@ message ListNodeTypesReply {
     repeated NodeType node_types = 1;
 }
 
+// ListNodeTypesByID
+message ListNodeTypesByIDRequest {
+    uint64 db_id = 1;
+    repeated uint64 node_type_ids = 2;
+}
+message ListNodeTypesByIDReply {
+    repeated NodeType node_types = 1;
+}
+
 // ListEdgeTypes
 message ListEdgeTypesRequest {
     uint64 db_id = 1;
 }
 message ListEdgeTypesReply {
+    repeated EdgeType edge_types = 1;
+}
+
+// ListEdgeTypesByID
+message ListEdgeTypesByIDRequest {
+    uint64 db_id = 1;
+    repeated uint64 edge_type_ids = 2;
+}
+message ListEdgeTypesByIDReply {
     repeated EdgeType edge_types = 1;
 }
 

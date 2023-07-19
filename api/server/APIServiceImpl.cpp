@@ -190,6 +190,7 @@ grpc::Status APIServiceImpl::ListNodes(grpc::ServerContext* ctxt,
         n->set_id(pair.first);
         n->set_db_id(request->db_id());
         n->set_net_id(pair.second->getNetwork()->getName().getID());
+        n->set_node_type_id(pair.second->getType()->getName().getID());
 
         n->mutable_out_edge_ids()->Reserve(pair.second->outEdges().size());
         for (const db::Edge* out : pair.second->outEdges()) {
@@ -226,6 +227,7 @@ grpc::Status APIServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
         rn->set_id(id);
         rn->set_db_id(request->db_id());
         rn->set_net_id(n->getNetwork()->getName().getID());
+        rn->set_node_type_id(n->getType()->getName().getID());
 
         rn->mutable_out_edge_ids()->Reserve(n->outEdges().size());
         for (const db::Edge* out : n->outEdges()) {
@@ -267,6 +269,7 @@ grpc::Status APIServiceImpl::ListEdges(grpc::ServerContext* ctxt,
         e->set_db_id(request->db_id());
         e->set_source_id(pair.second->getSource()->getIndex());
         e->set_target_id(pair.second->getTarget()->getIndex());
+        e->set_edge_type_id(pair.second->getType()->getName().getID());
     }
 
     return grpc::Status::OK;
@@ -294,6 +297,7 @@ grpc::Status APIServiceImpl::ListEdgesByID(grpc::ServerContext* ctxt,
         re->set_db_id(request->db_id());
         re->set_source_id(e->getSource()->getIndex());
         re->set_target_id(e->getTarget()->getIndex());
+        re->set_edge_type_id(e->getType()->getName().getID());
     }
 
     return grpc::Status::OK;
@@ -309,6 +313,39 @@ grpc::Status APIServiceImpl::ListNodeTypes(grpc::ServerContext* ctxt,
     const db::DB* db = _databases.at(request->db_id());
 
     for (const db::NodeType* nt : db->nodeTypes()) {
+        auto* rpcNodeType = reply->add_node_types();
+        rpcNodeType->set_db_id(request->db_id());
+        rpcNodeType->set_id(nt->getName().getID());
+        rpcNodeType->set_name(nt->getName().getSharedString()->getString());
+
+        for (const db::EdgeType* et : nt->inEdgeTypes()) {
+            rpcNodeType->add_in_edge_ids(et->getName().getID());
+        }
+
+        for (const db::EdgeType* et : nt->outEdgeTypes()) {
+            rpcNodeType->add_out_edge_ids(et->getName().getID());
+        }
+    }
+
+    return grpc::Status::OK;
+}
+
+grpc::Status APIServiceImpl::ListNodeTypesByID(grpc::ServerContext* ctxt,
+                                               const ListNodeTypesByIDRequest* request,
+                                               ListNodeTypesByIDReply* reply) {
+    if (!isDBValid(request->db_id())) {
+        return invalidDBStatus;
+    }
+
+    const db::DB* db = _databases.at(request->db_id());
+    reply->mutable_node_types()->Reserve(request->node_type_ids_size());
+
+    for (const auto& id : request->node_type_ids()) {
+        db::NodeType* nt = db->getNodeType((db::DBIndex)id);
+        if (!nt) {
+            return grpc::Status {grpc::StatusCode::NOT_FOUND,
+                                 "NodeType '" + std::to_string(id) + "' was not found"};
+        }
         auto* rpcNodeType = reply->add_node_types();
         rpcNodeType->set_db_id(request->db_id());
         rpcNodeType->set_id(nt->getName().getID());
@@ -353,6 +390,39 @@ grpc::Status APIServiceImpl::ListEdgeTypes(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
+grpc::Status APIServiceImpl::ListEdgeTypesByID(grpc::ServerContext* ctxt,
+                                           const ListEdgeTypesByIDRequest* request,
+                                           ListEdgeTypesByIDReply* reply) {
+    if (!isDBValid(request->db_id())) {
+        return invalidDBStatus;
+    }
+
+    const db::DB* db = _databases.at(request->db_id());
+    reply->mutable_edge_types()->Reserve(request->edge_type_ids_size());
+
+    for (const auto& id : request->edge_type_ids()) {
+        db::EdgeType* et = db->getEdgeType((db::DBIndex)id);
+        if (!et) {
+            return grpc::Status {grpc::StatusCode::NOT_FOUND,
+                                 "EdgeType '" + std::to_string(id) + "' was not found"};
+        }
+        auto* rpcEdgeType = reply->add_edge_types();
+        rpcEdgeType->set_db_id(request->db_id());
+        rpcEdgeType->set_id(et->getName().getID());
+        rpcEdgeType->set_name(et->getName().getSharedString()->getString());
+
+        for (const db::NodeType* nt : et->sourceTypes()) {
+            rpcEdgeType->add_source_ids(nt->getName().getID());
+        }
+
+        for (const db::NodeType* nt : et->targetTypes()) {
+            rpcEdgeType->add_target_ids(nt->getName().getID());
+        }
+    }
+
+    return grpc::Status::OK;
+}
+
 grpc::Status APIServiceImpl::ListNodesFromNetwork(grpc::ServerContext* ctxt,
                                                   const ListNodesFromNetworkRequest* request,
                                                   ListNodesFromNetworkReply* reply) {
@@ -379,6 +449,7 @@ grpc::Status APIServiceImpl::ListNodesFromNetwork(grpc::ServerContext* ctxt,
         n->set_id(node->getIndex());
         n->set_db_id(request->db_id());
         n->set_net_id(net_id);
+        n->set_node_type_id(node->getType()->getName().getID());
 
         n->mutable_out_edge_ids()->Reserve(node->outEdges().size());
         for (const db::Edge* out : node->outEdges()) {
@@ -417,6 +488,7 @@ grpc::Status APIServiceImpl::ListNodesByIDFromNetwork(grpc::ServerContext* ctxt,
         n->set_id(node->getIndex());
         n->set_db_id(request->db_id());
         n->set_net_id(net_id);
+        n->set_node_type_id(node->getType()->getName().getID());
 
         n->mutable_out_edge_ids()->Reserve(node->outEdges().size());
         for (const db::Edge* out : node->outEdges()) {
@@ -460,6 +532,7 @@ grpc::Status APIServiceImpl::ListEdgesFromNetwork(grpc::ServerContext* ctxt,
         e->set_db_id(request->db_id());
         e->set_source_id(edge->getSource()->getIndex());
         e->set_target_id(edge->getTarget()->getIndex());
+        e->set_edge_type_id(edge->getType()->getName().getID());
     }
 
     return grpc::Status::OK;
@@ -489,6 +562,7 @@ grpc::Status APIServiceImpl::ListEdgesByIDFromNetwork(grpc::ServerContext* ctxt,
         e->set_db_id(request->db_id());
         e->set_source_id(edge->getSource()->getIndex());
         e->set_target_id(edge->getTarget()->getIndex());
+        e->set_edge_type_id(edge->getType()->getName().getID());
     }
 
     return grpc::Status::OK;

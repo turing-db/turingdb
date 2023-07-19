@@ -69,8 +69,16 @@ class Database(DBObject):
         res = Request(self._turing, "ListNodeTypes", db_id=self._id)
         return {nt.name: NodeType(self, nt) for nt in res.data.node_types}
 
+    def list_node_types_by_id(self, ids: list[int]) -> Mapping[str, NodeType]:
+        res = Request(self._turing, "ListNodeTypesByID", db_id=self._id, node_type_ids=ids)
+        return {nt.name: NodeType(self, nt) for nt in res.data.node_types}
+
     def list_edge_types(self) -> Mapping[str, EdgeType]:
         res = Request(self._turing, "ListEdgeTypes", db_id=self._id)
+        return {et.name: EdgeType(self, et) for et in res.data.edge_types}
+
+    def list_edge_types_by_id(self, ids: list[int]) -> Mapping[str, EdgeType]:
+        res = Request(self._turing, "ListEdgeTypesByID", db_id=self._id, edge_type_ids=ids)
         return {et.name: EdgeType(self, et) for et in res.data.edge_types}
 
     def list_networks(self) -> Mapping[str, Network]:
@@ -160,6 +168,10 @@ class EntityType(DBObject):
 
     def __repr__(self) -> str:
         return f'<EntityType "{self._name}" id={self.id}>'
+
+    @property
+    def name(self) -> str:
+        return self._name
 
 
 class NodeType(EntityType):
@@ -303,11 +315,38 @@ class Node(Entity):
         super().__init__(node.id, net._db, APIService_pb2.EntityType.NODE)
         self._net = net
         self._name = node.name
-        self._in_edges_ids = node.in_edge_ids
-        self._out_edges_ids = node.out_edge_ids
+        self._in_edge_ids = node.in_edge_ids
+        self._out_edge_ids = node.out_edge_ids
+        self._node_type_id = node.node_type_id
 
     def __repr__(self) -> str:
         return f'<Node name="{self._name}" id={self.id}>'
+
+    @property
+    def in_edge_ids(self) -> list[int]:
+        return self._in_edge_ids
+
+    @property
+    def in_edges(self) -> list[Edge]:
+        return self._db.list_edges_by_id(self._in_edge_ids)
+
+    @property
+    def out_edges(self) -> list[Edge]:
+        return self._db.list_edges_by_id(self._out_edge_ids)
+
+    @property
+    def out_edge_ids(self) -> list[int]:
+        return self._out_edge_ids
+
+    @property
+    def node_type_id(self) -> int:
+        return self._node_type_id
+
+    @property
+    def node_type(self) -> EdgeType:
+        for _, v in self._db.list_node_types_by_id([self._node_type_id]).items():
+            return v
+        return None
 
 
 class Edge(Entity):
@@ -315,7 +354,34 @@ class Edge(Entity):
         super().__init__(edge.id, db, APIService_pb2.EntityType.EDGE)
         self._source_id = edge.source_id
         self._target_id = edge.target_id
+        self._edge_type_id = edge.edge_type_id
 
     def __repr__(self) -> str:
         return f'<Edge id={self.id}>'
+
+    @property
+    def source_id(self) -> int:
+        return self._source_id
+
+    @property
+    def source(self) -> Node:
+        return self._db.list_nodes_by_id([self._source_id])[0]
+
+    @property
+    def target(self) -> Node:
+        return self._db.list_nodes_by_id([self._target_id])[0]
+
+    @property
+    def target_id(self) -> int:
+        return self._target_id
+
+    @property
+    def edge_type_id(self) -> int:
+        return self._edge_type_id
+
+    @property
+    def edge_type(self) -> EdgeType:
+        for _, v in self._db.list_edge_types_by_id([self._edge_type_id]).items():
+            return v
+        return None
 

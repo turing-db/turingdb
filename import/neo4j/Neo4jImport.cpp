@@ -181,9 +181,6 @@ bool Neo4jImport::importNeo4j(const Path& filepath) {
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_NODE_COUNT() << stats.parsedNodes);
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_EDGE_COUNT() << stats.parsedEdges);
 
-    db::DBDumper dumper{parser.getDB(), _outDir / "turing.db" };
-    dumper.dump();
-
     handler.join();
     instance.destroy();
 
@@ -237,9 +234,6 @@ bool Neo4jImport::importJsonNeo4j(const Path& jsonDir) {
 
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_NODE_COUNT() << stats.parsedNodes);
     Log::BioLog::log(msg::INFO_NEO4J_PARSED_EDGE_COUNT() << stats.parsedEdges);
-
-    db::DBDumper dumper{parser.getDB(), _outDir / "turing.db"};
-    dumper.dump();
 
     return true;
 }
