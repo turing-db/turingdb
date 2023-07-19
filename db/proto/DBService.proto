@@ -1,6 +1,8 @@
 syntax = "proto3";
 
-service APIService {
+service DBService {
+    rpc ExecuteQuery (ExecuteQueryRequest) returns (stream ExecuteQueryReply) {}
+
     rpc GetStatus (GetStatusRequest) returns (GetStatusReply) {}
 
     // Database
@@ -123,6 +125,24 @@ message Property {
 message PropertyType {
     string name = 1;
     ValueType value_type = 2;
+}
+
+message QueryCell {
+    oneof value {
+        string string = 1;
+        int64 int64 = 2;
+        uint64 uint64 = 3;
+        bool boolean = 4;
+        double decimal = 5;
+    };
+}
+
+// Query
+message ExecuteQueryRequest {
+    string query_str = 1;
+}
+message ExecuteQueryReply {
+    repeated QueryCell cells = 1;
 }
 
 // GetStatus

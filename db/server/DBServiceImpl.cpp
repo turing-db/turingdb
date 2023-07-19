@@ -1,6 +1,5 @@
-#include "APIServiceImpl.h"
+#include "DBServiceImpl.h"
 
-#include "BioAssert.h"
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
@@ -11,32 +10,44 @@
 #include "Network.h"
 #include "Node.h"
 #include "NodeType.h"
-#include "RPCServerConfig.h"
+#include "DBServerConfig.h"
 #include "Writeback.h"
 
+#include "BioAssert.h"
+#include "BioLog.h"
+
 #define MAX_ENTITY_COUNT 50000
+
+using namespace Log;
 
 static const grpc::Status invalidDBStatus {grpc::StatusCode::NOT_FOUND,
                                            "The database ID is invalid"};
 
-APIServiceImpl::APIServiceImpl(const RPCServerConfig& config)
+DBServiceImpl::DBServiceImpl(const DBServerConfig& config)
     : _config(config)
 {
 }
 
-APIServiceImpl::~APIServiceImpl() {
+DBServiceImpl::~DBServiceImpl() {
     for (auto& [index, db] : _databases) {
         delete db;
     }
 }
 
-grpc::Status APIServiceImpl::GetStatus(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ExecuteQuery(grpc::ServerContext* ctxt,
+                                         const ExecuteQueryRequest* request,
+                                         grpc::ServerWriter<ExecuteQueryReply>* writer) {
+    BioLog::echo(request->query_str());
+    return grpc::Status::OK;
+}
+
+grpc::Status DBServiceImpl::GetStatus(grpc::ServerContext* ctxt,
                                        const GetStatusRequest* request,
                                        GetStatusReply* reply) {
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListAvailableDB(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListAvailableDB(grpc::ServerContext* ctxt,
                                              const ListAvailableDBRequest* request,
                                              ListAvailableDBReply* reply) {
 
@@ -50,7 +61,7 @@ grpc::Status APIServiceImpl::ListAvailableDB(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListLoadedDB(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListLoadedDB(grpc::ServerContext* ctxt,
                                           const ListLoadedDBRequest* request,
                                           ListLoadedDBReply* reply) {
 
@@ -64,7 +75,7 @@ grpc::Status APIServiceImpl::ListLoadedDB(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::LoadDB(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::LoadDB(grpc::ServerContext* ctxt,
                                     const LoadDBRequest* request,
                                     LoadDBReply* reply) {
     std::vector<std::string> diskDbNames;
@@ -98,7 +109,7 @@ grpc::Status APIServiceImpl::LoadDB(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::UnloadDB(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::UnloadDB(grpc::ServerContext* ctxt,
                                       const UnloadDBRequest* request,
                                       UnloadDBReply* reply) {
     const auto it = _dbNameMapping.find(request->db_name());
@@ -113,7 +124,7 @@ grpc::Status APIServiceImpl::UnloadDB(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::DumpDB(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::DumpDB(grpc::ServerContext* ctxt,
                                     const DumpDBRequest* request,
                                     DumpDBReply* reply) {
 
@@ -138,7 +149,7 @@ grpc::Status APIServiceImpl::DumpDB(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::CreateDB(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::CreateDB(grpc::ServerContext* ctxt,
                                       const CreateDBRequest* request,
                                       CreateDBReply* reply) {
     std::vector<std::string> diskDbNames;
@@ -166,7 +177,7 @@ grpc::Status APIServiceImpl::CreateDB(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNodes(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListNodes(grpc::ServerContext* ctxt,
                                        const ListNodesRequest* request,
                                        ListNodesReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -206,7 +217,7 @@ grpc::Status APIServiceImpl::ListNodes(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
                                            const ListNodesByIDRequest* request,
                                            ListNodesByIDReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -243,7 +254,7 @@ grpc::Status APIServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEdges(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEdges(grpc::ServerContext* ctxt,
                                        const ListEdgesRequest* request,
                                        ListEdgesReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -275,7 +286,7 @@ grpc::Status APIServiceImpl::ListEdges(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEdgesByID(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEdgesByID(grpc::ServerContext* ctxt,
                                            const ListEdgesByIDRequest* request,
                                            ListEdgesByIDReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -303,7 +314,7 @@ grpc::Status APIServiceImpl::ListEdgesByID(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNodeTypes(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListNodeTypes(grpc::ServerContext* ctxt,
                                            const ListNodeTypesRequest* request,
                                            ListNodeTypesReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -330,9 +341,9 @@ grpc::Status APIServiceImpl::ListNodeTypes(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNodeTypesByID(grpc::ServerContext* ctxt,
-                                               const ListNodeTypesByIDRequest* request,
-                                               ListNodeTypesByIDReply* reply) {
+grpc::Status DBServiceImpl::ListNodeTypesByID(grpc::ServerContext* ctxt,
+                                              const ListNodeTypesByIDRequest* request,
+                                              ListNodeTypesByIDReply* reply) {
     if (!isDBValid(request->db_id())) {
         return invalidDBStatus;
     }
@@ -363,7 +374,7 @@ grpc::Status APIServiceImpl::ListNodeTypesByID(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEdgeTypes(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEdgeTypes(grpc::ServerContext* ctxt,
                                            const ListEdgeTypesRequest* request,
                                            ListEdgeTypesReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -390,7 +401,7 @@ grpc::Status APIServiceImpl::ListEdgeTypes(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEdgeTypesByID(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEdgeTypesByID(grpc::ServerContext* ctxt,
                                            const ListEdgeTypesByIDRequest* request,
                                            ListEdgeTypesByIDReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -423,7 +434,7 @@ grpc::Status APIServiceImpl::ListEdgeTypesByID(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNodesFromNetwork(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListNodesFromNetwork(grpc::ServerContext* ctxt,
                                                   const ListNodesFromNetworkRequest* request,
                                                   ListNodesFromNetworkReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -465,7 +476,7 @@ grpc::Status APIServiceImpl::ListNodesFromNetwork(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNodesByIDFromNetwork(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListNodesByIDFromNetwork(grpc::ServerContext* ctxt,
                                                       const ListNodesByIDFromNetworkRequest* request,
                                                       ListNodesByIDFromNetworkReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -504,7 +515,7 @@ grpc::Status APIServiceImpl::ListNodesByIDFromNetwork(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEdgesFromNetwork(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEdgesFromNetwork(grpc::ServerContext* ctxt,
                                                   const ListEdgesFromNetworkRequest* request,
                                                   ListEdgesFromNetworkReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -538,7 +549,7 @@ grpc::Status APIServiceImpl::ListEdgesFromNetwork(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEdgesByIDFromNetwork(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEdgesByIDFromNetwork(grpc::ServerContext* ctxt,
                                                       const ListEdgesByIDFromNetworkRequest* request,
                                                       ListEdgesByIDFromNetworkReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -568,7 +579,7 @@ grpc::Status APIServiceImpl::ListEdgesByIDFromNetwork(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListNetworks(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListNetworks(grpc::ServerContext* ctxt,
                                           const ListNetworksRequest* request,
                                           ListNetworksReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -587,7 +598,7 @@ grpc::Status APIServiceImpl::ListNetworks(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListEntityProperties(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListEntityProperties(grpc::ServerContext* ctxt,
                                                   const ListEntityPropertiesRequest* request,
                                                   ListEntityPropertiesReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -649,7 +660,7 @@ grpc::Status APIServiceImpl::ListEntityProperties(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::CreateNodeType(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::CreateNodeType(grpc::ServerContext* ctxt,
                                             const CreateNodeTypeRequest* request,
                                             CreateNodeTypeReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -674,7 +685,7 @@ grpc::Status APIServiceImpl::CreateNodeType(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::CreateEdgeType(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::CreateEdgeType(grpc::ServerContext* ctxt,
                                             const CreateEdgeTypeRequest* request,
                                             CreateEdgeTypeReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -719,7 +730,7 @@ grpc::Status APIServiceImpl::CreateEdgeType(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::CreateNetwork(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::CreateNetwork(grpc::ServerContext* ctxt,
                                            const CreateNetworkRequest* request,
                                            CreateNetworkReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -740,7 +751,7 @@ grpc::Status APIServiceImpl::CreateNetwork(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::CreateNode(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::CreateNode(grpc::ServerContext* ctxt,
                                         const CreateNodeRequest* request,
                                         CreateNodeReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -774,7 +785,7 @@ grpc::Status APIServiceImpl::CreateNode(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::CreateEdge(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::CreateEdge(grpc::ServerContext* ctxt,
                                         const CreateEdgeRequest* request,
                                         CreateEdgeReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -811,7 +822,7 @@ grpc::Status APIServiceImpl::CreateEdge(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::AddEntityProperty(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::AddEntityProperty(grpc::ServerContext* ctxt,
                                                const AddEntityPropertyRequest* request,
                                                AddEntityPropertyReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -877,7 +888,7 @@ grpc::Status APIServiceImpl::AddEntityProperty(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::AddPropertyType(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::AddPropertyType(grpc::ServerContext* ctxt,
                                              const AddPropertyTypeRequest* request,
                                              AddPropertyTypeReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -936,7 +947,7 @@ grpc::Status APIServiceImpl::AddPropertyType(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-grpc::Status APIServiceImpl::ListPropertyTypes(grpc::ServerContext* ctxt,
+grpc::Status DBServiceImpl::ListPropertyTypes(grpc::ServerContext* ctxt,
                                                const ListPropertyTypesRequest* request,
                                                ListPropertyTypesReply* reply) {
     if (!isDBValid(request->db_id())) {
@@ -993,7 +1004,7 @@ grpc::Status APIServiceImpl::ListPropertyTypes(grpc::ServerContext* ctxt,
     return grpc::Status::OK;
 }
 
-void APIServiceImpl::listDiskDB(std::vector<std::string>& databaseNames) {
+void DBServiceImpl::listDiskDB(std::vector<std::string>& databaseNames) {
     std::vector<FileUtils::Path> paths;
     FileUtils::Path databasesPath {_config.getDatabasesPath()};
     FileUtils::listFiles(databasesPath, paths);
@@ -1005,6 +1016,6 @@ void APIServiceImpl::listDiskDB(std::vector<std::string>& databaseNames) {
     }
 }
 
-bool APIServiceImpl::isDBValid(size_t id) const {
+bool DBServiceImpl::isDBValid(size_t id) const {
     return _databases.find(id) != _databases.end();
 }

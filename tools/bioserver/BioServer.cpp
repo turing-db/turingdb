@@ -1,6 +1,7 @@
 #include "ToolInit.h"
 
-#include "APIServer.h"
+#include "DBServer.h"
+#include "DBServerConfig.h"
 
 #include "BioLog.h"
 
@@ -11,7 +12,11 @@ int main(int argc, const char** argv) {
 
     toolInit.init(argc, argv);
 
-    APIServer server;
+    // Configuration of the DB Server
+    DBServerConfig dbServerConfig;
+
+    // Database server
+    DBServer server(dbServerConfig);
     server.run();
 
     BioLog::printSummary();

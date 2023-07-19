@@ -1,14 +1,19 @@
 #include "StringIndexLoader.h"
-#include "FileUtils.h"
-#include "MsgCommon.h"
-#include "MsgDB.h"
-#include "StringIndex.h"
-#include "capnp/StringIndex.capnp.h"
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <cassert>
 #include <unistd.h>
+
+#include "FileUtils.h"
+#include "StringIndex.h"
+#include "capnp/StringIndex.capnp.h"
+
+#include "MsgCommon.h"
+#include "MsgDB.h"
+#include "BioLog.h"
+
+using namespace Log;
 
 namespace db {
 
@@ -23,12 +28,13 @@ bool StringIndexLoader::load(StringIndex& index) {
     _stringIdMapping.clear();
 
     if (!FileUtils::exists(_indexPath)) {
+        BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << _indexPath.string());
         return false;
     }
 
     const int indexFD = FileUtils::openForRead(_indexPath);
-
     if (indexFD < 0) {
+        BioLog::log(msg::ERROR_FAILED_TO_OPEN_FOR_READ() << _indexPath.string());
         return false;
     }
 
