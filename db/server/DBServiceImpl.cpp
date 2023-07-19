@@ -35,8 +35,8 @@ DBServiceImpl::~DBServiceImpl() {
 }
 
 grpc::Status DBServiceImpl::ExecuteQuery(grpc::ServerContext* ctxt,
-                                         const QueryRequest* request,
-                                         grpc::ServerWriter<QueryRowReply>* writer) {
+                                         const ExecuteQueryRequest* request,
+                                         grpc::ServerWriter<ExecuteQueryReply>* writer) {
     BioLog::echo(request->query_str());
     return grpc::Status::OK;
 }

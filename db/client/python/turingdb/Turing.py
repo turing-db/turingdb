@@ -22,6 +22,14 @@ class Turing:
         except:
             return False
 
+    def execute_query(self, query_str: str):
+        res = Request(self, "ExecuteQuery", query_str=query_str)
+        for row in res.data:
+            for cell in row:
+                print(cell.WhichOneof('value'), end='')
+
+            print('')
+
     def list_available_databases(self) -> Iterable[str]:
         res = Request(self, "ListAvailableDB")
         return res.data.db_names

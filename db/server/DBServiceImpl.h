@@ -14,8 +14,8 @@ public:
     ~DBServiceImpl() override;
 
     grpc::Status ExecuteQuery(grpc::ServerContext* ctxt,
-                              const QueryRequest* request,
-                              grpc::ServerWriter<QueryRowReply>* writer) override;
+                              const ExecuteQueryRequest* request,
+                              grpc::ServerWriter<ExecuteQueryReply>* writer) override;
 
     grpc::Status GetStatus(grpc::ServerContext* ctxt,
                            const GetStatusRequest* request,

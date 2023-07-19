@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 service DBService {
-    rpc ExecuteQuery (QueryRequest) returns (stream QueryRowReply) {}
+    rpc ExecuteQuery (ExecuteQueryRequest) returns (stream ExecuteQueryReply) {}
 
     rpc GetStatus (GetStatusRequest) returns (GetStatusReply) {}
 
@@ -125,7 +125,7 @@ message PropertyType {
     ValueType value_type = 2;
 }
 
-message QueryRowCell {
+message QueryCell {
     oneof value {
         string string = 1;
         int64 int64 = 2;
@@ -136,11 +136,11 @@ message QueryRowCell {
 }
 
 // Query
-message QueryRequest {
+message ExecuteQueryRequest {
     string query_str = 1;
 }
-message QueryRowReply {
-    repeated QueryRowCell cells = 1;
+message ExecuteQueryReply {
+    repeated QueryCell cells = 1;
 }
 
 // GetStatus
