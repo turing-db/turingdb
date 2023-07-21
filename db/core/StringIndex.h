@@ -22,7 +22,7 @@ public:
 
     void clear();
     StringRef getString(const std::string& str);
-    StringRef getString(const std::string& str) const;
+    StringRef lookupString(const std::string& str) const;
     StringRef getString(DBIndex id) const;
     bool hasString(const std::string& str) const;
     size_t getSize() const { return _strMap.size(); }

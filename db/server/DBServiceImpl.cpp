@@ -11,7 +11,9 @@
 #include "FileUtils.h"
 #include "Network.h"
 #include "Node.h"
+#include "NodeSearch.h"
 #include "NodeType.h"
+#include "TimerStat.h"
 #include "Writeback.h"
 
 #define MAX_ENTITY_COUNT 50000
@@ -49,6 +51,11 @@ static grpc::Status tooManyEntities(size_t countRequested) {
                 + std::to_string(countRequested)
                 + ", maximum amount is "
                 + std::to_string(MAX_ENTITY_COUNT) + ")"};
+}
+
+static grpc::Status invalidPropertyType() {
+    return {grpc::StatusCode::ABORTED,
+            "Filtering by property only supports strings"};
 }
 
 DBServiceImpl::DBServiceImpl(const DBServerConfig& config)
@@ -208,6 +215,9 @@ grpc::Status DBServiceImpl::CreateDB(grpc::ServerContext* ctxt,
 grpc::Status DBServiceImpl::ListNodes(grpc::ServerContext* ctxt,
                                       const ListNodesRequest* request,
                                       ListNodesReply* reply) {
+    TimerStat timer {"Listing nodes..."};
+#define Remy
+#ifdef Luc
     if (!isDBValid(request->db_id())) {
         return invalidDBStatus();
     }
@@ -282,6 +292,67 @@ grpc::Status DBServiceImpl::ListNodes(grpc::ServerContext* ctxt,
     }
 
     return grpc::Status::OK;
+#endif
+
+#ifdef Remy
+    if (!isDBValid(request->db_id())) {
+        return invalidDBStatus();
+    }
+
+    db::DB* db = _databases.at(request->db_id());
+    db::DB::NodeRange nodes = db->nodes();
+    std::unordered_set<size_t> ids;
+    NodeSearch nodeSearch(db);
+
+    if (request->has_filter_type()) {
+        const size_t id = request->filter_type().node_type_id();
+        const db::NodeType* nt = db->getNodeType((db::DBIndex)id);
+        nodeSearch.addAllowedType(nt);
+    }
+
+    if (request->has_filter_id()) {
+        for (const size_t id : request->filter_id().ids()) {
+            nodeSearch.addId((db::DBIndex)id);
+        }
+    }
+
+    if (request->has_filter_property()) {
+        const auto& property = request->filter_property().property();
+        if (!property.has_string()) {
+            return invalidPropertyType();
+        }
+        nodeSearch.addProperty(property.property_type_name(), property.string());
+    }
+
+    std::vector<db::Node*> toReturn;
+    toReturn.reserve(MAX_ENTITY_COUNT);
+    nodeSearch.run(toReturn);
+
+    if (toReturn.size() > MAX_ENTITY_COUNT) {
+        return tooManyEntities(toReturn.size());
+    }
+
+    reply->mutable_nodes()->Reserve(nodes.size());
+    for (const db::Node* node : toReturn) {
+        auto* n = reply->add_nodes();
+        n->set_id(node->getIndex());
+        n->set_db_id(request->db_id());
+        n->set_net_id(node->getNetwork()->getName().getID());
+        n->set_node_type_id(node->getType()->getName().getID());
+
+        n->mutable_out_edge_ids()->Reserve(node->outEdges().size());
+        for (const db::Edge* out : node->outEdges()) {
+            n->add_out_edge_ids(out->getIndex());
+        }
+
+        n->mutable_in_edge_ids()->Reserve(node->inEdges().size());
+        for (const db::Edge* in : node->inEdges()) {
+            n->add_in_edge_ids(in->getIndex());
+        }
+    }
+
+    return grpc::Status::OK;
+#endif
 }
 
 grpc::Status DBServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,

@@ -45,7 +45,7 @@ public:
     static DB* create();
 
     StringRef getString(const std::string& str);
-    StringRef getString(const std::string& str) const;
+    StringRef lookupString(const std::string& str) const;
 
     NetworkRange networks() const;
     NodeTypeRange nodeTypes() const;

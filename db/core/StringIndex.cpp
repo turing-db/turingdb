@@ -30,7 +30,7 @@ StringRef StringIndex::getString(const std::string& str) {
     return StringRef(sharedStr);
 }
 
-StringRef StringIndex::getString(const std::string& str) const {
+StringRef StringIndex::lookupString(const std::string& str) const {
     return _strMap.at(str);
 }
 
