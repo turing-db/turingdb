@@ -3,6 +3,7 @@
 #include "Network.h"
 #include "Node.h"
 #include "Edge.h"
+#include "PropertyType.h"
 
 using namespace db;
 
@@ -26,6 +27,15 @@ bool GMLDumper::dump() {
         _gml << "    node [\n";
         _gml << "        id "
              << std::to_string(node->getIndex().getObjectID()) << "\n";
+
+        for (const auto& [propType, value] : node->properties()) {
+            if (!value.getType().isString()) {
+                continue;
+            }
+            _gml << "        " << propType->getName().toStdString() << " \"" 
+                 << value.getString() << "\"\n";
+        }
+
         _gml << "    ]\n";
     }
 
