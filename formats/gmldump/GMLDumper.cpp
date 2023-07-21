@@ -7,6 +7,25 @@
 
 using namespace db;
 
+namespace {
+
+std::string escapeString(const std::string& str) {
+    std::string res;
+
+    for (char c : str) {
+        if (c == '\"') {
+            res.push_back('\\');
+            res.push_back('"');
+        } else {
+            res.push_back(c);
+        }
+    }
+
+    return res;
+}
+
+}
+
 GMLDumper::GMLDumper(const db::Network* net, const Path& gmlFilePath)
     : _net(net),
     _gmlFilePath(gmlFilePath)
@@ -32,8 +51,9 @@ bool GMLDumper::dump() {
             if (!value.getType().isString()) {
                 continue;
             }
-            _gml << "        " << propType->getName().toStdString() << " \"" 
-                 << value.getString() << "\"\n";
+            _gml << "        "
+                 << propType->getName().toStdString() << " \"" 
+                 << escapeString(value.getString()) << "\"\n";
         }
 
         _gml << "    ]\n";
