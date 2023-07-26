@@ -18,24 +18,25 @@ const DBFrame = (props) => {
         axios.get('/api/is_db_loaded', { params: { db_name: props.db_name } })
             .then(res => {
                 setIsDbLoaded(res.data.loaded);
-                console.log(props.db_name, ":", res.data.loaded);
             }).catch(err => {
                 console.log(err);
             })
     }, [props.db_name]);
 
     useEffect(() => {
+        console.log(props.db_name, ":", isDbLoaded);
         if (isDbLoaded) {
-            axios.post('/api/get_database', { db_name: props.db_name })
-                .then(res => {
-                    console.log("In is_db_loaded:", res.data);
-                    setDb(res.data);
-                }).catch(err => {
-                    console.log(err);
-                    setDb({})
-                });
+            console.log("Getting db:", props.db_name, ". Loaded:", isDbLoaded);
+            //axios.post('/api/get_database', { db_name: props.db_name })
+            //    .then(res => {
+            //        console.log("In is_db_loaded:", res.data);
+            //        setDb(res.data);
+            //    }).catch(err => {
+            //        console.log(err);
+            //        setDb({})
+            //    });
         }
-    }, [props.db_name, isDbLoaded]);
+    }, [isDbLoaded]);
 
     const onClick = () => {
         axios.post('/api/load_database', { db_name: props.db_name }).then(res => {

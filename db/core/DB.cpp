@@ -48,6 +48,10 @@ StringRef DB::getString(const std::string& str) {
     return _strIndex.getString(str);
 }
 
+StringRef DB::lookupString(const std::string& str) const {
+    return _strIndex.lookupString(str);
+}
+
 DB::NetworkRange DB::networks() const {
     return NetworkRange(&_networks);
 }

@@ -27,6 +27,7 @@ public:
     bool run();
 
     int getReturnCode() const { return _returnCode; }
+    void getLogs(std::string& data) const;
 
 private:
     std::string _cmd;

@@ -23,11 +23,23 @@ MSG_INFO(INFO_RUN_NODE_SERVER, 3005,
 MSG_INFO(INFO_STOPPING_NODE_SERVER, 3007,
         "Stopping nodejs server")
 
-MSG_ERROR(ERROR_CLEANING_SITE_FAILED, 3008,
+MSG_INFO(INFO_RUN_FLASK_SERVER, 3008,
+         "Run flask server on port $0")
+
+MSG_INFO(INFO_STOPPING_FLASK_SERVER, 3009,
+        "Stopping flask server")
+
+MSG_ERROR(ERROR_CLEANING_SITE_FAILED, 3010,
         "Cleaning directory '$0' failed.")
 
-MSG_INFO(INFO_CLEANING_SITE, 3009,
+MSG_INFO(INFO_CLEANING_SITE, 3011,
          "Cleaning site.")
+
+MSG_ERROR(ERROR_UI_SERVER_ERROR_OCCURED, 3012,
+          "Something went wront during execution of the flask server. Error $0")
+
+MSG_INFO(INFO_UI_SERVER_OUTPUT, 3013,
+          "UI Sever logs:\n$0")
 
 }
 

@@ -30,6 +30,10 @@ StringRef StringIndex::getString(const std::string& str) {
     return StringRef(sharedStr);
 }
 
+StringRef StringIndex::lookupString(const std::string& str) const {
+    return _strMap.at(str);
+}
+
 StringRef StringIndex::getString(DBIndex id) const {
     const auto it = _strIdMap.find(id);
     if (it == _strIdMap.end()) {

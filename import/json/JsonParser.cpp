@@ -81,15 +81,23 @@ bool JsonParser::parseNeo4jJsonDir(const FileUtils::Path& jsonDir) {
     // Nodes
     std::vector<FileUtils::Path> nodeFiles;
     FileUtils::listFiles(jsonDir, nodeFiles);
-    std::regex nodeRegex {"nodes_[0-9]*.json"};
+    std::regex nodeRegex {"nodes_([0-9]*).json"};
+    std::map<size_t, FileUtils::Path> nodeFilesOrdered;
 
     for (const FileUtils::Path& path : nodeFiles) {
         if (std::regex_search(path.string(), nodeRegex)) {
-            FileUtils::readContent(path, data);
+            size_t count = std::stoul(std::regex_replace(
+                path.filename().string(),
+                nodeRegex, "$1"));
+            nodeFilesOrdered[count] = path;
+        }
+    }
 
-            if (!parse(data, JsonParser::FileFormat::Neo4j4_Nodes)) {
-                return false;
-            }
+    for (const auto& [id, path] : nodeFilesOrdered) {
+        FileUtils::readContent(path, data);
+
+        if (!parse(data, JsonParser::FileFormat::Neo4j4_Nodes)) {
+            return false;
         }
     }
 
@@ -103,15 +111,23 @@ bool JsonParser::parseNeo4jJsonDir(const FileUtils::Path& jsonDir) {
     // Edges
     std::vector<FileUtils::Path> edgeFiles;
     FileUtils::listFiles(jsonDir, edgeFiles);
-    std::regex edgeRegex {"edges_[0-9]*.json"};
+    std::regex edgeRegex {"edges_([0-9]*).json"};
+    std::map<size_t, FileUtils::Path> edgeFilesOrdered;
 
     for (const FileUtils::Path& path : edgeFiles) {
         if (std::regex_search(path.string(), edgeRegex)) {
-            FileUtils::readContent(path, data);
+            size_t count = std::stoul(std::regex_replace(
+                path.filename().string(),
+                edgeRegex, "$1"));
+            edgeFilesOrdered[count] = path;
+        }
+    }
 
-            if (!parse(data, JsonParser::FileFormat::Neo4j4_Edges)) {
-                return false;
-            }
+    for (const auto& [id, path] : edgeFilesOrdered) {
+        FileUtils::readContent(path, data);
+
+        if (!parse(data, JsonParser::FileFormat::Neo4j4_Edges)) {
+            return false;
         }
     }
 

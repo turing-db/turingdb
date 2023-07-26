@@ -96,6 +96,10 @@ bool Command::run() {
     return true;
 }
 
+void Command::getLogs(std::string& data) const {
+    FileUtils::readContent(_logFile, data);
+}
+
 bool Command::searchCmd() {
     const auto bpExecPath = boost::process::search_path(_cmd);
     if (bpExecPath.empty()) {

@@ -3,8 +3,28 @@
 #include "Network.h"
 #include "Node.h"
 #include "Edge.h"
+#include "PropertyType.h"
 
 using namespace db;
+
+namespace {
+
+std::string escapeString(const std::string& str) {
+    std::string res;
+
+    for (char c : str) {
+        if (c == '\"') {
+            res.push_back('\\');
+            res.push_back('"');
+        } else {
+            res.push_back(c);
+        }
+    }
+
+    return res;
+}
+
+}
 
 GMLDumper::GMLDumper(const db::Network* net, const Path& gmlFilePath)
     : _net(net),
@@ -26,6 +46,16 @@ bool GMLDumper::dump() {
         _gml << "    node [\n";
         _gml << "        id "
              << std::to_string(node->getIndex().getObjectID()) << "\n";
+
+        for (const auto& [propType, value] : node->properties()) {
+            if (!value.getType().isString()) {
+                continue;
+            }
+            _gml << "        "
+                 << propType->getName().toStdString() << " \"" 
+                 << escapeString(value.getString()) << "\"\n";
+        }
+
         _gml << "    ]\n";
     }
 
