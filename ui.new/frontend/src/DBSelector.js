@@ -1,5 +1,4 @@
 import { Autocomplete, TextField } from '@mui/material';
-import { useEffect, useState } from 'react'
 
 const DBSelector = (props) => {
     return (
@@ -7,7 +6,7 @@ const DBSelector = (props) => {
             <Autocomplete
                 disablePortal
                 id="db_selector"
-                onChange={(event, newValue) => {
+                onChange={(_event, newValue) => {
                     props.setSelectedDbName(newValue)
                 }}
                 options={props.available}

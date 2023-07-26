@@ -22,7 +22,9 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
-    "eject": "craco eject"
+    "eject": "craco eject",
+    "lint-dev": "eslint .src/**/*.js",
+    "lint-build": "npm run lint-dev -- --max-warnings 0"
   },
   "eslintConfig": {
     "extends": [

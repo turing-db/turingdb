@@ -36,7 +36,7 @@ const DBFrame = (props) => {
             //        setDb({})
             //    });
         }
-    }, [isDbLoaded]);
+    }, [isDbLoaded, props.db_name]);
 
     const onClick = () => {
         axios.post('/api/load_database', { db_name: props.db_name }).then(res => {
@@ -73,7 +73,9 @@ const MainFrame = (props) => {
         <div className="flex justify-center items-center h-screen w-screen bg-turing1">
             {props.db_name
                 ? <DBFrame db_name={props.db_name} />
-                : <img src="/turing_illust.png" className="w-1/3" />}
+                : <img src="/turing_illust.png"
+                    className="w-1/3"
+                    alt="Turing Biosystems" />}
         </div>
     );
 };
