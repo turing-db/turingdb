@@ -6,8 +6,8 @@ namespace ui {
 
 class TailwindThread : public ServerThread {
 public:
-    TailwindThread() = default;
-    ~TailwindThread() override = default;
+    TailwindThread();
+    ~TailwindThread() override;
 
 private:
     void devTask() override;

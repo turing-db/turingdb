@@ -1,11 +1,19 @@
 #include "BioserverThread.h"
-
-#include <spawn.h>
+#include "Command.h"
 
 namespace ui {
 
+BioserverThread::BioserverThread()
+{
+}
+
+BioserverThread::~BioserverThread() {
+}
+
 void BioserverThread::task() {
-    [[maybe_unused]] int code = system("bioserver > /dev/null");
+    Command cmd("bioserver");
+    cmd.setGenerateScript(false);
+    cmd.run();
 }
 
 }

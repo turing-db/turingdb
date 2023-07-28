@@ -8,7 +8,7 @@ namespace ui {
 
 class ServerThreadEngine {
 public:
-    enum class ServerType {
+    enum class ServerType : uint8_t {
         BIOSERVER = 0,
         FLASK,
         REACT,

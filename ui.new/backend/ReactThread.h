@@ -6,8 +6,8 @@ namespace ui {
 
 class ReactThread : public ServerThread {
 public:
-    ReactThread() = default;
-    ~ReactThread() override = default;
+    ReactThread();
+    ~ReactThread() override;
 
 private:
     void devTask() override;

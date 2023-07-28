@@ -10,12 +10,11 @@
 namespace ui {
 
 ServerThreadEngine::ServerThreadEngine(const FileUtils::Path& rootDir)
-    : _rootDir(rootDir) {
+    : _rootDir(rootDir)
+{
 }
 
 void ServerThreadEngine::run() {
-    FileUtils::Path previousPath = std::filesystem::current_path();
-
     std::filesystem::current_path(_rootDir);
     auto& flaskThread = _threads[(uint8_t)ServerType::FLASK];
     flaskThread = std::make_unique<FlaskThread>();
@@ -28,7 +27,6 @@ void ServerThreadEngine::run() {
 
 void ServerThreadEngine::runDev() {
 #ifdef TURING_DEV
-    FileUtils::Path previousPath = std::filesystem::current_path();
     Log::BioLog::log(msg::INFO_STARTING_DEV_UI_SERVER());
 
     std::filesystem::current_path(_rootDir);

@@ -20,7 +20,7 @@ public:
 private:
     FileUtils::Path _outDir;
     int _returnCode = 0;
-    std::unique_ptr<ServerThreadEngine> _engine {nullptr};
+    std::unique_ptr<ServerThreadEngine> _engine;
 
     void cleanSite();
 };

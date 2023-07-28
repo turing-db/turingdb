@@ -6,8 +6,8 @@ namespace ui {
 
 class FlaskThread : public ServerThread {
 public:
-    FlaskThread() = default;
-    ~FlaskThread() override = default;
+    FlaskThread();
+    ~FlaskThread() override;
 
 private:
     void task() override;

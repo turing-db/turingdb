@@ -6,8 +6,8 @@ namespace ui {
 
 class BioserverThread : public ServerThread {
 public:
-    BioserverThread() = default;
-    ~BioserverThread() override = default;
+    BioserverThread();
+    ~BioserverThread() override;
 
 private:
     void task() override;
