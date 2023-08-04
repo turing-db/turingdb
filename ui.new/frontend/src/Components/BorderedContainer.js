@@ -1,6 +1,5 @@
 import { useTheme } from '@emotion/react';
-import CachedIcon from '@mui/icons-material/Cached'
-import { Grid, Stack, Box, Typography, Divider, IconButton, Autocomplete, TextField } from '@mui/material'
+import { Box, } from '@mui/material'
 
 export default function BorderedContainer({ children }) {
     const theme = useTheme();

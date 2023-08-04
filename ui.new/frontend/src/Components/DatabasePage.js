@@ -1,31 +1,22 @@
-import Typography from '@mui/material/Typography'
 import { AppContext } from './App'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { Box, Button, CircularProgress, Container } from '@mui/material';
+import React from 'react'
+import { Box, Button } from '@mui/material';
 import axios from 'axios'
 import { DBInspector } from './'
 
 
 export default function ViewerPage() {
-    const [dbLoading, setDbLoading] = useState(false);
-    const [dbLoaded, setDbLoaded] = useState(false);
-    const [fetchingDbLoaded, setFetchingDbLoaded] = useState(false);
-    const context = useContext(AppContext)
+    const [dbLoading, setDbLoading] = React.useState(false);
+    const [dbLoaded, setDbLoaded] = React.useState(false);
+    const [fetchingDbLoaded, setFetchingDbLoaded] = React.useState(false);
+    const context = React.useContext(AppContext)
 
-    const loadDatabase = () => {
-        axios.post("/api/load_database", {
-            db_name: context.currentDb
-        }).then(_res => {
-            setDbLoading(false);
-            setDbLoaded(true);
-            context.setIdleStatus();
-        });
-    }
-
-    useEffect(() => {
+    const contextRef = React.useRef(context);
+    React.useEffect(() => {
+        const c = contextRef.current;
         setDbLoading(false);
         setFetchingDbLoaded(true);
-        context.setStatus("", true);
+        c.setStatus("", true);
         axios
             .get('/api/is_db_loaded', {
                 params: { db_name: context.currentDb }
@@ -33,20 +24,28 @@ export default function ViewerPage() {
             .then(res => {
                 setDbLoaded(res.data.loaded);
                 setFetchingDbLoaded(false);
-                context.setIdleStatus()
+                c.setIdleStatus()
             })
             .catch(err => {
                 console.log(err);
             });
-    }, [context.currentDb]);
+    }, [contextRef, context.currentDb]);
 
-    useEffect(() => {
+    const dbLoadedRef = React.useRef(dbLoaded);
+    React.useEffect(() => {
+        const c = contextRef.current;
         if (dbLoading) {
-            if (!dbLoaded) {
-                loadDatabase();
+            if (!dbLoadedRef.current) {
+                axios.post("/api/load_database", {
+                    db_name: c.currentDb
+                }).then(_res => {
+                    setDbLoading(false);
+                    setDbLoaded(true);
+                    c.setIdleStatus();
+                });
             }
         }
-    }, [dbLoading]);
+    }, [dbLoading, dbLoadedRef]);
 
     var content = <Box></Box>;
 

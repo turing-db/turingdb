@@ -1,18 +1,17 @@
 import axios from 'axios'
 import { Autocomplete, Box, Chip, CircularProgress, Grid, TextField, Typography } from '@mui/material'
-import { useCallback, useContext, useEffect, useState } from 'react';
+import React from 'react'
 import { AppContext } from './App'
 import { BorderedContainer } from './'
 import { useTheme } from '@emotion/react';
 
 export default function NodeTypeFilterContainer({ selected, setSelected }) {
-    const [loading, setLoading] = useState(true);
-    const [nodeTypes, setNodeTypes] = useState([]);
-    const context = useContext(AppContext);
-    const refresh = useCallback(() => setLoading(true));
+    const [loading, setLoading] = React.useState(true);
+    const [nodeTypes, setNodeTypes] = React.useState([]);
+    const context = React.useContext(AppContext);
     const theme = useTheme();
 
-    const Content = ({ children }) => {
+    const Content = () => {
         return <BorderedContainer>
             <Box display="flex" alignItems="center">
                 <Typography

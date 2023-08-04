@@ -36,8 +36,9 @@ export default function App() {
     const [selectedCyLayout, setSelectedCyLayout] = React.useState("dagre");
     const theme = createTheme(themeOptions);
 
+    const selectedNodesRef = React.useRef(selectedNodes);
     React.useEffect(() => {
-        selectedNodes.clear();
+        selectedNodesRef.current.clear();
     }, [currentDb])
 
     const DrawerHeader = styled('div')(({ theme }) => ({

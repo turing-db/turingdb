@@ -1,6 +1,6 @@
 import { AppContext } from './App'
-import { useContext, useEffect, useState } from 'react'
-import { Box, Button, Autocomplete, CircularProgress, Container, MenuItem, InputLabel, TextField } from '@mui/material';
+import React from 'react'
+import { Box, Autocomplete, CircularProgress, TextField } from '@mui/material';
 import axios from 'axios'
 import CytoscapeComponent from 'react-cytoscapejs';
 import { useTheme } from '@emotion/react';
@@ -20,11 +20,11 @@ async function getCyStyle() {
 }
 
 export default function ViewerPage() {
-    const context = useContext(AppContext);
+    const context = React.useContext(AppContext);
     const theme = useTheme();
-    const [cyStyle, setCyStyle] = useState(null);
-    const [edges, setEdges] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [cyStyle, setCyStyle] = React.useState(null);
+    const [edges, setEdges] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
 
     cytoscape.use(cola);
     cytoscape.use(dagre);
@@ -47,7 +47,7 @@ export default function ViewerPage() {
             )
         ].flat();
 
-        if (ids.length != 0) {
+        if (ids.length !== 0) {
             axios
                 .get("/api/list_edges", {
                     params: {

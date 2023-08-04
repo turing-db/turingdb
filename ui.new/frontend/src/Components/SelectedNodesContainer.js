@@ -21,7 +21,7 @@ export default function SelectedNodesContainer() {
                 >
                     Selected nodes
                 </Typography>
-                {context.selectedNodes.ids.size != 0 &&
+                {context.selectedNodes.ids.size !== 0 &&
                     <IconButton onClick={() => {
                         context.selectedNodes.clear();
                     }}>

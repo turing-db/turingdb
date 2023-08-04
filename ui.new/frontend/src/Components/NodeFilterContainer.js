@@ -8,13 +8,11 @@ import {
     Typography,
     IconButton,
     Divider,
-    Stack,
     TextField,
-    FormControl,
     Alert
 } from '@mui/material'
 import CachedIcon from '@mui/icons-material/Cached'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React from 'react'
 import { AppContext } from './App'
 import { BorderedContainer, NodeStack } from './'
 import { useTheme } from '@emotion/react';
@@ -22,20 +20,17 @@ import { useTheme } from '@emotion/react';
 export default function NodeFilterContainer({
     selectedNodeType
 }) {
-    const [loading, setLoading] = useState(false);
-    const [nodes, setNodes] = useState([]);
-    const [nodeCount, setNodeCount] = useState(0);
-    const [tooManyNodes, setTooManyNodes] = useState(false);
-    const [error, setError] = useState(null);
-    const addNodeId = useRef(null);
+    const [loading, setLoading] = React.useState(false);
+    const [nodes, setNodes] = React.useState([]);
+    const [tooManyNodes, setTooManyNodes] = React.useState(false);
+    const [error, setError] = React.useState(null);
+    const addNodeId = React.useRef(null);
     const theme = useTheme()
-    const context = useContext(AppContext);
+    const context = React.useContext(AppContext);
 
-    useEffect(() => {
+    React.useEffect(() => {
         setLoading(true);
     }, [selectedNodeType]);
-
-    const refresh = useCallback(() => setLoading(true));
 
     const Content = ({ children }) => {
         return <BorderedContainer>
@@ -49,7 +44,7 @@ export default function NodeFilterContainer({
                 >
                     Nodes
                 </Typography>
-                <IconButton onClick={refresh}>
+                <IconButton onClick={() => setLoading(true)}>
                     <CachedIcon />
                 </IconButton>
 
@@ -74,7 +69,7 @@ export default function NodeFilterContainer({
                                 setError("Unknown error")
                                 return;
                             }
-                            if (res.data.length == 0) {
+                            if (res.data.length === 0) {
                                 setError("Node does not exist");
                                 return;
                             }
@@ -127,7 +122,6 @@ export default function NodeFilterContainer({
                     return;
                 }
                 setNodes(res.data);
-                setNodeCount(res.data.length);
                 setTooManyNodes(false);
             })
             .catch(err => {
@@ -146,7 +140,7 @@ export default function NodeFilterContainer({
     }
 
     const onNodeSelect = id =>
-        context.selectedNodes.add(nodes.filter(n => n.id == id)[0]);
+        context.selectedNodes.add(nodes.filter(n => n.id === id)[0]);
 
     const GridItem = ({ children }) => {
         const chipProps = {
