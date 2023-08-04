@@ -28,7 +28,8 @@ add_custom_target(turing_uinew_site
     DEPENDS site.tar
             SiteArchiveData.h)
 
-add_dependencies(turing_uinew_server_s turing_uinew_site)
+add_dependencies(turing_uinew_server_s
+            turing_uinew_site)
 
 target_include_directories(turing_uinew_server_s
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
@@ -41,8 +42,10 @@ target_link_libraries(turing_uinew_server_s
             incbin)
 
 if(${TURING_DEV})
-    target_compile_definitions(turing_uinew_server_s
-        PRIVATE TURINGUI_BACKEND_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../")
+
+target_compile_definitions(turing_uinew_server_s
+    PRIVATE TURINGUI_BACKEND_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../")
+
 endif()
 
 install(

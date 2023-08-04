@@ -361,8 +361,8 @@ class Node(Entity):
         super().__init__(node.id, net._db, dbService_pb2.EntityType.NODE)
         self._net = net
         self._name = node.name
-        self._in_edge_ids = node.in_edge_ids
-        self._out_edge_ids = node.out_edge_ids
+        self._in_edge_ids = [id for id in node.in_edge_ids]
+        self._out_edge_ids = [id for id in node.out_edge_ids]
         self._node_type_id = node.node_type_id
 
     def __repr__(self) -> str:

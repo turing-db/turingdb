@@ -83,6 +83,77 @@ def run(args):
             }
         )
 
+    @app.route("/api/list_nodes", methods=["GET"])
+    def list_nodes():
+        prop_name = request.args.get("property_name")
+        prop_value = request.args.get("property_value")
+        node_type_name = request.args.get("node_type_name")
+        ids = request.args.get("ids")
+        db_name = request.args.get("db_name")
+        try:
+            db = turing.get_db(db_name)
+            params = {}
+
+            if ids:
+                params["ids"] = [int(id) for id in ids.split(",")]
+
+            if node_type_name:
+                params["node_type"] = db.list_node_types()[node_type_name]
+
+            nodes = db.list_nodes(**params)
+
+        except TuringError as err:
+            return jsonify({"failed": True, "error": {"details": err.details}})
+
+        return jsonify(
+            [
+                {
+                    "id": n.id,
+                    "ins": n.in_edge_ids,
+                    "outs": n.out_edge_ids,
+                } for n in nodes
+            ]
+        )
+
+    @app.route("/api/list_edges", methods=["GET"])
+    def list_edges():
+        db_name = request.args.get("db_name")
+        ids = request.args.get("ids")
+
+        try:
+            db = turing.get_db(db_name)
+
+            if ids:
+                edges = db.list_edges_by_id([int(id) for id in ids.split(',')])
+            else:
+                edges = []
+
+        except TuringError as err:
+            return jsonify({"failed": True, "error": {"details": err.details}})
+
+        return jsonify(
+            [
+                {
+                    "id": e.id,
+                    "source_id": e.target_id,
+                    "target_id": e.source_id,
+                }
+                for e in edges
+            ]
+        )
+
+    @app.route("/api/list_node_types", methods=["GET"])
+    def list_node_types():
+        db_name = request.args.get("db_name")
+
+        try:
+            db = turing.get_db(db_name)
+            node_types = db.list_node_types()
+        except TuringError as err:
+            return jsonify({"failed": True, "error": {"details": err.details}})
+
+        return jsonify([name for name in node_types.keys()])
+
     @app.route("/api/get_database", methods=["POST"])
     def get_database():
         db_name = request.get_json()["db_name"]
