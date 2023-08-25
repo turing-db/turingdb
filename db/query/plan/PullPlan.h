@@ -1,21 +1,34 @@
 #pragma once
 
-#include <memory>
+#include "Frame.h"
 
-#include "LogicalOperator.h"
-#include "SymbolTable.h"
+class PullResponse;
+class Cell;
+
+namespace db {
+class Value;
+}
 
 namespace db::query {
 
+class LogicalOperator;
+class SymbolTable;
+class Cursor;
+
 class PullPlan {
 public:
-    PullPlan(std::unique_ptr<LogicalOperator> plan,
-             std::unique_ptr<SymbolTable> symTable);
+    PullPlan(LogicalOperator* plan, SymbolTable* symTable);
     ~PullPlan();
 
+    bool pull(PullResponse* res);
+
 private:
-    std::unique_ptr<LogicalPlan> _plan;
-    std::unique_ptr<SymbolTable> _symTable;
+    LogicalOperator* _plan {nullptr};
+    SymbolTable* _symTable {nullptr};
+    Frame _frame;
+    Cursor* _cursor {nullptr};
+
+    void encodeValue(Cell* cell, const db::Value& value);
 };
 
 }

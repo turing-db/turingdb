@@ -3,16 +3,17 @@
 #include <vector>
 #include <functional>
 
-#include "Symbol.h"
 #include "Value.h"
 
 namespace db::query {
 
 class Frame;
 class ExecutionContext;
+class Symbol;
 
 class Cursor {
 public:
+    virtual ~Cursor();
     virtual bool pull(Frame& frame, ExecutionContext* ctxt) = 0;
 };
 
@@ -20,23 +21,28 @@ class LogicalOperator {
 public:
     virtual ~LogicalOperator();
 
+    const std::vector<Symbol*>& getOutputSymbols() const { return _outputSymbols; }
+
     virtual Cursor* makeCursor() = 0;
+
+protected:
+    std::vector<Symbol*> _outputSymbols;
 };
 
 class OutputTableOperator : public LogicalOperator {
 public:
+    using Rows = std::vector<std::vector<db::Value>>;
     using Callback = std::function<void(Frame&,
                                         ExecutionContext*,
-                                        std::vector<std::vector<db::Value>>&)>;
+                                        Rows&)>;
 
-    OutputTableOperator(const std::vector<Symbol>& outputSymbols,
+    OutputTableOperator(const std::vector<Symbol*>& outputSymbols,
                         Callback callback);
     ~OutputTableOperator();
 
     Cursor* makeCursor() override;
 
 private:
-    std::vector<Symbol> _outputSymbols;
     Callback _callback;
 
     class OutputTableCursor : public Cursor {
@@ -48,7 +54,7 @@ private:
 
     private:
         OutputTableOperator* _self {nullptr};
-        std::vector<std::vector<db::Value>> _rows;
+        Rows _rows;
         bool _pulled {false};
         size_t _currentRow {0};
     };

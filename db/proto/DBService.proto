@@ -411,7 +411,7 @@ message SessionRequest {
     oneof req {
         OpenSession open_req = 1;
         ExecuteQuery query_req = 2;
-        PullResults pull_req = 3;
+        PullRequest pull_req = 3;
     }
 }
 
@@ -419,7 +419,7 @@ message SessionResponse {
     oneof res {
         Success success_res = 1;
         Failure failure_res = 2; 
-        RecordChunk record_res = 3;
+        PullResponse pull_res = 3;
     }
 }
 
@@ -431,7 +431,7 @@ message ExecuteQuery {
     string query_str = 1;
 }
 
-message PullResults {
+message PullRequest {
     uint64 query_id = 1;
 }
 
@@ -444,7 +444,7 @@ message Failure {
     string msg = 1;
 }
 
-message RecordChunk {
+message PullResponse {
     repeated Record records = 1;
 }
 

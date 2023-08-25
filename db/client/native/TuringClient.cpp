@@ -4,7 +4,6 @@
 
 #include <grpcpp/grpcpp.h>
 
-#include "TimerStat.h"
 #include "DBService.grpc.pb.h"
 
 using namespace turing::db::client;
@@ -39,7 +38,6 @@ public:
     }
 
     bool executeQuery(const std::string& queryStr) {
-        TimerStat stat("ExecuteQuery");
         if (!_stream) {
             return false;
         }

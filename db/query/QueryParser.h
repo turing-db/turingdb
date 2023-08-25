@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "ASTContext.h"
+
 namespace db::query {
 
 class QueryCommand;
@@ -11,6 +13,9 @@ public:
     QueryParser();
 
     QueryCommand* parse(const std::string& queryStr);
+
+private:
+    ASTContext _astCtxt;
 };
 
 }

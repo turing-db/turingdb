@@ -13,14 +13,13 @@ QueryParser::QueryParser()
 }
 
 QueryCommand* QueryParser::parse(const std::string& queryStr) {
-    ASTContext astCtxt;
     YScanner yscanner;
-    YParser yparser(yscanner, &astCtxt);
+    YParser yparser(yscanner, &_astCtxt);
 
     std::istringstream iss(queryStr);
     yscanner.switch_streams(&iss, NULL);
 
     yparser.parse();
 
-    return astCtxt.getRoot();
+    return _astCtxt.getRoot();
 }

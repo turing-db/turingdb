@@ -4,9 +4,11 @@
 #include <optional>
 #include <vector>
 
+class PullResponse;
+
 namespace db::query {
 
-class LogicalOperator;
+class PullPlan;
 
 class QueryInterpreter {
 public:
@@ -16,10 +18,10 @@ public:
     };
 
     struct QueryExecution {
-        QueryExecution(LogicalOperator* plan);
+        QueryExecution(PullPlan* plan);
         ~QueryExecution();
 
-        LogicalOperator* _plan {nullptr};
+        PullPlan* _plan {nullptr};
     };
 
     QueryInterpreter();
@@ -27,10 +29,12 @@ public:
 
     PrepareResult prepare(const std::string& query);
 
+    bool pull(PullResponse* result, size_t qid);
+
 private:
     std::vector<QueryExecution> _queries;
 
-    size_t registerQuery(LogicalOperator* plan);
+    size_t registerQuery(PullPlan* plan);
 };
 
 }

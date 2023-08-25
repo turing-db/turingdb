@@ -1,23 +1,21 @@
 #pragma once
 
-#include "PullPlan.h"
-
 namespace db::query {
 
+class PullPlan;
 class QueryCommand;
+class ListCommand;
 
 class Planner {
 public:
     Planner();
     ~Planner();
 
-    std::unique_ptr<PullPlan> makePlan(const QueryCommand* cmd);
+    PullPlan* makePlan(const QueryCommand* cmd);
 
 private:
-    using PullPlanPtr = std::unique_ptr<PullPlan>;
-
-    PullPlanPtr planListCommand(const ListCommand* cmd);
-    PullPlanPtr planListDatabases(const ListCommand* cmd);
+    PullPlan* planListCommand(const ListCommand* cmd);
+    PullPlan* planListDatabases(const ListCommand* cmd);
 };
 
 }

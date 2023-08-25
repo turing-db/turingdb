@@ -3,12 +3,14 @@
 #include "QueryParser.h"
 
 #include "plan/Planner.h"
-#include "plan/LogicalOperator.h"
+#include "plan/PullPlan.h"
+
+#include "DBService.grpc.pb.h"
 
 using namespace db::query;
 
 // QueryExecution
-QueryInterpreter::QueryExecution::QueryExecution(LogicalOperator* plan)
+QueryInterpreter::QueryExecution::QueryExecution(PullPlan* plan)
     : _plan(plan)
 {
 }
@@ -35,7 +37,7 @@ QueryInterpreter::PrepareResult QueryInterpreter::prepare(const std::string& que
     }
 
     Planner planner;
-    LogicalOperator* plan = planner.makePlan(cmd);
+    PullPlan* plan = planner.makePlan(cmd);
     if (!plan) {
         return PrepareResult();
     }
@@ -48,10 +50,24 @@ QueryInterpreter::PrepareResult QueryInterpreter::prepare(const std::string& que
     return res;
 }
 
-size_t QueryInterpreter::registerQuery(LogicalOperator* plan) {
+size_t QueryInterpreter::registerQuery(PullPlan* plan) {
     const size_t qid = _queries.size();
 
     _queries.emplace_back(plan);
 
     return qid;
+}
+
+bool QueryInterpreter::pull(PullResponse* pullRes, size_t qid) {
+    if (qid >= _queries.size()) {
+        return false;
+    }
+
+    QueryExecution& queryExec = _queries[qid];
+    PullPlan* pullPlan = queryExec._plan;
+    if (!pullPlan) {
+        return false;
+    }
+
+    return pullPlan->pull(pullRes);
 }

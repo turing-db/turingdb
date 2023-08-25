@@ -7,8 +7,11 @@ using namespace db::query;
 LogicalOperator::~LogicalOperator() {
 }
 
+Cursor::~Cursor() {
+}
+
 // OutputTableOperator
-OutputTableOperator::OutputTableOperator(const std::vector<Symbol>& outputSymbols,
+OutputTableOperator::OutputTableOperator(const std::vector<Symbol*>& outputSymbols,
                                          Callback callback)
 {
 }
@@ -42,7 +45,8 @@ bool OutputTableOperator::OutputTableCursor::pull(Frame& frame, ExecutionContext
             frame[outputSymbols[i]] = row[i];
         }
         _currentRow++;
+        return true;
     }
 
-    return true;
+    return false;
 }

@@ -12,7 +12,8 @@ public:
     Frame(size_t size);
     ~Frame();
 
-    db::Value& operator[](const Symbol& sym) { return _tbl[sym.getPosition()]; }
+    db::Value& operator[](const Symbol* sym) { return _tbl[sym->getPosition()]; }
+
 
 private:
     std::vector<db::Value> _tbl;
