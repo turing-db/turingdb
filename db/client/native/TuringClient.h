@@ -1,8 +1,10 @@
 #pragma once
 
 #include <string>
+#include <stdint.h>
 
 #include "TuringConfig.h"
+#include "QueryResult.h"
 
 namespace turing::db::client {
 
@@ -17,7 +19,7 @@ public:
     TuringConfig& getConfig() { return _config; }
     
     bool connect();
-    bool executeQuery(const std::string& query);
+    QueryResult exec(const std::string& query);
 
 private:
     TuringConfig _config;

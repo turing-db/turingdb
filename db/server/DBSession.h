@@ -23,6 +23,7 @@ private:
 
     grpc::Status processReq(const SessionRequest& req);
     grpc::Status processQuery(const ExecuteQuery& query);
+    grpc::Status processPull(const PullRequest& pullReq);
 };
 
 }

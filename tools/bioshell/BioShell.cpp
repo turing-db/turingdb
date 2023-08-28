@@ -1,5 +1,7 @@
 #include "TuringClient.h"
 
+#include <iostream>
+
 #include "ToolInit.h"
 #include "PerfStat.h"
 #include "TimerStat.h"
@@ -37,9 +39,22 @@ int main(int argc, const char** argv) {
             continue;
         }
 
-        if (!turing.executeQuery(lineStr)) {
+        QueryResult res = turing.exec(lineStr);
+        if (!res.isValid()) {
             BioLog::log(msg::ERROR_SHELL_ERROR_DURING_QUERY_EXECUTION());
         }
+
+        for (const auto& row : res) {
+            const size_t size = row.size();
+            for (size_t i = 0; i < size; i++) {
+                if (i > 0) {
+                    std::cout << ' ';
+                }
+                std::cout << row[i].toString();
+            }
+            std::cout << '\n';
+        }
+
         linenoiseHistoryAdd(line);
     }
 

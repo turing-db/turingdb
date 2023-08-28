@@ -48,4 +48,32 @@ bool PullPlan::pull(PullResponse* res) {
 }
 
 void PullPlan::encodeValue(Cell* cell, const db::Value& value) {
+    switch (value.getType().getKind()) {
+        case ValueType::VK_INT:
+            cell->set_int64(value.getInt());
+            break;
+
+        case ValueType::VK_UNSIGNED:
+            cell->set_uint64(value.getUint());
+            break;
+
+        case ValueType::VK_BOOL:
+            cell->set_boolean(value.getBool());
+            break;
+
+        case ValueType::VK_DECIMAL:
+            cell->set_decimal(value.getDouble());
+            break;
+
+        case ValueType::VK_STRING_REF:
+            cell->set_string(value.getStringRef().toStdString());
+            break;
+
+        case ValueType::VK_STRING:
+            cell->set_string(value.getString());
+            break;
+
+        default:
+            break;
+    }
 }

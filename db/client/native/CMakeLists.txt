@@ -1,5 +1,9 @@
 
 set(native_sources
+        QueryValue.cpp
+        QueryRecord.cpp
+        QueryResult.cpp
+        TuringClientImpl.cpp
         TuringClient.cpp)
 
 add_library(turing_client_native_s STATIC ${native_sources})

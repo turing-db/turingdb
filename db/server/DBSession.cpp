@@ -33,10 +33,10 @@ grpc::Status DBSession::processReq(const SessionRequest& req) {
     if (req.has_open_req()) {
     } else if (req.has_query_req()) {
         const ExecuteQuery& query = req.query_req();
-        const auto status = processQuery(query);
-        if (!status.ok()) {
-            return status;
-        }
+        return processQuery(query);
+    } else if (req.has_pull_req()) {
+        const PullRequest& pullReq = req.pull_req();
+        return processPull(pullReq);
     }
 
     return grpc::Status::OK;
@@ -53,6 +53,22 @@ grpc::Status DBSession::processQuery(const ExecuteQuery& query) {
     } else {
         Failure* failure = response.mutable_failure_res();
         failure->set_msg("");
+    }
+
+    if (!_stream->Write(response)) {
+        return grpc::Status::CANCELLED;
+    }
+
+    return grpc::Status::OK;
+}
+
+grpc::Status DBSession::processPull(const PullRequest& pullReq) {
+    SessionResponse response;
+    PullResponse* pullResponse = response.mutable_pull_res();
+
+    const size_t qid = pullReq.query_id();
+    if (!_interp.pull(pullResponse, qid)) {
+        return grpc::Status(grpc::UNKNOWN, "error encountered while pulling results");
     }
 
     if (!_stream->Write(response)) {
