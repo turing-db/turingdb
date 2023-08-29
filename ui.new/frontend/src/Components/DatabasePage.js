@@ -3,58 +3,50 @@ import axios from 'axios'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import { useDbName } from '../App/AppContext'
 import DBInspector from './DBInspector'
-import { useReactive } from '../Hooks'
 import { Secondary } from '../Components'
+import { useQuery } from '../App/queries'
 
 function DBLoader() {
-    const [dbName] = useDbName();
-    const [loaded, setLoaded] = useReactive(false, [dbName]);
-    const [loading, setLoading] = React.useState(false);
+    const dbName = useDbName();
+    const [isLoading, setIsLoading] = React.useState(false);
+    const { data: loaded, refetch } = useQuery(
+        ["is_db_loaded", dbName],
+        React.useCallback(async () => {
+            return dbName && await axios
+                .get('/api/is_db_loaded', { params: { db_name: dbName } })
+                .then(res => res.data.error ? false : res.data.loaded)
+                .catch(err => { console.log(err); return false })
+        }, [dbName]),
+        { staleTime: 0 }
+    );
 
-    React.useMemo(() => {
-        axios.get('/api/is_db_loaded', { params: { db_name: dbName } })
-            .then(res => {
-                if (res.data.error) {
-                    console.log("Error bioserver not started");
-                    return;
-                }
-                setLoaded(res.data.loaded)
-            })
-            .catch(error => {
-                console.log("Error", error);
-                setLoaded(false);
-            });
-    }, [dbName, setLoaded]);
+    React.useEffect(() => { refetch() }, [dbName, refetch]);
 
     const loadDatabase = React.useCallback(() => {
-        setLoading(true);
+        setIsLoading(true);
         axios
             .post('/api/load_database', { db_name: dbName })
-            .then(() => {
-                setLoading(false);
-                setLoaded(true);
-            });
-    }, [dbName, setLoaded]);
+            .then(() => { setIsLoading(false); refetch(); });
+    }, [dbName, refetch]);
 
-    if (!dbName) {
+    if (!dbName)
         return;
-    }
 
     return (
         <Box>
-            {loading
-                ? <Box display="flex" justifyContent="center" alignItems="center">
+            {isLoading &&
+                <Box display="flex" justifyContent="center" alignItems="center">
                     <Typography p={2} variant="h4">Loading <Secondary variant="h4">{dbName}</Secondary></Typography>
-                    <CircularProgress size={30}/>
-                </Box>
-                : loaded.current
-                    ? <DBInspector />
-                    : <Box display="flex" flexDirection="column" alignItems="center">
-                        <Typography p={2}>Database <Secondary>{dbName}</Secondary> not loaded.</Typography>
-                        <Button variant="contained" color="primary" onClick={loadDatabase}>
-                            Load Database
-                        </Button>
-                    </Box>}
+                    <CircularProgress size={20} />
+                </Box>}
+            {loaded && <DBInspector />}
+
+            {!loaded && <Box display="flex" flexDirection="column" alignItems="center">
+                <Typography p={2}>Database <Secondary>{dbName}</Secondary> not loaded.</Typography>
+                <Button variant="contained" color="primary" onClick={loadDatabase}>
+                    Load Database
+                </Button>
+            </Box>}
         </Box>
     );
 }

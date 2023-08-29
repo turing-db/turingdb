@@ -14,9 +14,10 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import DnsIcon from '@mui/icons-material/Dns';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
-import { useDbName } from '../App/AppContext'
-import { DBSelector } from './'
+import { DBSelector } from './';
 import { DrawerHeader } from '../App/App';
+import { useDispatch, useSelector } from 'react-redux';
+import * as actions from '../App/actions';
 
 const drawerWidth = 240;
 
@@ -76,10 +77,15 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' 
     }),
 );
 
-export default function CustomAppBar({ setCurrentMenu }) {
+export default function CustomAppBar() {
     const theme = useTheme();
     const [open, setOpen] = React.useState(false);
-    const [dbName] = useDbName();
+    const dbName = useSelector((state) => state.dbName);
+    const dispatch = useDispatch();
+
+    React.useEffect(() => {
+        dispatch(actions.clearSelectedNodes());
+    }, [dbName]); //eslint-disable-line react-hooks/exhaustive-deps
 
     const handleDrawerOpen = () => {
         setOpen(true);
@@ -136,7 +142,7 @@ export default function CustomAppBar({ setCurrentMenu }) {
                     sx={{ display: 'block' }}
                     onClick={
                         dbName
-                            ? () => setCurrentMenu("Database")
+                            ? () => dispatch(actions.setPage("Database"))
                             : handleDrawerOpen
                     }
                 >
@@ -167,7 +173,7 @@ export default function CustomAppBar({ setCurrentMenu }) {
                     sx={{ display: 'block' }}
                     onClick={
                         dbName
-                            ? () => setCurrentMenu("Viewer")
+                            ? () => dispatch(actions.setPage("Viewer"))
                             : handleDrawerOpen
                     }
                 >

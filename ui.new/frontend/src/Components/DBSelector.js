@@ -1,12 +1,25 @@
 import React from 'react'
 import axios from 'axios'
 
-import { Autocomplete, TextField } from '@mui/material'
-import { useDbName } from '../App/AppContext'
+import { Autocomplete, CircularProgress, TextField } from '@mui/material'
+import { useDispatch } from 'react-redux';
+import { setDbName } from '../App/actions';
+import { useDbName } from '../App/AppContext';
+import { useQuery } from '../App/queries'
 
 export default function DBSelector() {
-    const [availableDbs, setAvailableDbs] = React.useState([]);
-    const [dbName, setDbName] = useDbName();
+    const dbName = useDbName();
+    const dispatch = useDispatch();
+    const [enabled, setEnabled] = React.useState(false);
+
+    const { data: availableDbs, isFetching } = useQuery(
+        ["list_available_databases"],
+        React.useCallback(async () =>
+            await axios.get("/api/list_available_databases")
+                .then(res => res.data.db_names)
+                .catch(err => { console.log(err); return [] })
+            , []),
+        { enabled });
 
     // See https://mui.com/material-ui/react-autocomplete/ for an async
     // version to wait for the server to respond (Load on open section)
@@ -14,17 +27,29 @@ export default function DBSelector() {
         disablePortal
         blurOnSelect
         id="db_selector"
-        onChange={(_e, newDb) => newDb && setDbName(newDb)}
-        onOpen={(_e) => {
-            axios.get("/api/list_available_databases")
-                .then(res => { setAvailableDbs(res.data.db_names) })
-                .catch(err => { console.log(err) });
-        }}
-        options={availableDbs}
+        onOpen={() => setEnabled(true)}
+        onChange={(_e, newDb) => newDb && dispatch(setDbName(newDb))}
+        autoSelect
+        autoHighlight
+        loading={isFetching}
+        options={availableDbs || []}
         value={dbName}
         sx={{ width: 300 }}
         size="small"
-        renderInput={(params) => <TextField {...params} label="Database" />}
+        renderInput={(params) => (
+            <TextField
+                {...params}
+                label="Database"
+                InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                        <React.Fragment>
+                            {isFetching ? <CircularProgress color="inherit" size={20} /> : null}
+                            {params.InputProps.endAdornment}
+                        </React.Fragment>
+                    ),
+                }} />
+        )}
     />;
 }
 

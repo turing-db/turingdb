@@ -21,6 +21,7 @@ public:
 
 private:
     GMLLexer _lexer;
+    db::DB* _db {nullptr};
     db::Writeback _wb;
     db::Network* _outNet {nullptr};
     db::NodeType* _nodeType {nullptr};

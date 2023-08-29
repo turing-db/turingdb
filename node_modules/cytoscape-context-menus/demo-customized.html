@@ -1,0 +1,328 @@
+<!DOCTYPE HTML>
+
+<html>
+
+  <head>
+    <title>cytoscape-context-menus.js demo</title>
+
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+
+    <link href="cytoscape-context-menus.css" rel="stylesheet" type="text/css" />     
+
+    <!-- for testing with local version of cytoscape.js -->
+    <!--<script src="../cytoscape.js/build/cytoscape.js"></script>-->
+
+    <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+    <script src="cytoscape-context-menus.js"></script>
+
+    <style>
+      body {
+        font-family: helvetica neue, helvetica, liberation sans, arial, sans-serif;
+        font-size: 14px;
+      }
+
+      #cy {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        z-index: 999;
+      }
+
+      h1 {
+        opacity: 0.5;
+        font-size: 1em;
+        font-weight: bold;
+      }
+
+      .custom-menu-item {
+        border-color: white !important;
+        /*  border-top-left-radius: 5px !important;
+         border-top-right-radius: 5px !important;
+         border-bottom-left-radius: 5px !important;
+         border-bottom-right-radius: 5px !important; */
+        color:white !important;
+        background-color: purple;
+        font-weight: bold !important;
+
+      }                       
+
+      .custom-context-menu {
+        border-color: purple !important;                            
+
+      }      
+    </style>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+
+        var cy = window.cy = cytoscape({
+          container: document.getElementById('cy'),
+
+          style: [
+            {
+              selector: 'node',
+              style: {
+                'content': 'data(name)',
+                'background-color': "rgb(153,153,153)"
+              }
+            },
+
+            {
+              selector: 'edge',
+              style: {
+                'target-arrow-shape': 'triangle'
+              }
+            },
+
+            {
+              selector: ':selected',
+              style: {
+                "border-width": 2,
+                "border-color": "rgb(1,105,217)"
+              }
+            }
+          ],
+          layout: {
+            name: 'breadthfirst'
+          },
+
+          elements: {
+            nodes: [
+              {data: {id: 'j', name: 'Jerry'}},
+              {data: {id: 'e', name: 'Elaine'}},
+              {data: {id: 'k', name: 'Kramer'}},
+              {data: {id: 'g', name: 'George'}}
+            ],
+            edges: [
+              {data: {source: 'j', target: 'e'}},
+              {data: {source: 'j', target: 'k'}},
+              {data: {source: 'j', target: 'g'}},
+              {data: {source: 'e', target: 'k'}},
+              {data: {source: 'k', target: 'g'}},
+            ]
+          },
+        }).on('cxttap', function(event) {
+          if (allSelected('node')) {
+            contextMenu.hideMenuItem('select-all-nodes');
+            contextMenu.showMenuItem('unselect-all-nodes');
+          }
+          else {
+            contextMenu.hideMenuItem('unselect-all-nodes');
+            contextMenu.showMenuItem('select-all-nodes');
+          }
+          if (allSelected('edge')) {
+            contextMenu.hideMenuItem('select-all-edges');
+            contextMenu.showMenuItem('unselect-all-edges');
+          }
+          else {
+            contextMenu.hideMenuItem('unselect-all-edges');
+            contextMenu.showMenuItem('select-all-edges');
+          }
+        });
+
+        var allSelected = function (type) {
+          if (type == 'node') {
+            return cy.nodes().length == cy.nodes(':selected').length;
+          }
+          else if (type == 'edge') {
+            return cy.edges().length == cy.edges(':selected').length;
+          }
+          return false;
+        }
+
+        var selectAllOfTheSameType = function (type) {
+          if (type == 'node') {
+            cy.nodes().select();
+          } else if (type == 'edge') {
+            cy.edges().select();
+          }
+        };
+        var unselectAllOfTheSameType = function (type) {
+          if (type == 'node') {
+            cy.nodes().unselect();
+            ;
+          } else if (type == 'edge') {
+            cy.edges().unselect();
+          }
+        };
+
+        // demo your core ext
+        var contextMenu = cy.contextMenus({
+          menuItems: [
+            {
+              id: 'remove',
+              content: 'remove',
+              tooltipText: 'remove',
+              image: {src: "assets/remove.svg", width: 12, height: 12, x: 6, y: 4},
+              selector: 'node, edge',
+              onClickFunction: function (event) {
+                var target = event.target || event.cyTarget;
+                removed = target.remove();
+
+                contextMenu.showMenuItem('undo-last-remove');
+              },
+              hasTrailingDivider: true
+            },
+            {
+              id: 'undo-last-remove',
+              content: 'undo last remove',
+              selector: 'node, edge',
+              show: false,
+              coreAsWell: true,
+              onClickFunction: function (event) {
+                if (removed) {
+                  removed.restore();
+                }
+                contextMenu.hideMenuItem('undo-last-remove');
+              },
+              hasTrailingDivider: true
+            },
+            {
+              id: 'color',
+              content: 'change color',
+              tooltipText: 'change color',
+              selector: 'node',
+              hasTrailingDivider: true,
+              submenu: [
+                {
+                  id: 'color-blue',
+                  content: 'blue',
+                  tooltipText: 'blue',
+                  onClickFunction: function (event) {
+                    let target = event.target || event.cyTarget;
+                    target.style('background-color', 'blue');
+                  },
+                  submenu: [
+                    {
+                      id: 'color-light-blue',
+                      content: 'light blue',
+                      tooltipText: 'light blue',
+                      onClickFunction: function (event) {
+                        let target = event.target || event.cyTarget;
+                        target.style('background-color', 'lightblue');
+                      },
+                    },
+                    {
+                      id: 'color-dark-blue',
+                      content: 'dark blue',
+                      tooltipText: 'dark blue',
+                      onClickFunction: function (event) {
+                        let target = event.target || event.cyTarget;
+                        target.style('background-color', 'darkblue');
+                      },
+                    },
+                  ],
+                },
+                {
+                  id: 'color-green',
+                  content: 'green',
+                  tooltipText: 'green',
+                  onClickFunction: function (event) {
+                    let target = event.target || event.cyTarget;
+                    target.style('background-color', 'green');
+                  },
+                },
+                {
+                  id: 'color-red',
+                  content: 'red',
+                  tooltipText: 'red',
+                  onClickFunction: function (event) {
+                    let target = event.target || event.cyTarget;
+                    target.style('background-color', 'red');
+                  },
+                },
+              ]
+            },
+            {
+              id: 'add-node',
+              content: 'add node',
+              tooltipText: 'add node',
+              image: {src: "assets/add.svg", width: 12, height: 12, x: 6, y: 4},
+              coreAsWell: true,
+              onClickFunction: function (event) {
+                var data = {
+                  group: 'nodes'
+                };
+
+                var pos = event.position || event.cyPosition;
+
+                cy.add({
+                  data: data,
+                  position: {
+                    x: pos.x,
+                    y: pos.y
+                  }
+                });
+              }
+            },
+            {
+              id: 'select-all-nodes',
+              content: 'select all nodes',
+              selector: 'node',
+              coreAsWell: true,
+              show: true,
+              onClickFunction: function (event) {
+                selectAllOfTheSameType('node');
+
+                contextMenu.hideMenuItem('select-all-nodes');
+                contextMenu.showMenuItem('unselect-all-nodes');
+              }
+            },
+            {
+              id: 'unselect-all-nodes',
+              content: 'unselect all nodes',
+              selector: 'node',
+              coreAsWell: true,
+              show: false,
+              onClickFunction: function (event) {
+                unselectAllOfTheSameType('node');
+
+                contextMenu.showMenuItem('select-all-nodes');
+                contextMenu.hideMenuItem('unselect-all-nodes');
+              }
+            },
+            {
+              id: 'select-all-edges',
+              content: 'select all edges',
+              selector: 'edge',
+              coreAsWell: true,
+              show: true,
+              onClickFunction: function (event) {
+                selectAllOfTheSameType('edge');
+
+                contextMenu.hideMenuItem('select-all-edges');
+                contextMenu.showMenuItem('unselect-all-edges');
+              }
+            },
+            {
+              id: 'unselect-all-edges',
+              content: 'unselect all edges',
+              selector: 'edge',
+              coreAsWell: true,
+              show: false,
+              onClickFunction: function (event) {
+                unselectAllOfTheSameType('edge');
+
+                contextMenu.showMenuItem('select-all-edges');
+                contextMenu.hideMenuItem('unselect-all-edges');
+              }
+            }
+          ],
+          menuItemClasses: ['custom-menu-item'],
+          contextMenuClasses: ['custom-context-menu']
+        });
+      });
+    </script>
+  </head>
+
+  <body>
+    <h1>cytoscape-context-menus customized demo</h1>
+
+    <div id="cy"></div>
+
+  </body>
+
+</html>

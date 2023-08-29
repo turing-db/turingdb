@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+
+<html>
+
+	<head>
+		<title>cytoscape-cxtmenu.js demo with adaptative spotlight</title>
+
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+
+		<link href="https://unpkg.com/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
+		<script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+
+		<!-- for testing with local version of cytoscape.js -->
+		<!--<script src="../cytoscape.js/build/cytoscape.js"></script>-->
+
+		<script src="cytoscape-cxtmenu.js"></script>
+
+		<style>
+			body {
+				font-family: helvetica;
+				font-size: 14px;
+				overflow: hidden;
+			}
+
+			#cy {
+				width: 100%;
+				height: 100%;
+				position: absolute;
+				left: 0;
+				top: 0;
+				z-index: 999;
+			}
+
+			h1 {
+				opacity: 0.5;
+				font-size: 1em;
+			}
+
+			/* you can set the disabled style how you like on the text/icon */
+			.cxtmenu-disabled {
+				opacity: 0.333;
+			}
+		</style>
+
+		<script>
+			window.addEventListener('DOMContentLoaded', function(){
+
+				var cy = window.cy = cytoscape({
+					container: document.getElementById('cy'),
+
+					ready: function(){
+					},
+
+					style: [
+						{
+							selector: 'node',
+							css: {
+								'content': 'data(name)'
+							}
+						},
+						{
+							selector: 'node[id="j"]',
+							css: {
+								'width': 100,
+            					'height': 100,
+							}
+						},
+						{
+							selector: 'node[id="e"]',
+							css: {
+								'width': 150,
+            					'height': 150,
+							}
+						},
+						{
+							selector: 'node[id="k"]',
+							css: {
+								'width': 20,
+            					'height': 20,
+							}
+						},
+						{
+							selector: 'edge',
+							css: {
+								'curve-style': 'bezier',
+								'target-arrow-shape': 'triangle'
+							}
+						}
+					],
+
+					elements: {
+						nodes: [
+							{ data: { id: 'j', name: 'Non-adaptative spotlight medium node' } },
+							{ data: { id: 'e', name: 'Adaptative spotlight big node' } },
+							{ data: { id: 'k', name: 'Adaptative spotlight small node' } },
+							{ data: { id: 'g', name: 'Non-adaptative normal node' } }
+						],
+						edges: [
+							{ data: { source: 'j', target: 'e' } },
+							{ data: { source: 'j', target: 'k' } },
+							{ data: { source: 'j', target: 'g' } },
+							{ data: { source: 'e', target: 'j' } },
+							{ data: { source: 'e', target: 'k' } },
+							{ data: { source: 'k', target: 'j' } },
+							{ data: { source: 'k', target: 'e' } },
+							{ data: { source: 'k', target: 'g' } },
+							{ data: { source: 'g', target: 'j' } }
+						]
+					}
+				});
+
+				cy.cxtmenu({
+					selector: 'node[id="j"], node[id="g"], edge',
+					adaptativeNodeSpotlightRadius: false,
+					commands: [
+						{
+							content: '<span class="fa fa-flash fa-2x"></span>',
+							select: function(ele){
+								console.log( ele.id() );
+							}
+						},
+
+						{
+							content: '<span class="fa fa-star fa-2x"></span>',
+							select: function(ele){
+								console.log( ele.data('name') );
+							},
+							enabled: false
+						},
+
+						{
+							content: 'Text',
+							select: function(ele){
+								console.log( ele.position() );
+							}
+						}
+					]
+				});
+
+				cy.cxtmenu({
+					selector: 'node[id="e"], node[id="k"]',
+					adaptativeNodeSpotlightRadius: true,
+					commands: [
+						{
+							content: '<span class="fa fa-flash fa-2x"></span>',
+							select: function(ele){
+								console.log( ele.id() );
+							}
+						},
+
+						{
+							content: '<span class="fa fa-star fa-2x"></span>',
+							select: function(ele){
+								console.log( ele.data('name') );
+							},
+							enabled: false
+						},
+
+						{
+							content: 'Text',
+							select: function(ele){
+								console.log( ele.position() );
+							}
+						}
+					]
+				});
+
+				cy.cxtmenu({
+					selector: 'core',
+
+					commands: [
+						{
+							content: 'bg1',
+							select: function(){
+								console.log( 'bg1' );
+							}
+						},
+
+						{
+							content: 'bg2',
+							select: function(){
+								console.log( 'bg2' );
+							}
+						}
+					]
+				});
+
+			});
+		</script>
+	</head>
+
+	<body>
+		<h1>cytoscape-cxtmenu demo with adaptative spotlight</h1>
+
+		<div id="cy"></div>
+
+	</body>
+
+</html>

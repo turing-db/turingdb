@@ -5,7 +5,6 @@
 #include "FlaskThread.h"
 #include "MsgUIServer.h"
 #include "ReactThread.h"
-#include "TailwindThread.h"
 
 namespace ui {
 
@@ -37,10 +36,6 @@ void ServerThreadEngine::runDev() {
     auto& reactThread = _threads[(uint8_t)ServerType::REACT];
     reactThread = std::make_unique<ReactThread>();
     reactThread->runDev();
-
-    auto& tailwindTread = _threads[(uint8_t)ServerType::TAILWIND];
-    tailwindTread = std::make_unique<TailwindThread>();
-    tailwindTread->runDev();
 #endif
 }
 

@@ -4,7 +4,6 @@ set(uinew_server_sources
             BioserverThread.cpp
             FlaskThread.cpp
             ReactThread.cpp
-            TailwindThread.cpp
             ServerThreadEngine.cpp
             TuringUIServer.cpp)
 

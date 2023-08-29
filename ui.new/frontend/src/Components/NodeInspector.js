@@ -5,90 +5,81 @@ import axios from 'axios'
 import BorderedContainer, { BorderedContainerTitle } from './BorderedContainer';
 import NodeChip from './NodeChip';
 import NodeStack from './NodeStack';
-import { useDbName, useInspectedNode, useNodes } from '../App/AppContext';
-import { useReactive } from '../Hooks';
+import { useDbName, useInspectedNode } from '../App/AppContext';
+import * as actions from '../App/actions'
+import { useDispatch, useSelector } from 'react-redux';
+import * as thunks from '../App/thunks'
+import { useQuery } from '../App/queries'
+import { Secondary } from '../Components/Span'
 
 const containerHeight = "25vh";
+const edgeCountLim = 40;
 
 const Edges = (props) => {
+    const { edgeIds, type, edgeCount } = props;
     const theme = useTheme();
-    const { edgeIds, type } = props;
-    const [dbName] = useDbName({ noTrigger: true });
-    const [loading, setLoading] = useReactive(true, [edgeIds]);
-    const [edgeData, setEdgeData] = React.useState({});
-    const [{ getNodes }] = useNodes({ noTrigger: true });
-    const done = React.useRef(false);
+    const dbName = useDbName();
+    const dispatch = useDispatch();
 
-    React.useEffect(() => {
-        if (!loading.current) return;
-        done.current = false;
+    const { data, isFetching } = useQuery(
+        ["fetch_edge_data", edgeIds],
+        React.useCallback(async () => {
+            const edges = await dispatch(thunks.getEdges(dbName, edgeIds))
+                .then(res => res.error ? {} : res)
+                .catch(() => { return {} })
 
-        axios
-            .post("/api/list_edges", {
-                db_name: dbName,
-                ids: edgeIds,
-            })
-            .then(res => {
-                if (res.data.error) {
-                    setEdgeData({});
-                    return;
+            var rawIds = {};
+
+            if (type === "in") {
+                for (const e of Object.values(edges)) {
+                    if (e.edge_type_name in rawIds === false) {
+                        rawIds[e.edge_type_name] = [];
+                    }
+                    rawIds[e.edge_type_name].push(e.source_id);
                 }
-                setEdgeData({ ...res.data });
-            })
-            .catch(err => {
-                console.log(err);
-                setLoading(false);
-                setEdgeData({});
-            });
-    }, [loading, dbName, edgeIds, setLoading])
-
-    const nodeIds = React.useMemo(() => {
-        var currentNodeIds = {};
-
-        if (type === "in") {
-            for (const e of Object.values(edgeData)) {
-                if (e.edge_type_name in currentNodeIds === false) {
-                    currentNodeIds[e.edge_type_name] = [];
-                }
-                currentNodeIds[e.edge_type_name].push(e.source_id);
             }
-        }
-        else {
-            for (const e of Object.values(edgeData)) {
-                if (e.edge_type_name in currentNodeIds === false) {
-                    currentNodeIds[e.edge_type_name] = [];
+            else {
+                for (const e of Object.values(edges)) {
+                    if (e.edge_type_name in rawIds === false) {
+                        rawIds[e.edge_type_name] = [];
+                    }
+                    rawIds[e.edge_type_name].push(e.target_id);
                 }
-                currentNodeIds[e.edge_type_name].push(e.target_id);
+
             }
 
-        }
-        return currentNodeIds;
-    }, [type, edgeData])
+            // Fetching nodes
+            const ids = [...Object.values(rawIds)]
+                .flat()
+                .filter((id, i, arr) => arr.indexOf(id) === i);
+            const rawNodes = await dispatch(thunks.getNodes(dbName, ids))
+                .then(res => res);
 
-    React.useEffect(() => {
-        done.current = true;
+            const nodes = Object.fromEntries(Object
+                .entries(rawIds)
+                .map(([et, ids]) => [et, ids.map(id => rawNodes[id])]));
 
-        const ids = [...Object.values(nodeIds)]
-            .flat()
-            .filter((id, i, arr) => arr.indexOf(id) === i);
+            return nodes;
+        }, [dbName, dispatch, edgeIds, type])
+    );
 
-        getNodes(dbName, ids).then(() => {
-            setLoading(false);
-        })
-    }, [dbName, getNodes, nodeIds, setLoading, loading]);
+    const nodes = data || {};
 
     return <BorderedContainer
         height={containerHeight}
-        title={<BorderedContainerTitle
-            title={type === "in" ? "In edges" : "Out edges"}
-        />}
+        title={
+            <BorderedContainerTitle
+                title={type === "in" ? "In edges" : "Out edges"}
+            >
+                {edgeCount > edgeCountLim
+                    ? <Typography>Showing {edgeCountLim}/{edgeCount} edges</Typography>
+                    : <Typography> {edgeCount} edges</Typography>}
+            </BorderedContainerTitle>
+        }
     >
         <Grid container>
-            {/*TODO refactor here to have a grid container wrapping to edge type names
-            and one wrapping the nodeStack, so that the first column fits the width of
-            edge types*/}
-            {loading.current ? <CircularProgress /> : <>
-                {Object.keys(nodeIds).map(edge_type =>
+            {isFetching ? <CircularProgress disableShrink /> : <>
+                {Object.keys(nodes).map(edge_type =>
                     <Grid item container xs={12} key={"global-edge-type-" + edge_type}>
                         <Grid item xs={3.5}
                             key={edge_type}
@@ -110,8 +101,8 @@ const Edges = (props) => {
                             overflow="auto"
                         >
                             <NodeStack key={"node-stack-" + edge_type}>
-                                {nodeIds[edge_type].map((id, i) =>
-                                    <NodeChip key={i} nodeId={id}/>
+                                {nodes[edge_type].map((n, i) =>
+                                    <NodeChip key={i} nodeId={n.id} node={n} />
                                 )}
                             </NodeStack>
                         </Grid>
@@ -123,35 +114,38 @@ const Edges = (props) => {
     </BorderedContainer >
 }
 
-const Properties = (props) => {
-    const theme = useTheme()
+export const Properties = (props) => {
     const { node } = props;
-    const [loading, setLoading] = useReactive(true, [node]);
-    const [properties, setProperties] = React.useState({});
-    const [dbName] = useDbName({ noTrigger: true });
+    const dbName = useDbName();
 
-    if (loading.current && node) {
-        axios
+    const listNodeProperties = React.useCallback(async () =>
+        node && await axios
             .post("/api/list_node_properties", {
                 db_name: dbName,
                 id: node.id,
             })
             .then(res => {
-                setProperties(res.data);
-                setLoading(false);
+                return res.data;
             })
             .catch(err => {
                 console.log(err);
-                setProperties({});
-                setLoading(false);
-            });
-    }
+                return {};
+            })
+        , [dbName, node])
+
+    const { data, status } = useQuery(
+        ["properties", node && node.id],
+        listNodeProperties,
+    );
+
+    const properties = data || {};
 
     return <BorderedContainer
         title={<BorderedContainerTitle title="Node properties" />}
         height={containerHeight}
     >
-        {loading.current
+        {node &
+            status === "loading"
             ? <CircularProgress size={20} />
             : Object.keys(properties).map(pName =>
                 <Box
@@ -161,30 +155,53 @@ const Properties = (props) => {
                 >
                     <Typography
                         variant="body2"
-                        color={theme.palette.secondary.main}
-                        key={pName + "-name"}
                         p={1}
                     >
-                        {pName}:
+                        <Secondary>{pName}</Secondary>: <span>{properties[pName].toString()}</span>
                     </Typography>
-                    <Typography key={pName + "-value"}>
-                        {properties[pName]}
-                    </Typography>
-                </Box>)}
+                </Box>)
+        }
     </BorderedContainer>
 }
 
 export default function NodeInspector() {
-    const [inspectedNode, setInspectedNode] = useInspectedNode();
-    const [nodes] = useNodes({ noTrigger: true });
+    const inspectedNode = useInspectedNode();
+    const selectedNodes = useSelector((state) => state.selectedNodes);
+    const dispatch = useDispatch();
 
-    if (!inspectedNode) {
-        return null;
-    }
+    const inCount = React.useMemo(() => inspectedNode
+        ? inspectedNode.ins.length
+        : 0,
+        [inspectedNode]);
+
+    const outCount = React.useMemo(() => inspectedNode
+        ? inspectedNode.outs.length
+        : 0,
+        [inspectedNode]);
+
+    const inEdgeIds = React.useMemo(() =>
+        inspectedNode
+            ? (() => inspectedNode.ins.length > edgeCountLim
+                ? inspectedNode.ins.slice(0, edgeCountLim)
+                : inspectedNode.ins)()
+            : [],
+        [inspectedNode]
+    );
+
+    const outEdgeIds = React.useMemo(() =>
+        inspectedNode
+            ? (() => inspectedNode.outs.length > edgeCountLim
+                ? inspectedNode.outs.slice(0, edgeCountLim)
+                : inspectedNode.outs)()
+            : [],
+        [inspectedNode]
+    );
+
+    if (!inspectedNode) return <></>;
 
     return <Dialog
         open={inspectedNode !== null}
-        onClose={() => setInspectedNode(null)}
+        onClose={() => dispatch(actions.inspectNode(null))}
         maxWidth="md"
         fullWidth
     >
@@ -192,15 +209,25 @@ export default function NodeInspector() {
             Node id: {inspectedNode.id}
         </DialogTitle>
         <DialogContent dividers>
-            {<Edges edgeIds={inspectedNode.ins} type="in" />}
-            {<Edges edgeIds={inspectedNode.outs} type="out" />}
+            {<Edges edgeIds={inEdgeIds} edgeCount={inCount} type="in" />}
+            {<Edges edgeIds={outEdgeIds} edgeCount={outCount} type="out" />}
             <Properties node={inspectedNode} />
             <Box display="flex" flexDirection="column" alignItems="center">
-                {!nodes.has(inspectedNode) &&
-                    <Button variant="contained" onClick={() => {
-                        nodes.select(inspectedNode);
-                        setInspectedNode(null);
-                    }}>Add node to selection</Button>}
+                {
+                    !(inspectedNode.id in selectedNodes)
+                        ? <Button
+                            variant="contained"
+                            onClick={() => dispatch(actions.selectNode(inspectedNode))}
+                        >
+                            Add node to selection
+                        </Button>
+                        : <Button
+                            variant="contained"
+                            onClick={() => dispatch(actions.unselectNode(inspectedNode))}
+                        >
+                            Remove node from selection
+                        </Button>
+                }
             </Box>
         </DialogContent>
     </Dialog>

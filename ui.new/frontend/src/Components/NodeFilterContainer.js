@@ -2,29 +2,28 @@ import {
     Box,
     Button,
     CircularProgress,
-    IconButton,
     TextField,
     Alert,
 } from '@mui/material'
-import CachedIcon from '@mui/icons-material/Cached'
 import React from 'react'
-import { useDbName, useNodes } from '../App/AppContext'
+import { useDbName } from '../App/AppContext'
 import { NodeStack, BorderedContainer, NodeInspector, NodeChip } from './'
 import { BorderedContainerTitle } from './BorderedContainer'
+import { useDispatch, useSelector } from 'react-redux'
+import * as actions from '../App/actions'
+import * as thunks from '../App/thunks'
+import { useQuery } from '../App/queries'
 
 
 const Title = (props) => {
-    const { setLoading, setError } = props;
-
+    const { setError } = props;
     const [addNodeId, setAddNodeId] = React.useState("")
-    const [nodes] = useNodes({ noTrigger: true });
-    const [dbName] = useDbName();
+    const selectedNodes = useSelector((state) => state.selectedNodes);
+    const dbName = useDbName();
+    const dispatch = useDispatch();
+
 
     return <BorderedContainerTitle title="Nodes">
-        <IconButton onClick={() => setLoading(true)}>
-            <CachedIcon />
-        </IconButton>
-
         <form onSubmit={(e) => {
             e.preventDefault();
 
@@ -35,15 +34,14 @@ const Title = (props) => {
                 return;
             }
 
-            if (nodes.hasId(id)) {
+            if (selectedNodes[id]) {
                 setError("Node already selected");
                 return;
             }
 
             setError(null);
-            nodes
-                .getNode(dbName, id)
-                .then(res => nodes.select(res));
+            dispatch(thunks.getNodes(dbName, [id]))
+                .then(res => dispatch(actions.selectNode(Object.values(res)[0])));
         }}>
             <Box display="flex" >
                 <TextField
@@ -65,17 +63,12 @@ export default function NodeFilterContainer({
     propertyName,
     propertyValue
 }) {
-    const [loading, setLoading] = React.useState(false);
     const [tooManyNodes, setTooManyNodes] = React.useState(false);
     const [error, setError] = React.useState(null);
-    const [nodes] = useNodes();
-    const [currentNodes, setCurrentNodes] = React.useState(new Map());
-    const [dbName] = useDbName();
-    const titleProps = { setError, setLoading };
-
-    React.useLayoutEffect(() => {
-        setLoading(true);
-    }, [selectedNodeType, propertyName, propertyValue]);
+    const selectedNodes = useSelector((state) => state.selectedNodes);
+    const dbName = useDbName();
+    const titleProps = { setError };
+    const dispatch = useDispatch();
 
     const Content = ({ children }) => {
         return <BorderedContainer title={<Title {...titleProps} />}>
@@ -84,51 +77,52 @@ export default function NodeFilterContainer({
         </BorderedContainer >;
     }
 
-    if (loading) {
-        nodes
+    const { data, isFetching} = useQuery(
+        ["list_nodes", dbName, selectedNodeType, propertyName, propertyValue],
+        React.useCallback(() => dispatch(thunks
             .fetchNodes(dbName, {
                 ...selectedNodeType ? { node_type_name: selectedNodeType } : {},
                 ...propertyName ? { prop_name: propertyName } : {},
                 ...propertyValue ? { prop_value: propertyValue } : {},
-            })
+            }))
             .then(res => {
                 if (res.error) {
                     setTooManyNodes(true);
-                    setCurrentNodes(new Map());
-                    setLoading(false);
-                    return;
+                    return {}
                 }
 
-                setLoading(false);
-                setCurrentNodes(res);
+                dispatch(actions.cacheNodes(res));
                 setTooManyNodes(false);
-            });
-
-        return <Content>
-            <Box m={1}>Loading nodes</Box><Box><CircularProgress size={20} /></Box>
-        </Content>
-    }
+                return Object.fromEntries(res.map(n => [n.id, n]));
+            })
+        , [dbName, dispatch, propertyName, propertyValue, selectedNodeType])
+    )
 
     if (tooManyNodes) {
         return <Content><Box m={1}>Too many nodes requested</Box></Content>
     }
 
-    const currentNodeKeys = [...currentNodes.keys()];
+    if (isFetching) {
+        return <Content><Box m={1}>Loading nodes <CircularProgress s={10}/></Box></Content>
+    }
+
+    const currentNodes = data || {};
+    const currentNodeKeys = Object.keys(currentNodes);
     const filteredKeys = currentNodeKeys
-        .filter(id => !nodes.hasId(id))
+        .filter(id => !(id in selectedNodes))
         .slice(0, 100);
 
-    const filteredNodeCount = currentNodes.size - filteredKeys.length;
-    const remainingNodeCount = currentNodes.size - filteredNodeCount - filteredKeys.length;
+    const filteredNodeCount = currentNodes.length - filteredKeys.length;
+    const remainingNodeCount = currentNodes.length - filteredNodeCount - filteredKeys.length;
 
     return <BorderedContainer title={<Title {...titleProps} />}>
         {error && <Alert severity="error">{error}</Alert>}
         {<NodeInspector />}
         <NodeStack>
-            {filteredKeys.map((id, _i) => {
+            {filteredKeys.map((id, i) => {
                 return <NodeChip
-                    node={currentNodes.get(id)}
-                    key={_i}
+                    node={currentNodes[id]}
+                    key={i}
                     nodeId={id}
                 />;
             })}

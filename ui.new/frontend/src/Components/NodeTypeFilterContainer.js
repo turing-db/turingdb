@@ -6,51 +6,49 @@ import { Autocomplete, CircularProgress, TextField } from '@mui/material'
 import { useDbName } from '../App/AppContext'
 import BorderedContainer from './BorderedContainer'
 import { BorderedContainerTitle } from './BorderedContainer'
+import { useQuery } from '../App/queries'
 
 export default function NodeTypeFilterContainer({ selected, setSelected }) {
-    const [loading, setLoading] = React.useState(true);
-    const [nodeTypes, setNodeTypes] = React.useState([]);
-    const [dbName] = useDbName();
+    const dbName = useDbName();
+    const [enabled, setEnabled] = React.useState(false);
+    const { data, isFetching } = useQuery(
+        ["list_node_types", dbName],
+        () => axios
+            .post("/api/list_node_types", { db_name: dbName })
+            .then(res => res.data)
+            .catch(err => { console.log(err); return [] }),
+        { enabled }
+    );
+    const nodeTypes = data || [];
 
-    React.useEffect(() => {
-        setLoading(true);
-    }, [dbName])
-
-    const Content = () => {
-        return <BorderedContainer title={
+    return (
+        <BorderedContainer title={
             <BorderedContainerTitle title="NodeType" noDivider>
                 <Autocomplete
                     id="node-type-filter"
-                    onChange={(_e, nt) => {
-                        setSelected(nt);
-                    }}
+                    onOpen={() => setEnabled(true)}
+                    onChange={(_e, nt) => setSelected(nt)}
                     value={selected}
                     options={nodeTypes}
                     sx={{ width: "100%", p: 1 }}
                     size="small"
-                    renderInput={(params) => <TextField {...params} />}
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            label="Node type"
+                            InputProps={{
+                                ...params.InputProps,
+                                endAdornment: (
+                                    <React.Fragment>
+                                        {isFetching ? <CircularProgress color="inherit" size={20} /> : null}
+                                        {params.InputProps.endAdornment}
+                                    </React.Fragment>
+                                ),
+                            }} />
+                    )}
                 />
             </BorderedContainerTitle>
         }>
-        </BorderedContainer >;
-    }
-
-    if (loading) {
-        axios
-            .post("/api/list_node_types", {
-                db_name: dbName
-            })
-            .then(res => {
-                setLoading(false);
-                setNodeTypes(res.data)
-            })
-            .catch(err => {
-                setLoading(false);
-                console.log(err);
-            })
-        return <Content><CircularProgress size={20} /></Content>
-    }
-
-    return <Content>
-    </Content>
+        </BorderedContainer >
+    )
 }

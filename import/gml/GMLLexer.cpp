@@ -38,9 +38,9 @@ void GMLLexer::nextToken() {
     }
 
     const char c = *_current;
-    if (isalpha(c)) {
+    if (isalpha(c) && c != '-') {
         lexString();
-    } else if (isdigit(c)) {
+    } else if (isdigit(c) || c == '-') {
         lexInt();
     } else if (c == '[') {
         _token.setToken(GMLToken::TK_OSBRACK, _current, 1);
@@ -58,20 +58,21 @@ void GMLLexer::nextToken() {
 void GMLLexer::lexInt() {
     const char* start = _current;
 
-    while (_current < _end && isdigit(*_current)) {
+    while (_current < _end && (isdigit(*_current) || *_current == '-')) {
         _current++;
     }
 
     GMLToken::TokenType tokenType = GMLToken::TK_INT;
     if (_current < _end && *_current == '.') {
         _current++;
-        if (_current >= _end || !isdigit(*_current)) {
+
+        if ((_current >= _end || !isdigit(*_current)) && *_current != 'e') {
             _token.setToken(GMLToken::TK_ERROR, start, _current-start-1);
             return;
         }
 
         tokenType = GMLToken::TK_DOUBLE;
-        while (_current < _end && isdigit(*_current)) {
+        while (_current < _end && (isdigit(*_current) || *_current == 'e' || *_current == '-')) {
             _current++;
         }
     }

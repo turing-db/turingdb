@@ -103,7 +103,7 @@ def run(args):
                 params["node_type"] = db.list_node_types()[node_type_name]
 
             if prop_name and prop_value:
-                params["property"] = turingdb.Property(prop_name, prop_value);
+                params["property"] = turingdb.Property(prop_name, prop_value)
 
             nodes = db.list_nodes(**params)
 
@@ -116,7 +116,8 @@ def run(args):
                     "id": n.id,
                     "ins": n.in_edge_ids,
                     "outs": n.out_edge_ids,
-                } for n in nodes
+                }
+                for n in nodes
             ]
         )
 
@@ -139,9 +140,7 @@ def run(args):
         except TuringError as err:
             return jsonify({"failed": True, "error": {"details": err.details}})
 
-        return jsonify(
-            [p_name for p_name in property_types]
-        )
+        return jsonify([p_name for p_name in property_types])
 
     @app.route("/api/list_node_properties", methods=["POST"])
     def list_node_properties():
@@ -156,8 +155,26 @@ def run(args):
         except TuringError as err:
             return jsonify({"failed": True, "error": {"details": err.details}})
 
+        return jsonify(
+            {p_name: p.value for p_name, p in node.list_properties().items()}
+        )
+
+    @app.route("/api/list_nodes_properties", methods=["POST"])
+    def list_nodes_properties():
+        data = request.get_json()
+        db_name = data["db_name"]
+        ids = data["ids"] if "ids" in data else None
+
+        try:
+            db = turing.get_db(db_name)
+            nodes = db.list_nodes([int(id) for id in ids])
+
+        except TuringError as err:
+            return jsonify({"failed": True, "error": {"details": err.details}})
+
         return jsonify({
-            p_name: p.value for p_name, p in node.list_properties().items()
+                node.id: {p_name: p.value for p_name, p in node.list_properties().items()}
+                for node in nodes
         })
 
     @app.route("/api/list_edges", methods=["POST"])

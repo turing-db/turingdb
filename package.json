@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "cytoscape-context-menus": "^4.1.0",
+    "cytoscape-cxtmenu": "^3.5.0"
+  }
+}

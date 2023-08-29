@@ -1,0 +1,40 @@
+{
+  "name": "cytoscape-context-menus",
+  "version": "4.1.0",
+  "description": "A Cytoscape.js extension to provide context menu around elements and core instance.",
+  "main": "cytoscape-context-menus.js",
+  "style": "cytoscape-context-menus.css",
+  "spm": {
+    "main": "cytoscape-context-menus.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "cross-env NODE_ENV=production webpack",
+    "build:dev": "cross-env NODE_ENV=development webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iVis-at-Bilkent/cytoscape.js-context-menus.git"
+  },
+  "keywords": [
+    "cytoscape",
+    "cyext"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/iVis-at-Bilkent/cytoscape.js-context-menus/issues"
+  },
+  "homepage": "https://github.com/iVis-at-Bilkent/cytoscape.js-context-menus",
+  "devDependencies": {
+    "@babel/core": "^7.10.3",
+    "@babel/preset-env": "^7.10.3",
+    "babel-loader": "^8.1.0",
+    "camelcase": "^6.2.0",
+    "cross-env": "^7.0.2",
+    "webpack": "^5.36.1",
+    "webpack-cli": "^4.6.0"
+  },
+  "peerDependencies": {
+    "cytoscape": "^2.7.0 || ^3.0.0"
+  }
+}

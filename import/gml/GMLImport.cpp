@@ -2,6 +2,8 @@
 
 #include "DB.h"
 #include "NodeType.h"
+#include "Node.h"
+#include "Property.h"
 #include "Writeback.h"
 
 #include "StringBuffer.h"
@@ -17,6 +19,7 @@ GMLImport::GMLImport(const StringBuffer* buffer,
                      db::DB* db,
                      db::Network* outNet)
     : _lexer(buffer->getData(), buffer->getSize()),
+    _db(db),
     _wb(db),
     _outNet(outNet)
 {
@@ -98,6 +101,7 @@ bool GMLImport::parseNodeCommand() {
     for (const auto& prop : _nodeProperties) {
         if (prop.first == "id") {
             nodeID = StringToNumber<size_t>(prop.second, errorID);
+            break;
         }
     }
 
@@ -113,8 +117,18 @@ bool GMLImport::parseNodeCommand() {
         return false;
     }
 
-    _nodeIDs[nodeID] = node;
+    for (const auto& prop : _nodeProperties) {
+        if (prop.first != "id") {
+            StringRef propName = _db->getString(std::string(prop.first));
+            PropertyType* pt = _wb.addPropertyType(_nodeType,propName, ValueType::VK_STRING);
+            if (!pt) {
+                pt = _nodeType->getPropertyType(propName);
+            }
+            _wb.setProperty(node, Property(pt, Value::createString(std::string(prop.second))));
+        }
+    }
 
+    _nodeIDs[nodeID] = node;
     _insideNode = false;
 
     return true;

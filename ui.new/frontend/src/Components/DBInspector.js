@@ -9,14 +9,16 @@ import {
     PropertyFilterContainer,
     NodeFilterContainer,
     SelectedNodesContainer,
+    NodeInspector,
 } from './'
 
 export default function DBInspector() {
     const [selectedNodeType, setSelectedNodeType] = React.useState(null);
-    const [propertyName, setPropertyName] = React.useState("");
+    const [propertyName, setPropertyName] = React.useState(null);
     const [propertyValue, setPropertyValue] = React.useState("");
 
     return <Box>
+        <NodeInspector />
         <NodeTypeFilterContainer
             selected={selectedNodeType}
             setSelected={setSelectedNodeType}

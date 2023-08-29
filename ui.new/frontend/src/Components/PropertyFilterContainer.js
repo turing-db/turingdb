@@ -1,45 +1,63 @@
 import axios from 'axios'
-import { Autocomplete, IconButton, TextField } from '@mui/material'
+import { Autocomplete, CircularProgress, IconButton, TextField } from '@mui/material'
 import React from 'react'
 import { useDbName } from '../App/AppContext'
 import { BorderedContainer } from './'
 import SearchIcon from '@mui/icons-material/Search'
 import { BorderedContainerTitle } from './BorderedContainer'
+import { useQuery } from '../App/queries'
+
+const useProperty = ({ setPropertyName, setPropertyValue }) => {
+    const name = React.useRef(null);
+    const value = React.useRef("");
+    const [displayedName, setDisplayedName] = React.useState(null);
+    const [displayedValue, setDisplayedValue] = React.useState("");
+
+    const search = React.useCallback(() => {
+        setPropertyName(name.current);
+        setPropertyValue(value.current);
+    }, [setPropertyName, setPropertyValue]);
+
+    const setName = React.useCallback((v) => {
+        name.current = v;
+        setDisplayedName(v);
+    }, []);
+
+    const setValue = React.useCallback((v) => {
+        value.current = v;
+        setDisplayedValue(v);
+    }, []);
+
+    return {
+        name, value,
+        displayedName, displayedValue,
+        search,
+        setName, setValue
+    };
+}
 
 export default function PropertyFilterContainer({
     setPropertyName,
     setPropertyValue,
 }) {
-    const [loading, setLoading] = React.useState(true);
-    const [propertyNames, setPropertyNames] = React.useState([]);
-    const [currentPropertyName, setCurrentPropertyName] = React.useState(null);
-    const [currentValue, setCurrentValue] = React.useState("");
-    const [dbName] = useDbName();
+    const [enabled, setEnabled] = React.useState(false);
+    const dbName = useDbName();
+    const {
+        displayedValue,
+        search,
+        setName, setValue
+    } = useProperty({ setPropertyName, setPropertyValue });
 
-    React.useLayoutEffect(() => {
-        setLoading(true);
-    }, [dbName])
-
-    if (loading) {
-        axios
-            .post("/api/list_string_property_types", {
-                db_name: dbName
-            })
-            .then(res => {
-                setLoading(false);
-                setPropertyNames(res.data);
-            })
-            .catch(err => {
-                setLoading(false);
-                console.log(err);
-            })
-    }
-
-    const search = React.useCallback(() => {
-        setPropertyName(currentPropertyName);
-        setPropertyValue(currentValue);
-    }, [setPropertyValue, currentValue, setPropertyName, currentPropertyName]);
-
+    const { data, isFetching } = useQuery(
+        ["list_string_property_types", dbName],
+        React.useCallback(() => axios
+            .post("/api/list_string_property_types", { db_name: dbName })
+            .then(res => res.data)
+            .catch(err => { console.log(err); return []; })
+            , [dbName]),
+        { enabled }
+    )
+    const propertyNames = data || [];
 
     return <form onSubmit={(e) => {
         e.preventDefault();
@@ -49,21 +67,42 @@ export default function PropertyFilterContainer({
         <BorderedContainer title={
             <BorderedContainerTitle title="Property" noDivider>
                 <Autocomplete
-                    disablePortal
                     id="property-name-filter"
                     blurOnSelect
-                    onChange={(_e, v) => v && setCurrentPropertyName(v)}
-                    value={currentPropertyName}
+                    onOpen={() => setEnabled(true)}
+                    onChange={(e, v) => {
+                        setName(v);
+                        if (!v) {
+                            setValue("");
+                            e.currentTarget.form.requestSubmit();
+                        }
+                    }}
                     options={propertyNames}
                     sx={{ width: "50%", m: 1 }}
                     size="small"
-                    renderInput={(params) => <TextField {...params} label="Property name" />}
+                    autoSelect
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            label="Property"
+                            InputProps={{
+                                ...params.InputProps,
+                                endAdornment: (
+                                    <React.Fragment>
+                                        {isFetching
+                                            ? <CircularProgress color="inherit" size={20} />
+                                            : null}
+                                        {params.InputProps.endAdornment}
+                                    </React.Fragment>
+                                ),
+                            }} />
+                    )}
                 />
                 <TextField
                     id="outlined-controlled"
                     label="Property value"
-                    value={currentValue}
-                    onChange={e => setCurrentValue(e.target.value)}
+                    value={displayedValue}
+                    onChange={e => setValue(e.target.value)}
                     size="small"
                 />
                 <IconButton type="submit"><SearchIcon /></IconButton>

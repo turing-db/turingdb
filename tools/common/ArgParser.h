@@ -18,6 +18,7 @@ public:
     void addOption(const std::string& optionName,
                    const std::string& desc,
                    bool expectsArg);
+    void printHelp() const;
     bool isOptionSet(const std::string& optionName) const;
 
     void parse(int argc, const char** argv);
@@ -45,7 +46,6 @@ private:
     Options _options;
     Args _args;
 
-    void printHelp() const;
     void handleUnknownOption(const std::string& name) const;
     void handleOptionArgExpected(const std::string& optionName) const;
 };

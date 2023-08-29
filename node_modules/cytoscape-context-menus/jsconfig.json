@@ -1,0 +1,11 @@
+/**
+ * Provides some helpful warnings
+ * https://code.visualstudio.com/docs/nodejs/working-with-javascript
+ */
+{
+    "compilerOptions": {
+        "checkJs": true,
+        "target": "es6"
+    },
+    "exclude": ["node_modules", "**/node_modules/*", "cytoscape-context-menus.js", "./webpack.config.js"],
+}
