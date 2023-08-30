@@ -1,11 +1,9 @@
 import axios from 'axios'
 import React from 'react'
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@emotion/react';
 import HubIcon from '@mui/icons-material/Hub';
-import * as actions from '../App/actions';
-import * as thunks from '../App/thunks';
 
 import {
     Box,

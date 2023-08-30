@@ -82,7 +82,6 @@ export default function CustomAppBar() {
     const theme = useTheme();
     const [open, setOpen] = React.useState(false);
     const dbName = useSelector((state) => state.dbName);
-    const inspectedNode = useSelector((state) => state.inspectedNode);
     const page = useSelector((state) => state.page);
     const dispatch = useDispatch();
 
