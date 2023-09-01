@@ -49,6 +49,9 @@ MSG_INFO(INFO_STARTING_DEV_UI_SERVER, 3015,
          "Starting dev UI server. Make sure Bioserver is running in "
          "the background")
 
+MSG_ERROR(ERROR_DURING_SERVER_EXECUTION, 3016,
+         "Something went wront with the $0 server")
+
 }
 
 #endif

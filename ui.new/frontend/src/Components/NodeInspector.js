@@ -5,7 +5,6 @@ import axios from 'axios'
 import BorderedContainer, { BorderedContainerTitle } from './BorderedContainer';
 import NodeChip from './NodeChip';
 import NodeStack from './NodeStack';
-import { useDbName, useInspectedNode } from '../App/AppContext';
 import * as actions from '../App/actions'
 import { useDispatch, useSelector } from 'react-redux';
 import * as thunks from '../App/thunks'
@@ -18,7 +17,7 @@ const edgeCountLim = 40;
 const Edges = (props) => {
     const { edgeIds, type, edgeCount } = props;
     const theme = useTheme();
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const dispatch = useDispatch();
 
     const { data, isFetching } = useQuery(
@@ -74,11 +73,16 @@ const Edges = (props) => {
                 {edgeCount > edgeCountLim
                     ? <Typography>Showing {edgeCountLim}/{edgeCount} edges</Typography>
                     : <Typography> {edgeCount} edges</Typography>}
+                <Button
+                    onClick={() => 
+                        dispatch(actions.selectNodes(Object.values(nodes).flat()))
+                    }
+                >Select all</Button>
             </BorderedContainerTitle>
         }
     >
         <Grid container>
-            {isFetching ? <CircularProgress disableShrink /> : <>
+            {isFetching ? <CircularProgress/> : <>
                 {Object.keys(nodes).map(edge_type =>
                     <Grid item container xs={12} key={"global-edge-type-" + edge_type}>
                         <Grid item xs={3.5}
@@ -116,7 +120,7 @@ const Edges = (props) => {
 
 export const Properties = (props) => {
     const { node, title = true, disablePadding = false } = props;
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
 
     const listNodeProperties = React.useCallback(async () =>
         node && await axios
@@ -171,7 +175,7 @@ export const Properties = (props) => {
 
 export default function NodeInspector(props) {
     const { open, onClose} = props
-    const inspectedNode = useInspectedNode();
+    const inspectedNode = useSelector((state) => state.inspectedNode);
     const selectedNodes = useSelector((state) => state.selectedNodes);
     const dispatch = useDispatch();
 

@@ -1,6 +1,7 @@
 #include "ServerThreadEngine.h"
 
 #include "BioLog.h"
+#include "ServerThread.h"
 #include "BioserverThread.h"
 #include "FlaskThread.h"
 #include "MsgUIServer.h"
@@ -47,8 +48,16 @@ void ServerThreadEngine::wait() {
     }
 }
 
-int ServerThreadEngine::getReturnCode() const {
-    return _returnCode;
+int ServerThreadEngine::getReturnCode(ServerType serverType) const {
+    if (!_threads[(uint8_t)serverType]) {
+        return 0;
+    }
+
+    return _threads[(uint8_t)serverType]->getReturnCode();
+}
+
+void ServerThreadEngine::getOutput(ServerType serverType, std::string& output) const {
+    FileUtils::readContent(_threads[(uint8_t)serverType]->getLogFilePath(), output);
 }
 
 }

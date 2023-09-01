@@ -12,5 +12,6 @@ export const CACHE_NODES = "CACHE_NODES";
 export const CACHE_EDGES = "CACHE_EDGES"
 
 export const SELECT_NODE = "SELECT_NODE";
+export const SELECT_NODES = "SELECT_NODES";
 export const UNSELECT_NODE = "UNSELECT_NODE";
 export const CLEAR_SELECTED_NODES = "CLEAR_SELECTED_NODES"

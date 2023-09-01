@@ -2,13 +2,12 @@ import React from 'react'
 import axios from 'axios'
 
 import { Autocomplete, CircularProgress, TextField } from '@mui/material'
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { setDbName } from '../App/actions';
-import { useDbName } from '../App/AppContext';
 import { useQuery } from '../App/queries'
 
 export default function DBSelector() {
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const dispatch = useDispatch();
     const [enabled, setEnabled] = React.useState(false);
 

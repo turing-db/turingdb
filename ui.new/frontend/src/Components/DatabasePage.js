@@ -1,13 +1,13 @@
 import React from 'react'
 import axios from 'axios'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
-import { useDbName } from '../App/AppContext'
 import DBInspector from './DBInspector'
 import { Secondary } from '../Components'
 import { useQuery } from '../App/queries'
+import { useSelector } from 'react-redux'
 
 function DBLoader() {
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const [isLoading, setIsLoading] = React.useState(false);
     const { data: loaded, refetch } = useQuery(
         ["is_db_loaded", dbName],

@@ -3,13 +3,13 @@ import axios from 'axios'
 
 import { Autocomplete, CircularProgress, TextField } from '@mui/material'
 
-import { useDbName } from '../App/AppContext'
 import BorderedContainer from './BorderedContainer'
 import { BorderedContainerTitle } from './BorderedContainer'
 import { useQuery } from '../App/queries'
+import { useSelector } from 'react-redux'
 
 export default function NodeTypeFilterContainer({ selected, setSelected }) {
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const [enabled, setEnabled] = React.useState(false);
     const { data, isFetching } = useQuery(
         ["list_node_types", dbName],

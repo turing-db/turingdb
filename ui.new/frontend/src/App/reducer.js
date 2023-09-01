@@ -6,8 +6,10 @@ const initialState = () => ({
         name: "cola",
         animate: true,
         infinite: false,
-        fit: true,
-        centerGraph: false,
+        avoidOverlap: false,
+        randomize: false,
+        fit: false,
+        centerGraph: true,
         convergenceThreshold: 0.1,
         nodeSpacing: 30,
         edgeLengthVal: 50,
@@ -65,6 +67,13 @@ const reducers = {
                 return {
                     ...state,
                     [action.payload.node.id]: { ...action.payload.node }
+                };
+
+            case actions.SELECT_NODES:
+                return {
+                    ...state,
+                    ...Object.fromEntries(action.payload.nodes
+                        .map(n => [n.id, { ...n }]))
                 };
 
             case actions.UNSELECT_NODE:

@@ -1,11 +1,11 @@
 import axios from 'axios'
 import { Autocomplete, CircularProgress, IconButton, TextField } from '@mui/material'
 import React from 'react'
-import { useDbName } from '../App/AppContext'
 import { BorderedContainer } from './'
 import SearchIcon from '@mui/icons-material/Search'
 import { BorderedContainerTitle } from './BorderedContainer'
 import { useQuery } from '../App/queries'
+import { useSelector } from 'react-redux'
 
 const useProperty = ({ setPropertyName, setPropertyValue }) => {
     const name = React.useRef(null);
@@ -41,7 +41,7 @@ export default function PropertyFilterContainer({
     setPropertyValue,
 }) {
     const [enabled, setEnabled] = React.useState(false);
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const {
         displayedValue,
         search,

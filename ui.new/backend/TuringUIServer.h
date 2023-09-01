@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FileUtils.h"
+#include "ServerType.h"
 
 namespace ui {
 
@@ -11,15 +12,15 @@ public:
     TuringUIServer(const FileUtils::Path& outDir);
     ~TuringUIServer();
 
-    void start();
-    void startDev();
+    bool start();
+    bool startDev();
     void wait();
 
-    int getReturnCode() const;
+    int getReturnCode(ServerType serverType) const;
+    void getOutput(ServerType serverType, std::string& output) const;
 
 private:
     FileUtils::Path _outDir;
-    int _returnCode = 0;
     std::unique_ptr<ServerThreadEngine> _engine;
 
     void cleanSite();

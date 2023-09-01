@@ -6,7 +6,6 @@ import {
     Alert,
 } from '@mui/material'
 import React from 'react'
-import { useDbName } from '../App/AppContext'
 import { NodeStack, BorderedContainer, NodeInspector, NodeChip } from './'
 import { BorderedContainerTitle } from './BorderedContainer'
 import { useDispatch, useSelector } from 'react-redux'
@@ -19,7 +18,7 @@ const Title = (props) => {
     const { setError } = props;
     const [addNodeId, setAddNodeId] = React.useState("")
     const selectedNodes = useSelector((state) => state.selectedNodes);
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const dispatch = useDispatch();
 
 
@@ -66,7 +65,7 @@ export default function NodeFilterContainer({
     const [tooManyNodes, setTooManyNodes] = React.useState(false);
     const [error, setError] = React.useState(null);
     const selectedNodes = useSelector((state) => state.selectedNodes);
-    const dbName = useDbName();
+    const dbName = useSelector((state) => state.dbName);
     const inspectedNode = useSelector((state) => state.inspectedNode);
     const titleProps = { setError };
     const dispatch = useDispatch();

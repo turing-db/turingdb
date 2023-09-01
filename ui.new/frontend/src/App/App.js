@@ -19,7 +19,6 @@ export const DrawerHeader = styled('div')(({ theme }) => ({
     ...theme.mixins.toolbar,
 }));
 
-
 function Page() {
     const page = useSelector((state) => state.page)
 

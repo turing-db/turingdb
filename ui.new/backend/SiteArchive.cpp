@@ -50,7 +50,7 @@ bool SiteArchive::decompress(const std::filesystem::path& outDir) {
     // Decompress archive file
     Command untarCmd("tar");
     untarCmd.setScriptPath(outDir/"decompress.sh");
-    untarCmd.setLogFile(outDir/"decompress.log");
+    untarCmd.setLogFile(outDir/"reports"/"decompress.log");
     untarCmd.setWorkingDir(outDir);
     untarCmd.addArg("-xf");
     untarCmd.addArg(archiveFileName);

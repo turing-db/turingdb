@@ -150,6 +150,18 @@ export default function ViewerPage() {
             dispatch(actions.selectNode(node.turingData));
         });
 
+        cy.on('render', () => {
+            if (!cy) return;
+
+            const viewport = cy.getFitViewport();
+            const zoom = viewport?.zoom;
+
+            if (!zoom) return;
+
+            cy.minZoom(zoom / 2);
+            cy.maxZoom(zoom * 10);
+        })
+
         setCyReady(true);
     }, [cy, cyLayout, cyReady, dispatch, selectedNodes])
 
@@ -275,7 +287,6 @@ export default function ViewerPage() {
 
     }, [cy, cyLayout, elements]);
 
-
     if (!dbName) {
         return <Box>Select a database to start</Box>;
     }
@@ -345,21 +356,6 @@ export default function ViewerPage() {
                     />
 
                     <Box pl={2} pr={2}>
-                        <Typography gutterBottom>Node spacing</Typography>
-                        <Slider
-                            valueLabelDisplay="auto"
-                            aria-label="Node spacing"
-                            value={cyLayout.nodeSpacing}
-                            onChange={(_e, v) => dispatch(actions.setCyLayout({
-                                ...cyLayout,
-                                nodeSpacing: v
-                            }))}
-                            min={2}
-                            max={80}
-                        />
-                    </Box>
-
-                    <Box pr={2}>
                         <Typography gutterBottom>Edge length</Typography>
                         <Slider
                             valueLabelDisplay="auto"
@@ -370,7 +366,7 @@ export default function ViewerPage() {
                                 edgeLengthVal: v
                             }))}
                             min={5}
-                            max={100}
+                            max={400}
                         />
                     </Box>
 

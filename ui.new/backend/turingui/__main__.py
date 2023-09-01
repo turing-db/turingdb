@@ -7,7 +7,7 @@ import logging
 
 
 def run(args):
-    logging.basicConfig(filename="flask.log", level=logging.DEBUG)
+    logging.basicConfig(filename="reports/flask.log", level=logging.DEBUG)
     app = Flask(
         __name__,
         static_url_path="",

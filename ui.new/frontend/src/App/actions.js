@@ -40,6 +40,11 @@ export const selectNode = (node) => ({
     payload: { node },
 });
 
+export const selectNodes = (nodes) => ({
+    type: actions.SELECT_NODES,
+    payload: { nodes },
+});
+
 export const unselectNode = (node) => ({
     type: actions.UNSELECT_NODE,
     payload: { node },
