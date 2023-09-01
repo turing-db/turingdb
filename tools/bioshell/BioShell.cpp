@@ -1,6 +1,8 @@
 #include "TuringClient.h"
 
 #include <iostream>
+#include <chrono>
+#include <ratio>
 
 #include "ToolInit.h"
 #include "PerfStat.h"
@@ -13,6 +15,8 @@
 
 using namespace turing::db::client;
 using namespace Log;
+
+using Clock = std::chrono::system_clock;
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("bioshell");
@@ -39,7 +43,12 @@ int main(int argc, const char** argv) {
             continue;
         }
 
+        const auto timeExecStart = Clock::now();
         QueryResult res = turing.exec(lineStr);
+        const auto timeExecEnd = Clock::now();
+        const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
+        std::cout << "Request done in " << duration.count() << " ms.\n";
+
         if (!res.isValid()) {
             BioLog::log(msg::ERROR_SHELL_ERROR_DURING_QUERY_EXECUTION());
         }
