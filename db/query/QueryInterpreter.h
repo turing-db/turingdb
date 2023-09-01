@@ -8,6 +8,7 @@ class PullResponse;
 
 namespace db::query {
 
+class InterpreterContext;
 class PullPlan;
 
 class QueryInterpreter {
@@ -24,7 +25,7 @@ public:
         PullPlan* _plan {nullptr};
     };
 
-    QueryInterpreter();
+    explicit QueryInterpreter(InterpreterContext* interpCtxt);
     ~QueryInterpreter();
 
     PrepareResult prepare(const std::string& query);
@@ -32,6 +33,7 @@ public:
     bool pull(PullResponse* result, size_t qid);
 
 private:
+    InterpreterContext* _interpCtxt {nullptr};
     std::vector<QueryExecution> _queries;
 
     size_t registerQuery(PullPlan* plan);

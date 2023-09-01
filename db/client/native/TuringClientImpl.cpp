@@ -52,12 +52,9 @@ QueryResult TuringClientImpl::exec(const std::string& queryStr) {
     }
 
     if (response.has_success_res()) {
-        std::cout << "SUCCESS\n";
         const Success& success = response.success_res();
         return QueryResult(this, success.query_id());
     } else if (response.has_failure_res()) {
-        const auto& msg = response.failure_res().msg();
-        std::cout << "FAILURE " << msg << "\n";
         return QueryResult();
     }
 

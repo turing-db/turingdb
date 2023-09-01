@@ -22,7 +22,8 @@ QueryInterpreter::QueryExecution::~QueryExecution() {
 }
 
 // QueryInterpreter
-QueryInterpreter::QueryInterpreter()
+QueryInterpreter::QueryInterpreter(InterpreterContext* interpCtxt)
+    : _interpCtxt(interpCtxt)
 {
 }
 
@@ -36,7 +37,7 @@ QueryInterpreter::PrepareResult QueryInterpreter::prepare(const std::string& que
         return PrepareResult();
     }
 
-    Planner planner;
+    Planner planner(_interpCtxt);
     PullPlan* plan = planner.makePlan(cmd);
     if (!plan) {
         return PrepareResult();

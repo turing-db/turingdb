@@ -1,24 +1,30 @@
 #pragma once
 
 #include "QueryInterpreter.h"
+#include "InterpreterContext.h"
 
 #include "DBService.grpc.pb.h"
 
 namespace db {
 
+class DBUniverse;
+
 class DBSession {
 public:
-    using ServerContext = grpc::ServerContext;
     using Stream = grpc::ServerReaderWriter<SessionResponse, SessionRequest>;
 
-    DBSession(ServerContext* ctxt, Stream* stream);
+    DBSession(DBUniverse* universe,
+              grpc::ServerContext* grpcContext,
+              Stream* stream);
+
     ~DBSession();
 
     grpc::Status process();
 
 private:
-    ServerContext* _ctxt {nullptr};
+    grpc::ServerContext* _grpcContext {nullptr};
     Stream* _stream {nullptr};
+    db::query::InterpreterContext _interpCtxt;
     db::query::QueryInterpreter _interp;
 
     grpc::Status processReq(const SessionRequest& req);

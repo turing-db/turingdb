@@ -5,7 +5,12 @@
 using namespace turing::db::client;
 
 QueryIterator& QueryIterator::operator++() {
-    if (_currentRow >= (size_t)_pullResponse->records().size()) {
+    const size_t recordsSize = (size_t)_pullResponse->records().size();
+    if (recordsSize == 0) {
+        return *this;
+    }
+
+    if (_currentRow >= recordsSize-1) {
         _pullResponse = _result->fetch();
         _currentRow = 0;
     } else {
@@ -23,7 +28,6 @@ QueryResult::QueryResult(TuringClientImpl* client, uint64_t qid)
     : _client(client),
     _qid(qid)
 {
-
     _response = new SessionResponse();
 }
 

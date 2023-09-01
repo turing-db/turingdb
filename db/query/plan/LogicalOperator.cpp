@@ -13,6 +13,7 @@ Cursor::~Cursor() {
 // OutputTableOperator
 OutputTableOperator::OutputTableOperator(const std::vector<Symbol*>& outputSymbols,
                                          Callback callback)
+    : _callback(callback)
 {
 }
 

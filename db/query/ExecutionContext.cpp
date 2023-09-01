@@ -2,7 +2,8 @@
 
 using namespace db::query;
 
-ExecutionContext::ExecutionContext()
+ExecutionContext::ExecutionContext(InterpreterContext* interpCtxt)
+    : _interpCtxt(interpCtxt)
 {
 }
 

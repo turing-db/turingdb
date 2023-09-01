@@ -1,12 +1,14 @@
 #include "DBSession.h"
 
-#include "BioLog.h"
-
 using namespace db;
-using namespace Log;
 
-DBSession::DBSession(ServerContext* ctxt, Stream* stream)
-    : _ctxt(ctxt), _stream(stream)
+DBSession::DBSession(DBUniverse* universe,
+                     grpc::ServerContext* grpcContext,
+                     Stream* stream)
+    : _grpcContext(grpcContext),
+    _stream(stream),
+    _interpCtxt(universe),
+    _interp(&_interpCtxt)
 {
 }
 
@@ -14,8 +16,6 @@ DBSession::~DBSession() {
 }
 
 grpc::Status DBSession::process() {
-    BioLog::echo("SESSION OPEN");
-
     SessionRequest req;
     while (_stream->Read(&req)) {
         const auto status = processReq(req);
@@ -23,8 +23,6 @@ grpc::Status DBSession::process() {
             return status;
         }
     }
-
-    BioLog::echo("SESSION CLOSE");
 
     return grpc::Status::OK;
 }
@@ -49,7 +47,6 @@ grpc::Status DBSession::processQuery(const ExecuteQuery& query) {
     if (prepareRes._success) {
         Success* success = response.mutable_success_res();
         success->set_query_id(prepareRes._qid.value());
-        success->set_has_records(false);
     } else {
         Failure* failure = response.mutable_failure_res();
         failure->set_msg("");

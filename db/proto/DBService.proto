@@ -437,7 +437,6 @@ message PullRequest {
 
 message Success {
     uint64 query_id = 1;
-    bool has_records = 2;
 }
 
 message Failure {

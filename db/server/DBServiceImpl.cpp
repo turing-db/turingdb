@@ -1,6 +1,5 @@
 #include "DBServiceImpl.h"
 
-#include "BioLog.h"
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
@@ -18,8 +17,6 @@
 #include "DBSession.h"
 
 #define MAX_ENTITY_COUNT 20000
-
-using namespace Log;
 
 static grpc::Status invalidDBStatus() {
     return {grpc::StatusCode::NOT_FOUND, "The database ID is invalid"};
@@ -51,7 +48,7 @@ DBServiceImpl::~DBServiceImpl() {
 
 grpc::Status DBServiceImpl::Session(grpc::ServerContext* ctxt,
                                     grpc::ServerReaderWriter<SessionResponse, SessionRequest>* stream) {
-    db::DBSession session(ctxt, stream);
+    db::DBSession session(&_universe, ctxt, stream);
     session.process();
 
     return grpc::Status::OK;

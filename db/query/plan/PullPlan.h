@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Frame.h"
+#include "ExecutionContext.h"
 
 class PullResponse;
 class Cell;
@@ -17,7 +18,9 @@ class Cursor;
 
 class PullPlan {
 public:
-    PullPlan(LogicalOperator* plan, SymbolTable* symTable);
+    PullPlan(LogicalOperator* plan,
+             SymbolTable* symTable,
+             InterpreterContext* interpCtxt);
     ~PullPlan();
 
     bool pull(PullResponse* res);
@@ -25,6 +28,7 @@ public:
 private:
     LogicalOperator* _plan {nullptr};
     SymbolTable* _symTable {nullptr};
+    ExecutionContext _executionCtxt;
     Frame _frame;
     Cursor* _cursor {nullptr};
 

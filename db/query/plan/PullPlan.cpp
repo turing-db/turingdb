@@ -7,9 +7,12 @@
 
 using namespace db::query;
 
-PullPlan::PullPlan(LogicalOperator* plan, SymbolTable* symTable)
+PullPlan::PullPlan(LogicalOperator* plan,
+                   SymbolTable* symTable,
+                   InterpreterContext* interpCtxt)
     : _plan(plan),
     _symTable(symTable),
+    _executionCtxt(interpCtxt),
     _frame(symTable->size()),
     _cursor(_plan->makeCursor())
 {
@@ -29,7 +32,9 @@ PullPlan::~PullPlan() {
 }
 
 bool PullPlan::pull(PullResponse* res) {
-    _cursor->pull(_frame, nullptr);
+    if (!_cursor->pull(_frame, &_executionCtxt)) {
+        return true;
+    }
 
     const auto& outputSymbols = _plan->getOutputSymbols();
 
