@@ -22,7 +22,7 @@ function(add_cython_library)
             OUTPUT ${generated_file}
             DEPENDS ${py_file}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dir_in_out_pkg}
-            COMMAND cython ${py_file} --output-file ${generated_file})
+            COMMAND cython3 -3 ${py_file} --output-file ${generated_file})
 
         # Compute library target name
         string(REGEX REPLACE "/" "_" target_name ${path_in_pkg})
