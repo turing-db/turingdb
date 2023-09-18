@@ -7,7 +7,7 @@ public:
     DBServer(const DBServerConfig& serverConfig);
     ~DBServer();
 
-    void run();
+    bool run();
 
 private:
     const DBServerConfig& _config;

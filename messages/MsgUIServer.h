@@ -50,7 +50,10 @@ MSG_INFO(INFO_STARTING_DEV_UI_SERVER, 3015,
          "the background")
 
 MSG_ERROR(ERROR_DURING_SERVER_EXECUTION, 3016,
-         "Something went wront with the $0 server")
+         "Something went wront with the $0 server (error $1)\n$2")
+
+MSG_INFO(INFO_TERMINATING_UI_SERVER, 3017,
+        "Terminating Turing UI server");
 
 }
 

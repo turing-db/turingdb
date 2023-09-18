@@ -1,7 +1,7 @@
 #pragma once
 
 #include <chrono>
-#include <fstream>
+#include <string>
 
 class TimerStat {
 public:

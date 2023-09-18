@@ -1,7 +1,6 @@
 #include "SiteArchive.h"
 
 #include <string>
-#include <fstream>
 
 #include "SiteArchiveData.h"
 

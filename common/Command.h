@@ -1,10 +1,11 @@
 #ifndef _COMMON_COMMAND_
 #define _COMMON_COMMAND_
 
+#include "BoostProcess.h"
+
 #include <string>
 #include <filesystem>
 #include <vector>
-#include <utility>
 
 class Command {
 public:
@@ -25,6 +26,7 @@ public:
     void addArg(const std::string& arg);
 
     bool run();
+    ProcessChild runAsync(ProcessGroup& group);
 
     int getReturnCode() const { return _returnCode; }
     void getLogs(std::string& data) const;
@@ -42,7 +44,8 @@ private:
     int _returnCode {-1};
 
     bool searchCmd();
-    void generateCmdString(std::string& cmdStr);
+    void generateCmdString(std::string& cmdStr, bool async = false);
+    void getBashCmd(std::string& bashCmd, bool async = false);
 };
 
 #endif

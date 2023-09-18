@@ -1,11 +1,9 @@
 #include "TuringUIServer.h"
 
-#include "ServerThreadEngine.h"
-#include "ServerThread.h"
+#include "ServerCommandEngine.h"
 #include "SiteArchive.h"
 
 #include "BioLog.h"
-#include "MsgCommon.h"
 #include "MsgUIServer.h"
 
 using namespace Log;
@@ -15,7 +13,7 @@ namespace ui {
 
 TuringUIServer::TuringUIServer(const FileUtils::Path& outDir)
     : _outDir(outDir),
-      _engine(new ServerThreadEngine(outDir))
+      _engine(new ServerCommandEngine(outDir))
 {
     const auto sitePath = _outDir / SiteArchive::getSiteDirectoryName();
 }
@@ -45,8 +43,12 @@ bool TuringUIServer::startDev() {
 #endif
 }
 
-void TuringUIServer::wait() {
-    _engine->wait();
+void TuringUIServer::terminate() {
+    _engine->terminate();
+}
+
+ServerType TuringUIServer::waitServerDone() {
+    return _engine->waitServerDone();
 }
 
 int TuringUIServer::getReturnCode(ServerType serverType) const {
