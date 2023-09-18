@@ -41,7 +41,7 @@ bool Command::run() {
     std::string bashCmd;
     getBashCmd(bashCmd);
 
-    if (bashCmd == "") {
+    if (bashCmd.empty()) {
         return false;
     }
 
