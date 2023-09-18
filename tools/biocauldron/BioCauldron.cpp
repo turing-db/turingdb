@@ -1,14 +1,26 @@
 #include "ToolInit.h"
 
+#include <csignal>
+
 #include "BioLog.h"
 #include "MsgUIServer.h"
 #include "TuringUIServer.h"
-#include <unordered_map>
 
 #define BIOCAULDRON_TOOL_NAME "biocauldron"
 
 using namespace ui;
 using namespace Log;
+
+static std::unique_ptr<TuringUIServer> server;
+
+void sigintHandler(int signum) {
+    if (signum == SIGINT) {
+        server->terminate();
+        BioLog::printSummary();
+        BioLog::destroy();
+        exit(EXIT_SUCCESS);
+    }
+}
 
 int main(int argc, const char** argv) {
     ToolInit toolInit(BIOCAULDRON_TOOL_NAME);
@@ -18,35 +30,26 @@ int main(int argc, const char** argv) {
                         "Use a developpment environment instead of production",
                         false);
     toolInit.init(argc, argv);
-
-    TuringUIServer server {toolInit.getOutputsDir()};
+    signal(SIGINT, sigintHandler);
+    server = std::make_unique<TuringUIServer>(toolInit.getOutputsDir());
 
     argParser.isOptionSet("dev")
-        ? server.startDev()
-        : server.start();
+        ? server->startDev()
+        : server->start();
 
-    server.wait();
+    const ui::ServerType serverType = server->waitServerDone();
+    int code = server->getReturnCode(serverType);
 
-    std::unordered_map<ui::ServerType, std::string> serverNames = {
-        {ServerType::FLASK,     "Flask"    },
-        {ServerType::REACT,     "React"    },
-        {ServerType::BIOSERVER, "bioserver"},
-    };
+    std::string output;
+    server->getOutput(serverType, output);
 
-    for (uint8_t t = 0; t < (uint8_t)ServerType::_SIZE; t++) {
-        int code = server.getReturnCode((ServerType)t);
-        if (code != 0) {
-            BioLog::log(msg::ERROR_DURING_SERVER_EXECUTION() << serverNames.at((ServerType)t));
-            std::string output;
-            server.getOutput((ServerType)t, output);
-            BioLog::echo(output);
-            BioLog::printSummary();
-            BioLog::destroy();
-            return EXIT_FAILURE;
-        }
-    }
+    BioLog::log(msg::ERROR_DURING_SERVER_EXECUTION()
+                << SERVER_NAMES.at(serverType)
+                << code
+                << output);
 
+    server->terminate();
     BioLog::printSummary();
     BioLog::destroy();
-    return EXIT_SUCCESS;
+    exit(EXIT_FAILURE);
 }

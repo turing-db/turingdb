@@ -21,7 +21,7 @@ void RPCServer::addService(grpc::Service* service) {
     _services.push_back(service);
 }
 
-void RPCServer::run() {
+bool RPCServer::run() {
     gpr_cpu_set_num_cores(_config.getConcurrency());
 
     grpc::ServerBuilder builder;
@@ -38,10 +38,11 @@ void RPCServer::run() {
     std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
     if (!server) {
         BioLog::log(msg::ERROR_RPC_SERVER_FAILED_TO_START() << addrStr);
-        return;
+        return false;
     }
 
     BioLog::log(msg::INFO_RPC_SERVER_STARTED() << addrStr);
 
     server->Wait();
+    return true;
 }

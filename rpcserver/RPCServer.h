@@ -16,7 +16,7 @@ public:
 
     void addService(grpc::Service* service);
 
-    void run();
+    bool run();
 
 private:
     const RPCServerConfig& _config;

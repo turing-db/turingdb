@@ -1,10 +1,10 @@
 set(uinew_server_sources
             SiteArchive.cpp
-            ServerThread.cpp
-            BioserverThread.cpp
-            FlaskThread.cpp
-            ReactThread.cpp
-            ServerThreadEngine.cpp
+            ServerCommand.cpp
+            BioserverCommand.cpp
+            FlaskCommand.cpp
+            ReactCommand.cpp
+            ServerCommandEngine.cpp
             TuringUIServer.cpp)
 
 add_library(turing_uinew_server_s

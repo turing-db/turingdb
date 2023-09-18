@@ -1,6 +1,5 @@
 #include "TimerStat.h"
 #include "PerfStat.h"
-#include "FileUtils.h"
 
 using namespace std::literals;
 using Clock = std::chrono::system_clock;

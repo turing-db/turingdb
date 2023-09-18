@@ -5,7 +5,7 @@
 
 namespace ui {
 
-class ServerThreadEngine;
+class ServerCommandEngine;
 
 class TuringUIServer {
 public:
@@ -14,14 +14,15 @@ public:
 
     bool start();
     bool startDev();
-    void wait();
+    void terminate();
+    ServerType waitServerDone();
 
     int getReturnCode(ServerType serverType) const;
     void getOutput(ServerType serverType, std::string& output) const;
 
 private:
     FileUtils::Path _outDir;
-    std::unique_ptr<ServerThreadEngine> _engine;
+    std::unique_ptr<ServerCommandEngine> _engine;
 
     void cleanSite();
 };

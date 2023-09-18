@@ -13,10 +13,10 @@ DBServer::DBServer(const DBServerConfig& serverConfig)
 DBServer::~DBServer() {
 }
 
-void DBServer::run() {
+bool DBServer::run() {
     RPCServer rpcServer(_config.getRPCConfig());
     DBServiceImpl apiService(_config);
 
     rpcServer.addService(&apiService);
-    rpcServer.run();
+    return rpcServer.run();
 }
