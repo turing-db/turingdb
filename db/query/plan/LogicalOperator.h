@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Value.h"
+#include "PullStatus.h"
 
 namespace db {
 
@@ -15,7 +16,7 @@ class Symbol;
 class Cursor {
 public:
     virtual ~Cursor();
-    virtual bool pull(Frame& frame, ExecutionContext* ctxt) = 0;
+    virtual PullStatus pull(Frame& frame, ExecutionContext* ctxt) = 0;
 };
 
 class LogicalOperator {
@@ -47,7 +48,7 @@ private:
         OpenDBCursor(OpenDBOperator* self);
         ~OpenDBCursor();
 
-        bool pull(Frame& frame, ExecutionContext* ctxt) override;
+        PullStatus pull(Frame& frame, ExecutionContext* ctxt) override;
 
     private:
         OpenDBOperator* _self {nullptr};
@@ -75,7 +76,7 @@ private:
         OutputTableCursor(OutputTableOperator* self);
         ~OutputTableCursor();
 
-        bool pull(Frame& frame, ExecutionContext* ctxt) override;
+        PullStatus pull(Frame& frame, ExecutionContext* ctxt) override;
 
     private:
         OutputTableOperator* _self {nullptr};

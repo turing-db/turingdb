@@ -13,7 +13,7 @@
 #include "BioLog.h"
 #include "MsgShell.h"
 
-using namespace turing::db::client;
+using namespace turing;
 using namespace Log;
 
 using Clock = std::chrono::system_clock;

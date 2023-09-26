@@ -42,9 +42,10 @@ OpenDBOperator::OpenDBCursor::OpenDBCursor(OpenDBOperator* self)
 OpenDBOperator::OpenDBCursor::~OpenDBCursor() {
 }
 
-bool OpenDBOperator::OpenDBCursor::pull(Frame& frame, ExecutionContext* ctxt) {
+PullStatus OpenDBOperator::OpenDBCursor::pull(Frame& frame, ExecutionContext* ctxt) {
     DBManager* dbMan = ctxt->getInterpreterContext()->getDBManager();
-    return dbMan->loadDB(_self->_name);
+    dbMan->loadDB(_self->_name);
+    return PullStatus::Done;
 }
 
 // OutputTableOperator
@@ -71,7 +72,7 @@ Cursor* OutputTableOperator::makeCursor() {
 OutputTableOperator::OutputTableCursor::~OutputTableCursor() {
 }
 
-bool OutputTableOperator::OutputTableCursor::pull(Frame& frame, ExecutionContext* ctxt) {
+PullStatus OutputTableOperator::OutputTableCursor::pull(Frame& frame, ExecutionContext* ctxt) {
     if (!_pulled) {
         _self->_callback(frame, ctxt, _rows);
         _pulled = true;
@@ -84,8 +85,8 @@ bool OutputTableOperator::OutputTableCursor::pull(Frame& frame, ExecutionContext
             frame[outputSymbols[i]] = row[i];
         }
         _currentRow++;
-        return true;
+        return PullStatus::Partial;
     }
 
-    return false;
+    return PullStatus::Done;
 }

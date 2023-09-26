@@ -18,18 +18,18 @@ Interpreter::Interpreter(InterpreterContext* interpCtxt)
 Interpreter::~Interpreter() {
 }
 
-bool Interpreter::execQuery(const std::string& query, Buffer* outBuffer) {
+void Interpreter::execQuery(const std::string& query, Buffer* outBuffer) {
     QueryParser parser;
 
     QueryCommand* cmd = parser.parse(query);
     if (!cmd) {
-        return false;
+        return;
     }
 
     Planner planner(_interpCtxt);
     PullPlan* pullPlan = planner.makePlan(cmd);
     if (!pullPlan) {
-        return false;
+        return;
     }
 
     {
@@ -47,5 +47,5 @@ bool Interpreter::execQuery(const std::string& query, Buffer* outBuffer) {
 
     delete pullPlan;
 
-    return true;
+    return;
 }

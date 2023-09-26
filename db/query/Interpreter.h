@@ -13,7 +13,7 @@ public:
     explicit Interpreter(InterpreterContext* interpCtxt);
     ~Interpreter();
 
-    bool execQuery(const std::string& query, Buffer* outBuffer);
+    void execQuery(const std::string& query, Buffer* outBuffer);
 
 private:
     InterpreterContext* _interpCtxt {nullptr};

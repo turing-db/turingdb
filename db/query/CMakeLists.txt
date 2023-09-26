@@ -9,6 +9,7 @@ bison_target(parser ${CMAKE_CURRENT_SOURCE_DIR}/parser.y
 add_flex_bison_dependency(lexer parser)
 
 set(plan_sources
+    plan/PullPlan.cpp
     plan/LogicalOperator.cpp
     plan/Planner.cpp)
 

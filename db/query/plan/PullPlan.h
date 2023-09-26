@@ -2,6 +2,7 @@
 
 #include "Frame.h"
 #include "ExecutionContext.h"
+#include "PullStatus.h"
 
 namespace db {
 
@@ -16,7 +17,7 @@ public:
              InterpreterContext* interpCtxt);
     ~PullPlan();
 
-    bool pull();
+    PullStatus pull();
 
 private:
     LogicalOperator* _plan {nullptr};
