@@ -2,7 +2,7 @@
 
 #include "ASTContext.h"
 
-using namespace db::query;
+using namespace db;
 
 void QueryCommand::registerCmd(ASTContext* ctxt) {
     ctxt->addCmd(this);

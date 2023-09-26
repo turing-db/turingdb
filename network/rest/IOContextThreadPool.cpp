@@ -1,6 +1,6 @@
 #include "IOContextThreadPool.h"
 
-using namespace turing::network;
+using namespace net;
 
 IOContextThreadPool::IOContextThreadPool(size_t poolSize)
     : _poolSize(poolSize),

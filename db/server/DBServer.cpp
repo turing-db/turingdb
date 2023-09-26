@@ -2,42 +2,38 @@
 
 #include "DBServerConfig.h"
 #include "Server.h"
+#include "DBServerHandler.h"
+#include "Interpreter.h"
+#include "InterpreterContext.h"
+#include "DBManager.h"
 
-using namespace turing::network;
-
-class DBServerContext {
-public:
-    void process(Buffer* outBuffer, const std::string& uri) {
-        auto writer = outBuffer->getWriter();
-
-        strcpy(writer.getBuffer(), headerOk.c_str());
-        writer.setWrittenBytes(headerOk.size()); 
-        
-        strcpy(writer.getBuffer(), emptyLine.c_str());
-        writer.setWrittenBytes(emptyLine.size());
-
-        strcpy(writer.getBuffer(), body.c_str());
-        writer.setWrittenBytes(body.size());
-    }
-
-private:
-    std::string headerOk =
-        "HTTP/1.1 200 OK\r\n";
-    std::string emptyLine = "\r\n";
-    std::string body = "{\"data\":[],\"errors\":[]}";
-};
+using namespace db;
+using namespace net;
 
 DBServer::DBServer(const DBServerConfig& serverConfig)
     : _config(serverConfig)
 {
+    _dbMan = new DBManager(_config.getDatabasesPath());
+    _interpCtxt = new InterpreterContext(_dbMan);
+    _interp = new Interpreter(_interpCtxt);
 }
 
 DBServer::~DBServer() {
+    if (_interp) {
+        delete _interp;
+    }
+
+    if (_interpCtxt) {
+        delete _interpCtxt;
+    }
+
+    if (_dbMan) {
+        delete _dbMan;
+    }
 }
 
-bool DBServer::run() {
-    DBServerContext serverContext;
-    Server server(&serverContext, _config.getServerConfig());
+void DBServer::start() {
+    DBServerHandler serverHandler(_interp);
+    Server server(&serverHandler, _config.getServerConfig());
     server.start();
-    return true;
 }

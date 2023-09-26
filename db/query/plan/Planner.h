@@ -1,6 +1,6 @@
 #pragma once
 
-namespace db::query {
+namespace db {
 
 class InterpreterContext;
 class PullPlan;

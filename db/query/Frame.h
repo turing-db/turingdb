@@ -5,7 +5,7 @@
 #include "Value.h"
 #include "Symbol.h"
 
-namespace db::query {
+namespace db {
 
 class SymbolTable;
 

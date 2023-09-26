@@ -3,7 +3,7 @@
 #include "Frame.h"
 #include "ExecutionContext.h"
 
-namespace db::query {
+namespace db {
 
 class LogicalOperator;
 class SymbolTable;

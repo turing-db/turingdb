@@ -5,6 +5,8 @@
 #include "FileUtils.h"
 #include "BioAssert.h"
 
+using namespace db;
+
 DBServerConfig::DBServerConfig()
 {
     const char* home = std::getenv("HOME");

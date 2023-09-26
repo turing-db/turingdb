@@ -5,7 +5,7 @@
 #include "InterpreterContext.h"
 #include "DBManager.h"
 
-using namespace db::query;
+using namespace db;
 
 LogicalOperator::LogicalOperator(const std::vector<Symbol*>& outputSymbols)
     : _outputSymbols(outputSymbols)

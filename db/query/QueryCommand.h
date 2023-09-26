@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace db::query {
+namespace db {
 
 class ASTContext;
 

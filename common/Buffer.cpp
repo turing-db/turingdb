@@ -2,8 +2,6 @@
 
 #include <iostream>
 
-using namespace turing::network;
-
 Buffer::Buffer()
 {
 }

@@ -1,6 +1,6 @@
 #include "ExecutionContext.h"
 
-using namespace db::query;
+using namespace db;
 
 ExecutionContext::ExecutionContext(InterpreterContext* interpCtxt)
     : _interpCtxt(interpCtxt)

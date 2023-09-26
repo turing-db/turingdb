@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace db::query {
+namespace db {
 
 class QueryCommand;
 

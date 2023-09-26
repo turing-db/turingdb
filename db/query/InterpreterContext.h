@@ -1,10 +1,8 @@
 #pragma once
 
 namespace db {
-class DBManager;
-}
 
-namespace db::query {
+class DBManager;
 
 class InterpreterContext {
 public:

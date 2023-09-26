@@ -6,7 +6,7 @@
 #include "parser.hpp"
 #include "ASTContext.h"
 
-using namespace db::query;
+using namespace db;
 
 QueryParser::QueryParser()
 {

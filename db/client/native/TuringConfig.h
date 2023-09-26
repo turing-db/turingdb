@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace turing::db::client {
+namespace turing {
 
 class TuringConfig {
 public:

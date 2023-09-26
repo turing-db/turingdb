@@ -2,7 +2,7 @@
 
 #include "SymbolTable.h"
 
-using namespace db::query;
+using namespace db;
 
 Frame::Frame(SymbolTable* symTbl)
     : _symTbl(symTbl),

@@ -1,5 +1,6 @@
 
 set(dbserver_sources
+        DBServerHandler.cpp
         DBServerConfig.cpp
         DBServer.cpp)
 

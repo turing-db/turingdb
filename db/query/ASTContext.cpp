@@ -2,7 +2,7 @@
 
 #include "QueryCommand.h"
 
-using namespace db::query;
+using namespace db;
 
 ASTContext::ASTContext()
 {

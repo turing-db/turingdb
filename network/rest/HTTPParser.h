@@ -4,9 +4,7 @@
 
 #include "Buffer.h"
 
-namespace turing::network {
-
-class Buffer;
+namespace net {
 
 class HTTPParser {
 public:

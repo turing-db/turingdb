@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-using namespace turing::db::client;
+using namespace turing;
 namespace http = boost::beast::http;
 
 TuringClient::TuringClient()

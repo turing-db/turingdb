@@ -6,14 +6,14 @@
 %define api.token.constructor
 %define api.value.type variant
 %define parse.assert
-%define api.namespace { db::query }
+%define api.namespace { db }
 
 %code requires
 {
 
 #include <string>
 
-namespace db::query {
+namespace db {
 class YScanner;
 class ASTContext;
 class QueryCommand;
@@ -32,18 +32,18 @@ class QueryCommand;
 
 #include "BioLog.h"
 
-using namespace db::query;
+using namespace db;
 using namespace Log;
 
-static db::query::YParser::symbol_type yylex(db::query::YScanner& scanner) {
+static db::YParser::symbol_type yylex(db::YScanner& scanner) {
     return scanner.get_next_token();
 }
 
 }
 
-%lex-param { db::query::YScanner& scanner }
-%parse-param { db::query::YScanner& scanner }
-%parse-param { db::query::ASTContext* ctxt }
+%lex-param { db::YScanner& scanner }
+%parse-param { db::YScanner& scanner }
+%parse-param { db::ASTContext* ctxt }
 
 %define api.token.prefix {TOKEN_}
 
@@ -58,8 +58,8 @@ static db::query::YParser::symbol_type yylex(db::query::YScanner& scanner) {
 
 %token END
 
-%type<db::query::QueryCommand*> list_cmd
-%type<db::query::QueryCommand*> open_cmd
+%type<db::QueryCommand*> list_cmd
+%type<db::QueryCommand*> open_cmd
 
 %start query_unit
 
@@ -85,5 +85,5 @@ open_cmd : OPEN STRING_CONSTANT {
 
 %%
 
-void db::query::YParser::error(const std::string &message) {
+void db::YParser::error(const std::string &message) {
 }

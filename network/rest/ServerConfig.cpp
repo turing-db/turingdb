@@ -1,6 +1,6 @@
 #include "ServerConfig.h"
 
-using namespace turing::network;
+using namespace net;
 
 ServerConfig::ServerConfig()
 {

@@ -3,7 +3,7 @@
 #include "LogicalOperator.h"
 #include "SymbolTable.h"
 
-using namespace db::query;
+using namespace db;
 
 PullPlan::PullPlan(LogicalOperator* plan,
                    SymbolTable* symTable,

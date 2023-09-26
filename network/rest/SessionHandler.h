@@ -14,7 +14,7 @@
 
 #include "BioLog.h"
 
-namespace turing::network {
+namespace net {
 
 template <class ServerContextT>
 class SessionHandler : public std::enable_shared_from_this<SessionHandler<ServerContextT>> {

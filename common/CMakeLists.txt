@@ -1,6 +1,7 @@
 
 set(common_sources
         Command.cpp
+        Buffer.cpp
         StringBuffer.cpp
         BannerDisplay.cpp
         FileUtils.cpp

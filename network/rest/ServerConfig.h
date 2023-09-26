@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace turing::network {
+namespace net {
 
 class ServerConfig {
 public:

@@ -1,7 +1,6 @@
 
 set(rest_sources 
         HTTPParser.cpp
-        Buffer.cpp
         ServerConfig.cpp
         IOContextThreadPool.cpp)
 

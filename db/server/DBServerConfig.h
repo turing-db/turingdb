@@ -4,9 +4,11 @@
 
 #include "ServerConfig.h"
 
+namespace db {
+
 class DBServerConfig {
 public:
-    using ServerConfig = turing::network::ServerConfig;
+    using ServerConfig = net::ServerConfig;
 
     DBServerConfig();
     ~DBServerConfig();
@@ -19,3 +21,5 @@ private:
     ServerConfig _serverConfig;
     std::string _databasesPath;
 };
+
+}

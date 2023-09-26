@@ -3,7 +3,7 @@
 #include "YScanner.h"
 #include "parser.hpp"
 
-using namespace db::query;
+using namespace db;
 
 %}
 

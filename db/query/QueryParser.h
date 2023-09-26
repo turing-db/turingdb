@@ -4,7 +4,7 @@
 
 #include "ASTContext.h"
 
-namespace db::query {
+namespace db {
 
 class QueryCommand;
 

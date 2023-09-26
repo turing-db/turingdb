@@ -1,11 +1,51 @@
 #include "Interpreter.h"
 
-using namespace db::query;
+#include "string.h"
 
-Interpreter::Interpreter()
+#include "QueryParser.h"
+#include "plan/Planner.h"
+#include "plan/PullPlan.h"
+
+#include "Buffer.h"
+
+using namespace db;
+
+Interpreter::Interpreter(InterpreterContext* interpCtxt)
+    : _interpCtxt(interpCtxt)
 {
 }
 
 Interpreter::~Interpreter() {
 }
 
+bool Interpreter::execQuery(const std::string& query, Buffer* outBuffer) {
+    QueryParser parser;
+
+    QueryCommand* cmd = parser.parse(query);
+    if (!cmd) {
+        return false;
+    }
+
+    Planner planner(_interpCtxt);
+    PullPlan* pullPlan = planner.makePlan(cmd);
+    if (!pullPlan) {
+        return false;
+    }
+
+    {
+        auto writer = outBuffer->getWriter();
+
+        strcpy(writer.getBuffer(), headerOk.c_str());
+        writer.setWrittenBytes(headerOk.size()); 
+        
+        strcpy(writer.getBuffer(), emptyLine.c_str());
+        writer.setWrittenBytes(emptyLine.size());
+
+        strcpy(writer.getBuffer(), body.c_str());
+        writer.setWrittenBytes(body.size());
+    }
+
+    delete pullPlan;
+
+    return true;
+}

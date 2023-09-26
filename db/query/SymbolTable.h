@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 
-namespace db::query {
+namespace db {
 
 class Symbol;
 

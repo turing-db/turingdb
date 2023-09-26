@@ -8,7 +8,7 @@
 
 #include "BioLog.h"
 
-namespace turing::network {
+namespace net {
 
 template <class ServerContextT>
 class Server {

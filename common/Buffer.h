@@ -3,8 +3,6 @@
 #include <array>
 #include <stddef.h>
 
-namespace turing::network {
-
 class Buffer {
 public:
     Buffer();
@@ -52,5 +50,3 @@ private:
     std::array<char, BUFFER_SIZE+SAFETY_MARGIN> _data;
     size_t _bytes {0};
 };
-
-}

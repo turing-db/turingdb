@@ -6,7 +6,7 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 
-namespace turing::network {
+namespace net {
 
 class IOContextThreadPool {
 public:

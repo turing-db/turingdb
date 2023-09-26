@@ -6,7 +6,7 @@
 
 #include "Value.h"
 
-namespace db::query {
+namespace db {
 
 class Frame;
 class ExecutionContext;

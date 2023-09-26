@@ -11,7 +11,7 @@
 
 #include "TuringConfig.h"
 
-namespace turing::db::client {
+namespace turing {
 
 class TuringConfig;
 
