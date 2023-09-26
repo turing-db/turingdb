@@ -10,8 +10,7 @@ add_flex_bison_dependency(lexer parser)
 
 set(plan_sources
     plan/LogicalOperator.cpp
-    plan/Planner.cpp
-    plan/PullPlan.cpp)
+    plan/Planner.cpp)
 
 set(query_sources
         ${BISON_parser_OUTPUTS}
@@ -24,13 +23,12 @@ set(query_sources
         Symbol.cpp
         SymbolTable.cpp
         ExecutionContext.cpp
-        QueryInterpreter.cpp)
+        Interpreter.cpp)
 
 add_library(turing_db_query_s STATIC ${query_sources})
 target_include_directories(turing_db_query_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(turing_db_query_s PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(turing_db_query_s PRIVATE
-    turing_db_proto_s
     turing_db_core_s
     turing_db_manager_s
     common_s)

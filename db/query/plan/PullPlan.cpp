@@ -3,8 +3,6 @@
 #include "LogicalOperator.h"
 #include "SymbolTable.h"
 
-#include "DBService.grpc.pb.h"
-
 using namespace db::query;
 
 PullPlan::PullPlan(LogicalOperator* plan,

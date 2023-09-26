@@ -3,13 +3,6 @@
 #include "Frame.h"
 #include "ExecutionContext.h"
 
-class PullResponse;
-class Cell;
-
-namespace db {
-class Value;
-}
-
 namespace db::query {
 
 class LogicalOperator;
@@ -23,7 +16,7 @@ public:
              InterpreterContext* interpCtxt);
     ~PullPlan();
 
-    bool pull(PullResponse* res);
+    bool pull();
 
 private:
     LogicalOperator* _plan {nullptr};
@@ -31,8 +24,6 @@ private:
     ExecutionContext _executionCtxt;
     Frame _frame;
     Cursor* _cursor {nullptr};
-
-    void encodeValue(Cell* cell, const db::Value& value);
 };
 
 }

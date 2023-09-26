@@ -7,15 +7,17 @@
 
 namespace db::query {
 
+class SymbolTable;
+
 class Frame {
 public:
-    Frame(size_t size);
+    Frame(SymbolTable* symTbl);
     ~Frame();
 
     db::Value& operator[](const Symbol* sym) { return _tbl[sym->getPosition()]; }
 
-
 private:
+    SymbolTable* _symTbl {nullptr};
     std::vector<db::Value> _tbl;
 };
 

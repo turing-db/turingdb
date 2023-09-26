@@ -9,7 +9,7 @@ DBServerConfig::DBServerConfig()
 {
     const char* home = std::getenv("HOME");
     bioassert(home);
-    _databasesPath = (FileUtils::Path {home} / "databases").string();
+    _databasesPath = (FileUtils::Path(home)/"databases").string();
 }
 
 DBServerConfig::~DBServerConfig() {

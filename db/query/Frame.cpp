@@ -1,9 +1,12 @@
 #include "Frame.h"
 
+#include "SymbolTable.h"
+
 using namespace db::query;
 
-Frame::Frame(size_t size)
-    : _tbl(size)
+Frame::Frame(SymbolTable* symTbl)
+    : _symTbl(symTbl),
+    _tbl(symTbl->size())
 {
 }
 
