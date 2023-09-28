@@ -16,7 +16,7 @@ public:
     explicit Interpreter(InterpreterContext* interpCtxt);
     ~Interpreter();
 
-    void execQuery(StringSpan query, Buffer* outBuffer);
+    void execQuery(StringSpan query, Buffer* outBuffer) const;
 
 private:
     InterpreterContext* _interpCtxt {nullptr};
@@ -27,7 +27,7 @@ private:
     const std::string bodyPostStatus = "\",\"data\":[";
     const std::string bodyEnd = "]}\n";
 
-    void handleQueryError(QueryStatus status, Buffer* outBuffer);
+    void handleQueryError(QueryStatus status, Buffer* outBuffer) const;
 };
 
 }

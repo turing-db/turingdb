@@ -3,8 +3,8 @@
 namespace db {
 
 enum class PullStatus {
-    Partial,
-    Done
+    PARTIAL,
+    DONE
 };
 
 }

@@ -45,7 +45,7 @@ OpenDBOperator::OpenDBCursor::~OpenDBCursor() {
 PullStatus OpenDBOperator::OpenDBCursor::pull(Frame& frame, ExecutionContext* ctxt) {
     DBManager* dbMan = ctxt->getInterpreterContext()->getDBManager();
     dbMan->loadDB(_self->_name);
-    return PullStatus::Done;
+    return PullStatus::DONE;
 }
 
 // OutputTableOperator
@@ -85,8 +85,8 @@ PullStatus OutputTableOperator::OutputTableCursor::pull(Frame& frame, ExecutionC
             frame[outputSymbols[i]] = row[i];
         }
         _currentRow++;
-        return PullStatus::Partial;
+        return PullStatus::PARTIAL;
     }
 
-    return PullStatus::Done;
+    return PullStatus::DONE;
 }

@@ -16,6 +16,10 @@ public:
 
     db::Value& operator[](const Symbol* sym) { return _tbl[sym->getPosition()]; }
 
+    const db::Value& operator[](const Symbol* sym) const {
+        return _tbl[sym->getPosition()];
+    }
+
 private:
     SymbolTable* _symTbl {nullptr};
     std::vector<db::Value> _tbl;

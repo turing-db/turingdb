@@ -19,6 +19,9 @@ public:
 
     PullStatus pull();
 
+    SymbolTable* getSymbolTable() const { return _symTable; }
+    const Frame& getFrame() const { return _frame; }
+
 private:
     LogicalOperator* _plan {nullptr};
     SymbolTable* _symTable {nullptr};
