@@ -3,6 +3,7 @@
 #include <string>
 
 #include "StringSpan.h"
+#include "QueryStatus.h"
 
 class Buffer;
 
@@ -22,7 +23,11 @@ private:
     const std::string headerOk =
         "HTTP/1.1 200 OK\r\n";
     const std::string emptyLine = "\r\n";
-    const std::string body = "{\"data\":[],\"errors\":[]}";
+    const std::string bodyBegin = "{\"status\":\"";
+    const std::string bodyPostStatus = "\",\"data\":[";
+    const std::string bodyEnd = "]}\n";
+
+    void handleQueryError(QueryStatus status, Buffer* outBuffer);
 };
 
 }
