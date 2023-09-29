@@ -29,7 +29,10 @@ bool TuringClient::exec(const std::string& query) {
         return false;
     }
 
-    http::request<http::string_body> req{http::verb::get, "/query", 11};
+    http::request<http::string_body> req{http::verb::post, "/query", 11};
+    req.body() = query;
+    req.prepare_payload();
+
     http::write(_stream, req, error);
     if (error) {
         return false;
