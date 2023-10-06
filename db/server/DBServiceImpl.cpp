@@ -3,9 +3,9 @@
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
+#include "DBManager.h"
 #include "DBServerConfig.h"
 #include "Edge.h"
-#include "EdgeMap.h"
 #include "EdgeType.h"
 #include "FileUtils.h"
 #include "Network.h"
@@ -13,7 +13,6 @@
 #include "NodeSearch.h"
 #include "NodeType.h"
 #include "Writeback.h"
-#include "DBManager.h"
 
 #include "DBSession.h"
 
@@ -36,8 +35,192 @@ static grpc::Status invalidPropertyType() {
             "Filtering by property only supports strings"};
 }
 
+template <typename T>
+static grpc::Status buildRpcProperties(const db::DBEntity* e, T* rpcObject) {
+    for (const auto& pair : e->properties()) {
+        auto* p = rpcObject->add_properties();
+        p->set_property_type_name(pair.first->getName().getSharedString()->getString());
+        switch (pair.second.getType().getKind()) {
+            case db::ValueType::VK_INT: {
+                p->set_value_type(ValueType::INT);
+                p->set_int64(pair.second.getInt());
+                break;
+            }
+            case db::ValueType::VK_UNSIGNED: {
+                p->set_value_type(ValueType::UNSIGNED);
+                p->set_uint64(pair.second.getUint());
+                break;
+            }
+            case db::ValueType::VK_STRING: {
+                p->set_value_type(ValueType::STRING);
+                p->set_string(pair.second.getString());
+                break;
+            }
+            case db::ValueType::VK_BOOL: {
+                p->set_value_type(ValueType::BOOL);
+                p->set_boolean(pair.second.getBool());
+                break;
+            }
+            case db::ValueType::VK_DECIMAL: {
+                p->set_value_type(ValueType::DECIMAL);
+                p->set_decimal(pair.second.getDouble());
+                break;
+            }
+            default: {
+                return grpc::Status {grpc::StatusCode::INTERNAL,
+                                     "Invalid property"};
+            }
+        }
+    }
+
+    return grpc::Status::OK;
+}
+
+template <typename T>
+using Repeated = google::protobuf::RepeatedPtrField<T>;
+
+struct BuildNodeQueryParams {
+    uint64_t dbId;
+    ::Node* rpcNode;
+    const db::Node* node;
+    const bool yieldEdges = true;
+    const size_t maxEdgeCount;
+    const Repeated<std::string> nodeTypeFilterOut;
+    const Repeated<std::string> edgeTypeFilterOut;
+    const Repeated<::Property> propertyFilterOut;
+    const Repeated<::Property> propertyFilterIn;
+};
+
+static bool filterOutEdge(const db::Edge* e, const BuildNodeQueryParams& params, const db::Node* linkedNode) {
+    const auto edgeTypeFilterFunc = [&](const auto& edgeTypeName) {
+        return edgeTypeName == e->getType()->getName().getSharedString()->getString();
+    };
+
+    const bool edgeTypeFound = std::find_if(params.edgeTypeFilterOut.cbegin(),
+                                            params.edgeTypeFilterOut.cend(),
+                                            edgeTypeFilterFunc)
+                            != params.edgeTypeFilterOut.cend();
+    if (edgeTypeFound) {
+        return true;
+    }
+
+    const auto nodeTypeFilterFunc = [&](const auto& nodeTypeName) {
+        return nodeTypeName == e->getSource()->getType()->getName().getSharedString()->getString();
+    };
+
+    const bool nodeTypeFound = std::find_if(params.nodeTypeFilterOut.cbegin(),
+                                            params.nodeTypeFilterOut.cend(),
+                                            nodeTypeFilterFunc)
+                            != params.nodeTypeFilterOut.cend();
+    if (nodeTypeFound) {
+        return true;
+    }
+
+    bool propertyFound = false;
+    for (const auto& [propType, prop] : linkedNode->properties()) {
+
+        const auto propertyFilterOutFunc = [&](const ::Property& property) {
+            if (property.has_string() && prop.getType().isString()) {
+                const bool nameCondition = property.property_type_name()
+                                        == propType->getName().getSharedString()->getString();
+                const bool valueCondition = property.string() == prop.getString();
+                return nameCondition && valueCondition;
+            }
+
+            return false;
+        };
+
+        const auto propertyFilterInFunc = [&](const int sum, const ::Property& property) {
+            if (property.has_string() && prop.getType().isString()) {
+                const bool nameCondition = property.property_type_name()
+                                        == propType->getName().getSharedString()->getString();
+
+                const bool valueCondition = property.string() == prop.getString();
+
+                return sum + (int)(!nameCondition || valueCondition);
+            }
+
+            return sum + 1;
+        };
+
+        // All property passed in params.propertyFilterIn should match those in the node
+        // If a node does not have this property, it is kept
+        const bool discard = std::accumulate(params.propertyFilterIn.cbegin(),
+                                             params.propertyFilterIn.cend(),
+                                             (int)0,
+                                             propertyFilterInFunc)
+                          != params.propertyFilterIn.size();
+
+        if (discard) {
+            return true;
+        }
+
+        propertyFound = std::find_if(params.propertyFilterOut.cbegin(),
+                                     params.propertyFilterOut.cend(),
+                                     propertyFilterOutFunc)
+                     != params.propertyFilterOut.cend();
+
+        if (propertyFound) {
+            return true;
+        }
+    }
+
+    return propertyFound;
+}
+
+static grpc::Status buildRpcNode(const BuildNodeQueryParams& params) {
+    params.rpcNode->set_id(params.node->getIndex());
+    params.rpcNode->set_db_id(params.dbId);
+    params.rpcNode->set_net_id(params.node->getNetwork()->getName().getID());
+    params.rpcNode->set_node_type_id(params.node->getType()->getName().getID());
+    params.rpcNode->set_in_edge_count(params.node->inEdgeCount());
+    params.rpcNode->set_out_edge_count(params.node->outEdgeCount());
+
+    if (!params.yieldEdges)
+        return buildRpcProperties(params.node, params.rpcNode);
+
+    size_t edge_count = 0;
+    for (const db::Edge* in : params.node->inEdges()) {
+        const bool filterOut = filterOutEdge(in, params, in->getSource());
+
+        if (filterOut) {
+            continue;
+        }
+
+        ::EdgeDefinition* def = params.rpcNode->add_in_edges();
+        def->set_node_id(in->getSource()->getIndex());
+        def->set_edge_id(in->getIndex());
+
+        edge_count += 1;
+        if (edge_count > params.maxEdgeCount) {
+            break;
+        }
+    }
+
+    edge_count = 0;
+
+    for (const db::Edge* out : params.node->outEdges()) {
+        const bool filterOut = filterOutEdge(out, params, out->getTarget());
+
+        if (filterOut) {
+            continue;
+        }
+
+        ::EdgeDefinition* def = params.rpcNode->add_out_edges();
+        def->set_node_id(out->getTarget()->getIndex());
+        def->set_edge_id(out->getIndex());
+
+        edge_count += 1;
+        if (edge_count > params.maxEdgeCount) {
+            break;
+        }
+    }
+
+    return buildRpcProperties(params.node, params.rpcNode);
+}
+
 DBServiceImpl::DBServiceImpl(const DBServerConfig& config)
-    : _config(config)
+    : _config(config) 
 {
     _dbMan = new db::DBManager(_config.getDatabasesPath());
 }
@@ -239,19 +422,15 @@ grpc::Status DBServiceImpl::ListNodes(grpc::ServerContext* ctxt,
     reply->mutable_nodes()->Reserve(nodes.size());
     for (const db::Node* node : toReturn) {
         auto* n = reply->add_nodes();
-        n->set_id(node->getIndex());
-        n->set_db_id(request->db_id());
-        n->set_net_id(node->getNetwork()->getName().getID());
-        n->set_node_type_id(node->getType()->getName().getID());
+        grpc::Status status = buildRpcNode({
+            .dbId = request->db_id(),
+            .rpcNode = n,
+            .node = node,
+            .yieldEdges = request->yield_edges(),
+        });
 
-        n->mutable_out_edge_ids()->Reserve(node->outEdges().size());
-        for (const db::Edge* out : node->outEdges()) {
-            n->add_out_edge_ids(out->getIndex());
-        }
-
-        n->mutable_in_edge_ids()->Reserve(node->inEdges().size());
-        for (const db::Edge* in : node->inEdges()) {
-            n->add_in_edge_ids(in->getIndex());
+        if (!status.ok()) {
+            return status;
         }
     }
 
@@ -269,26 +448,27 @@ grpc::Status DBServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
     reply->mutable_nodes()->Reserve(request->node_ids_size());
 
     for (const auto& id : request->node_ids()) {
-        db::Node* n = db->getNode((db::DBIndex)id);
-        if (!n) {
+        db::Node* node = db->getNode((db::DBIndex)id);
+        if (!node) {
             return grpc::Status {grpc::StatusCode::NOT_FOUND,
                                  "Node '" + std::to_string(id) + "' was not found"};
         }
 
-        auto rn = reply->add_nodes();
-        rn->set_id(id);
-        rn->set_db_id(request->db_id());
-        rn->set_net_id(n->getNetwork()->getName().getID());
-        rn->set_node_type_id(n->getType()->getName().getID());
+        auto n = reply->add_nodes();
+        grpc::Status status = buildRpcNode({
+            .dbId = request->db_id(),
+            .rpcNode = n,
+            .node = node,
+            .yieldEdges = request->yield_edges(),
+            .maxEdgeCount = request->max_edge_count(),
+            .nodeTypeFilterOut = request->node_type_filter_out(),
+            .edgeTypeFilterOut = request->edge_type_filter_out(),
+            .propertyFilterOut = request->node_property_filter_out(),
+            .propertyFilterIn = request->node_property_filter_in(),
+        });
 
-        rn->mutable_out_edge_ids()->Reserve(n->outEdges().size());
-        for (const db::Edge* out : n->outEdges()) {
-            rn->add_out_edge_ids(out->getIndex());
-        }
-
-        rn->mutable_in_edge_ids()->Reserve(n->inEdges().size());
-        for (const db::Edge* in : n->inEdges()) {
-            rn->add_in_edge_ids(in->getIndex());
+        if (!status.ok()) {
+            return status;
         }
     }
 
@@ -322,6 +502,11 @@ grpc::Status DBServiceImpl::ListEdges(grpc::ServerContext* ctxt,
         e->set_source_id(pair.second->getSource()->getIndex());
         e->set_target_id(pair.second->getTarget()->getIndex());
         e->set_edge_type_id(pair.second->getType()->getName().getID());
+
+        grpc::Status status = buildRpcProperties(pair.second, e);
+        if (!status.ok()) {
+            return status;
+        }
     }
 
     return grpc::Status::OK;
@@ -350,6 +535,11 @@ grpc::Status DBServiceImpl::ListEdgesByID(grpc::ServerContext* ctxt,
         re->set_source_id(e->getSource()->getIndex());
         re->set_target_id(e->getTarget()->getIndex());
         re->set_edge_type_id(e->getType()->getName().getID());
+
+        grpc::Status status = buildRpcProperties(e, re);
+        if (!status.ok()) {
+            return status;
+        }
     }
 
     return grpc::Status::OK;
@@ -498,19 +688,14 @@ grpc::Status DBServiceImpl::ListNodesFromNetwork(grpc::ServerContext* ctxt,
     reply->mutable_nodes()->Reserve(nodes.size());
     for (const auto& [id, node] : nodes) {
         auto* n = reply->add_nodes();
-        n->set_id(node->getIndex());
-        n->set_db_id(request->db_id());
-        n->set_net_id(net_id);
-        n->set_node_type_id(node->getType()->getName().getID());
+        grpc::Status status = buildRpcNode({
+            .dbId = request->db_id(),
+            .rpcNode = n,
+            .node = node,
+        });
 
-        n->mutable_out_edge_ids()->Reserve(node->outEdges().size());
-        for (const db::Edge* out : node->outEdges()) {
-            n->add_out_edge_ids(out->getIndex());
-        }
-
-        n->mutable_in_edge_ids()->Reserve(node->inEdges().size());
-        for (const db::Edge* in : node->inEdges()) {
-            n->add_in_edge_ids(in->getIndex());
+        if (!status.ok()) {
+            return status;
         }
     }
 
@@ -536,20 +721,17 @@ grpc::Status DBServiceImpl::ListNodesByIDFromNetwork(grpc::ServerContext* ctxt,
             return grpc::Status {grpc::StatusCode::NOT_FOUND,
                                  "Node '" + std::to_string(id) + "' was not found"};
         }
-        auto* n = reply->add_nodes();
-        n->set_id(node->getIndex());
-        n->set_db_id(request->db_id());
-        n->set_net_id(net_id);
-        n->set_node_type_id(node->getType()->getName().getID());
 
-        n->mutable_out_edge_ids()->Reserve(node->outEdges().size());
-        for (const db::Edge* out : node->outEdges()) {
-            n->add_out_edge_ids(out->getIndex());
-        }
+        auto n = reply->add_nodes();
+        grpc::Status status = buildRpcNode({
+            .dbId = request->db_id(),
+            .rpcNode = n,
+            .node = node,
+            .yieldEdges = true,
+        });
 
-        n->mutable_in_edge_ids()->Reserve(node->inEdges().size());
-        for (const db::Edge* in : node->inEdges()) {
-            n->add_in_edge_ids(in->getIndex());
+        if (!status.ok()) {
+            return status;
         }
     }
 
@@ -585,6 +767,11 @@ grpc::Status DBServiceImpl::ListEdgesFromNetwork(grpc::ServerContext* ctxt,
         e->set_source_id(edge->getSource()->getIndex());
         e->set_target_id(edge->getTarget()->getIndex());
         e->set_edge_type_id(edge->getType()->getName().getID());
+
+        grpc::Status status = buildRpcProperties(edge, e);
+        if (!status.ok()) {
+            return status;
+        }
     }
 
     return grpc::Status::OK;
@@ -615,6 +802,11 @@ grpc::Status DBServiceImpl::ListEdgesByIDFromNetwork(grpc::ServerContext* ctxt,
         e->set_source_id(edge->getSource()->getIndex());
         e->set_target_id(edge->getTarget()->getIndex());
         e->set_edge_type_id(edge->getType()->getName().getID());
+
+        grpc::Status status = buildRpcProperties(edge, e);
+        if (!status.ok()) {
+            return status;
+        }
     }
 
     return grpc::Status::OK;
@@ -663,42 +855,7 @@ grpc::Status DBServiceImpl::ListEntityProperties(grpc::ServerContext* ctxt,
             return grpc::Status {grpc::INTERNAL, "EntityType is invalid"};
     }
 
-    for (const auto& pair : e->properties()) {
-        auto* p = reply->add_properties();
-        p->set_property_type_name(pair.first->getName().getSharedString()->getString());
-        switch (pair.second.getType().getKind()) {
-            case db::ValueType::VK_INT: {
-                p->set_value_type(ValueType::INT);
-                p->set_int64(pair.second.getInt());
-                break;
-            }
-            case db::ValueType::VK_UNSIGNED: {
-                p->set_value_type(ValueType::UNSIGNED);
-                p->set_uint64(pair.second.getUint());
-                break;
-            }
-            case db::ValueType::VK_STRING: {
-                p->set_value_type(ValueType::STRING);
-                p->set_string(pair.second.getString());
-                break;
-            }
-            case db::ValueType::VK_BOOL: {
-                p->set_value_type(ValueType::BOOL);
-                p->set_boolean(pair.second.getBool());
-                break;
-            }
-            case db::ValueType::VK_DECIMAL: {
-                p->set_value_type(ValueType::DECIMAL);
-                p->set_decimal(pair.second.getDouble());
-                break;
-            }
-            default: {
-                return grpc::Status {grpc::StatusCode::INTERNAL, "Invalid property"};
-            }
-        }
-    }
-
-    return grpc::Status::OK;
+    return buildRpcProperties(e, reply);
 }
 
 grpc::Status DBServiceImpl::CreateNodeType(grpc::ServerContext* ctxt,
@@ -1060,3 +1217,4 @@ void DBServiceImpl::listDiskDB(std::vector<std::string>& databaseNames) {
 bool DBServiceImpl::isDBValid(size_t id) const {
     return _databases.find(id) != _databases.end();
 }
+

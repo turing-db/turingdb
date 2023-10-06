@@ -37,8 +37,11 @@ void Node::setName(StringRef name) {
 
 void Node::addInEdge(Edge* edge) {
     _inEdges.addEdge(edge);
+    _inEdgeCount++;
 }
 
 void Node::addOutEdge(Edge* edge) {
     _outEdges.addEdge(edge);
+    _outEdgeCount++;
 }
+

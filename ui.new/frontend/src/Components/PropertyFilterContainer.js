@@ -1,27 +1,27 @@
-import axios from 'axios'
-import { Autocomplete, CircularProgress, IconButton, TextField } from '@mui/material'
-import React from 'react'
-import { BorderedContainer } from './'
-import SearchIcon from '@mui/icons-material/Search'
-import { BorderedContainerTitle } from './BorderedContainer'
-import { useQuery } from '../App/queries'
-import { useSelector } from 'react-redux'
+import axios from 'axios';
+import { Autocomplete, CircularProgress, IconButton, TextField } from '@mui/material';
+import React from 'react';
+import { BorderedContainer } from './';
+import SearchIcon from '@mui/icons-material/Search';
+import { BorderedContainerTitle } from './BorderedContainer';
+import { useQuery } from '../App/queries';
+import { useDispatch, useSelector } from 'react-redux';
+import * as actions from '../App/actions';
 
-const useProperty = ({ setPropertyName, setPropertyValue }) => {
+const useProperty = ({ setPropertyValue }) => {
+    const dispatch = useDispatch();
     const name = React.useRef(null);
     const value = React.useRef("");
-    const [displayedName, setDisplayedName] = React.useState(null);
     const [displayedValue, setDisplayedValue] = React.useState("");
 
     const search = React.useCallback(() => {
-        setPropertyName(name.current);
         setPropertyValue(value.current);
-    }, [setPropertyName, setPropertyValue]);
+    }, [setPropertyValue]);
 
     const setName = React.useCallback((v) => {
         name.current = v;
-        setDisplayedName(v);
-    }, []);
+        dispatch(actions.selectDisplayedProperty(v));
+    }, [dispatch]);
 
     const setValue = React.useCallback((v) => {
         value.current = v;
@@ -29,15 +29,13 @@ const useProperty = ({ setPropertyName, setPropertyValue }) => {
     }, []);
 
     return {
-        name, value,
-        displayedName, displayedValue,
+        name, value,displayedValue,
         search,
         setName, setValue
     };
 }
 
 export default function PropertyFilterContainer({
-    setPropertyName,
     setPropertyValue,
 }) {
     const [enabled, setEnabled] = React.useState(false);
@@ -46,12 +44,12 @@ export default function PropertyFilterContainer({
         displayedValue,
         search,
         setName, setValue
-    } = useProperty({ setPropertyName, setPropertyValue });
+    } = useProperty({ setPropertyValue });
 
     const { data, isFetching } = useQuery(
-        ["list_string_property_types", dbName],
+        ["list_property_types", dbName],
         React.useCallback(() => axios
-            .post("/api/list_string_property_types", { db_name: dbName })
+            .post("/api/list_property_types", { db_name: dbName })
             .then(res => res.data)
             .catch(err => { console.log(err); return []; })
             , [dbName]),
@@ -110,3 +108,4 @@ export default function PropertyFilterContainer({
         </BorderedContainer >
     </form>;
 }
+

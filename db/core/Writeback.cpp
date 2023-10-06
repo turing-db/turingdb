@@ -105,8 +105,17 @@ EdgeType* Writeback::createEdgeType(StringRef name,
     }
 
     const DBIndex typeIndex = _db->allocEdgeTypeIndex();
+
     EdgeType* edgeType = new EdgeType(typeIndex, name, sources, targets);
     _db->addEdgeType(edgeType);
+
+    for (db::NodeType* nt : sources) {
+        nt->addOutEdgeType(edgeType);
+    }
+
+    for (db::NodeType* nt : targets) {
+        nt->addInEdgeType(edgeType);
+    }
 
     return edgeType;
 }
@@ -156,6 +165,7 @@ bool Writeback::addSourceNodeType(EdgeType* edgeType, NodeType* nodeType) {
     }
 
     edgeType->addSourceType(nodeType);
+    nodeType->addOutEdgeType(edgeType);
     return true;
 }
 
@@ -169,6 +179,7 @@ bool Writeback::addTargetNodeType(EdgeType* edgeType, NodeType* nodeType) {
     }
 
     edgeType->addTargetType(nodeType);
+    nodeType->addInEdgeType(edgeType);
     return true;
 }
 
@@ -189,3 +200,4 @@ bool Writeback::setProperty(DBEntity* entity, const Property& prop) {
     entity->addProperty(prop);
     return true;
 }
+

@@ -2,418 +2,179 @@ import React from 'react';
 import axios from 'axios';
 import {
     Box,
-    Modal, Alert, Autocomplete, CircularProgress, TextField,
-    Typography, Checkbox, FormControlLabel, Slider, Button, Backdrop
+    Autocomplete, TextField,
+    Typography, Slider, Button, Modal, IconButton
 } from '@mui/material';
-import CytoscapeComponent from 'react-cytoscapejs';
-import cytoscape from 'cytoscape';
-import cola from 'cytoscape-cola';
-import nodeHtmlLabel from 'cytoscape-node-html-label';
 import { useDispatch, useSelector } from 'react-redux';
 import * as actions from '../App/actions';
 import * as thunks from '../App/thunks';
 import { useQuery } from '../App/queries';
-import { renderToString } from 'react-dom/server';
 
-const edgeCountLim = 40;
+import DeleteIcon from '@mui/icons-material/Delete'
+import CytoscapeCanvas from '../Cytoscape/CytoscapeCanvas'
+import CytoscapeContextMenu from '../Cytoscape/CytoscapeContextMenu'
+import BorderedContainer, { BorderedContainerTitle } from './BorderedContainer';
+import NodeStack from './NodeStack';
+import NodeChip from './NodeChip';
 
-if (typeof cytoscape("core", "cola") === "undefined") {
-    cytoscape.use(cola);
-}
-if (typeof cytoscape("core", "nodeHtmlLabel") === "undefined") {
-    cytoscape.use(nodeHtmlLabel);
-}
-
-const getCyStyle = async () => {
-    return await fetch('/cy-style.json')
-        .then(res => res.json())
-        .catch(err => console.log(err));
-}
-
-const defaultData = () => ({ selectedNodes: {}, neighbors: {}, edges: {} });
-
-export default function ViewerPage() {
-    const selectedNodes = useSelector((state) => state.selectedNodes);
-    const dbName = useSelector((state) => state.dbName);
-    const cyLayout = useSelector((state) => state.cyLayout);
-    const layout = React.useRef(null);
-    const [alertingNode, setAlertingNode] = React.useState(null);
-    const [property, setProperty] = React.useState(null);
-    const [cy, setCy] = React.useState(null);
-    const [cyReady, setCyReady] = React.useState(false);
-    const previousData = React.useRef(defaultData());
+const usePropertyTypes = (dbName) => {
     const dispatch = useDispatch();
+    const displayedProperty = useSelector((state) => state.displayedProperty);
 
-    const { data: cyStyle, isFetching: isFetchingStyle } = useQuery(
-        ["get_cystyle"],
-        getCyStyle,
-    )
-
-    const cySetup = React.useCallback(cyState => {
-        setCy(cyState);
-    }, []);
-
-    const { data: rawProperties } = useQuery(
-        ["list_string_property_types_viewer", dbName],
+    const { data: rawPropertyTypes } = useQuery(
+        ["list_property_types_viewer", dbName],
         React.useCallback(() => axios
-            .post("/api/list_string_property_types", { db_name: dbName })
+            .post("/api/list_property_types", { db_name: dbName })
             .then(res => res.data)
             .catch(err => { console.log(err); return []; })
             , [dbName]),
     );
-    const properties = React.useMemo(() => rawProperties || [], [rawProperties]);
+    const propertyTypes = React.useMemo(() => rawPropertyTypes || [], [rawPropertyTypes]);
+    const namingProps = ["displayName", "name", "Name", "NAME"]
+        .filter(p => propertyTypes.includes(p));
+
+    const defaultProperty = React.useMemo(() => {
+        if (namingProps[0]) return namingProps[0];
+
+        const regexProps = propertyTypes.map(p => p.match("/name|Name|NAME/"));
+        return regexProps.length !== 0
+            ? regexProps[0]
+            : propertyTypes[0];
+    }, [namingProps, propertyTypes])
 
     React.useEffect(() => {
-        if (properties.length === 0) return;
-
-        if (properties.includes("displayName")) setProperty("displayName");
-        else if (properties.includes("name")) setProperty("name");
-        else {
-            const matches = properties.map(p => p.match("/name|Name|NAME/"));
-            if (matches.length !== 0) setProperty(matches[0])
-            else setProperty(properties[0])
+        if (displayedProperty === null && defaultProperty !== undefined) {
+            dispatch(actions.selectDisplayedProperty(defaultProperty))
         }
-    }, [properties])
-
-    React.useEffect(() => {
-        if (!cy || cyReady) return;
-
-        cy.nodeHtmlLabel([
-            {
-                query: 'node[type="selected"]', // cytoscape query selector
-                halign: 'center', // title vertical position. Can be 'left',''center, 'right'
-                valign: 'center', // title vertical position. Can be 'top',''center, 'bottom'
-                halignBox: 'center', // title vertical position. Can be 'left',''center, 'right'
-                valignBox: 'center', // title relative box vertical position. Can be 'top',''center, 'bottom'
-                cssClass: '', // any classes will be as attribute of <div> container for every title
-                tpl(data) {
-                    const edgeCount = parseInt(data.inCount) + parseInt(data.outCount);
-                    return edgeCount > edgeCountLim
-                        ? renderToString(
-                            <div style={{
-                                display: "flex",
-                            }}>
-                                <box style={{
-                                    display: "flex",
-                                    justifyContent: "center",
-                                    alignItems: "center",
-                                    backgroundColor: "#e33",
-                                    overflow: "hidden",
-                                    position: "relative",
-                                    borderRadius: "4px",
-                                    opacity: 0.95,
-                                    left: "10px",
-                                    bottom: "10px",
-                                    width: "15px",
-                                    height: "8px",
-                                    fontSize: "6pt",
-                                }}>
-                                    <span style={{ marginTop: "-4px" }}>...</span>
-                                </box>
-
-                            </div>
-                        )
-                        : <></>;
-                }
-            }
-        ]);
-
-        cy.on('onetap', event => {
-            dispatch(actions.inspectNode(null));
-
-            const target = event.target;
-            if (!target.group) {
-                return;
-            };
-            if (target.group() !== "nodes") {
-                return;
-            };
-
-            const node = event.target.data();
-            dispatch(actions.inspectNode(node.turingData));
-        })
-
-        cy.on('dbltap', event => {
-            const target = event.target;
-            if (!target.group) {
-                cy.fit();
-                return;
-            }
-
-            const node = target.data();
-            if (target.group() !== 'nodes') {
-                cy.fit();
-                return;
-            }
-
-            setAlertingNode(node);
-            dispatch(actions.selectNode(node.turingData));
-        });
-
-        cy.on('render', () => {
-            if (!cy) return;
-
-            const viewport = cy.getFitViewport();
-            const zoom = viewport?.zoom;
-
-            if (!zoom) return;
-
-            cy.minZoom(zoom / 2);
-            cy.maxZoom(zoom * 10);
-        })
-
-        setCyReady(true);
-    }, [cy, cyLayout, cyReady, dispatch, selectedNodes])
-
-    const edgeIds = React.useMemo(() => Object
-        .values(selectedNodes)
-        .map(n => {
-            const ids = [...n.ins, ...n.outs];
-            return ids.length > edgeCountLim ? ids.slice(0, edgeCountLim) : ids;
-        })
-        .flat()
-        .filter((id, i, arr) => arr.indexOf(id) === i),
-        [selectedNodes]);
-
-    const getData = React.useCallback(async () => {
-        const edges = await dispatch(thunks
-            .getEdges(dbName, edgeIds))
-            .then(res => res);
-
-        const nodeIds = Object
-            .values(edges)
-            .map(e => [e.source_id, e.target_id])
-            .flat()
-            .filter(id => !(selectedNodes.hasOwnProperty(id)));
-
-        const ids = [...Object.keys(selectedNodes), ...nodeIds];
-
-        const nodeProperties = await axios
-            .post("/api/list_nodes_properties", {
-                db_name: dbName,
-                ids: ids,
-            })
-            .then(res => Object.fromEntries(Object
-                .entries(res.data)
-                .map(([id, props]) => [id, props[property] || ""])))
-            .catch(err => {
-                console.log(err);
-                return {};
-            })
-
-        const neighbors = await dispatch(thunks
-            .getNodes(dbName, nodeIds))
-            .then(nodes => Object.fromEntries(Object
-                .values(nodes)
-                .map(n => [n.id, {
-                    id: n.id,
-                    label: (() => {
-                        const res = nodeProperties[n.id];
-                        if (!res) return "";
-                        if (res.length > 18) return res.slice(0, 15) + "...";
-                        return res;
-                    })(),
-                    turingData: n,
-                    inCount: n.ins.length,
-                    outCount: n.outs.length,
-                    type: "neighbor"
-                }])
-            ));
-
-        const selNodes = Object.fromEntries(Object
-            .values(selectedNodes)
-            .map(n => [n.id, {
-                id: n.id,
-                label: (() => {
-                    const res = nodeProperties[n.id];
-                    if (!res) return "";
-                    if (res.length > 10) return res.slice(0, 15) + "...";
-                    return res;
-                })(),
-                turingData: n,
-                inCount: n.ins.length,
-                outCount: n.outs.length,
-                type: "selected"
-            }])
-        )
-
-        return { selectedNodes: selNodes, neighbors, edges };
-    }, [dispatch, dbName, selectedNodes, edgeIds, property]);
-
-    const { data, isFetching } = useQuery(
-        ["get_data", dbName, edgeIds, property],
-        getData,
-        { refetchOnMount: true, staleTime: 0 }
-    );
-
-    const rawData = data || previousData.current;
-    previousData.current = { ...rawData };
-
-    const elements = React.useMemo(() =>
-        [
-            ...Object.values({
-                ...Object.fromEntries(
-                    Object
-                        .values(rawData.neighbors)
-                        .map(n => [n.id, { data: n, group: "nodes" }])),
-                ...Object.fromEntries(
-                    Object
-                        .values(rawData.selectedNodes)
-                        .map(n => [n.id, { data: n, group: "nodes" }])),
-            }),
-            ...Object
-                .values(rawData.edges)
-                .map(e => ({
-                    data: { turingId: e.id, source: e.source_id, target: e.target_id },
-                    group: "edges"
-                }))
-        ], [rawData]);
-
-    React.useEffect(() => {
-        if (!cy) return;
-
-        if (layout.current) {
-            layout.current.stop();
-            layout.current.destroy();
-        }
-
-        cy.userZoomingEnabled(!cyLayout.fit);
-        cy.userPanningEnabled(!cyLayout.fit);
-        layout.current = cy.layout({
-            ...cyLayout,
-            edgeLength: (_e) => cyLayout.edgeLengthVal
-        });
-        layout.current.run();
-
-    }, [cy, cyLayout, elements]);
-
-    if (!dbName) {
-        return <Box>Select a database to start</Box>;
-    }
+    }, [defaultProperty, dispatch, displayedProperty]);
 
 
-    return <>
-        <Backdrop open={isFetching}><CircularProgress s={40} /></Backdrop>
-        <Modal
-            open={(() => alertingNode !== null && alertingNode.inCount + alertingNode.outCount > edgeCountLim)()}
-            onClose={() => setAlertingNode(null)}
-            aria-labelledby="alertingEdgeCount-modal-title"
-            aria-describedby="alertingEdgeCount-modal-description"
-        >
-            <Box sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 400,
-                bgcolor: 'background.paper',
-                border: '2px solid #000',
-                boxShadow: 24,
-                borderRadius: "2px",
-                p: 4,
-            }}>
-                <Alert severity="warning">
-                    The node has too many connections ({
-                        alertingNode?.inCount + alertingNode?.outCount
-                    }).
-                    Showing all the edges would hurt performances
-                </Alert>
+    return { propertyTypes, displayedProperty };
+}
+const HiddenNodesContainer = () => {
+    const hiddenNodeIds = useSelector(state => state.hiddenNodeIds);
+    const dispatch = useDispatch();
+
+    return <BorderedContainer title={
+        <BorderedContainerTitle title="Hidden nodes">
+            {hiddenNodeIds.length !== 0 &&
+                <IconButton onClick={() => { dispatch(actions.clearHiddenNodes()) }}>
+                    <DeleteIcon />
+                </IconButton>}
+        </BorderedContainerTitle>
+    }>
+        {hiddenNodeIds.length !== 0
+            ? <NodeStack>
+                {hiddenNodeIds.map((id, i) => <NodeChip key={i} nodeId={id} />)}
+            </NodeStack>
+            : "None"}
+    </BorderedContainer>;
+};
+
+const HiddenNodesModal = (props) => {
+    const onClose = () => props.setOpen(false);
+    const style = {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 400,
+        bgcolor: 'background.paper',
+        border: '2px solid #000',
+        boxShadow: 24,
+        p: 4,
+    };
+
+    return (
+        <Modal open={props.open} onClose={onClose}>
+            <Box sx={style}>
+                <HiddenNodesContainer />
             </Box>
         </Modal>
+    );
+}
 
-        {isFetchingStyle
-            ? <Box>
-                <Typography variant="h4">
-                    Loading cytoscape... <CircularProgress s={20} />
-                </Typography>
-            </Box>
-            : <Box
-                p={0}
-                m={0}
-                display="flex"
-                flexDirection="column"
-                flex={1}
+export default function ViewerPage() {
+    const dispatch = useDispatch();
+
+    const dbName = useSelector((state) => state.dbName);
+    const cyLayout = useSelector((state) => state.cyLayout);
+
+    const [showHiddenNodes, setShowHiddenNodes] = React.useState(false);
+    const portalRef = React.useRef();
+    const layout = React.useRef();
+    const cy = React.useRef();
+    const currentElements = React.useRef({});
+    const portalData = React.useRef({});
+    const setMenuData = React.useRef(() => console.log("NOT SET"));
+
+    const { propertyTypes, displayedProperty } = usePropertyTypes(dbName);
+
+    return <Box p={0} m={0} display="flex" flexDirection="column" flex={1}>
+        <Box p={1} display="flex" flexDirection="row" alignItems="center">
+            <Button
+                variant="contained"
+                onClick={() => {
+                    const nodeIds = Object
+                        .values(currentElements.current)
+                        .filter(el => el.group === "nodes")
+                        .map(el => el.data.id);
+
+                    dispatch(thunks.getNodes(dbName, nodeIds, { yield_edges: true }))
+                        .then(res => dispatch(actions.selectNodes(Object.values(res))));
+                }}
             >
-                <Box
-                    p={1}
-                    display="flex"
-                    flexDirection="row"
-                    alignItems="center"
-                >
-                    <FormControlLabel
-                        label="Lock viewport"
-                        labelPlacement="start"
-                        control={
-                            <Checkbox
-                                checked={cyLayout.fit}
-                                onChange={() => {
-                                    dispatch(actions.setCyLayout({
-                                        ...cyLayout,
-                                        fit: !cyLayout.fit,
-                                    }));
-                                }}
-                            />}
-                    />
+                Select all visible nodes
+            </Button>
 
-                    <Box pl={2} pr={2}>
-                        <Typography gutterBottom>Edge length</Typography>
-                        <Slider
-                            valueLabelDisplay="auto"
-                            aria-label="Edge length"
-                            value={cyLayout.edgeLengthVal}
-                            onChange={(_e, v) => dispatch(actions.setCyLayout({
-                                ...cyLayout,
-                                edgeLengthVal: v
-                            }))}
-                            min={5}
-                            max={400}
-                        />
-                    </Box>
-
-                    <Autocomplete
-                        disablePortal
-                        blurOnSelect
-                        id="property-selector"
-                        value={property}
-                        onChange={(_e, v) => v && setProperty(v)}
-                        autoSelect
-                        autoHighlight
-                        options={properties}
-                        sx={{ width: 300 }}
-                        size="small"
-                        renderInput={(params) => (
-                            <TextField
-                                {...params}
-                                label="Property"
-                            />
-                        )}
-                    />
-
-                    <Box pl={2}>
-                        <Button
-                            onClick={() => cy.fit()}
-                            variant="contained"
-                        >
-                            Fit
-                        </Button>
-                    </Box>
-
-                    <Box pl={2}>
-                        <Button
-                            onClick={() => layout.current.run()}
-                            variant="contained"
-                        >
-                            Clean
-                        </Button>
-                    </Box>
-                </Box>
-                <CytoscapeComponent
-                    elements={elements}
-                    cy={cySetup}
-                    stylesheet={cyStyle}
-                    style={{ width: "100%", height: "100%" }}
+            <Box pl={2} pr={2}>
+                <Typography gutterBottom>Edge length</Typography>
+                <Slider valueLabelDisplay="auto" aria-label="Edge length"
+                    value={cyLayout.edgeLengthVal} min={5} max={800}
+                    onChange={(_e, v) => dispatch(actions.setCyLayout({
+                        ...cyLayout,
+                        edgeLengthVal: v
+                    }))}
                 />
             </Box>
-        }
-    </>
+
+            <Autocomplete
+                disablePortal blurOnSelect id="property-selector"
+                value={displayedProperty}
+                autoSelect autoHighlight options={propertyTypes}
+                sx={{ width: 200 }} size="small"
+                onChange={(_e, v) => v &&
+                    dispatch(actions.selectDisplayedProperty(v))}
+                renderInput={(params) => (
+                    <TextField {...params} label="Property" />)}
+            />
+
+            <Box pl={2}>
+                <Button size="small" onClick={() => cy.current.fit()} variant="contained">
+                    Fit
+                </Button>
+            </Box>
+
+            <Box pl={2}>
+                <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => {
+                        layout.current = cy.current.layout(cyLayout);
+                        layout.current.run();
+                    }}
+                >
+                    Clean
+                </Button>
+            </Box>
+            <Button onClick={() => setShowHiddenNodes(true)}>Hidden nodes</Button>
+        </Box>
+        <HiddenNodesModal open={showHiddenNodes} setOpen={setShowHiddenNodes} />
+        <CytoscapeCanvas {...{ cy, layout, portalData, portalRef, currentElements }} setMenuData={setMenuData} />
+        <CytoscapeContextMenu
+            ref={portalRef}
+            data={portalData}
+            setMenuData={setMenuData} />
+    </Box>;
 }
+

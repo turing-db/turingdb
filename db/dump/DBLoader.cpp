@@ -3,7 +3,6 @@
 #include "DB.h"
 #include "EntityLoader.h"
 #include "FileUtils.h"
-#include "MsgCommon.h"
 #include "MsgDB.h"
 #include "StringIndexLoader.h"
 #include "TypeLoader.h"
@@ -54,5 +53,8 @@ bool DBLoader::load() {
         return false;
     }
 
+    BioLog::log(msg::INFO_DB_DONE_LOADING_DATABASE() << _dbDir);
+
     return true;
 }
+

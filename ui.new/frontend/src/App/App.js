@@ -7,6 +7,7 @@ import { themeOptions } from '../theme'
 
 import DatabasePage from '../Components/DatabasePage';
 import ViewerPage from '../Components/ViewerPage';
+import AdminPage from '../Components/AdminPage';
 import CustomAppBar from '../Components/CustomAppBar'
 import { Provider, useSelector } from 'react-redux';
 import store from './store'
@@ -25,6 +26,7 @@ function Page() {
     switch (page) {
         case 'Database': return <DatabasePage />;
         case 'Viewer': return <ViewerPage />;
+        case 'Admin': return <AdminPage />;
         default: return "404";
     }
 }
@@ -50,4 +52,5 @@ export default function App() {
         </Provider>
     </ThemeProvider>;
 }
+
 

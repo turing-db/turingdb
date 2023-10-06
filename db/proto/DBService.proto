@@ -61,14 +61,22 @@ message Network {
     string name = 3;
 }
 
+message EdgeDefinition {
+    uint64 edge_id = 1;
+    uint64 node_id = 2;
+}
+
 message Node {
     uint64 db_id = 1;
     uint64 net_id = 2;
     uint64 id = 3;
     string name = 4;
     uint64 node_type_id = 5;
-    repeated uint64 in_edge_ids = 6;
-    repeated uint64 out_edge_ids = 7;
+    uint64 in_edge_count = 6;
+    uint64 out_edge_count = 7;
+    repeated EdgeDefinition in_edges = 8;
+    repeated EdgeDefinition out_edges = 9;
+    repeated Property properties = 10;
 }
 
 message Edge {
@@ -77,6 +85,7 @@ message Edge {
     uint64 edge_type_id = 3;
     uint64 source_id = 4;
     uint64 target_id = 5;
+    repeated Property properties = 6;
 }
 
 message NodeType {
@@ -201,6 +210,7 @@ message ListNodesRequest {
     optional FilterType filter_type = 2;
     optional FilterID filter_id = 3;
     optional FilterProperty filter_property = 4;
+    bool yield_edges = 5;
 }
 message ListNodesReply {
     repeated Node nodes = 1;
@@ -210,6 +220,12 @@ message ListNodesReply {
 message ListNodesByIDRequest {
     uint64 db_id = 1;
     repeated uint64 node_ids = 2;
+    bool yield_edges = 3;
+    uint64 max_edge_count = 4;
+    repeated string edge_type_filter_out = 5;
+    repeated string node_type_filter_out = 6;
+    repeated Property node_property_filter_out = 7;
+    repeated Property node_property_filter_in = 8;
 }
 message ListNodesByIDReply {
     repeated Node nodes = 1;
@@ -460,4 +476,5 @@ message Cell {
         double decimal = 7;
     }
 }
+
 

@@ -13,7 +13,6 @@ import {
 
 export default function DBInspector() {
     const [selectedNodeType, setSelectedNodeType] = React.useState(null);
-    const [propertyName, setPropertyName] = React.useState(null);
     const [propertyValue, setPropertyValue] = React.useState("");
 
     return <Box>
@@ -23,18 +22,16 @@ export default function DBInspector() {
         />
 
         <PropertyFilterContainer
-            propertyName={propertyName}
-            setPropertyName={setPropertyName}
             propertyValue={propertyValue}
             setPropertyValue={setPropertyValue}
         />
 
         <NodeFilterContainer
             selectedNodeType={selectedNodeType}
-            propertyName={propertyName}
             propertyValue={propertyValue}
         />
 
         <SelectedNodesContainer />
     </Box>;
 }
+

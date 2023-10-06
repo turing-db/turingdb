@@ -36,15 +36,19 @@ public:
 
     EdgeMapRange inEdges() const;
     EdgeRange inEdges(const EdgeType* type) const;
+    size_t inEdgeCount() const { return _inEdgeCount; }
 
     EdgeMapRange outEdges() const;
     EdgeRange outEdges(const EdgeType* type) const;
+    size_t outEdgeCount() const { return _outEdgeCount; }
 
 private:
     Network* _net {nullptr};
     StringRef _name;
     EdgeMap _inEdges;
     EdgeMap _outEdges;
+    size_t _inEdgeCount {0};
+    size_t _outEdgeCount {0};
 
     Node(DBIndex index, NodeType* type, Network* net);
     ~Node();
@@ -53,3 +57,4 @@ private:
 };
 
 }
+

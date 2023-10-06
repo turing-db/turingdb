@@ -33,7 +33,7 @@ public:
     EdgeRange edges() const;
 
     EdgeVectorRange edges(const EdgeType* type) const;
-    size_t size() const { return _edges.size(); }
+    size_t size() const;
 
     void addEdge(Edge* edge);
 
@@ -42,3 +42,4 @@ private:
 };
 
 }
+

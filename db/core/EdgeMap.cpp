@@ -26,6 +26,15 @@ EdgeMap::EdgeVectorRange EdgeMap::edges(const EdgeType* type) const {
     return EdgeVectorRange(&edgeVec);
 }
 
+size_t EdgeMap::size() const {
+    size_t count = 0;
+    for (const auto& [name, container] : _edges) {
+        count += container.size();
+    }
+    return count;
+}
+
 void EdgeMap::addEdge(Edge* edge) {
     _edges[edge->getType()].push_back(edge);
 }
+

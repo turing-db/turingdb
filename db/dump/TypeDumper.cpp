@@ -5,7 +5,6 @@
 #include "MsgCommon.h"
 #include "NodeType.h"
 #include "PropertyType.h"
-#include "Writeback.h"
 #include "capnp/TypeIndex.capnp.h"
 
 #include <capnp/message.h>
@@ -131,3 +130,4 @@ bool TypeDumper::dump() {
     return true;
 }
 }
+

@@ -20,9 +20,11 @@ public:
     friend DB;
     friend Writeback;
     friend DBComparator;
-    using EdgeTypes = std::set<EdgeType*, DBObject::Sorter>;
+    using EdgeTypes = std::set<const EdgeType*, DBObject::Sorter>;
     using EdgeTypeRange = STLRange<EdgeTypes>;
 
+    void addInEdgeType(const EdgeType* et);
+    void addOutEdgeType(const EdgeType* et);
     EdgeTypeRange inEdgeTypes() const;
     EdgeTypeRange outEdgeTypes() const;
 
@@ -35,3 +37,4 @@ private:
 };
 
 }
+

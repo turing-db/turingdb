@@ -4,9 +4,6 @@
 #include "DBDumper.h"
 #include "FileUtils.h"
 #include "JsonExamples.h"
-#include "NodeType.h"
-#include "PropertyType.h"
-#include "Writeback.h"
 #include "gtest/gtest.h"
 
 namespace db {
@@ -114,3 +111,4 @@ TEST_F(DBLoaderTest, StackoverflowDB) {
 }
 
 }
+

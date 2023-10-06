@@ -76,28 +76,34 @@ const SideNodeInspector = (props) => {
                 }}
             >
                 <HubIcon sx={{ mr: 3, color: theme.palette.primary.main }} />
-                <Typography sx={{ color: theme.palette.primary.main }}>Node {inspectedNode.id}</Typography>
+                <Typography sx={{ color: theme.palette.primary.main }}
+                >
+                    Node {inspectedNode.id}
+                </Typography>
             </ListItemIcon>
             {menuExpanded &&
                 (inspectedNode & status === "loading"
                     ? <CircularProgress size={20} />
                     : <Box>
                         <Box overflow="auto">
-                        {Object.keys(properties).map(pName =>
-                            <Box
-                                key={"box-key-" + pName}
-                                display="flex"
-                                alignItems="center"
-                            >
-                                <Typography
-                                    variant="body2"
+                            <Typography variant="body2">
+                                <Secondary>Node type:</Secondary> {inspectedNode.node_type}
+                            </Typography>
+                            {Object.keys(properties).map(pName =>
+                                <Box
+                                    key={"box-key-" + pName}
+                                    display="flex"
+                                    alignItems="center"
                                 >
-                                    <Secondary>{pName}</Secondary>: <span>{properties[pName].toString()}</span>
-                                </Typography>
-                            </Box>)}
+                                    <Typography
+                                        variant="body2"
+                                    >
+                                        <Secondary>{pName}</Secondary>: <span>{properties[pName].toString()}</span>
+                                    </Typography>
+                                </Box>)}
                         </Box>
                         <Button onClick={() => setShowFullInspector(true)}>Inspect node</Button>
-                        <NodeInspector open={showFullInspector} onClose={() => setShowFullInspector(false)}/>
+                        <NodeInspector open={showFullInspector} onClose={() => setShowFullInspector(false)} />
                     </Box>
                 )
             }
@@ -106,3 +112,4 @@ const SideNodeInspector = (props) => {
 };
 
 export default SideNodeInspector;
+

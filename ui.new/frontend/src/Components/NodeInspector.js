@@ -51,7 +51,10 @@ const Edges = (props) => {
             const ids = [...Object.values(rawIds)]
                 .flat()
                 .filter((id, i, arr) => arr.indexOf(id) === i);
-            const rawNodes = await dispatch(thunks.getNodes(dbName, ids))
+            const rawNodes = await dispatch(thunks
+                .getNodes(dbName, ids, {
+                    yield_edges: false,
+                }))
                 .then(res => res);
 
             const nodes = Object.fromEntries(Object
@@ -74,7 +77,7 @@ const Edges = (props) => {
                     ? <Typography>Showing {edgeCountLim}/{edgeCount} edges</Typography>
                     : <Typography> {edgeCount} edges</Typography>}
                 <Button
-                    onClick={() => 
+                    onClick={() =>
                         dispatch(actions.selectNodes(Object.values(nodes).flat()))
                     }
                 >Select all</Button>
@@ -82,7 +85,7 @@ const Edges = (props) => {
         }
     >
         <Grid container>
-            {isFetching ? <CircularProgress/> : <>
+            {isFetching ? <CircularProgress /> : <>
                 {Object.keys(nodes).map(edge_type =>
                     <Grid item container xs={12} key={"global-edge-type-" + edge_type}>
                         <Grid item xs={3.5}
@@ -174,35 +177,35 @@ export const Properties = (props) => {
 }
 
 export default function NodeInspector(props) {
-    const { open, onClose} = props
-    const inspectedNode = useSelector((state) => state.inspectedNode);
-    const selectedNodes = useSelector((state) => state.selectedNodes);
+    const { open, onClose } = props
+    const inspectedNode = useSelector(state => state.inspectedNode);
+    const selectedNodes = useSelector(state => state.selectedNodes);
     const dispatch = useDispatch();
 
     const inCount = React.useMemo(() => inspectedNode
-        ? inspectedNode.ins.length
+        ? inspectedNode?.ins?.length
         : 0,
         [inspectedNode]);
 
     const outCount = React.useMemo(() => inspectedNode
-        ? inspectedNode.outs.length
+        ? inspectedNode?.outs?.length
         : 0,
         [inspectedNode]);
 
     const inEdgeIds = React.useMemo(() =>
         inspectedNode
-            ? (() => inspectedNode.ins.length > edgeCountLim
-                ? inspectedNode.ins.slice(0, edgeCountLim)
-                : inspectedNode.ins)()
+            ? (() => inspectedNode?.ins?.length > edgeCountLim
+                ? inspectedNode?.ins?.slice(0, edgeCountLim)
+                : inspectedNode?.ins)()
             : [],
         [inspectedNode]
     );
 
     const outEdgeIds = React.useMemo(() =>
         inspectedNode
-            ? (() => inspectedNode.outs.length > edgeCountLim
-                ? inspectedNode.outs.slice(0, edgeCountLim)
-                : inspectedNode.outs)()
+            ? (() => inspectedNode?.outs?.length > edgeCountLim
+                ? inspectedNode?.outs?.slice(0, edgeCountLim)
+                : inspectedNode?.outs)()
             : [],
         [inspectedNode]
     );
@@ -219,6 +222,16 @@ export default function NodeInspector(props) {
             Node id: {inspectedNode.id}
         </DialogTitle>
         <DialogContent dividers>
+            <BorderedContainer
+                title={
+                    <BorderedContainerTitle
+                        title={"Node type: "}
+                    >
+                        {inspectedNode.node_type}
+                    </BorderedContainerTitle>
+                }
+            >
+            </BorderedContainer>
             {<Edges edgeIds={inEdgeIds} edgeCount={inCount} type="in" />}
             {<Edges edgeIds={outEdgeIds} edgeCount={outCount} type="out" />}
             <Properties node={inspectedNode} />
@@ -243,3 +256,4 @@ export default function NodeInspector(props) {
     </Dialog>
 
 }
+

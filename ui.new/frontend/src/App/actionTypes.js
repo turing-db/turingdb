@@ -1,3 +1,4 @@
+export const CLEAR = "CLEAR";
 export const SET_PAGE = "SET_PAGE";
 export const SET_CY_LAYOUT = "SET_CY_LAYOUT";
 
@@ -8,10 +9,23 @@ export const SET_DB_NAME = "SET_DB_NAME";
 
 export const CACHE_NODE = "CACHE_NODE";
 export const CACHE_NODES = "CACHE_NODES";
+export const CLEAR_CACHE = "CLEAR_CACHE";
 
-export const CACHE_EDGES = "CACHE_EDGES"
+export const CACHE_EDGES = "CACHE_EDGES";
 
 export const SELECT_NODE = "SELECT_NODE";
 export const SELECT_NODES = "SELECT_NODES";
 export const UNSELECT_NODE = "UNSELECT_NODE";
-export const CLEAR_SELECTED_NODES = "CLEAR_SELECTED_NODES"
+export const CLEAR_SELECTED_NODES = "CLEAR_SELECTED_NODES";
+
+export const SELECT_DISPLAYED_PROPERTY = "SELECT_DISPLAYED_PROPERTY";
+
+export const HIDE_NEIGHBOR = "HIDE_NEIGHBOR";
+export const SHOW_NEIGHBOR = "SHOW_NEIGHBOR";
+export const HIDE_NEIGHBORS = "HIDE_NEIGHBORS";
+export const SHOW_NEIGHBORS = "SHOW_NEIGHBORS";
+
+export const HIDE_NODE = "HIDE_NODE";
+export const HIDE_NODES = "HIDE_NODES";
+export const CLEAR_HIDDEN_NODES = "CLEAR_HIDDEN_NODES";
+

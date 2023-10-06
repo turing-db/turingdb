@@ -39,7 +39,7 @@ const Title = (props) => {
             }
 
             setError(null);
-            dispatch(thunks.getNodes(dbName, [id]))
+            dispatch(thunks.getNodes(dbName, [id], { yield_edges: true }))
                 .then(res => dispatch(actions.selectNode(Object.values(res)[0])));
         }}>
             <Box display="flex" >
@@ -59,7 +59,6 @@ const Title = (props) => {
 
 export default function NodeFilterContainer({
     selectedNodeType,
-    propertyName,
     propertyValue
 }) {
     const [tooManyNodes, setTooManyNodes] = React.useState(false);
@@ -67,6 +66,7 @@ export default function NodeFilterContainer({
     const selectedNodes = useSelector((state) => state.selectedNodes);
     const dbName = useSelector((state) => state.dbName);
     const inspectedNode = useSelector((state) => state.inspectedNode);
+    const displayedProperty = useSelector((state) => state.displayedProperty);
     const titleProps = { setError };
     const dispatch = useDispatch();
 
@@ -78,12 +78,13 @@ export default function NodeFilterContainer({
     }
 
     const { data, isFetching } = useQuery(
-        ["list_nodes", dbName, selectedNodeType, propertyName, propertyValue],
+        ["list_nodes", dbName, selectedNodeType, propertyValue],
         React.useCallback(() => dispatch(thunks
             .fetchNodes(dbName, {
                 ...selectedNodeType ? { node_type_name: selectedNodeType } : {},
-                ...propertyName ? { prop_name: propertyName } : {},
+                ...displayedProperty ? { prop_name: displayedProperty} : {},
                 ...propertyValue ? { prop_value: propertyValue } : {},
+                yield_edges: false,
             }))
             .then(res => {
                 if (res.error) {
@@ -91,11 +92,11 @@ export default function NodeFilterContainer({
                     return {}
                 }
 
-                dispatch(actions.cacheNodes(res));
+                //dispatch(actions.cacheNodes(res));
                 setTooManyNodes(false);
                 return Object.fromEntries(res.map(n => [n.id, n]));
             })
-            , [dbName, dispatch, propertyName, propertyValue, selectedNodeType])
+            , [dbName, dispatch, displayedProperty, propertyValue, selectedNodeType])
     )
 
     if (tooManyNodes) {
@@ -119,7 +120,7 @@ export default function NodeFilterContainer({
         {error && <Alert severity="error">{error}</Alert>}
         <NodeInspector
             open={inspectedNode !== null}
-            onClose={() => dispatch(actions.inspectNode(null))} />
+            onClose={() => dispatch(thunks.inspectNode(dbName, null))} />
         <NodeStack>
             {filteredKeys.map((id, i) => {
                 return <NodeChip
@@ -133,3 +134,4 @@ export default function NodeFilterContainer({
             <Box p={1}>... {remainingNodeCount} more nodes</Box>}
     </BorderedContainer >;
 }
+

@@ -1,13 +1,19 @@
 import axios from 'axios'
 import * as actions from './actions'
 
-export const getNodes = (dbName, allIds) => async (dispatch, getState) => {
+export const getNodes = (dbName, allIds, params) => async (dispatch, getState) => {
+    if (!params.yield_edges) {
+        const rawNodes = await dispatch(fetchNodes(dbName, { ids: allIds, ...params }));
+        return Object.fromEntries(rawNodes.map(n => [n.id, n]));
+    }
+
     const cache = getState().nodeCache;
+
     const ids = allIds
         .filter(id => !(id in cache));
 
     if (ids.length !== 0) {
-        await dispatch(fetchNodes(dbName, { ids }))
+        await dispatch(fetchNodes(dbName, { ids, ...params }))
     }
 
     const newCache = getState().nodeCache;
@@ -25,18 +31,20 @@ export const fetchNodes = (dbName, filters) => async (dispatch) => {
                 return []
             }
 
-            dispatch(actions.cacheNodes(res.data));
+            if (filters.yield_edges) // Store nodes only if the info is complete
+                dispatch(actions.cacheNodes(res.data));
+
             return res.data;
         });
 }
 
-export const getEdges = (dbName, allIds) => async (dispatch, getState) => {
+export const getEdges = (dbName, allIds, params) => async (dispatch, getState) => {
     const cache = getState().edgeCache;
     const ids = allIds
         .filter(id => !(id in cache));
 
     if (ids.length !== 0) {
-        await dispatch(fetchEdges(dbName, { ids }))
+        await dispatch(fetchEdges(dbName, { ids, params }))
     }
 
     const newCache = getState().edgeCache;
@@ -60,3 +68,15 @@ export const fetchEdges = (dbName, filters) => async (dispatch) => {
         });
 
 }
+
+export const inspectNode = (dbName, nodeId) => async (dispatch) => {
+    if (!nodeId) {
+        dispatch(actions.inspectNode(null));
+        return;
+    }
+
+    dispatch(getNodes(dbName, [nodeId], { yield_edges: true }))
+        .then(res => dispatch(actions.inspectNode(Object.values(res)[0])));
+}
+
+

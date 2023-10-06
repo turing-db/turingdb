@@ -32,4 +32,8 @@ MSG_FATAL(FATAL_INVALID_PROPERTY_LOAD, 5009,
 MSG_INFO(INFO_DB_GENERATING_SCHEMA_REPORT, 5010,
          "Generating database schema report in $0")
 
+MSG_INFO(INFO_DB_DONE_LOADING_DATABASE, 5011,
+         "Done loading Turing DB from $0")
+
 }
+

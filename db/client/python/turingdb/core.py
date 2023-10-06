@@ -2,6 +2,7 @@ from __future__ import annotations
 from turingdb.Request import Request
 
 from typing import TYPE_CHECKING, Mapping
+
 if TYPE_CHECKING:
     from turingdb.Turing import Turing
 
@@ -24,6 +25,8 @@ class Database(DBObject):
         self._name = db.name
         self._turing = turing
         self._networks = {}
+        self._cached_node_types = {}
+        self._cached_edge_types = {}
 
     def dump(self) -> None:
         Request(self._turing, "DumpDB", db_id=self._id)
@@ -66,20 +69,34 @@ class Database(DBObject):
         return EdgeType(self, res.data.edge_type)
 
     def list_node_types(self) -> Mapping[str, NodeType]:
-        res = Request(self._turing, "ListNodeTypes", db_id=self._id)
-        return {nt.name: NodeType(self, nt) for nt in res.data.node_types}
+        if len(self._cached_node_types.keys()) == 0:
+            res = Request(self._turing, "ListNodeTypes", db_id=self._id)
+            self._cached_node_types = {
+                nt.name: NodeType(self, nt) for nt in res.data.node_types
+            }
+
+        return self._cached_node_types
 
     def list_node_types_by_id(self, ids: list[int]) -> Mapping[str, NodeType]:
-        res = Request(self._turing, "ListNodeTypesByID", db_id=self._id, node_type_ids=ids)
-        return {nt.name: NodeType(self, nt) for nt in res.data.node_types}
+        if len(self._cached_node_types.keys()) == 0:
+            self.list_node_types()
+
+        return {nt.name: nt for nt in self._cached_node_types.values() if nt.id in ids}
 
     def list_edge_types(self) -> Mapping[str, EdgeType]:
-        res = Request(self._turing, "ListEdgeTypes", db_id=self._id)
-        return {et.name: EdgeType(self, et) for et in res.data.edge_types}
+        if len(self._cached_edge_types.keys()) == 0:
+            res = Request(self._turing, "ListEdgeTypes", db_id=self._id)
+            self._cached_edge_types = {
+                et.name: EdgeType(self, et) for et in res.data.edge_types
+            }
+
+        return self._cached_edge_types
 
     def list_edge_types_by_id(self, ids: list[int]) -> Mapping[str, EdgeType]:
-        res = Request(self._turing, "ListEdgeTypesByID", db_id=self._id, edge_type_ids=ids)
-        return {et.name: EdgeType(self, et) for et in res.data.edge_types}
+        if len(self._cached_edge_types.keys()) == 0:
+            self.list_edge_types()
+
+        return {et.name: et for et in self._cached_edge_types.values() if et.id in ids}
 
     def list_networks(self) -> Mapping[str, Network]:
         """List the networks of a DB and caches them in the Database class"""
@@ -101,18 +118,19 @@ class Database(DBObject):
         )
         return Edge(self, res.data.edge)
 
-    def list_nodes(self, ids: list[int]=[], node_type: NodeType=None, property: Property = None) -> list[Node]:
-        kwargs = {
-            "db_id": self.id
-        }
+    def list_nodes(
+        self,
+        ids: list[int] = [],
+        node_type: NodeType = None,
+        property: Property = None,
+        yield_edges: bool = True,
+    ) -> list[Node]:
+        kwargs = {"db_id": self.id, "yield_edges": yield_edges}
+
         if len(ids) != 0:
-            kwargs["filter_id"] = dbService_pb2.FilterID(
-                ids=ids
-            )
+            kwargs["filter_id"] = dbService_pb2.FilterID(ids=ids)
         if node_type != None:
-            kwargs["filter_type"] = dbService_pb2.FilterType(
-                node_type_id = node_type.id
-            )
+            kwargs["filter_type"] = dbService_pb2.FilterType(node_type_id=node_type.id)
 
         if property != None:
             if property.value_type.value == dbService_pb2.ValueType.INT:
@@ -129,14 +147,51 @@ class Database(DBObject):
             kwargs["filter_property"] = dbService_pb2.FilterProperty(
                 property=dbService_pb2.Property(
                     property_type_name=property.name,
-                    value_type=property.value_type.value, **{oneof: property.value}
+                    value_type=property.value_type.value,
+                    **{oneof: property.value},
                 )
             )
+
         res = Request(self._turing, "ListNodes", **kwargs)
         return [Node(self._get_network(n.net_id), n) for n in res.data.nodes]
 
-    def list_nodes_by_id(self, ids: list[int]) -> list[Node]:
-        res = Request(self._turing, "ListNodesByID", db_id=self.id, node_ids=ids)
+    def list_nodes_by_id(
+        self,
+        ids: list[int],
+        yield_edges: bool = True,
+        max_edge_count: int = 300000,
+        edge_type_filter_out: list[str] = [],
+        node_type_filter_out: list[str] = [],
+        node_property_filter_out: list[Property] = [],
+        node_property_filter_in: list[Property] = [],
+    ) -> list[Node]:
+
+        res = Request(
+            self._turing,
+            "ListNodesByID",
+            db_id=self.id,
+            node_ids=ids,
+            yield_edges=yield_edges,
+            max_edge_count=max_edge_count,
+            edge_type_filter_out=edge_type_filter_out,
+            node_type_filter_out=node_type_filter_out,
+            node_property_filter_out=[
+                dbService_pb2.Property(
+                    property_type_name=p.name,
+                    value_type=p.value_type.value,
+                    **{"string": p.value},
+                )
+                for p in node_property_filter_out
+            ],
+            node_property_filter_in=[
+                dbService_pb2.Property(
+                    property_type_name=p.name,
+                    value_type=p.value_type.value,
+                    **{"string": p.value},
+                )
+                for p in node_property_filter_in
+            ],
+        )
         return [Node(self._get_network(n.net_id), n) for n in res.data.nodes]
 
     def list_edges(self) -> list[Edge]:
@@ -159,7 +214,7 @@ class ValueType(enum.Enum):
     DECIMAL = dbService_pb2.ValueType.DECIMAL
 
     def __repr__(self) -> str:
-        return f'<ValueType {self.value}>'
+        return f"<ValueType {self.value}>"
 
 
 class EntityType(DBObject):
@@ -181,9 +236,7 @@ class EntityType(DBObject):
         )
         return {pt.name: PropertyType(pt) for pt in res.data.property_types}
 
-    def add_property_type(
-        self, name: str, value_type: ValueType
-    ) -> PropertyType:
+    def add_property_type(self, name: str, value_type: ValueType) -> PropertyType:
         res = Request(
             self._db._turing,
             "AddPropertyType",
@@ -207,9 +260,20 @@ class EntityType(DBObject):
 class NodeType(EntityType):
     def __init__(self, db: Database, nt):
         super().__init__(db, nt.id, nt.name, dbService_pb2.EntityType.NODE)
+        self._in_edge_type_ids = [id for id in nt.in_edge_ids]
+        self._out_edge_type_ids = [id for id in nt.out_edge_ids]
 
     def __repr__(self) -> str:
         return f'<NodeType "{self._name}" id={self.id}>'
+
+    @property
+    def in_edge_types(self) -> Mapping[str, EdgeType]:
+        return self._db.list_edge_types_by_id(self._in_edge_type_ids)
+
+    @property
+    def out_edge_types(self) -> Mapping[str, EdgeType]:
+        return self._db.list_edge_types_by_id(self._out_edge_type_ids)
+
 
 class EdgeType(EntityType):
     def __init__(self, db: Database, et):
@@ -242,9 +306,14 @@ class Network(DBObject):
         )
         return [Node(self, n) for n in res.data.nodes]
 
-    def list_nodes_by_id(self, ids: list[int]) -> list[Node]:
+    def list_nodes_by_id(self, ids: list[int], yield_edges: bool = True) -> list[Node]:
         res = Request(
-            self._db._turing, "ListNodesByIDFromNetwork", db_id=self._db.id, net_id=self.id, node_ids=ids
+            self._db._turing,
+            "ListNodesByIDFromNetwork",
+            db_id=self._db.id,
+            net_id=self.id,
+            node_ids=ids,
+            yield_edges=yield_edges,
         )
         return [Node(self, n) for n in res.data.nodes]
 
@@ -256,7 +325,11 @@ class Network(DBObject):
 
     def list_edges_by_id(self, ids: list[int]) -> list[Edge]:
         res = Request(
-            self._db._turing, "ListEdgesByIDFromNetwork", db_id=self._db.id, net_id=self.id, edge_ids=ids
+            self._db._turing,
+            "ListEdgesByIDFromNetwork",
+            db_id=self._db.id,
+            net_id=self.id,
+            edge_ids=ids,
         )
         return [Edge(self._db, e) for e in res.data.edges]
 
@@ -304,24 +377,27 @@ class Property:
 
 
 class Entity(DBObject):
-    def __init__(self, id: int, db: Database, entity_type: dbService_pb2.EntityType):
+    def __init__(
+        self, id: int, db: Database, entity_type: dbService_pb2.EntityType, properties
+    ):
         super().__init__(id)
         self._db = db
         self._entity_type = entity_type
+        self._properties = {
+            p.property_type_name: Property(
+                p.property_type_name,
+                getattr(p, p.WhichOneof("value")),
+                p.value_type,
+            )
+            for p in properties
+        }
+
+    @property
+    def properties(self) -> Mapping[str, Property]:
+        return self._properties
 
     def list_properties(self) -> Mapping[str, Property]:
-        res = Request(
-            self._db._turing,
-            "ListEntityProperties",
-            db_id=self._db.id,
-            entity_type=self._entity_type,
-            entity_id=self.id,
-        )
-        return {p.property_type_name: Property(
-            p.property_type_name,
-            getattr(p, p.WhichOneof("value")),
-            p.value_type,
-        ) for p in res.data.properties}
+        return self._properties
 
     def add_property(self, pt: PropertyType, value) -> Property:
         if pt.value_type == dbService_pb2.ValueType.INT:
@@ -352,17 +428,32 @@ class Entity(DBObject):
         )
 
     def __repr__(self) -> str:
-        return f'<Entity id={self.id}>'
+        return f"<Entity id={self.id}>"
+
+
+class EdgeDefinition:
+    def __init__(self, id, source, target):
+        self.id = id
+        self.source_id = source
+        self.target_id = target
 
 
 class Node(Entity):
     def __init__(self, net: Network, node):
-        super().__init__(node.id, net._db, dbService_pb2.EntityType.NODE)
+        super().__init__(
+            node.id, net._db, dbService_pb2.EntityType.NODE, node.properties
+        )
         self._net = net
         self._name = node.name
-        self._in_edge_ids = [id for id in node.in_edge_ids]
-        self._out_edge_ids = [id for id in node.out_edge_ids]
         self._node_type_id = node.node_type_id
+        self._in_edge_count = node.in_edge_count
+        self._out_edge_count = node.out_edge_count
+        self._in_edges = [
+            EdgeDefinition(ed.edge_id, ed.node_id, node.id) for ed in node.in_edges
+        ]
+        self._out_edges = [
+            EdgeDefinition(ed.edge_id, node.id, ed.node_id) for ed in node.out_edges
+        ]
 
     def __repr__(self) -> str:
         return f'<Node name="{self._name}" id={self.id}>'
@@ -372,27 +463,59 @@ class Node(Entity):
         return self._name
 
     @property
-    def in_edge_ids(self) -> list[int]:
-        return self._in_edge_ids
+    def in_edge_definitions(self) -> list[EdgeDefinition]:
+        return self._in_edges
+
+    @property
+    def out_edge_definitions(self) -> list[EdgeDefinition]:
+        return self._out_edges
+
+    @property
+    def in_edge_count(self) -> int:
+        return self._in_edge_count
+
+    @property
+    def out_edge_count(self) -> int:
+        return self._out_edge_count
 
     @property
     def in_edges(self) -> list[Edge]:
-        return self._db.list_edges_by_id(self._in_edge_ids)
+        return self._db.list_edges_by_id(ids=[ed.id for ed in self._in_edges])
+
+    @property
+    def in_edge_ids(self) -> list[int]:
+        return [ed.id for ed in self._in_edges]
 
     @property
     def out_edges(self) -> list[Edge]:
-        return self._db.list_edges_by_id(self._out_edge_ids)
+        return self._db.list_edges_by_id(ids=[ed.id for ed in self._out_edges])
 
     @property
     def out_edge_ids(self) -> list[int]:
-        return self._out_edge_ids
+        return [ed.id for ed in self._out_edges]
+
+    @property
+    def in_nodes(self) -> list[Node]:
+        return self._db.list_nodes_by_id(ids=[ed.source_id for ed in self._in_edges])
+
+    @property
+    def in_node_ids(self) -> list[int]:
+        return [ed.source_id for ed in self._in_edges]
+
+    @property
+    def out_nodes(self) -> list[Node]:
+        return self._db.list_nodes_by_id(ids=[ed.target_id for ed in self._out_edges])
+
+    @property
+    def out_node_ids(self) -> list[int]:
+        return [ed.target_id for ed in self._out_edges]
 
     @property
     def node_type_id(self) -> int:
         return self._node_type_id
 
     @property
-    def node_type(self) -> EdgeType:
+    def node_type(self) -> NodeType:
         for _, v in self._db.list_node_types_by_id([self._node_type_id]).items():
             return v
         return None
@@ -400,13 +523,13 @@ class Node(Entity):
 
 class Edge(Entity):
     def __init__(self, db: Database, edge):
-        super().__init__(edge.id, db, dbService_pb2.EntityType.EDGE)
+        super().__init__(edge.id, db, dbService_pb2.EntityType.EDGE, edge.properties)
         self._source_id = edge.source_id
         self._target_id = edge.target_id
         self._edge_type_id = edge.edge_type_id
 
     def __repr__(self) -> str:
-        return f'<Edge id={self.id}>'
+        return f"<Edge id={self.id}>"
 
     @property
     def source_id(self) -> int:

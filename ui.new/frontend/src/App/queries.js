@@ -1,7 +1,7 @@
 import { useQuery as useNativeQuery } from '@tanstack/react-query';
 
-export const useQuery = (key, fn, options = {}) => {
-    const res = useNativeQuery(key, fn, {
+export const useQuery = (key, fn, options = {}) =>
+    useNativeQuery(key, fn, {
         immutableCheck: { warnAfter: 256 },
         serializableCheck: { warnAfter: 256 },
         refetchOnMount: false,
@@ -10,5 +10,3 @@ export const useQuery = (key, fn, options = {}) => {
         ...options
     })
 
-    return res;
-}

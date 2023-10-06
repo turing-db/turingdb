@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@alenaksu/json-viewer": "^2.0.1",
+    "@blueprintjs/core": "^5.3.2",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@fontsource/public-sans": "^5.0.5",
@@ -22,6 +24,8 @@
     "cytoscape-cola": "^2.5.1",
     "cytoscape-dagre": "^2.5.0",
     "cytoscape-elk": "^2.2.0",
+    "cytoscape-euler": "^1.2.2",
+    "cytoscape-fcose": "^2.2.0",
     "cytoscape-klay": "^3.1.4",
     "cytoscape-node-html-label": "^1.2.2",
     "http-proxy-middleware": "^2.0.6",
@@ -70,3 +74,4 @@
     "tailwindcss": "^3.3.2"
   }
 }
+

@@ -13,11 +13,13 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import DnsIcon from '@mui/icons-material/Dns';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 import { DBSelector, SideNodeInspector } from './';
 import { DrawerHeader } from '../App/App';
 import { useDispatch, useSelector } from 'react-redux';
 import * as actions from '../App/actions';
+import * as thunks from '../App/thunks';
 import { Divider } from '@mui/material';
 
 const drawerWidth = 240;
@@ -86,7 +88,7 @@ export default function CustomAppBar() {
     const dispatch = useDispatch();
 
     React.useEffect(() => {
-        dispatch(actions.clearSelectedNodes());
+        dispatch(actions.clear());
     }, [dbName]); //eslint-disable-line react-hooks/exhaustive-deps
 
     const handleDrawerOpen = () => {
@@ -146,7 +148,7 @@ export default function CustomAppBar() {
                         dbName
                             ? () => {
                                 dispatch(actions.setPage("Database"));
-                                dispatch(actions.inspectNode(null));
+                                dispatch(thunks.inspectNode(dbName, null));
                             }
                             : handleDrawerOpen
                     }
@@ -180,7 +182,7 @@ export default function CustomAppBar() {
                         dbName
                             ? () => {
                                 dispatch(actions.setPage("Viewer"));
-                                dispatch(actions.inspectNode(null));
+                                dispatch(thunks.inspectNode(dbName, null));
                             }
                             : handleDrawerOpen
                     }
@@ -206,6 +208,40 @@ export default function CustomAppBar() {
                         {open ? "Viewer" : ""}
                     </ListItemButton>
                 </ListItem>
+                <ListItem
+                    key="Admin"
+                    disablePadding
+                    sx={{ display: 'block' }}
+                    onClick={
+                        dbName
+                            ? () => {
+                                dispatch(actions.setPage("Admin"));
+                                dispatch(thunks.inspectNode(dbName, null));
+                            }
+                            : handleDrawerOpen
+                    }
+                >
+                    <ListItemButton
+                        sx={{
+                            minHeight: 48,
+                            justifyContent: open ? 'initial' : 'center',
+                            px: 2.5,
+                        }}
+                    >
+
+                        <ListItemIcon
+                            sx={{
+                                minWidth: 0,
+                                mr: open ? 3 : 'auto',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <AdminPanelSettingsIcon />
+                        </ListItemIcon>
+
+                        {open ? "Admin" : ""}
+                    </ListItemButton>
+                </ListItem>
                 <Divider />
             </List>
 
@@ -213,3 +249,4 @@ export default function CustomAppBar() {
         </Drawer>
     </>
 }
+
