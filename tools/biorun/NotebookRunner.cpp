@@ -105,6 +105,8 @@ bool NotebookRunner::generateReport(const Path& path) {
     reportCmd.addArg(_reportsDir.string());
     reportCmd.addArg("-so");
     reportCmd.addArg(_outDir.string());
+    
+    reportCmd.setScriptPath(_outDir/"generate_report.sh");
 
     const auto logFile = _reportsDir / "generate_report.log";
     reportCmd.setLogFile(logFile);
