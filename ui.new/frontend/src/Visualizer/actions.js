@@ -27,15 +27,20 @@ export const setEdgeLabel = edgeLabel => ({
 
 export const clearHiddenNodes = () => ({
     type: actions.CLEAR_HIDDEN_NODES,
-    payload: { }
-})
+    payload: {}
+});
 
 export const hideNode = nodeId => ({
     type: actions.HIDE_NODE,
     payload: { nodeId }
-})
+});
 
 export const hideNodes = nodeIds => ({
     type: actions.HIDE_NODES,
     payload: { nodeIds }
+});
+
+export const setEdgeColorMode = (mode, data = {}) => ({
+    type: actions.SET_EDGE_COLOR_MODE,
+    payload: { mode, data }
 })

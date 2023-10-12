@@ -1,4 +1,5 @@
 import * as actions from './actionTypes'
+import { EDGE_COLOR_MODES } from './constants'
 
 export const initialState = () => ({
     cyLayout: {
@@ -32,6 +33,11 @@ export const initialState = () => ({
     },
     edgeLabel: "EdgeType",
     hiddenNodeIds: [],
+
+    edgeColorMode: {
+        mode: EDGE_COLOR_MODES.None,
+        data: {},
+    }
 })
 
 export const reducer = (state = initialState(), action) => {
@@ -127,12 +133,22 @@ export const reducer = (state = initialState(), action) => {
                 ].filter((e, i, arr) => arr.indexOf(e) === i)
             };
 
-        case actions.CLEAR_HIDDEN_NODES:
+        case actions.CLEAR_HIDDEN_NODES: {
             return {
                 ...state,
                 hiddenNodeIds: initialState().hiddenNodeIds
             };
+        }
 
+        case actions.SET_EDGE_COLOR_MODE: {
+            return {
+                ...state,
+                edgeColorMode: {
+                    mode: action.payload.mode,
+                    data: action.payload.data
+                }
+            };
+        }
         default:
             return state;
     }

@@ -187,12 +187,13 @@ export default function ViewerPage() {
             <Autocomplete
                 disablePortal
                 blurOnSelect
-                id="property-selector"
+                id="node-property-selector"
                 value={displayedNodeProperty}
                 autoSelect
                 autoHighlight
                 options={[...nodePropertyTypes, "NodeType", "None"]}
-                sx={{ width: 200 }} size="small"
+                sx={{ width: 200 }}
+                size="small"
                 onChange={(_e, v) => v && dispatch(actions.selectDisplayedProperty(v))}
                 renderInput={(params) => (<TextField {...params} label="Displayed node property" />)}
             />
@@ -200,13 +201,14 @@ export default function ViewerPage() {
             <Autocomplete
                 disablePortal
                 blurOnSelect
-                id="property-selector"
+                id="edge-property-selector"
                 value={edgeLabel}
                 autoSelect
                 autoHighlight
                 options={[...edgePropertyTypes, "EdgeType", "None"]}
-                sx={{ width: 200 }} size="small"
-                onChange={(_e, v) => () => visualizer.current.callbacks.setEdgeLabel(v)}
+                sx={{ width: 200 }}
+                size="small"
+                onChange={(_e, v) => visualizer.current.callbacks.setEdgeLabel(v)}
                 renderInput={(params) => (<TextField {...params} label="Edge label" />)}
             />
         </Box>

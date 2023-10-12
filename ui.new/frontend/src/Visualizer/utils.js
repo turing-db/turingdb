@@ -3,7 +3,14 @@ import React from 'react';
 import { useSelector } from 'react-redux';
 import { useQuery } from '../App/queries';
 import * as actions from './actions';
+import { EDGE_COLOR_MODES } from './constants'
 
+const colorGradient = (min, max, value) => {
+    const extent = max - min;
+    const r = parseInt(255 * (value - min) / extent);
+    const g = 255 - parseInt(255 * (value - min) / extent);
+    return `rgb(${r},${g},0)`;
+}
 
 export const useCytoscapeElements = () => {
     const dbName = useSelector(state => state.dbName);
@@ -12,6 +19,7 @@ export const useCytoscapeElements = () => {
     const edgeLabel = useSelector(state => state.visualizer.edgeLabel);
     const hiddenNodeIds = useSelector(state => state.visualizer.hiddenNodeIds);
     const filters = useSelector(state => state.visualizer.filters);
+    const edgeColorMode = useSelector(state => state.visualizer.edgeColorMode);
     const nodeIds = Object.keys(selectedNodes);
 
     const res = useQuery(
@@ -53,6 +61,55 @@ export const useCytoscapeElements = () => {
             return rawElements;
         }, [dbName, nodeIds, hiddenNodeIds, filters]))
 
+    const edges = res.data ? res.data.filter(el => el.group === "edges") : [];
+    const edgeTypes = edges
+        .map(e => e.data.edge_type_name)
+        .filter((et, i, arr) => arr.indexOf(et) === i);
+    const gradientColorPropertyValues = edgeColorMode.mode === EDGE_COLOR_MODES.GradientProperty
+        ? (() => {
+            const propertiesAreFloats = edges
+                .every(e => !isNaN(parseFloat(e.data.properties[edgeColorMode.data.propTypeName])));
+            if (!propertiesAreFloats) return [];
+
+            const propertyValues = Object.fromEntries(
+                edges.map(e => [e.data.id, e.data.properties[edgeColorMode.data.propTypeName]])
+            );
+
+            const min = Math.min.apply(Math, Object.values(propertyValues));
+            const max = Math.max.apply(Math, Object.values(propertyValues));
+            return Object.fromEntries(
+                Object.entries(propertyValues)
+                    .map(([id, v]) => [id, colorGradient(min, max, v)])
+            );
+        })()
+        : {};
+
+    const uniquePropertyValues = edgeColorMode.mode === EDGE_COLOR_MODES.QuantitativeProperty
+        ? edges
+            .map(e => e.data.properties[edgeColorMode.data.propTypeName])
+            .filter((pt, i, arr) => arr.indexOf(pt) === i)
+        : [];
+
+    const edgeColorMakers = {
+        [EDGE_COLOR_MODES.None]: () => undefined,
+        [EDGE_COLOR_MODES.EdgeType]: (elData) => {
+            const colorIndex = edgeTypes.indexOf(elData.edge_type_name)
+                % quantitativeColors.length;
+            const color = quantitativeColors[colorIndex];
+            return color;
+        },
+        [EDGE_COLOR_MODES.GradientProperty]: (elData) => {
+            return gradientColorPropertyValues[elData.id];
+        },
+        [EDGE_COLOR_MODES.QuantitativeProperty]: (elData) => {
+            const colorIndex = uniquePropertyValues.indexOf(
+                elData.properties[edgeColorMode.data.propTypeName]
+            ) % quantitativeColors.length;
+            const color = quantitativeColors[colorIndex];
+            return color;
+        }
+    }
+
     const getElementLabel = el => {
         if (el.group === "nodes") {
             if (displayedNodeProperty === "None") return "";
@@ -73,9 +130,9 @@ export const useCytoscapeElements = () => {
                 return { "backgroundColor": "rgb(155,155,155)", color: "rgb(90, 90, 90)" };
         } else { // edges
             if (el.data.type === "connecting")
-                return { "lineColor": "rgb(0, 153, 0)" };
+                return { "lineColor": edgeColorMakers[edgeColorMode.mode](el.data) || "rgb(0,153,0)" };
             else // connecting
-                return { "lineColor": "rgb(0,80,0)" };
+                return { "lineColor": edgeColorMakers[edgeColorMode.mode](el.data) || "rgb(0,80,0)" };
         }
     }
 
@@ -161,5 +218,17 @@ export const useCyStyleQuery = () => useQuery(
         .then(res => res.json())
         .catch(err => console.log(err))
 );
+
+export const quantitativeColors = [
+    "#29A634",
+    "#D1980B",
+    "#D33D17",
+    "#9D3F9D",
+    "#00A396",
+    "#DB2C6F",
+    "#8EB125",
+    "#946638",
+    "#7961DB"
+];
 
 

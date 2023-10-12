@@ -56,7 +56,7 @@
     "line-color": "data(lineColor)",
     "arrow-scale": 1,
     "text-opacity": 1.0,
-    "color": "rgb(30,100,50)",
+    "color": "data(lineColor)",
     "font-size": 12,
     "width": 2.0,
     "line-style": "solid",
