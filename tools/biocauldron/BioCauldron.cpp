@@ -1,6 +1,7 @@
 #include "ToolInit.h"
 
-#include <csignal>
+#include <signal.h>
+#include <boost/process.hpp>
 
 #include "BioLog.h"
 #include "MsgUIServer.h"
@@ -11,7 +12,8 @@
 using namespace ui;
 using namespace Log;
 
-static std::unique_ptr<TuringUIServer> server;
+// This is necessary to handle unix signals
+std::unique_ptr<TuringUIServer> server;
 
 void sigintHandler(int signum) {
     if (signum == SIGINT) {
@@ -30,15 +32,25 @@ int main(int argc, const char** argv) {
                         "Use a developpment environment instead of production",
                         false);
     toolInit.init(argc, argv);
-    signal(SIGINT, sigintHandler);
+
+    const bool startDevRequested = argParser.isOptionSet("dev");
+
+    // Create server
     server = std::make_unique<TuringUIServer>(toolInit.getOutputsDir());
+    
+    // Install signal handler to handle ctrl+C
+    signal(SIGINT, sigintHandler);
 
-    argParser.isOptionSet("dev")
-        ? server->startDev()
-        : server->start();
+    // Start server
+    if (startDevRequested) {
+        server->startDev();
+    } else {
+        server->start();
+    }
 
+    // Wait for termination
     const ui::ServerType serverType = server->waitServerDone();
-    int code = server->getReturnCode(serverType);
+    const int code = server->getReturnCode(serverType);
 
     std::string output;
     server->getOutput(serverType, output);
@@ -49,7 +61,8 @@ int main(int argc, const char** argv) {
                 << output);
 
     server->terminate();
+
     BioLog::printSummary();
     BioLog::destroy();
-    exit(EXIT_FAILURE);
+    exit(EXIT_SUCCESS);
 }
