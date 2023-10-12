@@ -1,12 +1,11 @@
-import axios from 'axios';
 import { Autocomplete, CircularProgress, IconButton, TextField } from '@mui/material';
 import React from 'react';
-import { BorderedContainer } from './';
+import BorderedContainer from './BorderedContainer';
 import SearchIcon from '@mui/icons-material/Search';
 import { BorderedContainerTitle } from './BorderedContainer';
-import { useQuery } from '../App/queries';
-import { useDispatch, useSelector } from 'react-redux';
-import * as actions from '../App/actions';
+import { useNodePropertyTypesQuery } from '../queries';
+import { useDispatch } from 'react-redux';
+import * as actions from '../actions';
 
 const useProperty = ({ setPropertyValue }) => {
     const dispatch = useDispatch();
@@ -39,22 +38,13 @@ export default function PropertyFilterContainer({
     setPropertyValue,
 }) {
     const [enabled, setEnabled] = React.useState(false);
-    const dbName = useSelector((state) => state.dbName);
     const {
         displayedValue,
         search,
         setName, setValue
     } = useProperty({ setPropertyValue });
 
-    const { data, isFetching } = useQuery(
-        ["list_property_types", dbName],
-        React.useCallback(() => axios
-            .post("/api/list_property_types", { db_name: dbName })
-            .then(res => res.data)
-            .catch(err => { console.log(err); return []; })
-            , [dbName]),
-        { enabled }
-    )
+    const { data, isFetching } = useNodePropertyTypesQuery({ enabled });
     const propertyNames = data || [];
 
     return <form onSubmit={(e) => {

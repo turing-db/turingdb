@@ -1,6 +1,5 @@
 export const CLEAR = "CLEAR";
 export const SET_PAGE = "SET_PAGE";
-export const SET_CY_LAYOUT = "SET_CY_LAYOUT";
 
 export const INSPECT_NODE = "INSPECT_NODE";
 export const RESET_INSPECTED_NODE = "RESET_INSPECTED_NODE";
@@ -24,8 +23,3 @@ export const HIDE_NEIGHBOR = "HIDE_NEIGHBOR";
 export const SHOW_NEIGHBOR = "SHOW_NEIGHBOR";
 export const HIDE_NEIGHBORS = "HIDE_NEIGHBORS";
 export const SHOW_NEIGHBORS = "SHOW_NEIGHBORS";
-
-export const HIDE_NODE = "HIDE_NODE";
-export const HIDE_NODES = "HIDE_NODES";
-export const CLEAR_HIDDEN_NODES = "CLEAR_HIDDEN_NODES";
-

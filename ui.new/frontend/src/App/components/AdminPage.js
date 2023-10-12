@@ -1,7 +1,7 @@
 import '@alenaksu/json-viewer';
 import React from 'react';
 import axios from 'axios'
-import { useQuery } from '../App/queries';
+import { useQuery } from '../queries';
 import { Box, Button, CircularProgress } from '@mui/material'
 import { useSelector } from 'react-redux';
 

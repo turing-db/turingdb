@@ -1,50 +1,35 @@
+import { combineReducers } from 'redux'
 import * as actions from './actionTypes'
+import * as visualizer from '../Visualizer/reducer';
 
 const initialState = () => ({
     page: "Database",
-    cyLayout: {
-        name: "cola",
-        animate: true,
-        infinite: false,
-        avoidOverlap: false,
-        randomize: false,
-        maxSimulationTime: 2000,
-        fit: false,
-        centerGraph: true,
-        convergenceThreshold: 0.02,
-        nodeSpacing: 30,
-        edgeLengthVal: 150,
-        refresh: 10,
-        edgeLength: (_e) => 150,
-    },
+    visualizer: visualizer.initialState(),
     dbName: null,
     inspectedNode: null,
     stringProperties: [],
     nodeCache: {},
     edgeCache: {},
     selectedNodes: {},
-    displayedProperty: null,
+    highlightedNodes: {},
+    displayedNodeProperty: null,
     hiddenNeighbors: { selectedNodeIds: [], edgeIds: [] },
-    hiddenNodeIds: [],
+    filters: {
+        showOnlyHomoSapiens: true,
+        hidePublications: true,
+        hideCompartments: true,
+        hideSpecies: true,
+        hideDatabaseReferences: true,
+    }
 });
 
-const reducers = {
+const reducers = combineReducers({
+    visualizer: visualizer.reducer,
+
     page: (state = initialState().page, action) => {
         switch (action.type) {
             case actions.SET_PAGE:
                 return action.payload.page;
-            default:
-                return state;
-        }
-    },
-
-    cyLayout: (state = initialState().cyLayout, action) => {
-        switch (action.type) {
-            case actions.SET_CY_LAYOUT:
-                return {
-                    ...action.payload.cyLayout,
-                    edgeLength: (_e) => action.payload.cyLayout.edgeLengthVal,
-                }
             default:
                 return state;
         }
@@ -104,6 +89,22 @@ const reducers = {
         }
     },
 
+    //highlightedNodes: (state = initialState().highlightedNodes, action) => {
+    //    switch (action.type) {
+    //        case actions.CLEAR:
+    //            return initialState().highlightedNodes;
+
+    //        case actions.ADD_HIGHLIGHTED_NODES:
+    //            return [
+    //                ...state,
+    //                ...action.payload.nodeIds
+    //            ];
+
+    //        default:
+    //            return state;
+    //    }
+    //},
+
     nodeCache: (state = initialState().nodeCache, action) => {
         switch (action.type) {
             case actions.CLEAR:
@@ -145,13 +146,13 @@ const reducers = {
         }
     },
 
-    displayedProperty: (state = initialState().displayedProperty, action) => {
+    displayedNodeProperty: (state = initialState().displayedNodeProperty, action) => {
         switch (action.type) {
             case actions.CLEAR:
-                return initialState().displayedProperty;
+                return initialState().displayedNodeProperty;
 
             case actions.SELECT_DISPLAYED_PROPERTY:
-                return action.payload.displayedProperty;
+                return action.payload.displayedNodeProperty;
 
             default:
                 return state;
@@ -186,30 +187,7 @@ const reducers = {
                 return state;
         }
     },
-
-    hiddenNodeIds: (state = initialState().hiddenNodeIds, action) => {
-        switch (action.type) {
-            case actions.CLEAR:
-                return initialState().hiddenNodeIds;
- 
-            case actions.HIDE_NODE:
-                return [
-                    ...state, action.payload.nodeId
-                ].filter((e, i, arr) => arr.indexOf(e) === i)
-
-            case actions.HIDE_NODES:
-                return [
-                    ...state, ...action.payload.nodeIds
-                ].filter((e, i, arr) => arr.indexOf(e) === i)
-
-            case actions.CLEAR_HIDDEN_NODES:
-                return initialState().hiddenNodeIds;
-
-            default:
-                return state;
-        }
-    }
-}
+})
 
 export default reducers;
 

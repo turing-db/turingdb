@@ -3,14 +3,14 @@ import React from 'react'
 import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import CssBaseline from '@mui/material/CssBaseline';
-import { themeOptions } from '../theme'
+import { themeOptions } from '../../theme'
 
-import DatabasePage from '../Components/DatabasePage';
-import ViewerPage from '../Components/ViewerPage';
-import AdminPage from '../Components/AdminPage';
-import CustomAppBar from '../Components/CustomAppBar'
+import DatabasePage from './DatabasePage';
+import ViewerPage from './ViewerPage';
+import AdminPage from './AdminPage';
+import CustomAppBar from './CustomAppBar'
 import { Provider, useSelector } from 'react-redux';
-import store from './store'
+import store from '../store'
 
 export const DrawerHeader = styled('div')(({ theme }) => ({
     display: 'flex',

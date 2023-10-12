@@ -26,7 +26,11 @@ def run(args):
     turing = turingdb.Turing("localhost:6666")
     app.turing = turing
 
-    from turingui.viewer import viewer_blueprint
+    if args.dev:
+        from viewer import viewer_blueprint
+    else:
+        from turingui.viewer import viewer_blueprint
+
     app.register_blueprint(viewer_blueprint)
 
     @app.route("/")
@@ -175,8 +179,8 @@ def run(args):
 
         return jsonify([{**base_nodes[i], **edges[i]} for i in range(len(nodes))])
 
-    @app.route("/api/list_property_types", methods=["POST"])
-    def list_property_types():
+    @app.route("/api/list_node_property_types", methods=["POST"])
+    def list_node_property_types():
         data = request.get_json()
         db_name = data["db_name"]
 
@@ -185,6 +189,26 @@ def run(args):
             property_types = []
 
             for nt in db.list_node_types().values():
+                for pt_name, pt in nt.list_property_types().items():
+                    property_types.append(pt_name)
+
+            property_types = set(property_types)
+
+        except TuringError as err:
+            return jsonify({"failed": True, "error": {"details": err.details}})
+
+        return jsonify([p_name for p_name in property_types])
+
+    @app.route("/api/list_edge_property_types", methods=["POST"])
+    def list_edge_property_types():
+        data = request.get_json()
+        db_name = data["db_name"]
+
+        try:
+            db = turing.get_db(db_name)
+            property_types = []
+
+            for nt in db.list_edge_types().values():
                 for pt_name, pt in nt.list_property_types().items():
                     property_types.append(pt_name)
 

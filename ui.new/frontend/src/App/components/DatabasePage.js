@@ -2,8 +2,8 @@ import React from 'react'
 import axios from 'axios'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import DBInspector from './DBInspector'
-import { Secondary } from '../Components'
-import { useQuery } from '../App/queries'
+import { Secondary } from './Span'
+import { useQuery } from '../queries'
 import { useSelector } from 'react-redux'
 
 function DBLoader() {

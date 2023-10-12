@@ -1,10 +1,12 @@
 import { IconButton } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
-import { BorderedContainer, NodeChip, NodeStack } from './'
+import BorderedContainer from './BorderedContainer';
+import NodeChip from './NodeChip';
+import NodeStack from './NodeStack';
 import React from 'react'
 import { BorderedContainerTitle } from './BorderedContainer';
 import { useSelector, useDispatch } from 'react-redux'
-import { clearSelectedNodes } from '../App/actions'
+import { clearSelectedNodes } from '../actions'
 
 export default function SelectedNodesContainer() {
     const selectedNodes = useSelector((state) => state.selectedNodes);

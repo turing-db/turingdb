@@ -1,5 +1,5 @@
 import React from 'react';
-import * as utils from './utils';
+import * as utils from '../utils';
 import { renderToString } from 'react-dom/server';
 
 import CytoscapeComponent from "react-cytoscapejs";
@@ -9,8 +9,8 @@ import fcose from 'cytoscape-fcose'
 import euler from 'cytoscape-euler'
 import dagre from 'cytoscape-dagre'
 import nodeHtmlLabel from 'cytoscape-node-html-label';
-import * as actions from '../App/actions';
-import * as thunks from '../App/thunks';
+import * as actions from '../../App/actions';
+import * as thunks from '../../App/thunks';
 import { useDispatch, useSelector } from 'react-redux';
 import { Backdrop, CircularProgress } from '@mui/material';
 
@@ -51,13 +51,17 @@ const Dots = (props) => <div style={{ display: "flex" }}>
 
 const CytoscapeCanvas = (props) => {
     const dispatch = useDispatch();
+    const { setInteractionDisabled, fitRequired } = props;
     const [cy, setCy] = React.useState();
-    const [, setAlertingNode] = React.useState(null);
     const [cyReady, setCyReady] = React.useState(false);
 
-    const dbName = useSelector((state) => state.dbName);
-    const cyLayout = useSelector((state) => state.cyLayout);
-    const hiddenNeighbors = useSelector((state) => state.hiddenNeighbors);
+    const dbName = useSelector(state => state.dbName);
+    const cyLayout = useSelector(state => state.visualizer.cyLayout);
+    const hiddenNeighbors = useSelector(state => state.hiddenNeighbors);
+    const layouts = useSelector(state => state.visualizer.layouts);
+    const cyLayoutRef = React.useRef(cyLayout);
+    const layoutsRef = React.useRef(layouts);
+    const defaultLayoutRef = React.useRef();
 
     const previousElements = React.useRef([]);
 
@@ -78,7 +82,13 @@ const CytoscapeCanvas = (props) => {
         , [hiddenNeighbors]);
 
     React.useEffect(() => {
-        if (!cy || cyReady) return;
+        cyLayoutRef.current = cyLayout;
+        layoutsRef.current = layouts;
+
+        if (!cy) return;
+        cy.defaultLayoutRef = defaultLayoutRef;
+
+        if (cyReady) return;
 
         cy.nodeHtmlLabel([
             {
@@ -116,20 +126,40 @@ const CytoscapeCanvas = (props) => {
             const e = event.originalEvent;
             const newEvent = new e.constructor("contextmenu", e);
 
+            // Clicked on the background
             if (!target.group) {
-                props.setMenuData.current({group: "background", data: target.elements()});
+                props.setMenuData.current({ group: "background", data: target.elements() });
             }
 
+            // Clicked on a node
             else if (target.group() === "nodes") {
-                props.setMenuData.current({group: "nodes", data: target.data()});
+                // If clicked a node that is not highlighted, make it highlighted
+                if (!target.selected()) {
+                    cy.elements().forEach(e => e.unselect());
+                    target.select();
+                }
+                props.setMenuData.current({ group: "nodes", data: target.data() });
             }
 
             else {
-                props.setMenuData.current({group: "edges", data: target.data()});
+                props.setMenuData.current({ group: "edges", data: target.data() });
             }
 
             props.portalRef.current.dispatchEvent(newEvent);
         })
+
+        cy.on('dragfree', event => {
+            const nodeId = event.target.id();
+            const layoutId = layoutsRef.current.mapping[nodeId];
+
+            if (layoutId !== undefined) {
+                const layout = layoutsRef.current.definitions[layoutId];
+
+                if (layout.name === "preset") {
+                    layout.positions[nodeId] = event.target.position();
+                }
+            }
+        });
 
         cy.on('dbltap', event => {
             const target = event.target;
@@ -148,7 +178,6 @@ const CytoscapeCanvas = (props) => {
                 yield_edges: true
             }))
                 .then(res => {
-                    setAlertingNode(res[node.id]);
                     dispatch(actions.selectNode(res[node.id]));
                 });
         });
@@ -166,22 +195,35 @@ const CytoscapeCanvas = (props) => {
         })
 
         setCyReady(true);
-    }, [props, cy, cyReady, dbName, dispatch, getCollapsed]);
+    }, [props, cyLayout, cy, cyReady, dbName, dispatch, getCollapsed, layouts]);
 
     React.useEffect(() => {
         if (!cy) return;
 
-        if (props.layout.current) {
-            props.layout.current.stop();
-            props.layout.current.destroy();
+        const pan = { ...cy.viewport().pan() };
+        const zoom = cy.viewport().zoom();
+        utils.applyLayouts(cy, layouts, cyLayoutRef.current);
+        cy.pan(pan);
+        cy.zoom(zoom);
+
+        setInteractionDisabled((() => {
+            const nodes = cy.nodes().filter(n => n.id);
+            if (nodes.length === 0) return true;
+
+            const uniqueTitleValues = nodes
+                .map(n => n.data().properties.title)
+                .filter((title, i, arr) => arr.indexOf(title) === i);
+
+            if (uniqueTitleValues.length !== 2 && uniqueTitleValues.length !== 3) return true;
+
+            return false;
+        })());
+
+        if (fitRequired.current) {
+            cy.fit();
+            fitRequired.current = false;
         }
-
-        cy.userZoomingEnabled(!cyLayout.fit);
-        cy.userPanningEnabled(!cyLayout.fit);
-        props.layout.current = cy.layout(cyLayout);
-        props.layout.current.run();
-
-    }, [cy, cyLayout, isFetching, props.layout, elements]);
+    }, [cy, setInteractionDisabled, elements, layouts, fitRequired])
 
     return <>
         {<Backdrop open={isFetching}><CircularProgress s={40} /></Backdrop>}
