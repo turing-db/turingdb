@@ -5,6 +5,8 @@
 #include "FromTarget.h"
 #include "PathPattern.h"
 #include "Expr.h"
+#include "TypeConstraint.h"
+#include "ExprConstraint.h"
 
 using namespace db;
 
@@ -43,6 +45,14 @@ ASTContext::~ASTContext() {
 
     for (EdgePattern* pattern : _edgePatterns) {
         delete pattern;
+    }
+
+    for (TypeConstraint* constr : _typeConstraints) {
+        delete constr;
+    }
+
+    for (ExprConstraint* constr : _exprConstraints) {
+        delete constr;
     }
 
     for (Expr* expr : _expr) {
@@ -84,4 +94,12 @@ void ASTContext::addEdgePattern(EdgePattern* pattern) {
 
 void ASTContext::addExpr(Expr* expr) {
     _expr.push_back(expr);
+}
+
+void ASTContext::addTypeConstraint(TypeConstraint* constr) {
+    _typeConstraints.push_back(constr);
+}
+
+void ASTContext::addExprConstraint(ExprConstraint* constr) {
+    _exprConstraints.push_back(constr);
 }

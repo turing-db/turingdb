@@ -43,6 +43,8 @@ class Expr;
 #include "FromTarget.h"
 #include "PathPattern.h"
 #include "Expr.h"
+#include "TypeConstraint.h"
+#include "ExprConstraint.h"
 
 #include "BioLog.h"
 
@@ -71,6 +73,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token CBRACK
 %token OPAR
 %token CPAR
+%token OSBRACK
+%token CSBRACK
 
 // Keywords
 %token LIST
@@ -112,7 +116,6 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::EntityPattern*> entity_pattern
 %type<db::TypeConstraint*> type_constraint
 %type<db::ExprConstraint*> expr_constraint
-%type<db::VarList*> id_list
 %type<db::Expr*> expr
 %type<db::Expr*> or_expr
 %type<db::Expr*> and_expr
@@ -172,40 +175,45 @@ path_pattern: node_pattern                           {
 node_pattern: entity_pattern { $$ = NodePattern::create(ctxt, $1); }
             ;
 
-edge_pattern: MINUS entity_pattern MINUS         { $$ = EdgePattern::create(ctxt, $2); }
+edge_pattern: MINUS OPAR entity_pattern CPAR MINUS { $$ = EdgePattern::create(ctxt, $3); }
+            | MINUS OPAR CPAR MINUS                { $$ = nullptr; }
             ;
 
-entity_pattern: ID type_constraint expr_constraint {
-                                                       VarExpr* var = VarExpr::create(ctxt, $1);
-                                                       $$ = EntityPattern::create(ctxt, var, $2, $3);
-                                                   }
-              | ID expr_constraint                 {
-                                                       VarExpr* var = VarExpr::create(ctxt, $1);
-                                                       $$ = EntityPattern::create(ctxt, var, nullptr, $2);
-                                                   }
+entity_pattern: type_constraint COLON ID expr_constraint {
+                                                             VarExpr* var = VarExpr::create(ctxt, $3);
+                                                             $$ = EntityPattern::create(ctxt, var, $1, $4);
+                                                         }
+              | COLON ID expr_constraint                 {
+                                                             VarExpr* var = VarExpr::create(ctxt, $2);
+                                                             $$ = EntityPattern::create(ctxt, var, nullptr, $3);
+                                                         }
               | type_constraint expr_constraint    {
                                                        $$ = EntityPattern::create(ctxt, nullptr, $1, $2);
                                                    }
-              | ID type_constraint                 {
-                                                       VarExpr* var = VarExpr::create(ctxt, $1);
-                                                       $$ = EntityPattern::create(ctxt, var, $2, nullptr);
+              | type_constraint COLON ID           {
+                                                       VarExpr* var = VarExpr::create(ctxt, $3);
+                                                       $$ = EntityPattern::create(ctxt, var, $1, nullptr);
                                                    }
-              | ID                                 {
-                                                       VarExpr* var = VarExpr::create(ctxt, $1);
+              | COLON ID                           {
+                                                       VarExpr* var = VarExpr::create(ctxt, $2);
                                                        $$ = EntityPattern::create(ctxt, var, nullptr, nullptr);
                                                    }
               | type_constraint                    { $$ = EntityPattern::create(ctxt, nullptr, $1, nullptr); }
               ;
 
-type_constraint: COLON id_list { $$ = nullptr; }
+type_constraint: type_constraint COMMA ID {
+                                              $1->addType(VarExpr::create(ctxt, $3));
+                                              $$ = $1;
+                                          }
+               | ID                       {
+                                              auto constr = TypeConstraint::create(ctxt);
+                                              constr->addType(VarExpr::create(ctxt, $1));
+                                              $$ = constr;
+                                          }
                ;
 
-expr_constraint: OBRACK expr CBRACK { $$ = nullptr; }
+expr_constraint: OBRACK expr CBRACK { $$ = ExprConstraint::create(ctxt, $2); }
                ;
-
-id_list: ID COMMA id_list { $$ = nullptr; }
-       | ID               { $$ = nullptr; } 
-       ;
 
 // list command
 list_cmd: LIST DATABASES {

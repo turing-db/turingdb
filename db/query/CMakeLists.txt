@@ -23,6 +23,9 @@ set(query_sources
         SelectField.cpp
         FromTarget.cpp
         PathPattern.cpp
+        TypeConstraint.cpp
+        ExprConstraint.cpp
+        Expr.cpp
         QueryParser.cpp
         Symbol.cpp
         SymbolTable.cpp

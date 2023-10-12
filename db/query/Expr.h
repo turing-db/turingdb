@@ -19,6 +19,7 @@ public:
 protected:
     Expr() = default;
     virtual ~Expr();
+    void postCreate(ASTContext* ctxt);
 };
 
 class VarExpr : public Expr {

@@ -12,6 +12,8 @@ class PathElement;
 class EntityPattern;
 class NodePattern;
 class EdgePattern;
+class TypeConstraint;
+class ExprConstraint;
 class Expr;
 
 class ASTContext {
@@ -24,6 +26,8 @@ public:
     friend EntityPattern;
     friend NodePattern;
     friend EdgePattern;
+    friend TypeConstraint;
+    friend ExprConstraint;
     friend Expr;
 
     ASTContext();
@@ -47,6 +51,8 @@ private:
     std::vector<EntityPattern*> _entityPatterns;
     std::vector<NodePattern*> _nodePatterns;
     std::vector<EdgePattern*> _edgePatterns;
+    std::vector<TypeConstraint*> _typeConstraints;
+    std::vector<ExprConstraint*> _exprConstraints;
     std::vector<Expr*> _expr;
 
     void addCmd(QueryCommand* cmd);
@@ -57,6 +63,8 @@ private:
     void addEntityPattern(EntityPattern* pattern);
     void addNodePattern(NodePattern* pattern);
     void addEdgePattern(EdgePattern* pattern);
+    void addTypeConstraint(TypeConstraint* constr);
+    void addExprConstraint(ExprConstraint* constr);
     void addExpr(Expr* expr);
 };
 
