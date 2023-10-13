@@ -15,6 +15,7 @@ public:
     void setQuiet(bool quiet) { _silent = quiet; }
     void setExportHTML(bool enable) { _exportHTML = enable; }
     void setExportPDF(bool enable) { _exportPDF = enable; }
+    void setGenerateReport(bool enable) { _generateReport = enable; }
     void setExecEnabled(bool enable) { _execNotebooks = enable; }
 
     void addNotebook(const Path& path);
@@ -29,10 +30,12 @@ private:
     bool _execNotebooks {true};
     bool _exportHTML {false};
     bool _exportPDF {false};
+    bool _generateReport {false};
 
     bool runNotebook(const Path& path);
     bool executeNotebook(const Path& path);
     bool exportNotebook(const Path& path, const std::string& toDest);
+    bool generateReport(const Path& path);
 };
 
 #endif

@@ -50,8 +50,11 @@ MSG_ERROR(ERROR_FILE_NOT_EXISTS, 1014,
 MSG_ERROR(ERROR_INCORRECT_CMD_USAGE, 1015,
           "The argument '$0' wat not used correctly.")
 
-MSG_ERROR(ERROR_INCORRECT_ENV_SETUP, 1015,
+MSG_ERROR(ERROR_INCORRECT_ENV_SETUP, 1016,
           "The TURING_HOME env variable is not set")
+
+MSG_ERROR(ERROR_IMPOSSIBLE_TO_RUN_COMMAND, 1017,
+          "Impossible to launch a command: $0")
 
 }
 

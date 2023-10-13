@@ -71,8 +71,52 @@ bool NotebookRunner::runNotebook(const Path& path) {
             return false;
         }
     }
+    
+    if (_generateReport) {
+        if (!generateReport(path)) {
+            BioLog::log(msg::ERROR_FAILED_TO_GENERATE_REPORT()
+                    << path.string());
+            return false;
+        }
+    }
 
     return true;
+}
+
+bool NotebookRunner::generateReport(const Path& path) {
+    TimerStat timer("Generating report for " + path.string());
+    
+    const char* turingHome = getenv("TURING_HOME");
+    if (!turingHome) {
+        BioLog::log(msg::ERROR_INCORRECT_ENV_SETUP());
+        return false;
+    }
+
+    const FileUtils::Path scriptPath = FileUtils::Path(turingHome)
+                                     / "scripts"
+                                     / "latex_template"
+                                     / "report_generation_scripts"
+                                     / "run_latex_template.py";
+
+    Command reportCmd("python3");
+    reportCmd.addArg(scriptPath.string());
+    reportCmd.addArg(path.string());
+    reportCmd.addArg("-ro");
+    reportCmd.addArg(_reportsDir.string());
+    reportCmd.addArg("-so");
+    reportCmd.addArg(_outDir.string());
+    
+    reportCmd.setScriptPath(_outDir/"generate_report.sh");
+
+    const auto logFile = _reportsDir / "generate_report.log";
+    reportCmd.setLogFile(logFile);
+    reportCmd.setWriteOnStdout(!_silent);
+
+    if (!reportCmd.run()) {
+        return false;
+    }
+
+    return reportCmd.getReturnCode() == 0;
 }
 
 bool NotebookRunner::executeNotebook(const Path& path) {

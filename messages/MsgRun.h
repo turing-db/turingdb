@@ -22,6 +22,9 @@ MSG_INFO(INFO_JUPYTER_LOG_FILE, 4005,
 
 MSG_INFO(INFO_NOTEBOOK_REPORT, 4006,
          "Notebook report written in $0")
+    
+MSG_ERROR(ERROR_FAILED_TO_GENERATE_REPORT, 4007,
+          "Failed to generate report for notebook '$0'")
 
 }
 

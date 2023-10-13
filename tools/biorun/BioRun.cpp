@@ -16,12 +16,14 @@ int main(int argc, const char** argv) {
     argParser.addOption("convertonly", "Only convert the notebooks to a report, do not execute notebooks", false);
     argParser.addOption("html", "Export each notebook as an html report", false);
     argParser.addOption("pdf", "Export each notebook as a pdf report.", false);
+    argParser.addOption("report", "Export each notebook as a custom pdf report.", false); //
 
     toolInit.init(argc, argv);
 
     bool quiet = false;
     bool exportHTML = false;
     bool exportPDF = false;
+    bool generateReport = false;
     bool execNotebooks = true;
 
     for (const auto& option : argParser.options()) {
@@ -32,9 +34,11 @@ int main(int argc, const char** argv) {
             exportHTML = true;
         } else if (optName == "pdf") {
             exportPDF = true;
+        } else if (optName == "report") {
+            generateReport = true;
         } else if (optName == "convertonly") {
             execNotebooks = false;
-        }
+        } 
     }
 
     // Run notebooks
@@ -43,6 +47,7 @@ int main(int argc, const char** argv) {
     notebookRunner.setExecEnabled(execNotebooks);
     notebookRunner.setExportHTML(exportHTML);
     notebookRunner.setExportPDF(exportPDF);
+    notebookRunner.setGenerateReport(generateReport);
 
     for (const auto& arg : argParser.args()) {
         notebookRunner.addNotebook(arg);

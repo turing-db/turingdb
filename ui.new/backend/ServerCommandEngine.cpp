@@ -1,11 +1,15 @@
 #include "ServerCommandEngine.h"
 
-#include "BioLog.h"
 #include "BioserverCommand.h"
 #include "FlaskCommand.h"
-#include "MsgUIServer.h"
 #include "ReactCommand.h"
 #include "ServerCommand.h"
+
+#include "BioLog.h"
+#include "MsgUIServer.h"
+#include "MsgCommon.h"
+
+using namespace Log;
 
 namespace ui {
 
@@ -18,7 +22,9 @@ ServerCommandEngine::ServerCommandEngine(const FileUtils::Path& rootDir)
 
 ServerCommandEngine::~ServerCommandEngine() {
     for (auto& server : _servers) {
-        server.reset();
+        if (server) {
+            server.reset();
+        }
     }
 }
 
@@ -27,18 +33,28 @@ void ServerCommandEngine::run() {
 
     _group = std::make_unique<boost::process::group>();
 
-    auto& flaskCommand = _servers[(uint8_t)ServerType::FLASK];
-    flaskCommand = std::make_unique<FlaskCommand>();
-    flaskCommand->run(_group);
+    try {
+        auto& flaskCommand = _servers[(uint8_t)ServerType::FLASK];
+        flaskCommand = std::make_unique<FlaskCommand>();
+        flaskCommand->run(_group);
+    } catch (const boost::process::process_error& e) {
+        BioLog::log(msg::ERROR_IMPOSSIBLE_TO_RUN_COMMAND() << "flask command");
+        return;
+    }
 
-    auto& bioserverCommand = _servers[(uint8_t)ServerType::BIOSERVER];
-    bioserverCommand = std::make_unique<BioserverCommand>();
-    bioserverCommand->run(_group);
+    try {
+        auto& bioserverCommand = _servers[(uint8_t)ServerType::BIOSERVER];
+        bioserverCommand = std::make_unique<BioserverCommand>();
+        bioserverCommand->run(_group);
+    } catch (const boost::process::process_error& e) {
+        BioLog::log(msg::ERROR_IMPOSSIBLE_TO_RUN_COMMAND() << "bioserver command");
+        return;
+    }
 }
 
 void ServerCommandEngine::runDev() {
 #ifdef TURING_DEV
-    Log::BioLog::log(msg::INFO_STARTING_DEV_UI_SERVER());
+    BioLog::log(msg::INFO_STARTING_DEV_UI_SERVER());
 
     _group = std::make_unique<boost::process::group>();
 
@@ -54,11 +70,12 @@ void ServerCommandEngine::runDev() {
 }
 
 void ServerCommandEngine::terminate() {
-    Log::BioLog::log(msg::INFO_TERMINATING_UI_SERVER());
-    for (auto& server : _servers)
+    BioLog::log(msg::INFO_TERMINATING_UI_SERVER());
+    for (auto& server : _servers) {
         if (server && !server->isDone()) {
             server->terminate();
         }
+    }
 }
 
 ServerType ServerCommandEngine::waitServerDone() {
@@ -87,7 +104,10 @@ int ServerCommandEngine::getReturnCode(ServerType serverType) const {
 }
 
 void ServerCommandEngine::getOutput(ServerType serverType, std::string& output) const {
-    FileUtils::readContent(_servers[(uint8_t)serverType]->getLogFilePath(), output);
+    const auto& server = _servers[(uint8_t)serverType];
+    if (server) {
+        FileUtils::readContent(server->getLogFilePath(), output);
+    }
 }
 
 }
