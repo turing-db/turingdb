@@ -72,6 +72,7 @@ export default function PropertyFilterContainer({
                     renderInput={(params) => (
                         <TextField
                             {...params}
+                            required
                             label="Property"
                             InputProps={{
                                 ...params.InputProps,
@@ -87,6 +88,7 @@ export default function PropertyFilterContainer({
                     )}
                 />
                 <TextField
+                    required
                     id="outlined-controlled"
                     label="Property value"
                     value={displayedValue}

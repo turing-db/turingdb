@@ -121,8 +121,8 @@ bool GMLImport::parseNodeCommand() {
 
     for (const auto& prop : _nodeProperties) {
         if (prop.first != "id") {
-            StringRef propName = _db->getString(std::string(prop.first));
-            PropertyType* pt = _wb.addPropertyType(_nodeType,propName, ValueType::VK_STRING);
+            const StringRef propName = _db->getString(std::string(prop.first));
+            PropertyType* pt = _wb.addPropertyType(_nodeType, propName, ValueType::VK_STRING);
             if (!pt) {
                 pt = _nodeType->getPropertyType(propName);
             }
@@ -205,7 +205,7 @@ bool GMLImport::parseEdgeCommand() {
 
     for (const auto& prop : _edgeProperties) {
         if (prop.first != "id") {
-            StringRef propName = _db->getString(std::string(prop.first));
+            const StringRef propName = _db->getString(std::string(prop.first));
             PropertyType* pt = _wb.addPropertyType(_edgeType, propName, ValueType::VK_STRING);
             if (!pt) {
                 pt = _edgeType->getPropertyType(propName);
