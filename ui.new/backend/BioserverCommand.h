@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ServerCommand.h"
+#include "Command.h"
 
 namespace ui {
 
@@ -10,6 +11,9 @@ public:
     ~BioserverCommand() override;
 
     void run(ProcessGroup& group) override;
+
+private:
+    Command _cmd;
 };
 
 }

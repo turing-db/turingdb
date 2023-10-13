@@ -3,19 +3,21 @@
 namespace ui {
 
 BioserverCommand::BioserverCommand()
-    : ServerCommand("Bioserver")
+    : ServerCommand("Bioserver"),
+    _cmd("bioserver")
 {
 }
 
 BioserverCommand::~BioserverCommand() = default;
 
 void BioserverCommand::run(ProcessGroup& group) {
-    _process = std::make_unique<boost::process::child>(
-        "bioserver",
-        boost::process::std_in.close(),
-        boost::process::std_out > boost::process::null,
-        boost::process::std_err > boost::process::null,
-        *group);
+    const FileUtils::Path currentPath = std::filesystem::current_path();
+    _logFilePath = currentPath / "reports" / "bioserver_cmd.log";
+
+    _cmd.setLogFile(_logFilePath);
+    _cmd.setScriptPath("bioserver.sh");
+    _cmd.setGenerateScript(true);
+    _process = _cmd.runAsync(group);
 }
 
 }

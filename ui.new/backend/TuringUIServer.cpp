@@ -10,12 +10,10 @@ using namespace Log;
 
 namespace ui {
 
-
 TuringUIServer::TuringUIServer(const FileUtils::Path& outDir)
     : _outDir(outDir),
       _engine(new ServerCommandEngine(outDir))
 {
-    const auto sitePath = _outDir / SiteArchive::getSiteDirectoryName();
 }
 
 TuringUIServer::~TuringUIServer() {
