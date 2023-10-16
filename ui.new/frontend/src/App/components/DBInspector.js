@@ -4,12 +4,10 @@ import {
     Box
 } from '@mui/material'
 
-import {
-    NodeTypeFilterContainer,
-    PropertyFilterContainer,
-    NodeFilterContainer,
-    SelectedNodesContainer,
-} from './'
+import NodeTypeFilterContainer from './NodeTypeFilterContainer';
+import PropertyFilterContainer from './PropertyFilterContainer';
+import NodeFilterContainer from './NodeFilterContainer';
+import SelectedNodesContainer from './SelectedNodesContainer';
 
 export default function DBInspector() {
     const [selectedNodeType, setSelectedNodeType] = React.useState(null);

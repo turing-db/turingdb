@@ -9,28 +9,26 @@
   "style": {
     "z-index": "10",
     "content": "data(label)",
+    "background-color" : "data(backgroundColor)",
+    "color": "data(color)",
     "font-size": "12px",
     "font-weight": "normal",
     "text-valign": "bottom",
     "text-halign": "right",
     "background-opacity": 1.0,
-    "background-color" : "rgb(255,255,255)",
     "shape": "hexagon",
     "width": 23.0,
     "height": 20.0,
-    "text-opacity": 1.0,
-    "color": "rgb(204,204,204)"
+    "text-opacity": 1.0
   }
 }, {
   "selector": "node[type=\"neighbor\"]",
   "style": {
     "font-size": "12px",
     "background-opacity": 1.0,
-    "background-color" : "rgb(155,155,155)",
     "width": 12.0,
     "height": 10.0,
-    "text-opacity": 1.0,
-    "color": "rgb(164,164,164)"
+    "text-opacity": 1.0
   }
 }, {
   "selector": "node[?query]",
@@ -54,22 +52,20 @@
     "text-halign": "right",
     "curve-style": "bezier",
     "target-arrow-shape": "triangle",
-    "target-arrow-color": "rgb(0,193,0)",
+    "target-arrow-color": "data(lineColor)",
+    "line-color": "data(lineColor)",
     "arrow-scale": 1,
     "text-opacity": 1.0,
-    "color": "rgb(30,100,50)",
+    "color": "data(lineColor)",
     "font-size": 12,
     "width": 2.0,
-    "line-color": "rgb(0,153,0)",
     "line-style": "solid",
     "text-wrap": "wrap"
   }
 }, {
   "selector": "edge[type=\"neighbor\"]",
   "style": {
-    "width": 1.0,
-    "target-arrow-color": "rgb(0,140,0)",
-    "line-color": "rgb(0, 80, 0)"
+    "width": 1.0
   }
 }, {
   "selector": "node.unhighlighted",

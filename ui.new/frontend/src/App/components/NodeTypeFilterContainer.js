@@ -5,7 +5,7 @@ import { Autocomplete, CircularProgress, TextField } from '@mui/material'
 
 import BorderedContainer from './BorderedContainer'
 import { BorderedContainerTitle } from './BorderedContainer'
-import { useQuery } from '../App/queries'
+import { useQuery } from '../queries'
 import { useSelector } from 'react-redux'
 
 export default function NodeTypeFilterContainer({ selected, setSelected }) {

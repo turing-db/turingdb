@@ -1,7 +1,7 @@
 import axios from 'axios'
 import * as actions from './actions'
 
-export const getNodes = (dbName, allIds, params) => async (dispatch, getState) => {
+export const getNodes = (dbName, allIds, params = {}) => async (dispatch, getState) => {
     if (!params.yield_edges) {
         const rawNodes = await dispatch(fetchNodes(dbName, { ids: allIds, ...params }));
         return Object.fromEntries(rawNodes.map(n => [n.id, n]));
@@ -28,7 +28,7 @@ export const fetchNodes = (dbName, filters) => async (dispatch) => {
         })
         .then(res => {
             if (res.data.error) {
-                return []
+                return res.data;
             }
 
             if (filters.yield_edges) // Store nodes only if the info is complete
@@ -70,7 +70,7 @@ export const fetchEdges = (dbName, filters) => async (dispatch) => {
 }
 
 export const inspectNode = (dbName, nodeId) => async (dispatch) => {
-    if (!nodeId) {
+    if (nodeId === null) {
         dispatch(actions.inspectNode(null));
         return;
     }

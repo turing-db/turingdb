@@ -5,11 +5,11 @@ import axios from 'axios'
 import BorderedContainer, { BorderedContainerTitle } from './BorderedContainer';
 import NodeChip from './NodeChip';
 import NodeStack from './NodeStack';
-import * as actions from '../App/actions'
+import * as actions from '../actions'
 import { useDispatch, useSelector } from 'react-redux';
-import * as thunks from '../App/thunks'
-import { useQuery } from '../App/queries'
-import { Secondary } from '../Components/Span'
+import * as thunks from '../thunks'
+import { useQuery } from '../queries'
+import { Secondary } from './Span'
 
 const containerHeight = "25vh";
 const edgeCountLim = 40;

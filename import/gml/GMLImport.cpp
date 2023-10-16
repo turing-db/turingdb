@@ -2,7 +2,9 @@
 
 #include "DB.h"
 #include "NodeType.h"
+#include "EdgeType.h"
 #include "Node.h"
+#include "Edge.h"
 #include "Property.h"
 #include "Writeback.h"
 
@@ -119,8 +121,8 @@ bool GMLImport::parseNodeCommand() {
 
     for (const auto& prop : _nodeProperties) {
         if (prop.first != "id") {
-            StringRef propName = _db->getString(std::string(prop.first));
-            PropertyType* pt = _wb.addPropertyType(_nodeType,propName, ValueType::VK_STRING);
+            const StringRef propName = _db->getString(std::string(prop.first));
+            PropertyType* pt = _wb.addPropertyType(_nodeType, propName, ValueType::VK_STRING);
             if (!pt) {
                 pt = _nodeType->getPropertyType(propName);
             }
@@ -135,6 +137,7 @@ bool GMLImport::parseNodeCommand() {
 }
 
 bool GMLImport::parseEdgeCommand() {
+    _edgeProperties.clear();
     _source = std::string_view();
     _target = std::string_view();
 
@@ -200,6 +203,17 @@ bool GMLImport::parseEdgeCommand() {
         return false;
     }
 
+    for (const auto& prop : _edgeProperties) {
+        if (prop.first != "id") {
+            const StringRef propName = _db->getString(std::string(prop.first));
+            PropertyType* pt = _wb.addPropertyType(_edgeType, propName, ValueType::VK_STRING);
+            if (!pt) {
+                pt = _edgeType->getPropertyType(propName);
+            }
+            _wb.setProperty(edge, Property(pt, Value::createString(std::string(prop.second))));
+        }
+    }
+
     _insideEdge = false;
 
     return true;
@@ -255,6 +269,8 @@ bool GMLImport::handleCommand(std::string_view keyword,
             _source = data;
         } else if (keyword == "target") {
             _target = data;
+        } else {
+            _edgeProperties.emplace_back(keyword, data);
         }
     }
 

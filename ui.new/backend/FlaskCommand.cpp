@@ -29,9 +29,9 @@ void FlaskCommand::runDev(ProcessGroup& group) {
 #ifdef TURING_DEV
     // Spawns the flask server with static folder "./" (not used in dev mode)
     const FileUtils::Path currentPath = std::filesystem::current_path();
-    const FileUtils::Path turinguiPath {TURINGUI_BACKEND_SRC_DIR};
+    const FileUtils::Path turinguiPath = FileUtils::Path(TURINGUI_BACKEND_SRC_DIR)
+            / "backend" / "turingui" / "__main__.py";
     _logFilePath = currentPath / "reports" / "turingui.log";
-    turinguiPath = turinguiPath / "backend" / "turingui" / "__main__.py";
 
     _cmd.addArg(turinguiPath);
     _cmd.addArg("./");

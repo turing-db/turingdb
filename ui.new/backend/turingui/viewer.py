@@ -146,8 +146,7 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
                 for n in selected_nodes
                 for id in n.edge_definitions_df[
                     ~n.edge_definitions_df.index.isin(important_edge_ids)
-                ]
-                .index
+                ].index
             ]
             + important_edge_ids
         )
@@ -283,11 +282,14 @@ def init():
     db_name = data.get("db_name")
     hidden_node_ids = [int(id) for id in data.get("hidden_node_ids", [])]
     edge_count_lim = data.get("edge_count_lim", 30)
+    node_property_filter_in = data.get("node_property_filter_in", [])
+    node_property_filter_out = data.get("node_property_filter_out", [])
+
 
     if not db_name:
         return jsonify({"Error": "You need to provide a db_name to start"})
 
-    session.viewer: ViewerSession = ViewerSession()
+    session.viewer = ViewerSession()
     session.viewer.db_name = db_name
     session.viewer.turing: turingdb.Turing = current_app.turing
     session.viewer.db = session.viewer.turing.get_db(db_name)
@@ -302,16 +304,18 @@ def init():
         yield_edges=True,
         max_edge_count=session.viewer.edge_count_lim,
         node_property_filter_out=[
-            turingdb.Property("schemaClass", "InstanceEdit", turingdb.ValueType.STRING),
+            turingdb.Property(propName, propValue, turingdb.ValueType.STRING)
+            for propName, propValue in node_property_filter_out
         ],
         node_property_filter_in=[
-            turingdb.Property("speciesName", "Homo sapiens", turingdb.ValueType.STRING),
+            turingdb.Property(propName, propValue, turingdb.ValueType.STRING)
+            for propName, propValue in node_property_filter_in
         ],
     )
 
     make_network({n.id: n for n in nodes})
 
-    current_app.logger.info(f"Total time: {time.time() - t0:.4f} s")
+    current_app.logger.info(f"Total time of /viewer/init: {time.time() - t0:.4f} s")
     return jsonify(session.viewer.elements)
 
 
@@ -331,4 +335,3 @@ def clear():
     session.viewer = ViewerSession()
     session.viewer.db_name = db_name
     session.viewer.db = db
-

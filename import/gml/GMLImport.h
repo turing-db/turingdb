@@ -31,6 +31,7 @@ private:
     std::string_view _source;
     std::string_view _target;
     std::vector<std::pair<std::string_view, std::string_view>> _nodeProperties;
+    std::vector<std::pair<std::string_view, std::string_view>> _edgeProperties;
     std::unordered_map<size_t, db::Node*> _nodeIDs;
 
     bool parseCommand();

@@ -3,8 +3,8 @@ import axios from 'axios'
 
 import { Autocomplete, CircularProgress, TextField } from '@mui/material'
 import { useDispatch, useSelector } from 'react-redux';
-import { setDbName } from '../App/actions';
-import { useQuery } from '../App/queries'
+import { setDbName } from '../actions';
+import { useQuery } from '../queries'
 
 export default function DBSelector() {
     const dbName = useSelector((state) => state.dbName);

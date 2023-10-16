@@ -220,7 +220,7 @@ static grpc::Status buildRpcNode(const BuildNodeQueryParams& params) {
 }
 
 DBServiceImpl::DBServiceImpl(const DBServerConfig& config)
-    : _config(config) 
+    : _config(config)
 {
     _dbMan = new db::DBManager(_config.getDatabasesPath());
 }
@@ -447,6 +447,18 @@ grpc::Status DBServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
     const db::DB* db = _databases.at(request->db_id());
     reply->mutable_nodes()->Reserve(request->node_ids_size());
 
+    BuildNodeQueryParams buildParams {
+        .dbId = request->db_id(),
+        .rpcNode = nullptr,
+        .node = nullptr,
+        .yieldEdges = request->yield_edges(),
+        .maxEdgeCount = request->max_edge_count(),
+        .nodeTypeFilterOut = request->node_type_filter_out(),
+        .edgeTypeFilterOut = request->edge_type_filter_out(),
+        .propertyFilterOut = request->node_property_filter_out(),
+        .propertyFilterIn = request->node_property_filter_in(),
+    };
+
     for (const auto& id : request->node_ids()) {
         db::Node* node = db->getNode((db::DBIndex)id);
         if (!node) {
@@ -455,17 +467,9 @@ grpc::Status DBServiceImpl::ListNodesByID(grpc::ServerContext* ctxt,
         }
 
         auto n = reply->add_nodes();
-        grpc::Status status = buildRpcNode({
-            .dbId = request->db_id(),
-            .rpcNode = n,
-            .node = node,
-            .yieldEdges = request->yield_edges(),
-            .maxEdgeCount = request->max_edge_count(),
-            .nodeTypeFilterOut = request->node_type_filter_out(),
-            .edgeTypeFilterOut = request->edge_type_filter_out(),
-            .propertyFilterOut = request->node_property_filter_out(),
-            .propertyFilterIn = request->node_property_filter_in(),
-        });
+        buildParams.node = node;
+        buildParams.rpcNode = n;
+        grpc::Status status = buildRpcNode(buildParams);
 
         if (!status.ok()) {
             return status;
