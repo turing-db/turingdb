@@ -4,6 +4,7 @@ import { useQuery } from '../App/queries';
 import * as queries from './queries'
 import * as colors from './colors'
 import * as actions from './actions';
+import { useTheme } from '@emotion/react';
 
 export const useCytoscapeElements = () => {
     const displayedNodeProperty = useSelector(state => state.displayedNodeProperty);
@@ -11,6 +12,7 @@ export const useCytoscapeElements = () => {
     const edgeColors = useSelector(state => state.visualizer.edgeColors);
     const nodeColors = useSelector(state => state.visualizer.nodeColors);
     const rawElements = queries.useElementsQuery();
+    const theme = useTheme();
     const { nodeColorMakers, edgeColorMakers } = colors.useElementColorMakers(rawElements);
 
     const getElementLabel = React.useCallback(el => {
@@ -33,14 +35,14 @@ export const useCytoscapeElements = () => {
 
             if (el.data.type === "selected") {
                 return {
-                    backgroundColor: colorMaker(el.data, colorSet) || "rgb(204,204,204)",
-                    color: colorMaker(el.data, colorSet) || "rgb(240,240,240)"
+                    iconColor: colorMaker(el.data, colorSet) || theme.nodes.selected.icon,
+                    textColor: colorMaker(el.data, colorSet) || theme.nodes.selected.text
                 };
             }
             else { // neighbor
                 return {
-                    backgroundColor: colorMaker(el.data, colorSet) || "rgb(155,155,155)",
-                    color: colorMaker(el.data, colorSet) || "rgb(190,190,190)"
+                    iconColor: colorMaker(el.data, colorSet) || theme.nodes.neighbor.icon,
+                    textColor: colorMaker(el.data, colorSet) || theme.nodes.neighbor.text
                 };
             }
 
@@ -50,11 +52,17 @@ export const useCytoscapeElements = () => {
             const colorMaker = edgeColorMakers[colorSet.mode];
 
             if (el.data.type === "connecting")
-                return { "lineColor": colorMaker(el.data, colorSet) || "rgb(0,193,0)" };
-            else // connecting
-                return { "lineColor": colorMaker(el.data, colorSet) || "rgb(0,130,0)" };
+                return {
+                    lineColor: colorMaker(el.data, colorSet) || theme.edges.connecting.line,
+                    textColor: colorMaker(el.data, colorSet) || theme.edges.connecting.text
+                };
+            else // neighbor
+                return {
+                    lineColor: colorMaker(el.data, colorSet) || theme.edges.neighbor.line,
+                    textColor: colorMaker(el.data, colorSet) || theme.edges.neighbor.text
+                };
         }
-    }, [edgeColorMakers, edgeColors, nodeColorMakers, nodeColors]);
+    }, [edgeColorMakers, edgeColors, nodeColorMakers, nodeColors, theme]);
 
     const data = React.useMemo(() => rawElements.data?.map(el => ({
         ...el,

@@ -1,4 +1,4 @@
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { COLOR_MODES, DISCRETE_COLORS } from './constants'
 import { MenuItem } from '@blueprintjs/core';
 import * as actions from './actions'

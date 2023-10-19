@@ -1,7 +1,7 @@
 import { darkScrollbar } from "@mui/material";
 
 export const themeOptions = {
-    "dark": {
+    dark: {
         components: {
             MuiCssBaseline: {
                 styleOverrides: (themeParam) => ({
@@ -16,12 +16,9 @@ export const themeOptions = {
             },
         },
     },
-    "light": {
+    light: {
         palette: {
             mode: 'light',
-            background: {
-                paper: '#E9F4FF'
-            }
         },
     }
 };

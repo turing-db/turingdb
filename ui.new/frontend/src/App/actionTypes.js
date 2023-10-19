@@ -1,4 +1,6 @@
 export const CLEAR = "CLEAR";
+
+export const SET_THEME_MODE = "SET_THEME_MODE";
 export const SET_PAGE = "SET_PAGE";
 
 export const INSPECT_NODE = "INSPECT_NODE";
