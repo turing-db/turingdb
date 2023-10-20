@@ -31,26 +31,83 @@ function Page() {
     }
 }
 
-export default function App() {
-    const theme = createTheme(themeOptions.dark);
+const useTheme = (options) => {
+    const themeMode = useSelector(state => state.themeMode);
+    return React.useMemo(() => {
+        const theme = createTheme(options[themeMode]);
+        themeMode === "light"
+            ? (() => { // Light
+                theme.nodes = {
+                    selected: {
+                        icon: theme.palette.secondary.dark,
+                        text: theme.palette.secondary.dark,
+                    },
+                    neighbor: {
+                        icon: theme.palette.info.light,
+                        text: theme.palette.info.light,
+                    }
+                };
+                theme.edges = {
+                    connecting: {
+                        line: theme.palette.secondary.dark,
+                        text: theme.palette.secondary.dark,
+                    },
+                    neighbor: {
+                        line: theme.palette.info.light,
+                        text: theme.palette.info.light,
+                    }
+                };
+            })()
+            : (() => { // Dark
+                theme.nodes = {
+                    selected: {
+                        icon: "rgb(204,204,204)",
+                        text: "rgb(204,204,204)",
+                    },
+                    neighbor: {
+                        icon: "rgb(155,155,155)",
+                        text: "rgb(155,155,155)",
+                    }
+                };
+                theme.edges = {
+                    connecting: {
+                        line: "rgb(0,193,0)",
+                        text: "rgb(0,193,0)",
+                    },
+                    neighbor: {
+                        line: "rgb(0,130,0)",
+                        text: "rgb(0,130,0)",
+                    }
+                };
+            })();
+        return theme;
+    }, [options, themeMode])
+}
+
+const ThemedApp = () => {
+    const theme = useTheme(themeOptions);
 
     return <ThemeProvider theme={theme}>
-        <Provider store={store}>
-            <CssBaseline />
-            <Box display="flex" sx={{ flexGrow: 1 }}>
-                <CustomAppBar />
-                <Box component="main" flex={1} sx={{
-                    p: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    minHeight: "100vh"
-                }}>
-                    <DrawerHeader />
-                    <Page />
-                </Box>
+        <CssBaseline />
+        <Box display="flex" sx={{ flexGrow: 1 }}>
+            <CustomAppBar />
+            <Box component="main" flex={1} sx={{
+                p: 0,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: "100vh"
+            }}>
+                <DrawerHeader />
+                <Page />
             </Box>
-        </Provider>
+        </Box>
     </ThemeProvider>;
+}
+
+export default function App() {
+    return <Provider store={store}>
+        <ThemedApp />
+    </Provider>
 }
 
 

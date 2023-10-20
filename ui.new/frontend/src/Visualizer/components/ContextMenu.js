@@ -1,14 +1,14 @@
 import React from 'react';
 import classNames from "classnames";
 
-import { ContextMenu as BPContextMenu, Menu, MenuItem } from '@blueprintjs/core';
+import { ContextMenu as BPContextMenu, Menu, MenuDivider, MenuItem } from '@blueprintjs/core';
 import { useDispatch, useSelector } from "react-redux";
 import { Icon } from "@blueprintjs/core";
 
 import * as actions from "../actions";
 import * as appActions from '../../App/actions';
 import * as thunks from "../../App/thunks";
-import { EDGE_COLOR_MODES } from '../constants';
+import { colorMenuItems } from '../colors';
 
 const NodeContextMenu = (props) => {
     const dispatch = useDispatch();
@@ -33,13 +33,12 @@ const NodeContextMenu = (props) => {
 
     const VerticalLineIcon = () => <Icon
         icon="layout-linear"
-        style={{
-            rotate: "90deg"
-        }}
+        style={{ rotate: "90deg" }}
     />;
 
     return (
         <Menu>
+            <NodeColorContextMenu nodePropertyTypes={props.nodePropertyTypes} cy={props.cy} />
             <MenuItem
                 icon="layout"
                 text="Set layout..."
@@ -74,10 +73,7 @@ const NodeContextMenu = (props) => {
                     }}
                 />
             </MenuItem>
-            <MenuItem
-                text="Select all..."
-                icon="select"
-            >
+            <MenuItem text="Select all..." icon="select">
                 <MenuItem icon="property" text="by same property...">
                     {Object.keys(nodeProps).map(propName =>
                         <MenuItem key={propName} icon="label" text={propName}
@@ -107,6 +103,7 @@ const NodeContextMenu = (props) => {
                 ? <>
                     <MenuItem
                         text="Hide"
+                        intent="danger"
                         icon="graph-remove"
                         onClick={() => hideNodes(props.cy.current)}
                     />
@@ -128,7 +125,8 @@ const NodeContextMenu = (props) => {
                 // Neighbors nodes only
                 : <>
                     <MenuItem
-                        text="Add to selection"
+                        text="Add to network"
+                        intent="success"
                         icon="add"
                         onClick={() => {
                             dispatch(thunks.getNodes(dbName, [props.data.id]))
@@ -137,6 +135,7 @@ const NodeContextMenu = (props) => {
                     />
                     <MenuItem
                         text="Hide"
+                        intent="danger"
                         icon="graph-remove"
                         onClick={() => hideNodes(props.cy.current)}
                     />
@@ -146,119 +145,82 @@ const NodeContextMenu = (props) => {
 };
 
 const EdgeColorContextMenu = (props) => {
-    const dispatch = useDispatch();
-
     return (
-        <Menu small>
-            <MenuItem
-                text="Set edge colors..."
-                icon="tint"
-            >
-                <MenuItem
-                    text="None"
-                    icon="cross"
-                    onClick={() => { dispatch(actions.setEdgeColorMode(EDGE_COLOR_MODES.None)) }}
-                />
-                <MenuItem
-                    text="Gradient"
-                    icon="text-highlight"
-                >
-                    <MenuItem
-                        text="Based on property..."
-                        icon="property"
-                    >
-                        {props.edgePropertyTypes.map(propName =>
-                            <MenuItem key={propName} icon="label" text={propName}
-                                onClick={() =>
-                                    dispatch(actions.setEdgeColorMode(
-                                        EDGE_COLOR_MODES.GradientProperty,
-                                        { propTypeName: propName }
-                                    ))
-                                }
-                            />
-                        )}
-                    </MenuItem>
-                </MenuItem>
+        <Menu>
+            <MenuItem text="Set edge colors..." icon="one-to-one">
 
-                <MenuItem
-                    text="Quantitative"
-                    icon="list"
-                >
-                    <MenuItem
-                        text="Based on property..."
-                        icon="property"
-                    >
-                        {props.edgePropertyTypes.map(propName =>
-                            <MenuItem key={propName} icon="label" text={propName}
-                                onClick={() =>
-                                    dispatch(actions.setEdgeColorMode(
-                                        EDGE_COLOR_MODES.QuantitativeProperty,
-                                        { propTypeName: propName }
-                                    ))
-                                }
-                            />
-                        )}
-                    </MenuItem>
-                    <MenuItem
-                        text="Based on edge type"
-                        icon="one-to-one"
-                        onClick={() => { dispatch(actions.setEdgeColorMode(EDGE_COLOR_MODES.EdgeType)) }}
-                    />
-                </MenuItem>
+                <MenuDivider title="General" />
+                <colorMenuItems.EdgeColorContextMenu_None
+                    cy={props.cy.current} />
+
+                <colorMenuItems.EdgeColorContextMenu_Preset
+                    cy={props.cy.current} />
+
+                <MenuDivider title="Gradient" />
+                <colorMenuItems.EdgeColorContextMenu_GradientProperty
+                    cy={props.cy.current}
+                    propertyTypes={props.edgePropertyTypes} />
+
+                <MenuDivider title="Discrete" />
+                <colorMenuItems.EdgeColorContextMenu_DiscreteProperty
+                    cy={props.cy.current}
+                    propertyTypes={props.edgePropertyTypes} />
+                <colorMenuItems.EdgeColorContextMenu_EdgeType
+                    cy={props.cy.current} />
+
             </MenuItem>
         </Menu>
     );
 }
 
-const EdgeContextMenu = () => {
-    return <></>
+const NodeColorContextMenu = (props) => {
+    return (
+        <Menu>
+            <MenuItem text="Set node colors..." icon="graph">
+
+                <MenuDivider title="General" />
+                <colorMenuItems.NodeColorContextMenu_None
+                    cy={props.cy.current} />
+
+                <colorMenuItems.NodeColorContextMenu_Preset
+                    cy={props.cy.current} />
+
+                <MenuDivider title="Gradient" />
+                <colorMenuItems.NodeColorContextMenu_GradientProperty
+                    propertyTypes={props.nodePropertyTypes}
+                    cy={props.cy.current} />
+
+                <MenuDivider title="Discrete" />
+                <colorMenuItems.NodeColorContextMenu_DiscreteProperty
+                    propertyTypes={props.nodePropertyTypes}
+                    cy={props.cy.current} />
+                <colorMenuItems.NodeColorContextMenu_NodeType
+                    cy={props.cy.current} />
+
+            </MenuItem>
+        </Menu>
+    );
+}
+
+const EdgeContextMenu = (props) => {
+    return (
+        <Menu>
+            <EdgeColorContextMenu edgePropertyTypes={props.edgePropertyTypes} cy={props.cy} />
+        </Menu>
+    );
+
 };
 
+const getPropertyTypesFromElements = (elements) => elements
+    .map(e => Object.keys(e.data().properties))
+    .flat()
+    .filter((p, i, arr) => arr.indexOf(p) === i);
+
 const BackgroundContextMenu = (props) => {
-    const dispatch = useDispatch();
-    const dbName = useSelector(state => state.dbName);
-    const edgePropertyTypes = props.cy.current
-        .edges()
-        .map(e => Object.keys(e.data().properties))
-        .flat()
-        .filter((p, i, arr) => arr.indexOf(p) === i);
-
-    const publicationNodeIds = (() => {
-        switch (dbName) {
-            case "reactome":
-                return props.elements
-                    .filter(e => e.group() === "nodes" && e.data().type === "neighbor")
-                    .map(e => e.data())
-                    .filter(e => e.properties.schemaClass === "InstanceEdit")
-                    .map(e => e.id);
-
-            default:
-                return [];
-        }
-    })();
-
-    const nonHomoSapensNodeIds = (() => {
-        switch (dbName) {
-            case "reactome":
-                return props.elements
-                    .filter(e => e.group() === "nodes" && e.data().type === "neighbor")
-                    .map(e => e.data())
-                    .filter(e => e.properties.speciesName && e.properties.speciesName !== "Homo sapiens")
-                    .map(e => e.id);
-            default:
-                return [];
-        }
-
-    })();
-
     return <Menu>
-        <EdgeColorContextMenu edgePropertyTypes={edgePropertyTypes} cy={props.cy} />
-        {publicationNodeIds.length !== 0 &&
-            <MenuItem text="Hide publications" onClick={() =>
-                dispatch(actions.hideNodes(publicationNodeIds))} />}
-        {nonHomoSapensNodeIds.length !== 0 &&
-            <MenuItem text="Hide non Homo sapiens" onClick={() =>
-                dispatch(actions.hideNodes(nonHomoSapensNodeIds))} />}
+        <MenuDivider title="colors" />
+        <EdgeColorContextMenu edgePropertyTypes={props.edgePropertyTypes} cy={props.cy} />
+        <NodeColorContextMenu nodePropertyTypes={props.nodePropertyTypes} cy={props.cy} />
     </Menu>;
 }
 
@@ -266,23 +228,39 @@ const ContextMenu = React.forwardRef((props, ref) => {
     const BaseContextMenu = () => {
         const [data, setData] = React.useState({});
         props.setMenuData.current = setData;
+        const edgePropertyTypes = getPropertyTypesFromElements(props.cy.current?.edges() || []);
+        const nodePropertyTypes = getPropertyTypesFromElements(props.cy.current?.nodes() || []);
 
         return <BPContextMenu
+            style={{zIndex: 9999999999}}
             popoverProps={{
-                modifiers: {
-                    computeStyle: {
-                        gpuAcceleration: false,
-                    }
-                }
+               // modifiers: {
+               //     computeStyle: {
+               //         gpuAcceleration: true, // can cause bugs with icon rendering on chrome
+               //     }
+               // }
             }}
             content={() => {
                 switch (data.group) {
                     case "nodes":
-                        return <NodeContextMenu cy={props.cy} data={data.data} />;
+                        return <NodeContextMenu
+                            cy={props.cy}
+                            data={data.data}
+                            nodePropertyTypes={nodePropertyTypes}
+                        />;
                     case "edges":
-                        return <EdgeContextMenu cy={props.cy} data={data.data} />;
+                        return <EdgeContextMenu
+                            cy={props.cy}
+                            data={data.data}
+                            edgePropertyTypes={edgePropertyTypes}
+                        />;
                     default:
-                        return <BackgroundContextMenu cy={props.cy} elements={data.data} />;
+                        return <BackgroundContextMenu
+                            cy={props.cy}
+                            elements={data.data}
+                            nodePropertyTypes={nodePropertyTypes}
+                            edgePropertyTypes={edgePropertyTypes}
+                        />;
                 }
             }}
         >

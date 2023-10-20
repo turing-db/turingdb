@@ -40,7 +40,17 @@ export const hideNodes = nodeIds => ({
     payload: { nodeIds }
 });
 
-export const setEdgeColorMode = (mode, data = {}) => ({
+export const showNodes = nodeIds => ({
+    type: actions.SHOW_NODES,
+    payload: { nodeIds }
+});
+
+export const setEdgeColorMode = (mode, elementIds = [], data = {}) => ({
     type: actions.SET_EDGE_COLOR_MODE,
-    payload: { mode, data }
+    payload: { mode, elementIds, data }
+})
+
+export const setNodeColorMode = (mode, elementIds = [], data = {}) => ({
+    type: actions.SET_NODE_COLOR_MODE,
+    payload: { mode, elementIds, data }
 })

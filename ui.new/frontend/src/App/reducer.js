@@ -4,6 +4,7 @@ import * as visualizer from '../Visualizer/reducer';
 
 const initialState = () => ({
     page: "Database",
+    themeMode: "dark",
     visualizer: visualizer.initialState(),
     dbName: null,
     inspectedNode: null,
@@ -25,6 +26,16 @@ const initialState = () => ({
 
 const reducers = combineReducers({
     visualizer: visualizer.reducer,
+
+    themeMode: (state = initialState().themeMode, action) => {
+        switch (action.type) {
+            case actions.SET_THEME_MODE: {
+                return action.payload.mode;
+            }
+            default:
+                return state;
+        }
+    },
 
     page: (state = initialState().page, action) => {
         switch (action.type) {

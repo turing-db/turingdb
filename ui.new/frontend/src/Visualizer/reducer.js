@@ -1,5 +1,5 @@
 import * as actions from './actionTypes'
-import { EDGE_COLOR_MODES } from './constants'
+import { COLOR_MODES } from './constants'
 
 export const initialState = () => ({
     cyLayout: {
@@ -34,8 +34,33 @@ export const initialState = () => ({
     edgeLabel: "EdgeType",
     hiddenNodeIds: [],
 
+    nodeColors: {
+        colorSets: {
+            0: { mode: COLOR_MODES.None, data: {} } // Global
+        },
+        mapping: {
+            // filled with 'edgeId: setId' entries
+        },
+        setCount: 1,
+    },
+
+    edgeColors: {
+        colorSets: {
+            0: { mode: COLOR_MODES.None, data: {} } // Global
+        },
+        mapping: {
+            // filled with 'edgeId: setId' entries
+        },
+        setCount: 1,
+    },
+
     edgeColorMode: {
-        mode: EDGE_COLOR_MODES.None,
+        mode: COLOR_MODES.None,
+        data: {},
+    },
+
+    nodeColorMode: {
+        mode: COLOR_MODES.None,
         data: {},
     }
 })
@@ -133,6 +158,14 @@ export const reducer = (state = initialState(), action) => {
                 ].filter((e, i, arr) => arr.indexOf(e) === i)
             };
 
+        case actions.SHOW_NODES:
+            const prev = state.hiddenNodeIds;
+            return {
+                ...state,
+                hiddenNodeIds: prev
+                    .filter(id => !action.payload.nodeIds.includes(parseInt(id)))
+            };
+
         case actions.CLEAR_HIDDEN_NODES: {
             return {
                 ...state,
@@ -140,15 +173,50 @@ export const reducer = (state = initialState(), action) => {
             };
         }
 
-        case actions.SET_EDGE_COLOR_MODE: {
+        case actions.SET_NODE_COLOR_MODE: {
+            const newState = { ...state.nodeColors };
+            const isGlobalAction = action.payload.elementIds.length === 0;
+            const setId = isGlobalAction
+                ? 0 // global set
+                : state.nodeColors.setCount// new colorset;
+            newState.setCount = isGlobalAction
+                ? newState.setCount
+                : newState.setCount + 1;
+            const newSet = { mode: action.payload.mode, data: action.payload.data };
+
+            action.payload.elementIds.forEach(id => newState.mapping[id] = setId);
+            const presentSets = [...new Set([0, ...Object.values(newState.mapping)])];
+            newState.colorSets = Object.fromEntries(presentSets.map(sid => [sid, newState.colorSets[sid]]));
+            newState.colorSets[setId] = newSet;
+
             return {
                 ...state,
-                edgeColorMode: {
-                    mode: action.payload.mode,
-                    data: action.payload.data
-                }
+                nodeColors: { ...newState },
             };
         }
+
+        case actions.SET_EDGE_COLOR_MODE: {
+            const newState = { ...state.edgeColors };
+            const isGlobalAction = action.payload.elementIds.length === 0;
+            const setId = isGlobalAction
+                ? 0 // global set
+                : state.edgeColors.setCount// new colorset;
+            newState.setCount = isGlobalAction
+                ? newState.setCount
+                : newState.setCount + 1;
+            const newSet = { mode: action.payload.mode, data: action.payload.data };
+
+            action.payload.elementIds.forEach(id => newState.mapping[id] = setId);
+            const presentSets = [...new Set([0, ...Object.values(newState.mapping)])];
+            newState.colorSets = Object.fromEntries(presentSets.map(sid => [sid, newState.colorSets[sid]]));
+            newState.colorSets[setId] = newSet;
+
+            return {
+                ...state,
+                edgeColors: { ...newState },
+            };
+        }
+
         default:
             return state;
     }

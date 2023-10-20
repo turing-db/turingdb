@@ -5,6 +5,11 @@ export const clear = () => ({
     payload: { }
 });
 
+export const setThemeMode = (mode) => ({
+    type: actions.SET_THEME_MODE,
+    payload: { mode }
+})
+
 export const setPage = page => ({
     type: actions.SET_PAGE,
     payload: { page },

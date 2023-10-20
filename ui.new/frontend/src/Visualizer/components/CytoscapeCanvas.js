@@ -10,6 +10,7 @@ import euler from 'cytoscape-euler'
 import dagre from 'cytoscape-dagre'
 import nodeHtmlLabel from 'cytoscape-node-html-label';
 import * as actions from '../../App/actions';
+import * as visActions from '../actions';
 import * as thunks from '../../App/thunks';
 import { useDispatch, useSelector } from 'react-redux';
 import { Backdrop, CircularProgress } from '@mui/material';
@@ -142,6 +143,11 @@ const CytoscapeCanvas = (props) => {
             }
 
             else {
+                // If clicked a edge that is not highlighted, make it highlighted
+                if (!target.selected()) {
+                    cy.elements().forEach(e => e.unselect());
+                    target.select();
+                }
                 props.setMenuData.current({ group: "edges", data: target.data() });
             }
 
@@ -178,7 +184,20 @@ const CytoscapeCanvas = (props) => {
                 yield_edges: true
             }))
                 .then(res => {
-                    dispatch(actions.selectNode(res[node.id]));
+                    const n = res[node.id];
+                    const edgeIds = [
+                        ...n.ins,
+                        ...n.outs,
+                    ];
+
+                    dispatch(thunks.getEdges(dbName, edgeIds))
+                        .then(res => {
+                            const nodeIds = Object.values(res)
+                                .map(e => [e.source_id, e.target_id])
+                                .flat();
+                            dispatch(visActions.showNodes(nodeIds));
+                        })
+                    dispatch(actions.selectNode(n));
                 });
         });
 
