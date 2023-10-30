@@ -8,12 +8,12 @@ turing_dir=$1
 
 function build_package() {
 	# Build turing package
-	docker run -it -v $turing_dir:/home/dev/turing $turing_img /home/dev/turing/release/scripts/build_package.sh
+	docker run -it --user root -v $turing_dir:/home/dev/turing $turing_img /home/dev/turing/release/scripts/build_package.sh
 	error=$?
 
 	if [ ! "$error" == "0" ] ; then
 		echo 'Build failed'
-		docker run -it -v $turing_dir:/home/dev/turing $turing_img bash
+		docker run -it --user root -v $turing_dir:/home/dev/turing $turing_img bash
 		exit 1
 	fi
 
@@ -30,6 +30,8 @@ function build_package() {
 	rm -rf $package_name/lib/python/turing/db
 
 	cp -r build/turing_package/notebooks $package_name/notebooks
+	cp -r build/turing_package/scripts $package_name/scripts
+	cp -r build/turing_package/neo4j $package_name/neo4j
 
 	# Create package archive
 	tar -czvf $package_name.tar.gz $package_name

@@ -2,8 +2,8 @@
 
 set -e
 
-build_dir=$HOME/turing/release/build
-package_dir=$HOME/turing/release/build/turing_package
+build_dir=/home/dev/turing/release/build
+package_dir=/home/dev/turing/release/build/turing_package
 
 source /turing/setup.sh
 printenv
