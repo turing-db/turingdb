@@ -45,6 +45,9 @@ bool Command::run() {
         return false;
     }
 
+    if (_verbose) {
+        BioLog::echo("Executing command "+bashCmd);
+    }
     _returnCode = system(bashCmd.c_str());
     return true;
 }
@@ -175,6 +178,6 @@ void Command::getBashCmd(std::string& bashCmd, bool async) {
 
         bashCmd += _scriptPath.string();
     } else {
-        bashCmd += "-c \"" + cmdStr + "\"";
+        bashCmd += "-c '" + cmdStr + "'";
     }
 }

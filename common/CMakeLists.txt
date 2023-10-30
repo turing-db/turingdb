@@ -7,6 +7,7 @@ set(common_sources
         BioAssert.cpp
         TimerStat.cpp
         PerfStat.cpp
+        ProcessUtils.cpp
         Report.cpp)
 
 add_library(common_s STATIC ${common_sources})

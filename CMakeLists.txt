@@ -1,5 +1,5 @@
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.6)
 
 project(biodesigner)
 
@@ -83,6 +83,7 @@ set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${BIO_SOURCE_DIR})
 
 enable_testing()
+include(Regress)
 
 add_subdirectory(external)
 add_subdirectory(build)

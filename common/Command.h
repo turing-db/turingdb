@@ -22,6 +22,7 @@ public:
     void setGenerateScript(bool enable) { _generateScript = enable; }
     void setWriteLogFile(bool enable) { _writeLogFile = enable; }
     void setWriteOnStdout(bool enable) { _stdoutEnabled = enable; }
+    void setVerbose(bool verbose) { _verbose = verbose; }
 
     void addArg(const std::string& arg);
 
@@ -41,6 +42,7 @@ private:
     bool _generateScript {true};
     bool _writeLogFile {true};
     bool _stdoutEnabled {false};
+    bool _verbose {false};
     int _returnCode {-1};
 
     bool searchCmd();

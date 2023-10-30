@@ -121,6 +121,8 @@ void RegressTesting::runTests() {
     populateRunQueue();
 
     while (!_runningTests.empty()) {
+        _ioContext.poll();
+
         // Check if a job is finished
         auto it = _runningTests.begin();
         while (it != _runningTests.end()) {
@@ -131,6 +133,7 @@ void RegressTesting::runTests() {
                 const auto toBeRemoved = it;
                 ++it;
                 _runningTests.erase(toBeRemoved);
+                delete job;
             } else {
                 it++;
             }
@@ -202,19 +205,35 @@ void RegressTesting::populateRunQueue() {
             continue;
         }
 
+        // Register timer
+        createTimerForJob(job);
+
         _runningTests.push_back(job);
         jobRank++;
     }
 }
 
 void RegressTesting::processTestTermination(RegressJob* job) {
+    job->wait();
+
     const int exitCode = job->getExitCode();
     const auto& path = job->getPath();
     if (exitCode == 0) {
         BioLog::echo("Pass: "+path.string());
         _testSuccess.emplace_back(path);
+        cleanDir(path);
     } else {
         BioLog::echo("Fail: "+path.string());
         _testFail.emplace_back(path);
     }
+}
+
+void RegressTesting::createTimerForJob(RegressJob* job) {
+    const auto interval = boost::posix_time::seconds(_timeout);
+    auto timer = std::make_unique<boost::asio::deadline_timer>(_ioContext, interval);
+    timer->async_wait([job](const boost::system::error_code& error){
+        BioLog::echo("Timeout: "+job->getPath().string());
+        job->terminate();
+    });
+    job->setTimer(std::move(timer));
 }

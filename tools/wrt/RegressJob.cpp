@@ -1,8 +1,10 @@
 #include "RegressJob.h"
 
-#include "Command.h"
-
+#include <signal.h>
 #include <boost/process.hpp>
+
+#include "Command.h"
+#include "ProcessUtils.h"
 
 #include "BioLog.h"
 #include "MsgCommon.h"
@@ -42,5 +44,24 @@ bool RegressJob::isRunning() {
 }
 
 int RegressJob::getExitCode() const {
+    if (!_process) {
+        return -1;
+    }
     return _process->exit_code();
+}
+
+void RegressJob::terminate() {
+    if (_process) {
+        if (!ProcessUtils::killAllChildren(_process->id(), SIGKILL)) {
+            BioLog::echo("Kill failed");
+        }
+        _process->terminate();
+        _process->wait();
+    }
+}
+
+void RegressJob::wait() {
+    if (_process) {
+        _process->wait();
+    }
 }
