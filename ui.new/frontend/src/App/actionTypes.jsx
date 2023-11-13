@@ -1,0 +1,30 @@
+export const CLEAR = "CLEAR";
+
+export const SET_THEME_MODE = "SET_THEME_MODE";
+export const SET_PAGE = "SET_PAGE";
+
+export const INSPECT_NODE = "INSPECT_NODE";
+export const RESET_INSPECTED_NODE = "RESET_INSPECTED_NODE";
+
+export const SET_DB_NAME = "SET_DB_NAME";
+
+export const CACHE_NODE = "CACHE_NODE";
+export const CACHE_NODES = "CACHE_NODES";
+export const CLEAR_CACHE = "CLEAR_CACHE";
+
+export const CACHE_EDGES = "CACHE_EDGES";
+
+export const SET_SELECTED_NODES = "SET_SELECTED_NODES";
+export const SELECT_NODE = "SELECT_NODE";
+export const SELECT_NODES = "SELECT_NODES";
+export const UNSELECT_NODE = "UNSELECT_NODE";
+export const UNSELECT_NODES = "UNSELECT_NODES";
+export const CLEAR_SELECTED_NODES = "CLEAR_SELECTED_NODES";
+
+export const SET_NODE_LABEL = "SET_NODE_LABEL";
+export const SET_EDGE_LABEL = "SET_EDGE_LABEL";
+
+export const HIDE_NEIGHBOR = "HIDE_NEIGHBOR";
+export const SHOW_NEIGHBOR = "SHOW_NEIGHBOR";
+export const HIDE_NEIGHBORS = "HIDE_NEIGHBORS";
+export const SHOW_NEIGHBORS = "SHOW_NEIGHBORS";

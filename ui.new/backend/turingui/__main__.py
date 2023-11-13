@@ -15,7 +15,7 @@ def run(args):
         __name__,
         static_url_path="",
         static_folder=args.static,
-        template_folder=args.static,
+        template_folder=args.static + "../",
     )
 
     CORS(app)
@@ -40,7 +40,7 @@ def run(args):
                 "<h1>ERROR: you're trying to access a "
                 "dev server with the wrong port</h1>"
             )
-        return render_template("index.html", node_modules_path="../node_modules")
+        return render_template("../index.html", node_modules_path="../node_modules")
 
     @app.route("/api/get_status")
     def get_status():

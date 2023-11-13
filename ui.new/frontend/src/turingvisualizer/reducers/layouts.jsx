@@ -1,0 +1,213 @@
+import React from "react";
+
+export const SET_DEFAULT_CY_LAYOUT = "SET_CY_LAYOUT";
+export const ADD_LAYOUT = "ADD_LAYOUT";
+export const UPDATE_LAYOUT = "UPDATE_LAYOUT";
+export const UPDATE_LAYOUTS = "UPDATE_LAYOUTS";
+export const RESET_LAYOUT = "RESET_LAYOUT";
+export const REQUEST_RUN = "REQUEST_RUN";
+
+export const INIT_EDGE_VAL = 150;
+
+const getEdgeLengthFn = (v) => (edge) => {
+  const sourceExtent = edge.source().connectedEdges().length - 1;
+  const targetExtent = edge.target().connectedEdges().length - 1;
+  const extent = (Math.log(sourceExtent * targetExtent + 1) * v) / 7;
+  return v + extent;
+};
+
+const initialColaLayout = () => ({
+  name: "cola",
+  animate: true,
+  handleDisconnected: true,
+  infinite: false,
+  randomize: false,
+  avoidOverlap: true,
+  maxSimulationTime: 1000,
+  fit: false,
+  centerGraph: false,
+  convergenceThreshold: 0.005,
+  nodeSpacing: 10,
+  nodeDimensionsIncludeLabels: false,
+  edgeLengthVal: INIT_EDGE_VAL,
+  refresh: 1,
+  edgeLength: getEdgeLengthFn(INIT_EDGE_VAL),
+  lineCount: 0,
+});
+
+export const layoutsInitialState = () => ({
+  definitions: {
+    0: initialColaLayout(),
+  }, // Maps the layout definition to a unique id
+  mapping: {}, // Maps the node ids to one of the layout ids
+  layoutCount: 1,
+  runRequested: false,
+});
+
+const useLayoutsReducer = (state, action) => {
+  switch (action.type) {
+    case "CLEAR":
+      return layoutsInitialState();
+
+    case SET_DEFAULT_CY_LAYOUT: {
+      return {
+        ...state,
+        definitions: {
+          ...state.definitions,
+          0: {
+            ...action.payload.cyLayout,
+            edgeLength: getEdgeLengthFn(action.payload.cyLayout.edgeLengthVal),
+          },
+        },
+        runRequested: true,
+      };
+    }
+
+    case ADD_LAYOUT:
+      return {
+        definitions: {
+          ...state.definitions,
+          [state.layoutCount]: action.payload.definition,
+        },
+        mapping: {
+          ...state.mapping,
+          ...Object.fromEntries(
+            action.payload.nodeIds.map((id) => [id, state.layoutCount])
+          ),
+        },
+        layoutCount: state.layoutCount + 1,
+        runRequested: true,
+      };
+
+    case UPDATE_LAYOUT:
+      return {
+        ...state,
+        definitions: {
+          ...state.definitions,
+          [action.payload.layoutId]: {
+            ...state.definitions[action.payload.layoutId],
+            ...action.payload.patch,
+          },
+        },
+      };
+
+    case UPDATE_LAYOUTS:
+      const newState = { ...state };
+      newState.definitions = {
+        ...newState.definitions,
+        ...action.payload.layoutIds.map((lId) => {
+          const patch = action.payload.patches[lId];
+          return {
+            ...newState.definitions[lId],
+            ...patch,
+          };
+        }),
+      };
+      return newState;
+
+    case RESET_LAYOUT: {
+      const newState = {
+        definitions: { ...state.definitions },
+        mapping: { ...state.mapping },
+        layoutCount: state.layoutCount,
+        runRequested: true,
+      };
+
+      for (const id of action.payload.nodeIds) {
+        const layoutId = newState.mapping[id];
+        if (layoutId === undefined || layoutId === 0) continue;
+
+        const layout = newState.definitions[layoutId];
+        delete newState.mapping[id];
+        delete newState.definitions[layoutId].positions[id];
+
+        if (Object.keys(layout.positions).length === 0) {
+          delete newState.definitions[layoutId];
+        }
+      }
+
+      return newState;
+    }
+
+    case REQUEST_RUN: {
+      return {
+        ...state,
+        runRequested: action.payload.request,
+      };
+    }
+
+    default:
+      return state;
+  }
+};
+
+const useLayouts = () => {
+  const [state, dispatch] = React.useReducer(
+    useLayoutsReducer,
+    layoutsInitialState()
+  );
+  const setDefaultCyLayout = React.useCallback(
+    (cyLayout) =>
+      dispatch({
+        type: SET_DEFAULT_CY_LAYOUT,
+        payload: { cyLayout },
+      }),
+    []
+  );
+
+  const addLayout = React.useCallback(
+    (definition, nodeIds) =>
+      dispatch({
+        type: ADD_LAYOUT,
+        payload: { definition, nodeIds },
+      }),
+    []
+  );
+
+  const updateLayout = React.useCallback(
+    (layoutId, patch) =>
+      dispatch({
+        type: UPDATE_LAYOUT,
+        payload: { layoutId, patch },
+      }),
+    []
+  );
+
+  const updateLayouts = React.useCallback(
+    (layoutIds, patchs) =>
+      dispatch({
+        type: UPDATE_LAYOUTS,
+        payload: { layoutIds, patchs },
+      }),
+    []
+  );
+
+  const resetLayout = React.useCallback(
+    (nodeIds) =>
+      dispatch({
+        type: RESET_LAYOUT,
+        payload: { nodeIds },
+      }),
+    []
+  );
+
+  const requestLayoutRun = React.useCallback(
+    (request) =>
+      dispatch({
+        type: REQUEST_RUN,
+        payload: { request },
+      }),
+    []
+  );
+
+  return {
+    layouts: state,
+    setDefaultCyLayout,
+    addLayout,
+    updateLayout,
+    resetLayout,
+    requestLayoutRun,
+  };
+};
+
+export default useLayouts;

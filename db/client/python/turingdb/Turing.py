@@ -9,8 +9,11 @@ import grpc
 class Turing:
     def __init__(self, connection_str):
         self.channel = grpc.insecure_channel(
-            connection_str, options=(("grpc.enable_http_proxy", 0),)
-        )
+            connection_str, options=(
+                ("grpc.enable_http_proxy", 0),
+                ('grpc.max_send_message_length', -1),
+                ('grpc.max_receive_message_length', -1),
+        ))
         self.stub = DBServiceStub(self.channel)
 
     @property
