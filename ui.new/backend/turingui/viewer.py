@@ -29,7 +29,7 @@ def log_time(name):
 
 
 def appearing_more_than_once(ids: list[int]) -> list[int]:
-    counts = pd.Series(ids).value_counts()
+    counts = pd.Series(ids, dtype='int64').value_counts()
     return counts[counts > 1].index.tolist()
 
 
@@ -50,24 +50,26 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
 
     restart_timer()
     for n in selected_nodes:
-        n.edge_definitions = pd.Series(n.in_edge_definitions + n.out_edge_definitions)
+        n.edge_definitions = pd.Series(n.in_edge_definitions + n.out_edge_definitions, dtype='object')
         n.edge_definitions_df = pd.DataFrame(
             {
                 "source_ids": [ed.source_id for ed in n.edge_definitions],
                 "target_ids": [ed.target_id for ed in n.edge_definitions],
             },
             index=[ed.id for ed in n.edge_definitions],
+            dtype='int64'
         )
-        n.selected_in_connections = pd.Series(n.in_node_ids)
+        n.selected_in_connections = pd.Series(n.in_node_ids, dtype='int64')
         n.selected_in_connections = n.selected_in_connections[
             n.selected_in_connections.isin(selected_node_ids)
         ]
-        n.selected_out_connections = pd.Series(n.out_node_ids)
+        n.selected_out_connections = pd.Series(n.out_node_ids, dtype='int64')
         n.selected_out_connections = n.selected_out_connections[
             n.selected_out_connections.isin(selected_node_ids)
         ]
         n.selected_connections = pd.Series(
-            n.selected_in_connections.tolist() + n.selected_out_connections.tolist()
+            n.selected_in_connections.tolist() + n.selected_out_connections.tolist(),
+            dtype='object'
         ).unique()
         n.is_important = n.selected_connections.size > 2
     log_time("making edge definitions in nodes")
@@ -118,10 +120,11 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
     restart_timer()
     all_node_ids = pd.Series(
         all_neighbor_edge_definitions.source_ids.tolist()
-        + all_neighbor_edge_definitions.target_ids.tolist()
+        + all_neighbor_edge_definitions.target_ids.tolist(),
+        dtype='int64'
     )
     all_neighbor_node_ids = all_node_ids[~all_node_ids.isin(selected_node_ids)]
-    important_neighbor_ids = pd.Series([n.id for n in selected_nodes if n.is_important])
+    important_neighbor_ids = pd.Series([n.id for n in selected_nodes if n.is_important], dtype='int64')
 
     # This stores the ids of neighbors that are connected at least twice (not selected)
     # ie, Node ids that we need to keep because important although node might be bloated
@@ -148,7 +151,8 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
                     ~n.edge_definitions_df.index.isin(important_edge_ids)
                 ].index
             ]
-            + important_edge_ids
+            + important_edge_ids,
+            dtype='int64'
         )
         .unique()
         .tolist()
@@ -196,8 +200,10 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
 
     selected_node_elements = [
         {
+            "id": n.id + 1,
             "data": {
-                "id": n.id,
+                "turing_id": n.id,
+                "id": n.id + 1,
                 "node_type_name": n.node_type.name,
                 "properties": {
                     p_name: p_value.value for p_name, p_value in n.properties.items()
@@ -215,8 +221,10 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
 
     neighbor_node_elements = [
         {
+            "id": n.id + 1,
             "data": {
-                "id": n.id,
+                "turing_id": n.id,
+                "id": n.id + 1,
                 "node_type_name": n.node_type.name,
                 "properties": {
                     p_name: p_value.value for p_name, p_value in n.properties.items()
@@ -234,14 +242,18 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
 
     connecting_edge_elements = [
         {
+            "id": -e.id - 1,
             "data": {
+                "turing_id": e.id,
                 "id": -e.id - 1,
                 "edge_type_name": e.edge_type.name,
                 "properties": {
                     p_name: p_value.value for p_name, p_value in e.properties.items()
                 },
-                "source": e.source_id,
-                "target": e.target_id,
+                "turing_source_id": e.source_id,
+                "turing_target_id": e.target_id,
+                "source": e.source_id + 1,
+                "target": e.target_id + 1,
                 "type": "connecting",
             },
             "group": "edges",
@@ -251,14 +263,18 @@ def make_network(selected_nodes: Mapping[int, turingdb.core.Node]):
 
     neighboring_edge_elements = [
         {
+            "id": -e.id - 1,
             "data": {
+                "turing_id": e.id,
                 "id": -e.id - 1,
                 "edge_type_name": e.edge_type.name,
                 "properties": {
                     p_name: p_value.value for p_name, p_value in e.properties.items()
                 },
-                "source": e.source_id,
-                "target": e.target_id,
+                "turing_source_id": e.source_id,
+                "turing_target_id": e.target_id,
+                "source": e.source_id + 1,
+                "target": e.target_id + 1,
                 "type": "neighbor",
             },
             "group": "edges",

@@ -21,7 +21,8 @@ void ReactCommand::runDev(ProcessGroup& group) {
 
     _cmd.addArg("--prefix");
     _cmd.addArg(turinguiPath);
-    _cmd.addArg("start");
+    _cmd.addArg("run");
+    _cmd.addArg("dev");
     _cmd.setLogFile(_logFilePath);
     _cmd.setGenerateScript(false);
     _process = _cmd.runAsync(group);

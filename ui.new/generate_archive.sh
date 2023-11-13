@@ -16,9 +16,8 @@ site_dir=$(readlink -e $1)
 out_dir=$(readlink -e $2)
 archive_path=$out_dir/site.tar
 
-echo $site_dir
-cd $site_dir && ./build.sh $out_dir/site
-cd $out_dir && tar -cf $archive_path site > /dev/null
+cd $site_dir && npm run build
+tar -zcvf $archive_path site
 
 echo "
 #pragma once
@@ -27,5 +26,5 @@ echo "
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 #include \"incbin.h\"
 
-INCBIN(site, \"$archive_path\");
+INCBIN(site, \"./site.tar\");
 " > $out_dir/SiteArchiveData.h

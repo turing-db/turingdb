@@ -25,6 +25,8 @@ bool RPCServer::run() {
     gpr_cpu_set_num_cores(_config.getConcurrency());
 
     grpc::ServerBuilder builder;
+    builder.SetMaxSendMessageSize(-1);
+    builder.SetMaxReceiveMessageSize(-1);
 
     // Configure server address and port
     const std::string addrStr = _config.getAddress() + ":" + std::to_string(_config.getPort());
