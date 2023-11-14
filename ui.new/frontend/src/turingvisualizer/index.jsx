@@ -13,6 +13,7 @@ const useVisualizerReferences = () => {
   const callbacks = React.useRef();
   const triggers = React.useRef({
     elements: { core: {}, secondary: {} },
+    selectedNodeIds: { core: {}, secondary: {} },
     filters: { core: {}, secondary: {} },
     layouts: { core: {}, secondary: {} },
     nodeLabel: { core: {}, secondary: {} },

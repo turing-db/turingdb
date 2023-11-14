@@ -22,12 +22,11 @@ export const useCytoscapeInstance = () => {
       style: style,
     });
 
-    vis.cy().on("onetap", (e) => vis.refs.events.current.onetap(vis, e));
-    vis.cy().on("cxttap", (e) => vis.refs.events.current.cxttap(vis, e));
-    vis
-      .cy()
-      .on("dragfreeon", (e) => vis.refs.events.current.dragfreeon(vis, e));
-    vis.cy().on("dbltap", (e) => vis.refs.events.current.dbltap(vis, e));
+    const evs = vis.refs.events;
+    vis.cy().on("onetap", (e) => evs.current.onetap(vis, e));
+    vis.cy().on("cxttap", (e) => evs.current.cxttap(vis, e));
+    vis.cy().on("dragfreeon", (e) => evs.current.dragfreeon(vis, e));
+    vis.cy().on("dbltap", (e) => evs.current.dbltap(vis, e));
   }, [vis, cytoscapeProps.style]);
 
   return vis.refs.cy;
@@ -99,6 +98,15 @@ const Canvas = () => {
             const l2 = parseInt(lId);
             return l1 === l2;
           });
+
+          const rawAddedElements = Object.fromEntries(
+            toAdd.map((n) => [n.id, n])
+          );
+          const addedElements = c.filter(
+            (n) => rawAddedElements[n.id()] !== undefined
+          );
+          const cyPatchedElements = c.filter((n) => patchedElements[n.id()]);
+
           // If no elements to add or remove, it means the graph did not have
           // any element prior to this operation. Thus, we can center the camera
           const centerGraph = toKeep.length === 0 && toRm.length === 0;
@@ -108,28 +116,39 @@ const Canvas = () => {
           // - run a first layout with the lock
           // - at the end of the run, unlock and re-run
           toKeep.lock();
+          //cyPatchedElements.unlock();
+          addedElements.style({
+            opacity: 0.0,
+          });
 
           const nextLayoutId = it.next().value;
           const nextLayout = layouts.definitions[nextLayoutId];
           const nextLayoutName = nextLayout?.name || "end";
-
-          const toAddIds = toAdd.map((e) => e.id);
-          const toAddCy = c.$id(toAddIds);
 
           const stop = () => {
             toKeep.unlock();
 
             const stop = () =>
               runCallbacks[nextLayoutName](it, nextLayoutId, nextLayout);
-            eles.layout({ ...lDef, stop }).run();
+            eles.layout({ ...lDef, centerGraph, stop }).run();
           };
 
+          const animationTime = 400;
           const layout = eles.layout({
             ...lDef,
-            maxSimulationTime: 50,
-            refresh: 300,
+            maxSimulationTime: animationTime,
+            avoidOverlap: false,
+            refresh: 2,
+            animate: true,
             centerGraph,
+            handleDisconnected: false,
             stop,
+          });
+
+          addedElements.animate({
+            style: { opacity: 1.0 },
+            duration: animationTime + 1000,
+            easing: "ease-in-out-expo",
           });
 
           layout.run();

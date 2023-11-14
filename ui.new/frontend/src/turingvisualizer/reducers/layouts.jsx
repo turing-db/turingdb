@@ -7,13 +7,14 @@ export const UPDATE_LAYOUTS = "UPDATE_LAYOUTS";
 export const RESET_LAYOUT = "RESET_LAYOUT";
 export const REQUEST_RUN = "REQUEST_RUN";
 
-export const INIT_EDGE_VAL = 150;
+export const INIT_EDGE_VAL = 130;
 
 const getEdgeLengthFn = (v) => (edge) => {
+  const connectingMultiplier = (edge.data().type === "connecting") * 0.1 + 1;
   const sourceExtent = edge.source().connectedEdges().length - 1;
   const targetExtent = edge.target().connectedEdges().length - 1;
-  const extent = (Math.log(sourceExtent * targetExtent + 1) * v) / 7;
-  return v + extent;
+  const ratio = 1 / (Math.max(sourceExtent, targetExtent) + 1) * 0.1;
+  return (v + v * ratio) * connectingMultiplier;
 };
 
 const initialColaLayout = () => ({

@@ -156,18 +156,18 @@ export const useCytoscapeElements = (props) => {
   const getElementLabel = useGetElementLabel(props);
   const getElementColors = useGetElementColors(props, elements, theme);
 
-  const data = React.useMemo(
-    () =>
-      elements.map((el) => ({
-        ...el,
-        data: {
-          ...el.data,
-          label: getElementLabel[el.group](el),
-          ...getElementColors(el),
-        },
-      })),
-    [elements, getElementColors, getElementLabel]
-  );
+  const data = React.useMemo(() => {
+    const baseElements = elements.map((el) => ({
+      ...el,
+      data: {
+        ...el.data,
+        label: getElementLabel[el.group](el),
+        ...getElementColors(el),
+      },
+    }));
+
+    return baseElements;
+  }, [elements, getElementColors, getElementLabel]);
 
   previousElements.current = data;
 

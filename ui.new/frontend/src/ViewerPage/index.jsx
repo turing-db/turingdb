@@ -182,7 +182,7 @@ const ViewerPageContent = () => {
   };
 
   useCanvasTrigger({
-    category: "elements",
+    category: "selectedNodeIds",
     name: "setSelectedNodeIds",
 
     callback: () => {
@@ -206,7 +206,7 @@ const ViewerPageContent = () => {
         ).filter((n) => nodeIdsMap[n.id]);
 
         dispatch(
-          thunks.getNodes(dbName, unknownNodeIds, { yield_edges: true })
+          thunks.getNodes(dbName, unknownNodeIds, { yield_edges: false })
         ).then((res) => {
           const unknownNodes = Object.values(res);
           dispatch(

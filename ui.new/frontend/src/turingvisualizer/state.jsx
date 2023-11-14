@@ -51,70 +51,65 @@ const useVisualizerState = (cyStyle) => {
 
   const elements = useCytoscapeElements(vis.refs.state.current);
   vis.refs.state.current.elements = elements;
+  const trig = vis.triggers;
 
   // Core
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.elements.core).forEach((f) => f());
-  }, [vis.refs.triggers, elements]);
+    Object.values(trig().elements.core).forEach((f) => f());
+  }, [trig, elements]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.filters.core).forEach((f) => f());
-  }, [vis.refs.triggers, filters]);
+    Object.values(trig().selectedNodeIds.core).forEach((f) => f());
+  }, [trig, selectedNodeIds]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.layouts.core).forEach((f) => f());
-  }, [vis.refs.triggers, layouts]);
+    Object.values(trig().filters.core).forEach((f) => f());
+  }, [trig, filters]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.nodeLabel.core).forEach((f) => f());
-  }, [vis.refs.triggers, nodeLabel]);
+    Object.values(trig().layouts.core).forEach((f) => f());
+  }, [trig, layouts]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.edgeLabel.core).forEach((f) => f());
-  }, [vis.refs.triggers, edgeLabel]);
+    Object.values(trig().nodeLabel.core).forEach((f) => f());
+  }, [trig, nodeLabel]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.hiddenNodes.core).forEach((f) =>
-      f()
-    );
-  }, [vis.refs.triggers, hiddenNodes]);
+    Object.values(trig().edgeLabel.core).forEach((f) => f());
+  }, [trig, edgeLabel]);
+
+  React.useEffect(() => {
+    Object.values(trig().hiddenNodes.core).forEach((f) => f());
+  }, [trig, hiddenNodes]);
 
   // Secondary
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.elements.secondary).forEach((f) =>
-      f()
-    );
-  }, [vis.refs.triggers, elements]);
+    Object.values(trig().elements.secondary).forEach((f) => f());
+  }, [trig, elements]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.filters.secondary).forEach((f) =>
-      f()
-    );
-  }, [vis.refs.triggers, filters]);
+    Object.values(trig().selectedNodeIds.secondary).forEach((f) => f());
+  }, [trig, selectedNodeIds]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.layouts.secondary).forEach((f) =>
-      f()
-    );
-  }, [vis.refs.triggers, layouts]);
+    Object.values(trig().filters.secondary).forEach((f) => f());
+  }, [trig, filters]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.nodeLabel.secondary).forEach((f) =>
-      f()
-    );
-  }, [vis.refs.triggers, nodeLabel]);
+    Object.values(trig().layouts.secondary).forEach((f) => f());
+  }, [trig, layouts]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.edgeLabel.secondary).forEach((f) =>
-      f()
-    );
-  }, [vis.refs.triggers, edgeLabel]);
+    Object.values(trig().nodeLabel.secondary).forEach((f) => f());
+  }, [trig, nodeLabel]);
 
   React.useEffect(() => {
-    Object.values(vis.refs.triggers.current.hiddenNodes.secondary).forEach(
-      (f) => f()
-    );
-  }, [vis.refs.triggers, hiddenNodes]);
+    Object.values(trig().edgeLabel.secondary).forEach((f) => f());
+  }, [trig, edgeLabel]);
+
+  React.useEffect(() => {
+    Object.values(trig().hiddenNodes.secondary).forEach((f) => f());
+  }, [trig, hiddenNodes]);
 
   vis.refs.callbacks.current = {
     setSelectedNodeIds: (ids) => setSelectedNodeIds(ids),
