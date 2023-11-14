@@ -24,7 +24,8 @@ void ReactCommand::runDev(ProcessGroup& group) {
     _cmd.addArg("run");
     _cmd.addArg("dev");
     _cmd.setLogFile(_logFilePath);
-    _cmd.setGenerateScript(false);
+    _cmd.setScriptPath("npm_run_dev.sh");
+    _cmd.setGenerateScript(true);
     _process = _cmd.runAsync(group);
 #endif
 }

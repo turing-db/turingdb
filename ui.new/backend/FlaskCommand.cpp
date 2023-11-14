@@ -21,6 +21,7 @@ void FlaskCommand::run(ProcessGroup& group) {
     _cmd.addArg("turingui");
     _cmd.addArg(staticFolder);
     _cmd.setLogFile(_logFilePath);
+    _cmd.setScriptPath("start_flask.sh");
     _cmd.setGenerateScript(true);
     _process = _cmd.runAsync(group);
 }
@@ -37,7 +38,8 @@ void FlaskCommand::runDev(ProcessGroup& group) {
     _cmd.addArg("./");
     _cmd.addArg("--dev");
     _cmd.setLogFile(_logFilePath);
-    _cmd.setGenerateScript(false);
+    _cmd.setScriptPath("start_flask.sh");
+    _cmd.setGenerateScript(true);
     _process = _cmd.runAsync(group);
 #endif
 }
