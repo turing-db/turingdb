@@ -13,7 +13,7 @@ const getEdgeLengthFn = (v) => (edge) => {
   const connectingMultiplier = (edge.data().type === "connecting") * 0.1 + 1;
   const sourceExtent = edge.source().connectedEdges().length - 1;
   const targetExtent = edge.target().connectedEdges().length - 1;
-  const ratio = 1 / (Math.max(sourceExtent, targetExtent) + 1) * 0.1;
+  const ratio = 1 / (Math.max(sourceExtent, targetExtent) + 1) * 0.8;
   return (v + v * ratio) * connectingMultiplier;
 };
 

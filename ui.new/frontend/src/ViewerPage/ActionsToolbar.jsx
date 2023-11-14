@@ -123,7 +123,19 @@ const ActionsToolbar = (props) => {
       </Tooltip>
 
       <Tooltip title="Fit canvas" arrow>
-        <IconButton {...btnStyle} onClick={() => vis.cy().fit()}>
+        <IconButton
+          {...btnStyle}
+          onClick={() =>
+            vis.cy().animate(
+              {
+                fit: vis.cy().nodes(),
+              },
+              {
+                duration: 600,
+                easing: "ease-in-out-sine",
+              }
+            )
+          }>
           <FitScreenIcon />
         </IconButton>
       </Tooltip>

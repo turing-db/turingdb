@@ -61,7 +61,18 @@ const SearchNodesWindow = () => {
               onClick={() => {
                 vis.cy().elements().unselect();
                 n.select();
-                vis.cy().fit(n, 310);
+                vis.cy().animate(
+                  {
+                    fit: {
+                      eles: n,
+                      padding: 300,
+                    },
+                  },
+                  {
+                    duration: 600,
+                    easing: "ease-in-out-sine",
+                  }
+                );
               }}>
               <Tag minimal style={{ width: "min-content" }}>
                 id [{n.data().turing_id}]
