@@ -178,6 +178,12 @@ MSG_ERROR(ERROR_IMPORT_NO_PATH_GIVEN, 2055,
           "a json dump folder (obtained from a previous bioimport run) with the -jsonNeo4j option, "
           "or a path to a GML file with the -gml option")
 
+MSG_ERROR(ERROR_IMPORT_NET_APPLIED_WITH_WRONG_ORDER, 2056,
+          "Please precede the \"net\" argument with an import option "
+          "(such as -neo4j, -jsonNeo4j, -gml, ...)")
+
+MSG_ERROR(ERROR_NETWORK_ALREADY_EXISTS, 2057,
+          "A network with the same name ($0) already exists")
 }
 
 #endif

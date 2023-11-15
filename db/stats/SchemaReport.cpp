@@ -2,6 +2,7 @@
 
 #include "Report.h"
 
+#include "Network.h"
 #include "DB.h"
 #include "NodeType.h"
 #include "EdgeType.h"
@@ -47,6 +48,15 @@ void SchemaReport::writeReport() {
     Report report(reportPath, "Database Schema Report");
 
     auto& stream = report.getStream();
+
+    // Networks
+    stream << "==== Networks ====\n";
+    for (const Network* net: _db->networks()) {
+        stream << net->getName().toStdString();
+        stream << " (" << net->nodes().size() << " nodes)\n";
+    }
+
+    stream << '\n';
 
     // Node types
     stream << "==== Node Types ====\n";

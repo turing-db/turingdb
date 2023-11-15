@@ -50,6 +50,7 @@ bool EntityDumper::dump() {
     size_t i = 0;
     for (const Network* net : networks) {
         networksBuilder[i].setNameId(net->getName().getID());
+        i++;
     }
 
     const auto& nodes = _db->_nodes;
@@ -218,8 +219,6 @@ bool EntityDumper::dump() {
         edgeCountLeft -= entityCountLimit;
         spanIndex += count;
     }
-
-    i++;
 
     ::capnp::writeMessageToFd(indexFD, message);
     close(indexFD);

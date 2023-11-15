@@ -19,14 +19,15 @@ using namespace Log;
 
 GMLImport::GMLImport(const StringBuffer* buffer,
                      db::DB* db,
-                     db::Network* outNet)
+                     db::Network* outNet,
+                     const std::string& entityPrefix)
     : _lexer(buffer->getData(), buffer->getSize()),
     _db(db),
     _wb(db),
     _outNet(outNet)
 {
-    _nodeType = _wb.createNodeType(db->getString("GenericNode"));
-    _edgeType = _wb.createEdgeType(db->getString("GenericEdge"), _nodeType, _nodeType);
+    _nodeType = _wb.createNodeType(db->getString(entityPrefix + "Node"));
+    _edgeType = _wb.createEdgeType(db->getString(entityPrefix + "Edge"), _nodeType, _nodeType);
 }
 
 GMLImport::~GMLImport() {

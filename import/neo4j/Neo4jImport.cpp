@@ -19,7 +19,7 @@ Neo4jImport::Neo4jImport(db::DB* db, const Path& outDir)
 Neo4jImport::~Neo4jImport() {
 }
 
-bool Neo4jImport::importNeo4j(const Path& filepath) {
+bool Neo4jImport::importNeo4j(const Path& filepath, const std::string& networkName) {
     BioLog::log(msg::INFO_NEO4J_IMPORT_DUMP_FILE() << filepath.string());
     TimerStat timer {"Neo4j: import"};
 
@@ -41,7 +41,7 @@ bool Neo4jImport::importNeo4j(const Path& filepath) {
     }
 
     // Initialization of the parser
-    JsonParser parser(_db);
+    JsonParser parser(_db, networkName);
     parser.setReducedOutput(true);
     const JsonParsingStats& stats = parser.getStats();
 
@@ -187,7 +187,7 @@ bool Neo4jImport::importNeo4j(const Path& filepath) {
     return true;
 }
 
-bool Neo4jImport::importJsonNeo4j(const Path& jsonDir) {
+bool Neo4jImport::importJsonNeo4j(const Path& jsonDir, const std::string& networkName) {
     BioLog::log(msg::INFO_NEO4J_IMPORT_JSON_FILES() << jsonDir.string());
     TimerStat timer {"Neo4j: import"};
 
@@ -201,7 +201,7 @@ bool Neo4jImport::importJsonNeo4j(const Path& jsonDir) {
     }
 
     // Initialization of the parser
-    JsonParser parser(_db);
+    JsonParser parser(_db, networkName);
     parser.setReducedOutput(true);
     const JsonParsingStats& stats = parser.getStats();
 

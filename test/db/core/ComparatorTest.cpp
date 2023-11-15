@@ -436,8 +436,8 @@ TEST_F(ComparatorTest, DBComparison) {
     Writeback wb2 {db2};
     ASSERT_TRUE(DBComparator::same(db1, db2));
 
-    Network* net1 = db1->getNetwork(db1->getString("Neo4jNetwork"));
-    Network* net2 = db2->getNetwork(db2->getString("Neo4jNetwork"));
+    Network* net1 = db1->getNetwork(db1->getString("cyber-security-db"));
+    Network* net2 = db2->getNetwork(db2->getString("cyber-security-db"));
     ASSERT_TRUE(net1);
     ASSERT_TRUE(net2);
 
@@ -485,4 +485,17 @@ TEST_F(ComparatorTest, DBComparison) {
 
     delete db1;
     delete db2;
+}
+
+TEST_F(ComparatorTest, MultiNetComparison) {
+    DB* db1 = getMultiNetNeo4j4DB({"cyber-security-db", "network-db"});
+    DB* db2 = getMultiNetNeo4j4DB({"cyber-security-db", "network-db"});
+    DB* db3 = getMultiNetNeo4j4DB({"cyber-security-db"});
+
+    ASSERT_TRUE(DBComparator::same(db1, db2));
+    ASSERT_FALSE(DBComparator::same(db1, db3));
+
+    delete db1;
+    delete db2;
+    delete db3;
 }

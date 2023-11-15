@@ -22,7 +22,10 @@ void ToolInit::init(int argc, const char** argv) {
     BioLog::init();
 
     // Option to change the output directory
-    _argParser.addOption("o", "Changes the default output directory", true);
+    _argParser.addOption(
+        "o",
+        "Changes the default output directory",
+        "output_dir");
     _argParser.parse(argc, argv);
 
     for (const auto& option : _argParser.options()) {

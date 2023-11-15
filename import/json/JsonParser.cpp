@@ -5,8 +5,9 @@
 #include "Neo4j4JsonParser.h"
 #include <regex>
 
-JsonParser::JsonParser(db::DB* db)
+JsonParser::JsonParser(db::DB* db, const std::string& networkName)
     : _db(db),
+      _networkName(networkName),
       _neo4j4Parser(_db, _stats)
 {
 }
@@ -37,7 +38,7 @@ bool JsonParser::parse(const std::string& data, FileFormat format) {
             case FileFormat::Neo4j4_Nodes:
                 Log::BioLog::log(msg::INFO_JSON_DISPLAY_NODES_STATUS()
                                  << _stats.parsedNodes << _stats.nodeCount);
-                return _neo4j4Parser.parseNodes(data);
+                return _neo4j4Parser.parseNodes(data, _networkName);
 
             case FileFormat::Neo4j4_EdgeProperties:
                 return _neo4j4Parser.parseEdgeProperties(data);

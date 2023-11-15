@@ -237,9 +237,9 @@ bool Neo4j4JsonParser::parseNodeProperties(const std::string& data) {
     return true;
 }
 
-bool Neo4j4JsonParser::parseNodes(const std::string& data) {
+bool Neo4j4JsonParser::parseNodes(const std::string& data, const std::string& networkName) {
     TimerStat timer {"JSON Parser: parsing Neo4J nodes"};
-    db::Network* net = getOrCreateNetwork();
+    db::Network* net = getOrCreateNetwork(networkName);
 
     if (!_reducedOutput) {
         Log::BioLog::log(msg::INFO_NEO4J_READING_NODES());
@@ -525,16 +525,16 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
     return true;
 }
 
-inline db::Network* Neo4j4JsonParser::getOrCreateNetwork() {
-    const db::StringRef netName = _db->getString("Neo4jNetwork");
-    db::Network* net = _wb->createNetwork(netName);
+db::Network* Neo4j4JsonParser::getOrCreateNetwork(const std::string& netName) {
+    const db::StringRef name = _db->getString(netName);
+    db::Network* net = _wb->createNetwork(name);
     if (!net) {
-        net = _db->getNetwork(netName);
+        net = _db->getNetwork(name);
     }
     return net;
 }
 
-inline db::NodeType* Neo4j4JsonParser::getOrCreateNodeType(db::StringRef name) {
+db::NodeType* Neo4j4JsonParser::getOrCreateNodeType(db::StringRef name) {
     db::NodeType* obj = _wb->createNodeType(name);
     if (!obj) {
         obj = _db->getNodeType(name);

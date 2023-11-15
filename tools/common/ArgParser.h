@@ -16,8 +16,10 @@ public:
 
     void setArgsDesc(const std::string& desc);
     void addOption(const std::string& optionName,
+                   const std::string& desc);
+    void addOption(const std::string& optionName,
                    const std::string& desc,
-                   bool expectsArg);
+                   const std::string& argName);
     void printHelp() const;
     bool isOptionSet(const std::string& optionName) const;
 
@@ -28,21 +30,15 @@ public:
 
 private:
     struct Option {
-        Option(const std::string& desc, bool expectsArg)
-            : _desc(desc),
-            _expectArg(expectsArg)
-        {
-        }
-
-        Option() = default;
-
-        std::string _desc;
-        bool _expectArg {false};
+        std::string desc;
+        std::string argName;
+        bool expectsArg {false};
     };
 
     std::string _toolName;
     std::string _argsDesc;
     std::map<std::string, Option> _optionMap;
+    size_t _maxOptionSize = 0;
     Options _options;
     Args _args;
 
