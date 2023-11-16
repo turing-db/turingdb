@@ -24,7 +24,7 @@ private:
 
     bool parseStats(const std::string& data);
     bool parseNodeProperties(const std::string& data);
-    bool parseNodes(const std::string& data);
+    bool parseNodes(const std::string& data, const std::string& networkName);
     bool parseEdgeProperties(const std::string& data);
     bool parseEdges(const std::string& data);
 
@@ -39,6 +39,6 @@ private:
     std::unordered_map<size_t, db::DBIndex> _nodeIdMap;
     bool _reducedOutput = false;
 
-    db::Network* getOrCreateNetwork();
+    db::Network* getOrCreateNetwork(const std::string& netName);
     db::NodeType* getOrCreateNodeType(db::StringRef name);
 };

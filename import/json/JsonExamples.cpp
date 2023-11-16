@@ -10,12 +10,11 @@
 
 db::DB* getNeo4j4DB(const std::string& dbName) {
     db::DB* db = db::DB::create();
-    JsonParser parser(db);
+    JsonParser parser(db, dbName);
     parser.setReducedOutput(true);
 
     std::string turingHome = std::getenv("TURING_HOME");
-    const FileUtils::Path jsonDir = FileUtils::Path {turingHome}  /
-                                    "neo4j" / dbName;
+    const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / dbName;
 
     if (!FileUtils::exists(jsonDir)) {
         Log::BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS() << jsonDir);
@@ -25,6 +24,30 @@ db::DB* getNeo4j4DB(const std::string& dbName) {
 
     if (!parser.parseJsonDir(jsonDir, JsonParser::DirFormat::Neo4j4)) {
         return nullptr;
+    }
+
+    return db;
+}
+
+db::DB* getMultiNetNeo4j4DB(std::initializer_list<std::string> dbNames) {
+    db::DB* db = db::DB::create();
+
+    for (const auto& dbName : dbNames) {
+        JsonParser parser(db, dbName);
+        parser.setReducedOutput(true);
+
+        std::string turingHome = std::getenv("TURING_HOME");
+        const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / dbName;
+
+        if (!FileUtils::exists(jsonDir)) {
+            Log::BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS() << jsonDir);
+            std::cout << std::flush;
+            return nullptr;
+        }
+
+        if (!parser.parseJsonDir(jsonDir, JsonParser::DirFormat::Neo4j4)) {
+            return nullptr;
+        }
     }
 
     return db;

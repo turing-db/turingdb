@@ -26,16 +26,14 @@ int main(int argc, const char** argv) {
     ToolInit toolInit(BIOCAULDRON_TOOL_NAME);
 
     ArgParser& argParser = toolInit.getArgParser();
-    argParser.addOption("dev",
-                        "Use a developpment environment instead of production",
-                        false);
+    argParser.addOption("dev", "Use a developpment environment instead of production");
     toolInit.init(argc, argv);
 
     const bool startDevRequested = argParser.isOptionSet("dev");
 
     // Create server
     server = std::make_unique<TuringUIServer>(toolInit.getOutputsDir());
-    
+
     // Install signal handler to handle ctrl+C
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);

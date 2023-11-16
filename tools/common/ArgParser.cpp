@@ -2,10 +2,15 @@
 
 #include <cassert>
 #include <iostream>
-#include <stdlib.h>
-#include <string>
+#include <sstream>
+#include <cstdlib>
 
+#define INDENT_SIZE 4
 #define INDENT "    "
+
+std::string indent(size_t spaceCount) {
+    return std::string(spaceCount, ' ');
+}
 
 ArgParser::ArgParser(const std::string& toolName)
     : _toolName(toolName)
@@ -20,9 +25,19 @@ void ArgParser::setArgsDesc(const std::string& desc) {
 }
 
 void ArgParser::addOption(const std::string& optionName,
+                          const std::string& desc) {
+    _optionMap[optionName] = Option {
+        .desc = desc,
+        .expectsArg = false,
+    };
+    _maxOptionSize = std::max(optionName.size(), _maxOptionSize);
+}
+
+void ArgParser::addOption(const std::string& optionName,
                           const std::string& desc,
-                          bool expectsArg) {
-    _optionMap[optionName] = Option(desc, expectsArg);
+                          const std::string& argName) {
+    _optionMap[optionName] = Option {desc, argName, true};
+    _maxOptionSize = std::max(optionName.size() + argName.size(), _maxOptionSize);
 }
 
 bool ArgParser::isOptionSet(const std::string& optionName) const {
@@ -30,7 +45,8 @@ bool ArgParser::isOptionSet(const std::string& optionName) const {
                         _options.cend(),
                         [&](const auto& opt) {
                             return opt.first == optionName;
-                        }) != _options.end();
+                        })
+        != _options.end();
 }
 
 void ArgParser::parse(int argc, const char** argv) {
@@ -60,7 +76,7 @@ void ArgParser::parse(int argc, const char** argv) {
                     handleUnknownOption(optionName);
                 }
 
-                const bool expectsArg = foundIt->second._expectArg;
+                const bool expectsArg = foundIt->second.expectsArg;
                 if (expectsArg) {
                     inOption = true;
                 } else {
@@ -79,23 +95,46 @@ void ArgParser::parse(int argc, const char** argv) {
 }
 
 void ArgParser::printHelp() const {
-    std::cout << "Usage:\n";
-    std::cout << INDENT << _toolName << " [options]";
+    // indentSize corresponds to format:
+    // "    -OPTION [ARG] "
+    size_t indentSize = 1 + _maxOptionSize + 6;
+    std::stringstream content;
+    content << "Usage:\n";
+    content << INDENT << _toolName << " [options]";
 
     if (!_argsDesc.empty()) {
-        std::cout << " " << _argsDesc;
+        content << " " << _argsDesc;
     }
 
-    std::cout << "\n\n";
-    std::cout << "Options:\n";
-    std::cout << INDENT << "-h, -help" << "\t" << "Display this help\n";
+    content << "\n\n";
+    content << "Options:\n";
+    content << INDENT
+            << "-h, -help"
+            << indent(indentSize - 10)
+            << "Display this help\n";
 
     for (const auto& option : _optionMap) {
-        std::cout << INDENT << "-" << option.first
-                  << INDENT << "\t" << option.second._desc << "\n";
+        size_t printedSize = 0;
+        std::stringstream optionContent;
+        optionContent << INDENT << "-" << option.first;
+        printedSize += 1 + option.first.size() + 1;
+
+        if (option.second.expectsArg) {
+            if (option.second.argName.empty()) {
+                optionContent << " [arg]";
+                printedSize += 6;
+            } else {
+                optionContent << " [" << option.second.argName << "]";
+                printedSize += 3 + option.second.argName.size();
+            }
+        }
+
+        optionContent << indent(indentSize - printedSize) << option.second.desc << "\n";
+        content << optionContent.str();
     }
 
-    std::cout << "\n";
+    content << "\n";
+    std::cout << content.str();
     exit(EXIT_SUCCESS);
 }
 

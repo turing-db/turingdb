@@ -13,9 +13,9 @@ using namespace Log;
 int main(int argc, const char** argv) {
     ToolInit toolInit("wrt");
     ArgParser& argParser = toolInit.getArgParser();
-    argParser.addOption("clean", "Clean all test directories", false);
-    argParser.addOption("timeout", "Maximum running time of a test in seconds", true);
-    argParser.addOption("noclean", "Do not clean test directories", false);
+    argParser.addOption("clean", "Clean all test directories");
+    argParser.addOption("timeout", "Maximum running time of a test", "seconds");
+    argParser.addOption("noclean", "Do not clean test directories");
 
     toolInit.init(argc, argv);
 

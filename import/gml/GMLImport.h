@@ -14,7 +14,8 @@ class GMLImport {
 public:
     GMLImport(const StringBuffer* buffer,
               db::DB* db,
-              db::Network* outNet);
+              db::Network* outNet,
+              const std::string& entityPrefix = "Generic");
     ~GMLImport();
 
     bool run();

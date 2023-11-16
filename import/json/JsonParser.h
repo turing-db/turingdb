@@ -18,7 +18,7 @@ public:
         Neo4j4 = 0,
     };
 
-    JsonParser(db::DB* db);
+    JsonParser(db::DB* db, const std::string& networkName);
 
     bool parseJsonDir(const FileUtils::Path& jsonDir, DirFormat format);
     bool parse(const std::string& data, FileFormat format);
@@ -30,6 +30,7 @@ public:
 
 private:
     db::DB* _db {nullptr};
+    std::string _networkName;
     JsonParsingStats _stats;
     Neo4j4JsonParser _neo4j4Parser;
     bool _reducedOutput = false;

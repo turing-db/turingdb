@@ -12,11 +12,11 @@ int main(int argc, const char** argv) {
 
     ArgParser& argParser = toolInit.getArgParser();
     argParser.setArgsDesc("notebook.ipynb ...");
-    argParser.addOption("q", "Launch the notebooks in quiet mode.", false);
-    argParser.addOption("convertonly", "Only convert the notebooks to a report, do not execute notebooks", false);
-    argParser.addOption("html", "Export each notebook as an html report", false);
-    argParser.addOption("pdf", "Export each notebook as a pdf report.", false);
-    argParser.addOption("report", "Export each notebook as a custom pdf report.", false); //
+    argParser.addOption("q", "Launch the notebooks in quiet mode.");
+    argParser.addOption("convertonly", "Only convert the notebooks to a report, do not execute notebooks");
+    argParser.addOption("html", "Export each notebook as an html report");
+    argParser.addOption("pdf", "Export each notebook as a pdf report.");
+    argParser.addOption("report", "Export each notebook as a custom pdf report.");
 
     toolInit.init(argc, argv);
 

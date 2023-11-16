@@ -39,7 +39,7 @@ void RegressTesting::run() {
     const auto currentDir = FileUtils::cwd();
     
     {
-        TimerStat("Analyze tests");
+        TimerStat timerStat("Analyze tests");
         analyzeDir(currentDir);
         if (_error) {
             BioLog::echo("Some tests have errors, please fix test setup errors and retry.");

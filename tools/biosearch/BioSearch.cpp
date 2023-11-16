@@ -28,7 +28,7 @@ int main(int argc, const char** argv) {
     ToolInit toolInit("biosearch");
 
     ArgParser& argParser = toolInit.getArgParser();
-    argParser.addOption("db", "import a database", true);
+    argParser.addOption("db", "import a database", "db_path");
 
     toolInit.init(argc, argv);
 
