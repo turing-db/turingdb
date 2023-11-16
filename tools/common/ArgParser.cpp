@@ -3,9 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <sstream>
-#include <stdlib.h>
-#include <string>
-#include <ranges>
+#include <cstdlib>
 
 #define INDENT_SIZE 4
 #define INDENT "    "
