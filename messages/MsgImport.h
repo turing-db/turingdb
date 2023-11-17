@@ -188,6 +188,18 @@ MSG_ERROR(ERROR_NETWORK_ALREADY_EXISTS, 2057,
 MSG_WARNING(WARNING_COULD_NOT_DEDUCE_NETWORK_NAME, 2058,
           "Could not deduce a name for the network from the path given ($0). Provide one with "
           "the '-net' option. Falling back to the full path")
+
+MSG_ERROR(ERROR_SOURCE_NETWORK_NOT_SPECIFIED, 2059,
+          "Trying to link but missing infos on the source network ($0)")
+
+MSG_ERROR(ERROR_TARGET_NETWORK_NOT_SPECIFIED, 2060,
+          "Trying to link but missing infos on the target network ($0)")
+
+MSG_ERROR(ERROR_SOURCE_NETWORK_NOT_FOUND, 2061,
+          "Trying to link to a source network that does not exist ($0)")
+
+MSG_ERROR(ERROR_TARGET_NETWORK_NOT_FOUND, 2062,
+          "Trying to link to a target network that does not exist ($0)")
 }
 
 #endif

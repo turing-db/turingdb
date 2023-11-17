@@ -173,7 +173,7 @@ int main(int argc, const char** argv) {
                 StringBuffer* strBuffer = StringBuffer::readFromFile(path);
                 Writeback wb(db);
                 db::Network* net = wb.createNetwork(db->getString(networkName));
-                GMLImport gmlImport(strBuffer, db, net, networkName);
+                GMLImport gmlImport(strBuffer, db, net);
                 gmlImport.run();
                 break;
             }

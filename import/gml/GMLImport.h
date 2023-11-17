@@ -14,8 +14,7 @@ class GMLImport {
 public:
     GMLImport(const StringBuffer* buffer,
               db::DB* db,
-              db::Network* outNet,
-              const std::string& entityPrefix = "Generic");
+              db::Network* outNet);
     ~GMLImport();
 
     bool run();
@@ -25,8 +24,6 @@ private:
     db::DB* _db {nullptr};
     db::Writeback _wb;
     db::Network* _outNet {nullptr};
-    db::NodeType* _nodeType {nullptr};
-    db::EdgeType* _edgeType {nullptr};
     bool _insideNode {false};
     bool _insideEdge {false};
     std::string_view _source;
@@ -42,5 +39,6 @@ private:
     bool parseGenericCommand(std::string_view keyword);
     bool parseNodeCommand();
     bool parseEdgeCommand();
+    bool parseDBLinkageCommand(size_t sourceID, size_t targetID);
     db::Node* getNodeFromID(size_t id) const;
 };
