@@ -8,6 +8,7 @@
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
+#include "Writeback.h"
 #include "SchemaReport.h"
 
 #include "PerfStat.h"
@@ -16,7 +17,7 @@
 #include "BioLog.h"
 #include "FileUtils.h"
 #include "MsgImport.h"
-#include "Writeback.h"
+#include "MsgCommon.h"
 
 #define BIOIMPORT_TOOL_NAME "bioimport"
 
@@ -88,18 +89,39 @@ int main(int argc, const char** argv) {
     for (const auto& option : argParser.options()) {
         const auto& optName = option.first;
         if (optName == "db-path") {
+            if (!FileUtils::exists(option.second)) {
+                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
+                            << option.second);
+                return cleanUp(EXIT_FAILURE);
+            }
             turingdbPath = option.second;
         } else if (optName == "neo4j") {
+            if (!FileUtils::exists(option.second)) {
+                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
+                            << option.second);
+                return cleanUp(EXIT_FAILURE);
+            }
+
             importData.emplace_back(ImportData {
                 .type = ImportType::NEO4J,
                 .path = option.second,
             });
         } else if (optName == "json-neo4j") {
+            if (!FileUtils::exists(option.second)) {
+                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
+                            << option.second);
+                return cleanUp(EXIT_FAILURE);
+            }
             importData.emplace_back(ImportData {
                 .type = ImportType::JSON_NEO4J,
                 .path = option.second,
             });
         } else if (optName == "gml") {
+            if (!FileUtils::exists(option.second)) {
+                BioLog::log(msg::ERROR_FILE_NOT_EXISTS()
+                            << option.second);
+                return cleanUp(EXIT_FAILURE);
+            }
             importData.emplace_back(ImportData {
                 .type = ImportType::GML,
                 .path = option.second,
@@ -121,6 +143,11 @@ int main(int argc, const char** argv) {
 
             previousCmd.networkName = option.second;
         } else if (optName == "db") {
+            if (!FileUtils::exists(option.second)) {
+                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
+                            << option.second);
+                return cleanUp(EXIT_FAILURE);
+            }
             existingDbPath = option.second;
         }
     }
@@ -171,6 +198,11 @@ int main(int argc, const char** argv) {
             case ImportType::GML: {
                 const FileUtils::Path path(data.path);
                 StringBuffer* strBuffer = StringBuffer::readFromFile(path);
+                if (!strBuffer) {
+                    BioLog::log(msg::ERROR_FAILED_TO_OPEN_FOR_READ() << path.string());
+                    return cleanUp(EXIT_FAILURE);
+                }
+
                 Writeback wb(db);
                 db::Network* net = wb.createNetwork(db->getString(networkName));
                 GMLImport gmlImport(strBuffer, db, net);
