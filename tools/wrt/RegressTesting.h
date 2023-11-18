@@ -17,16 +17,16 @@ public:
     RegressTesting(const Path& reportPath);
     ~RegressTesting();
 
-    void setTimeout(size_t seconds) { _timeout = seconds; }
     void setCleanIfSuccess(bool enabled) { _cleanIfSuccess = enabled; }
+    void setConcurrency(size_t jobs) { _concurrency = jobs; }
 
     void run();
     void clean();
+    void terminate();
 
 private:
     const Path _reportDir;
-    int _concurrency {1};
-    size_t _timeout {3600};
+    size_t _concurrency {1};
     bool _error {false};
     bool _cleanIfSuccess {true};
     ProcessGroup _processGroup;
@@ -44,5 +44,4 @@ private:
     void cleanDir(const Path& dir, bool keepTopLevelWRT=false);
     void populateRunQueue();
     void processTestTermination(RegressJob* job);
-    void createTimerForJob(RegressJob* job);
 };

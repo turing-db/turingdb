@@ -4,7 +4,6 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <chrono>
 
 #include <boost/process.hpp>
 
@@ -209,9 +208,6 @@ void RegressTesting::populateRunQueue() {
             continue;
         }
 
-        // Register timer
-        createTimerForJob(job);
-
         _runningTests.push_back(job);
         jobRank++;
     }
@@ -235,12 +231,8 @@ void RegressTesting::processTestTermination(RegressJob* job) {
     }
 }
 
-void RegressTesting::createTimerForJob(RegressJob* job) {
-    const auto interval = boost::posix_time::seconds(_timeout);
-    auto timer = std::make_unique<boost::asio::deadline_timer>(_ioContext, interval);
-    timer->async_wait([job](const boost::system::error_code& error){
-        BioLog::echo("Timeout: "+job->getPath().string());
+void RegressTesting::terminate() {
+    for (RegressJob* job : _runningTests) {
         job->terminate();
-    });
-    job->setTimer(std::move(timer));
+    }
 }

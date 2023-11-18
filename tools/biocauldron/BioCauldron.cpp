@@ -1,11 +1,12 @@
-#include "ToolInit.h"
-
 #include <signal.h>
 #include <boost/process.hpp>
 
+#include "TuringUIServer.h"
+
+#include "ToolInit.h"
+
 #include "BioLog.h"
 #include "MsgUIServer.h"
-#include "TuringUIServer.h"
 
 #define BIOCAULDRON_TOOL_NAME "biocauldron"
 

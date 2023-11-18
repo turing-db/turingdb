@@ -1,3 +1,6 @@
+#include <memory>
+#include <signal.h>
+
 #include "RegressTesting.h"
 
 #include "ToolInit.h"
@@ -7,32 +10,43 @@
 
 #include "BioLog.h"
 #include "MsgCommon.h"
+#include "MsgWRT.h"
 
 using namespace Log;
+
+// This is necessary to handle unix signals
+std::unique_ptr<RegressTesting> regress;
+
+void signalHandler(int signum) {
+    regress->terminate();
+    BioLog::printSummary();
+    BioLog::destroy();
+    exit(EXIT_SUCCESS);
+}
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("wrt");
     ArgParser& argParser = toolInit.getArgParser();
     argParser.addOption("clean", "Clean all test directories");
-    argParser.addOption("timeout", "Maximum running time of a test", "seconds");
     argParser.addOption("noclean", "Do not clean test directories");
+    argParser.addOption("j", "Number of parallel jobs", "jobs");
 
     toolInit.init(argc, argv);
 
     bool cleanDir = false;
-    size_t timeout = 0;
     bool cleanIfSuccess = true;
     bool error = false;
+    size_t jobs = 1;
     for (const auto& option : argParser.options()) {
         if (option.first == "clean") {
             cleanDir = true;
-        } else if (option.first == "timeout") {
-            timeout = StringToNumber<size_t>(option.second, error);
-            if (error) {
-                BioLog::log(msg::ERROR_INCORRECT_CMD_USAGE() << "timeout");
-            }
         } else if (option.first == "noclean") {
             cleanIfSuccess = false;
+        } else if (option.first == "j") {
+            jobs = StringToNumber<size_t>(option.second, error);
+            if (error || jobs == 0) {
+                BioLog::log(msg::ERROR_WRT_BAD_NUMBER_OF_JOBS() << option.second);
+            }
         }
     }
 
@@ -43,17 +57,19 @@ int main(int argc, const char** argv) {
         return EXIT_SUCCESS;
     }
 
-    RegressTesting regress(toolInit.getReportsDir());
-    regress.setCleanIfSuccess(cleanIfSuccess);
+    regress = std::make_unique<RegressTesting>(toolInit.getReportsDir());
 
-    if (timeout > 0) {
-        regress.setTimeout(timeout);
-    }
+    // Install signal handler to handle ctrl+C
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+
+    regress->setCleanIfSuccess(cleanIfSuccess);
+    regress->setConcurrency(jobs);
 
     if (cleanDir) {
-        regress.clean();
+        regress->clean();
     } else {
-        regress.run();
+        regress->run();
     }
 
     BioLog::printSummary();
