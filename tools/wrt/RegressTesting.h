@@ -24,6 +24,8 @@ public:
     void clean();
     void terminate();
 
+    bool hasFail() const { return !_testFail.empty(); }
+
 private:
     const Path _reportDir;
     size_t _concurrency {1};
