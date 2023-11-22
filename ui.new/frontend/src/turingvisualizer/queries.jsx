@@ -80,7 +80,7 @@ export const useElementsQuery = ({
 export const useDevElementsQuery = () =>
   useQuery(
     ["cytoscape_dev_elements"],
-    async () => await import("./reactome-subset").then((res) => res.default)
+    async () => await fetch("/reactome-subset.json").then((res) => res.json())
   );
 
 export const useDevElements = ({ selectedNodeIds, hiddenNodeIds, filters }) => {
@@ -217,12 +217,12 @@ export const useDevElements = ({ selectedNodeIds, hiddenNodeIds, filters }) => {
 
   const importantNodesMap = Object.fromEntries(
     Object.entries(importantNodeCounts)
-      .filter(([_id, count]) => count > 1)
-      .map(([id, _count]) => [id, filteredNeighborNodesMap[id]])
+      .filter(([, count]) => count > 1)
+      .map(([id]) => [id, filteredNeighborNodesMap[id]])
   );
 
   const importantEdgesMap = Object.fromEntries(
-    Object.entries(filteredNeighborEdgesMap).filter(([_id, e]) => {
+    Object.entries(filteredNeighborEdgesMap).filter(([, e]) => {
       const sourceIsImportant =
         importantNodesMap[e.data.turing_source_id] !== undefined;
       const targetIsImportant =
@@ -238,7 +238,7 @@ export const useDevElements = ({ selectedNodeIds, hiddenNodeIds, filters }) => {
 
   const neighborEdgesMap = {
     ...Object.fromEntries(
-      Object.entries(filteredNeighborEdgesMap).filter(([_id, e]) => {
+      Object.entries(filteredNeighborEdgesMap).filter(([, e]) => {
         const tsid = e.data.turing_source_id;
         const ttid = e.data.turing_target_id;
 
@@ -295,8 +295,8 @@ export const devEndpoints = {
     additionalPropFilterOut = [],
     additionalPropFilterIn = [],
   }) => {
-    const devElements = await import("./reactome-subset").then(
-      (res) => res.default
+    const devElements = await fetch("/reactome-subset.json").then((res) =>
+      res.json()
     );
 
     const { nodePropertyFilterOut, nodePropertyFilterIn } =
@@ -338,8 +338,8 @@ export const devEndpoints = {
     edgePropFilterOut = [],
     edgePropFilterIn = [],
   }) => {
-    const devElements = await import("./reactome-subset").then(
-      (res) => res.default
+    const devElements = await fetch("/reactome-subset.json").then((res) =>
+      res.json()
     );
     const mappedDevNodes = Object.fromEntries(
       devElements
@@ -421,8 +421,8 @@ export const devEndpoints = {
   },
 
   get_nodes: async ({ nodeIds }) => {
-    const devElements = await import("./reactome-subset").then(
-      (res) => res.default
+    const devElements = await fetch("/reactome-subset.json").then((res) =>
+      res.json()
     );
 
     const mappedIds = Object.fromEntries(nodeIds.map((id) => [id, true]));
@@ -433,8 +433,8 @@ export const devEndpoints = {
   },
 
   get_edges: async ({ edgeIds }) => {
-    const devElements = await import("./reactome-subset").then(
-      (res) => res.default
+    const devElements = await fetch("/reactome-subset.json").then((res) =>
+      res.json()
     );
 
     const mappedIds = Object.fromEntries(edgeIds.map((id) => [id, true]));

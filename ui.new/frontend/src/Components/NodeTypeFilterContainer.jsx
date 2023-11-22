@@ -6,9 +6,9 @@ import { useSelector } from "react-redux";
 // @mui/material
 import { Autocomplete, CircularProgress, TextField } from "@mui/material";
 
-import BorderedContainer from "@Components/BorderedContainer";
-import { BorderedContainerTitle } from "@Components/BorderedContainer";
-import { useQuery } from "@App/queries";
+import BorderedContainer from "src/Components/BorderedContainer";
+import { BorderedContainerTitle } from "src/Components/BorderedContainer";
+import { useQuery } from "src/App/queries";
 
 export default function NodeTypeFilterContainer({ selected, setSelected }) {
   const dbName = useSelector((state) => state.dbName);

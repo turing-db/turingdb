@@ -4,10 +4,7 @@ import { useTheme } from "@emotion/react";
 import { useDispatch, useSelector } from "react-redux";
 
 // @mui
-import { Modal, Stack, Paper, Autocomplete, TextField } from "@mui/material";
-
-// @blueprintjs
-import { Alert, Intent } from "@blueprintjs/core";
+import { Stack, Paper, Autocomplete, TextField } from "@mui/material";
 
 // Turing
 import {
@@ -15,16 +12,15 @@ import {
   Visualizer,
   VisualizerContextProvider,
   TuringContextMenu,
-  useVisualizerContext,
-  style,
-} from "@turingvisualizer";
-import SettingsModal from "@ViewerPage/SettingsModal";
-import * as actions from "@App/actions";
-import * as thunks from "@App/thunks";
-import { useCanvasTrigger } from "@turingvisualizer/tools";
-import { useSelectorRef } from "@App/tools";
-import * as cyEvents from "@turingvisualizer/events";
-import ActionsToolbar from "@ViewerPage/ActionsToolbar";
+} from "src/turingvisualizer/components";
+import { useVisualizerContext, style } from "src/turingvisualizer";
+import SettingsModal from "src/turingvisualizer/components/ActionsToolbar/SettingsModal";
+import * as actions from "src/App/actions";
+import * as thunks from "src/App/thunks";
+import { useCanvasTrigger } from "src/turingvisualizer/tools";
+import { useSelectorRef } from "src/App/tools";
+import * as cyEvents from "src/turingvisualizer/events";
+import ActionsToolbar from "src/turingvisualizer/components/ActionsToolbar";
 
 const useDefinedState = (initValue) => {
   const [value, set] = React.useState(initValue);

@@ -6,14 +6,14 @@ import { useDispatch, useSelector } from "react-redux";
 import { Box, Button, CircularProgress, TextField, Alert } from "@mui/material";
 
 // Turing
-import NodeStack from "@Components/NodeStack";
-import BorderedContainer from "@Components/BorderedContainer";
-import NodeInspector from "@Components/NodeInspector";
-import NodeChip from "@Components/NodeChip";
-import { BorderedContainerTitle } from "@Components/BorderedContainer";
-import * as actions from "@App/actions";
-import * as thunks from "@App/thunks";
-import { useQuery } from "@App/queries";
+import NodeStack from "src/Components/NodeStack";
+import BorderedContainer from "src/Components/BorderedContainer";
+import NodeInspector from "src/Components/NodeInspector";
+import NodeChip from "src/Components/NodeChip";
+import { BorderedContainerTitle } from "src/Components/BorderedContainer";
+import * as actions from "src/App/actions";
+import * as thunks from "src/App/thunks";
+import { useQuery } from "src/App/queries";
 
 const Title = (props) => {
   const { setError } = props;

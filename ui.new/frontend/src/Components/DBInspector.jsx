@@ -6,15 +6,15 @@ import { useDispatch, useSelector } from "react-redux";
 import { Box, Button } from "@mui/material";
 
 // Turing
-import NodeTypeFilterContainer from "@Components/NodeTypeFilterContainer";
-import PropertyFilterContainer from "@Components/PropertyFilterContainer";
-import NodeFilterContainer from "@Components/NodeFilterContainer";
-import SelectedNodesContainer from "@Components/SelectedNodesContainer";
-import BorderedContainer from "@Components/BorderedContainer";
-import NodeStack from "@Components/NodeStack";
-import { BorderedContainerTitle } from "@Components/BorderedContainer";
-import * as actions from "@App/actions";
-import * as thunks from "@App/thunks";
+import NodeTypeFilterContainer from "src/Components/NodeTypeFilterContainer";
+import PropertyFilterContainer from "src/Components/PropertyFilterContainer";
+import NodeFilterContainer from "src/Components/NodeFilterContainer";
+import SelectedNodesContainer from "src/Components/SelectedNodesContainer";
+import BorderedContainer from "src/Components/BorderedContainer";
+import NodeStack from "src/Components/NodeStack";
+import { BorderedContainerTitle } from "src/Components/BorderedContainer";
+import * as actions from "src/App/actions";
+import * as thunks from "src/App/thunks";
 
 export const CommonNode = ({ nodeId, nodeName }) => {
   const dbName = useSelector((state) => state.dbName);

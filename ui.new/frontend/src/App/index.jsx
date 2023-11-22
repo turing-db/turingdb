@@ -8,13 +8,13 @@ import Box from "@mui/material/Box";
 import CssBaseline from "@mui/material/CssBaseline";
 
 // Turing
-import { themeOptions } from "@/theme";
-import store from "@App/store";
-import ViewerPage from "@ViewerPage";
-import DatabasePage from "@DatabasePage";
-import AdminPage from "@AdminPage";
-import CustomAppBar from "@Components/CustomAppBar";
-import { DrawerHeader } from "@Components/CustomAppBar";
+import { themeOptions } from "src/theme";
+import store from "src/App/store";
+import ViewerPage from "src/ViewerPage";
+import DatabasePage from "src/DatabasePage";
+import AdminPage from "src/AdminPage";
+import CustomAppBar from "src/Components/CustomAppBar";
+import { DrawerHeader } from "src/Components/CustomAppBar";
 
 function Page() {
   const page = useSelector((state) => state.page);

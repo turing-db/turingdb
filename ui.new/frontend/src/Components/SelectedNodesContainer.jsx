@@ -1,5 +1,4 @@
 // Core
-import React from "react";
 import { useSelector, useDispatch } from "react-redux";
 
 // @mui/material
@@ -7,11 +6,11 @@ import { IconButton } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 
 // Turing
-import BorderedContainer from "@Components/BorderedContainer";
-import NodeChip from "@Components/NodeChip";
-import NodeStack from "@Components/NodeStack";
-import { BorderedContainerTitle } from "@Components/BorderedContainer";
-import { clearSelectedNodes } from "@App/actions";
+import BorderedContainer from "src/Components/BorderedContainer";
+import NodeChip from "src/Components/NodeChip";
+import NodeStack from "src/Components/NodeStack";
+import { BorderedContainerTitle } from "src/Components/BorderedContainer";
+import { clearSelectedNodes } from "src/App/actions";
 
 export default function SelectedNodesContainer() {
   const selectedNodes = useSelector((state) => state.selectedNodes);

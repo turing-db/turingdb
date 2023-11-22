@@ -27,10 +27,10 @@ import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 
 // Turing
-import * as actions from "@App/actions";
-import * as thunks from "@App/thunks";
-import DBSelector from "@Components/DBSelector";
-import SideNodeInspector from "@Components/SideNodeInspector";
+import * as actions from "src/App/actions";
+import * as thunks from "src/App/thunks";
+import DBSelector from "src/Components/DBSelector";
+import SideNodeInspector from "src/Components/SideNodeInspector";
 
 const drawerWidth = 240;
 

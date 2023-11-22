@@ -4,7 +4,7 @@ import React from "react";
 //Turing
 import * as queries from "./queries";
 import * as colors from "./colors";
-import { useVisualizerContext } from ".";
+import { useVisualizerContext } from "./";
 
 const useGetElementLabel = (state) => {
   const getElementLabel = React.useMemo(

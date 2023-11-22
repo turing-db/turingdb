@@ -1,10 +1,10 @@
-import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import jsconfigPaths from "vite-jsconfig-paths";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), jsconfigPaths()],
   server: {
     port: 3000,
     proxy: {
@@ -18,18 +18,5 @@ export default defineConfig({
   },
   build: {
     outDir: "site",
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@App": path.resolve(__dirname, "./src/App"),
-      "@DatabasePage": path.resolve(__dirname, "./src/DatabasePage"),
-      "@ViewerPage": path.resolve(__dirname, "./src/ViewerPage"),
-      "@AdminPage": path.resolve(__dirname, "./src/AdminPage"),
-      "@turingvisualizer": path.resolve(__dirname, "./src/turingvisualizer"),
-      "@VisualizerOld": path.resolve(__dirname, "./src/Visualizer.old"),
-      "@Components": path.resolve(__dirname, "./src/Components"),
-      "@cytoscape-cola": path.resolve(__dirname, "./src/cytoscape-cola"),
-    },
   },
 });

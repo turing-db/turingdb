@@ -1,7 +1,44 @@
 # Turing visualizer component
+
+## Breaking changes
+
+```jsx
+// Importing the TestApp component
+// from
+import { TestApp } from "@turingvisualizer";
+// to
+import { TestApp } from "turingvisualizer/components";
+
+// Importing components, hooks, etc.
+// from
+import {
+  Canvas,
+  Visualizer,
+  VisualizerContextProvider,
+  TuringContextMenu,
+  useVisualizerContext,
+  useCanvasTrigger,
+  style,
+} from "turingvisualizer";
+// to
+import {
+  useVisualizerContext,
+  useCanvasTrigger,
+  style,
+} from "turingvisualizer";
+import {
+  Canvas,
+  Visualizer,
+  VisualizerContextProvider,
+  ActionsToolbar,
+  TuringContextMenu,
+} from "turingvisualizer/components";
+```
+
 ## Setup
 
 In order to work, the visualizer component needs
+
 - React
 - blueprintjs
 - react-query
@@ -9,6 +46,7 @@ In order to work, the visualizer component needs
 - cytoscape-cola
 
 For example, this boilerplate code renders the TestApp
+
 ```JSX
 // React
 import React from 'react';
@@ -24,7 +62,7 @@ import '@blueprintjs/core/lib/css/blueprint.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Example application content
-import { TestApp } from '@turingvisualizer'
+import { TestApp } from 'turingvisualizer/components'
 
 const queryClient = new QueryClient();
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -35,10 +73,13 @@ root.render(
     </QueryClientProvider>
 );
 ```
+
 ## Inside a custom application
+
 In order to render the canvas, you need to wrap your custom component with a `VisualizerContextProvider`, with four parameters: `themeMode`, `dbName` (that you can set to `"reactome"` for the moment), a `containerId`, and `devMode` (a boolean to use the fake database). The containerId is the unique identifier for the html container that cytoscape uses to render the canvas (each canvas should have a unique id).
 
 In the example below, the `<AppContent />` component is the wrapper around the visualizer, and thus, controls its lifetime. The visualizer stays alive as long as `<AppContent />` stays mounted. In your application, you might have different tabs `<VisualizerTab />` with a unique canvas in each one, in which case, you need to keep the tab alive when hidden if you want to restore the state of the canvas when switching tabs.
+
 ```JSX
 <div>
     <VisualizerContextProviders
@@ -57,7 +98,9 @@ In the example below, the `<AppContent />` component is the wrapper around the v
     </VisualizerContextProvider>
 </div>
 ```
+
 In your component (`<AppContent/>` in this example), render the visualizer with:
+
 ```JSX
 <Visualizer
     canvas={<Canvas />}
@@ -75,6 +118,7 @@ const vis = useVisualizerContext();
 ```
 
 ## Trigger actions on Canvas state change
+
 If you need to react to state changes in the canvas, you can register triggers. For example, when the JSON 'elements' object (that cytoscape uses to render the graph) changes, you might trigger changes to your component using the `useCanvasTrigger`. For example, say that we want to increase a count everytime the elements array changes:
 
 ```JSX
@@ -105,17 +149,20 @@ const MyComponent = () => {
 ```
 
 Available trigger categories:
+
 - `elements`: The JSON dict that cytoscape uses to render stuff
 - `selectedNodeIds`: IDs of the selected nodes (the main nodes, which don't include their neighbors)
-- `filters`: The node filters 
-- `layouts`: The layouts object (using right click -> setLayout will execute callbacks stored here). 
+- `filters`: The node filters
+- `layouts`: The layouts object (using right click -> setLayout will execute callbacks stored here).
 - `nodeLabel`: The node label displayed on the canvas
 - `edgeLabel`: The edge label displayed on the canvas
 - `hiddenNodes`: The nodes hidden on the canvas
 
 ## Modify the canvas state (does not re-render the canvas)
+
 It is possible to trigger state changes on the canvas using callbacks accessible using `vis.callbacks()`.
 For now, here are the possible actions:
+
 ```JSX
 vis.callbacks().setSelectedNodeIds(ids)
 // Sets the selected nodes using an array of turing ids
@@ -164,7 +211,7 @@ vis.callbacks().setFilters({
     hidePublications: true
 });
 
-The available filters are: 
+The available filters are:
 - hidePublications
 - hideCompartments
 - hideSpecies
@@ -173,6 +220,7 @@ The available filters are:
 ```
 
 ## ContextMenu
+
 The context menu can entirely be changed if need, just change `<TuringContextMenu/>` in visualizer to use your own component. Your component should be defined like so:
 
 ```JSX
@@ -205,7 +253,9 @@ const MyComponent = () => {
 ```
 
 ## Interact with cytoscape
+
 Interact with cytoscape at all time using the `cy` reference:
+
 ```JSX
 const vis = useVisualizerContext();
 const cy = vis.cy();
@@ -217,9 +267,11 @@ const turingEdgeIds = cy.edges().map(e => e.data().turing_id) // Turing database
 ```
 
 ## Avoid re-rendering
+
 Sometimes, the component that holds the visualizer might use some external state
 and re-render upon changes. For example in our UI prototype, with have a global state (redux) to
 store the selectedNodes that we access with:
+
 ```JSX
 const selectedNodes = useSelector(state => state.selectedNodes);
 ```
@@ -245,10 +297,11 @@ const onClick = (e) => console.log(selectedNodesRef.current);
 ```
 
 ## Custom style
+
 The canvas style is customizable by modifying the cytoscape json stylesheet:
 
 ```JSX
-import { style } from '@turingvisualizer';
+import { style } from 'turingvisualizer';
 
 const MyComponent = () => {
     const cyStyle = [
@@ -274,6 +327,7 @@ const MyComponent = () => {
 
 Also, some parameters are definied programmatically using `data()` directives.
 You can modify them like so:
+
 ```JSX
 import { getDefaultCanvasTheme } from 'turingvisualizer/tools';
 
@@ -292,10 +346,12 @@ import { getDefaultCanvasTheme } from 'turingvisualizer/tools';
 ```
 
 ## Rest API
-It is possible to fetch for nodes and edges outside of the visualizer by using the 
+
+It is possible to fetch for nodes and edges outside of the visualizer by using the
 fake REST API.
 
 ### List nodes
+
 For example using react-query:
 
 ```JSX
@@ -376,6 +432,7 @@ devEndpoints["list_edges"]({
 ```
 
 ### Get nodes
+
 This returns the nodes of given ids
 
 ```JSX
@@ -385,6 +442,7 @@ devEndpoints["get_nodes"]({
 ```
 
 ### Get edges
+
 This returns the edges of given ids
 
 ```JSX
@@ -394,6 +452,7 @@ devEndpoints["get_edges"]({
 ```
 
 ## Cytoscape events
+
 It is possible to hook onto some cytoscape events by modifying the callbacks
 in vis.refs.events (don't forget to call the original event at the end of your
 callback if your need to retain the original effect):
@@ -423,4 +482,3 @@ vis.refs.events.current.dbltap = (vis, e) => {
 ```
 
 Checkout the `turingvisualizer/events.js` file for examples on how to write event callbacks
-

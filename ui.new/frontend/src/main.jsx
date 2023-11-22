@@ -16,6 +16,6 @@ const root = ReactDOM.createRoot(document.getElementById("root"));
 
 root.render(
   <QueryClientProvider client={queryClient}>
-    <AppController />
+    <AppController/>
   </QueryClientProvider>
 );

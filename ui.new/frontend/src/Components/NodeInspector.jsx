@@ -19,13 +19,13 @@ import {
 // Turing
 import BorderedContainer, {
   BorderedContainerTitle,
-} from "@Components/BorderedContainer";
-import NodeChip from "@Components/NodeChip";
-import NodeStack from "@Components/NodeStack";
-import { Secondary } from "@Components/Span";
-import * as actions from "@App/actions";
-import * as thunks from "@App/thunks";
-import { useQuery } from "@App/queries";
+} from "src/Components/BorderedContainer";
+import NodeChip from "src/Components/NodeChip";
+import NodeStack from "src/Components/NodeStack";
+import { Secondary } from "src/Components/Span";
+import * as actions from "src/App/actions";
+import * as thunks from "src/App/thunks";
+import { useQuery } from "src/App/queries";
 
 const containerHeight = "120vh";
 const edgeCountLim = 40;

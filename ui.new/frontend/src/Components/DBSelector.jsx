@@ -7,8 +7,8 @@ import axios from "axios";
 import { Autocomplete, CircularProgress, TextField } from "@mui/material";
 
 // Turing
-import { setDbName } from "@App/actions";
-import { useQuery } from "@App/queries";
+import { setDbName } from "src/App/actions";
+import { useQuery } from "src/App/queries";
 
 export default function DBSelector() {
   const dbName = useSelector((state) => state.dbName);

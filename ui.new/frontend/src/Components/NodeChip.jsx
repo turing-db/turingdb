@@ -1,5 +1,4 @@
 // Core
-import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 // @mui/material
@@ -11,8 +10,8 @@ import CircleSharpIcon from "@mui/icons-material/CircleSharp";
 import DeleteSharpIcon from "@mui/icons-material/DeleteSharp";
 
 // Turing
-import * as actions from "@App/actions";
-import * as thunks from "@App/thunks";
+import * as actions from "src/App/actions";
+import * as thunks from "src/App/thunks";
 
 const NodeChip = (props) => {
   const node = props.node;

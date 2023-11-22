@@ -7,9 +7,9 @@ import axios from "axios";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 
 // Turing
-import DBInspector from "@Components/DBInspector";
-import { Secondary } from "@Components/Span";
-import { useQuery } from "@App/queries";
+import DBInspector from "src/Components/DBInspector";
+import { Secondary } from "src/Components/Span";
+import { useQuery } from "src/App/queries";
 
 function DBLoader() {
   const dbName = useSelector((state) => state.dbName);

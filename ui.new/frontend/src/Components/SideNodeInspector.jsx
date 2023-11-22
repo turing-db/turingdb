@@ -16,8 +16,8 @@ import {
 // @mui/icons-material
 import HubIcon from "@mui/icons-material/Hub";
 
-import { Secondary } from "@Components/Span";
-import NodeInspector from "@Components/NodeInspector";
+import { Secondary } from "src/Components/Span";
+import NodeInspector from "src/Components/NodeInspector";
 
 const SideNodeInspector = (props) => {
   const theme = useTheme();

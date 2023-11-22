@@ -11,7 +11,7 @@ import useEdgeColors from "./reducers/edgeColors";
 import useLayouts from "./reducers/layouts";
 import useHiddenNodes from "./reducers/hiddenNodes";
 import { useCytoscapeElements } from "./tools";
-import { VisualizerContext } from ".";
+import { VisualizerContext } from "./components/VisualizerContext";
 
 const useVisualizerState = (cyStyle) => {
   const vis = React.useContext(VisualizerContext);
@@ -128,9 +128,6 @@ const useVisualizerState = (cyStyle) => {
     showNodes: (nodeIds) => showNodes(nodeIds),
     requestLayoutRun: (request) => requestLayoutRun(request),
     setFilters: (filters) => setFilters(filters),
-
-    // Overlays
-    toggleSearchNodesWindow: React.useRef(() => {}),
   };
 
   return {

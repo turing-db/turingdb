@@ -9,10 +9,10 @@ import { Autocomplete, IconButton, TextField } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 
 // Turing
-import BorderedContainer from "@Components/BorderedContainer";
-import { BorderedContainerTitle } from "@Components/BorderedContainer";
-import { useNodePropertyTypesQuery } from "@App/queries";
-import * as actions from "@App/actions";
+import BorderedContainer from "src/Components/BorderedContainer";
+import { BorderedContainerTitle } from "src/Components/BorderedContainer";
+import { useNodePropertyTypesQuery } from "src/App/queries";
+import * as actions from "src/App/actions";
 
 const useProperty = ({ setPropertyValue }) => {
   const dispatch = useDispatch();
