@@ -1,14 +1,15 @@
 // Turing
 import { useVisualizerContext, useCanvasTrigger } from "../";
 import { useCytoscapeInstance } from "../cytoscape/instance";
+import { getFitViewport} from '../cytoscape/tools';
 
 const onLayoutStop = (vis) => {
-  const viewport = vis.cy().getFitViewport();
+  const viewport = getFitViewport(vis.cy(), vis.cy().elements(), 100);
   const zoom = viewport?.zoom;
 
   if (!zoom) return;
 
-  vis.cy().minZoom(zoom / 5);
+  vis.cy().minZoom(zoom);
   vis.cy().maxZoom(6);
 };
 
