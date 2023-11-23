@@ -3,12 +3,16 @@ import useVisualizerState from "../state";
 import useSearchNodesWindow from "../useSearchNodesWindow";
 import { useVisualizerContext } from "../context";
 import useKeepOnlyAlert from "../useKeepOnlyAlert";
+import useSettingsModal from "./ActionsToolbar/useSettingsModal";
+import useHiddenNodesPopover from "./ActionsToolbar/useHiddenNodesPopover";
 
 const Visualizer = (props) => {
   useVisualizerState(props.cyStyle);
   const vis = useVisualizerContext();
   useSearchNodesWindow();
   useKeepOnlyAlert();
+  useSettingsModal();
+  useHiddenNodesPopover();
 
   return (
     <div

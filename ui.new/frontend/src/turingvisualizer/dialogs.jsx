@@ -8,6 +8,7 @@ import { Alert, Dialog } from "@blueprintjs/core";
 export const useDialog = ({
   name,
   content,
+  title,
   isAlert = false,
   alertProps,
 }) => {
@@ -42,6 +43,7 @@ export const useDialog = ({
         <Dialog
           key={name + "-dialog"}
           isOpen={open}
+          title={title}
           usePortal={false}
           onClose={toggle}
           canOutsideClickCancel={true}
@@ -52,7 +54,7 @@ export const useDialog = ({
           {content(toggle, data, open)}
         </Dialog>
       ),
-    [vis, isAlert, alertProps, content, open, toggle, name]
+    [vis, title, isAlert, alertProps, content, open, toggle, name]
   );
 
   vis.dialogs()[name] = { toggle, Content, open };

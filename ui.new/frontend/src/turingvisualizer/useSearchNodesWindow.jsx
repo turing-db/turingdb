@@ -61,6 +61,7 @@ const useSearchNodesWindow = () => {
 
   useDialog({
     name: "search-nodes",
+    title: "Search nodes in graph",
     content: () => {
       const nodes = vis.dialogs()["search-nodes"]?.open
         ? vis
@@ -141,13 +142,15 @@ const useSearchNodesWindow = () => {
               />
             </Select>
           </FormGroup>
-          <InputGroup
-            leftElement={<Icon icon="search" />}
-            onChange={(e) => setPropValue(e.target.value)}
-            placeholder="Find nodes"
-            rightElement={<Tag minimal>{nodes.length}</Tag>}
-            value={propValue}
-          />
+          <div style={{ padding: 20, paddingTop: 0 }}>
+            <InputGroup
+              leftElement={<Icon icon="search" />}
+              onChange={(e) => setPropValue(e.target.value)}
+              placeholder="Find nodes"
+              rightElement={<Tag minimal>{nodes.length}</Tag>}
+              value={propValue}
+            />
+          </div>
           <CardList
             style={{
               maxHeight: "50vh",

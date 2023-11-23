@@ -47,7 +47,7 @@ export const SelectMenu = (props) => {
       itemPredicate={predicate}
       itemListRenderer={renderMenu}
       popoverProps={{
-        placement: "right-start",
+        placement: `${props.placement || "right"}-start`,
       }}
       noResults={
         <MenuItem

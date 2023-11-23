@@ -1,49 +1,42 @@
 import React from "react";
 import {
-  Modal,
-  Box,
-  Typography,
-  Slider,
   Tooltip,
-  FormControlLabel,
   Checkbox,
+  Slider,
   FormGroup,
-} from "@mui/material";
+} from "@blueprintjs/core";
 
 import { useVisualizerContext, useCanvasTrigger } from "../../";
 import { INIT_EDGE_VAL } from "../../reducers/layouts";
+import { useDialog } from "src/turingvisualizer/dialogs";
 
 const LENGTH_RATIO = 0.1;
 
-const FilterCheckbox = (props) => {
+const useSettingsModal = () => {
   const vis = useVisualizerContext();
-
-  return (
-    <Tooltip title={props.tooltip}>
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={props.propValue}
-            onChange={(e) => {
-              vis.callbacks().setFilters({
-                ...vis.state().filters,
-                [props.propName]: e.target.checked,
-              });
-            }}
-          />
-        }
-        label={props.label}
-      />
-    </Tooltip>
-  );
-};
-
-const SettingsModal = (props) => {
-  const vis = useVisualizerContext();
-  const [filters, setFilters] = React.useState({});
+  const [filters, setFilters] = React.useState(vis.state().filters);
   const [edgeLengthVal, setEdgeLengthVal] = React.useState(
     INIT_EDGE_VAL * LENGTH_RATIO
   );
+
+  const FilterCheckbox = (props) => {
+    const vis = useVisualizerContext();
+
+    return (
+      <Tooltip content={props.tooltip || props.label} usePortal={false}>
+        <Checkbox
+          label={props.label}
+          checked={props.propValue}
+          onChange={(e) => {
+            vis.callbacks().setFilters({
+              ...vis.state().filters,
+              [props.propName]: e.target.checked,
+            });
+          }}
+        />
+      </Tooltip>
+    );
+  };
 
   useCanvasTrigger({
     category: "filters",
@@ -60,39 +53,34 @@ const SettingsModal = (props) => {
       ),
   });
 
-  const onClose = () => props.setOpen(false);
-
-  const style = {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: 400,
-    bgcolor: "background.paper",
-    border: "2px solid #000",
-    boxShadow: 24,
-    p: 4,
-  };
-
-  return (
-    <Modal open={props.open} onClose={onClose}>
-      <Box sx={style}>
-        <Typography gutterBottom>Edge length</Typography>
-        <Slider
-          valueLabelDisplay="auto"
-          aria-label="Edge length"
-          min={1}
-          max={100}
-          value={edgeLengthVal}
-          onChange={(_e, v) =>
-            vis.callbacks().setDefaultCyLayout({
-              ...vis.state().layouts.definitions[0],
-              edgeLengthVal: v / LENGTH_RATIO,
-            })
-          }
-        />
-
-        <FormGroup>
+  useDialog({
+    name: "show-settings",
+    title: "Graph settings",
+    content: () => {
+      return <div style={{
+        display: "flex",
+        flexDirection: "column",
+        padding: 20
+      }}>
+        <FormGroup label="Edge length">
+          <Slider
+            min={1}
+            labelValues={[1, 50, 100]}
+            max={100}
+            initialValue={edgeLengthVal}
+            value={edgeLengthVal}
+            onChange={(v) => {
+              setEdgeLengthVal(v);
+            }}
+            onRelease={(v) =>
+              vis.callbacks().setDefaultCyLayout({
+                ...vis.state().layouts.definitions[0],
+                edgeLengthVal: v / LENGTH_RATIO,
+              })
+            }
+          />
+        </FormGroup>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <FilterCheckbox
             label="Hide publications"
             propValue={filters.hidePublications}
@@ -120,10 +108,10 @@ const SettingsModal = (props) => {
             propValue={filters.showOnlyHomoSapiens}
             propName="showOnlyHomoSapiens"
           />
-        </FormGroup>
-      </Box>
-    </Modal>
-  );
+        </div>
+      </div>;
+    },
+  });
 };
 
-export default SettingsModal;
+export default useSettingsModal;

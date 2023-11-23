@@ -96,27 +96,27 @@ export const dbltap = (vis, e) => {
     .setSelectedNodeIds([...vis.state().selectedNodeIds, node.turing_id]);
 };
 
-export const select = (vis, e) => {
-  const unselected = vis.cy().$(":unselected");
-  const selected = vis.cy().$(":selected");
+export const select = (vis) => {
+  //const unselected = vis.cy().$(":unselected");
+  //const selected = vis.cy().$(":selected");
 
-  unselected.clearQueue();
-  selected.clearQueue();
-  unselected.stop();
-  selected.stop();
+  //unselected.clearQueue();
+  //selected.clearQueue();
+  //unselected.stop();
+  //selected.stop();
 
-  if (selected.length !== 0) {
-    selected.animate({
-      style: { opacity: 1.0 },
-    });
-    unselected.animate({
-      style: { opacity: 1.0 },
-    });
-  } else {
-    unselected.animate({
-      style: { opacity: 1.0 },
-    });
-  }
+  //if (selected.length !== 0) {
+  //  selected.animate({
+  //    style: { opacity: 1.0 },
+  //  });
+  //  unselected.animate({
+  //    style: { opacity: 1.0 },
+  //  });
+  //} else {
+  //  unselected.animate({
+  //    style: { opacity: 1.0 },
+  //  });
+  //}
 };
 
 export const render = (vis, e) => {};

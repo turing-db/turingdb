@@ -1,40 +1,5 @@
 # Turing visualizer component
 
-## Breaking changes
-
-```jsx
-// Importing the TestApp component
-// from
-import { TestApp } from "@turingvisualizer";
-// to
-import { TestApp } from "turingvisualizer/components";
-
-// Importing components, hooks, etc.
-// from
-import {
-  Canvas,
-  Visualizer,
-  VisualizerContextProvider,
-  TuringContextMenu,
-  useVisualizerContext,
-  useCanvasTrigger,
-  style,
-} from "turingvisualizer";
-// to
-import {
-  useVisualizerContext,
-  useCanvasTrigger,
-  style,
-} from "turingvisualizer";
-import {
-  Canvas,
-  Visualizer,
-  VisualizerContextProvider,
-  ActionsToolbar,
-  TuringContextMenu,
-} from "turingvisualizer/components";
-```
-
 ## Setup
 
 In order to work, the visualizer component needs

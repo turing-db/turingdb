@@ -121,56 +121,6 @@ const AppContent = ({ hideHowTo }) => {
 
   return (
     <>
-      <Navbar>
-        <Navbar.Group align={Alignment.LEFT}>
-          <Navbar.Heading>Turing visualizer</Navbar.Heading>
-
-          <Navbar.Divider />
-
-          <Popover
-            placement="bottom"
-            content={
-              <Menu>
-                {nodeLabels.map((label) => (
-                  <MenuItem
-                    key={"item-" + label}
-                    text={label}
-                    icon="property"
-                    onClick={() => vis.callbacks().setNodeLabel(label)}
-                  />
-                ))}
-              </Menu>
-            }>
-            <Button
-              text="Node label"
-              placement="bottom"
-              rightIcon="caret-down"
-            />
-          </Popover>
-
-          <Popover
-            placement="bottom"
-            content={
-              <Menu>
-                {edgeLabels.map((label) => (
-                  <MenuItem
-                    key={"item-" + label}
-                    text={label}
-                    icon="property"
-                    onClick={() => vis.callbacks().setEdgeLabel(label)}
-                  />
-                ))}
-              </Menu>
-            }>
-            <Button
-              text="Edge label"
-              placement="bottom"
-              rightIcon="caret-down"
-            />
-          </Popover>
-        </Navbar.Group>
-      </Navbar>
-
       {!hideHowTo && (
         <Section title="How to use">
           <ul>
@@ -194,7 +144,7 @@ const AppContent = ({ hideHowTo }) => {
           </ButtonGroup>
         </div>
         <div style={{ margin: 10, marginTop: 0 }}>
-          <ActionsToolbar />
+          <ActionsToolbar/>
         </div>
       </Visualizer>
     </>

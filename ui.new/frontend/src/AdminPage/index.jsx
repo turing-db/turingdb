@@ -1,5 +1,7 @@
+import { TestApp } from "src/turingvisualizer/components";
+
 const AdminPage = () => {
-  return <div>Admin</div>;
+  return <TestApp/>;
 };
 
 export default AdminPage;
