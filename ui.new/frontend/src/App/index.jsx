@@ -13,6 +13,7 @@ import store from "src/App/store";
 import ViewerPage from "src/ViewerPage";
 import DatabasePage from "src/DatabasePage";
 import AdminPage from "src/AdminPage";
+import ChatPage from "src/ChatPage";
 import CustomAppBar from "src/Components/CustomAppBar";
 import { DrawerHeader } from "src/Components/CustomAppBar";
 
@@ -26,6 +27,8 @@ function Page() {
       return <ViewerPage />;
     case "Admin":
       return <AdminPage />;
+    case "Chat":
+      return <ChatPage/>;
     default:
       return "404";
   }
