@@ -157,3 +157,22 @@ bool FileUtils::listFiles(const Path& dir, std::vector<Path>& paths) {
 uint64_t FileUtils::fileSize(const Path& path) {
     return std::filesystem::file_size(path);
 }
+
+std::string FileUtils::getExtension(const Path& path) {
+    return path.extension();
+}
+
+std::string FileUtils::getNameWithoutExtension(const Path& path) {
+    return path.stem();
+}
+
+bool FileUtils::makeExecutable(const Path& path) {
+    std::error_code error;
+
+    const auto execPerms = std::filesystem::perms::owner_exec
+                         | std::filesystem::perms::group_exec
+                         | std::filesystem::perms::others_exec;
+
+    std::filesystem::permissions(path, execPerms, std::filesystem::perm_options::add);
+    return !error;
+}

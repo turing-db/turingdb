@@ -23,4 +23,7 @@ public:
     static bool readContent(const Path& path, std::string& data);
     static bool listFiles(const Path& dir, std::vector<Path>& paths);
     static uint64_t fileSize(const Path& path);
+    static std::string getExtension(const Path& path);
+    static std::string getNameWithoutExtension(const Path& path);
+    static bool makeExecutable(const Path& path);
 };
