@@ -74,7 +74,9 @@ const Message = (props) => {
           backgroundColor: props.ai ? aiMessageBg : userMessageBg,
           maxWidth: "100%",
         }}>
-        <code style={{ fontSize: 13 }}>{props.content}</code>
+        <code
+          style={{ fontSize: 13 }}
+          dangerouslySetInnerHTML={{ __html: props.content }}></code>
       </Card>
     </div>
   );
@@ -169,7 +171,7 @@ const Prompt = ({ loading, messages, setMessages }) => {
         placeholder="Ask me anything..."
         onChange={(e) => setCurrentMsg(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && e.shiftKey) {
+          if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             submit();
           }
