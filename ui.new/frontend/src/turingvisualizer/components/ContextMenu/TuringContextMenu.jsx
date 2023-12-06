@@ -27,6 +27,8 @@ const NodeContextMenu = (props) => {
 
       <MenuDivider title="Selection" />
       <items.ItemSelectNeighborhood />
+      <items.ItemSelectUniqueNeighbors />
+      <items.ItemSelectFragment/>
       <MenuItem text="Select all..." icon="select">
         <items.ItemSelectAllBySameNodeType actions={actions} />
         <items.ItemSelectAllBySameProperty actions={actions} />
@@ -39,6 +41,7 @@ const NodeContextMenu = (props) => {
         <>
           <items.ItemCollapseNeighbors actions={actions} />
           <items.ItemExpandNeighbors actions={actions} />
+          <items.ItemDevelopNeighbors actions={actions} />
         </>
       )}
       <items.ItemHideNodes actions={actions} />

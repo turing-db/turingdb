@@ -1,5 +1,7 @@
 // React
 import ReactDOM from "react-dom/client";
+import "./index.css";
+import "./index.scss";
 
 // Blueprintjs dependencies
 //import "normalize.css/normalize.css";

@@ -6,14 +6,19 @@ export const UPDATE_LAYOUT = "UPDATE_LAYOUT";
 export const UPDATE_LAYOUTS = "UPDATE_LAYOUTS";
 export const RESET_LAYOUT = "RESET_LAYOUT";
 export const REQUEST_RUN = "REQUEST_RUN";
+export const lockBehaviours = {
+  ALL_SELECTED: 0,
+  INTERACTED: 1,
+  DO_NOT_LOCK: 2,
+};
 
 export const INIT_EDGE_VAL = 130;
 
 const getEdgeLengthFn = (v) => (edge) => {
-  const connectingMultiplier = (edge.data().type === "connecting") * 0.1 + 1;
+  const connectingMultiplier = (edge.data().type === "connecting") * 0.2 + 1;
   const sourceExtent = edge.source().connectedEdges().length - 1;
   const targetExtent = edge.target().connectedEdges().length - 1;
-  const ratio = 1 / (Math.max(sourceExtent, targetExtent) + 1) * 0.8;
+  const ratio = (1 / (Math.max(sourceExtent, targetExtent) + 1)) * 0.8;
   return (v + v * ratio) * connectingMultiplier;
 };
 
@@ -23,17 +28,18 @@ const initialColaLayout = () => ({
   handleDisconnected: true,
   infinite: false,
   randomize: false,
-  avoidOverlap: true,
+  avoidOverlap: false,
   maxSimulationTime: 1000,
   fit: false,
   centerGraph: false,
   convergenceThreshold: 0.005,
-  nodeSpacing: 10,
-  nodeDimensionsIncludeLabels: false,
+  nodeSpacing: 0,
+  nodeDimensionsIncludeLabels: true,
   edgeLengthVal: INIT_EDGE_VAL,
   refresh: 1,
   edgeLength: getEdgeLengthFn(INIT_EDGE_VAL),
   lineCount: 0,
+  lockBehaviour: lockBehaviours.INTERACTED,
 });
 
 export const layoutsInitialState = () => ({
@@ -92,7 +98,7 @@ const useLayoutsReducer = (state, action) => {
         },
       };
 
-    case UPDATE_LAYOUTS:
+    case UPDATE_LAYOUTS: {
       const newState = { ...state };
       newState.definitions = {
         ...newState.definitions,
@@ -105,6 +111,7 @@ const useLayoutsReducer = (state, action) => {
         }),
       };
       return newState;
+    }
 
     case RESET_LAYOUT: {
       const newState = {

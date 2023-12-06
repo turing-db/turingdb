@@ -109,6 +109,8 @@ def run(args):
         exclude_publications = (
             data["exclude_publications"] if "exclude_publications" in data else False
         )
+        node_property_filter_out = data["node_property_filter_out"] if "node_property_filter_out" in data else []
+        node_property_filter_in = data["node_property_filter_in"] if "node_property_filter_in" in data else []
         yield_edges = data["yield_edges"] if "yield_edges" in data else False
         nodes = []
 
@@ -153,6 +155,34 @@ def run(args):
                     publication_filter,
                 )
             )
+
+        def filter_out_props(node):
+            props = node.list_properties()
+            for p_name, p_value in node_property_filter_out:
+                if p_name not in props: continue
+                if props[p_name].value == p_value: return False
+            return True
+
+        def filter_in_props(node):
+            props = node.list_properties()
+            for p_name, p_value in node_property_filter_in:
+                if p_name not in props: continue
+                if props[p_name].value != p_value: return False
+            return True
+
+        nodes = list(
+            filter(
+                filter_out_props,
+                nodes
+            )
+        )
+
+        nodes = list(
+            filter(
+                filter_in_props,
+                nodes
+            )
+        )
 
         base_nodes = [
             {

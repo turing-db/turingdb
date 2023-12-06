@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .debug-red {
+    border: 2px solid red;
+  }
+  .debug-green {
+    border: 2px solid green;
+  }
+  .debug-blue {
+    border: 2px solid blue;
+  }
+  .debug-purple {
+    border: 2px solid purple;
+  }
+}

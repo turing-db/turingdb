@@ -2,17 +2,13 @@
 import React from "react";
 
 // @blueprintjs
-import {
-  ButtonGroup,
-  Tooltip,
-  Popover,
-  Button,
-} from "@blueprintjs/core";
+import { ButtonGroup, Tooltip, Popover, Button } from "@blueprintjs/core";
 
 // Turing
 import { useVisualizerContext, useCanvasTrigger } from "../../";
 import SelectNodesMenu from "./SelectNodesMenu";
 import LabelMenus from "./LabelMenus";
+import { useMenuActions } from "../ContextMenu/hooks";
 
 const ttParams = {
   hoverCloseDelay: 40,
@@ -36,7 +32,7 @@ const showCellCellInteraction = (addLayout, cy) => {
     Math,
     filteredNodes.map((arr) => arr.length)
   );
-  const yStretch = 35.0;
+  const yStretch = 95.0;
   const aspectRatio = cy.width() / cy.height();
   const canvasWidth = maxLength * yStretch * aspectRatio;
   const xStretch = canvasWidth / nLines;
@@ -72,11 +68,14 @@ const ActionsToolbar = ({
   hiddenNodesAction = true,
   cellCellInteraction = true,
   expandAction = true,
+  developAction = true,
   collapseAction = true,
   searchAction = true,
+  searchDatabaseAction = true,
 }) => {
   const vis = useVisualizerContext();
   const [interactionDisabled, setInteractionDisabled] = React.useState(true);
+  const actions = useMenuActions();
 
   useCanvasTrigger({
     category: "elements",
@@ -109,12 +108,12 @@ const ActionsToolbar = ({
         display: "flex",
         flex: 1,
         alignItems: "space-between",
-        flexWrap: "wrap"
+        flexWrap: "wrap",
       }}>
       <div style={{ display: "flex", flex: 1 }}>
         <ButtonGroup style={{ padding: 5 }}>
           {fitAction && (
-            <Tooltip  {...ttParams} content="Fit canvas">
+            <Tooltip {...ttParams} content="Fit canvas">
               <Button
                 icon="zoom-to-fit"
                 onClick={() =>
@@ -136,7 +135,7 @@ const ActionsToolbar = ({
           )}
 
           {cleanAction && (
-            <Tooltip  {...ttParams}content="Clean up canvas">
+            <Tooltip {...ttParams} content="Clean up canvas">
               <Button
                 onClick={() => vis.callbacks().requestLayoutRun(true)}
                 icon="eraser"
@@ -145,7 +144,7 @@ const ActionsToolbar = ({
           )}
 
           {hiddenNodesAction && (
-            <Tooltip  {...ttParams}content="Hidden nodes">
+            <Tooltip {...ttParams} content="Hidden nodes">
               <Button
                 icon="eye-open"
                 onClick={vis.dialogs()["hidden-nodes"].toggle}
@@ -154,7 +153,7 @@ const ActionsToolbar = ({
           )}
 
           {cellCellInteraction && (
-            <Tooltip  {...ttParams}content="Show cell-cell interaction">
+            <Tooltip {...ttParams} content="Show cell-cell interaction">
               <Button
                 icon="intersection"
                 disabled={interactionDisabled}
@@ -166,57 +165,43 @@ const ActionsToolbar = ({
           )}
 
           {expandAction && (
-            <Tooltip  {...ttParams}content="Expand all neighbors">
+            <Tooltip {...ttParams} content="Expand all neighbors">
               <Button
                 icon="expand-all"
                 onClick={() => {
-                  const neighborIds = vis
-                    .cy()
-                    .nodes()
-                    .filter((n) => n.data().type === "neighbor")
-                    .map((n) => n.data().turing_id);
-                  vis
-                    .callbacks()
-                    .setSelectedNodeIds(
-                      [...vis.state().selectedNodeIds, ...neighborIds].flat()
-                    );
+                  actions.expandNeighbors();
                 }}
               />
             </Tooltip>
           )}
 
           {collapseAction && (
-            <Tooltip  {...ttParams}content="Collapse all neighbors">
+            <Tooltip {...ttParams} content="Hides neighbors">
               <Button
                 icon="collapse-all"
                 onClick={() => {
-                  const selNodes = vis
-                    .cy()
-                    .nodes()
-                    .filter((e) => e.data().type === "selected");
-                  const neiData = Object.fromEntries(
-                    selNodes
-                      .neighborhood()
-                      .filter(
-                        (e) =>
-                          e.group() === "nodes" && e.data().type === "neighbor"
-                      )
-                      .map((n) => [
-                        n.data().turing_id,
-                        {
-                          ...n.data(),
-                          neighborNodeIds: n
-                            .connectedEdges()
-                            .map((e) =>
-                              e.data().turing_source_id !== n.data().turing_id
-                                ? e.data().turing_source_id
-                                : e.data().turing_target_id
-                            ),
-                        },
-                      ])
-                  );
-                  vis.callbacks().hideNodes(neiData);
+                  actions.collapseNeighbors();
                 }}
+              />
+            </Tooltip>
+          )}
+
+          {developAction && (
+            <Tooltip {...ttParams} content="Develop neighbors">
+              <Button
+                icon="fullscreen"
+                onClick={() => {
+                  actions.developNeighbors();
+                }}
+              />
+            </Tooltip>
+          )}
+
+          {searchDatabaseAction && (
+            <Tooltip {...ttParams} content="Search nodes in the database">
+              <Button
+                icon="database"
+                onClick={vis.dialogs()["search-nodes-in-database"].toggle}
               />
             </Tooltip>
           )}
@@ -229,7 +214,7 @@ const ActionsToolbar = ({
 
       <ButtonGroup style={{ padding: 5 }}>
         {settingsAction && (
-          <Tooltip  {...ttParams}content="Settings">
+          <Tooltip {...ttParams} content="Settings">
             <Button
               onClick={vis.dialogs()["show-settings"].toggle}
               text="Settings"
@@ -239,7 +224,7 @@ const ActionsToolbar = ({
         )}
 
         {searchAction && (
-          <Tooltip  {...ttParams}content="Search nodes in current view">
+          <Tooltip {...ttParams} content="Search nodes in current view">
             <Button
               icon="search"
               text="Search"

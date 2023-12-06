@@ -41,8 +41,31 @@ export const ItemSelectNeighborhood = () => {
       text="Select neighborhood"
       onClick={() => {
         vis.cy().elements().unselect();
-        vis.cy().$id(data.id).neighborhood().select();
-        vis.cy().$id(data.id).select();
+        vis.cy().$id(data.id).closedNeighborhood().select();
+      }}
+    />
+  );
+};
+
+export const ItemSelectFragment = () => {
+  const vis = useVisualizerContext();
+  const data = vis.contextMenuData().data;
+
+  return (
+    <MenuItem
+      icon="shapes"
+      text="Select connected nodes"
+      onClick={() => {
+        vis.cy().elements().unselect();
+        let fragment = vis.cy().$id(data.id).closedNeighborhood();
+        let previousSize = fragment.length;
+
+        do {
+          previousSize = fragment.length;
+          fragment = fragment.closedNeighborhood();
+        } while (previousSize !== fragment.length);
+
+        fragment.select();
       }}
     />
   );
@@ -74,9 +97,9 @@ export const ItemSelectAllBySameNodeTypeNoData = ({ actions }) => {
     return (
       <MenuItem
         key={"node-type-" + nt}
-        text={nt.length < titleSizeLimit
-          ? nt
-          : nt.slice(0, titleSizeLimit) + "..."}
+        text={
+          nt.length < titleSizeLimit ? nt : nt.slice(0, titleSizeLimit) + "..."
+        }
         onClick={() => actions.selectAllBySameNodeType(nt)}
       />
     );
@@ -237,12 +260,13 @@ export const ItemSelectAllBySameLayout = () => {
       onClick={() =>
         vis
           .cy()
+          .nodes()
           .filter(
-            (e) =>
-              vis.state().layouts.mapping[e.id()] ===
+            (n) =>
+              vis.state().layouts.mapping[n.id()] ===
               vis.state().layouts.mapping[data.id]
           )
-          .forEach((e) => e.select())
+          .forEach((n) => n.select())
       }
     />
   );
@@ -265,7 +289,7 @@ export const ItemKeepOnly = ({ actions }) => {
       icon="hurricane"
       text="Keep only"
       intent="danger"
-      onClick={() => vis.dialogs()["keep-only-alert"].toggle({actions})}
+      onClick={() => vis.dialogs()["keep-only-alert"].toggle({ actions })}
     />
   );
 };
@@ -285,8 +309,18 @@ export const ItemExpandNeighbors = ({ actions }) => {
     <MenuItem
       text="Expand neighbors"
       icon="expand-all"
-      intent="success"
       onClick={() => actions.expandNeighbors()}
+    />
+  );
+};
+
+export const ItemDevelopNeighbors = ({ actions }) => {
+  return (
+    <MenuItem
+      text="Develop neighbors"
+      icon="fullscreen"
+      intent="success"
+      onClick={() => actions.developNeighbors()}
     />
   );
 };
@@ -312,6 +346,31 @@ export const ItemSearchNodes = () => {
       onClick={vis.dialogs()["search-nodes"].toggle}
       popoverProps={{
         interactionKind: "click",
+      }}
+    />
+  );
+};
+
+export const ItemSelectUniqueNeighbors = () => {
+  const vis = useVisualizerContext();
+  const data = vis.contextMenuData().data;
+
+  return (
+    <MenuItem
+      icon="one-to-one"
+      text="Select unique neighbors"
+      onClick={() => {
+        vis.cy().elements().unselect();
+        vis
+          .cy()
+          .$id(data.id)
+          .neighborhood()
+          .filter((e) => {
+            if (e.group === "edges") return true;
+            return e.connectedEdges().length <= 1;
+          })
+          .select();
+        vis.cy().$id(data.id).select();
       }}
     />
   );

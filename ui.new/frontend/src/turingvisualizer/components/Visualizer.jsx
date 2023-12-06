@@ -5,6 +5,7 @@ import { useVisualizerContext } from "../context";
 import useKeepOnlyAlert from "../useKeepOnlyAlert";
 import useSettingsModal from "./ActionsToolbar/useSettingsModal";
 import useHiddenNodesPopover from "./ActionsToolbar/useHiddenNodesPopover";
+import useSearchNodesDatabaseWindow from "./ActionsToolbar/useSearchNodesDatabaseWindow";
 
 const Visualizer = (props) => {
   useVisualizerState(props.cyStyle);
@@ -13,6 +14,10 @@ const Visualizer = (props) => {
   useKeepOnlyAlert();
   useSettingsModal();
   useHiddenNodesPopover();
+  useSearchNodesDatabaseWindow({
+    onNodeAdd: props.onNodeAdd,
+    onNodeRemove: props.onNodeRemove,
+  });
 
   return (
     <div
@@ -40,7 +45,7 @@ const Visualizer = (props) => {
         </div>
       )}
       {props.contextMenu}
-      {Object.values(vis.dialogs()).map((d) => d.Content())}
+      {Object.values(vis.dialogs()).map((d) => d.Content(d.props))}
       <div
         style={{
           position: "absolute",

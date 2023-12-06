@@ -137,13 +137,7 @@ export default function CustomAppBar() {
               <ChevronRightIcon />
             )}
           </IconButton>
-          <Box
-            sx={{
-              display: "flex",
-              flexGrow: 1,
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}>
+          <Box className="flex flex-grow justify-between items-center">
             <Box variant="h5">{dbName ? dbName : "No database selected"}</Box>
             <Box>
               <IconButton

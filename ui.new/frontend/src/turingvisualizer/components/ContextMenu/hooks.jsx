@@ -8,10 +8,11 @@ const useHighlightedNodes = () => {
   const vis = useVisualizerContext();
 
   return React.useCallback(() => {
-    const nodes = vis
+    const rawNodes = vis
       .cy()
       .nodes()
       .filter((e) => e.selected());
+    const nodes = rawNodes.length !== 0 ? rawNodes : vis.cy().nodes();
     const selNodes = nodes.filter((e) => e.data().type === "selected");
     const neiNodes = nodes.filter((e) => e.data().type === "neighbor");
     const selNodeIds = Object.fromEntries(
@@ -84,6 +85,17 @@ export const useMenuActions = () => {
   }, [vis, getHighlightedData]);
 
   const expandNeighbors = React.useCallback(() => {
+    const { nodes } = getHighlightedData();
+    for (const node of nodes) {
+      Object.entries(vis.state().hiddenNodes).forEach(([hiddenNodeId, n]) => {
+        if (n.neighborNodeIds.includes(node.data().turing_id)) {
+          vis.callbacks().showNodes([hiddenNodeId]);
+        }
+      });
+    }
+  }, [vis, getHighlightedData]);
+
+  const developNeighbors = React.useCallback(() => {
     const nodes = getHighlightedData();
     const neighbors = nodes.selNodes
       .neighborhood()
@@ -103,7 +115,18 @@ export const useMenuActions = () => {
       vis.cy().elements().unselect();
       vis
         .cy()
-        .filter((e) => e.data().node_type_name === nt).select();
+        .filter((e) => e.data().node_type_name === nt)
+        .select();
+      vis
+        .cy()
+        .filter((e) => e.data().node_type_name !== nt)
+        .animate({
+          style: {
+            opacity: 0.5,
+          },
+          duration: 400,
+          easing: "ease-in",
+        });
     },
     [vis]
   );
@@ -118,7 +141,22 @@ export const useMenuActions = () => {
             e.data().properties[propName] &&
             e.data().properties[propName] === propValue
         )
-        .forEach((e) => e.select());
+        .select();
+
+      vis
+        .cy()
+        .filter(
+          (e) =>
+            !e.data().properties[propName] ||
+            e.data().properties[propName] !== propValue
+        )
+        .animate({
+          style: {
+            opacity: 0.5,
+          },
+          duration: 400,
+          easing: "ease-in",
+        });
     },
     [vis]
   );
@@ -174,6 +212,7 @@ export const useMenuActions = () => {
     selectAllBySameNodeProperty,
     collapseNeighbors,
     expandNeighbors,
+    developNeighbors,
     keepOnly,
     addToNetwork,
     setVerticalLine,

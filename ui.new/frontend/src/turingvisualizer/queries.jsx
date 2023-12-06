@@ -2,7 +2,7 @@ import React from "react";
 import axios from "axios";
 import { useQuery as useNativeQuery } from "@tanstack/react-query";
 
-const getRawFilters = (filters) => {
+export const getRawFilters = (filters) => {
   const nodePropertyFilterOut = [
     ...(filters.hideCompartments ? [["schemaClass", "Compartment"]] : []),
 

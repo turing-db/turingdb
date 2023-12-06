@@ -137,6 +137,7 @@ export const useCytoscapeElements = (props) => {
   const themeDef = props.canvasTheme || getDefaultCanvasTheme();
   const theme = themeDef[themeMode];
   const previousElements = React.useRef([]);
+  const vis = useVisualizerContext();
 
   const { data: rawElements } = props.devMode
     ? queries.useDevElements({
@@ -157,17 +158,24 @@ export const useCytoscapeElements = (props) => {
   const getElementColors = useGetElementColors(props, elements, theme);
 
   const data = React.useMemo(() => {
+    const nodesHaveHiddenNodes = Object.fromEntries(
+      [...Object.values(vis.state().hiddenNodes).map((n) => n.neighborNodeIds)]
+        .flat()
+        .map((id) => [id, true])
+    );
+
     const baseElements = elements.map((el) => ({
       ...el,
       data: {
         ...el.data,
         label: getElementLabel[el.group](el),
         ...getElementColors(el),
+        has_hidden_nodes: nodesHaveHiddenNodes[el.data.turing_id] || false,
       },
     }));
 
     return baseElements;
-  }, [elements, getElementColors, getElementLabel]);
+  }, [vis, elements, getElementColors, getElementLabel]);
 
   previousElements.current = data;
 

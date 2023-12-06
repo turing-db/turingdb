@@ -1,10 +1,6 @@
 import React from "react";
-import {
-  Tooltip,
-  Checkbox,
-  Slider,
-  FormGroup,
-} from "@blueprintjs/core";
+import { Tooltip, Checkbox, Slider, FormGroup } from "@blueprintjs/core";
+import LockMenu from "./LockMenu";
 
 import { useVisualizerContext, useCanvasTrigger } from "../../";
 import { INIT_EDGE_VAL } from "../../reducers/layouts";
@@ -18,6 +14,16 @@ const useSettingsModal = () => {
   const [edgeLengthVal, setEdgeLengthVal] = React.useState(
     INIT_EDGE_VAL * LENGTH_RATIO
   );
+  const [nodeSpacing, setNodeSpacing] = React.useState(
+    vis.state().layouts.definitions[0].nodeSpacing
+  );
+
+  React.useEffect(() => {
+    vis.callbacks().setDefaultCyLayout({
+      ...vis.state().layouts.definitions[0],
+      nodeSpacing: nodeSpacing,
+    })
+  }, [vis, nodeSpacing]);
 
   const FilterCheckbox = (props) => {
     const vis = useVisualizerContext();
@@ -57,59 +63,81 @@ const useSettingsModal = () => {
     name: "show-settings",
     title: "Graph settings",
     content: () => {
-      return <div style={{
-        display: "flex",
-        flexDirection: "column",
-        padding: 20
-      }}>
-        <FormGroup label="Edge length">
-          <Slider
-            min={1}
-            labelValues={[1, 50, 100]}
-            max={100}
-            initialValue={edgeLengthVal}
-            value={edgeLengthVal}
-            onChange={(v) => {
-              setEdgeLengthVal(v);
-            }}
-            onRelease={(v) =>
-              vis.callbacks().setDefaultCyLayout({
-                ...vis.state().layouts.definitions[0],
-                edgeLengthVal: v / LENGTH_RATIO,
-              })
-            }
-          />
-        </FormGroup>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <FilterCheckbox
-            label="Hide publications"
-            propValue={filters.hidePublications}
-            propName="hidePublications"
-          />
-          <FilterCheckbox
-            label="Hide compartments"
-            propValue={filters.hideCompartments}
-            propName="hideCompartments"
-            tooltip='Hide compartments such as "extracellular region" which can significantly complicate the visualization'
-          />
-          <FilterCheckbox
-            label="Hide species"
-            propValue={filters.hideSpecies}
-            propName="hideSpecies"
-            tooltip='Hide species nodes such as "Homo sapiens" which can significantly complicate the visualization'
-          />
-          <FilterCheckbox
-            label="Hide database references"
-            propValue={filters.hideDatabaseReferences}
-            propName="hideDatabaseReferences"
-          />
-          <FilterCheckbox
-            label="Homo sapiens only"
-            propValue={filters.showOnlyHomoSapiens}
-            propName="showOnlyHomoSapiens"
-          />
+      return (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            padding: 20,
+          }}>
+          <FormGroup label="Node spacing">
+            <Slider
+              min={1}
+              labelValues={[1, 50, 100]}
+              max={100}
+              initialValue={nodeSpacing}
+              value={nodeSpacing}
+              onChange={(v) => {
+                setNodeSpacing(v);
+              }}
+              onRelease={(v) =>
+                vis.callbacks().setDefaultCyLayout({
+                  ...vis.state().layouts.definitions[0],
+                  nodeSpacing: v,
+                })
+              }
+            />
+          </FormGroup>
+          <FormGroup label="Edge length">
+            <Slider
+              min={1}
+              labelValues={[1, 50, 100]}
+              max={100}
+              initialValue={edgeLengthVal}
+              value={edgeLengthVal}
+              onChange={(v) => {
+                setEdgeLengthVal(v);
+              }}
+              onRelease={(v) =>
+                vis.callbacks().setDefaultCyLayout({
+                  ...vis.state().layouts.definitions[0],
+                  edgeLengthVal: v / LENGTH_RATIO,
+                })
+              }
+            />
+          </FormGroup>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <FilterCheckbox
+              label="Hide publications"
+              propValue={filters.hidePublications}
+              propName="hidePublications"
+            />
+            <FilterCheckbox
+              label="Hide compartments"
+              propValue={filters.hideCompartments}
+              propName="hideCompartments"
+              tooltip='Hide compartments such as "extracellular region" which can significantly complicate the visualization'
+            />
+            <FilterCheckbox
+              label="Hide species"
+              propValue={filters.hideSpecies}
+              propName="hideSpecies"
+              tooltip='Hide species nodes such as "Homo sapiens" which can significantly complicate the visualization'
+            />
+            <FilterCheckbox
+              label="Hide database references"
+              propValue={filters.hideDatabaseReferences}
+              propName="hideDatabaseReferences"
+            />
+            <FilterCheckbox
+              label="Homo sapiens only"
+              propValue={filters.showOnlyHomoSapiens}
+              propName="showOnlyHomoSapiens"
+            />
+          </div>
+          <LockMenu />
         </div>
-      </div>;
+      );
     },
   });
 };

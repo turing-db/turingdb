@@ -1,13 +1,19 @@
 // Core
 import React from "react";
+import { renderToString } from "react-dom/server";
 import cytoscape from "cytoscape";
 import cola from "cytoscape-cola";
+import nodeHtmlLabel from "cytoscape-node-html-label";
 
 // Turing
 import { style, useVisualizerContext } from "..";
+import { Icon } from "@blueprintjs/core";
 
 if (typeof cytoscape("core", "cola") === "undefined") {
   cytoscape.use(cola);
+}
+if (typeof cytoscape("core", "nodeHtmlLabel") === "undefined") {
+  cytoscape.use(nodeHtmlLabel);
 }
 
 export const useCytoscapeInstance = () => {
@@ -21,6 +27,24 @@ export const useCytoscapeInstance = () => {
       container: document.getElementById(vis.containerId),
       style: style,
     });
+    vis.cy().nodeHtmlLabel([
+      {
+        query: "node",
+        halign: "center",
+        valign: "center",
+        halignBox: "right",
+        valignBox: "top",
+        tpl(data) {
+          if (data.has_hidden_nodes) {
+            return renderToString(
+              <Icon className="primary-dark" icon="eye-off" />
+            );
+          }
+
+          return;
+        },
+      },
+    ]);
 
     const evs = vis.refs.events;
     vis.cy().on("onetap", (e) => evs.current.onetap(vis, e));

@@ -1,3 +1,5 @@
+import { getFitViewport } from "src/turingvisualizer/cytoscape/tools";
+
 export const onetap = (_vis, _e) => {};
 
 export const cxttap = (vis, e) => {
@@ -97,26 +99,31 @@ export const dbltap = (vis, e) => {
 };
 
 export const select = (vis) => {
-  //const unselected = vis.cy().$(":unselected");
-  //const selected = vis.cy().$(":selected");
+  const unselected = vis.cy().$(":unselected");
+  const selected = vis.cy().$(":selected");
 
-  //unselected.clearQueue();
-  //selected.clearQueue();
-  //unselected.stop();
-  //selected.stop();
+  unselected.clearQueue();
+  selected.clearQueue();
+  unselected.stop();
+  selected.stop();
 
-  //if (selected.length !== 0) {
-  //  selected.animate({
-  //    style: { opacity: 1.0 },
-  //  });
-  //  unselected.animate({
-  //    style: { opacity: 1.0 },
-  //  });
-  //} else {
-  //  unselected.animate({
-  //    style: { opacity: 1.0 },
-  //  });
-  //}
+  if (unselected.length !== 0) {
+    unselected.animate({
+      style: {
+        opacity: 1.0,
+      },
+      duration: 200,
+      transition: "ease-in",
+    });
+  }
 };
 
-export const render = (vis, e) => {};
+export const render = (vis) => {
+  const viewport = getFitViewport(vis.cy(), vis.cy().elements(), 100);
+  const zoom = viewport?.zoom;
+
+  if (!zoom) return;
+
+  vis.cy().minZoom(zoom * 0.5);
+  vis.cy().maxZoom(6);
+};

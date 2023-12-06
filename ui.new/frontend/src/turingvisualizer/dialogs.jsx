@@ -10,6 +10,8 @@ export const useDialog = ({
   content,
   title,
   isAlert = false,
+  width = "60vw",
+  dialogProps = {},
   alertProps,
 }) => {
   const vis = useVisualizerContext();
@@ -37,7 +39,7 @@ export const useDialog = ({
           onConfirm={() => alertProps.onConfirm({ data, toggle, open })}
           onCancel={() => alertProps.onCancel({ data, toggle, open })}
           isOpen={open}>
-          {content(toggle, data, open)}
+          {content(dialogProps)}
         </Alert>
       ) : (
         <Dialog
@@ -50,11 +52,23 @@ export const useDialog = ({
           className={vis.state().themeMode === "light" ? "" : "bp5-dark"}
           style={{
             position: "relative",
+            width: width,
           }}>
-          {content(toggle, data, open)}
+          {content(dialogProps)}
         </Dialog>
       ),
-    [vis, title, isAlert, alertProps, content, open, toggle, name]
+    [
+      vis,
+      width,
+      dialogProps,
+      title,
+      isAlert,
+      alertProps,
+      content,
+      open,
+      toggle,
+      name,
+    ]
   );
 
   vis.dialogs()[name] = { toggle, Content, open };

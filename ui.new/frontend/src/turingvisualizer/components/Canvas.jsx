@@ -1,7 +1,8 @@
 // Turing
 import { useVisualizerContext, useCanvasTrigger } from "../";
 import { useCytoscapeInstance } from "../cytoscape/instance";
-import { getFitViewport} from '../cytoscape/tools';
+import { getFitViewport } from "../cytoscape/tools";
+import { lockBehaviours } from "src/turingvisualizer/reducers/layouts";
 
 const onLayoutStop = (vis) => {
   const viewport = getFitViewport(vis.cy(), vis.cy().elements(), 100);
@@ -58,7 +59,14 @@ const Canvas = () => {
           const data2 = e2.data;
 
           // data keys
-          const keys = ["type", "iconColor", "textColor", "lineColor", "label"];
+          const keys = [
+            "type",
+            "iconColor",
+            "textColor",
+            "lineColor",
+            "label",
+            "has_hidden_nodes",
+          ];
           for (const key of keys) {
             if (data1[key] !== data2[key]) {
               e1.data(data2);
@@ -74,10 +82,11 @@ const Canvas = () => {
 
       const runCallbacks = {
         cola: (it, lId, lDef) => {
-          const eles = c.filter((e) => {
+          const allElements = c.elements();
+          const nonColaEles = c.filter((e) => {
             const l1 = parseInt(layouts.mapping[e.id()] || 0);
             const l2 = parseInt(lId);
-            return l1 === l2;
+            return l1 !== l2;
           });
 
           const rawAddedElements = Object.fromEntries(
@@ -86,18 +95,91 @@ const Canvas = () => {
           const addedElements = c.filter(
             (n) => rawAddedElements[n.id()] !== undefined
           );
-          // const cyPatchedElements = c.filter((n) => patchedElements[n.id()]);
+
+          const addedNodes = addedElements.nodes();
+          c.edges().forEach((e) => {
+            const n1 = e.source();
+            const n2 = e.target();
+            let originNode = undefined;
+            let newNode = undefined;
+            if (
+              toKeep.$id(n1.id()).length !== 0 &&
+              addedNodes.$id(n2.id()).length !== 0
+            ) {
+              originNode = n1;
+              newNode = n2;
+            } else if (
+              toKeep.$id(n2.id()).length !== 0 &&
+              addedNodes.$id(n1.id()).length !== 0
+            ) {
+              originNode = n2;
+              newNode = n1;
+            }
+            if (!originNode) return;
+
+            const neighbors = originNode
+              .neighborhood()
+              .nodes()
+              .filter(
+                (n) => n.id() !== newNode.id() && n.data().type === "selected"
+              );
+
+            if (neighbors.length === 0) return;
+
+            const totalPosition = neighbors
+              .map((n) => n.position())
+              .reduce(
+                (pos_a, pos_b) => ({
+                  x: pos_a.x + pos_b.x,
+                  y: pos_a.y + pos_b.y,
+                }),
+                { x: 0, y: 0 }
+              );
+
+            const origin = originNode.position();
+            const vector = {
+              x: originNode.position().x - totalPosition.x / neighbors.length,
+              y: originNode.position().y - totalPosition.y / neighbors.length,
+            };
+            const norm = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
+            const unitVector = {
+              x: vector.x / norm,
+              y: vector.y / norm,
+            };
+            const newPosition = {
+              x: origin.x + unitVector.x * lDef.edgeLengthVal,
+              y: origin.y + unitVector.y * lDef.edgeLengthVal,
+            };
+            newNode.position(newPosition);
+          });
 
           // If no elements to add or remove, it means the graph did not have
           // any element prior to this operation. Thus, we can center the camera
           const firstRender = toKeep.length === 0 && toRm.length === 0;
 
-          // Hack to start the animation from a decent initial guess:
-          // - lock elements that did not change,
-          // - run a first layout with the lock
-          // - at the end of the run, unlock and re-run
-          toKeep.lock();
-          //cyPatchedElements.unlock();
+          const selectedNodes = c
+            .nodes()
+            .filter((n) => n.data().type === "selected");
+
+          if (toKeep.length !== c.elements().length) {
+            if (!firstRender) {
+              switch (lDef.lockBehaviour) {
+                case lockBehaviours.ALL_SELECTED: {
+                  selectedNodes.lock();
+                  break;
+                }
+                case lockBehaviours.INTERACTED: {
+                  selectedNodes.filter((n) => patchedElements[n.id()]).lock();
+                  break;
+                }
+                default: {
+                  break;
+                }
+              }
+            }
+          }
+
+          nonColaEles.lock();
           addedElements.style({
             opacity: 0.0,
           });
@@ -107,28 +189,20 @@ const Canvas = () => {
           const nextLayoutName = nextLayout?.name || "end";
 
           const stop = () => {
-            toKeep.unlock();
-
-            const stop = () =>
-              runCallbacks[nextLayoutName](it, nextLayoutId, nextLayout);
-            eles.layout({ ...lDef, centerGraph: firstRender, stop }).run();
+            c.elements().unlock();
+            runCallbacks[nextLayoutName](it, nextLayoutId, nextLayout);
           };
 
-          const animationTime = 400;
-          const layout = eles.layout({
+          const layout = allElements.layout({
             ...lDef,
-            maxSimulationTime: animationTime,
-            avoidOverlap: true,
-            refresh: 1,
-            animate: true,
             centerGraph: firstRender,
-            handleDisconnected: false,
+            fit: firstRender,
             stop,
           });
 
           addedElements.animate({
             style: { opacity: 1.0 },
-            duration: animationTime + 600,
+            duration: 1000,
             easing: "ease-in-out-expo",
           });
 
@@ -144,10 +218,9 @@ const Canvas = () => {
           const nextLayoutId = it.next().value;
           const nextLayout = layouts.definitions[nextLayoutId];
           const nextLayoutName = nextLayout?.name || "end";
-          const stop = () => vis.cy().fit();
           runCallbacks[nextLayoutName](it, nextLayoutId, nextLayout);
 
-          eles.layout({ ...lDef, stop }).run();
+          eles.layout({ ...lDef }).run();
         },
 
         random: (it, lId, lDef) => {
@@ -165,9 +238,7 @@ const Canvas = () => {
           eles.layout({ ...lDef, stop }).run();
         },
 
-        end: () => {
-          onLayoutStop(vis);
-        },
+        end: () => {},
       };
 
       if (nodesAdded || layouts.runRequested) {

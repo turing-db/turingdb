@@ -189,7 +189,7 @@ const LabelMenus = () => {
             style={{ width: "180px" }}
             fill
             alignText="left"
-            icon="graph"
+            icon="one-to-one"
             text={
               currentEdgeLabel.value.length < titleSizeLimit
                 ? currentEdgeLabel.value
