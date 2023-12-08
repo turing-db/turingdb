@@ -294,11 +294,12 @@ export const ItemKeepOnly = ({ actions }) => {
   );
 };
 
-export const ItemCollapseNeighbors = ({ actions }) => {
+export const ItemCollapseNeighbors = ({ actions, disabled }) => {
   return (
     <MenuItem
       text="Collapse neighbors"
       icon="collapse-all"
+      disabled={disabled}
       onClick={() => actions.collapseNeighbors()}
     />
   );

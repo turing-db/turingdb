@@ -28,7 +28,7 @@ const NodeContextMenu = (props) => {
       <MenuDivider title="Selection" />
       <items.ItemSelectNeighborhood />
       <items.ItemSelectUniqueNeighbors />
-      <items.ItemSelectFragment/>
+      <items.ItemSelectFragment />
       <MenuItem text="Select all..." icon="select">
         <items.ItemSelectAllBySameNodeType actions={actions} />
         <items.ItemSelectAllBySameProperty actions={actions} />
@@ -37,12 +37,8 @@ const NodeContextMenu = (props) => {
       <items.ItemSearchNodes />
 
       <MenuDivider title="Add / Remove" />
-      {isSelected && (
-        <>
-          <items.ItemCollapseNeighbors actions={actions} />
-          <items.ItemExpandNeighbors actions={actions} />
-        </>
-      )}
+      <items.ItemCollapseNeighbors disabled={!isSelected} actions={actions} />
+      <items.ItemExpandNeighbors actions={actions} />
       <items.ItemHideNodes actions={actions} />
       <items.ItemKeepOnly actions={actions} />
       {!isSelected && <items.ItemAddToNetwork actions={actions} />}
