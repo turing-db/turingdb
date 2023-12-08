@@ -13,6 +13,8 @@ import { useMenuActions } from "../ContextMenu/hooks";
 const ttParams = {
   hoverCloseDelay: 40,
   hoverOpenDelay: 400,
+  compact: true,
+  openOnTargetFocus: false,
 };
 
 const showCellCellInteraction = (addLayout, cy) => {
@@ -199,19 +201,21 @@ const ActionsToolbar = ({
               />
             </Tooltip>
           )}
+        </ButtonGroup>
 
+        <ButtonGroup style={{ padding: 5 }}>
+          <LabelMenus />
+        </ButtonGroup>
+        <ButtonGroup style={{ padding: 5 }}>
           {searchDatabaseAction && (
             <Tooltip {...ttParams} content="Search nodes in the database">
               <Button
+                text="Add node"
                 icon="database"
                 onClick={vis.dialogs()["search-nodes-in-database"].toggle}
               />
             </Tooltip>
           )}
-        </ButtonGroup>
-
-        <ButtonGroup style={{ padding: 5 }}>
-          <LabelMenus />
         </ButtonGroup>
       </div>
 

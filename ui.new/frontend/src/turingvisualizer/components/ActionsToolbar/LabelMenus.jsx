@@ -12,6 +12,8 @@ const titleSizeLimit = 14;
 const ttParams = {
   hoverCloseDelay: 40,
   hoverOpenDelay: 400,
+  compact: true,
+  openOnTargetFocus: false,
 };
 
 

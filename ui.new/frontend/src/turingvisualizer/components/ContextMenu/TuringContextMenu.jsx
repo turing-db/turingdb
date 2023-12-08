@@ -236,7 +236,7 @@ const ColorMenuItem = ({
 
         setColorMode(
           colorMode,
-          selectedElements.map((n) => n.id()),
+          elements.map((n) => n.id()),
           colorData
         );
       }}
