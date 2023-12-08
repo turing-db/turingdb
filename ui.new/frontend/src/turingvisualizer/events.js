@@ -112,12 +112,11 @@ export const select = (vis) => {
   const unselected = vis.cy().$(":unselected");
   const selected = vis.cy().$(":selected");
 
-  unselected.clearQueue();
-  selected.clearQueue();
-  unselected.stop();
-  selected.stop();
-
   if (unselected.length !== 0) {
+    unselected.clearQueue();
+    selected.clearQueue();
+    unselected.stop();
+    selected.stop();
     unselected.animate({
       style: {
         opacity: 1.0,
@@ -126,6 +125,8 @@ export const select = (vis) => {
       transition: "ease-in",
     });
   }
+
+  Object.values(vis.eventHooks()["select"]).forEach((fn) => fn());
 };
 
 export const render = (vis) => {

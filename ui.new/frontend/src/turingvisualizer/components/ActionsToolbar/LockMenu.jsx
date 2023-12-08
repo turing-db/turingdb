@@ -35,10 +35,12 @@ const LockMenu = () => {
       }
     }
 
-    vis.callbacks().setDefaultCyLayout({
-      ...vis.state().layouts.definitions[0],
-      lockBehaviour: lockValue,
-    });
+    if (vis.state().layouts.definitions[0].lockBehaviour !== lockValue) {
+      vis.callbacks().setDefaultCyLayout({
+        ...vis.state().layouts.definitions[0],
+        lockBehaviour: lockValue,
+      });
+    }
   }, [vis, lock]);
 
   const renderValue = (behaviour) => {

@@ -78,11 +78,21 @@ const ActionsToolbar = ({
 }) => {
   const vis = useVisualizerContext();
   const [interactionDisabled, setInteractionDisabled] = React.useState(true);
+  const [expandDisabled, setExpandDisabled] = React.useState(true);
   const actions = useMenuActions();
+
+  vis.hookEvent("select", "actionDisabled", () => {
+    setExpandDisabled(
+      vis
+        .cy()
+        .nodes()
+        .filter((n) => n.selected()).length === 0
+    );
+  });
 
   useCanvasTrigger({
     category: "elements",
-    name: "actionsToolbar-setInteractionDisabled",
+    name: "actionsToolbar-actionDisabled",
     callback: () => {
       setInteractionDisabled(
         (() => {
@@ -173,6 +183,7 @@ const ActionsToolbar = ({
             <Tooltip {...ttParams} content="Expand all neighbors">
               <Button
                 icon="expand-all"
+                disabled={expandDisabled}
                 onClick={() => {
                   actions.expandNeighbors();
                 }}
@@ -184,6 +195,7 @@ const ActionsToolbar = ({
             <Tooltip {...ttParams} content="Hides neighbors">
               <Button
                 icon="collapse-all"
+                disabled={expandDisabled}
                 onClick={() => {
                   actions.collapseNeighbors();
                 }}

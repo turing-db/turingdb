@@ -25,6 +25,13 @@ export const useVisualizerReferences = () => {
   const dialogs = React.useRef({});
   const cy = React.useRef();
 
+  const eventHooks = React.useRef({
+    "select": {},
+  });
+  const hookEvent = React.useRef((eventName, key, callback) => {
+    eventHooks.current[eventName][key] = callback;
+  });
+
   const contextMenu = {
     ref: React.useRef(),
     data: React.useRef(),
@@ -39,6 +46,8 @@ export const useVisualizerReferences = () => {
     triggers,
     cy,
     contextMenu,
+    eventHooks,
+    hookEvent,
   };
 };
 

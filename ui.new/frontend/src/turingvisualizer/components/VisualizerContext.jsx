@@ -30,6 +30,8 @@ export const VisualizerContextProvider = ({
         contextMenu: () => refs.contextMenu.ref.current,
         contextMenuData: () => refs.contextMenu.data.current,
         contextMenuSetData: (data) => refs.contextMenu.setData.current(data),
+        eventHooks: () => refs.eventHooks.current,
+        hookEvent: (eventName, key, callback) => refs.hookEvent.current(eventName, key, callback),
       }}>
       {children}
     </VisualizerContext.Provider>

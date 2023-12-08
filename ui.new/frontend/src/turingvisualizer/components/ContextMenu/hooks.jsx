@@ -102,13 +102,23 @@ export const useMenuActions = () => {
 
   const expandNeighbors = React.useCallback(() => {
     const { nodes } = getHighlightedData();
+    let newNodeIds = [];
+
     for (const node of nodes) {
+      if (node.data().type === "neighbor") {
+        newNodeIds.push(node.data().turing_id);
+      }
+
       Object.entries(vis.state().hiddenNodes).forEach(([hiddenNodeId, n]) => {
         if (n.neighborNodeIds.includes(node.data().turing_id)) {
           vis.callbacks().showNodes([hiddenNodeId]);
         }
       });
     }
+
+    vis
+      .callbacks()
+      .setSelectedNodeIds([...vis.state().selectedNodeIds, ...newNodeIds]);
   }, [vis, getHighlightedData]);
 
   const developNeighbors = React.useCallback(() => {
