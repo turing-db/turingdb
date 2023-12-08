@@ -230,7 +230,7 @@ const ActionsToolbar = ({
           <Tooltip {...ttParams} content="Search nodes in current view">
             <Button
               icon="search"
-              text="Search"
+              text="Search view"
               onClick={vis.dialogs()["search-nodes"].toggle}
             />
           </Tooltip>
