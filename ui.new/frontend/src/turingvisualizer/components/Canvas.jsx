@@ -183,12 +183,21 @@ const Canvas = () => {
             runCallbacks[nextLayoutName](it, nextLayoutId, nextLayout);
           };
 
+          const ready= () => {
+            if (firstRender) {
+              setTimeout(() => {
+                c.fit(allElements, 200)
+              }, 50)
+            }
+          };
+
           const layout = allElements.layout({
             ...lDef,
             centerGraph: firstRender,
-            fit: firstRender,
-            padding: firstRender ? 130 : 0,
+            //fit: firstRender,
+            //padding: firstRender ? 130 : 0,
             stop,
+            ready,
           });
 
           addedElements.animate({
