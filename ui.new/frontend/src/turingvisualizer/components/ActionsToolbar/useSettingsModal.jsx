@@ -22,14 +22,18 @@ const useSettingsModal = () => {
   );
 
   React.useEffect(() => {
-    vis.callbacks().setDefaultCyLayout({
-      ...vis.state().layouts.definitions[0],
-      nodeSpacing: nodeSpacing,
-    });
+    if (vis.state().layouts.nodeSpacing !== nodeSpacing) {
+      vis.callbacks().setDefaultCyLayout({
+        ...vis.state().layouts.definitions[0],
+        nodeSpacing: nodeSpacing,
+      });
+    }
   }, [vis, nodeSpacing]);
 
   React.useEffect(() => {
-    vis.callbacks().centerOnDoubleClicked(centerOnDoubleClicked);
+    if (vis.state().layouts.centerOnDoubleClicked !== centerOnDoubleClicked) {
+      vis.callbacks().centerOnDoubleClicked(centerOnDoubleClicked);
+    }
   }, [vis, centerOnDoubleClicked]);
 
   const FilterCheckbox = (props) => {
