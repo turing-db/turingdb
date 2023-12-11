@@ -223,7 +223,7 @@ const ActionsToolbar = ({
             <Tooltip {...ttParams} content="Search nodes in the database">
               <Button
                 text="Add node"
-                icon="database"
+                icon="add"
                 onClick={vis.dialogs()["search-nodes-in-database"].toggle}
               />
             </Tooltip>
