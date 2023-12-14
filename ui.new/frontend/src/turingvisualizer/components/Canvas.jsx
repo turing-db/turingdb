@@ -1,5 +1,6 @@
 // Turing
-import { useVisualizerContext, useCanvasTrigger } from "../";
+import { useVisualizerContext } from "../context";
+import { useCanvasTrigger } from "../useCanvasTrigger";
 import { useCytoscapeInstance } from "../cytoscape/instance";
 import { getFitViewport } from "../cytoscape/tools";
 import { lockBehaviours } from "src/turingvisualizer/reducers/layouts";
@@ -183,11 +184,11 @@ const Canvas = () => {
             runCallbacks[nextLayoutName](it, nextLayoutId, nextLayout);
           };
 
-          const ready= () => {
+          const ready = () => {
             if (firstRender) {
               setTimeout(() => {
-                c.fit(allElements, 200)
-              }, 50)
+                c.fit(allElements, 200);
+              }, 50);
             }
           };
 

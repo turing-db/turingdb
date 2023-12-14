@@ -3,9 +3,6 @@ import React from "react";
 import { useTheme } from "@emotion/react";
 import { useDispatch, useSelector } from "react-redux";
 
-// @mui
-import { Paper } from "@mui/material";
-
 // Turing
 import {
   Canvas,
@@ -13,19 +10,23 @@ import {
   VisualizerContextProvider,
   TuringContextMenu,
 } from "src/turingvisualizer/components";
-import { useVisualizerContext, style } from "src/turingvisualizer";
+
+import { useVisualizerContext } from "src/turingvisualizer/context";
+import style from "src/turingvisualizer/style";
 import * as actions from "src/App/actions";
 import * as thunks from "src/App/thunks";
-import { useCanvasTrigger } from "src/turingvisualizer/tools";
+import { useCanvasTrigger } from "src/turingvisualizer/useCanvasTrigger";
 import { useSelectorRef } from "src/App/tools";
 import * as cyEvents from "src/turingvisualizer/events";
 import ActionsToolbar from "src/turingvisualizer/components/ActionsToolbar";
+import { PortalProvider } from "@blueprintjs/core";
 
 const ViewerPageContent = () => {
   const vis = useVisualizerContext();
   const selectedNodesRef = useSelectorRef("selectedNodes");
   const selectedNodes = useSelector((state) => state.selectedNodes);
   const dbName = useSelector((state) => state.dbName);
+  const theme = useTheme();
   const dispatch = useDispatch();
 
   React.useEffect(
@@ -33,12 +34,14 @@ const ViewerPageContent = () => {
     [vis, selectedNodes]
   );
 
-  vis.refs.events.current.onetap = (vis, e) => {
-    if (e.target.group === undefined) return;
-    if (e.target.group() !== "nodes") return;
-    dispatch(thunks.inspectNode(dbName, e.target.data().turing_id));
-    cyEvents.onetap(vis, e);
-  };
+  useCanvasTrigger({
+    category: "inspectedNode",
+    name: "setInspectedNode",
+
+    callback: () => {
+      dispatch(thunks.inspectNode(dbName, vis.state().inspectedNode.turing_id));
+    },
+  });
 
   useCanvasTrigger({
     category: "selectedNodeIds",
@@ -46,9 +49,9 @@ const ViewerPageContent = () => {
 
     callback: () => {
       const nodeIds = vis.state().selectedNodeIds;
-      const currentIds = Object.keys(selectedNodesRef.current).sort();
+      const currentIds = Object.keys(selectedNodesRef.current);
 
-      if (nodeIds.toString() !== currentIds.toString()) {
+      if (nodeIds.length !== currentIds.length) {
         const currentIdsMap = Object.fromEntries(
           currentIds.map((id) => [id, true])
         );
@@ -73,44 +76,49 @@ const ViewerPageContent = () => {
     },
   });
 
+  const bpTheme = theme.palette.mode === "dark" ? "bp5-dark" : "";
   return (
-    <div style={{ display: "flex", flex: 1, flexDirection: "column" }}>
-      <Visualizer
-        canvas={<Canvas />}
-        contextMenu={<TuringContextMenu />}
-        cyStyle={style}
-        onNodeAdd={(n) => {
-          dispatch(thunks.getNodes(dbName, [n.id], { yield_edges: true })).then(
-            (res) => dispatch(actions.selectNode(Object.values(res)[0]))
-          );
-        }}
-        onNodeRemove={(n) => {
-          dispatch(actions.unselectNode(n));
-        }}
-        onNodeInspect={(n) => {
-          dispatch(thunks.inspectNode(dbName, n.id));
-        }}>
-        <div
-          style={{
-            margin: 10,
-            marginLeft: 20,
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
+    <div className="flex flex-1 flex-col">
+      <PortalProvider portalClassName={bpTheme}>
+        <Visualizer
+          canvas={<Canvas />}
+          contextMenu={<TuringContextMenu />}
+          cyStyle={style}
+          onNodeAdd={(n) => {
+            dispatch(
+              thunks.getNodes(dbName, [n.id], { yield_edges: true })
+            ).then((res) =>
+              dispatch(actions.selectNode(Object.values(res)[0]))
+            );
+          }}
+          onNodeRemove={(n) => {
+            dispatch(actions.unselectNode(n));
+          }}
+          onNodeInspect={(n) => {
+            dispatch(thunks.inspectNode(dbName, n.id));
           }}>
-          <ActionsToolbar
-            settingsAction
-            selectAction
-            fitAction
-            cleanAction
-            hiddenNodesAction
-            cellCellInteraction
-            expandAction
-            collapseAction
-            searchAction
-          />
-        </div>
-      </Visualizer>
+          <div
+            style={{
+              margin: 10,
+              marginLeft: 20,
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+            }}>
+            <ActionsToolbar
+              settingsAction
+              selectAction
+              fitAction
+              cleanAction
+              hiddenNodesAction
+              cellCellInteraction
+              expandAction
+              collapseAction
+              searchAction
+            />
+          </div>
+        </Visualizer>
+      </PortalProvider>
     </div>
   );
 };
@@ -123,7 +131,7 @@ const ViewerPage = () => {
     <VisualizerContextProvider
       themeMode={theme.palette.mode}
       dbName={dbName}
-      containerId="cy-admin">
+      containerId="cy-viewer">
       <ViewerPageContent />
     </VisualizerContextProvider>
   );

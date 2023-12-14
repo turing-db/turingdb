@@ -1,38 +1,20 @@
 import React from "react";
-import { Tooltip, Checkbox, Slider, FormGroup } from "@blueprintjs/core";
+import {
+  Button,
+  Dialog,
+  Tooltip,
+  Checkbox,
+  Slider,
+  FormGroup,
+} from "@blueprintjs/core";
 import LockMenu from "./LockMenu";
-
-import { useVisualizerContext } from "../../";
-import { useDialog } from "src/turingvisualizer/dialogs";
+import { useVisualizerContext } from "../../../";
+import { useDialog, dialogParams, ttParams } from "../tools";
+import { useWidgetValue } from "./hooks";
 
 const LENGTH_RATIO = 0.1;
 
-const useValue = ({ getCanvasValue, setCanvasValue }) => {
-  const [released, setReleased] = React.useState(false);
-  const [v, setV] = React.useState(getCanvasValue());
-
-  React.useEffect(() => {
-    if (!released) return;
-
-    if (released) setReleased(false);
-
-    if (v !== getCanvasValue()) {
-      setCanvasValue(v);
-    }
-  }, [getCanvasValue, setCanvasValue, released, v]);
-
-  return {
-    value: v,
-    onRelease: () => {
-      setReleased(true);
-    },
-    onChange: (v) => {
-      setV(v);
-    },
-  };
-};
-
-const useSettingsModal = () => {
+function useFilters() {
   const vis = useVisualizerContext();
   const [filters, setFilters] = React.useState(vis.state().filters);
 
@@ -48,12 +30,20 @@ const useSettingsModal = () => {
     });
   }, [vis, filters]);
 
-  const centerOnDoubleClicked = useValue({
+  return [filters, setFilters];
+}
+
+export default function SettingsDialog() {
+  const vis = useVisualizerContext();
+  const [filters, setFilters] = useFilters();
+  const dialog = useDialog();
+
+  const centerOnDoubleClicked = useWidgetValue({
     getCanvasValue: () => vis.state().layouts.centerOnDoubleClicked,
     setCanvasValue: vis.callbacks().centerOnDoubleClicked,
   });
 
-  const edgeLengthVal = useValue({
+  const edgeLengthVal = useWidgetValue({
     getCanvasValue: () => vis.state().layouts.definitions[0].edgeLengthVal,
     setCanvasValue: (v) => {
       vis.callbacks().setDefaultCyLayout({
@@ -63,8 +53,8 @@ const useSettingsModal = () => {
     },
   });
 
-  const nodeSpacing = useValue({
-    getCanvasValue: () => vis.state().layouts.nodeSpacing,
+  const nodeSpacing = useWidgetValue({
+    getCanvasValue: () => vis.state().layouts.definitions[0].nodeSpacing,
     setCanvasValue: (v) => {
       vis.callbacks().setDefaultCyLayout({
         ...vis.state().layouts.definitions[0],
@@ -73,17 +63,18 @@ const useSettingsModal = () => {
     },
   });
 
-  useDialog({
-    name: "show-settings",
-    title: "Graph settings",
-    content: () => {
-      return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            padding: 20,
-          }}>
+  return (
+    <>
+      <Tooltip {...ttParams} content="Canvas settings">
+        <Button text="Settings" icon="settings" onClick={dialog.open} />
+      </Tooltip>
+
+      <Dialog
+        {...dialogParams}
+        isOpen={dialog.isOpen}
+        onClose={dialog.close}
+        title="Canvas settings">
+        <div className="flex flex-col p-10 overflow-auto h-[60vh]">
           <FormGroup label="Node spacing">
             <Slider
               min={1}
@@ -95,6 +86,7 @@ const useSettingsModal = () => {
               onChange={nodeSpacing.onChange}
             />
           </FormGroup>
+
           <FormGroup label="Edge length">
             <Slider
               min={1}
@@ -106,10 +98,11 @@ const useSettingsModal = () => {
               onChange={(v) => edgeLengthVal.onChange(v / LENGTH_RATIO)}
             />
           </FormGroup>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <Tooltip content={"Hide publications"} usePortal={false}>
+
+          <div className="flex flex-col">
+            <Tooltip content="Hide publications">
               <Checkbox
-                label={"Hide publications"}
+                label="Hide publications"
                 checked={filters.hidePublications}
                 onChange={(e) => {
                   setFilters({
@@ -119,13 +112,10 @@ const useSettingsModal = () => {
                 }}
               />
             </Tooltip>
-            <Tooltip
-              content={
-                'Hide compartments such as "extracellular region" which can significantly complicate the visualization'
-              }
-              usePortal={false}>
+
+            <Tooltip content='Hide compartments such as "extracellular region"'>
               <Checkbox
-                label={"Hide compartments"}
+                label="Hide compartments"
                 checked={filters.hideCompartments}
                 onChange={(e) => {
                   setFilters({
@@ -135,13 +125,9 @@ const useSettingsModal = () => {
                 }}
               />
             </Tooltip>
-            <Tooltip
-              content={
-                'Hide species nodes such as "Homo sapiens" which can significantly complicate the visualization'
-              }
-              usePortal={false}>
+            <Tooltip content='Hide species nodes such as "Homo sapiens"'>
               <Checkbox
-                label={"Hide species"}
+                label="Hide species"
                 checked={filters.hideSpecies}
                 onChange={(e) => {
                   setFilters({
@@ -151,13 +137,9 @@ const useSettingsModal = () => {
                 }}
               />
             </Tooltip>
-            <Tooltip
-              content={
-                'Hide database references'
-              }
-              usePortal={false}>
+            <Tooltip content="Hide database references">
               <Checkbox
-                label={"Hide database references"}
+                label="Hide database references"
                 checked={filters.hideDatabaseReferences}
                 onChange={(e) => {
                   setFilters({
@@ -167,13 +149,9 @@ const useSettingsModal = () => {
                 }}
               />
             </Tooltip>
-            <Tooltip
-              content={
-                'Show Homo sapiens only nodes'
-              }
-              usePortal={false}>
+            <Tooltip content="Show Homo sapiens only nodes">
               <Checkbox
-                label={"Homo sapiens only"}
+                label="Homo sapiens only"
                 checked={filters.showOnlyHomoSapiens}
                 onChange={(e) => {
                   setFilters({
@@ -185,9 +163,7 @@ const useSettingsModal = () => {
             </Tooltip>
           </div>
           <LockMenu />
-          <Tooltip
-            content={"Double clicking a node centers the canvas onto it"}
-            usePortal={false}>
+          <Tooltip content="Double clicking a node centers the canvas onto it">
             <Checkbox
               label="Center on double click"
               checked={centerOnDoubleClicked.value}
@@ -198,9 +174,7 @@ const useSettingsModal = () => {
             />
           </Tooltip>
         </div>
-      );
-    },
-  });
-};
-
-export default useSettingsModal;
+      </Dialog>
+    </>
+  );
+}

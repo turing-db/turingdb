@@ -1,16 +1,21 @@
-export const getFitViewport = (cy, elements, padding = 0) => {
-  const bb = elements.boundingBox();
-  const vp = cy.viewport();
+import cytoscape from "cytoscape";
 
-  let w = vp.width();
-  let h = vp.height();
-  let zoom;
+export const getFitViewport = (
+  cy: cytoscape.Core,
+  elements: cytoscape.Collection,
+  padding = 0
+) => {
+  const bb = elements.boundingBox();
+
+  let w = cy.width();
+  let h = cy.height();
+  let zoom: number;
 
   zoom = Math.min((w - 2 * padding) / bb.w, (h - 2 * padding) / bb.h);
 
   // crop zoom
-  zoom = zoom > vp.maxZoom ? vp.maxZoom : zoom;
-  zoom = zoom < vp.minZoom ? vp.minZoom : zoom;
+  zoom = zoom > cy.maxZoom() ? cy.maxZoom() : zoom;
+  zoom = zoom < cy.minZoom() ? cy.minZoom() : zoom;
 
   let pan = {
     // now pan to middle
@@ -24,7 +29,11 @@ export const getFitViewport = (cy, elements, padding = 0) => {
   };
 };
 
-export const fit = (cy, elements, padding = 0) => {
+export const fit = (
+  cy: cytoscape.Core,
+  elements: cytoscape.Collection,
+  padding = 0
+) => {
   const viewport = getFitViewport(cy, elements, padding);
   viewport.zoom *= 0.9;
   cy.viewport(viewport);

@@ -1,24 +1,15 @@
 import React from "react";
 import useVisualizerState from "../state";
-import useSearchNodesWindow from "../useSearchNodesWindow";
 import { useVisualizerContext } from "../context";
-import useKeepOnlyAlert from "../useKeepOnlyAlert";
-import useSettingsModal from "./ActionsToolbar/useSettingsModal";
-import useHiddenNodesPopover from "./ActionsToolbar/useHiddenNodesPopover";
-import useSearchNodesDatabaseWindow from "./ActionsToolbar/useSearchNodesDatabaseWindow";
 
 const Visualizer = (props) => {
   useVisualizerState(props.cyStyle);
   const vis = useVisualizerContext();
-  useSearchNodesWindow();
-  useKeepOnlyAlert();
-  useSettingsModal();
-  useHiddenNodesPopover();
-  useSearchNodesDatabaseWindow({
-    onNodeAdd: props.onNodeAdd,
-    onNodeRemove: props.onNodeRemove,
-    onNodeInspect: props.onNodeInspect,
-  });
+  //useSearchNodesDatabaseWindow({
+  //  onNodeAdd: props.onNodeAdd,
+  //  onNodeRemove: props.onNodeRemove,
+  //  onNodeInspect: props.onNodeInspect,
+  //});
 
   return (
     <div
@@ -46,7 +37,6 @@ const Visualizer = (props) => {
         </div>
       )}
       {props.contextMenu}
-      {Object.values(vis.dialogs()).map((d) => d.Content(d.props))}
       <div
         style={{
           position: "absolute",

@@ -1,6 +1,6 @@
 // Core
 import React from "react";
-import { useCanvasTrigger } from "../../";
+import { useCanvasTrigger } from "../../useCanvasTrigger";
 import { useVisualizerContext } from "../../context";
 
 // @blueprintjs

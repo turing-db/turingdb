@@ -5,17 +5,17 @@ import React from "react";
 import { ButtonGroup, Tooltip, Popover, Button } from "@blueprintjs/core";
 
 // Turing
-import { useVisualizerContext, useCanvasTrigger } from "../../";
-import SelectNodesMenu from "./SelectNodesMenu";
-import LabelMenus from "./LabelMenus";
-import { useMenuActions } from "../ContextMenu/hooks";
+import { useVisualizerContext } from "../../context";
+import { useCanvasTrigger } from "../../useCanvasTrigger";
 
-const ttParams = {
-  hoverCloseDelay: 40,
-  hoverOpenDelay: 400,
-  compact: true,
-  openOnTargetFocus: false,
-};
+import { ttParams } from "./tools";
+import LabelMenus from "./LabelMenus";
+import SelectNodesMenu from "./SelectNodesMenu";
+import SettingsDialog from "./SettingsDialog";
+import HiddenNodesDialog from "./HiddenNodesDialog";
+import SearchNodesDialog from "./SearchNodesDialog";
+import AddNodeDialog from "./AddNodeDialog";
+import { useMenuActions } from "../ContextMenu/hooks";
 
 const showCellCellInteraction = (addLayout, cy) => {
   const nodes = cy.nodes();
@@ -115,142 +115,101 @@ const ActionsToolbar = ({
     },
   });
 
+  const bpTheme = vis.state().themeMode === "dark" ? "bp5-dark" : "";
+
   return (
     <div
-      style={{
-        display: "flex",
-        flex: 1,
-        alignItems: "space-between",
-        flexWrap: "wrap",
-      }}>
-      <div style={{ display: "flex", flex: 1 }}>
-        <ButtonGroup style={{ padding: 5 }}>
-          {fitAction && (
-            <Tooltip {...ttParams} content="Fit canvas">
-              <Button
-                icon="zoom-to-fit"
-                onClick={() =>
-                  vis.cy().animate(
-                    {
-                      fit: {
-                        eles: vis.cy().elements(),
-                        padding: 100,
-                      },
+      className={`flex flex-1 justify-between flex-wrap ${bpTheme}`}>
+      <ButtonGroup>
+        {fitAction && (
+          <Tooltip {...ttParams} content="Fit canvas">
+            <Button
+              icon="zoom-to-fit"
+              onClick={() => {
+                vis.cy().animate(
+                  {
+                    fit: {
+                      eles: vis.cy().elements(),
+                      padding: 100,
                     },
-                    {
-                      duration: 600,
-                      easing: "ease-in-out-sine",
-                      queue: true,
-                    }
-                  )
-                }
-              />
-            </Tooltip>
-          )}
-
-          {cleanAction && (
-            <Tooltip {...ttParams} content="Clean up canvas">
-              <Button
-                onClick={() => vis.callbacks().requestLayoutRun(true)}
-                icon="eraser"
-              />
-            </Tooltip>
-          )}
-
-          {hiddenNodesAction && (
-            <Tooltip {...ttParams} content="Hidden nodes">
-              <Button
-                icon="eye-open"
-                onClick={vis.dialogs()["hidden-nodes"].toggle}
-              />
-            </Tooltip>
-          )}
-
-          {cellCellInteraction && (
-            <Tooltip {...ttParams} content="Show cell-cell interaction">
-              <Button
-                icon="intersection"
-                disabled={interactionDisabled}
-                onClick={() => {
-                  showCellCellInteraction(vis.callbacks().addLayout, vis.cy());
-                  vis.callbacks().requestLayoutFit(true);
-                }}
-              />
-            </Tooltip>
-          )}
-
-          {expandAction && (
-            <Tooltip {...ttParams} content="Expand all neighbors">
-              <Button
-                icon="expand-all"
-                disabled={expandDisabled}
-                onClick={() => {
-                  actions.expandNeighbors();
-                }}
-              />
-            </Tooltip>
-          )}
-
-          {collapseAction && (
-            <Tooltip {...ttParams} content="Hides neighbors">
-              <Button
-                icon="collapse-all"
-                disabled={expandDisabled}
-                onClick={() => {
-                  actions.collapseNeighbors();
-                }}
-              />
-            </Tooltip>
-          )}
-
-          {developAction && (
-            <Tooltip {...ttParams} content="Develop neighbors">
-              <Button
-                icon="fullscreen"
-                onClick={() => {
-                  actions.developNeighbors();
-                }}
-              />
-            </Tooltip>
-          )}
-        </ButtonGroup>
-
-        <ButtonGroup style={{ padding: 5 }}>
-          <LabelMenus />
-        </ButtonGroup>
-        <ButtonGroup style={{ padding: 5 }}>
-          {searchDatabaseAction && (
-            <Tooltip {...ttParams} content="Search nodes in the database">
-              <Button
-                text="Add node"
-                icon="add"
-                onClick={vis.dialogs()["search-nodes-in-database"].toggle}
-              />
-            </Tooltip>
-          )}
-        </ButtonGroup>
-      </div>
-
-      <ButtonGroup style={{ padding: 5 }}>
-        {settingsAction && (
-          <Tooltip {...ttParams} content="Settings">
-            <Button
-              onClick={vis.dialogs()["show-settings"].toggle}
-              text="Settings"
-              icon="settings"
+                  },
+                  {
+                    duration: 600,
+                    easing: "ease-in-out-sine",
+                    queue: true,
+                  }
+                );
+              }}
             />
           </Tooltip>
         )}
 
-        {searchAction && (
-          <Tooltip {...ttParams} content="Search nodes in current view">
+        {cleanAction && (
+          <Tooltip {...ttParams} content="Clean up canvas">
             <Button
-              icon="search"
-              text="Search view"
-              onClick={vis.dialogs()["search-nodes"].toggle}
+              onClick={() => vis.callbacks().requestLayoutRun(true)}
+              icon="eraser"
             />
           </Tooltip>
         )}
+
+        {hiddenNodesAction && <HiddenNodesDialog/>}
+
+        {cellCellInteraction && (
+          <Tooltip {...ttParams} content="Show cell-cell interaction">
+            <Button
+              icon="intersection"
+              disabled={interactionDisabled}
+              onClick={() => {
+                showCellCellInteraction(vis.callbacks().addLayout, vis.cy());
+                vis.callbacks().requestLayoutFit(true);
+              }}
+            />
+          </Tooltip>
+        )}
+
+        {expandAction && (
+          <Tooltip {...ttParams} content="Expand all neighbors">
+            <Button
+              icon="expand-all"
+              disabled={expandDisabled}
+              onClick={() => {
+                actions.expandNeighbors();
+              }}
+            />
+          </Tooltip>
+        )}
+
+        {collapseAction && (
+          <Tooltip {...ttParams} content="Hides neighbors">
+            <Button
+              icon="collapse-all"
+              disabled={expandDisabled}
+              onClick={() => {
+                actions.collapseNeighbors();
+              }}
+            />
+          </Tooltip>
+        )}
+
+        {developAction && (
+          <Tooltip {...ttParams} content="Develop neighbors">
+            <Button
+              icon="fullscreen"
+              onClick={() => {
+                actions.developNeighbors();
+              }}
+            />
+          </Tooltip>
+        )}
+
+        <LabelMenus/>
+        {searchDatabaseAction && <AddNodeDialog />}
+      </ButtonGroup>
+
+      <ButtonGroup>
+        {settingsAction && <SettingsDialog />}
+        {searchAction && <SearchNodesDialog />}
 
         {selectAction && (
           <Popover

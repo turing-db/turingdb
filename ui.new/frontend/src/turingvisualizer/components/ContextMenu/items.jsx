@@ -1,9 +1,10 @@
 // @blueprintjs
-import { Icon, Button, MenuItem } from "@blueprintjs/core";
+import { Dialog, Icon, Button, MenuItem } from "@blueprintjs/core";
 
 // Turing
 import { useVisualizerContext } from "../../";
 import { SelectMenu } from "./select";
+import { useDialog } from "../ActionsToolbar/tools";
 
 const titleSizeLimit = 40;
 
@@ -281,7 +282,7 @@ export const ItemHideNodes = ({ actions }) => (
   />
 );
 
-export const ItemKeepOnly = ({ actions }) => {
+export const ItemKeepOnly = ({ actions, keepOnlyAlert }) => {
   const vis = useVisualizerContext();
 
   return (
@@ -289,7 +290,7 @@ export const ItemKeepOnly = ({ actions }) => {
       icon="hurricane"
       text="Keep only"
       intent="danger"
-      onClick={() => vis.dialogs()["keep-only-alert"].toggle({ actions })}
+      onClick={keepOnlyAlert.open}
     />
   );
 };
@@ -344,7 +345,6 @@ export const ItemSearchNodes = () => {
       text="Search nodes..."
       icon="search"
       labelElement={<Icon icon="share" />}
-      onClick={vis.dialogs()["search-nodes"].toggle}
       popoverProps={{
         interactionKind: "click",
       }}

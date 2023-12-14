@@ -1,10 +1,22 @@
-import { getFitViewport } from "src/turingvisualizer/cytoscape/tools";
+import { getFitViewport } from "./cytoscape/tools";
+import cytoscape from "cytoscape";
+import { Visualizer, CanvasEvent } from "./types";
 
-export const onetap = (_vis, _e) => {};
+export const onetap: CanvasEvent = (
+  vis: Visualizer,
+  e: cytoscape.EventObject
+) => {
+  if (e.target.group === undefined) return;
+  if (e.target.group() !== "nodes") return;
+  vis.callbacks().setInspectedNode(e.target.data());
+};
 
-export const cxttap = (vis, e) => {
+export const cxttap: CanvasEvent = (vis, e) => {
   const target = e.target;
-  const newEvent = new e.originalEvent.constructor(
+  type EventConstructor = new (name: string, e: MouseEvent) => MouseEvent;
+  const constructEvent = e.originalEvent.constructor as EventConstructor;
+
+  const newEvent: MouseEvent = new constructEvent(
     "contextmenu",
     e.originalEvent
   );
@@ -21,7 +33,9 @@ export const cxttap = (vis, e) => {
       vis
         .cy()
         .elements()
-        .forEach((e) => e.unselect());
+        .forEach((e) => {
+          e.unselect();
+        });
       target.select();
     }
     vis.contextMenuSetData({ group: "nodes", data: target.data() });
@@ -31,7 +45,9 @@ export const cxttap = (vis, e) => {
       vis
         .cy()
         .elements()
-        .forEach((e) => e.unselect());
+        .forEach((e) => {
+          e.unselect();
+        });
       target.select();
     }
     vis.contextMenuSetData({ group: "edges", data: target.data() });
@@ -40,7 +56,7 @@ export const cxttap = (vis, e) => {
   vis.contextMenu().dispatchEvent(newEvent);
 };
 
-export const dragfreeon = (vis, _e) => {
+export const dragfreeon: CanvasEvent = (vis, _e) => {
   const layouts = vis.state().layouts;
   const mapping = layouts.mapping;
   const positions = Object.fromEntries(
@@ -56,11 +72,14 @@ export const dragfreeon = (vis, _e) => {
     .filter((n) => {
       const layoutId = mapping[n.data().id] || 0;
       const layout = layouts.definitions[layoutId];
+      if (!layout) return false;
+
       return layout.name === "preset";
     })
     .forEach((n) => {
       const layoutId = mapping[n.data().id];
-      positions[layoutId][n.data().id] = n.position();
+      const id: string = n.data().id;
+      positions[layoutId]![id] = n.position();
     });
 
   Object.entries(positions).forEach(([lId, p]) => {
@@ -73,7 +92,7 @@ export const dragfreeon = (vis, _e) => {
   });
 };
 
-export const dbltap = (vis, e) => {
+export const dbltap: CanvasEvent = (vis, e) => {
   const target = e.target;
 
   if (!target.group) {
@@ -108,7 +127,7 @@ export const dbltap = (vis, e) => {
   }
 };
 
-export const select = (vis) => {
+export const select: CanvasEvent = (vis) => {
   const unselected = vis.cy().$(":unselected");
   const selected = vis.cy().$(":selected");
 
@@ -122,19 +141,17 @@ export const select = (vis) => {
         opacity: 1.0,
       },
       duration: 200,
-      transition: "ease-in",
+      easing: "ease-in",
     });
   }
 
-  Object.values(vis.eventHooks()["select"]).forEach((fn) => fn());
+  Object.values(vis.eventHooks()["select"]!).forEach((fn) => fn());
 };
 
-export const render = (vis) => {
+export const render: CanvasEvent = (vis) => {
+  if (vis.cy().elements().length === 0) return;
   const viewport = getFitViewport(vis.cy(), vis.cy().elements(), 100);
-  const zoom = viewport?.zoom;
-
-  if (!zoom) return;
-
+  const zoom = viewport.zoom!;
   vis.cy().minZoom(zoom * 0.5);
   vis.cy().maxZoom(6);
 };

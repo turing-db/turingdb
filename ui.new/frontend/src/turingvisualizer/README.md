@@ -266,7 +266,7 @@ const onClick = (e) => console.log(selectedNodesRef.current);
 The canvas style is customizable by modifying the cytoscape json stylesheet:
 
 ```JSX
-import { style } from 'turingvisualizer';
+import style from 'turingvisualizer/style';
 
 const MyComponent = () => {
     const cyStyle = [

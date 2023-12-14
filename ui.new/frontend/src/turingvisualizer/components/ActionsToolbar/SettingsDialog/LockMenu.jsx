@@ -1,11 +1,11 @@
 // Core
 import React from "react";
-import { useVisualizerContext } from "../../context";
+import { useVisualizerContext } from "../../../context";
 
 // @blueprintjs
 import { Tooltip, MenuItem, Button } from "@blueprintjs/core";
-import { SelectMenu } from "../ContextMenu/select";
-import { lockBehaviours } from "../../reducers/layouts";
+import { SelectMenu } from "../../ContextMenu/select";
+import { lockBehaviours } from "../../../reducers/layouts";
 
 const ttParams = {
   hoverCloseDelay: 40,

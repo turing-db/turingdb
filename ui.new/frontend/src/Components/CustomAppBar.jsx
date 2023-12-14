@@ -97,6 +97,7 @@ const Drawer = styled(MuiDrawer, {
     ...closedMixin(theme),
     "& .MuiDrawer-paper": closedMixin(theme),
   }),
+  zIndex: 5,
 }));
 
 export default function CustomAppBar() {

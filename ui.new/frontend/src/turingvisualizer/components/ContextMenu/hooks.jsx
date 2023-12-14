@@ -148,7 +148,7 @@ export const useMenuActions = () => {
         .filter((e) => e.data().node_type_name !== nt)
         .animate({
           style: {
-            opacity: 0.5,
+            opacity: 0.3,
           },
           duration: 400,
           easing: "ease-in",
@@ -178,7 +178,7 @@ export const useMenuActions = () => {
         )
         .animate({
           style: {
-            opacity: 0.5,
+            opacity: 0.3,
           },
           duration: 400,
           easing: "ease-in",

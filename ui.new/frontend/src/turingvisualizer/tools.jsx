@@ -2,8 +2,8 @@
 import React from "react";
 
 //Turing
-import * as queries from "./queries";
-import * as colors from "./colors";
+import { useDevElements, useElementsQuery } from "./queries";
+import { useElementColorMakers } from "./colors";
 import { useVisualizerContext } from "./";
 
 const useGetElementLabel = (state) => {
@@ -12,7 +12,12 @@ const useGetElementLabel = (state) => {
       nodes: (el) => {
         if (state.nodeLabel === "None") return "";
         if (state.nodeLabel === "Node Type") return el.data.node_type_name;
-        return el.data.properties[state.nodeLabel] || "";
+        return (
+          el.data.properties[state.nodeLabel] ||
+          el.data.properties["displayName"] ||
+          el.data.properties["label"] ||
+          ""
+        );
       },
       edges: (el) => {
         if (state.edgeLabel === "None") return "";
@@ -78,7 +83,7 @@ export const getDefaultCanvasTheme = () => ({
 
 const useGetElementColors = (state, rawElements, theme) => {
   const { nodeColorMakers, edgeColorMakers } =
-    colors.useElementColorMakers(rawElements);
+    useElementColorMakers(rawElements);
 
   const getElementColors = React.useCallback(
     (el) => {
@@ -140,19 +145,18 @@ export const useCytoscapeElements = (props) => {
   const vis = useVisualizerContext();
 
   const { data: rawElements } = props.devMode
-    ? queries.useDevElements({
+    ? useDevElements({
         ...props,
         hiddenNodeIds: Object.keys(props.hiddenNodes),
       })
-    : queries.useElementsQuery({
+    : useElementsQuery({
         ...props,
         hiddenNodeIds: Object.keys(props.hiddenNodes),
       });
 
-  const elements = React.useMemo(
-    () => rawElements || previousElements.current,
-    [rawElements]
-  );
+  const elements = React.useMemo(() => {
+    return rawElements || previousElements.current;
+  }, [rawElements]);
 
   const getElementLabel = useGetElementLabel(props);
   const getElementColors = useGetElementColors(props, elements, theme);
@@ -180,19 +184,4 @@ export const useCytoscapeElements = (props) => {
   previousElements.current = data;
 
   return data;
-};
-
-export const useCanvasTrigger = ({
-  category,
-  name,
-  callback = () => {},
-  core = false,
-}) => {
-  const vis = useVisualizerContext();
-
-  React.useEffect(() => {
-    core
-      ? (vis.triggers()[category].secondary[name] = () => callback())
-      : (vis.triggers()[category].core[name] = () => callback());
-  }, [callback, name, category, vis, core]);
 };

@@ -36,9 +36,9 @@ export const fetchNodes = (dbName, filters) => async (dispatch) => {
 
       if (filters.yield_edges)
         // Store nodes only if the info is complete
-        dispatch(actions.cacheNodes(res.data));
+        dispatch(actions.cacheNodes(res.data.nodes));
 
-      return res.data;
+      return res.data.nodes;
     });
 };
 

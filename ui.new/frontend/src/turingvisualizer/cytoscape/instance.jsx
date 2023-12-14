@@ -7,7 +7,8 @@ import cola from "cytoscape-cola";
 //import { Icon } from "@blueprintjs/core";
 
 // Turing
-import { style, useVisualizerContext } from "..";
+import { useVisualizerContext } from "../context";
+import style from "../style"
 
 if (typeof cytoscape("core", "cola") === "undefined") {
   cytoscape.use(cola);

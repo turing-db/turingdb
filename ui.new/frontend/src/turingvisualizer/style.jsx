@@ -1,4 +1,4 @@
-const cyStyle = [
+const style = [
   {
     selector: "core",
     style: {
@@ -92,4 +92,4 @@ const cyStyle = [
   },
 ];
 
-export default cyStyle;
+export default style;

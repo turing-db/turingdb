@@ -9,7 +9,7 @@ import {
 export function SelectProperty(props: {
   properties: string[];
   currentProp: string | undefined;
-  setCurrentProp: React.Dispatch<React.SetStateAction<string|undefined>>;
+  setCurrentProp: React.Dispatch<React.SetStateAction<string>>;
 }) {
   const predicate: ItemPredicate<string> = (
     query,

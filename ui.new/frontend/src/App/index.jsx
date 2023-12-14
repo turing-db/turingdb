@@ -98,7 +98,7 @@ const ThemedApp = () => {
       <Box
         display="flex"
         sx={{ flexGrow: 1 }}
-        className={theme.palette.mode === "light" ? "" : "bp5-dark"}>
+        className={theme.palette.mode === "dark" && "bp5-dark"}>
         <CustomAppBar />
         <Box
           component="main"

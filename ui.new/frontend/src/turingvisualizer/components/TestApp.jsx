@@ -1,16 +1,10 @@
-import {
-  Alignment,
-  Menu,
-  MenuItem,
-  Button,
-  Navbar,
-  Section,
-  Popover,
-  ButtonGroup,
-} from "@blueprintjs/core";
+import { Button, Section, ButtonGroup } from "@blueprintjs/core";
 import React from "react";
 
-import { useVisualizerContext, useCanvasTrigger, style } from "../";
+import { useVisualizerContext } from "../context";
+import { useCanvasTrigger } from "../useCanvasTrigger";
+import style from "../style";
+
 import {
   Canvas,
   Visualizer,
@@ -144,7 +138,7 @@ const AppContent = ({ hideHowTo }) => {
           </ButtonGroup>
         </div>
         <div style={{ margin: 10, marginTop: 0 }}>
-          <ActionsToolbar/>
+          <ActionsToolbar />
         </div>
       </Visualizer>
     </>
