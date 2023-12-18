@@ -94,6 +94,9 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
         }
     }
 
+    // At this point: a declaration has been created for each variable
+    // in each pattern and select fields are connected to the var decl
+
     return true;
 }
 
@@ -106,11 +109,6 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
     VarExpr* var = entity->getVar();
     if (!var) {
         return true;
-    }
-
-    // Check that the variable has not been already declared
-    if (declContext->getDecl(var->getName())) {
-        return false;
     }
 
     // Create the variable declaration in the scope of the command

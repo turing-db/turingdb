@@ -8,13 +8,14 @@
 
 using namespace db;
 
-QueryParser::QueryParser()
+QueryParser::QueryParser(ASTContext* astCtxt)
+    : _astCtxt(astCtxt)
 {
 }
 
 QueryCommand* QueryParser::parse(StringSpan query) {
     YScanner yscanner;
-    YParser yparser(yscanner, &_astCtxt);
+    YParser yparser(yscanner, _astCtxt);
 
     std::istringstream iss;
     iss.rdbuf()->pubsetbuf(query.getData(), query.getSize());
@@ -23,5 +24,5 @@ QueryCommand* QueryParser::parse(StringSpan query) {
 
     yparser.parse();
 
-    return _astCtxt.getRoot();
+    return _astCtxt->getRoot();
 }

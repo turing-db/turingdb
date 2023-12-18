@@ -15,6 +15,7 @@ class EdgePattern;
 class TypeConstraint;
 class ExprConstraint;
 class Expr;
+class VarDecl;
 
 class ASTContext {
 public:
@@ -29,6 +30,7 @@ public:
     friend TypeConstraint;
     friend ExprConstraint;
     friend Expr;
+    friend VarDecl;
 
     ASTContext();
     ~ASTContext();
@@ -54,6 +56,7 @@ private:
     std::vector<TypeConstraint*> _typeConstraints;
     std::vector<ExprConstraint*> _exprConstraints;
     std::vector<Expr*> _expr;
+    std::vector<VarDecl*> _varDecls;
 
     void addCmd(QueryCommand* cmd);
     void addSelectField(SelectField* field);
@@ -66,6 +69,7 @@ private:
     void addTypeConstraint(TypeConstraint* constr);
     void addExprConstraint(ExprConstraint* constr);
     void addExpr(Expr* expr);
+    void addVarDecl(VarDecl* decl);
 };
 
 } 

@@ -9,7 +9,7 @@ class DeclContext;
 
 class VarDecl {
 public:
-    friend DeclContext;
+    friend ASTContext;
 
     static VarDecl* create(ASTContext* astCtxt,
                            DeclContext* declContext,

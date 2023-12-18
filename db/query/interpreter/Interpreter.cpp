@@ -3,6 +3,7 @@
 #include <string_view>
 #include <chrono>
 
+#include "ASTContext.h"
 #include "QueryParser.h"
 #include "QueryAnalyzer.h"
 #include "Planner.h"
@@ -19,6 +20,7 @@ namespace {
 
 static const std::string Ok = "OK";
 static const std::string ParseError = "PARSE_ERROR";
+static const std::string AnalyzeError = "ANALYZE_ERROR";
 static const std::string PlanError = "PLAN_ERROR";
 static const std::string ExecError = "EXEC_ERROR";
 static const std::string UnknownError = "UNKNOWN_ERROR";
@@ -31,6 +33,9 @@ const std::string& getQueryStatusString(QueryStatus status) {
 
         case QueryStatus::PARSE_ERROR:
             return ParseError;
+
+        case QueryStatus::ANALYZE_ERROR:
+            return AnalyzeError;
 
         case QueryStatus::QUERY_PLAN_ERROR:
             return PlanError;
@@ -59,10 +64,16 @@ Interpreter::~Interpreter() {
 void Interpreter::execQuery(StringSpan query, Buffer* outBuffer) const {
     const auto timeExecStart = Clock::now();
 
-    QueryParser parser;
+    ASTContext astCtxt;
+    QueryParser parser(&astCtxt);
     QueryCommand* cmd = parser.parse(query);
     if (!cmd) {
         return handleQueryError(QueryStatus::PARSE_ERROR, outBuffer);
+    }
+
+    QueryAnalyzer analyzer(&astCtxt);
+    if (!analyzer.analyze(cmd)) {
+        return handleQueryError(QueryStatus::ANALYZE_ERROR, outBuffer);
     }
 
     Planner planner(cmd, _interpCtxt);

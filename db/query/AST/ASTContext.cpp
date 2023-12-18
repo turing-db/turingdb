@@ -7,6 +7,7 @@
 #include "Expr.h"
 #include "TypeConstraint.h"
 #include "ExprConstraint.h"
+#include "VarDecl.h"
 
 using namespace db;
 
@@ -58,6 +59,10 @@ ASTContext::~ASTContext() {
     for (Expr* expr : _expr) {
         delete expr;
     }
+
+    for (VarDecl* decl : _varDecls) {
+        delete decl;
+    }
 }
 
 void ASTContext::addCmd(QueryCommand* cmd) {
@@ -102,4 +107,8 @@ void ASTContext::addTypeConstraint(TypeConstraint* constr) {
 
 void ASTContext::addExprConstraint(ExprConstraint* constr) {
     _exprConstraints.push_back(constr);
+}
+
+void ASTContext::addVarDecl(VarDecl* decl) {
+    _varDecls.push_back(decl);
 }
