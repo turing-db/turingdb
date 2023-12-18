@@ -14,3 +14,9 @@ ListDBStep::~ListDBStep() {
 std::string ListDBStep::getName() const {
     return "ListDBStep";
 }
+
+ListDBStep* ListDBStep::create(QueryPlan* plan) {
+    ListDBStep* step = new ListDBStep();
+    plan->addStep(step);
+    return step;
+}

@@ -66,11 +66,9 @@ private:
 class PathElement {
 public:
     friend ASTContext;
-
     static PathElement* create(ASTContext* ctxt,
                                EdgePattern* edge,
                                NodePattern* node);
-    static PathElement* create(ASTContext* ctxt, NodePattern* node);
 
     EdgePattern* getEdge() const { return _edge; }
     NodePattern* getNode() const { return _node; }
@@ -90,11 +88,15 @@ public:
 
     static PathPattern* create(ASTContext* ctxt);
 
+    void setOrigin(NodePattern* node) { _origin = node; }
+    NodePattern* getOrigin() const { return _origin; }
+
     const PathElements& elements() const { return _elements; }
 
     void addElement(PathElement* element);
 
 private:
+    NodePattern* _origin {nullptr};
     PathElements _elements;
 
     PathPattern();

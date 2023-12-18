@@ -161,7 +161,7 @@ from_target: path_pattern {
 
 path_pattern: node_pattern                           {
                                                          auto pattern = PathPattern::create(ctxt);
-                                                         pattern->addElement(PathElement::create(ctxt, $1));
+                                                         pattern->setOrigin($1);
                                                          $$ = pattern;
                                                      }
             | path_pattern edge_pattern node_pattern {

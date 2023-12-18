@@ -5,6 +5,7 @@
 namespace db {
 
 class ASTContext;
+class VarDecl;
 
 class Expr {
 public:
@@ -30,8 +31,13 @@ public:
 
     const std::string& getName() const { return _varName; }
 
+    VarDecl* getDecl() const { return _decl; }
+
+    void setDecl(VarDecl* decl) { _decl = decl; }
+
 private:
     const std::string _varName;
+    VarDecl* _decl {nullptr};
 
     VarExpr(const std::string& varName);
     ~VarExpr();

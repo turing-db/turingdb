@@ -8,17 +8,19 @@ class QueryPlanStep;
 
 class QueryPlan {
 public:
-    using QueryPlanSteps = std::vector<QueryPlanStep*>;
-
     QueryPlan();
     ~QueryPlan();
 
-    const QueryPlanSteps& steps() const { return _steps; }
+    QueryPlanStep* getRoot() const { return _root; }
 
-    void addStep(QueryPlanStep* step);
+    void setRoot(QueryPlanStep* step) { _root = step; }
 
 private:
+    using QueryPlanSteps = std::vector<QueryPlanStep*>;
     QueryPlanSteps _steps;
+    QueryPlanStep* _root {nullptr};
+
+    void addStep(QueryPlanStep* step);
 };
 
 }

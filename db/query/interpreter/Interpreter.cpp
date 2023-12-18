@@ -4,6 +4,7 @@
 #include <chrono>
 
 #include "QueryParser.h"
+#include "QueryAnalyzer.h"
 #include "Planner.h"
 #include "QueryPipelineBuilder.h"
 #include "QueryPipeline.h"

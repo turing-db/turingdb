@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include "DeclContext.h"
+
 namespace db {
 
 class ASTContext;

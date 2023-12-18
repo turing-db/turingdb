@@ -1,7 +1,6 @@
-set(plan_sources 
+set(plan_sources
         Planner.cpp
         QueryPlan.cpp
-        SearchNodeStep.cpp
         ListDBStep.cpp
         OpenDBStep.cpp
         QueryPipeline.cpp

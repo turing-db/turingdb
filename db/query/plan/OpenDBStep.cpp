@@ -13,3 +13,9 @@ OpenDBStep::~OpenDBStep() {
 std::string OpenDBStep::getName() const {
     return "OpenDBStep";
 }
+
+OpenDBStep* OpenDBStep::create(QueryPlan* plan, const std::string& path) {
+    OpenDBStep* step = new OpenDBStep(path);
+    plan->addStep(step);
+    return step;
+}

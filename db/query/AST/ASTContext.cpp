@@ -31,8 +31,8 @@ ASTContext::~ASTContext() {
         delete pattern;
     }
 
-    for (PathElement* element : _pathElements) {
-        delete element;
+    for (PathElement* elem : _pathElements) {
+        delete elem;
     }
 
     for (EntityPattern* pattern : _entityPatterns) {
@@ -76,8 +76,8 @@ void ASTContext::addPathPattern(PathPattern* pattern) {
     _pathPatterns.push_back(pattern);
 }
 
-void ASTContext::addPathElement(PathElement* element) {
-    _pathElements.push_back(element);
+void ASTContext::addPathElement(PathElement* elem) {
+    _pathElements.push_back(elem);
 }
 
 void ASTContext::addEntityPattern(EntityPattern* pattern) {

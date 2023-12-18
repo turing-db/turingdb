@@ -8,12 +8,13 @@ class QueryPlan;
 
 class ListDBStep : public QueryPlanStep {
 public:
-    ListDBStep();
-    ~ListDBStep();
-
     std::string getName() const override;
 
+    static ListDBStep* create(QueryPlan* plan);
+
 private:
+    ListDBStep();
+    ~ListDBStep();
 };
 
 }

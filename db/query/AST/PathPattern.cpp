@@ -58,8 +58,7 @@ EdgePattern* EdgePattern::create(ASTContext* ctxt, EntityPattern* entity) {
 
 // PathElement
 PathElement::PathElement(EdgePattern* edge, NodePattern* node)
-    : _edge(edge),
-    _node(node)
+    : _edge(edge), _node(node)
 {
 }
 
@@ -69,15 +68,9 @@ PathElement::~PathElement() {
 PathElement* PathElement::create(ASTContext* ctxt,
                                  EdgePattern* edge,
                                  NodePattern* node) {
-    PathElement* elem = new PathElement(edge, node);
-    ctxt->addPathElement(elem);
-    return elem;
-}
-
-PathElement* PathElement::create(ASTContext* ctxt, NodePattern* node) {
-    PathElement* elem = new PathElement(nullptr, node);
-    ctxt->addPathElement(elem);
-    return elem;
+    PathElement* step = new PathElement(edge, node);
+    ctxt->addPathElement(step);
+    return step;
 }
 
 // PathPattern
@@ -94,6 +87,6 @@ PathPattern* PathPattern::create(ASTContext* ctxt) {
     return pattern;
 }
 
-void PathPattern::addElement(PathElement* element) {
-    _elements.push_back(element);
+void PathPattern::addElement(PathElement* elem) {
+    _elements.push_back(elem);
 }

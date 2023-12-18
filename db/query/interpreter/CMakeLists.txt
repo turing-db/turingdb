@@ -1,5 +1,6 @@
 
 set(interpreter_sources
+        QueryAnalyzer.cpp
         ExecutionContext.cpp 
         Interpreter.cpp)
 

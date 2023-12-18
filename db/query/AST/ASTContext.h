@@ -58,7 +58,7 @@ private:
     void addCmd(QueryCommand* cmd);
     void addSelectField(SelectField* field);
     void addFromTarget(FromTarget* target);
-    void addPathElement(PathElement* element);
+    void addPathElement(PathElement* elem);
     void addPathPattern(PathPattern* pattern);
     void addEntityPattern(EntityPattern* pattern);
     void addNodePattern(NodePattern* pattern);

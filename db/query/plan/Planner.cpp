@@ -16,11 +16,14 @@ Planner::Planner(const QueryCommand* query,
                  InterpreterContext* interpCtxt)
     : _query(query),
     _interpCtxt(interpCtxt),
-    _queryPlan(std::make_unique<QueryPlan>())
+    _plan(new QueryPlan())
 {
 }
 
 Planner::~Planner() {
+    if (_plan) {
+        delete _plan;
+    }
 }
 
 bool Planner::buildQueryPlan() {
@@ -44,33 +47,43 @@ bool Planner::buildQueryPlan() {
 }
 
 bool Planner::planListCommand(const ListCommand* cmd) {
-    ListDBStep* listDB = new ListDBStep();
-    _queryPlan->addStep(listDB);
+    ListDBStep* listDB = ListDBStep::create(_plan);
+    _plan->setRoot(listDB);
     return true;
 }
 
 bool Planner::planOpenCommand(const OpenCommand* cmd) {
-    OpenDBStep* openDB = new OpenDBStep(cmd->getPath());
-    _queryPlan->addStep(openDB);
+    OpenDBStep* openDB = OpenDBStep::create(_plan, cmd->getPath());
+    _plan->setRoot(openDB);
     return true;
 }
 
 bool Planner::planSelectCommand(const SelectCommand* cmd) {
-    // Plan for each FROM target
-    std::vector<QueryPlanStep*> targetsSteps;
-    for (const FromTarget* fromTarget : cmd->fromTargets()) {
-        QueryPlanStep* patternStep = planPathPattern(fromTarget->getPattern());
-        if (!patternStep) {
-            return nullptr;
-        }
-
-        targetsSteps.push_back(patternStep);
-    }
-
     return false;
 }
 
 QueryPlanStep* Planner::planPathPattern(const PathPattern* pattern) {
-    for (const PathElement* pathElement : pattern->elements()) {
+    auto originStep = planNodePattern(pattern->getOrigin());
+    if (!originStep) {
+        return nullptr;
     }
+
+    auto prevStep = originStep;
+    for (const PathElement* elem : pattern->elements()) {
+        auto expandStep = planPathElement(elem, prevStep);
+        if (!expandStep) {
+            return nullptr;
+        }
+    }
+
+    return prevStep;
+}
+
+QueryPlanStep* Planner::planNodePattern(const NodePattern* pattern) {
+    EntityPattern* entity = pattern->getEntity();
+    
+    TypeConstraint* typeConstr = entity->getTypeConstraint();
+    ExprConstraint* exprConstr = entity->getExprConstraint();
+
+    return nullptr;
 }
