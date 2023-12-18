@@ -1,6 +1,7 @@
 #include "QueryCommand.h"
 
 #include "ASTContext.h"
+#include "DeclContext.h"
 
 using namespace db;
 
@@ -42,6 +43,7 @@ OpenCommand* OpenCommand::create(ASTContext* ctxt, const std::string& path) {
 /* SelectCommand */
 
 SelectCommand::SelectCommand()
+    : _declContext(std::make_unique<DeclContext>())
 {
 }
 

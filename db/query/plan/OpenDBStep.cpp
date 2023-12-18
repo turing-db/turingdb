@@ -1,5 +1,7 @@
 #include "OpenDBStep.h"
 
+#include "QueryPlan.h"
+
 using namespace db;
 
 OpenDBStep::OpenDBStep(const std::string& path)

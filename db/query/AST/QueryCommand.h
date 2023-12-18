@@ -2,12 +2,12 @@
 
 #include <string>
 #include <vector>
-
-#include "DeclContext.h"
+#include <memory>
 
 namespace db {
 
 class ASTContext;
+class DeclContext;
 class SelectField;
 class FromTarget;
 
@@ -72,6 +72,8 @@ public:
 
     static SelectCommand* create(ASTContext* ctxt);
 
+    DeclContext* getDeclContext() const { return _declContext.get(); }
+
     Kind getKind() const override { return QCOM_SELECT_COMMAND; }
 
     const SelectFields& selectFields() const { return _selectFields; }
@@ -81,6 +83,7 @@ public:
     void addFromTarget(FromTarget* fromTarget);
 
 private:
+    std::unique_ptr<DeclContext> _declContext;
     SelectFields _selectFields;
     FromTargets _fromTargets;
 
