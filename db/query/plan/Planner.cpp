@@ -80,10 +80,5 @@ QueryPlanStep* Planner::planPathPattern(const PathPattern* pattern) {
 }
 
 QueryPlanStep* Planner::planNodePattern(const NodePattern* pattern) {
-    EntityPattern* entity = pattern->getEntity();
-    
-    TypeConstraint* typeConstr = entity->getTypeConstraint();
-    ExprConstraint* exprConstr = entity->getExprConstraint();
-
     return nullptr;
 }
