@@ -78,10 +78,19 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
 
     // Select fields
     const auto& selectFields = cmd->selectFields();
-    for (const SelectField* field : selectFields) {
+    for (SelectField* field : selectFields) {
         // Check that if we have a star field it is the only select field
         if (field->isAll()) {
             return (selectFields.size() == 1);
+        } else {
+            const auto& name = field->getName();
+            // Check that the variable exists in the declContext
+            VarDecl* decl = declContext->getDecl(name);
+            if (!decl) {
+                return false;
+            }
+
+            field->setDecl(decl);
         }
     }
 
@@ -109,7 +118,7 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
     if (!decl) {
         return false;
     }
-    
+
     var->setDecl(decl);
 
     return true;

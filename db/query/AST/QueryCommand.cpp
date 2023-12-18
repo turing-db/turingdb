@@ -59,3 +59,7 @@ SelectCommand* SelectCommand::create(ASTContext* ctxt) {
 void SelectCommand::addSelectField(SelectField* field) {
     _selectFields.push_back(field);
 }
+
+void SelectCommand::addFromTarget(FromTarget* fromTarget) {
+    _fromTargets.push_back(fromTarget);
+}
