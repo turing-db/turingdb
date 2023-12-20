@@ -66,7 +66,7 @@ export const useCytoscapeInstance = () => {
       }
     });
 
-    vis.cy().on("grab", (e) => {
+    vis.cy().on("grabon", (e) => {
       if (!e.target?.group) return;
       if (e.target.group() !== "nodes") return;
       const n = e.target;
@@ -87,12 +87,13 @@ export const useCytoscapeInstance = () => {
 
       if (scratch.shiftKey || scratch.ctrlKey) {
         const p = n.position();
+
         scratch.shift.x = p.x - scratch.previousPosition.x;
         scratch.shift.y = p.y - scratch.previousPosition.y;
 
         // if shift key, whole fragment. else if ctrl key, only unique neighbors
         const frag = scratch.shiftKey
-          ? getFragment(vis.cy(), n.id()).difference(n)
+          ? getFragment(vis.cy(), n.id()).difference(n).filter(n => !n.selected())
           : vis
               .cy()
               .$id(n.id())
@@ -100,10 +101,12 @@ export const useCytoscapeInstance = () => {
               .filter((e) => {
                 if (e.group === "edges") return true;
                 return e.connectedEdges().length <= 1;
-              });
+              })
+              .filter((e) => !e.selected());
 
         frag.shift(scratch.shift);
 
+        scratch.shift = { x: 0, y: 0};
         scratch.previousPosition.x = p.x;
         scratch.previousPosition.y = p.y;
         n.scratch("turing", scratch);
