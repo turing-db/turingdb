@@ -4,7 +4,7 @@ import { Dialog, Icon, Button, MenuItem } from "@blueprintjs/core";
 // Turing
 import { useVisualizerContext } from "../../";
 import { SelectMenu } from "./select";
-import { getFragment } from "../../cytoscape/tools";
+import { useDialog } from "../ActionsToolbar/tools";
 
 const titleSizeLimit = 40;
 
@@ -58,7 +58,14 @@ export const ItemSelectFragment = () => {
       text="Select connected nodes"
       onClick={() => {
         vis.cy().elements().unselect();
-        const fragment = getFragment(vis.cy(), data.id);
+        let fragment = vis.cy().$id(data.id).closedNeighborhood();
+        let previousSize = fragment.length;
+
+        do {
+          previousSize = fragment.length;
+          fragment = fragment.closedNeighborhood();
+        } while (previousSize !== fragment.length);
+
         fragment.select();
       }}
     />

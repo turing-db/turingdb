@@ -9,22 +9,10 @@ import {
   Tag,
   Icon,
 } from "@blueprintjs/core";
-import { ItemPredicate, ItemRenderer, Select } from "@blueprintjs/select";
+import { Select } from "@blueprintjs/select";
 
-export default function QueryNodesBar(props: {
-  propNames: string[];
-  setPropName: React.Dispatch<React.SetStateAction<string>>;
-  propName: string
-  setPropValue: React.Dispatch<React.SetStateAction<string>>;
-  nodeCount: number,
-  propValue: string,
-}) {
-  const filterProp: ItemPredicate<string> = (
-    query,
-    prop,
-    _index,
-    exactMatch
-  ) => {
+export default function QueryNodesBar(props) {
+  const filterProp = (query, prop, _index, exactMatch) => {
     const normalizedProp = prop.toLowerCase();
     const normalizedQuery = query.toLowerCase();
 
@@ -35,10 +23,7 @@ export default function QueryNodesBar(props: {
     return normalizedProp.indexOf(normalizedQuery) >= 0;
   };
 
-  const renderProp: ItemRenderer<string> = (
-    prop,
-    { handleClick, handleFocus, modifiers }
-  ) => {
+  const renderProp = (prop, { handleClick, handleFocus, modifiers }) => {
     if (!modifiers.matchesPredicate) {
       return null;
     }
@@ -57,7 +42,7 @@ export default function QueryNodesBar(props: {
   };
 
   const renderList = ({ items, renderItem, itemsParentRef }) => {
-    const renderedItems = items.map(renderItem);
+    const renderedItems = items.map(renderItem).filter((item) => item != null);
 
     return (
       <Menu
@@ -99,7 +84,7 @@ export default function QueryNodesBar(props: {
           leftElement={<Icon icon="search" />}
           onChange={(e) => props.setPropValue(e.target.value)}
           placeholder="Find nodes"
-          rightElement={<Tag minimal>{props.nodeCount}</Tag>}
+          rightElement={<Tag minimal>{props.nodes.length}</Tag>}
           value={props.propValue}
         />
       </div>

@@ -63,7 +63,6 @@ const Title = (props) => {
 export default function NodeFilterContainer({
   selectedNodeType,
   propertyValue,
-  filters,
 }) {
   const [tooManyNodes, setTooManyNodes] = React.useState(false);
   const [error, setError] = React.useState(null);
@@ -84,7 +83,7 @@ export default function NodeFilterContainer({
   };
 
   const { data, isFetching } = useQuery(
-    ["list_nodes", filters, dbName, selectedNodeType, nodeLabel, propertyValue],
+    ["list_nodes", dbName, selectedNodeType, nodeLabel, propertyValue],
     React.useCallback(
       () =>
         dispatch(
@@ -92,7 +91,6 @@ export default function NodeFilterContainer({
             ...(selectedNodeType ? { node_type_name: selectedNodeType } : {}),
             ...(nodeLabel ? { prop_name: nodeLabel } : {}),
             ...(propertyValue ? { prop_value: propertyValue } : {}),
-            filters,
             yield_edges: false,
           })
         ).then((res) => {
@@ -105,7 +103,7 @@ export default function NodeFilterContainer({
           setTooManyNodes(false);
           return Object.fromEntries(res.map((n) => [n.id, n]));
         }),
-      [dbName, filters, dispatch, nodeLabel, propertyValue, selectedNodeType]
+      [dbName, dispatch, nodeLabel, propertyValue, selectedNodeType]
     )
   );
 

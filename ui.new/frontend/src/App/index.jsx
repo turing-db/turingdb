@@ -76,7 +76,7 @@ const useTheme = (options) => {
           };
           theme.edges = {
             connecting: {
-              line: "rgb(0,93,0)",
+              line: "rgb(0,193,0)",
               text: "rgb(0,193,0)",
             },
             neighbor: {

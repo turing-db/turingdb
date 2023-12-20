@@ -5,8 +5,9 @@ import React from "react";
 import { Button, Dialog, Tooltip } from "@blueprintjs/core";
 
 // Turing
-import { useVisualizerContext } from "../../context";
-import { dialogParams, ttParams, useDefinedState } from "../../tools";
+import { useVisualizerContext } from "../../../";
+import { dialogParams, ttParams, useDefinedState } from "../tools";
+
 import QueryNodesBar from "./QueryNodesBar";
 import NodeContainer from "./NodeContainer";
 import { usePropertyTypes } from "../AddNodeDialog/nodes";
@@ -29,9 +30,9 @@ export function SearchNodesDialog() {
 
   const propName = useDefinedState("");
   const [propValue, setPropValue] = React.useState("");
-  const properties = usePropertyTypes(vis.state()!.dbName);
+  const properties = usePropertyTypes(vis.state().dbName);
 
-  const previousNodes = React.useRef<cytoscape.CollectionReturnValue | undefined>();
+  const previousNodes = React.useRef([]);
 
   React.useEffect(() => {
     if (properties.includes("displayName")) {
@@ -46,8 +47,8 @@ export function SearchNodesDialog() {
 
   const nodes = vis.searchNodesDialog.isOpen
     ? vis
-        .cy()!
-        .nodes()
+        .cy()
+        ?.nodes()
         .filter((n) => {
           const v = String(
             (() => {
@@ -70,7 +71,6 @@ export function SearchNodesDialog() {
     setPropValue,
     propNames: properties,
     nodes,
-    nodeCount: nodes?.length || 0,
   };
 
   return (

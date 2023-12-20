@@ -1,6 +1,5 @@
 import React from "react";
 import { VisualizerReferences, useVisualizerReferences } from "../refs";
-import { DialogInfos, useDialog } from "../tools";
 import {
   CxtMenuData,
   HookEventFunction,
@@ -10,6 +9,7 @@ import {
   VisualizerState,
   VisualizerTriggers,
 } from "../types";
+import { DialogInfos, useDialog } from "./ActionsToolbar/tools";
 
 type VisualizerContextValueType = {
   refs?: VisualizerReferences;

@@ -11,7 +11,7 @@ import { useVisualizerContext } from "../../context";
 import { useMenuActions } from "./hooks";
 import { useCanvasTrigger } from "../../useCanvasTrigger";
 import * as items from "./items";
-import { useDialog } from "../../tools";
+import { useDialog } from "../ActionsToolbar/tools";
 
 const NodeContextMenu = (props) => {
   const vis = useVisualizerContext();
@@ -141,6 +141,7 @@ const TuringContextMenu = () => {
   const [nodePropertyTypes, setNodePropertyTypes] = React.useState([]);
   const [edgePropertyTypes, setEdgePropertyTypes] = React.useState([]);
   const keepOnlyAlert = useDialog();
+  const searchNodesDialog = useDialog();
 
   // Call this hook at the beginning of your ContextMenuComponent
   useContextMenuData();

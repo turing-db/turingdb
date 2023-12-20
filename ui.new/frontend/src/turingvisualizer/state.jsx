@@ -11,7 +11,7 @@ import useEdgeColors from "./reducers/edgeColors";
 import useLayouts from "./reducers/layouts";
 import useHiddenNodes from "./reducers/hiddenNodes";
 import useInspectedNode from "./reducers/inspectedNode";
-import { useCytoscapeElements } from "./cytoscape/tools";
+import { useCytoscapeElements } from "./tools";
 import { VisualizerContext } from "./components/VisualizerContext";
 
 const useVisualizerState = (cyStyle) => {

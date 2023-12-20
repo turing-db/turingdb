@@ -8,7 +8,7 @@ export const nodeColorsInitialState = () => ({
     0: { mode: COLOR_MODES.None, data: {} }, // Global
   },
   mapping: {
-    // filled with 'nodeId: setId' entries
+    // filled with 'edgeId: setId' entries
   },
   setCount: 1,
 });

@@ -185,13 +185,11 @@ def run(args):
         base_nodes = [
             {
                 "id": n.id,
-                "node_type_name": n.node_type.name,
+                "node_type": n.node_type.name,
                 "properties": {
-                    p_name: p_value.value for p_name, p_value in n.properties.items()
+                    p_name: p_value.value
+                    for p_name, p_value in n.list_properties().items()
                 },
-                "type": "selected",
-                "in_edge_count": n.in_edge_count,
-                "out_edge_count": n.out_edge_count
             }
             for n in nodes
         ]

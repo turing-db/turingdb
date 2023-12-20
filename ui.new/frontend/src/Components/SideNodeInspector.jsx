@@ -62,7 +62,7 @@ const SideNodeInspector = (props) => {
             <Box>
               <Box overflow="auto">
                 <Typography variant="body2">
-                  <Secondary>Node type:</Secondary> {inspectedNode.node_type_name}
+                  <Secondary>Node type:</Secondary> {inspectedNode.node_type}
                 </Typography>
                 {Object.keys(properties).map((pName) => (
                   <Box

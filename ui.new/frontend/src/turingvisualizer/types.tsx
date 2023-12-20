@@ -1,18 +1,4 @@
-import { CanvasThemes } from "./cytoscape/tools";
 import { Filters } from "./getRawFilters";
-
-export type Property = [string, string];
-
-export type ColorSet = {
-  mode: string;
-  data: {
-    min?: number;
-    max?: number;
-    propValues?: string[];
-    propName?: string;
-    color?: string;
-  };
-};
 
 export type CxtMenuData = {
   group: string;
@@ -22,77 +8,22 @@ export type CxtMenuData = {
 export type LayoutDefinition = {
   name: string;
   positions: [];
-  lockBehaviour?: number,
-  edgeLengthVal?: number,
-  nodeSpacing?: number,
 };
 
-export type ElementProperties = {
-  [pName: string]: string;
+type GraphNodeProperties = {
+  [propName: string]: string;
 };
 
 export type GraphNodeData = {
   id: string;
   turing_id: string;
-  type: "selected" | "neighbor";
-  node_type_name: string;
-  properties: ElementProperties[];
+  node_type_name?: string;
   neighborNodeIds?: string[];
-};
-
-export type GraphEdgeData = {
-  id: string;
-  turing_id: string;
-  type: "connecting" | "neighbor";
-  turing_source_id: string;
-  turing_target_id: string;
-  edge_type_name: string;
-  properties: ElementProperties;
-};
-
-export type GraphNode = {
-  group: "nodes";
-  data: GraphNodeData;
-};
-
-export type GraphEdge = {
-  group: "edges";
-  data: GraphEdgeData;
-};
-
-export type GraphElement = GraphNode | GraphEdge;
-
-export type NodeColors = {
-  colorSets: {
-    [id: number]: ColorSet;
-  };
-  mapping: {
-    // 'nodeId: setId' entries
-    [edgeId: string]: number;
-  };
-  setCount: number;
-};
-
-export type EdgeColors = {
-  colorSets: {
-    [id: number]: ColorSet;
-  };
-  mapping: {
-    // 'nodeId: setId' entries
-    [nodeId: string]: number;
-  };
-  setCount: number;
-};
-
-export type HiddenNodes = {
-  [id: string]: GraphNodeData;
+  properties: GraphNodeProperties;
 };
 
 export type VisualizerState = {
   dbName: string;
-  themeMode?: "light" | "dark";
-  canvasTheme?: CanvasThemes;
-  devMode?: boolean,
   inspectedNode: GraphNodeData;
   layouts: {
     definitions: {
@@ -104,13 +35,13 @@ export type VisualizerState = {
     fitRequested: boolean;
     centerOnDoubleClicked: boolean;
   };
-  hiddenNodes: HiddenNodes;
+  hiddenNodes: {
+    [id: string]: GraphNodeData;
+  };
   selectedNodeIds: string[];
   filters: Filters;
   nodeLabel: string;
   edgeLabel: string;
-  nodeColors: NodeColors;
-  edgeColors: EdgeColors;
 };
 
 export type CanvasEvent = (_vis: Visualizer, _e: cytoscape.EventObject) => void;

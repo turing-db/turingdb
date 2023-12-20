@@ -1,6 +1,5 @@
 import axios from "axios";
 import * as actions from "./actions";
-import { getRawFilters } from "src/turingvisualizer/getRawFilters";
 
 export const getNodes =
   (dbName, allIds, params = {}) =>
@@ -24,24 +23,18 @@ export const getNodes =
     return Object.fromEntries(allIds.map((id) => [id, newCache[id]]));
   };
 
-export const fetchNodes = (dbName, params) => async (dispatch) => {
-  const filters = params.filters
-    ? getRawFilters(params.filters)
-    : { nodePropertyFilterOut: [], nodePropertyFilterIn: [] };
-
+export const fetchNodes = (dbName, filters) => async (dispatch) => {
   return await axios
     .post("/api/list_nodes", {
       db_name: dbName,
-      ...params,
-      node_property_filter_out: filters.nodePropertyFilterOut,
-      node_property_filter_in: filters.nodePropertyFilterIn,
+      ...filters,
     })
     .then((res) => {
       if (res.data.error) {
         return res.data;
       }
 
-      if (params.yield_edges)
+      if (filters.yield_edges)
         // Store nodes only if the info is complete
         dispatch(actions.cacheNodes(res.data.nodes));
 
@@ -85,7 +78,7 @@ export const inspectNode = (dbName, nodeId) => async (dispatch) => {
     return;
   }
 
-  dispatch(getNodes(dbName, [nodeId], { yield_edges: true })).then((res) => {
-    dispatch(actions.inspectNode(Object.values(res)[0]));
-  });
+  dispatch(getNodes(dbName, [nodeId], { yield_edges: true })).then((res) =>
+    dispatch(actions.inspectNode(Object.values(res)[0]))
+  );
 };

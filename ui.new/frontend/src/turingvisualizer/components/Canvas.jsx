@@ -3,7 +3,7 @@ import { useVisualizerContext } from "../context";
 import { useCanvasTrigger } from "../useCanvasTrigger";
 import { useCytoscapeInstance } from "../cytoscape/instance";
 import { getFitViewport } from "../cytoscape/tools";
-import { lockBehaviours } from "../reducers/layouts";
+import { lockBehaviours } from "src/turingvisualizer/reducers/layouts";
 
 const Canvas = () => {
   const vis = useVisualizerContext();

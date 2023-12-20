@@ -1,7 +1,7 @@
 import React from "react";
-import { useVisualizerContext } from "../../context";
-import { useCanvasTrigger } from "../../useCanvasTrigger";
-import { dialogParams, ttParams, useDialog } from "../../tools";
+import { useVisualizerContext } from "../../../context";
+import { useCanvasTrigger } from "../../../useCanvasTrigger";
+import { dialogParams, ttParams, useDialog } from "../tools";
 import { Tag, CardList, Card, Button, Dialog, Tooltip } from "@blueprintjs/core";
 
 export default function HiddenNodesDialog() {

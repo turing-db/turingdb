@@ -1,8 +1,8 @@
 import React from "react";
 import axios from "axios";
-import { Filters, getRawFilters } from "../../getRawFilters";
-import { useVisualizerContext } from "../../context";
-import { GraphNodeData } from "../../types";
+import { Filters, getRawFilters } from "../../../getRawFilters";
+import { useVisualizerContext } from "../../../context";
+import { GraphNodeData } from "../../../types";
 
 const NODE_SCORES = {
   EXACT_SAME_CASE_PROP_MATCH: 10000,
@@ -134,9 +134,9 @@ function queryNodes(params: QueryNodeParams) {
       params.setNodes(
         res.data.nodes.map((n) => {
           return {
-            ...n,
-            id: String(n.id + 1),
+            id: String(n.id),
             turing_id: String(n.id),
+            properties: n.properties,
           };
         })
       );

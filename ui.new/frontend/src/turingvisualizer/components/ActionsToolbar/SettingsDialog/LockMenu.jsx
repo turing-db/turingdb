@@ -1,11 +1,11 @@
 // Core
 import React from "react";
-import { useVisualizerContext } from "../../context";
+import { useVisualizerContext } from "../../../context";
 
 // @blueprintjs
 import { Tooltip, MenuItem, Button } from "@blueprintjs/core";
-import { SelectMenu } from "../ContextMenu/select";
-import { lockBehaviours } from "../../reducers/layouts";
+import { SelectMenu } from "../../ContextMenu/select";
+import { lockBehaviours } from "../../../reducers/layouts";
 
 const ttParams = {
   hoverCloseDelay: 40,
@@ -35,15 +35,15 @@ const LockMenu = () => {
       }
     }
 
-    if (vis.state()!.layouts.definitions[0]!.lockBehaviour !== lockValue) {
-      vis.callbacks()!.setDefaultCyLayout({
-        ...vis.state()!.layouts.definitions[0]!,
+    if (vis.state().layouts.definitions[0].lockBehaviour !== lockValue) {
+      vis.callbacks().setDefaultCyLayout({
+        ...vis.state().layouts.definitions[0],
         lockBehaviour: lockValue,
       });
     }
   }, [vis, lock]);
 
-  const renderValue = (behaviour: string) => {
+  const renderValue = (behaviour) => {
     return (
       <MenuItem
         key={"lock-behaviour-" + behaviour}
