@@ -8,7 +8,7 @@ namespace db {
 
 class ASTContext;
 class DeclContext;
-class SelectField;
+class SelectProjection;
 class FromTarget;
 
 class QueryCommand {
@@ -67,7 +67,6 @@ private:
 
 class SelectCommand : public QueryCommand {
 public:
-    using SelectFields = std::vector<SelectField*>;
     using FromTargets = std::vector<FromTarget*>;
 
     static SelectCommand* create(ASTContext* ctxt);
@@ -76,15 +75,15 @@ public:
 
     Kind getKind() const override { return QCOM_SELECT_COMMAND; }
 
-    const SelectFields& selectFields() const { return _selectFields; }
+    SelectProjection* getProjection() const { return _proj; }
     const FromTargets& fromTargets() const { return _fromTargets; }
 
-    void addSelectField(SelectField* field);
+    void setProjection(SelectProjection* proj) { _proj = proj; }
     void addFromTarget(FromTarget* fromTarget);
 
 private:
     std::unique_ptr<DeclContext> _declContext;
-    SelectFields _selectFields;
+    SelectProjection* _proj {nullptr};
     FromTargets _fromTargets;
 
     SelectCommand();

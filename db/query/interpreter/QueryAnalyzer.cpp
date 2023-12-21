@@ -9,6 +9,7 @@
 #include "VarDecl.h"
 #include "Expr.h"
 #include "DeclContext.h"
+#include "SelectProjection.h"
 
 using namespace db;
 
@@ -42,6 +43,11 @@ bool QueryAnalyzer::analyze(QueryCommand* cmd) {
 }
 
 bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
+    SelectProjection* proj = cmd->getProjection();
+    if (!proj) {
+        return false;
+    }
+
     // From targets
     DeclContext* declContext = cmd->getDeclContext();
     for (const FromTarget* target : cmd->fromTargets()) {
@@ -77,7 +83,7 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
     }
 
     // Select fields
-    const auto& selectFields = cmd->selectFields();
+    const auto& selectFields = proj->selectFields();
     for (SelectField* field : selectFields) {
         // Check that if we have a star field it is the only select field
         if (field->isAll()) {

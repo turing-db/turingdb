@@ -63,7 +63,7 @@ bool Planner::planSelectCommand(const SelectCommand* cmd) {
 }
 
 QueryPlanStep* Planner::planPathPattern(const PathPattern* pattern) {
-    auto originStep = planNodePattern(pattern->getOrigin());
+    auto originStep = planSearchNode(pattern->getOrigin());
     if (!originStep) {
         return nullptr;
     }
@@ -79,6 +79,11 @@ QueryPlanStep* Planner::planPathPattern(const PathPattern* pattern) {
     return prevStep;
 }
 
-QueryPlanStep* Planner::planNodePattern(const NodePattern* pattern) {
+QueryPlanStep* Planner::planSearchNode(const NodePattern* pattern) {
+    return nullptr;
+}
+
+QueryPlanStep* Planner::planPathElement(const PathElement* pathElem,
+                                        QueryPlanStep* prevStep) {
     return nullptr;
 }

@@ -32,7 +32,7 @@ private:
     bool planOpenCommand(const OpenCommand* cmd);
     bool planSelectCommand(const SelectCommand* cmd);
     QueryPlanStep* planPathPattern(const PathPattern* pattern);
-    QueryPlanStep* planNodePattern(const NodePattern* pattern);
+    QueryPlanStep* planSearchNode(const NodePattern* pattern);
     QueryPlanStep* planPathElement(const PathElement* elem,
                                    QueryPlanStep* prevStep);
 };

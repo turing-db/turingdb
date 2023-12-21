@@ -27,6 +27,7 @@ class TypeConstraint;
 class ExprConstraint;
 class VarList;
 class Expr;
+class SelectProjection;
 }
 
 }
@@ -45,6 +46,7 @@ class Expr;
 #include "Expr.h"
 #include "TypeConstraint.h"
 #include "ExprConstraint.h"
+#include "SelectProjection.h"
 
 #include "BioLog.h"
 
@@ -108,7 +110,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::QueryCommand*> list_cmd
 %type<db::QueryCommand*> open_cmd
 %type<db::QueryCommand*> select_cmd
-%type<db::SelectField*> select_fields
+%type<db::SelectProjection*> select_fields
+%type<db::SelectField*> select_field
 %type<db::FromTarget*> from_target
 %type<db::PathPattern*> path_pattern
 %type<db::EdgePattern*> edge_pattern
@@ -140,17 +143,33 @@ query_unit: list_cmd { ctxt->setRoot($1); }
 
 select_cmd: SELECT select_fields FROM from_target {
                                                        auto cmd = SelectCommand::create(ctxt); 
-                                                       cmd->addSelectField($2);
+                                                       cmd->setProjection($2);
                                                        cmd->addFromTarget($4);
                                                        $$ = cmd;
                                                   }
           ;
 
-select_fields: STAR {
+select_field: STAR {
                         auto field = SelectField::create(ctxt);
                         field->setAll(true);
                         $$ = field;
                     }
+             | ID { 
+                    auto field = SelectField::create(ctxt);
+                    field->setName($1);
+                    $$ = field;
+                  }
+             ;
+
+select_fields: select_fields COMMA select_field {
+                                                    $1->addField($3);
+                                                    $$ = $1;
+                                                }
+             | select_field {
+                                auto proj = SelectProjection::create(ctxt);
+                                proj->addField($1);
+                                $$ = proj;
+                            }
              ;
 
 from_target: path_pattern {
@@ -178,26 +197,26 @@ edge_pattern: MINUS OPAR entity_pattern CPAR MINUS { $$ = EdgePattern::create(ct
             | MINUS OPAR CPAR MINUS                { $$ = nullptr; }
             ;
 
-entity_pattern: type_constraint COLON ID expr_constraint {
-                                                             VarExpr* var = VarExpr::create(ctxt, $3);
-                                                             $$ = EntityPattern::create(ctxt, var, $1, $4);
+entity_pattern: ID COLON type_constraint expr_constraint {
+                                                             VarExpr* var = VarExpr::create(ctxt, $1);
+                                                             $$ = EntityPattern::create(ctxt, var, $3, $4);
                                                          }
-              | COLON ID expr_constraint                 {
-                                                             VarExpr* var = VarExpr::create(ctxt, $2);
-                                                             $$ = EntityPattern::create(ctxt, var, nullptr, $3);
+              | ID expr_constraint                       {
+                                                             VarExpr* var = VarExpr::create(ctxt, $1);
+                                                             $$ = EntityPattern::create(ctxt, var, nullptr, $2);
                                                          }
-              | type_constraint expr_constraint    {
-                                                       $$ = EntityPattern::create(ctxt, nullptr, $1, $2);
+              | COLON type_constraint expr_constraint    {
+                                                             $$ = EntityPattern::create(ctxt, nullptr, $2, $3);
+                                                         }
+              | ID COLON type_constraint           {
+                                                       VarExpr* var = VarExpr::create(ctxt, $1);
+                                                       $$ = EntityPattern::create(ctxt, var, $3, nullptr);
                                                    }
-              | type_constraint COLON ID           {
-                                                       VarExpr* var = VarExpr::create(ctxt, $3);
-                                                       $$ = EntityPattern::create(ctxt, var, $1, nullptr);
-                                                   }
-              | COLON ID                           {
-                                                       VarExpr* var = VarExpr::create(ctxt, $2);
+              | ID                                 {
+                                                       VarExpr* var = VarExpr::create(ctxt, $1);
                                                        $$ = EntityPattern::create(ctxt, var, nullptr, nullptr);
                                                    }
-              | type_constraint                    { $$ = EntityPattern::create(ctxt, nullptr, $1, nullptr); }
+              | COLON type_constraint              { $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr); }
               ;
 
 type_constraint: type_constraint COMMA ID {
@@ -280,5 +299,5 @@ simple_expr: OPAR expr CPAR   { $$ = $2; }
 
 %%
 
-void db::YParser::error(const std::string &message) {
+void db::YParser::error(const std::string& message) {
 }

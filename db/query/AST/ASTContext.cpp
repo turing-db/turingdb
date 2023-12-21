@@ -8,6 +8,7 @@
 #include "TypeConstraint.h"
 #include "ExprConstraint.h"
 #include "VarDecl.h"
+#include "SelectProjection.h"
 
 using namespace db;
 
@@ -63,6 +64,10 @@ ASTContext::~ASTContext() {
     for (VarDecl* decl : _varDecls) {
         delete decl;
     }
+
+    for (SelectProjection* proj : _selectProjections) {
+        delete proj;
+    }
 }
 
 void ASTContext::addCmd(QueryCommand* cmd) {
@@ -111,4 +116,8 @@ void ASTContext::addExprConstraint(ExprConstraint* constr) {
 
 void ASTContext::addVarDecl(VarDecl* decl) {
     _varDecls.push_back(decl);
+}
+
+void ASTContext::addSelectProjection(SelectProjection* proj) {
+    _selectProjections.push_back(proj);
 }

@@ -9,7 +9,8 @@ set(AST_sources
         QueryCommand.cpp 
         SelectField.cpp 
         TypeConstraint.cpp 
-        VarDecl.cpp)
+        VarDecl.cpp
+        SelectProjection.cpp)
 
 add_library(turing_db_query_AST_s STATIC ${AST_sources})
 

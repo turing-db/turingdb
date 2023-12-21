@@ -16,6 +16,7 @@ class TypeConstraint;
 class ExprConstraint;
 class Expr;
 class VarDecl;
+class SelectProjection;
 
 class ASTContext {
 public:
@@ -31,6 +32,7 @@ public:
     friend ExprConstraint;
     friend Expr;
     friend VarDecl;
+    friend SelectProjection;
 
     ASTContext();
     ~ASTContext();
@@ -57,6 +59,7 @@ private:
     std::vector<ExprConstraint*> _exprConstraints;
     std::vector<Expr*> _expr;
     std::vector<VarDecl*> _varDecls;
+    std::vector<SelectProjection*> _selectProjections;
 
     void addCmd(QueryCommand* cmd);
     void addSelectField(SelectField* field);
@@ -70,6 +73,7 @@ private:
     void addExprConstraint(ExprConstraint* constr);
     void addExpr(Expr* expr);
     void addVarDecl(VarDecl* decl);
+    void addSelectProjection(SelectProjection* proj);
 };
 
 } 

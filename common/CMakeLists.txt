@@ -8,7 +8,9 @@ set(common_sources
         BioAssert.cpp
         TimerStat.cpp
         PerfStat.cpp
-        Report.cpp)
+        Report.cpp
+        SpinLock.cpp
+        RWSpinLock.cpp)
 
 add_library(common_s STATIC ${common_sources})
 target_include_directories(common_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

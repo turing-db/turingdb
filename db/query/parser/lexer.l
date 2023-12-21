@@ -16,15 +16,16 @@ using namespace db;
 
 [ \t\r\n]+  { }
 
-"list"    { return YParser::make_LIST(); }
-"databases" { return YParser::make_DATABASES(); }
-"open" { return YParser::make_OPEN(); }
-"close" { return YParser::make_CLOSE(); }
-"select" { return YParser::make_SELECT(); }
-"from" { return YParser::make_FROM(); }
-"or" { return YParser::make_OR(); }
-"and" { return YParser::make_AND(); }
-"is" { return YParser::make_LIKE(); }
+"list"|"LIST" { return YParser::make_LIST(); }
+
+"databases"|"DATABASES" { return YParser::make_DATABASES(); }
+"open"|"OPEN" { return YParser::make_OPEN(); }
+"close"|"CLOSE" { return YParser::make_CLOSE(); }
+"select"|"SELECT" { return YParser::make_SELECT(); }
+"from"|"FROM" { return YParser::make_FROM(); }
+"or"|"OR" { return YParser::make_OR(); }
+"and"|"AND" { return YParser::make_AND(); }
+"like"|"LIKE" { return YParser::make_LIKE(); }
 
 "," { return YParser::make_COMMA(); }
 ":" { return YParser::make_COLON(); }
