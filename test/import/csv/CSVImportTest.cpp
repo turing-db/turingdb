@@ -47,7 +47,7 @@ protected:
         Writeback wb(db);
         db::Network* net = wb.createNetwork(db->getString("example_net"));
         StringBuffer* strBuffer = StringBuffer::readFromFile(path);
-        CSVImport csvImport(CSVImport::InitArgs {
+        CSVImport csvImport({
             .buffer = strBuffer,
             .db = db,
             .outNet = net,
