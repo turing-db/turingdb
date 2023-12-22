@@ -225,7 +225,7 @@ const ChatPage = () => {
   const { loading, messages, setMessages } = useChatMessages();
 
   return (
-    <div style={{ padding: 30, maxWidth: "100vh", overflow: "hidden" }}>
+    <div style={{ padding: 30, maxWidth: "100%", overflow: "hidden" }}>
       <MessageList messages={messages} loading={loading} />
       <Prompt loading={loading} messages={messages} setMessages={setMessages} />
     </div>

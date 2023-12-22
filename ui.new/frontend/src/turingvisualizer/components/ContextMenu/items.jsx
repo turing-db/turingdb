@@ -1,9 +1,10 @@
 // @blueprintjs
-import { Icon, Button, MenuItem } from "@blueprintjs/core";
+import { Dialog, Icon, Button, MenuItem } from "@blueprintjs/core";
 
 // Turing
 import { useVisualizerContext } from "../../";
 import { SelectMenu } from "./select";
+import { getFragment } from "../../cytoscape/tools";
 
 const titleSizeLimit = 40;
 
@@ -41,8 +42,24 @@ export const ItemSelectNeighborhood = () => {
       text="Select neighborhood"
       onClick={() => {
         vis.cy().elements().unselect();
-        vis.cy().$id(data.id).neighborhood().select();
-        vis.cy().$id(data.id).select();
+        vis.cy().$id(data.id).closedNeighborhood().select();
+      }}
+    />
+  );
+};
+
+export const ItemSelectFragment = () => {
+  const vis = useVisualizerContext();
+  const data = vis.contextMenuData().data;
+
+  return (
+    <MenuItem
+      icon="shapes"
+      text="Select connected nodes"
+      onClick={() => {
+        vis.cy().elements().unselect();
+        const fragment = getFragment(vis.cy(), data.id);
+        fragment.select();
       }}
     />
   );
@@ -74,9 +91,9 @@ export const ItemSelectAllBySameNodeTypeNoData = ({ actions }) => {
     return (
       <MenuItem
         key={"node-type-" + nt}
-        text={nt.length < titleSizeLimit
-          ? nt
-          : nt.slice(0, titleSizeLimit) + "..."}
+        text={
+          nt.length < titleSizeLimit ? nt : nt.slice(0, titleSizeLimit) + "..."
+        }
         onClick={() => actions.selectAllBySameNodeType(nt)}
       />
     );
@@ -237,12 +254,13 @@ export const ItemSelectAllBySameLayout = () => {
       onClick={() =>
         vis
           .cy()
+          .nodes()
           .filter(
-            (e) =>
-              vis.state().layouts.mapping[e.id()] ===
+            (n) =>
+              vis.state().layouts.mapping[n.id()] ===
               vis.state().layouts.mapping[data.id]
           )
-          .forEach((e) => e.select())
+          .forEach((n) => n.select())
       }
     />
   );
@@ -257,7 +275,7 @@ export const ItemHideNodes = ({ actions }) => (
   />
 );
 
-export const ItemKeepOnly = ({ actions }) => {
+export const ItemKeepOnly = ({ actions, keepOnlyAlert }) => {
   const vis = useVisualizerContext();
 
   return (
@@ -265,16 +283,17 @@ export const ItemKeepOnly = ({ actions }) => {
       icon="hurricane"
       text="Keep only"
       intent="danger"
-      onClick={() => vis.dialogs()["keep-only-alert"].toggle({actions})}
+      onClick={keepOnlyAlert.open}
     />
   );
 };
 
-export const ItemCollapseNeighbors = ({ actions }) => {
+export const ItemCollapseNeighbors = ({ actions, disabled }) => {
   return (
     <MenuItem
       text="Collapse neighbors"
       icon="collapse-all"
+      disabled={disabled}
       onClick={() => actions.collapseNeighbors()}
     />
   );
@@ -285,8 +304,18 @@ export const ItemExpandNeighbors = ({ actions }) => {
     <MenuItem
       text="Expand neighbors"
       icon="expand-all"
-      intent="success"
       onClick={() => actions.expandNeighbors()}
+    />
+  );
+};
+
+export const ItemDevelopNeighbors = ({ actions }) => {
+  return (
+    <MenuItem
+      text="Develop neighbors"
+      icon="fullscreen"
+      intent="success"
+      onClick={() => actions.developNeighbors()}
     />
   );
 };
@@ -309,9 +338,34 @@ export const ItemSearchNodes = () => {
       text="Search nodes..."
       icon="search"
       labelElement={<Icon icon="share" />}
-      onClick={vis.dialogs()["search-nodes"].toggle}
+      onClick={vis.searchNodesDialog.open}
       popoverProps={{
         interactionKind: "click",
+      }}
+    />
+  );
+};
+
+export const ItemSelectUniqueNeighbors = () => {
+  const vis = useVisualizerContext();
+  const data = vis.contextMenuData().data;
+
+  return (
+    <MenuItem
+      icon="one-to-one"
+      text="Select unique neighbors"
+      onClick={() => {
+        vis.cy().elements().unselect();
+        vis
+          .cy()
+          .$id(data.id)
+          .neighborhood()
+          .filter((e) => {
+            if (e.group === "edges") return true;
+            return e.connectedEdges().length <= 1;
+          })
+          .select();
+        vis.cy().$id(data.id).select();
       }}
     />
   );

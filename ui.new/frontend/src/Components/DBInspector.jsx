@@ -15,6 +15,7 @@ import NodeStack from "src/Components/NodeStack";
 import { BorderedContainerTitle } from "src/Components/BorderedContainer";
 import * as actions from "src/App/actions";
 import * as thunks from "src/App/thunks";
+import NodeFilters from "src/Components/NodeFilters";
 
 export const CommonNode = ({ nodeId, nodeName }) => {
   const dbName = useSelector((state) => state.dbName);
@@ -25,7 +26,9 @@ export const CommonNode = ({ nodeId, nodeName }) => {
       variant="outlined"
       onClick={() =>
         dispatch(thunks.getNodes(dbName, [nodeId], { yield_edges: true })).then(
-          (res) => dispatch(actions.selectNode(Object.values(res)[0]))
+          (res) => {
+            dispatch(actions.selectNode(Object.values(res)[0]));
+          }
         )
       }
       style={{ textTransform: "none" }}>
@@ -38,9 +41,21 @@ export default function DBInspector() {
   const [selectedNodeType, setSelectedNodeType] = React.useState(null);
   const [propertyValue, setPropertyValue] = React.useState("");
   const dbName = useSelector((state) => state.dbName);
+  const [filters, setFilters] = React.useState({
+    showOnlyHomoSapiens: true,
+    hidePublications: true,
+    hideCompartments: true,
+    hideSpecies: true,
+    hideDatabaseReferences: true,
+  });
 
   return (
     <Box>
+      <div className="p-8">
+        <p>Node filters</p>
+        <NodeFilters filters={filters} setFilters={setFilters} />
+      </div>
+
       <NodeTypeFilterContainer
         selected={selectedNodeType}
         setSelected={setSelectedNodeType}
@@ -54,6 +69,7 @@ export default function DBInspector() {
       <NodeFilterContainer
         selectedNodeType={selectedNodeType}
         propertyValue={propertyValue}
+        filters={filters}
       />
 
       {dbName === "reactome" && (

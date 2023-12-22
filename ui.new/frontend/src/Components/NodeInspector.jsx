@@ -249,7 +249,7 @@ export default function NodeInspector(props) {
         <BorderedContainer
           title={
             <BorderedContainerTitle title={"Node type: "}>
-              {inspectedNode.node_type}
+              {inspectedNode.node_type_name}
             </BorderedContainerTitle>
           }></BorderedContainer>
         <Properties node={inspectedNode} />

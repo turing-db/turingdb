@@ -1,12 +1,17 @@
+// Core
+import React from "react";
+
 // @blueprintjs
-import { Icon, Menu, MenuDivider, MenuItem } from "@blueprintjs/core";
+import { Alert, Icon, Menu, MenuDivider, MenuItem } from "@blueprintjs/core";
 
 // Turing
 import { COLOR_MODES, DISCRETE_COLORS } from "../../constants";
 import { ContextMenu, useContextMenuData } from "./ContextMenu";
-import { useVisualizerContext } from "../../";
+import { useVisualizerContext } from "../../context";
 import { useMenuActions } from "./hooks";
+import { useCanvasTrigger } from "../../useCanvasTrigger";
 import * as items from "./items";
+import { useDialog } from "../../tools";
 
 const NodeContextMenu = (props) => {
   const vis = useVisualizerContext();
@@ -27,22 +32,23 @@ const NodeContextMenu = (props) => {
 
       <MenuDivider title="Selection" />
       <items.ItemSelectNeighborhood />
+      <items.ItemSelectUniqueNeighbors />
+      <items.ItemSelectFragment />
       <MenuItem text="Select all..." icon="select">
         <items.ItemSelectAllBySameNodeType actions={actions} />
         <items.ItemSelectAllBySameProperty actions={actions} />
         <items.ItemSelectAllBySameLayout />
       </MenuItem>
-      <items.ItemSearchNodes />
+      <items.ItemSearchNodes/>
 
       <MenuDivider title="Add / Remove" />
-      {isSelected && (
-        <>
-          <items.ItemCollapseNeighbors actions={actions} />
-          <items.ItemExpandNeighbors actions={actions} />
-        </>
-      )}
+      <items.ItemCollapseNeighbors disabled={!isSelected} actions={actions} />
+      <items.ItemExpandNeighbors actions={actions} />
       <items.ItemHideNodes actions={actions} />
-      <items.ItemKeepOnly actions={actions} />
+      <items.ItemKeepOnly
+        actions={actions}
+        keepOnlyAlert={props.keepOnlyAlert}
+      />
       {!isSelected && <items.ItemAddToNetwork actions={actions} />}
     </Menu>
   );
@@ -132,32 +138,65 @@ const BackgroundContextMenu = (props) => {
   );
 };
 const TuringContextMenu = () => {
+  const [nodePropertyTypes, setNodePropertyTypes] = React.useState([]);
+  const [edgePropertyTypes, setEdgePropertyTypes] = React.useState([]);
+  const keepOnlyAlert = useDialog();
+
   // Call this hook at the beginning of your ContextMenuComponent
   useContextMenuData();
 
   const vis = useVisualizerContext();
   const cy = vis.cy();
+  const actions = useMenuActions();
 
-  const edgePropertyTypes = getPropertyTypesFromElements(cy?.edges() || []);
-  const nodePropertyTypes = getPropertyTypesFromElements(cy?.nodes() || []);
+  useCanvasTrigger({
+    category: "elements",
+    name: "contextMenu-setPropertyTypes",
+
+    callback: () => {
+      setNodePropertyTypes(getPropertyTypesFromElements(cy?.nodes() || []));
+      setEdgePropertyTypes(getPropertyTypesFromElements(cy?.edges() || []));
+    },
+  });
 
   const menuData = vis.contextMenuData();
 
   return (
-    <ContextMenu>
-      {menuData.group === "nodes" && (
-        <NodeContextMenu nodePropertyTypes={nodePropertyTypes} />
-      )}
-      {menuData.group === "edges" && (
-        <EdgeContextMenu edgePropertyTypes={edgePropertyTypes} />
-      )}
-      {menuData.group === "background" && (
-        <BackgroundContextMenu
-          nodePropertyTypes={nodePropertyTypes}
-          edgePropertyTypes={edgePropertyTypes}
-        />
-      )}
-    </ContextMenu>
+    <>
+      <Alert
+        isOpen={keepOnlyAlert.isOpen}
+        cancelButtonText="Cancel"
+        confirmButtonText={`Keep only selected nodes`}
+        icon="trash"
+        intent="danger"
+        onConfirm={() => {
+          actions.keepOnly();
+          keepOnlyAlert.close();
+        }}
+        onCancel={keepOnlyAlert.close}>
+        <p>
+          Are you sure you want to keep only the selected nodes ? You will start
+          a new network exploration from this set.
+        </p>
+      </Alert>
+      <ContextMenu>
+        {menuData.group === "nodes" && (
+          <NodeContextMenu
+            nodePropertyTypes={nodePropertyTypes}
+            keepOnlyAlert={keepOnlyAlert}
+          />
+        )}
+        {menuData.group === "edges" && (
+          <EdgeContextMenu edgePropertyTypes={edgePropertyTypes} />
+        )}
+        {menuData.group === "background" && (
+          <BackgroundContextMenu
+            nodePropertyTypes={nodePropertyTypes}
+            edgePropertyTypes={edgePropertyTypes}
+          />
+        )}
+      </ContextMenu>
+    </>
   );
 };
 
@@ -234,7 +273,7 @@ const ColorMenuItem = ({
 
         setColorMode(
           colorMode,
-          selectedElements.map((n) => n.id()),
+          elements.map((n) => n.id()),
           colorData
         );
       }}

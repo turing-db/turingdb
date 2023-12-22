@@ -1,16 +1,15 @@
 import {
-  Alignment,
-  Menu,
-  MenuItem,
   Button,
-  Navbar,
   Section,
-  Popover,
   ButtonGroup,
+  PortalProvider,
 } from "@blueprintjs/core";
 import React from "react";
 
-import { useVisualizerContext, useCanvasTrigger, style } from "../";
+import { useVisualizerContext } from "../context";
+import { useCanvasTrigger } from "../useCanvasTrigger";
+import style from "../style";
+
 import {
   Canvas,
   Visualizer,
@@ -18,6 +17,7 @@ import {
   ActionsToolbar,
   TuringContextMenu,
 } from "./";
+import DialogContainer from "./DialogContainer";
 
 const AddNodeButton = () => {
   const vis = useVisualizerContext();
@@ -118,6 +118,7 @@ const AppContent = ({ hideHowTo }) => {
         setEdgeLabels(edgeProperties);
     },
   });
+  const bpTheme = vis.themeMode === "dark" ? "bp5-dark" : "";
 
   return (
     <>
@@ -133,20 +134,23 @@ const AppContent = ({ hideHowTo }) => {
           </ul>
         </Section>
       )}
-      <Visualizer
-        canvas={<Canvas />}
-        contextMenu={<TuringContextMenu />}
-        cyStyle={cyStyle}>
-        <div style={{ margin: 10 }}>
-          <ButtonGroup>
-            <AddNodeButton />
-            <RemoveNodeButton />
-          </ButtonGroup>
-        </div>
-        <div style={{ margin: 10, marginTop: 0 }}>
-          <ActionsToolbar/>
-        </div>
-      </Visualizer>
+      <PortalProvider portalClassName={bpTheme}>
+        <Visualizer
+          canvas={<Canvas />}
+          contextMenu={<TuringContextMenu />}
+          cyStyle={cyStyle}>
+          <div style={{ margin: 10 }}>
+            <ButtonGroup>
+              <AddNodeButton />
+              <RemoveNodeButton />
+            </ButtonGroup>
+          </div>
+          <div style={{ margin: 10, marginTop: 0 }}>
+            <DialogContainer />
+            <ActionsToolbar />
+          </div>
+        </Visualizer>
+      </PortalProvider>
     </>
   );
 };

@@ -1,0 +1,95 @@
+const style = [
+  {
+    selector: "core",
+    style: {
+      "selection-box-color": "#AAD8FF",
+      "selection-box-opacity": "0.5",
+    },
+  },
+  {
+    selector: "node",
+    style: {
+      "z-index": "10",
+      content: "data(label)",
+      "background-color": "data(iconColor)",
+      color: "data(textColor)",
+      "font-size": "12px",
+      "font-weight": "normal",
+      "text-valign": "bottom",
+      "text-halign": "right",
+      "background-opacity": 1.0,
+      shape: "hexagon",
+      width: 23.0,
+      height: 20.0,
+      "text-opacity": 1.0,
+    },
+  },
+  {
+    selector: 'node[type="neighbor"]',
+    style: {
+      "font-size": "12px",
+      "background-opacity": 1.0,
+      width: 12.0,
+      height: 10.0,
+      "text-opacity": 1.0,
+    },
+  },
+  {
+    selector: "node[?query]",
+    style: {
+      "background-clip": "none",
+      "background-fit": "contain",
+    },
+  },
+  {
+    selector: "edge",
+    style: {
+      content: "data(label)",
+      "text-rotation": "autorotate",
+      "font-weight": "normal",
+      opacity: 1.0,
+      "text-valign": "bottom",
+      "text-halign": "right",
+      "curve-style": "bezier",
+      "target-arrow-shape": "triangle",
+      "target-arrow-color": "data(lineColor)",
+      "line-color": "data(lineColor)",
+      "arrow-scale": 1,
+      "text-opacity": 1.0,
+      color: "data(textColor)",
+      "font-size": 12,
+      width: 2.0,
+      "line-style": "solid",
+      "text-wrap": "wrap",
+    },
+  },
+  {
+    selector: 'edge[type="neighbor"]',
+    style: {
+      width: 1.0,
+    },
+  },
+  {
+    selector: "node:active",
+    style: {
+      "overlay-opacity": 0,
+    },
+  },
+  {
+    selector: "node:selected",
+    style: {
+      "background-color": "#96a",
+      color: "#96a",
+    },
+  },
+  {
+    selector: "edge:selected",
+    style: {
+      "line-color": "#96a",
+      color: "#96a",
+      "target-arrow-color": "#96a",
+    },
+  },
+];
+
+export default style;

@@ -25,7 +25,7 @@ export const useNodePropertyTypesQuery = (options = {}) => {
       () =>
         axios
           .post("/api/list_node_property_types", { db_name: dbName })
-          .then((res) => res.data)
+          .then((res) => res.data.data)
           .catch((err) => {
             console.log(err);
             return [];

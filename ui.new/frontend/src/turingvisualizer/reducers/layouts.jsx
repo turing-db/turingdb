@@ -6,21 +6,29 @@ export const UPDATE_LAYOUT = "UPDATE_LAYOUT";
 export const UPDATE_LAYOUTS = "UPDATE_LAYOUTS";
 export const RESET_LAYOUT = "RESET_LAYOUT";
 export const REQUEST_RUN = "REQUEST_RUN";
+export const REQUEST_FIT = "REQUEST_FIT";
+export const CENTER_ON_DOUBLE_CLICKED = "CENTER_ON_DOUBLE_CLICKED";
+
+export const lockBehaviours = {
+  ALL_SELECTED: 0,
+  INTERACTED: 1,
+  DO_NOT_LOCK: 2,
+};
 
 export const INIT_EDGE_VAL = 130;
 
 const getEdgeLengthFn = (v) => (edge) => {
-  const connectingMultiplier = (edge.data().type === "connecting") * 0.1 + 1;
+  const connectingMultiplier = (edge.data().type === "connecting") * 0.2 + 1;
   const sourceExtent = edge.source().connectedEdges().length - 1;
   const targetExtent = edge.target().connectedEdges().length - 1;
-  const ratio = 1 / (Math.max(sourceExtent, targetExtent) + 1) * 0.8;
+  const ratio = (1 / (Math.max(sourceExtent, targetExtent) + 1)) * 0.8;
   return (v + v * ratio) * connectingMultiplier;
 };
 
 const initialColaLayout = () => ({
   name: "cola",
   animate: true,
-  handleDisconnected: true,
+  handleDisconnected: false,
   infinite: false,
   randomize: false,
   avoidOverlap: true,
@@ -28,12 +36,13 @@ const initialColaLayout = () => ({
   fit: false,
   centerGraph: false,
   convergenceThreshold: 0.005,
-  nodeSpacing: 10,
+  nodeSpacing: 5,
   nodeDimensionsIncludeLabels: false,
   edgeLengthVal: INIT_EDGE_VAL,
   refresh: 1,
   edgeLength: getEdgeLengthFn(INIT_EDGE_VAL),
   lineCount: 0,
+  lockBehaviour: lockBehaviours.INTERACTED,
 });
 
 export const layoutsInitialState = () => ({
@@ -43,6 +52,8 @@ export const layoutsInitialState = () => ({
   mapping: {}, // Maps the node ids to one of the layout ids
   layoutCount: 1,
   runRequested: false,
+  fitRequested: false,
+  centerOnDoubleClicked: false,
 });
 
 const useLayoutsReducer = (state, action) => {
@@ -92,7 +103,7 @@ const useLayoutsReducer = (state, action) => {
         },
       };
 
-    case UPDATE_LAYOUTS:
+    case UPDATE_LAYOUTS: {
       const newState = { ...state };
       newState.definitions = {
         ...newState.definitions,
@@ -105,6 +116,7 @@ const useLayoutsReducer = (state, action) => {
         }),
       };
       return newState;
+    }
 
     case RESET_LAYOUT: {
       const newState = {
@@ -135,6 +147,20 @@ const useLayoutsReducer = (state, action) => {
         ...state,
         runRequested: action.payload.request,
       };
+    }
+
+    case REQUEST_FIT: {
+      return {
+        ...state,
+        fitRequested: action.payload.request,
+      }
+    }
+
+    case CENTER_ON_DOUBLE_CLICKED: {
+      return {
+        ...state,
+        centerOnDoubleClicked: action.payload.value,
+      }
     }
 
     default:
@@ -201,6 +227,24 @@ const useLayouts = () => {
     []
   );
 
+  const requestLayoutFit = React.useCallback(
+    (request) =>
+      dispatch({
+        type: REQUEST_FIT,
+        payload: { request },
+      }),
+    []
+  );
+
+  const centerOnDoubleClicked = React.useCallback(
+    (value) =>
+      dispatch({
+        type: CENTER_ON_DOUBLE_CLICKED,
+        payload: { value },
+      }),
+    []
+  );
+
   return {
     layouts: state,
     setDefaultCyLayout,
@@ -208,6 +252,8 @@ const useLayouts = () => {
     updateLayout,
     resetLayout,
     requestLayoutRun,
+    requestLayoutFit,
+    centerOnDoubleClicked,
   };
 };
 

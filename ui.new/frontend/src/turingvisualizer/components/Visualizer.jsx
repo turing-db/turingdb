@@ -1,18 +1,10 @@
 import React from "react";
 import useVisualizerState from "../state";
-import useSearchNodesWindow from "../useSearchNodesWindow";
 import { useVisualizerContext } from "../context";
-import useKeepOnlyAlert from "../useKeepOnlyAlert";
-import useSettingsModal from "./ActionsToolbar/useSettingsModal";
-import useHiddenNodesPopover from "./ActionsToolbar/useHiddenNodesPopover";
 
 const Visualizer = (props) => {
   useVisualizerState(props.cyStyle);
   const vis = useVisualizerContext();
-  useSearchNodesWindow();
-  useKeepOnlyAlert();
-  useSettingsModal();
-  useHiddenNodesPopover();
 
   return (
     <div
@@ -40,22 +32,23 @@ const Visualizer = (props) => {
         </div>
       )}
       {props.contextMenu}
-      {Object.values(vis.dialogs()).map((d) => d.Content())}
       <div
         style={{
           position: "absolute",
           width: "100%",
+          height:"100%",
           pointerEvents: "none",
         }}>
-        {React.Children.map(props.children, (child) =>
-          React.cloneElement(child, {
+        {React.Children.map(props.children, (child) => {
+          const pointerEvents = child.props.style?.pointerEvents || "auto";
+          return React.cloneElement(child, {
             ...child.props,
             style: {
               ...child.props.style,
-              pointerEvents: "auto",
+              pointerEvents: pointerEvents,
             },
-          })
-        )}
+          });
+        })}
       </div>
     </div>
   );

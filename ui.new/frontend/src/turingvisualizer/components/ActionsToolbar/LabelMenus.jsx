@@ -1,6 +1,6 @@
 // Core
 import React from "react";
-import { useCanvasTrigger } from "../../";
+import { useCanvasTrigger } from "../../useCanvasTrigger";
 import { useVisualizerContext } from "../../context";
 
 // @blueprintjs
@@ -12,6 +12,8 @@ const titleSizeLimit = 14;
 const ttParams = {
   hoverCloseDelay: 40,
   hoverOpenDelay: 400,
+  compact: true,
+  openOnTargetFocus: false,
 };
 
 
@@ -189,7 +191,7 @@ const LabelMenus = () => {
             style={{ width: "180px" }}
             fill
             alignText="left"
-            icon="graph"
+            icon="one-to-one"
             text={
               currentEdgeLabel.value.length < titleSizeLimit
                 ? currentEdgeLabel.value

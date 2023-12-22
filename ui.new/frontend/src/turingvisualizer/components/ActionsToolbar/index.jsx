@@ -2,22 +2,20 @@
 import React from "react";
 
 // @blueprintjs
-import {
-  ButtonGroup,
-  Tooltip,
-  Popover,
-  Button,
-} from "@blueprintjs/core";
+import { ButtonGroup, Tooltip, Popover, Button } from "@blueprintjs/core";
 
 // Turing
-import { useVisualizerContext, useCanvasTrigger } from "../../";
-import SelectNodesMenu from "./SelectNodesMenu";
-import LabelMenus from "./LabelMenus";
+import { useVisualizerContext } from "../../context";
+import { useCanvasTrigger } from "../../useCanvasTrigger";
 
-const ttParams = {
-  hoverCloseDelay: 40,
-  hoverOpenDelay: 400,
-};
+import { ttParams } from "../../tools";
+import LabelMenus from "./LabelMenus";
+import SelectNodesMenu from "./SelectNodesMenu";
+import SettingsDialog from "../SettingsDialog";
+import HiddenNodesDialog from "../HiddenNodesDialog";
+import { SearchNodesDialogButton } from "../SearchNodesDialog";
+import AddNodeDialog from "../AddNodeDialog";
+import { useMenuActions } from "../ContextMenu/hooks";
 
 const showCellCellInteraction = (addLayout, cy) => {
   const nodes = cy.nodes();
@@ -36,14 +34,15 @@ const showCellCellInteraction = (addLayout, cy) => {
     Math,
     filteredNodes.map((arr) => arr.length)
   );
-  const yStretch = 35.0;
+  const yStretch = 150.0;
   const aspectRatio = cy.width() / cy.height();
-  const canvasWidth = maxLength * yStretch * aspectRatio;
-  const xStretch = canvasWidth / nLines;
+  const layoutHeight = maxLength * yStretch;
+  const layoutWidth = layoutHeight * aspectRatio;
+  const xStretch = layoutWidth / (nLines - 1);
 
   uniqueTitleValues.forEach((_title, x) => {
     const currentNodes = filteredNodes[x];
-    const xPos = x * xStretch;
+    const xPos = x * xStretch - layoutWidth / 2;
     const yShift = (maxLength - currentNodes.length) / 2;
 
     addLayout(
@@ -74,13 +73,27 @@ const ActionsToolbar = ({
   expandAction = true,
   collapseAction = true,
   searchAction = true,
+  searchDatabaseAction = true,
 }) => {
   const vis = useVisualizerContext();
   const [interactionDisabled, setInteractionDisabled] = React.useState(true);
+  const [collapseDisabled, setCollapseDisabled] = React.useState(false);
+  const actions = useMenuActions();
+
+  vis.hookEvent("select", "actionDisabled", () => {
+    const selectedNodes = vis.cy().$(":selected");
+    const selectedMainNodes = selectedNodes.filter(
+      (n) => n.data().type === "selected"
+    );
+
+    setCollapseDisabled(
+      selectedNodes.length !== 0 && selectedMainNodes.length === 0
+    );
+  });
 
   useCanvasTrigger({
     category: "elements",
-    name: "actionsToolbar-setInteractionDisabled",
+    name: "actionsToolbar-actionDisabled",
     callback: () => {
       setInteractionDisabled(
         (() => {
@@ -103,150 +116,89 @@ const ActionsToolbar = ({
     },
   });
 
+  const bpTheme = vis.state().themeMode === "dark" ? "bp5-dark" : "";
+
   return (
     <div
-      style={{
-        display: "flex",
-        flex: 1,
-        alignItems: "space-between",
-        flexWrap: "wrap"
-      }}>
-      <div style={{ display: "flex", flex: 1 }}>
-        <ButtonGroup style={{ padding: 5 }}>
-          {fitAction && (
-            <Tooltip  {...ttParams} content="Fit canvas">
-              <Button
-                icon="zoom-to-fit"
-                onClick={() =>
-                  vis.cy().animate(
-                    {
-                      fit: {
-                        eles: vis.cy().nodes(),
-                        padding: 100,
-                      },
+      className={`flex flex-1 pointer-events-none justify-between flex-wrap ${bpTheme}`}>
+      <ButtonGroup className="pointer-events-auto">
+        {fitAction && (
+          <Tooltip {...ttParams} content="Fit canvas">
+            <Button
+              icon="zoom-to-fit"
+              onClick={() => {
+                vis.cy().animate(
+                  {
+                    fit: {
+                      eles: vis.cy().elements(),
+                      padding: 100,
                     },
-                    {
-                      duration: 600,
-                      easing: "ease-in-out-sine",
-                    }
-                  )
-                }
-              />
-            </Tooltip>
-          )}
-
-          {cleanAction && (
-            <Tooltip  {...ttParams}content="Clean up canvas">
-              <Button
-                onClick={() => vis.callbacks().requestLayoutRun(true)}
-                icon="eraser"
-              />
-            </Tooltip>
-          )}
-
-          {hiddenNodesAction && (
-            <Tooltip  {...ttParams}content="Hidden nodes">
-              <Button
-                icon="eye-open"
-                onClick={vis.dialogs()["hidden-nodes"].toggle}
-              />
-            </Tooltip>
-          )}
-
-          {cellCellInteraction && (
-            <Tooltip  {...ttParams}content="Show cell-cell interaction">
-              <Button
-                icon="intersection"
-                disabled={interactionDisabled}
-                onClick={() => {
-                  showCellCellInteraction(vis.callbacks().addLayout, vis.cy());
-                }}
-              />
-            </Tooltip>
-          )}
-
-          {expandAction && (
-            <Tooltip  {...ttParams}content="Expand all neighbors">
-              <Button
-                icon="expand-all"
-                onClick={() => {
-                  const neighborIds = vis
-                    .cy()
-                    .nodes()
-                    .filter((n) => n.data().type === "neighbor")
-                    .map((n) => n.data().turing_id);
-                  vis
-                    .callbacks()
-                    .setSelectedNodeIds(
-                      [...vis.state().selectedNodeIds, ...neighborIds].flat()
-                    );
-                }}
-              />
-            </Tooltip>
-          )}
-
-          {collapseAction && (
-            <Tooltip  {...ttParams}content="Collapse all neighbors">
-              <Button
-                icon="collapse-all"
-                onClick={() => {
-                  const selNodes = vis
-                    .cy()
-                    .nodes()
-                    .filter((e) => e.data().type === "selected");
-                  const neiData = Object.fromEntries(
-                    selNodes
-                      .neighborhood()
-                      .filter(
-                        (e) =>
-                          e.group() === "nodes" && e.data().type === "neighbor"
-                      )
-                      .map((n) => [
-                        n.data().turing_id,
-                        {
-                          ...n.data(),
-                          neighborNodeIds: n
-                            .connectedEdges()
-                            .map((e) =>
-                              e.data().turing_source_id !== n.data().turing_id
-                                ? e.data().turing_source_id
-                                : e.data().turing_target_id
-                            ),
-                        },
-                      ])
-                  );
-                  vis.callbacks().hideNodes(neiData);
-                }}
-              />
-            </Tooltip>
-          )}
-        </ButtonGroup>
-
-        <ButtonGroup style={{ padding: 5 }}>
-          <LabelMenus />
-        </ButtonGroup>
-      </div>
-
-      <ButtonGroup style={{ padding: 5 }}>
-        {settingsAction && (
-          <Tooltip  {...ttParams}content="Settings">
-            <Button
-              onClick={vis.dialogs()["show-settings"].toggle}
-              text="Settings"
-              icon="settings"
+                  },
+                  {
+                    duration: 600,
+                    easing: "ease-in-out-sine",
+                    queue: true,
+                  }
+                );
+              }}
             />
           </Tooltip>
         )}
 
-        {searchAction && (
-          <Tooltip  {...ttParams}content="Search nodes in current view">
+        {cleanAction && (
+          <Tooltip {...ttParams} content="Clean up canvas">
             <Button
-              icon="search"
-              text="Search"
-              onClick={vis.dialogs()["search-nodes"].toggle}
+              onClick={() => vis.callbacks().requestLayoutRun(true)}
+              icon="eraser"
             />
           </Tooltip>
         )}
+
+        {hiddenNodesAction && <HiddenNodesDialog />}
+
+        {cellCellInteraction && (
+          <Tooltip {...ttParams} content="Show cell-cell interaction">
+            <Button
+              icon="intersection"
+              disabled={interactionDisabled}
+              onClick={() => {
+                showCellCellInteraction(vis.callbacks().addLayout, vis.cy());
+                vis.callbacks().requestLayoutFit(true);
+              }}
+            />
+          </Tooltip>
+        )}
+
+        {expandAction && (
+          <Tooltip {...ttParams} content="Expand all neighbors">
+            <Button
+              icon="expand-all"
+              onClick={() => {
+                actions.expandNeighbors();
+              }}
+            />
+          </Tooltip>
+        )}
+
+        {collapseAction && (
+          <Tooltip {...ttParams} content="Hides neighbors">
+            <Button
+              icon="collapse-all"
+              disabled={collapseDisabled}
+              onClick={() => {
+                actions.collapseNeighbors();
+              }}
+            />
+          </Tooltip>
+        )}
+
+        <LabelMenus />
+        {searchDatabaseAction && <AddNodeDialog />}
+      </ButtonGroup>
+
+      <ButtonGroup className="pointer-events-auto">
+        {settingsAction && <SettingsDialog />}
+        {searchAction && <SearchNodesDialogButton />}
 
         {selectAction && (
           <Popover

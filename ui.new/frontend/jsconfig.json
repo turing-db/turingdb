@@ -3,6 +3,9 @@
     "baseUrl": ".",
     "paths": {
       "src/*": ["./src/*"]
-    }
+    },
+    "moduleResolution": "bundler",
+    "module": "es2020",
+    "target": "es2020"
   }
 }

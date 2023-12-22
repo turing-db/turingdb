@@ -10,7 +10,8 @@ import useNodeColors from "./reducers/nodeColors";
 import useEdgeColors from "./reducers/edgeColors";
 import useLayouts from "./reducers/layouts";
 import useHiddenNodes from "./reducers/hiddenNodes";
-import { useCytoscapeElements } from "./tools";
+import useInspectedNode from "./reducers/inspectedNode";
+import { useCytoscapeElements } from "./cytoscape/tools";
 import { VisualizerContext } from "./components/VisualizerContext";
 
 const useVisualizerState = (cyStyle) => {
@@ -20,6 +21,7 @@ const useVisualizerState = (cyStyle) => {
   const { nodeColors, setNodeColorMode } = useNodeColors();
   const { edgeColors, setEdgeColorMode } = useEdgeColors();
   const { selectedNodeIds, setSelectedNodeIds } = useSelectedNodeIds();
+  const { inspectedNode, setInspectedNode } = useInspectedNode();
   const {
     layouts,
     setDefaultCyLayout,
@@ -27,6 +29,8 @@ const useVisualizerState = (cyStyle) => {
     updateLayout,
     resetLayout,
     requestLayoutRun,
+    requestLayoutFit,
+    centerOnDoubleClicked,
   } = useLayouts();
   const { hiddenNodes, hideNode, hideNodes, showNodes } = useHiddenNodes();
   const { filters, setFilters } = useFilters();
@@ -36,6 +40,7 @@ const useVisualizerState = (cyStyle) => {
     themeMode: vis.themeMode,
     canvasTheme: vis.canvasTheme,
     selectedNodeIds,
+    inspectedNode,
     hiddenNodes,
     nodeLabel,
     edgeLabel,
@@ -50,6 +55,7 @@ const useVisualizerState = (cyStyle) => {
   };
 
   const elements = useCytoscapeElements(vis.refs.state.current);
+
   vis.refs.state.current.elements = elements;
   const trig = vis.triggers;
 
@@ -61,6 +67,10 @@ const useVisualizerState = (cyStyle) => {
   React.useEffect(() => {
     Object.values(trig().selectedNodeIds.core).forEach((f) => f());
   }, [trig, selectedNodeIds]);
+
+  React.useEffect(() => {
+    Object.values(trig().inspectedNode.core).forEach((f) => f());
+  }, [trig, inspectedNode]);
 
   React.useEffect(() => {
     Object.values(trig().filters.core).forEach((f) => f());
@@ -92,6 +102,10 @@ const useVisualizerState = (cyStyle) => {
   }, [trig, selectedNodeIds]);
 
   React.useEffect(() => {
+    Object.values(trig().inspectedNode.secondary).forEach((f) => f());
+  }, [trig, inspectedNode]);
+
+  React.useEffect(() => {
     Object.values(trig().filters.secondary).forEach((f) => f());
   }, [trig, filters]);
 
@@ -113,6 +127,7 @@ const useVisualizerState = (cyStyle) => {
 
   vis.refs.callbacks.current = {
     setSelectedNodeIds: (ids) => setSelectedNodeIds(ids),
+    setInspectedNode: (inspectedNode) => setInspectedNode(inspectedNode),
     setDefaultCyLayout: (cyLayout) => setDefaultCyLayout(cyLayout),
     addLayout: (definition, nodeIds) => addLayout(definition, nodeIds),
     updateLayout: (layoutId, patch) => updateLayout(layoutId, patch),
@@ -127,6 +142,8 @@ const useVisualizerState = (cyStyle) => {
     hideNodes: (nodes) => hideNodes(nodes),
     showNodes: (nodeIds) => showNodes(nodeIds),
     requestLayoutRun: (request) => requestLayoutRun(request),
+    requestLayoutFit: (request) => requestLayoutFit(request),
+    centerOnDoubleClicked: (value) => centerOnDoubleClicked(value),
     setFilters: (filters) => setFilters(filters),
   };
 
@@ -150,6 +167,7 @@ const useVisualizerState = (cyStyle) => {
 
     // Callbacks
     setSelectedNodeIds,
+    setInspectedNode,
     setNodeLabel,
     setEdgeLabel,
     setFilters,

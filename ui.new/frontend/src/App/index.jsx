@@ -76,7 +76,7 @@ const useTheme = (options) => {
           };
           theme.edges = {
             connecting: {
-              line: "rgb(0,193,0)",
+              line: "rgb(0,93,0)",
               text: "rgb(0,193,0)",
             },
             neighbor: {
@@ -98,7 +98,7 @@ const ThemedApp = () => {
       <Box
         display="flex"
         sx={{ flexGrow: 1 }}
-        className={theme.palette.mode === "light" ? "" : "bp5-dark"}>
+        className={theme.palette.mode === "dark" && "bp5-dark"}>
         <CustomAppBar />
         <Box
           component="main"
