@@ -15,7 +15,7 @@ class EdgeType;
 
 class CSVImport {
 public:
-    struct InitArgs {
+    struct CSVImportConfig {
         const StringBuffer* buffer = nullptr;
         db::DB* db = nullptr;
         db::Network* outNet = nullptr;
@@ -23,13 +23,13 @@ public:
         std::string primaryColumn = "";
     };
 
-    CSVImport(InitArgs&& args);
+    CSVImport(CSVImportConfig&& args);
     ~CSVImport();
     bool run();
 
 private:
     CSVLexer _lexer;
-    const StringBuffer* _buffer;
+    const StringBuffer* _buffer {nullptr};
     db::DB* _db {nullptr};
     db::Network* _net {nullptr};
     db::Writeback _wb;

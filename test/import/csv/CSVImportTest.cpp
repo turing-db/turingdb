@@ -136,14 +136,6 @@ TEST_F(CSVImportTest, DuplicateNodeType) {
     ASSERT_STREQ(logContent.data(), "[2063] Error: Encountered a duplicate value in header: 'Diagnostic'\n");
 }
 
-//TEST_F(CSVImportTest, NodeRedefinition) {
-//    auto [db, success] = run("node_redefinition.csv");
-//    ASSERT_FALSE(success);
-//    std::string logContent;
-//    ASSERT_TRUE(FileUtils::readContent(_logPath, logContent));
-//    ASSERT_STREQ(logContent.data(), "[2068] Error: Line 4: node of type 'Diagnostic' was already registered as 'Patient'\n");
-//}
-
 TEST_F(CSVImportTest, MissingNames) {
     auto [db, success] = run("missing_cell_value.csv");
     ASSERT_TRUE(success);

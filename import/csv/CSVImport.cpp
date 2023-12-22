@@ -9,7 +9,7 @@
 #include "NodeType.h"
 #include "StringBuffer.h"
 
-CSVImport::CSVImport(InitArgs&& args)
+CSVImport::CSVImport(CSVImportConfig&& args)
     : _lexer(args.buffer->getData(), args.delimiter),
       _buffer(args.buffer),
       _db(args.db),
@@ -105,8 +105,9 @@ bool CSVImport::run() {
                && token.type != CSVLexer::Token::Type::ERROR
                && token.type != CSVLexer::Token::Type::LINE_BREAK) {
 
-            if (token.type == CSVLexer::Token::Type::DELIMITER)
+            if (token.type == CSVLexer::Token::Type::DELIMITER) {
                 delimiterParsed++;
+            }
 
             if (token.type == CSVLexer::Token::Type::STRING) {
                 if (i >= nodeTypes.size()) {
@@ -120,13 +121,6 @@ bool CSVImport::run() {
                 db::Node* n = nodes.find(nName) != nodes.end()
                                 ? nodes.at(nName)
                                 : _wb.createNode(_net, nt, nDisplayName);
-
-                //if (nt != n->getType()) {
-                //    const auto currentName = nt->getName().getSharedString()->getString();
-                //    const auto previousName = primaryNodeType->getName().getSharedString()->getString();
-                //    Log::BioLog::log(msg::ERROR_CSV_REDEFINITION_OF_NODE() << line << currentName << previousName);
-                //    return false;
-                //}
 
                 msgbioassert(n, "Something went wrong when creating node");
 
@@ -159,8 +153,9 @@ bool CSVImport::run() {
 
         // Now creating the edges
         for (db::Node* n : currentNodes) {
-            if (n == currentPrimaryNode)
+            if (n == currentPrimaryNode) {
                 continue;
+            }
 
             const db::NodeType* nt = n->getType();
             const db::Edge* e = _wb.createEdge(edgeTypes.at(nt), currentPrimaryNode, n);
