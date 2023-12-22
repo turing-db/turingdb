@@ -23,7 +23,8 @@ static constexpr inline size_t entityCountLimit = 100000;
 
 EntityDumper::EntityDumper(const db::DB* db, const FileUtils::Path& indexPath)
     : _indexPath(indexPath),
-      _db(db) {
+      _db(db)
+{
 }
 
 bool EntityDumper::dump() {
