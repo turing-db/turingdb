@@ -27,7 +27,7 @@ export default function NodeFilters() {
 
   return (
     <div className="flex flex-col">
-      <Tooltip content="Hide publications">
+      <Tooltip content="Hide publications" className="w-max">
         <Checkbox
           label="Hide publications"
           checked={filters.hidePublications}
@@ -40,7 +40,7 @@ export default function NodeFilters() {
         />
       </Tooltip>
 
-      <Tooltip content='Hide compartments such as "extracellular region"'>
+      <Tooltip content='Hide compartments such as "extracellular region"' className="w-max">
         <Checkbox
           label="Hide compartments"
           checked={filters.hideCompartments}
@@ -52,7 +52,7 @@ export default function NodeFilters() {
           }}
         />
       </Tooltip>
-      <Tooltip content='Hide species nodes such as "Homo sapiens"'>
+      <Tooltip content='Hide species nodes such as "Homo sapiens"' className="w-max">
         <Checkbox
           label="Hide species"
           checked={filters.hideSpecies}
@@ -64,7 +64,7 @@ export default function NodeFilters() {
           }}
         />
       </Tooltip>
-      <Tooltip content="Hide database references">
+      <Tooltip content="Hide database references" className="w-max">
         <Checkbox
           label="Hide database references"
           checked={filters.hideDatabaseReferences}
@@ -76,7 +76,7 @@ export default function NodeFilters() {
           }}
         />
       </Tooltip>
-      <Tooltip content="Show Homo sapiens only nodes">
+      <Tooltip content="Show Homo sapiens only nodes" className="w-max">
         <Checkbox
           label="Homo sapiens only"
           checked={filters.showOnlyHomoSapiens}

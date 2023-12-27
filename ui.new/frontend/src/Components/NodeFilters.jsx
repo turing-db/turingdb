@@ -2,7 +2,7 @@ import { Tooltip, Checkbox } from "@blueprintjs/core";
 
 export default function NodeFilters({filters, setFilters}) {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col w-max">
       <Tooltip content="Hide publications">
         <Checkbox
           label="Hide publications"
