@@ -50,17 +50,27 @@ export const useCytoscapeInstance = () => {
     //]);
 
     const evs = vis.refs.events;
+    vis.cy().ready(() => vis.cy().scratch("turing", {}))
     vis.cy().on("onetap", (e) => evs.current.onetap(vis, e));
     vis.cy().on("cxttap", (e) => evs.current.cxttap(vis, e));
     vis.cy().on("dragfreeon", (e) => evs.current.dragfreeon(vis, e));
     vis.cy().on("dbltap", (e) => evs.current.dbltap(vis, e));
     vis.cy().on("render", (e) => evs.current.render(vis, e));
     vis.cy().on("select unselect", (e) => evs.current.select(vis, e));
+    vis.cy().on("mousemove", (e) => {
+      const globalScratch = vis.cy().scratch("turing");
+      globalScratch.shifting = true;
+    });
+
     vis.cy().on("mousedown", (e) => {
       vis.cy().boxSelectionEnabled(true);
       if (!e.target?.group) return;
       if (e.target.group() !== "nodes") return;
-      if (e.originalEvent.shiftKey || e.originalEvent.ctrlKey) {
+      if (
+        e.originalEvent.shiftKey ||
+        e.originalEvent.ctrlKey ||
+        e.originalEvent.metaKey
+      ) {
         vis.cy().boxSelectionEnabled(false);
         return;
       }
@@ -71,58 +81,93 @@ export const useCytoscapeInstance = () => {
       if (e.target.group() !== "nodes") return;
       const n = e.target;
       const p = n.position();
+
       n.scratch("turing", {
         previousPosition: { x: p.x, y: p.y },
-        shift: { x: 0, y: 0 },
         shiftKey: e.originalEvent.shiftKey,
-        ctrlKey: e.originalEvent.ctrlKey,
+        ctrlKey: e.originalEvent.ctrlKey || e.originalEvent.metaKey,
       });
     });
 
     vis.cy().on("drag", (e) => {
+      const globalScratch = vis.cy().scratch("turing");
+
       if (!e.target?.group) return;
       if (e.target.group() !== "nodes") return;
-      const n = e.target;
-      const scratch = { ...n.scratch("turing") };
+      if (!globalScratch.shifting) return;
 
-      if (scratch.shiftKey || scratch.ctrlKey) {
-        const p = n.position();
-        scratch.shift.x = p.x - scratch.previousPosition.x;
-        scratch.shift.y = p.y - scratch.previousPosition.y;
+      const baseN = e.target;
+      const scratch = { ...baseN.scratch("turing") };
+      const p = baseN.position();
 
-        // if shift key, whole fragment. else if ctrl key, only unique neighbors
-        const frag = scratch.shiftKey
-          ? getFragment(vis.cy(), n.id()).difference(n)
-          : vis
+      globalScratch.shift = {
+        x: p.x - scratch.previousPosition.x,
+        y: p.y - scratch.previousPosition.y,
+      };
+
+      const fragments = [];
+      const selectedElements = vis.cy().$(":selected");
+      const baseElements = selectedElements.union(baseN);
+
+      if (scratch.shiftKey) {
+        for (const n of baseElements) {
+          fragments.push(getFragment(vis.cy(), n.id()));
+        }
+      } else if (scratch.ctrlKey) {
+        for (const n of baseElements) {
+          fragments.push(n);
+          fragments.push(
+            vis
               .cy()
               .$id(n.id())
               .neighborhood()
-              .filter((e) => {
-                if (e.group === "edges") return true;
-                return e.connectedEdges().length <= 1;
-              });
-
-        frag.shift(scratch.shift);
-
-        scratch.previousPosition.x = p.x;
-        scratch.previousPosition.y = p.y;
-        n.scratch("turing", scratch);
+              .filter((el) => {
+                if (el.group() === "edges") return false;
+                const connectedNodeIds = new Set([
+                  ...el
+                    .connectedEdges()
+                    .map((edge) =>
+                      edge.target().id() === el.id()
+                        ? edge.source().id()
+                        : edge.target().id()
+                    ),
+                ]);
+                return connectedNodeIds.size <= 1;
+              })
+          );
+        }
       }
+
+      if (fragments.length === 0) return;
+
+      const frag = vis.cy().collection();
+      fragments.forEach((f) => frag.merge(f));
+
+      if (selectedElements.contains(baseN)) {
+        frag.unmerge(baseElements);
+      } else {
+        frag.unmerge(baseN);
+      }
+
+      frag.shift(globalScratch.shift);
+      scratch.previousPosition = { ...baseN.position() };
+      baseN.scratch("turing", scratch);
+      globalScratch.shifting = false;
     });
 
     container.setAttribute("tabindex", 0);
-    container.addEventListener("mousemove", () => {
-      container.focus();
-      return false;
-    });
-    container.addEventListener("keydown", (e) => {
+    document.addEventListener("keydown", (e) => {
+      if (!vis.cy()) return;
+
       if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
         vis.cy().elements().select();
         e.preventDefault();
         return true;
       }
     });
-    container.addEventListener("keydown", (e) => {
+    document.addEventListener("keydown", (e) => {
+      if (!vis.cy()) return;
+
       if (e.key === "f" && (e.ctrlKey || e.metaKey)) {
         vis.searchNodesDialog.open();
         e.preventDefault();
