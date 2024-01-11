@@ -152,8 +152,8 @@ const ViewerPageContent = () => {
                     placement="right-end"
                     content={
                       <div className="flex flex-col space-y-4 p-4 mr-4">
-                        The visualizer is showing many elements ({elementCount})
-                        and you might experience sluttering
+                        Many elements will be displayed at the same time, you
+                        may experience flickering of the visualization
                       </div>
                     }>
                     <Icon
