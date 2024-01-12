@@ -22,9 +22,9 @@ export type CxtMenuData = {
 export type LayoutDefinition = {
   name: string;
   positions: [];
-  lockBehaviour?: number,
-  edgeLengthVal?: number,
-  nodeSpacing?: number,
+  lockBehaviour?: number;
+  edgeLengthVal?: number;
+  nodeSpacing?: number;
 };
 
 export type ElementProperties = {
@@ -92,7 +92,7 @@ export type VisualizerState = {
   dbName: string;
   themeMode?: "light" | "dark";
   canvasTheme?: CanvasThemes;
-  devMode?: boolean,
+  devMode?: boolean;
   inspectedNode: GraphNodeData;
   layouts: {
     definitions: {

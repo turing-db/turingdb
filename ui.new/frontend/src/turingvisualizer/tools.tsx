@@ -3,6 +3,8 @@ import React from "react";
 
 export const dialogParams: Partial<DialogProps> = {
   canOutsideClickClose: true,
+  autoFocus: true,
+  shouldReturnFocusOnClose: false,
   usePortal: true,
   canEscapeKeyClose: true,
   className: "min-w-[80%]",
@@ -12,7 +14,7 @@ export const ttParams = {
   hoverCloseDelay: 40,
   hoverOpenDelay: 400,
   compact: true,
-  openOnTargetFocus: false,
+  openOnTargetFocus: true,
 };
 
 export function useDialog() {

@@ -62,7 +62,7 @@ const useVisualizerState = (cyStyle) => {
   // Core
   React.useEffect(() => {
     Object.values(trig().elements.core).forEach((f) => f());
-  }, [trig, elements]);
+  }, [trig, elements, hiddenNodes]);
 
   React.useEffect(() => {
     Object.values(trig().selectedNodeIds.core).forEach((f) => f());
