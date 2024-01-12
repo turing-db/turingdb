@@ -1,0 +1,8 @@
+
+add_executable(sgcdb_db_test SGCDBTest.cpp)
+target_link_libraries(sgcdb_db_test PRIVATE turing_sgc_db_s gtest_main)
+gtest_discover_tests(sgcdb_db_test)
+
+add_executable(sgcdb_name_test NameTest.cpp)
+target_link_libraries(sgcdb_name_test PRIVATE turing_sgc_db_s gtest_main)
+gtest_discover_tests(sgcdb_name_test)
