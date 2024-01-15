@@ -395,11 +395,11 @@ export const ItemShowInPathway = () => {
     devEndpoints["get_pathway"]({
       devElements,
       nodeId: pathway.data.turing_id,
-      filters: vis.state().filters
+      filters: vis.state()?.filters,
     }).then((nodes) => {
-        setPathwayNodes(nodes)
-        setLoading(false)
-      });
+      setPathwayNodes(nodes);
+      setLoading(false);
+    });
   }, [pathway]);
 
   if (!pathway || loading) {
