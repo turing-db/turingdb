@@ -39,7 +39,6 @@ const initialColaLayout = () => ({
   nodeSpacing: 5,
   nodeDimensionsIncludeLabels: false,
   edgeLengthVal: INIT_EDGE_VAL,
-  refresh: 1,
   edgeLength: getEdgeLengthFn(INIT_EDGE_VAL),
   lineCount: 0,
   lockBehaviour: lockBehaviours.INTERACTED,

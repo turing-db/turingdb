@@ -1,6 +1,5 @@
 #include "DBServiceImpl.h"
 
-#include "BioLog.h"
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
@@ -1005,7 +1004,7 @@ void searchNeighborhood(
             continue;
         }
 
-        const bool nodeHasNecessaryProps = std::all_of(
+        const bool nodeHasNecessaryProps = std::any_of(
             necessaryNodeProperties.cbegin(),
             necessaryNodeProperties.cend(),
             [&](const auto& pair) {
@@ -1065,7 +1064,7 @@ void searchNeighborhood(
             continue;
         }
 
-        const bool nodeHasNecessaryProps = std::all_of(
+        const bool nodeHasNecessaryProps = std::any_of(
             necessaryNodeProperties.cbegin(),
             necessaryNodeProperties.cend(),
             [&](const auto& pair) {
@@ -1119,7 +1118,14 @@ grpc::Status DBServiceImpl::ListPathways(grpc::ServerContext* ctxt,
     };
     const std::vector<db::StringRef> outEdgeTypeNames = {};
     const std::vector<std::pair<std::string, std::string>> necessaryNodeProperties = {
-        {"schemaClass", "Pathway"}
+        {"schemaClass", "Pathway"},
+
+        // {"schemaClass", "TopLevelPathway"}
+        // Ideally, we should support TopLevelPathway nodes
+        // (such as 'Metabolism of proteins'), unfortunately,
+        // this would require a more complex algorithm where we
+        // stop we encounter a sub-Pathway because TopLevelPathways
+        // are too large
     };
     const std::vector<std::pair<std::string, std::string>> excludeNodeProperties = {};
 
@@ -1166,25 +1172,37 @@ grpc::Status DBServiceImpl::GetPathway(grpc::ServerContext* ctxt,
 
     std::unordered_set<const db::Node*> previouslyVisited;
     std::unordered_set<const db::Node*> pathways;
-    const std::vector<db::StringRef> inEdgeTypeNames = {
-    };
+    const std::vector<db::StringRef> inEdgeTypeNames = {};
     const std::vector<db::StringRef> outEdgeTypeNames = {
         db->getString("input"),
         db->getString("output"),
         db->getString("hasEvent"),
     };
-    const std::vector<std::pair<std::string, std::string>> necessaryNodeProperties = {};
+    const std::vector<std::pair<std::string, std::string>> necessaryNodeProperties = {
+        { "schemaClass", "Reaction"},
+        { "schemaClass", "BlackBoxEvent"},
+        { "schemaClass", "Pathway"},
+
+    };
     const std::vector<std::pair<std::string, std::string>> excludeNodeProperties = {};
 
     ::searchNeighborhood(previouslyVisited,
                          pathways,
                          pathwayNode,
                          0, // Current depth
-                         3, // Max depth
+                         2, // Max depth
                          inEdgeTypeNames,
                          outEdgeTypeNames,
                          excludeNodeProperties,
                          necessaryNodeProperties);
+
+    if (pathways.size() > 600) {
+        return {grpc::StatusCode::ABORTED,
+                "This pathway is too large ("
+                    + std::to_string(pathways.size())
+                    + ", maximum size is "
+                    + std::to_string(600) + ")"};
+    }
 
     reply->mutable_nodes()->Reserve(pathways.size());
     for (const db::Node* node : pathways) {

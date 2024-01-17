@@ -15,8 +15,8 @@ const Canvas = () => {
     core: true,
     callback: () => {
       if (!cy.current) return;
-
       const c = cy.current;
+
       const elements = vis.state().elements;
       const layouts = vis.state().layouts;
       const idsBefore = Object.fromEntries(
@@ -38,35 +38,37 @@ const Canvas = () => {
       );
       const patchedElements = {};
 
-      c.batch(() => {
-        if (toAdd.length !== 0 || toRm.length !== 0) c.elements().unselect();
-        toAdd.forEach((e) => c.add(e));
-        toRm.forEach((e) => c.remove(e));
+      if (toAdd.length !== 0 || toRm.length !== 0) c.elements().unselect();
+      toRm.forEach((e) => c.remove(e));
+      toAdd.forEach((e) => c.add(e));
 
-        // Patching exiting elements
-        toKeep.forEach((e1) => {
-          const e2 = mappedElements[e1.id()];
-          const data1 = e1.data();
-          const data2 = e2.data;
+      // Patching exiting elements
+      if (toRm.length === 0 && toAdd.length === 0) {
+        c.batch(() => {
+          toKeep.forEach((e1) => {
+            const e2 = mappedElements[e1.id()];
+            const data1 = e1.data();
+            const data2 = e2.data;
 
-          // data keys
-          const keys = [
-            "type",
-            "iconColor",
-            "textColor",
-            "lineColor",
-            "label",
-            "has_hidden_nodes",
-          ];
-          for (const key of keys) {
-            if (data1[key] !== data2[key]) {
-              e1.data(data2);
-              patchedElements[e1.id()] = true;
-              break;
+            // data keys
+            const keys = [
+              "type",
+              "iconColor",
+              "textColor",
+              "lineColor",
+              "label",
+              "has_hidden_nodes",
+            ];
+            for (const key of keys) {
+              if (data1[key] !== data2[key]) {
+                e1.data(data2);
+                patchedElements[e1.id()] = true;
+                break;
+              }
             }
-          }
+          });
         });
-      });
+      }
 
       // If nodes were added or layouts were modified, apply layouts
       const nodesAdded = toAdd.length !== 0;

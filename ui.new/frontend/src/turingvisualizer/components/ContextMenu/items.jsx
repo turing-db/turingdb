@@ -381,8 +381,6 @@ export const ItemShowInPathway = () => {
       icon="path"
       text="Show in pathway"
       onClick={vis.showInPathwayDialog.open}
-      //onClick={() => {
-      //}}
     />
   );
 };

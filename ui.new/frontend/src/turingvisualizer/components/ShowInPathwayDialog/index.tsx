@@ -18,6 +18,10 @@ export function ShowInPathwayDialog() {
   const data = vis.contextMenuData()?.data;
 
   React.useEffect(() => {
+    if (!vis.showInPathwayDialog.isOpen && !loading) {
+      setLoading(true);
+      return;
+    }
     if (!vis.showInPathwayDialog.isOpen || !data) return;
 
     if (loading) {
@@ -48,6 +52,7 @@ export function ShowInPathwayDialog() {
                 onClick={() => {
                   const lockBehaviour =
                     vis.state()!.layouts.definitions[0]?.lockBehaviour!;
+
                   vis.callbacks()!.setDefaultCyLayout({
                     ...vis.state()!.layouts.definitions[0]!,
                     lockBehaviour: lockBehaviours.DO_NOT_LOCK,
@@ -58,7 +63,12 @@ export function ShowInPathwayDialog() {
                   endpoints["get_pathway"]({
                     nodeId: p.data.turing_id,
                     dbName: vis.state()!.dbName,
-                  }).then((pathwayNodes) => {
+                  }).then((res) => {
+                      if (res.failed) {
+                        console.log(res.error)
+                        return;
+                      }
+                      const pathwayNodes = res.nodes;
                     vis
                       .callbacks()!
                       .setSelectedNodeIds(
@@ -66,8 +76,6 @@ export function ShowInPathwayDialog() {
                       );
 
                     cy.one("layoutstop", () => {
-                      cy.startBatch();
-
                       const n = cy.$id(data.id);
                       n.select();
                       cy.animate(
@@ -85,8 +93,6 @@ export function ShowInPathwayDialog() {
                         ...vis.state()!.layouts.definitions[0]!,
                         lockBehaviour: lockBehaviour,
                       });
-
-                      cy.endBatch();
                     });
                   });
                 }}>

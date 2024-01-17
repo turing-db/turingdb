@@ -41,7 +41,12 @@ root.render(
 
 ## Inside a custom application
 
-In order to render the canvas, you need to wrap your custom component with a `VisualizerContextProvider`, with four parameters: `themeMode`, `dbName` (that you can set to `"reactome"` for the moment), a `containerId`, and `devMode` (a boolean to use the fake database). The containerId is the unique identifier for the html container that cytoscape uses to render the canvas (each canvas should have a unique id).
+In order to render the canvas,
+you need to wrap your custom component with a `VisualizerContextProvider`,
+with four parameters: `themeMode`, `dbName` (that you can set to `"reactome"` for the moment),
+a `containerId`.
+The containerId is the unique identifier for the html container that
+cytoscape uses to render the canvas (each canvas should have a unique id).
 
 In the example below, the `<AppContent />` component is the wrapper around the visualizer, and thus, controls its lifetime. The visualizer stays alive as long as `<AppContent />` stays mounted. In your application, you might have different tabs `<VisualizerTab />` with a unique canvas in each one, in which case, you need to keep the tab alive when hidden if you want to restore the state of the canvas when switching tabs.
 
@@ -51,7 +56,6 @@ In the example below, the `<AppContent />` component is the wrapper around the v
         themeMode="light"
         dbName="pole"
         containerId="cy1"
-        devMode // Use a fake connection to the database
     >
         <div style={{
             display: "flex",
@@ -332,10 +336,7 @@ For example using react-query:
 
 ```JSX
 // import
-import { useEndpoints } from 'turingvisualizer/queries';
-
-const devElements = vis.state()?.devElements || [];
-const endpoints = useEndpoints(devMode)
+import { endpoints } from 'turingvisualizer/queries';
 
 const { data, isFetching } = useQuery(
 
@@ -345,8 +346,7 @@ const { data, isFetching } = useQuery(
     // Actual query
     () => {
         return endpoints["list_nodes"]({
-            devElements, // Only in dev mode
-            dbName, // Only in prod mode
+            dbName,
 
             // The usual filters
             filters: {
@@ -377,8 +377,7 @@ const { data, isFetching } = useQuery(
 
 ```JSX
 endpoints["list_edges"]({
-        devElements, // Only in dev mode
-        dbName, // Only in prod mode
+        dbName,
 
         nodeId: 1930248, // List the edges of the node 1930248
 
@@ -422,8 +421,7 @@ This returns the nodes of given ids
 
 ```JSX
 endpoints["get_nodes"]({
-    devElements, // Only in dev mode
-    dbName, // Only in prod mode
+    dbName,
     nodeIds: [1930248, 1930250]
 })
 ```
@@ -434,8 +432,7 @@ This returns the edges of given ids
 
 ```JSX
 endpoints["get_edges"]({
-    devElements, // Only in dev mode
-    dbName, // Only in prod mode
+    dbName,
     edgeIds: [1930248, 1930250]
 })
 ```
@@ -444,8 +441,7 @@ endpoints["get_edges"]({
 
 ```JSX
 endpoints["list_pathways"]({
-    devElements, // Only in dev mode
-    dbName, // Only in prod mode
+    dbName,
     nodeId: 1930248,
 })
 ```
@@ -454,8 +450,7 @@ endpoints["list_pathways"]({
 
 ```JSX
 endpoints["get_pathway"]({
-    devElements, // Only in dev mode
-    dbName, // Only in prod mode
+    dbName,
     nodeId: pathwayNodeID, // One of the node ids returned by
                            // the 'list_pathways' endpoint
 

@@ -149,6 +149,12 @@ type GetPathwayRes = {
   nodes: GraphNodeData[];
 };
 
+type GetPathwayResult = {
+  failed: boolean;
+  error?: string;
+  nodes: GraphNode[];
+};
+
 async function prod_list_nodes({
   dbName = "reactome",
   filters = {},
@@ -337,7 +343,7 @@ async function prod_list_pathways({
 async function prod_get_pathway({
   nodeId,
   dbName,
-}: GetPathwayDevParams): Promise<GraphNode[]> {
+}: GetPathwayDevParams): Promise<GetPathwayResult> {
   return await axios
     .post<GetPathwayRes>("/api/get_pathway", {
       db_name: dbName,
@@ -345,17 +351,24 @@ async function prod_get_pathway({
     })
     .then((res) => {
       if (res.data.failed) {
-        return [];
-      }
-      return res.data.nodes.map((n) => {
         return {
-          group: "nodes",
-          data: {
-            ...n,
-            id: String(n.id + 1),
-            turing_id: String(n.id),
-          },
+          failed: true,
+          error: res.data.error.details,
+          nodes: [],
         };
-      });
+      }
+      return {
+        nodes: res.data.nodes.map((n) => {
+          return {
+            group: "nodes",
+            data: {
+              ...n,
+              id: String(n.id + 1),
+              turing_id: String(n.id),
+            },
+          };
+        }),
+        failed: false,
+      };
     });
 }
