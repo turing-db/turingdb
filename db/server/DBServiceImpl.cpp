@@ -964,8 +964,8 @@ void searchNeighborhood(
     size_t maxDepth,
     const std::vector<db::StringRef>& inEdgeTypeNames,
     const std::vector<db::StringRef>& outEdgeTypeNames,
-    const std::vector<std::pair<std::string, std::string>>& excludeNodeProperties,
-    const std::vector<std::pair<std::string, std::string>>& necessaryNodeProperties) {
+    const std::vector<std::pair<db::StringRef, std::string>>& excludeNodeProperties,
+    const std::vector<std::pair<db::StringRef, std::string>>& necessaryNodeProperties) {
 
     if (currentDepth > maxDepth
         || previouslyVisited.find(n) != previouslyVisited.end()) {
@@ -993,7 +993,7 @@ void searchNeighborhood(
             excludeNodeProperties.cend(),
             [&](const auto& pair) {
                 for (const auto& [nodePName, nodePValue] : source->properties()) {
-                    const bool pTypeMatches = pair.first == nodePName->getName().getSharedString()->getString();
+                    const bool pTypeMatches = pair.first == nodePName->getName();
                     if (pTypeMatches && pair.second == nodePValue.getString()) {
                         return true;
                     }
@@ -1010,7 +1010,7 @@ void searchNeighborhood(
             necessaryNodeProperties.cend(),
             [&](const auto& pair) {
                 for (const auto& [nodePName, nodePValue] : source->properties()) {
-                    const bool pTypeMatches = pair.first == nodePName->getName().getSharedString()->getString();
+                    const bool pTypeMatches = pair.first == nodePName->getName();
                     if (pTypeMatches && pair.second == nodePValue.getString()) {
                         return true;
                     }
@@ -1053,7 +1053,7 @@ void searchNeighborhood(
             excludeNodeProperties.cend(),
             [&](const auto& pair) {
                 for (const auto& [nodePName, nodePValue] : target->properties()) {
-                    const bool pTypeMatches = pair.first == nodePName->getName().getSharedString()->getString();
+                    const bool pTypeMatches = pair.first == nodePName->getName();
                     if (pTypeMatches && pair.second == nodePValue.getString()) {
                         return true;
                     }
@@ -1070,7 +1070,7 @@ void searchNeighborhood(
             necessaryNodeProperties.cend(),
             [&](const auto& pair) {
                 for (const auto& [nodePName, nodePValue] : target->properties()) {
-                    const bool pTypeMatches = pair.first == nodePName->getName().getSharedString()->getString();
+                    const bool pTypeMatches = pair.first == nodePName->getName();
                     if (pTypeMatches && pair.second == nodePValue.getString()) {
                         return true;
                     }
@@ -1118,17 +1118,17 @@ grpc::Status DBServiceImpl::ListPathways(grpc::ServerContext* ctxt,
         db->getString("hasEvent"),
     };
     const std::vector<db::StringRef> outEdgeTypeNames = {};
-    const std::vector<std::pair<std::string, std::string>> necessaryNodeProperties = {
-        {"schemaClass", "Pathway"},
+    const std::vector<std::pair<db::StringRef, std::string>> necessaryNodeProperties = {
+        {db->getString("schemaClass"), "Pathway"},
 
         // {"schemaClass", "TopLevelPathway"}
         // Ideally, we should support TopLevelPathway nodes
         // (such as 'Metabolism of proteins'), unfortunately,
         // this would require a more complex algorithm where we
-        // stop we encounter a sub-Pathway because TopLevelPathways
+        // stop when we encounter a sub-Pathway because TopLevelPathways
         // are too large
     };
-    const std::vector<std::pair<std::string, std::string>> excludeNodeProperties = {};
+    const std::vector<std::pair<db::StringRef, std::string>> excludeNodeProperties = {};
 
     ::searchNeighborhood(previouslyVisited,
                          pathways,
@@ -1179,13 +1179,13 @@ grpc::Status DBServiceImpl::GetPathway(grpc::ServerContext* ctxt,
         db->getString("output"),
         db->getString("hasEvent"),
     };
-    const std::vector<std::pair<std::string, std::string>> necessaryNodeProperties = {
-        { "schemaClass", "Reaction"},
-        { "schemaClass", "BlackBoxEvent"},
-        { "schemaClass", "Pathway"},
+    const std::vector<std::pair<db::StringRef, std::string>> necessaryNodeProperties = {
+        { db->getString("schemaClass"), "Reaction"},
+        { db->getString("schemaClass"), "BlackBoxEvent"},
+        { db->getString("schemaClass"), "Pathway"},
 
     };
-    const std::vector<std::pair<std::string, std::string>> excludeNodeProperties = {};
+    const std::vector<std::pair<db::StringRef, std::string>> excludeNodeProperties = {};
 
     ::searchNeighborhood(previouslyVisited,
                          pathways,
