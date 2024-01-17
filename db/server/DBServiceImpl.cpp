@@ -222,7 +222,8 @@ static grpc::Status buildRpcNode(const BuildNodeQueryParams& params) {
 
 DBServiceImpl::DBServiceImpl(const DBServerConfig& config)
     : _config(config),
-      _dbMan(new db::DBManager(_config.getDatabasesPath())) {
+      _dbMan(new db::DBManager(_config.getDatabasesPath()))
+{
 }
 
 DBServiceImpl::~DBServiceImpl() {
