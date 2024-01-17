@@ -35,6 +35,8 @@ const ViewerPageContent = () => {
   const selectedNodesRef = useSelectorRef("selectedNodes");
   const selectedNodes = useSelector((state) => state.selectedNodes);
   const dbName = useSelector((state) => state.dbName);
+  const [slutterWarning, setSlutterWarning] = React.useState(false);
+  const [elementCount, setElementCount] = React.useState(0);
   const theme = useTheme();
   const dispatch = useDispatch();
 
@@ -42,6 +44,20 @@ const ViewerPageContent = () => {
     () => vis.callbacks().setSelectedNodeIds(Object.keys(selectedNodes)),
     [vis, selectedNodes]
   );
+
+  useCanvasTrigger({
+    category: "elements",
+    name: "slutterWarning",
+
+    callback: () => {
+      if (vis.state().elements.length > 1000) {
+        setSlutterWarning(true);
+      } else {
+        setSlutterWarning(false);
+      }
+      setElementCount(vis.state().elements.length);
+    },
+  });
 
   useCanvasTrigger({
     category: "inspectedNode",
@@ -128,6 +144,25 @@ const ViewerPageContent = () => {
             </div>
             <div className="w-full flex flex-col items-end">
               <div className="w-min pointer-events-auto">
+                {slutterWarning && (
+                  <Popover
+                    {...ttParams}
+                    className="warning"
+                    interactionKind="hover"
+                    placement="right-end"
+                    content={
+                      <div className="flex flex-col space-y-4 p-4 mr-4">
+                        Many elements will be displayed at the same time, you
+                        may experience flickering of the visualization
+                      </div>
+                    }>
+                    <Icon
+                      className="opacity-50 warning"
+                      size={30}
+                      icon="warning-sign"
+                    />
+                  </Popover>
+                )}
                 <Popover
                   {...ttParams}
                   className="gray1"

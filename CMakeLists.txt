@@ -9,9 +9,6 @@ set(CLANG_NEEDED_VERSION "9.4.0")
 # C++ standard
 set(CPP_STANDARD "c++20")
 
-# C++ features
-#set(CPP_FEATURES "-fno-rtti")
-
 # C++ warning flags
 set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable")
 

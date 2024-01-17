@@ -20,7 +20,7 @@ const Visualizer = (props) => {
         style={{
           position: "absolute",
           width: "100%",
-          height:"100%",
+          height: "100%",
           pointerEvents: "none",
         }}>
         {React.Children.map(props.children, (child) => {

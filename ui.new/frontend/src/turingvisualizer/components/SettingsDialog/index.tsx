@@ -82,7 +82,7 @@ export default function SettingsDialog() {
 
           <NodeFilters/>
           <LockMenu />
-          <Tooltip content="Double clicking a node centers the canvas onto it">
+          <Tooltip content="Double clicking a node centers the canvas onto it" className="w-max">
             <Checkbox
               label="Center on double click"
               checked={centerOnDoubleClicked.value}

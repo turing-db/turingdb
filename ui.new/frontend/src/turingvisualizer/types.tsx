@@ -1,5 +1,6 @@
 import { CanvasThemes } from "./cytoscape/tools";
 import { Filters } from "./getRawFilters";
+import cytoscape from 'cytoscape';
 
 export type Property = [string, string];
 
