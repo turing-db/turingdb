@@ -6,7 +6,6 @@
 #include "BioLog.h"
 
 using namespace Log;
-using namespace db;
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("bioserver");
@@ -18,7 +17,7 @@ int main(int argc, const char** argv) {
 
     // Database server
     DBServer server(dbServerConfig);
-    server.start();
+    server.run();
 
     BioLog::printSummary();
     BioLog::destroy();
