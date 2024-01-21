@@ -1,12 +1,16 @@
 
 set(common_sources
         Command.cpp
+        Buffer.cpp
         StringBuffer.cpp
         BannerDisplay.cpp
         FileUtils.cpp
         BioAssert.cpp
         TimerStat.cpp
         PerfStat.cpp
+        Report.cpp
+        SpinLock.cpp
+        RWSpinLock.cpp
         ProcessUtils.cpp
         Report.cpp)
 

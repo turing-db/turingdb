@@ -5,7 +5,6 @@
 namespace db {
 class DB;
 class DBSession;
-class DBManager;
 }
 
 class DBServerConfig;
@@ -14,9 +13,6 @@ class DBServiceImpl : public DBService::Service {
 public:
     DBServiceImpl(const DBServerConfig& config);
     ~DBServiceImpl() override;
-
-    grpc::Status Session(grpc::ServerContext* ctxt,
-                         grpc::ServerReaderWriter<SessionResponse, SessionRequest>* stream) override;
 
     grpc::Status GetStatus(grpc::ServerContext* ctxt,
                            const GetStatusRequest* request,
@@ -144,7 +140,6 @@ public:
 
 private:
     const DBServerConfig& _config;
-    db::DBManager* _dbMan {nullptr};
     std::map<size_t, db::DB*> _databases;
     std::map<std::string, size_t> _dbNameMapping;
     size_t _nextAvailableId = 0;

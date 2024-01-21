@@ -3,7 +3,6 @@
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
-#include "DBManager.h"
 #include "DBServerConfig.h"
 #include "Edge.h"
 #include "EdgeType.h"
@@ -13,8 +12,6 @@
 #include "NodeSearch.h"
 #include "NodeType.h"
 #include "Writeback.h"
-
-#include "DBSession.h"
 
 #define MAX_ENTITY_COUNT 20000
 
@@ -221,8 +218,7 @@ static grpc::Status buildRpcNode(const BuildNodeQueryParams& params) {
 }
 
 DBServiceImpl::DBServiceImpl(const DBServerConfig& config)
-    : _config(config),
-      _dbMan(new db::DBManager(_config.getDatabasesPath()))
+    : _config(config)
 {
 }
 
@@ -230,18 +226,6 @@ DBServiceImpl::~DBServiceImpl() {
     for (auto& [index, db] : _databases) {
         delete db;
     }
-
-    if (_dbMan) {
-        delete _dbMan;
-    }
-}
-
-grpc::Status DBServiceImpl::Session(grpc::ServerContext* ctxt,
-                                    grpc::ServerReaderWriter<SessionResponse, SessionRequest>* stream) {
-    db::DBSession session(_dbMan, ctxt, stream);
-    session.process();
-
-    return grpc::Status::OK;
 }
 
 grpc::Status DBServiceImpl::GetStatus(grpc::ServerContext* ctxt,
