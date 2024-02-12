@@ -14,6 +14,8 @@ public:
 
     size_t getWorkersCount() const { return _workersCount; }
 
+    void setPort(short unsigned port) { _port = port; }
+
 private:
     const std::string _address {"127.0.0.1"};
     short unsigned _port {6666};
