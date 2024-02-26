@@ -41,7 +41,8 @@ protected:
         std::set<EntityID> nodeIDs;
         std::set<EntityID> edgeIDs;
 
-        TemporaryDataBuffer tempData1(0, 0);
+        // First node and edge IDs: 0, 0
+        TemporaryDataBuffer tempData1 = _db->createTempBuffer();
         nodeIDs.insert(tempData1.addNode());        // Node 0
         nodeIDs.insert(tempData1.addNode());        // Node 1
         nodeIDs.insert(tempData1.addNode());        // Node 2
@@ -49,33 +50,36 @@ protected:
         edgeIDs.insert(tempData1.addEdge(0, 0, 2)); // Edge 1
 
         // Concurrent writing
-        TemporaryDataBuffer tempData2(0, 0);
+        // First node and edge IDs: 0, 0
+        TemporaryDataBuffer tempData2 = _db->createTempBuffer();
         nodeIDs.insert(tempData2.addNode());        // Node 3
         nodeIDs.insert(tempData2.addNode());        // Node 4
         edgeIDs.insert(tempData2.addEdge(0, 0, 1)); // Edge 2 [3->4]
         edgeIDs.insert(tempData2.addEdge(0, 0, 1)); // Edge 3 [3->4]
         edgeIDs.insert(tempData2.addEdge(0, 1, 0)); // Edge 4 [4->3]
 
-        TemporaryDataBuffer tempData3(5, 5); // Empty buffer
-        tempData3.setNextNodeID(5);
-        tempData3.setNextEdgeID(5);
+        _db->pushDataPart(tempData1);
+        _db->pushDataPart(tempData2);
 
-        TemporaryDataBuffer tempData4(5, 5);
-        tempData4.setNextNodeID(5);
-        tempData4.setNextEdgeID(5);
+        // First node and edge IDs: 5, 5
+        // Empty buffer
+        TemporaryDataBuffer tempData3 = _db->createTempBuffer();
+
+        _db->pushDataPart(tempData3);
+
+        // First node and edge IDs: 5, 5
+        TemporaryDataBuffer tempData4 = _db->createTempBuffer();
         nodeIDs.insert(tempData4.addNode()); // Node 5
         nodeIDs.insert(tempData4.addNode()); // Node 6
         nodeIDs.insert(tempData4.addNode()); // Node 7
         nodeIDs.insert(tempData4.addNode()); // Node 8
+        // Reference node in previous datapart
         edgeIDs.insert(tempData4.addEdge(0, 6, 3)); // Edge 5
         edgeIDs.insert(tempData4.addEdge(0, 6, 8)); // Edge 6
         edgeIDs.insert(tempData4.addEdge(0, 7, 8)); // Edge 7
         // Reference node in previous datapart
         edgeIDs.insert(tempData4.addEdge(0, 2, 8)); // Edge 8
 
-        _db->pushDataPart(tempData1);
-        _db->pushDataPart(tempData2);
-        _db->pushDataPart(tempData3);
         _db->pushDataPart(tempData4);
     }
 
@@ -97,10 +101,10 @@ TEST_F(IteratorsTest, ScanCoreEdgesIteratorTest) {
     std::string output;
     while (it.isValid()) {
         const auto& v = it.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -121,10 +125,10 @@ TEST_F(IteratorsTest, ScanPatchEdgesIteratorTest) {
     std::string output;
     while (coreIt.isValid()) {
         const auto& v = coreIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -135,10 +139,10 @@ TEST_F(IteratorsTest, ScanPatchEdgesIteratorTest) {
 
     while (patchIt.isValid()) {
         const auto& v = patchIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -177,10 +181,10 @@ TEST_F(IteratorsTest, GetCoreEdgesIteratorTest) {
     std::string output;
     while (it.isValid()) {
         const auto& v = it.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -203,10 +207,10 @@ TEST_F(IteratorsTest, GetPatchEdgesIteratorTest) {
 
     while (coreIt.isValid()) {
         const auto& v = coreIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -217,10 +221,10 @@ TEST_F(IteratorsTest, GetPatchEdgesIteratorTest) {
 
     while (patchIt.isValid()) {
         const auto& v = patchIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -241,10 +245,10 @@ TEST_F(IteratorsTest, GetCoreInEdgesIteratorTest) {
     std::string output;
     while (it.isValid()) {
         const auto& v = it.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -267,10 +271,10 @@ TEST_F(IteratorsTest, GetPatchInEdgesIteratorTest) {
 
     while (coreIt.isValid()) {
         const auto& v = coreIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -281,10 +285,10 @@ TEST_F(IteratorsTest, GetPatchInEdgesIteratorTest) {
 
     while (patchIt.isValid()) {
         const auto& v = patchIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -305,10 +309,10 @@ TEST_F(IteratorsTest, GetCoreOutEdgesIteratorTest) {
     std::string output;
     while (it.isValid()) {
         const auto& v = it.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -331,10 +335,10 @@ TEST_F(IteratorsTest, GetPatchOutEdgesIteratorTest) {
 
     while (coreIt.isValid()) {
         const auto& v = coreIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
@@ -345,10 +349,10 @@ TEST_F(IteratorsTest, GetPatchOutEdgesIteratorTest) {
 
     while (patchIt.isValid()) {
         const auto& v = patchIt.get();
-        const auto& [source, target] = v.edgeDir == EdgeDirection::Incoming
-                                         ? std::make_pair(v.otherID, v.nodeID)
-                                         : std::make_pair(v.nodeID, v.otherID);
-        output += std::to_string(v.edgeID.getID());
+        const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
+                                         ? std::make_pair(v._otherID, v._nodeID)
+                                         : std::make_pair(v._nodeID, v._otherID);
+        output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
 
