@@ -1,93 +1,55 @@
+#include <memory>
+
 #include "gtest/gtest.h"
 
-#include "PipelineManager.h"
-#include "PipelineBuilder.h"
+#include "DB.h"
+#include "Pipeline.h"
 #include "ScanNodesProcessor.h"
+#include "DiscardProcessor.h"
 #include "ColumnNodes.h"
-#include "FilterNodesProcessor.h"
+#include "Stream.h"
 
 using namespace db;
 
 class PipelineTest : public ::testing::Test {
 };
 
-TEST_F(PipelineTest, emptyPipeline) {
-    PipelineManager pipeMan;
-    PipelineBuilder builder(&pipeMan);
-    builder.setPipeline(pipeMan.createPipeline());
+TEST_F(PipelineTest, createSmallPipeline) {
+    auto db = std::make_unique<DB>();
+    auto access = db->access();
+    Pipeline pipe;
 
-    ASSERT_TRUE(builder.getPipeline());
-}
+    auto scanNodes = pipe.addProcessor<ScanNodesProcessor>(db.get());
+    auto scanNodeOut = scanNodes->createOut(&scanNodes->writeNodeID);
+    ASSERT_TRUE(scanNodeOut);
 
-TEST_F(PipelineTest, createPipelineWithSource) {
-    PipelineManager pipeMan;
-    PipelineBuilder builder(&pipeMan);
+    auto discard = pipe.addProcessor<DiscardProcessor>();
+    discard->setInput(&discard->inputData, scanNodeOut);
 
-    builder.setPipeline(pipeMan.createPipeline());
-    ASSERT_TRUE(builder.getPipeline());
+    pipe.setup();
 
-    builder.addSource<ScanNodesProcessor>();
+    ASSERT_EQ(pipe.processors().size(), 2);
+    ASSERT_EQ(pipe.sources().size(), 1);
 
-    Pipeline* pipeline = builder.getPipeline();
-    PipelineState* state = pipeline->getState();
+    // Check scan nodes
+    ASSERT_TRUE(scanNodes->inputs().empty());
+    ASSERT_EQ(scanNodes->outputs().size(), 1);
+    for (const auto& [writeFunc, setupFunc, stream] : scanNodes->outputs()) {
+        ASSERT_EQ(writeFunc, &scanNodes->writeNodeID);
+        ASSERT_TRUE(stream != nullptr);
+        ASSERT_EQ(stream, scanNodeOut);
 
-    // We have only one source node so we should have only 
-    // one output column
-    ASSERT_EQ(state->size(), 1);
+        ASSERT_EQ(stream->getDriver(), scanNodes);
+        ASSERT_EQ(stream->getReceiver(), discard);
+        ASSERT_TRUE(stream->getColumn() != nullptr);
+        ASSERT_TRUE(dynamic_cast<ColumnNodes*>(stream->getColumn()));
+    }
 
-    const auto& processors = pipeline->processors();
-    ASSERT_EQ(processors.size(), 1);
-
-    // We check that the only processor that we have in the pipeline
-    // is indeed a ScanNodesProcessor
-    const auto firstProc = processors.front();
-    ASSERT_TRUE(dynamic_cast<const ScanNodesProcessor*>(firstProc));
-
-    // Check that the processor has no inputs as it is a source
-    // and a single output column which is a ColumnNodes
-    ASSERT_TRUE(firstProc->getInputs().empty());
-    const auto& outputs = firstProc->getOutputs();
-    ASSERT_EQ(outputs.size(), 1);
-    ASSERT_TRUE(dynamic_cast<ColumnNodes*>(outputs.columns().front()));
-}
-
-TEST_F(PipelineTest, createPipelineWithSourceAndFilter) {
-    PipelineManager pipeMan;
-    PipelineBuilder builder(&pipeMan);
-
-    builder.setPipeline(pipeMan.createPipeline());
-    ASSERT_TRUE(builder.getPipeline());
-
-    builder.addSource<ScanNodesProcessor>();
-    builder.addTransform<FilterNodesProcessor>();
-
-    Pipeline* pipeline = builder.getPipeline();
-    PipelineState* state = pipeline->getState();
-
-    // We should have 2 columns
-    ASSERT_EQ(state->size(), 2);
-
-    // We should have 2 processors
-    const auto& processors = pipeline->processors();
-    ASSERT_EQ(processors.size(), 2);
-
-    // Check that the processors are correct
-    auto scanProc = dynamic_cast<ScanNodesProcessor*>(processors[0]);
-    auto filterProc = dynamic_cast<FilterNodesProcessor*>(processors[1]);
-    ASSERT_TRUE(scanProc);
-    ASSERT_TRUE(filterProc);
-
-    // ScanNodes must have no inputs
-    ASSERT_TRUE(scanProc->getInputs().empty());
-
-    // ScanNodes has one output
-    ASSERT_EQ(scanProc->getOutputs().size(), 1);
-    ASSERT_TRUE(dynamic_cast<ColumnNodes*>(scanProc->getOutputs().columns().front()));
-
-    // The output of ScanNodes is the input of FilterNodes
-    ASSERT_EQ(scanProc->getOutputs().columns(), filterProc->getInputs().columns());
-
-    // FilterNodes has one output
-    ASSERT_EQ(filterProc->getOutputs().size(), 1);
-    ASSERT_TRUE(dynamic_cast<ColumnNodes*>(filterProc->getOutputs().columns().front()));
+    // Check discard
+    ASSERT_TRUE(discard->outputs().empty());
+    ASSERT_EQ(discard->inputs().size(), 1);
+    for (const auto& [tag, stream] : discard->inputs()) {
+        ASSERT_EQ(tag, &discard->inputData);
+        ASSERT_EQ(stream, scanNodeOut);
+    }
 }

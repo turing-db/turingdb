@@ -1,3 +1,6 @@
+#include <gtest/gtest.h>
+#include <set>
+
 #include "BioLog.h"
 #include "DB.h"
 #include "FileUtils.h"
@@ -12,8 +15,6 @@
 #include "iterators/ScanCoreEdgesIterator.h"
 #include "iterators/ScanPatchEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
-
-#include <gtest/gtest.h>
 
 using namespace db;
 
@@ -37,12 +38,14 @@ protected:
         Log::BioLog::init();
         Log::BioLog::openFile(_logPath.string());
 
-        _db = new DB;
         std::set<EntityID> nodeIDs;
         std::set<EntityID> edgeIDs;
 
+        _db = new DB();
+        auto access = _db->uniqueAccess();
+
         // First node and edge IDs: 0, 0
-        TemporaryDataBuffer tempData1 = _db->createTempBuffer();
+        TemporaryDataBuffer tempData1 = access.createTempBuffer();
         nodeIDs.insert(tempData1.addNode());        // Node 0
         nodeIDs.insert(tempData1.addNode());        // Node 1
         nodeIDs.insert(tempData1.addNode());        // Node 2
@@ -51,24 +54,24 @@ protected:
 
         // Concurrent writing
         // First node and edge IDs: 0, 0
-        TemporaryDataBuffer tempData2 = _db->createTempBuffer();
+        TemporaryDataBuffer tempData2 = access.createTempBuffer();
         nodeIDs.insert(tempData2.addNode());        // Node 3
         nodeIDs.insert(tempData2.addNode());        // Node 4
         edgeIDs.insert(tempData2.addEdge(0, 0, 1)); // Edge 2 [3->4]
         edgeIDs.insert(tempData2.addEdge(0, 0, 1)); // Edge 3 [3->4]
         edgeIDs.insert(tempData2.addEdge(0, 1, 0)); // Edge 4 [4->3]
 
-        _db->pushDataPart(tempData1);
-        _db->pushDataPart(tempData2);
+        access.pushDataPart(tempData1);
+        access.pushDataPart(tempData2);
 
         // First node and edge IDs: 5, 5
         // Empty buffer
-        TemporaryDataBuffer tempData3 = _db->createTempBuffer();
+        TemporaryDataBuffer tempData3 = access.createTempBuffer();
 
-        _db->pushDataPart(tempData3);
+        access.pushDataPart(tempData3);
 
         // First node and edge IDs: 5, 5
-        TemporaryDataBuffer tempData4 = _db->createTempBuffer();
+        TemporaryDataBuffer tempData4 = access.createTempBuffer();
         nodeIDs.insert(tempData4.addNode()); // Node 5
         nodeIDs.insert(tempData4.addNode()); // Node 6
         nodeIDs.insert(tempData4.addNode()); // Node 7
@@ -80,7 +83,7 @@ protected:
         // Reference node in previous datapart
         edgeIDs.insert(tempData4.addEdge(0, 2, 8)); // Edge 8
 
-        _db->pushDataPart(tempData4);
+        access.pushDataPart(tempData4);
     }
 
     void TearDown() override {
@@ -104,6 +107,7 @@ TEST_F(IteratorsTest, ScanCoreEdgesIteratorTest) {
         const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
                                          ? std::make_pair(v._otherID, v._nodeID)
                                          : std::make_pair(v._nodeID, v._otherID);
+        std::cout << "(" << v._edgeID.getID() << ", " << source.getID() << ", " << target.getID() << ")\n";
         output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID());
         output += std::to_string(target.getID());
