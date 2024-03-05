@@ -111,9 +111,9 @@ TEST_F(ChunkReaderTest, ScanEdgesChunkReaderTest) {
         for (const auto& edge : column) {
             output += std::to_string(edge._edgeID.getID());
             output += std::to_string(edge._nodeID.getID());
-            output += std::to_string(edge._otherID.getID());
+            output += std::to_string(edge._otherID.getID()) + " ";
         }
-        ASSERT_STREQ(output.c_str(), "001102234334443563668778828");
+        ASSERT_STREQ(output.c_str(), "001 102 443 234 334 778 563 668 828 ");
 
         auto t1 = std::chrono::high_resolution_clock::now();
         auto dur = duration_cast<microseconds>(t1 - t0).count();
