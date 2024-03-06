@@ -10,7 +10,7 @@
 
 namespace net {
 
-template <class ServerContextT>
+template <class ServerContextT, class SessionT>
 class Server {
 public:
     using ServerEndpoint = boost::asio::ip::tcp::endpoint;
@@ -40,7 +40,7 @@ public:
 private:
     ServerEndpoint _endpoint;
     IOContextThreadPool _threadPool;
-    Listener<ServerContextT> _listener;
+    Listener<ServerContextT, SessionT> _listener;
 };
 
 }

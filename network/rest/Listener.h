@@ -11,12 +11,11 @@
 
 namespace net {
 
-template <class ServerContextT>
+template <class ServerContextT, class SessionT>
 class Listener {
 public:
     using IOContext = boost::asio::io_context;
     using ServerEndpoint = boost::asio::ip::tcp::endpoint;
-    using Session = SessionHandler<ServerContextT>;
 
     Listener(IOContext& ioContext,
              ServerEndpoint& endpoint,
@@ -64,8 +63,9 @@ private:
             return;
         }
 
-        auto session = Session::create(std::move(socket), _serverContext);
-        session->start();
+        auto sessionHandler = SessionHandler<ServerContextT, SessionT>::create(std::move(socket),
+                                                                               _serverContext);
+        sessionHandler->start();
         doAccept();
     }
 };

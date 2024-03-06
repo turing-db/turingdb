@@ -6,8 +6,6 @@
 #include <boost/asio/strand.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/streambuf.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "Buffer.h"
 #include "HTTPParser.h"
@@ -16,11 +14,11 @@
 
 namespace net {
 
-template <class ServerContextT>
-class SessionHandler : public std::enable_shared_from_this<SessionHandler<ServerContextT>> {
+template <class ServerContextT, class SessionT>
+class SessionHandler : public std::enable_shared_from_this<SessionHandler<ServerContextT, SessionT>> {
 public:
     using TCPSocket = boost::asio::ip::tcp::socket;
-    using std::enable_shared_from_this<SessionHandler<ServerContextT>>::shared_from_this;
+    using std::enable_shared_from_this<SessionHandler<ServerContextT, SessionT>>::shared_from_this;
 
     ~SessionHandler() {
         Log::BioLog::echo("Session destroyed");
@@ -45,14 +43,14 @@ private:
     Buffer _inputBuffer;
     Buffer _outBuffer;
     HTTPParser _parser;
-    boost::asio::deadline_timer _timer;
+    SessionT _session;
 
     SessionHandler(boost::asio::ip::tcp::socket&& socket, ServerContextT* serverContext)
         : _socket(std::move(socket)),
         _strand(boost::asio::make_strand(_socket.get_executor())),
         _serverContext(serverContext),
         _parser(&_inputBuffer),
-        _timer(_socket.get_executor())
+        _session(_serverContext)
     {
         _socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
         _socket.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
@@ -77,12 +75,14 @@ private:
             return onError(error);
         }
 
+        // Update input buffer on the number of bytes read
         _inputBuffer.getWriter().setWrittenBytes(bytesRead);
-        const bool completed = process();
-        if (completed) {
-            const Buffer::Reader reader = _outBuffer.getReader();
-            write(reader.getData(), reader.getSize());
-            doShutdown();
+
+        // Analyse the request with the HTTP parser
+        const bool analyzeComplete = _parser.analyze();
+
+        if (analyzeComplete) {
+            process();
         } else {
             doRead();
         }
@@ -140,14 +140,17 @@ private:
         return _socket.lowest_layer().is_open();
     }
 
-    bool process() {
-        const bool analyzeComplete = _parser.analyze();
-        if (!analyzeComplete) {
-            return false;
-        }
+    void process() {
+        _session.prepare(_parser.getURI(), _parser.getPayload());
 
-        _serverContext->process(&_outBuffer, _parser.getURI(), _parser.getPayload());
-        return true;
+        bool processFinished = false;
+        do {
+            processFinished = _session.process(&_outBuffer);
+            const Buffer::Reader reader = _outBuffer.getReader();
+            write(reader.getData(), reader.getSize());
+        } while (!processFinished);
+
+        doShutdown();
     }
 };
 
