@@ -42,7 +42,7 @@ int main(int argc, const char** argv) {
         } else if (optName == "convertonly") {
             execNotebooks = false;
         } else if (optName == "nbarg") {
-            size_t it = option.second.find('=');
+            const size_t it = option.second.find('=');
             if (it == std::string::npos) {
                 BioLog::log(msg::ERROR_FAILED_TO_PARSE_NB_ARG() << option.second);
                 BioLog::printSummary();
