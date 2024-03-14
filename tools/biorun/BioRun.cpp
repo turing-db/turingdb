@@ -51,8 +51,8 @@ int main(int argc, const char** argv) {
                 return EXIT_FAILURE;
             }
 
-            std::string argName = option.second.substr(0, it);
-            std::string argValue = option.second.substr(it + 1, option.second.size() - 1);
+            const std::string argName = option.second.substr(0, it);
+            const std::string argValue = option.second.substr(it + 1, option.second.size() - 1);
 
             nbArgs.emplace_back(NotebookRunner::EnvVar {
                 .argName = argName,
