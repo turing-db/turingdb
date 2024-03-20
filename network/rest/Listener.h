@@ -1,9 +1,8 @@
 #pragma once
 
-#include <iostream>
-
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/signal_set.hpp>
 
 #include "SessionHandler.h"
 
@@ -21,6 +20,7 @@ public:
              ServerEndpoint& endpoint,
              ServerContextT* serverContext)
         : _ioContext(ioContext),
+        _signals(_ioContext, SIGINT, SIGTERM),
         _acceptor(ioContext),
         _serverContext(serverContext)
     {
@@ -42,13 +42,22 @@ public:
     }
 
     void start() {
+        doSignalWait();
         doAccept();
     }
 
 private:
     IOContext& _ioContext;
+    boost::asio::signal_set _signals;
     boost::asio::ip::tcp::acceptor _acceptor;
     ServerContextT* _serverContext {nullptr};
+
+    void doSignalWait() {
+        _signals.async_wait(
+            [this](const boost::system::error_code& error , int signal) {
+                _ioContext.stop();
+        });
+    }
 
     void doAccept() {
         _acceptor.async_accept(_ioContext,

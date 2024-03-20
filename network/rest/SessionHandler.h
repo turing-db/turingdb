@@ -8,6 +8,7 @@
 #include <boost/asio/streambuf.hpp>
 
 #include "Buffer.h"
+#include "NetWriter.h"
 #include "HTTPParser.h"
 
 #include "BioLog.h"
@@ -41,7 +42,7 @@ private:
     boost::asio::strand<TCPSocket::executor_type> _strand;
     ServerContextT* _serverContext {nullptr};
     Buffer _inputBuffer;
-    Buffer _outBuffer;
+    NetWriter _writer;
     HTTPParser _parser;
     SessionT _session;
 
@@ -49,8 +50,9 @@ private:
         : _socket(std::move(socket)),
         _strand(boost::asio::make_strand(_socket.get_executor())),
         _serverContext(serverContext),
+        _writer(_socket),
         _parser(&_inputBuffer),
-        _session(_serverContext)
+        _session(_serverContext, &_writer)
     {
         _socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
         _socket.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
@@ -88,29 +90,10 @@ private:
         }
     }
 
-    bool write(const char* data, size_t size) {
-        if (!isConnected()) {
-            return false;
-        }
 
-        boost::system::error_code error;
-
-        const char* dataPtr = data;
-        size_t remainingBytes = size;
-        while (remainingBytes > 0) {
-            const auto sent = _socket.send(boost::asio::buffer(dataPtr, remainingBytes),
-                                           MSG_NOSIGNAL,
-                                           error);
-            if (error) {
-                onError(error);
-                return false;
-            }
-
-            dataPtr += sent;
-            remainingBytes -= sent;
-        }
-
-        return true;
+    void process() {
+        _session.process(_parser.getURI(), _parser.getPayload());
+        doShutdown();
     }
 
     void onError(const boost::system::error_code& error) {
@@ -138,19 +121,6 @@ private:
 
     bool isConnected() {
         return _socket.lowest_layer().is_open();
-    }
-
-    void process() {
-        _session.prepare(_parser.getURI(), _parser.getPayload());
-
-        bool processFinished = false;
-        do {
-            processFinished = _session.process(&_outBuffer);
-            const Buffer::Reader reader = _outBuffer.getReader();
-            write(reader.getData(), reader.getSize());
-        } while (!processFinished);
-
-        doShutdown();
     }
 };
 
