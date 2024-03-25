@@ -73,7 +73,7 @@ bool processCommand(TuringClient& turing, std::string& line) {
         std::vector<std::string_view> words;
         extractWords(words, line);
         if (words.size() != 2) {
-            std::cout << "ERROR: the 'cd' command expects one argument.\n";
+            std::cout << "ERROR: the command 'cd' expects one argument.\n";
             return true;
         }
 
@@ -109,6 +109,12 @@ void process(TuringClient& turing, std::string& line) {
     std::cout << "Request done in " << duration.count() << " ms.\n";
 }
 
+std::string composePrompt(const TuringClient& turing) {
+    const std::string basePrompt = "\e[0;35mturing\e[0m";
+    const char* separator = ":";
+    return basePrompt + separator + "\e[0;36m" + turing.getDBName() + "\e[0m> ";
+}
+
 }
 
 int main(int argc, const char** argv) {
@@ -126,10 +132,10 @@ int main(int argc, const char** argv) {
         }
     }
 
-    const char* shellPrompt = "turing> ";
+    std::string shellPrompt = composePrompt(turing);
     char* line = NULL;
     std::string lineStr;
-    while ((line = linenoise(shellPrompt)) != NULL) {
+    while ((line = linenoise(shellPrompt.c_str())) != NULL) {
         lineStr = line;
         if (lineStr.empty()) {
             continue;
@@ -138,9 +144,9 @@ int main(int argc, const char** argv) {
         process(turing, lineStr);
 
         linenoiseHistoryAdd(line);
+        shellPrompt = composePrompt(turing);
     }
 
-    BioLog::printSummary();
     BioLog::destroy();
     PerfStat::destroy();
     return EXIT_SUCCESS;
