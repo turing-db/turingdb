@@ -1,5 +1,6 @@
 
-set(rest_sources 
+set(rest_sources
+        NetWriter.cpp
         HTTPParser.cpp
         ServerConfig.cpp
         IOContextThreadPool.cpp)

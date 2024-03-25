@@ -26,6 +26,9 @@ MSG_INFO(INFO_NOTEBOOK_REPORT, 4006,
 MSG_ERROR(ERROR_FAILED_TO_GENERATE_REPORT, 4007,
           "Failed to generate report for notebook '$0'")
 
+MSG_ERROR(ERROR_FAILED_TO_PARSE_NB_ARG, 4008,
+          "Failed to parse -nbarg ('$0'). The format must be ENV_NAME=ENV_VALUE")
+
 }
 
 #endif

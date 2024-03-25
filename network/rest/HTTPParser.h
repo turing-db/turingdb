@@ -1,9 +1,9 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 
 #include "Buffer.h"
-#include "StringSpan.h"
+#include "HTTPParams.h"
 
 namespace net {
 
@@ -19,16 +19,16 @@ public:
 
     bool analyze();
     
-    const std::string& getURI() const { return _uri; }
+    const HTTPParams& getParams() const { return _params; }
 
-    StringSpan getPayload() const { return _payload; }
+    std::string_view getPayload() const { return _payload; }
 
 private:
     Buffer::Reader _reader;
     char* _currentPtr {nullptr};
     HTTPMethod _method {HTTPMethod::UNKNOWN};
-    std::string _uri;
-    StringSpan _payload;
+    HTTPParams _params;
+    std::string_view _payload;
 
     size_t getSize() { return getEndPtr()-_currentPtr; }
     char* getEndPtr() { return _reader.getData() + _reader.getSize(); }

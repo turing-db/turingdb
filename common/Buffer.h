@@ -22,33 +22,24 @@ public:
             _buffer->_bytes = 0;
         }
 
-        bool writeChar(char c) {
-            if (getBufferSize() < 1) {
-                return false;
-            }
-
+        void writeChar(char c) {
             char* buffer = getBuffer();
             *buffer = c;
             setWrittenBytes(1);
-
-            return true;
         }
 
-        bool writeString(const std::string& str) {
-            if (str.size() > getBufferSize()) {
-                return false;
-            }
-
+        void writeString(const std::string& str) {
             char* buffer = getBuffer();
             strcpy(buffer, str.c_str());
             setWrittenBytes(str.size());
-            return true;
         }
 
         void setWrittenBytes(size_t bytesWritten) { _buffer->_bytes += bytesWritten; }
 
         char* getBuffer() { return &_buffer->_data[_buffer->_bytes]; }
         size_t getBufferSize() const { return Buffer::BUFFER_SIZE-_buffer->_bytes; }
+
+        bool isFull() const { return getBufferSize() == 0; }
 
     private:
         Buffer* _buffer {nullptr};

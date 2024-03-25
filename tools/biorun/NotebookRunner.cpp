@@ -102,13 +102,17 @@ bool NotebookRunner::generateReport(const Path& path) {
     reportCmd.addArg(scriptPath.string());
     reportCmd.addArg(path.string());
     reportCmd.addArg("-ro");
-    reportCmd.addArg(_reportsDir.string());
+    reportCmd.addArg(_outDir/"pdf_reports"); //reportCmd.addArg(_reportsDir.string());
     reportCmd.addArg("-so");
     reportCmd.addArg(_outDir.string());
+
+    for (const auto& envVar : _envVars) {
+        reportCmd.setEnvVar(envVar.argName, envVar.argValue);
+    }
     
     reportCmd.setScriptPath(_outDir/"generate_report.sh");
 
-    const auto logFile = _reportsDir / "generate_report.log";
+    const auto logFile = _outDir / "generate_report.log";
     reportCmd.setLogFile(logFile);
     reportCmd.setWriteOnStdout(!_silent);
 
@@ -130,6 +134,10 @@ bool NotebookRunner::executeNotebook(const Path& path) {
     jupyterCmd.addArg(path.string());
     jupyterCmd.setWorkingDir(_outDir);
     jupyterCmd.setScriptPath(_outDir/"jupyter_exec.sh");
+
+    for (const auto& envVar : _envVars) {
+        jupyterCmd.setEnvVar(envVar.argName, envVar.argValue);
+    }
 
     const auto logFile = _outDir/"jupyter_exec.log";
     jupyterCmd.setLogFile(logFile);
@@ -159,6 +167,10 @@ bool NotebookRunner::exportNotebook(const Path& path, const std::string& toDest)
     jupyterCmd.setWorkingDir(_outDir);
     jupyterCmd.setScriptPath(_outDir/("jupyter_convert_"+toDest+".sh"));
     jupyterCmd.setLogFile(_outDir/("jupyter_convert_"+toDest+".log"));
+
+    for (const auto& envVar : _envVars) {
+        jupyterCmd.setEnvVar(envVar.argName, envVar.argValue);
+    }
 
     BioLog::log(msg::INFO_CONVERTING_NOTEBOOK() << path.string() << toDest);
 

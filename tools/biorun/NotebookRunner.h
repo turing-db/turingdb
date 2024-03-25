@@ -9,6 +9,11 @@ public:
     using Path = std::filesystem::path;
     using Notebooks = std::vector<Path>;
 
+    struct EnvVar {
+        std::string argName;
+        std::string argValue;
+    };
+
     NotebookRunner(const Path& outDir, const Path& reportsDir);
     ~NotebookRunner();
 
@@ -17,6 +22,7 @@ public:
     void setExportPDF(bool enable) { _exportPDF = enable; }
     void setGenerateReport(bool enable) { _generateReport = enable; }
     void setExecEnabled(bool enable) { _execNotebooks = enable; }
+    void setEnvVars(std::vector<EnvVar>&& vars) { _envVars = std::move(vars); };
 
     void addNotebook(const Path& path);
 
@@ -26,6 +32,8 @@ private:
     Path _outDir;
     Path _reportsDir;
     Notebooks _notebooks;
+    std::vector<EnvVar> _envVars;
+
     bool _silent {false};
     bool _execNotebooks {true};
     bool _exportHTML {false};
