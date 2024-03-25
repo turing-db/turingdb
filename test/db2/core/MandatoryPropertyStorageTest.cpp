@@ -1,6 +1,6 @@
-#include "mandatory/MandatoryBools.h"
-#include "mandatory/MandatoryGenerics.h"
-#include "mandatory/MandatoryStrings.h"
+#include "mandatory/MandatoryBoolStorage.h"
+#include "mandatory/MandatoryGenericStorage.h"
+#include "mandatory/MandatoryStringStorage.h"
 
 #include <gtest/gtest.h>
 #include <iostream>
@@ -16,9 +16,11 @@ struct TestNode {
 };
 
 template <typename T>
-std::unique_ptr<MandatoryGenerics<T>> buildStorage(const std::vector<TestNode>& nodes) {
-    typename MandatoryGenerics<T>::Builder builder;
+std::unique_ptr<MandatoryGenericStorage<T>> buildStorage(const std::vector<TestNode>& nodes) {
+    typename MandatoryGenericStorage<T>::Builder builder;
     std::unordered_map<LabelSet, size_t> nodeCounts;
+    size_t currentPosition = 0;
+    std::unordered_map<LabelSet, size_t> currentPositions;
 
     builder.startBuilding(nodes.size());
 
@@ -27,23 +29,26 @@ std::unique_ptr<MandatoryGenerics<T>> buildStorage(const std::vector<TestNode>& 
     }
 
     for (const auto& [labelset, count] : nodeCounts) {
-        builder.addNodeLabelSet(labelset, count);
+        builder.addNodeLabelSet(labelset, count, currentPosition);
+        currentPositions[labelset] = currentPosition;
+        currentPosition += count;
     }
 
     for (const auto& node : nodes) {
+        const size_t pos = currentPositions.at(node._labelset);
         if constexpr (std::is_same_v<T, StringPropertyType>) {
-            builder.setNextProp(node._labelset, node._stringProp);
+            builder.setProp(node._stringProp, pos);
         } else if constexpr (std::is_same_v<T, BoolPropertyType>) {
-            builder.setNextProp(node._labelset, node._boolProp);
+            builder.setProp(node._boolProp, pos);
         } else if constexpr (std::is_same_v<T, Int64PropertyType>) {
-            builder.setNextProp(node._labelset, node._intProp);
+            builder.setProp(node._intProp, pos);
         }
-        builder.finishNode(node._labelset);
+        currentPositions.at(node._labelset)++;
     }
 
     PropertyStorage* ptr = builder.build().release();
-    return std::unique_ptr<MandatoryGenerics<T>> {
-        static_cast<MandatoryGenerics<T>*>(ptr)};
+    return std::unique_ptr<MandatoryGenericStorage<T>> {
+        static_cast<MandatoryGenericStorage<T>*>(ptr)};
 }
 
 TEST(MandatoryPropertyStorageTest, Create) {

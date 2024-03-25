@@ -8,12 +8,10 @@ endfunction()
 
 add_db2_core_gtest(db2_core_temp_data_buffer_test TemporaryDataBufferTest.cpp)
 add_db2_core_gtest(db2_core_datapart_test DataPartTest.cpp)
-#add_db2_core_gtest(db2_core_labelset_test LabelSetTest.cpp)
-#add_db2_core_gtest(db2_core_flatedgecontainer_test FlatEdgeContainerTest.cpp)
-
+add_db2_core_gtest(db2_core_labelset_test LabelSetTest.cpp)
+add_db2_core_gtest(db2_core_edgecontainer_test EdgeContainerTest.cpp)
 add_db2_core_gtest(db2_core_propertycontainer_test PropertyContainerTest.cpp)
 add_db2_core_gtest(db2_core_mandatorypropertystorage_test MandatoryPropertyStorageTest.cpp)
 add_db2_core_gtest(db2_core_optionalpropertystorage_test OptionalPropertyStorageTest.cpp)
-
-#add_db2_core_gtest(db2_core_iterator_test iterators/IteratorsTest.cpp)
-#add_db2_core_gtest(db2_core_scan_nodes_iterator_test iterators/ScanNodesIteratorTest.cpp)
+add_db2_core_gtest(db2_core_iterator_test iterators/IteratorsTest.cpp)
+add_db2_core_gtest(db2_core_scan_nodes_iterator_test iterators/ScanNodesIteratorTest.cpp)

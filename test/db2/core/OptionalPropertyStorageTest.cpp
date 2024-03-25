@@ -1,6 +1,4 @@
-#include "optional/OptionalBools.h"
-#include "optional/OptionalGenerics.h"
-#include "optional/OptionalStrings.h"
+#include "optional/OptionalGenericStorage.h"
 
 #include <gtest/gtest.h>
 
@@ -15,9 +13,11 @@ struct TestNode {
 };
 
 template <SupportedType T>
-std::unique_ptr<OptionalGenerics<T>> buildStorage(const std::vector<TestNode>& nodes) {
-    typename OptionalGenerics<T>::Builder builder;
+std::unique_ptr<OptionalGenericStorage<T>> buildStorage(const std::vector<TestNode>& nodes) {
+    typename OptionalGenericStorage<T>::Builder builder;
     std::unordered_map<LabelSet, size_t> nodeCounts;
+    size_t currentPosition = 0;
+    std::unordered_map<LabelSet, size_t> currentPositions;
 
     builder.startBuilding(nodes.size());
 
@@ -26,29 +26,32 @@ std::unique_ptr<OptionalGenerics<T>> buildStorage(const std::vector<TestNode>& n
     }
 
     for (const auto& [labelset, count] : nodeCounts) {
-        builder.addNodeLabelSet(labelset, count);
+        builder.addNodeLabelSet(labelset, count, currentPosition);
+        currentPositions[labelset] = currentPosition;
+        currentPosition += count;
     }
 
     for (const auto& node : nodes) {
+        const size_t pos = currentPositions.at(node._labelset);
         if constexpr (std::is_same_v<T, StringPropertyType>) {
             if (node._stringProp.has_value()) {
-                builder.setNextProp(node._labelset, node._stringProp.value());
+                builder.setProp(node._stringProp.value(), pos);
             }
         } else if constexpr (std::is_same_v<T, BoolPropertyType>) {
             if (node._boolProp.has_value()) {
-                builder.setNextProp(node._labelset, node._boolProp.value());
+                builder.setProp(node._boolProp.value(), pos);
             }
         } else if constexpr (std::is_same_v<T, Int64PropertyType>) {
             if (node._intProp.has_value()) {
-                builder.setNextProp(node._labelset, node._intProp.value());
+                builder.setProp(node._intProp.value(), pos);
             }
         }
-        builder.finishNode(node._labelset);
+        currentPositions.at(node._labelset)++;
     }
 
     PropertyStorage* ptr = builder.build().release();
-    return std::unique_ptr<OptionalGenerics<T>> {
-        static_cast<OptionalGenerics<T>*>(ptr)};
+    return std::unique_ptr<OptionalGenericStorage<T>> {
+        static_cast<OptionalGenericStorage<T>*>(ptr)};
 }
 
 TEST(OptionalPropertyStorageTest, Create) {

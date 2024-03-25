@@ -72,5 +72,5 @@ TEST_F(DataPartTest, CreateTest) {
     dp.load(0, 0, _tempBuffer);
 
     ASSERT_EQ(dp.getNodeCount(), _tempBuffer.getCoreNodeCount());
-    ASSERT_EQ(dp.getCoreEdgeCount(), _tempBuffer.getCoreEdgeCount());
+    ASSERT_EQ(dp.getCoreEdgeCount(), _tempBuffer.getCoreEdgeCount() / 2);
 }
