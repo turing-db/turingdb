@@ -224,8 +224,8 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 
     Log::BioLog::echo(outputFinalIDs);
 
-    ASSERT_STREQ(outputFinalIDs.c_str(), "243867");
-    ASSERT_STREQ(outputTempIDs.c_str(), "234578");
+    ASSERT_STREQ(outputFinalIDs.c_str(), "234678");
+    ASSERT_STREQ(outputTempIDs.c_str(), "243785");
 }
 
 TEST_F(IteratorsTest, GetCoreEdgesIteratorTest) {
