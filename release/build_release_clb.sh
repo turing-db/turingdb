@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 prod_ready_bins=biorun
 
 package_name=turing
