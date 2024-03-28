@@ -87,7 +87,11 @@ void GMLLexer::lexString() {
     if (*start == '"') {
         _current++;
         while (_current < _end && *_current != '"') {
-            _current++;
+            if (_end-_current >= 2 && *_current == '\\' && _current[1] == '"') {
+                _current += 2;
+            } else {
+                _current++;
+            }
         }
 
         if (*_current != '"') {

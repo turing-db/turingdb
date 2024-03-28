@@ -6,23 +6,44 @@
 #include "Edge.h"
 #include "NodeType.h"
 
-#include "ExploratorTree.h"
 #include "SearchUtils.h"
 
 #include "BioLog.h"
+#include "BioAssert.h"
 
 using namespace db;
 using namespace Log;
 
+namespace {
+
+void buildNetworkRec(const ExploratorTreeNode* treeNode, SubNetBuilder* subNetBuilder) {
+    Node* node = treeNode->getNode();
+    if (subNetBuilder->getNodeInSubNet(node)) {
+        return;
+    }
+
+    subNetBuilder->addNode(node);
+    
+    const ExploratorTreeNode* parent = treeNode->getParent();
+    if (parent) {
+        buildNetworkRec(parent, subNetBuilder);
+    }
+}
+
+}
+
 Explorator::Explorator(DB* db)
     : _db(db),
     _wb(db),
-    _stIdName(db->getString("stId")),
     _displayName(db->getString("displayName")),
-    _speciesName(db->getString("speciesName"))
+    _speciesName(db->getString("speciesName")),
+    _schemaClassName(db->getString("schemaClass"))
 {
     _resNet = _wb.createNetwork(_db->getString("out"));
+    bioassert(_resNet);
     _subNetBuilder = std::make_unique<SubNetBuilder>(_db, _resNet);
+
+    addDefaultTargetClasses();
 }
 
 Explorator::~Explorator() {
@@ -39,9 +60,18 @@ void Explorator::run() {
 
     std::queue<ExploratorTreeNode*> queue;
 
+    const auto searchSeedName = _db->getString("searchSeed");
+
     // Create the initial explorator tree with the seeds
     _tree = new ExploratorTree();
     for (Node* seed : _seeds) {
+        PropertyType* searchSeedPropType = seed->getType()->getPropertyType(searchSeedName);
+        if (!searchSeedPropType) {
+            searchSeedPropType = _wb.addPropertyType(seed->getType(), searchSeedName, ValueType::stringType());
+        }
+        bioassert(searchSeedPropType);
+        const auto searchSeedProp = Property(searchSeedPropType, Value::createString("1"));
+        _wb.setProperty(seed, searchSeedProp);
         ExploratorTreeNode* seedNode =  ExploratorTreeNode::create(_tree, seed, nullptr);
         queue.push(seedNode);
     }
@@ -66,7 +96,14 @@ void Explorator::run() {
         ExploratorTreeNode* currentTreeNode = queue.front();
         queue.pop();
 
-        visit(currentTreeNode);
+        Node* node = currentTreeNode->getNode();
+
+        if (hasTargetSchemaClass(node)) {
+            _targets.insert(currentTreeNode);
+            if (!_traverseTargets) {
+                continue;
+            }
+        }
 
         if (currentTreeNode->getDistance() >= _maxDist) {
             continue;
@@ -84,22 +121,13 @@ void Explorator::run() {
         }
     }
 
+    buildNetwork();
+
     BioLog::echo("Nodes visited: "+std::to_string(_tree->getSize()));
 }
 
-void Explorator::visit(ExploratorTreeNode* treeNode) {
-    Node* node = treeNode->getNode();
-
-    if (SearchUtils::isReactomePathway(node)) {
-        _pathways.insert(node);
-        return;
-    }
-
-    _subNetBuilder->addNode(node);
-}
-
-bool Explorator::shouldExplore(const Node* node) {
-    if (SearchUtils::isReactomeMetadata(node)) {
+bool Explorator::shouldExplore(const Node* node) const {
+    if (SearchUtils::isPublication(node)) {
         return false;
     }
 
@@ -109,10 +137,81 @@ bool Explorator::shouldExplore(const Node* node) {
         return false;
     }
 
-    // We do not want publications
-    if (SearchUtils::isPublication(node)) {
+    // Check schema class
+    const std::string schemaClass = SearchUtils::getProperty(node, _schemaClassName);
+    if (_excludedClasses.find(schemaClass) != _excludedClasses.end()) {
         return false;
     }
 
+    // Check name against exclusion list
+    const std::string displayName = SearchUtils::getProperty(node, _displayName);
+    if (!displayName.empty()) {
+        if (_excludedNames.find(displayName) != _excludedNames.end()) {
+            return false;
+        }
+    }
+
     return true;
+}
+
+void Explorator::buildNetwork() {
+    for (const ExploratorTreeNode* treeNode : _targets) {
+        buildNetworkRec(treeNode, _subNetBuilder.get());
+    }
+}
+
+void Explorator::addExcludedName(const std::string& name) {
+    _excludedNames.insert(name);
+}
+
+bool Explorator::hasTargetSchemaClass(const db::Node* node) const {
+    const std::string schemaClass = SearchUtils::getProperty(node, _schemaClassName);
+    return (_targetClasses.find(schemaClass) != _targetClasses.end());
+}
+
+void Explorator::setNoDefaultTargets() {
+    _targetClasses.clear();
+}
+
+void Explorator::addTargetClass(const std::string& name) {
+    _targetClasses.insert(name);
+}
+
+void Explorator::addDefaultTargetClasses() {
+    _targetClasses.insert("ProteinDrug");
+    _targetClasses.insert("ChemicalDrug");
+}
+
+void Explorator::addDefaultExcludedNames() {
+    addExcludedName("ATP [cytosol]");
+    addExcludedName("ADP [cytosol]");
+    addExcludedName("AMP [cytosol]");
+    addExcludedName("H2O [cytosol]");
+    addExcludedName("AdoMet [cytosol]");
+    addExcludedName("AdoHcy [cytosol]");
+    addExcludedName("gain_of_function via non_conservative_missense_variant");
+}
+
+void Explorator::addExcludedClass(const std::string& schemaClass) {
+    _excludedClasses.insert(schemaClass);
+}
+
+void Explorator::addDefaultExcludedClasses() {
+    addExcludedClass("Summation");
+    addExcludedClass("InstanceEdit");
+    addExcludedClass("Species");
+    addExcludedClass("Disease");
+    addExcludedClass("Compartment");
+    addExcludedClass("ReferenceDatabase");
+    addExcludedClass("DatabaseIdentifier");
+    addExcludedClass("FunctionalStatus");
+    addExcludedClass("Pathway");
+    addExcludedClass("LiteratureReference");
+    addExcludedClass("Publication");
+    addExcludedClass("UndirectedInteraction");
+    addExcludedClass("CandidateSet");
+    addExcludedClass("DefinedSet");
+    addExcludedClass("ReferenceGeneProduct");
+    addExcludedClass("SimpleEntity");
+    addExcludedClass("GO_MolecularFunction");
 }

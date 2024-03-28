@@ -17,11 +17,12 @@ public:
 
     void addNode(db::Node* node);
 
+    db::Node* getNodeInSubNet(const db::Node* node) const;
+
 private:
     db::Network* _subNet {nullptr};
     db::Writeback _wb;
     std::unordered_map<const db::Node*, db::Node*> _subNetNodeMap;
 
     void cloneProperties(const db::DBEntity* src, db::DBEntity* dest);
-    db::Node* getNodeInSubNet(const db::Node* node) const;
 };

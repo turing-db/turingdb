@@ -59,6 +59,9 @@ MSG_ERROR(ERROR_IMPOSSIBLE_TO_RUN_COMMAND, 1017,
 MSG_ERROR(ERROR_FAILED_TO_RUN_SCRIPT, 1018,
           "Impossible to run the script $0")
 
+MSG_ERROR(ERROR_EXPECTED_OPTIONS, 1019,
+          "Please give the following options: $0")
+
 }
 
 #endif
