@@ -20,6 +20,7 @@ public:
     enum class MatchType {
         EXACT,
         PREFIX,
+        PREFIX_AND_LOC,
         SUBWORD
     };
 
@@ -39,6 +40,8 @@ public:
                                    const std::string& expectedValue);
     static bool isPrefixMatch(const std::string& str,
                               const std::string& expectedValue);
+    static bool isPrefixAndLocMatch(const std::string& str,
+                                    const std::string& expectedValue);
 
 private:
     using PropertyName = db::StringRef;

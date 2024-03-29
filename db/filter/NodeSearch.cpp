@@ -81,6 +81,11 @@ void NodeSearch::run(std::vector<db::Node*>& result) {
                                 propFound = true;
                                 break;
                             }
+                        } else if (matchType == MatchType::PREFIX_AND_LOC) {
+                            if (isPrefixAndLocMatch(valueStr, expectedValue)) {
+                                propFound = true;
+                                break;
+                            }
                         } else {
                             if (isApproximateMatch(valueStr, expectedValue)) {
                                 propFound = true;
@@ -136,3 +141,21 @@ bool NodeSearch::isPrefixMatch(const std::string& str, const std::string& expect
     return word == expectedValue;
 }
 
+bool NodeSearch::isPrefixAndLocMatch(const std::string& str, const std::string& expectedValue) {
+    if (expectedValue.size() >= str.size()) {
+        return str == expectedValue;
+    }
+
+    std::stringstream ss(str);
+    std::string word;
+
+    // First word must match expectedValue
+    ss >> word;
+    if (word != expectedValue) {
+        return false;
+    }
+
+    // Second word must begin with [
+    ss >> word;
+    return word.starts_with("[");
+}

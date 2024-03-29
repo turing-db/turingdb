@@ -55,6 +55,7 @@ int main(int argc, const char** argv) {
     argParser.addOption("exclude_class", "Exclude a schemaClass", "schemaClass");
     argParser.addOption("no_pathways", "Do not traverse pathways");
     argParser.addOption("max_degree", "Maximum degree of a node", "degree");
+    argParser.addOption("use_failed_reaction", "Use FailedReaction information");
 
     toolInit.init(argc, argv);
 
@@ -73,6 +74,7 @@ int main(int argc, const char** argv) {
     bool enableDefaultExcludedClasses = true;
     bool traversePathways = true;
     bool traverseSets = true;
+    bool traverseFailedReaction = false;
 
     for (const auto& option : argParser.options()) {
         const auto& optName = option.first;
@@ -102,11 +104,13 @@ int main(int argc, const char** argv) {
             maxDegree = std::stoul(option.second);
         } else if (optName == "no_sets") {
             traverseSets = false;
+        } else if (optName == "use_failed_reaction") {
+            traverseFailedReaction = true;
         }
     }
 
     if (dbPaths.empty() || (seedFilePath.empty() && seedNames.empty())) {
-        BioLog::log(msg::ERROR_EXPECTED_OPTIONS() << "-db and -seeds");
+        BioLog::log(msg::ERROR_EXPECTED_OPTIONS() << "-db and -seeds or -seed");
         return exitSuccess();
     }
 
@@ -146,7 +150,7 @@ int main(int argc, const char** argv) {
             nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
 
             for (const auto& name : seedNames) {
-                nodeSearch.addProperty("displayName", name, NodeSearch::MatchType::PREFIX);
+                nodeSearch.addProperty("displayName", name, NodeSearch::MatchType::PREFIX_AND_LOC);
             }
 
             nodeSearch.run(seeds);
@@ -183,9 +187,22 @@ int main(int argc, const char** argv) {
         explorator.setTraverseTargets(traverseTargets);
         explorator.setTraversePathways(traversePathways);
         explorator.setTraverseSets(traverseSets);
+        explorator.setTraverseFailedReaction(traverseFailedReaction);
 
         if (maxDegree > 0) {
             explorator.setMaximumDegree(maxDegree);
+        }
+
+        // Add target schema classes
+        if (!targetClasses.empty()) {
+            explorator.setNoDefaultTargets();
+            for (const auto& targetClassName : targetClasses) {
+                if (targetClassName.empty()) {
+                    continue;
+                }
+                explorator.addTargetClass(targetClassName);
+                BioLog::echo("Added target schemaClass "+targetClassName);
+            }
         }
 
         // Add excluded names
@@ -204,18 +221,6 @@ int main(int argc, const char** argv) {
 
         for (const auto& excludedClass : excludedClasses) {
             explorator.addExcludedClass(excludedClass);
-        }
-
-        // Add target schema classes
-        if (!targetClasses.empty()) {
-            explorator.setNoDefaultTargets();
-            for (const auto& targetClassName : targetClasses) {
-                if (targetClassName.empty()) {
-                    continue;
-                }
-                explorator.addTargetClass(targetClassName);
-                BioLog::echo("Added target schemaClass "+targetClassName);
-            }
         }
 
         {

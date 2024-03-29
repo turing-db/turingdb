@@ -34,6 +34,7 @@ public:
     void setTraverseTargets(bool enabled) { _traverseTargets = enabled; }
     void setTraversePathways(bool enabled) { _traversePathways = enabled; }
     void setTraverseSets(bool enabled) { _traverseSets = enabled; }
+    void setTraverseFailedReaction(bool enabled) { _traverseFailedReaction = enabled; }
 
     void setNoDefaultTargets();
     void addTargetClass(const std::string& name);
@@ -56,6 +57,7 @@ private:
     bool _traverseTargets {true};
     bool _traversePathways {true};
     bool _traverseSets {true};
+    bool _traverseFailedReaction {false};
 
     db::DB* _db {nullptr};
     db::Writeback _wb;

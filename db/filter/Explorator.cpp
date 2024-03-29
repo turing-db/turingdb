@@ -195,9 +195,14 @@ void Explorator::addDefaultExcludedNames() {
     addExcludedName("AdoMet [cytosol]");
     addExcludedName("AdoHcy [cytosol]");
     addExcludedName("gain_of_function via non_conservative_missense_variant");
+    addExcludedName("lapatinib, neratinib, afatinib, AZ5104, tesevatinib, canertinib, sapitinib, CP-724714, AEE78 [cytosol]");
 }
 
 void Explorator::addExcludedClass(const std::string& schemaClass) {
+    if (_targetClasses.find(schemaClass) != _targetClasses.end()) {
+        BioLog::echo("Schema class "+schemaClass+" not excluded because it is a target class");
+        return;
+    }
     _excludedClasses.insert(schemaClass);
 }
 
@@ -226,5 +231,9 @@ void Explorator::addDefaultExcludedClasses() {
     if (!_traverseSets) {
         addExcludedClass("CandidateSet");
         addExcludedClass("DefinedSet");
+    }
+
+    if (!_traverseFailedReaction) {
+        addExcludedClass("FailedReaction");
     }
 }
