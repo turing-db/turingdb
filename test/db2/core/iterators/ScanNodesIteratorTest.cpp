@@ -7,7 +7,7 @@
 #include "DBAccess.h"
 #include "Reader.h"
 #include "DataPart.h"
-#include "TemporaryDataBuffer.h"
+#include "TempBuffer.h"
 #include "ColumnNodes.h"
 #include "ChunkConfig.h"
 
@@ -40,7 +40,7 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto access = db->uniqueAccess();
 
     {
-        const TemporaryDataBuffer buf = access.createTempBuffer();
+        const TempBuffer buf = access.createTempBuffer();
         access.pushDataPart(buf);
     } 
 
@@ -58,7 +58,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     auto access = db->uniqueAccess();
 
     for (auto i = 0; i < 3; i++) {
-        const TemporaryDataBuffer buf = access.createTempBuffer();
+        const TempBuffer buf = access.createTempBuffer();
         access.pushDataPart(buf);
     } 
 
@@ -76,7 +76,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     auto access = db->uniqueAccess();
 
     {
-        TemporaryDataBuffer buf = access.createTempBuffer();
+        TempBuffer buf = access.createTempBuffer();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
             buf.addNode({0});
         } 
@@ -119,7 +119,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto access = db->uniqueAccess();
 
     for (auto i = 0; i < 8; i++) {
-        TemporaryDataBuffer buf = access.createTempBuffer();
+        TempBuffer buf = access.createTempBuffer();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
             buf.addNode({0});
         } 
@@ -167,7 +167,7 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     auto access = db->uniqueAccess();
 
     {
-        TemporaryDataBuffer buf = access.createTempBuffer();
+        TempBuffer buf = access.createTempBuffer();
         for (size_t i = 0; i < nodeCount; i++) {
             buf.addNode({0});
         } 

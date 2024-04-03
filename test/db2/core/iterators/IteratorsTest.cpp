@@ -5,7 +5,7 @@
 #include "DB.h"
 #include "FileUtils.h"
 #include "Reader.h"
-#include "TemporaryDataBuffer.h"
+#include "TempBuffer.h"
 #include "iterators/GetCoreInEdgesIterator.h"
 #include "iterators/GetCoreOutEdgesIterator.h"
 #include "iterators/GetPatchInEdgesIterator.h"
@@ -51,7 +51,7 @@ protected:
         }
 
         // First node and edge IDs: 0, 0
-        TemporaryDataBuffer tempData1 = access.createTempBuffer();
+        TempBuffer tempData1 = access.createTempBuffer();
         tempData1.addNode({0});     // Node 0        (temp ID: 0)
         tempData1.addNode({0});     // Node 1        (temp ID: 1)
         tempData1.addNode({1});     // Node 2        (temp ID: 2)
@@ -65,7 +65,7 @@ protected:
 
         // Concurrent writing
         // First node and edge IDs: 0, 0
-        TemporaryDataBuffer tempData2 = access.createTempBuffer();
+        TempBuffer tempData2 = access.createTempBuffer();
         tempData2.addNode({0, 1});  // Node 4        (temp ID: 3)
         tempData2.addNode({1});     // Node 3        (temp ID: 4)
         tempData2.addEdge(0, 0, 1); // Edge 3 [4->3] (temp ID: 2 [3->4])
@@ -83,12 +83,12 @@ protected:
 
         // First node and edge IDs: 5, 5
         // Empty buffer
-        TemporaryDataBuffer tempData3 = access.createTempBuffer();
+        TempBuffer tempData3 = access.createTempBuffer();
 
         access.pushDataPart(tempData3);
 
         // First node and edge IDs: 5, 5
-        TemporaryDataBuffer tempData4 = access.createTempBuffer();
+        TempBuffer tempData4 = access.createTempBuffer();
         tempData4.addNode({0, 1}); // Node 8        (temp ID: 5)
         tempData4.addNode({0});    // Node 5        (temp ID: 6)
         tempData4.addNode({1});    // Node 6        (temp ID: 7)
@@ -130,12 +130,10 @@ TEST_F(IteratorsTest, ScanCoreEdgesIteratorTest) {
 
     std::string output;
     while (it.isValid()) {
-        std::cout << "Edge iterator is valid" << std::endl;
         const auto& v = it.get();
         const auto& [source, target] = v._edgeDir == EdgeDirection::Incoming
                                          ? std::make_pair(v._otherID, v._nodeID)
                                          : std::make_pair(v._nodeID, v._otherID);
-        std::cout << "(" << v._edgeID.getID() << ", " << source.getID() << ", " << target.getID() << ")\n";
         output += std::to_string(v._edgeID.getID());
         output += std::to_string(source.getID()) ;
         output += std::to_string(target.getID()) + " ";
