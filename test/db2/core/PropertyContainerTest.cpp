@@ -114,7 +114,7 @@ TEST(PropertyContainerTest, Create) {
         std::string output;
         std::cout << "Property type infos:" << std::endl;
         for (const auto& [ptID, ptType] : propertyTypeInfos) {
-            output += "ID: " + std::to_string(ptID.getID())
+            output += "ID: " + std::to_string(ptID)
                     + "; Count: " + std::to_string(ptType._count)
                     + "; Importance: " + std::to_string((size_t)container->getImportance(ptID))
                     + "\n";

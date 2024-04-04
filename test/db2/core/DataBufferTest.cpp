@@ -1,4 +1,4 @@
-#include "TemporaryDataBuffer.h"
+#include "DataBuffer.h"
 #include "BioLog.h"
 #include "FileUtils.h"
 
@@ -6,7 +6,7 @@
 
 using namespace db;
 
-class TemporaryDataBufferTest : public ::testing::Test {
+class DataBufferTest : public ::testing::Test {
 protected:
     void SetUp() override {
         const testing::TestInfo* const testInfo =
@@ -36,8 +36,8 @@ protected:
     FileUtils::Path _logPath;
 };
 
-TEST_F(TemporaryDataBufferTest, CreateTest) {
-    TemporaryDataBuffer tempBuffer(0, 0);
+TEST_F(DataBufferTest, CreateTest) {
+    DataBuffer tempBuffer(0, 0);
     std::vector<EntityID> nodeIDs(100);
 
     // Nodes
