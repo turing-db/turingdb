@@ -52,7 +52,7 @@ MSG_ERROR(ERROR_NEO4J_FAILED_TO_START, 2015,
           "Failed to start Neo4j")
 
 MSG_ERROR(ERROR_NEO4J_FAILED_TO_STOP, 2016,
-          "Failed to stop Neo4j")
+          "Failed to stop Neo4j. Killing java process")
 
 MSG_ERROR(ERROR_NEO4J_HTTP_REQUEST, 2017,
           "Error in request to Neo4j '$0'")
@@ -216,8 +216,14 @@ MSG_ERROR(ERROR_CSV_MISSING_ENTRY, 2066,
 MSG_ERROR(ERROR_IMPORT_PRIMARY_KEY_APPLIED_WITH_WRONG_ORDER, 2067,
           "Please precede the \"-primary-key\" argument by a \"-csv\" option")
 
-MSG_ERROR(ERROR_CSV_REDEFINITION_OF_NODE, 2068,
+MSG_ERROR(ERROR_URL_NOT_PROVIDED, 2068,
+          "Please precede the url argument by the \"-neo4j-url\" option")
+
+MSG_ERROR(ERROR_CSV_REDEFINITION_OF_NODE, 2069,
           "Line $0: node of type '$1' was already registered as '$2'")
+
+MSG_ERROR(ERROR_JSON_CONTAINS_ERROR, 2070,
+          "The json file contains some errors")
 
 }
 

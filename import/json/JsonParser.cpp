@@ -3,13 +3,13 @@
 #include "DB.h"
 #include "MsgImport.h"
 #include "Neo4j4JsonParser.h"
+
 #include <regex>
 
 JsonParser::JsonParser(db::DB* db, const std::string& networkName)
     : _db(db),
       _networkName(networkName),
-      _neo4j4Parser(_db, _stats),
-      _neo4j5Parser(_db, _stats)
+      _neo4j4Parser(_db, _stats)
 {
 }
 
@@ -18,8 +18,6 @@ bool JsonParser::parseJsonDir(const FileUtils::Path& jsonDir, DirFormat format) 
         switch (format) {
             case DirFormat::Neo4j4:
                 return parseNeo4jJsonDir(jsonDir);
-            case DirFormat::Neo4j5:
-                return parseNeo4j5JsonDir(jsonDir);
         }
 
     } catch (const std::exception& e) {
@@ -50,25 +48,6 @@ bool JsonParser::parse(const std::string& data, FileFormat format) {
                 Log::BioLog::log(msg::INFO_JSON_DISPLAY_EDGES_STATUS()
                                  << _stats.parsedEdges << _stats.edgeCount);
                 return _neo4j4Parser.parseEdges(data);
-
-            case FileFormat::Neo4j5_Stats:
-                return _neo4j5Parser.parseStats(data);
-
-            case FileFormat::Neo4j5_NodeProperties:
-                return _neo4j5Parser.parseNodeProperties(data);
-
-            case FileFormat::Neo4j5_Nodes:
-                Log::BioLog::log(msg::INFO_JSON_DISPLAY_NODES_STATUS()
-                                 << _stats.parsedNodes << _stats.nodeCount);
-                return _neo4j5Parser.parseNodes(data, _networkName);
-
-            case FileFormat::Neo4j5_EdgeProperties:
-                return _neo4j5Parser.parseEdgeProperties(data);
-
-            case FileFormat::Neo4j5_Edges:
-                Log::BioLog::log(msg::INFO_JSON_DISPLAY_EDGES_STATUS()
-                                 << _stats.parsedEdges << _stats.edgeCount);
-                return _neo4j5Parser.parseEdges(data);
         }
 
     } catch (const std::exception& e) {
@@ -150,81 +129,6 @@ bool JsonParser::parseNeo4jJsonDir(const FileUtils::Path& jsonDir) {
         FileUtils::readContent(path, data);
 
         if (!parse(data, JsonParser::FileFormat::Neo4j4_Edges)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool JsonParser::parseNeo4j5JsonDir(const FileUtils::Path& jsonDir) {
-    const FileUtils::Path statsFile = jsonDir / "stats.json";
-    const FileUtils::Path nodePropertiesFile = jsonDir / "nodeProperties.json";
-    const FileUtils::Path edgePropertiesFile = jsonDir / "edgeProperties.json";
-    std::string data;
-
-    FileUtils::readContent(statsFile, data);
-
-    if (!parse(data, JsonParser::FileFormat::Neo4j5_Stats)) {
-        return false;
-    }
-
-    // Parsing node properties data
-    FileUtils::readContent(nodePropertiesFile, data);
-
-    if (!parse(data, JsonParser::FileFormat::Neo4j5_NodeProperties)) {
-        return false;
-    }
-
-    // Nodes
-    std::vector<FileUtils::Path> nodeFiles;
-    FileUtils::listFiles(jsonDir, nodeFiles);
-    std::regex nodeRegex {"nodes_([0-9]*).json"};
-    std::map<size_t, FileUtils::Path> nodeFilesOrdered;
-
-    for (const FileUtils::Path& path : nodeFiles) {
-        if (std::regex_search(path.string(), nodeRegex)) {
-            size_t count = std::stoul(std::regex_replace(
-                path.filename().string(),
-                nodeRegex, "$1"));
-            nodeFilesOrdered[count] = path;
-        }
-    }
-
-    for (const auto& [id, path] : nodeFilesOrdered) {
-        FileUtils::readContent(path, data);
-
-        if (!parse(data, JsonParser::FileFormat::Neo4j5_Nodes)) {
-            return false;
-        }
-    }
-
-    // Parsing edge properties data
-    FileUtils::readContent(edgePropertiesFile, data);
-
-    if (!parse(data, JsonParser::FileFormat::Neo4j5_EdgeProperties)) {
-        return false;
-    }
-
-    // Edges
-    std::vector<FileUtils::Path> edgeFiles;
-    FileUtils::listFiles(jsonDir, edgeFiles);
-    std::regex edgeRegex {"edges_([0-9]*).json"};
-    std::map<size_t, FileUtils::Path> edgeFilesOrdered;
-
-    for (const FileUtils::Path& path : edgeFiles) {
-        if (std::regex_search(path.string(), edgeRegex)) {
-            size_t count = std::stoul(std::regex_replace(
-                path.filename().string(),
-                edgeRegex, "$1"));
-            edgeFilesOrdered[count] = path;
-        }
-    }
-
-    for (const auto& [id, path] : edgeFilesOrdered) {
-        FileUtils::readContent(path, data);
-
-        if (!parse(data, JsonParser::FileFormat::Neo4j5_Edges)) {
             return false;
         }
     }

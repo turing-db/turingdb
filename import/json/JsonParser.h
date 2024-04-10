@@ -2,7 +2,6 @@
 
 #include "JsonParsingStats.h"
 #include "Neo4j4JsonParser.h"
-#include "Neo4j5JsonParser.h"
 #include "FileUtils.h"
 
 class JsonParser {
@@ -13,16 +12,10 @@ public:
         Neo4j4_EdgeProperties,
         Neo4j4_Edges,
         Neo4j4_Stats,
-        Neo4j5_NodeProperties,
-        Neo4j5_Nodes,
-        Neo4j5_EdgeProperties,
-        Neo4j5_Edges,
-        Neo4j5_Stats,
     };
 
     enum class DirFormat {
         Neo4j4 = 0,
-        Neo4j5,
     };
 
     JsonParser(db::DB* db, const std::string& networkName);
@@ -40,9 +33,7 @@ private:
     std::string _networkName;
     JsonParsingStats _stats;
     Neo4j4JsonParser _neo4j4Parser;
-    Neo4j5JsonParser _neo4j5Parser;
     bool _reducedOutput = false;
 
     bool parseNeo4jJsonDir(const FileUtils::Path& jsonDir);
-    bool parseNeo4j5JsonDir(const FileUtils::Path& jsonDir);
 };

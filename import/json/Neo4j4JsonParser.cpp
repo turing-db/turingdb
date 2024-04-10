@@ -77,8 +77,7 @@ static bool isExpectedType(const JsonObject& value) {
             static_assert(flag,
                           "Support for a new type was added, but not included "
                           "in this method. Implement it to allow compilation");
-        }
-        ();
+        }();
     }
 }
 
@@ -108,8 +107,7 @@ static T convert(const JsonObject& value) {
             static_assert(flag,
                           "Support for a new type was added, but not included "
                           "in this method. Implement it to allow compilation");
-        }
-        ();
+        }();
     }
 }
 
@@ -192,6 +190,11 @@ bool Neo4j4JsonParser::parseStats(const std::string& data) {
     }
 
     const auto json = nlohmann::json::parse(data);
+    auto errors = json.find("errors");
+    if (errors != json.end() && !errors->empty()) {
+        Log::BioLog::log(msg::ERROR_JSON_CONTAINS_ERROR());
+        Log::BioLog::echo(data);
+    }
     const auto& row = json["results"].front()["data"].front()["row"];
     _stats.nodeCount = row.at(0).get<size_t>();
     _stats.edgeCount = row.at(1).get<size_t>();
@@ -364,46 +367,17 @@ bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
         sourceLabel = "";
         targetLabel = "";
 
-        // Getting source NodeType
-        for (const JsonObject& ntAliasStr : row.at(1)) {
-            sourceLabel += ntAliasStr.get<std::string>();
-        }
-
-        db::NodeType* sourceNt = _db->getNodeType(_db->getString(sourceLabel));
-        if (!sourceNt) {
-            Log::BioLog::log(msg::ERROR_NEO4J_PROBLEM_WITH_NODETYPE()
-                             << sourceLabel);
-            return false;
-        }
-
-        // Getting target NodeType
-        for (const JsonObject& ntAliasStr : row.at(2)) {
-            targetLabel += ntAliasStr.get<std::string>();
-        }
-
-        db::NodeType* targetNt = _db->getNodeType(_db->getString(targetLabel));
-        if (!targetNt) {
-            Log::BioLog::log(msg::ERROR_NEO4J_PROBLEM_WITH_NODETYPE()
-                             << targetLabel);
-            return false;
-        }
-
         db::EdgeType* et = _db->getEdgeType(etName);
-        if (et) {
-            _wb->addSourceNodeType(et, sourceNt);
-            _wb->addTargetNodeType(et, targetNt);
-
-        } else {
-            et = _wb->createEdgeType(etName, sourceNt, targetNt);
+        if (!et) {
+            et = _wb->createEdgeType(etName);
         }
 
-        // If the edge type has no property, we skip this part
-        if (row.at(3).is_null()) {
+        if (row.at(1).is_null()) {
             continue;
         }
 
-        const db::StringRef propName = _db->getString(row.at(3));
-        const db::ValueType valType = neo4jTypes.find(row.at(4).at(0))->second;
+        const db::StringRef propName = _db->getString(row.at(1));
+        const db::ValueType valType = neo4jTypes.find(row.at(2).at(0))->second;
 
         if (valType == db::ValueType::VK_INVALID) {
             continue;
@@ -470,8 +444,9 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
 
             // if the propType is invalid, it means the PropertyType was not
             // registered due to invalid (unsupported) type
-            if (!propType)
+            if (!propType) {
                 continue;
+            }
 
             PropertyContext context = {
                 .stats = _stats,

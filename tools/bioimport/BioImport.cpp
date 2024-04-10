@@ -27,8 +27,8 @@ using namespace db;
 
 enum class ImportType {
     NEO4J,
+    NEO4J_URL,
     JSON_NEO4J,
-    JSON_NEO4J_5,
     GML,
     CSV,
 };
@@ -38,6 +38,11 @@ struct ImportData {
     std::string path;
     std::string networkName;
     std::string primaryKey;
+    std::string url;
+    std::string urlSuffix;
+    uint64_t port = 0;
+    std::string username;
+    std::string password;
 };
 
 int cleanUp(int returnCode) {
@@ -63,13 +68,33 @@ int main(int argc, const char** argv) {
         "my_file.dump");
 
     argParser.addOption(
-        "json-neo4j",
-        "Imports Neo4j v4 json files from a json/ directory (default network name: \"my_json_dir\")",
-        "my_json_dir");
+        "neo4j-url",
+        "Imports a neo4j database from an existing neo4j instance",
+        "localhost");
 
     argParser.addOption(
-        "json-neo4j-5",
-        "Imports Neo4j v5 json files from a json/ directory (default network name: \"my_json_dir\")",
+        "port",
+        "Port for the query. Must follow a neo4j-url option",
+        "7474");
+
+    argParser.addOption(
+        "user",
+        "Username for the query. Must follow a neo4j-url option",
+        "neo4j");
+
+    argParser.addOption(
+        "password",
+        "Password for the query. Must follow a neo4j-url option",
+        "turing");
+
+    argParser.addOption(
+        "url-suffix",
+        "Suffix for the url. Must follow a neo4j-url option",
+        "/db/data/transaction/commit");
+
+    argParser.addOption(
+        "json-neo4j",
+        "Imports Neo4j v4 json files from a json/ directory (default network name: \"my_json_dir\")",
         "my_json_dir");
 
     argParser.addOption(
@@ -120,6 +145,43 @@ int main(int argc, const char** argv) {
                 .type = ImportType::NEO4J,
                 .path = option.second,
             });
+        } else if (optName == "neo4j-url") {
+            importData.emplace_back(ImportData {
+                .type = ImportType::NEO4J_URL,
+                .url = option.second,
+            });
+        } else if (optName == "port") {
+            if (importData.empty()) {
+                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
+                argParser.printHelp();
+                return cleanUp(EXIT_FAILURE);
+            }
+            auto& cmd = importData.back();
+            cmd.port = std::stoi(option.second);
+        } else if (optName == "user") {
+            if (importData.empty()) {
+                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
+                argParser.printHelp();
+                return cleanUp(EXIT_FAILURE);
+            }
+            auto& cmd = importData.back();
+            cmd.username = option.second;
+        } else if (optName == "password") {
+            if (importData.empty()) {
+                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
+                argParser.printHelp();
+                return cleanUp(EXIT_FAILURE);
+            }
+            auto& cmd = importData.back();
+            cmd.password = option.second;
+        } else if (optName == "url-suffix") {
+            if (importData.empty()) {
+                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
+                argParser.printHelp();
+                return cleanUp(EXIT_FAILURE);
+            }
+            auto& cmd = importData.back();
+            cmd.urlSuffix = option.second;
         } else if (optName == "json-neo4j") {
             if (!FileUtils::exists(option.second)) {
                 BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
@@ -128,16 +190,6 @@ int main(int argc, const char** argv) {
             }
             importData.emplace_back(ImportData {
                 .type = ImportType::JSON_NEO4J,
-                .path = option.second,
-            });
-        } else if (optName == "json-neo4j-5") {
-            if (!FileUtils::exists(option.second)) {
-                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
-                            << option.second);
-                return cleanUp(EXIT_FAILURE);
-            }
-            importData.emplace_back(ImportData {
-                .type = ImportType::JSON_NEO4J_5,
                 .path = option.second,
             });
         } else if (optName == "gml") {
@@ -241,12 +293,13 @@ int main(int argc, const char** argv) {
                 neo4jImport.importNeo4j(data.path, networkName);
                 break;
             }
-            case ImportType::JSON_NEO4J: {
-                neo4jImport.importJsonNeo4j(data.path, networkName);
+            case ImportType::NEO4J_URL: {
+                neo4jImport.importNeo4jUrl(data.url, data.port, data.username,
+                                           data.password, data.urlSuffix, networkName);
                 break;
             }
-            case ImportType::JSON_NEO4J_5: {
-                neo4jImport.importJsonNeo4j5(data.path, networkName);
+            case ImportType::JSON_NEO4J: {
+                neo4jImport.importJsonNeo4j(data.path, networkName);
                 break;
             }
             case ImportType::GML: {
