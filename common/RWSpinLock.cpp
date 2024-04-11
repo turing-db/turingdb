@@ -19,7 +19,20 @@ RWSpinLock::RWSpinLock()
 {
 }
 
+RWSpinLock::RWSpinLock(std::atomic<uint32_t> status)
+    : _status(status.load())
+{
+}
+
 RWSpinLock::~RWSpinLock() {
+}
+
+RWSpinLock RWSpinLock::copy() const {
+    return RWSpinLock(_status.load());
+}
+
+void RWSpinLock::assign(const RWSpinLock& other) {
+    _status = other._status.load();
 }
 
 void RWSpinLock::lock() {
