@@ -1,4 +1,4 @@
-#include "PropertyContainer.h"
+#include "NodePropertyContainer.h"
 #include "BioLog.h"
 #include "FileUtils.h"
 #include "NodePropertyView.h"
@@ -35,8 +35,8 @@ TEST(PropertyContainerTest, Create) {
     Log::BioLog::openFile(logPath.string());
     PerfStat::init(outDir + "/perf");
 
-    PropertyContainer::Builder::NodeCountsPerLabelSet nodeCounts;
-    PropertyContainer::Builder builder;
+    NodePropertyContainer::Builder::NodeCountsPerLabelSet nodeCounts;
+    NodePropertyContainer::Builder builder;
 
     std::vector<test_nodes::TestNode> nodes;
     auto propertyTypeInfos = test_nodes::PROPERTY_TYPE_INFOS;
@@ -107,7 +107,7 @@ TEST(PropertyContainerTest, Create) {
         n._id = builder.finishNode(n._labelset);
     }
 
-    std::unique_ptr<PropertyContainer> container = builder.build();
+    std::unique_ptr<NodePropertyContainer> container = builder.build();
 
     {
         std::string output;
