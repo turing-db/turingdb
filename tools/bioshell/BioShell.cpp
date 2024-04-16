@@ -110,9 +110,9 @@ void process(TuringClient& turing, std::string& line) {
 }
 
 std::string composePrompt(const TuringClient& turing) {
-    const std::string basePrompt = "\e[0;35mturing\e[0m";
+    const std::string basePrompt = "turing";
     const char* separator = ":";
-    return basePrompt + separator + "\e[0;36m" + turing.getDBName() + "\e[0m> ";
+    return basePrompt + separator + turing.getDBName() + "> ";
 }
 
 }

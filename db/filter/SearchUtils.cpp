@@ -4,10 +4,28 @@
 #include "Node.h"
 #include "NodeType.h"
 
+#include "ExploratorTree.h"
+
 #include "BioLog.h"
 
 using namespace db;
 using namespace Log;
+
+namespace {
+
+void printPathRec(const ExploratorTreeNode* node,
+                  db::StringRef displayNameProp,
+                  std::ostream& stream) {
+    const ExploratorTreeNode* parent = node->getParent();
+    if (parent) {
+        printPathRec(parent, displayNameProp, stream);
+        stream << "->";
+    }
+
+    stream << SearchUtils::getProperty(node->getNode(), displayNameProp);
+}
+
+}
 
 std::string SearchUtils::getProperty(const db::Node* node, db::StringRef name) {
     const PropertyType* propType = node->getType()->getPropertyType(name);
@@ -23,30 +41,20 @@ std::string SearchUtils::getProperty(const db::Node* node, db::StringRef name) {
     return std::string();
 }
 
-bool SearchUtils::isPublication(const db::Node* node) {
-    const std::string typeName = node->getType()->getName().toStdString();
-    return (typeName.find("Publication") != std::string::npos)
-        || (typeName.find("Literature") != std::string::npos);
-}
-
-bool SearchUtils::isReactomeMetadata(const db::Node* node) {
-    const std::string typeName = node->getType()->getName().toStdString();
-    return typeName == "DatabaseObjectInstanceEdit";
-}
-
-bool SearchUtils::isReactomePathway(const db::Node* node) {
-    const std::string typeName = node->getType()->getName().toStdString();
-    return (typeName == "DatabaseObjectEventPathway")
-        || (typeName == "DatabaseObjectEventPathwayTopLevelPathway");
-}
-
-void SearchUtils::printNode(const db::Node* node) {
-    BioLog::echo("========");
-    BioLog::echo("NodeType "+node->getType()->getName().toStdString());
+void SearchUtils::printNode(const db::Node* node, std::ostream& stream) {
+    stream << "========\n";
+    stream << "NodeType "+node->getType()->getName().toStdString() << "\n";
     for (const auto& [propType, value] : node->properties()) {
         if (value.getType().isString()) {
-            BioLog::echo(propType->getName().toStdString()+" "+value.getString());
+            stream << propType->getName().toStdString()+" "+value.getString() << "\n";
         }
     }
-    BioLog::echo("");
+    stream << "\n";
+}
+
+void SearchUtils::printPath(const ExploratorTreeNode* node,
+                            db::StringRef displayNameProp,
+                            std::ostream& stream) {
+    printPathRec(node, displayNameProp, stream);
+    stream << "\n";
 }

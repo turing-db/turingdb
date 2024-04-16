@@ -11,26 +11,6 @@
 using namespace db;
 using namespace Log;
 
-namespace {
-
-bool isApproximateMatch(const std::string& str, const std::string& expectedValue) {
-    if (expectedValue.size() >= str.size()) {
-        return str == expectedValue;
-    }
-
-    // If the expectedValue is shorter than str we compare word by word
-    std::stringstream ss(str);
-    std::string word;
-    while (ss >> word) {
-        if (word == expectedValue) {
-            return true;
-        }
-    }
-    return false;
-}
-
-}
-
 NodeSearch::NodeSearch(db::DB* db)
     : _db(db)
 {
@@ -41,10 +21,10 @@ NodeSearch::~NodeSearch() {
 
 void NodeSearch::addProperty(const std::string& propName,
                              const std::string& value,
-                             bool exact) {
+                             MatchType matchType) {
     auto& propEntry = _properties[_db->getString(propName)];
     propEntry.first.push_back(value);
-    propEntry.second &= exact;
+    propEntry.second = matchType;
 }
 
 void NodeSearch::addAllowedType(const db::NodeType* nodeType) {
@@ -79,7 +59,7 @@ void NodeSearch::run(std::vector<db::Node*>& result) {
             bool allPropsFound = true;
             for (const auto& [expectedPropName, expectedEntry] : _properties) {
                 const auto& expectedValueSet = expectedEntry.first;
-                const bool exact = expectedEntry.second;
+                const MatchType matchType = expectedEntry.second;
                 bool propFound = false;
                 for (const auto& [propType, value] : node->properties()) {
                     if (!propType->getValueType().isString()) {
@@ -91,8 +71,18 @@ void NodeSearch::run(std::vector<db::Node*>& result) {
 
                     const std::string& valueStr = value.getString();
                     for (const auto& expectedValue : expectedValueSet) {
-                        if (exact) {
+                        if (matchType == MatchType::EXACT) {
                             if (valueStr == expectedValue) {
+                                propFound = true;
+                                break;
+                            }
+                        } else if (matchType == MatchType::PREFIX) {
+                            if (isPrefixMatch(valueStr, expectedValue)) {
+                                propFound = true;
+                                break;
+                            }
+                        } else if (matchType == MatchType::PREFIX_AND_LOC) {
+                            if (isPrefixAndLocMatch(valueStr, expectedValue)) {
                                 propFound = true;
                                 break;
                             }
@@ -121,4 +111,51 @@ void NodeSearch::run(std::vector<db::Node*>& result) {
 
         result.push_back(node);
     }
+}
+
+bool NodeSearch::isApproximateMatch(const std::string& str, const std::string& expectedValue) {
+    if (expectedValue.size() >= str.size()) {
+        return str == expectedValue;
+    }
+
+    // If the expectedValue is shorter than str we look if expectedValue
+    // is a word of str
+    std::stringstream ss(str);
+    std::string word;
+    while (ss >> word) {
+        if (word == expectedValue) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool NodeSearch::isPrefixMatch(const std::string& str, const std::string& expectedValue) {
+    if (expectedValue.size() >= str.size()) {
+        return str == expectedValue;
+    }
+
+    std::stringstream ss(str);
+    std::string word;
+    ss >> word;
+    return word == expectedValue;
+}
+
+bool NodeSearch::isPrefixAndLocMatch(const std::string& str, const std::string& expectedValue) {
+    if (expectedValue.size() >= str.size()) {
+        return str == expectedValue;
+    }
+
+    std::stringstream ss(str);
+    std::string word;
+
+    // First word must match expectedValue
+    ss >> word;
+    if (word != expectedValue) {
+        return false;
+    }
+
+    // Second word must begin with [
+    ss >> word;
+    return word.starts_with("[");
 }

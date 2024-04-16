@@ -12,6 +12,13 @@ public:
     friend ExploratorTree;
     using Nodes = std::vector<ExploratorTreeNode*>;
 
+    struct Comparator {
+        bool operator()(const ExploratorTreeNode* lhs,
+                        const ExploratorTreeNode* rhs) const {
+            return db::DBObject::Sorter()(lhs->getNode(), rhs->getNode());
+        }
+    };
+
     static ExploratorTreeNode* create(ExploratorTree* tree,
                                       db::Node* current,
                                       ExploratorTreeNode* parent);
