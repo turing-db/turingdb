@@ -2,7 +2,7 @@
 #include "NodeContainer.h"
 #include "NodeData.h"
 #include "NodeEdgeView.h"
-#include "TemporaryDataBuffer.h"
+#include "DataBuffer.h"
 
 #include <gtest/gtest.h>
 
@@ -23,7 +23,7 @@ TEST(EdgeContainerTest, Create) {
         {{2}, {1, 4}},
     };
 
-    TemporaryDataBuffer buffer(0, 0);
+    DataBuffer buffer(0, 0);
     buffer.addNode({0});     // Temp node id: 0
     buffer.addNode({1});     // Temp node id: 1
     buffer.addNode({0});     // Temp node id: 2

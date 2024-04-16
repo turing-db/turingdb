@@ -5,7 +5,7 @@
 #include "DB.h"
 #include "FileUtils.h"
 #include "Reader.h"
-#include "TemporaryDataBuffer.h"
+#include "DataBuffer.h"
 #include "iterators/GetCoreInEdgesIterator.h"
 #include "iterators/GetCoreOutEdgesIterator.h"
 #include "iterators/GetPatchInEdgesIterator.h"
@@ -49,7 +49,7 @@ protected:
         //
         /* FIRST BUFFER */
         //
-        TemporaryDataBuffer tempData1 = access.createTempBuffer();
+        DataBuffer tempData1 = access.newDataBuffer();
         PropertyTypeID uint64ID = 0;
         PropertyTypeID stringID = 1;
 
@@ -89,7 +89,7 @@ protected:
         //
         /* SECOND BUFFER (Concurrent to the first one) */
         //
-        TemporaryDataBuffer tempData2 = access.createTempBuffer();
+        DataBuffer tempData2 = access.newDataBuffer();
 
         {
             // NODE 4 (temp ID: 0))
@@ -123,13 +123,13 @@ protected:
         //
         /* THIRD BUFFER (Empty) */
         //
-        TemporaryDataBuffer tempData3 = access.createTempBuffer();
+        DataBuffer tempData3 = access.newDataBuffer();
         access.pushDataPart(tempData3);
 
         //
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
         //
-        TemporaryDataBuffer tempData4 = access.createTempBuffer();
+        DataBuffer tempData4 = access.newDataBuffer();
 
         {
             // NODE 8 (temp ID: 5)
