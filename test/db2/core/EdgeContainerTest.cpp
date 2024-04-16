@@ -120,9 +120,9 @@ TEST(EdgeContainerTest, Create) {
     // Loop other all edges
     std::string output;
     for (const auto& edge : edges->getAllOutEdges()) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     std::cout << "All Out edges: " << output << std::endl;
@@ -130,9 +130,9 @@ TEST(EdgeContainerTest, Create) {
 
     output.clear();
     for (const auto& edge : edges->getAllInEdges()) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     std::cout << "All In edges: " << output << std::endl;
@@ -141,27 +141,27 @@ TEST(EdgeContainerTest, Create) {
     // Loop other out edges by labelset
     output.clear();
     for (const auto& edge : edges->getOutEdgesSpanFromLabelSet({0})) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "003 101 205 314 415 521 625 ");
 
     output.clear();
     for (const auto& edge : edges->getOutEdgesSpanFromLabelSet({1})) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "731 835 942 ");
 
     output.clear();
     for (const auto& edge : edges->getOutEdgesSpanFromLabelSet({2})) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "1053 ");
@@ -169,27 +169,27 @@ TEST(EdgeContainerTest, Create) {
     // Loop other in edges by labelset
     output.clear();
     for (const auto& edge : edges->getInEdgesSpanFromLabelSet({0})) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "110 713 512 924 ");
 
     output.clear();
     for (const auto& edge : edges->getInEdgesSpanFromLabelSet({1})) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "030 1035 341 ");
 
     output.clear();
     for (const auto& edge : edges->getInEdgesSpanFromLabelSet({2})) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "250 853 451 652 ");
@@ -201,9 +201,9 @@ TEST(EdgeContainerTest, Create) {
 
     output.clear();
     for (const auto& edge : view.outEdges()) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "521 625 ");
@@ -211,9 +211,9 @@ TEST(EdgeContainerTest, Create) {
 
     output.clear();
     for (const auto& edge : view.inEdges()) {
-        output += std::to_string(edge._edgeID.getID());
-        output += std::to_string(edge._nodeID.getID());
-        output += std::to_string(edge._otherID.getID());
+        output += std::to_string(edge._edgeID);
+        output += std::to_string(edge._nodeID);
+        output += std::to_string(edge._otherID);
         output += " ";
     }
     ASSERT_STREQ(output.c_str(), "924 ");
@@ -222,9 +222,9 @@ TEST(EdgeContainerTest, Create) {
     output.clear();
     for (const auto& edges : view.patchEdgeSpans()) {
         for (const auto& edge : edges) {
-            output += std::to_string(edge._edgeID.getID());
-            output += std::to_string(edge._nodeID.getID());
-            output += std::to_string(edge._otherID.getID());
+            output += std::to_string(edge._edgeID);
+            output += std::to_string(edge._nodeID);
+            output += std::to_string(edge._otherID);
             output += " ";
         }
     }
