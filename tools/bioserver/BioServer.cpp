@@ -31,12 +31,8 @@ int main(int argc, const char** argv) {
     DBServer server(dbServerConfig);
 
     if (!server.run(dbNames)) {
-        BioLog::printSummary();
-        BioLog::destroy();
         return EXIT_FAILURE;
     };
 
-    BioLog::printSummary();
-    BioLog::destroy();
     return EXIT_SUCCESS;
 }

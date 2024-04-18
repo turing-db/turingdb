@@ -18,8 +18,6 @@ std::unique_ptr<TuringUIServer> server;
 
 void signalHandler(int signum) {
     server->terminate();
-    BioLog::printSummary();
-    BioLog::destroy();
     exit(EXIT_SUCCESS);
 }
 
@@ -69,9 +67,5 @@ int main(int argc, const char** argv) {
 
     server->terminate();
 
-    BioLog::printSummary();
-    BioLog::destroy();
     return EXIT_SUCCESS;
-
-    //
 }

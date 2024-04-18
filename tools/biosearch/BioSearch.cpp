@@ -27,17 +27,6 @@
 using namespace Log;
 using namespace db;
 
-namespace {
-
-int exitSuccess() {
-    BioLog::printSummary();
-    BioLog::destroy();
-    PerfStat::destroy();
-    return EXIT_SUCCESS;
-}
-
-}
-
 int main(int argc, const char** argv) {
     ToolInit toolInit("biosearch");
 
@@ -111,7 +100,7 @@ int main(int argc, const char** argv) {
 
     if (dbPaths.empty() || (seedFilePath.empty() && seedNames.empty())) {
         BioLog::log(msg::ERROR_EXPECTED_OPTIONS() << "-db and -seeds or -seed");
-        return exitSuccess();
+        return EXIT_FAILURE;
     }
 
     // Import db
@@ -129,7 +118,7 @@ int main(int argc, const char** argv) {
         std::ifstream seedFile(seedFilePath);
         if (!seedFile.is_open()) {
             BioLog::log(msg::ERROR_FAILED_TO_OPEN_FOR_READ() << seedFilePath);
-            return exitSuccess();
+            return EXIT_FAILURE;
         }
 
         std::string name;
@@ -254,5 +243,5 @@ int main(int argc, const char** argv) {
         bioassert(res);
     }
 
-    return exitSuccess();
+    return EXIT_SUCCESS;
 }

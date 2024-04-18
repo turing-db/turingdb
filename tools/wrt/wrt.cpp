@@ -20,16 +20,7 @@ std::unique_ptr<RegressTesting> regress;
 
 void signalHandler(int signum) {
     regress->terminate();
-    BioLog::printSummary();
-    BioLog::destroy();
     exit(EXIT_SUCCESS);
-}
-
-int cleanup(int returnCode) {
-    BioLog::printSummary();
-    BioLog::destroy();
-    PerfStat::destroy();
-    return returnCode;
 }
 
 int main(int argc, const char** argv) {
@@ -52,7 +43,7 @@ int main(int argc, const char** argv) {
     }
 
     if (error) {
-        return cleanup(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     regress = std::make_unique<RegressTesting>(toolInit.getReportsDir());
@@ -70,8 +61,8 @@ int main(int argc, const char** argv) {
     }
 
     if (regress->hasFail()) {
-        return cleanup(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
-    return cleanup(EXIT_SUCCESS);
+    return EXIT_FAILURE;
 }

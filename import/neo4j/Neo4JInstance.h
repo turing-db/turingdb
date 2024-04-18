@@ -2,16 +2,17 @@
 
 #include "FileUtils.h"
 
-class Neo4JInstance {
+class Neo4jInstance {
 public:
-    Neo4JInstance(const FileUtils::Path& baseDir);
-    ~Neo4JInstance();
+    Neo4jInstance(const FileUtils::Path& baseDir);
+    ~Neo4jInstance();
 
     bool setup();
     bool start();
     bool stop();
     void destroy();
-    bool isReady() const;
+    static bool isRunning();
+    static void killJava();
 
     bool importDumpedDB(const FileUtils::Path& dbFilePath) const;
 

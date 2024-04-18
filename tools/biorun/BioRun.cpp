@@ -45,9 +45,6 @@ int main(int argc, const char** argv) {
             const size_t it = option.second.find('=');
             if (it == std::string::npos) {
                 BioLog::log(msg::ERROR_FAILED_TO_PARSE_NB_ARG() << option.second);
-                BioLog::printSummary();
-                BioLog::destroy();
-                PerfStat::destroy();
                 return EXIT_FAILURE;
             }
 
@@ -75,14 +72,8 @@ int main(int argc, const char** argv) {
     }
 
     if (!notebookRunner.run()) {
-        BioLog::printSummary();
-        BioLog::destroy();
-        PerfStat::destroy();
         return EXIT_FAILURE;
     }
 
-    BioLog::printSummary();
-    BioLog::destroy();
-    PerfStat::destroy();
     return EXIT_SUCCESS;
 }

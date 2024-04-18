@@ -4,13 +4,13 @@
 #include <string>
 #include <string_view>
 
-#define DEFINE_MESSAGE(Name, Type, Code, MsgStr) \
-class Name : public Log::Message {                  \
-public:                                             \
-    Name()                                          \
-        : Message(Code, Message::Type, MsgStr)      \
-    {}                                              \
-};                                                  \
+#define DEFINE_MESSAGE(Name, Type, Code, MsgStr)     \
+    class Name : public Log::Message {               \
+    public:                                          \
+        Name()                                       \
+            : Message(Code, Message::Type, MsgStr) { \
+        }                                            \
+    };
 
 #define MSG_FATAL(Name, Code, MsgStr) DEFINE_MESSAGE(Name, FATAL, Code, MsgStr)
 #define MSG_ERROR(Name, Code, MsgStr) DEFINE_MESSAGE(Name, ERROR, Code, MsgStr)
@@ -59,7 +59,20 @@ public:
 
     Message& operator<<(const std::string& value);
     Message& operator<<(std::string&& value);
-    Message& operator<<(long int value);
+
+    template <std::integral T>
+    Message& operator<<(T value) {
+        _argStorage._args[_argStorage._size] = std::to_string(value);
+        _argStorage._size++;
+        return *this;
+    }
+
+    template <std::floating_point T>
+    Message& operator<<(T value) {
+        _argStorage._args[_argStorage._size] = std::to_string(value);
+        _argStorage._size++;
+        return *this;
+    }
 
 protected:
     Message(MessageID msgID, Severity severity, const std::string& format);

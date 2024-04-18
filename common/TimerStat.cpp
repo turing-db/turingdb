@@ -24,8 +24,7 @@ TimerStat::~TimerStat() {
     PerfStat* perfStatInst = PerfStat::getInstance();
     std::ofstream& file = perfStatInst->_outStream;
     if (file.is_open()) {
-        const auto duration = Clock::now() - _start;
-        const float seconds = std::chrono::duration_cast<FloatSeconds>(duration).count();
+        const float seconds = duration<Seconds>(_start, Clock::now());
         const size_t memUsage = perfStatInst->getReservedMemInMegabytes();
 
         file << '[' << _msg << "] " 

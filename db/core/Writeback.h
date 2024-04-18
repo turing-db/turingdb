@@ -38,6 +38,7 @@ public:
 
     // Types
     NodeType* createNodeType(StringRef name);
+    EdgeType* createEdgeType(StringRef name);
     EdgeType* createEdgeType(StringRef name,
                              NodeType* source,
                              NodeType* target);

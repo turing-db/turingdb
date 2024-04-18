@@ -29,13 +29,6 @@ bool extractModuleAndClass(const std::string& arg,
     return true;
 }
 
-int cleanup(int code) {
-    BioLog::printSummary();
-    BioLog::destroy();
-    PerfStat::destroy();
-    return code;
-}
-
 }
 
 int main(int argc, const char** argv) {
@@ -48,23 +41,23 @@ int main(int argc, const char** argv) {
 
     const auto& args = argParser.args();
     if (args.empty()) {
-        return cleanup(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     std::string moduleName;
     std::string className;
     if (!extractModuleAndClass(args.front(), moduleName, className)) {
-        return cleanup(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     ModelBuilder modelBuilder(toolInit.getOutputsDir());
     if (!modelBuilder.build(moduleName, className)) {
         BioLog::log(msg::ERROR_LLM_MODEL_BUILDER_FAILED());
-        return cleanup(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     BioLog::log(msg::INFO_LLM_MODEL_API_GENERATION_COMPLETE()
                 << toolInit.getOutputsDir());
 
-    return cleanup(EXIT_SUCCESS);
+    return EXIT_FAILURE;
 }

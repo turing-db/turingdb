@@ -62,6 +62,18 @@ MSG_ERROR(ERROR_FAILED_TO_RUN_SCRIPT, 1018,
 MSG_ERROR(ERROR_EXPECTED_OPTIONS, 1019,
           "Please give the following options: $0")
 
+MSG_INFO(INFO_JOB_SYSTEM_INITIALIZED, 1020,
+         "Job system initialized with $0 threads")
+
+MSG_INFO(INFO_JOB_SYSTEM_TERMINATING, 1020,
+         "Job system terminating, $0 jobs remaining")
+
+MSG_INFO(INFO_JOB_SYSTEM_TERMINATED, 1021,
+         "Job system terminated")
+
+MSG_INFO(INFO_ELAPSED_TIME, 1022,
+         "Elapsed time: $0 $1")
+
 }
 
 #endif

@@ -21,9 +21,3 @@ Message& Message::operator<<(std::string&& value) {
     _argStorage._size++;
     return *this;
 }
-
-Message& Message::operator<<(long int value) {
-    _argStorage._args[_argStorage._size] = std::to_string(value);
-    _argStorage._size++;
-    return *this;
-}

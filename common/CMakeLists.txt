@@ -12,6 +12,7 @@ set(common_sources
         SpinLock.cpp
         RWSpinLock.cpp
         ProcessUtils.cpp
+        JobSystem.cpp
         Report.cpp)
 
 add_library(common_s STATIC ${common_sources})

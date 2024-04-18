@@ -19,7 +19,5 @@ int main(int argc, const char** argv) {
     DBServer server(dbServerConfig);
     server.start();
 
-    BioLog::printSummary();
-    BioLog::destroy();
     return EXIT_SUCCESS;
 }

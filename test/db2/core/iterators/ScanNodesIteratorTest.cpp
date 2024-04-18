@@ -40,7 +40,7 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto access = db->uniqueAccess();
 
     {
-        const DataBuffer buf = access.newDataBuffer();
+        DataBuffer buf = access.newDataBuffer();
         access.pushDataPart(buf);
     } 
 
@@ -58,7 +58,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     auto access = db->uniqueAccess();
 
     for (auto i = 0; i < 3; i++) {
-        const DataBuffer buf = access.newDataBuffer();
+        DataBuffer buf = access.newDataBuffer();
         access.pushDataPart(buf);
     } 
 

@@ -1,15 +1,10 @@
 #pragma once
 
-#include <chrono>
+#include "Time.h"
 #include <string>
 
 class TimerStat {
 public:
-    using Clock = std::chrono::high_resolution_clock;
-    using TimePoint = std::chrono::time_point<Clock>;
-    using SecondsPeriod = std::chrono::seconds::period;
-    using FloatSeconds = std::chrono::duration<float, SecondsPeriod>;
-
     TimerStat(const TimerStat& other) = delete;
     TimerStat(TimerStat&& other) = delete;
     TimerStat& operator=(const TimerStat& other) = delete;

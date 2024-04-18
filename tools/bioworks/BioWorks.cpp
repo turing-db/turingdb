@@ -18,7 +18,5 @@ int main(int argc, const char** argv) {
     WorkflowServer server(serverConfig);
     server.start();
 
-    BioLog::printSummary();
-    BioLog::destroy();
     return EXIT_SUCCESS;
 }

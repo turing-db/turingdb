@@ -16,6 +16,9 @@ ToolInit::ToolInit(const std::string& toolName)
 }
 
 ToolInit::~ToolInit() {
+    BioLog::printSummary();
+    BioLog::destroy();
+    PerfStat::destroy();
 }
 
 void ToolInit::init(int argc, const char** argv) {

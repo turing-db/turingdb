@@ -14,16 +14,17 @@
 
 using namespace Log;
 
-Neo4JInstance::Neo4JInstance(const FileUtils::Path& baseDir)
+Neo4jInstance::Neo4jInstance(const FileUtils::Path& baseDir)
     : _neo4jDir(baseDir / "neo4j"),
       _neo4jBinary(_neo4jDir / "bin" / "neo4j"),
-      _neo4jAdminBinary(_neo4jDir / "bin" / "neo4j-admin") {
+      _neo4jAdminBinary(_neo4jDir / "bin" / "neo4j-admin")
+{
 }
 
-Neo4JInstance::~Neo4JInstance() {
+Neo4jInstance::~Neo4jInstance() {
 }
 
-bool Neo4JInstance::setup() {
+bool Neo4jInstance::setup() {
     // Check that neo4j archive exists in installation
     std::string turingHome = std::getenv("TURING_HOME");
     if (turingHome.empty()) {
@@ -65,21 +66,24 @@ bool Neo4JInstance::setup() {
     return true;
 }
 
-bool Neo4JInstance::stop() {
+bool Neo4jInstance::stop() {
+    BioLog::log(msg::INFO_NEO4J_STOPPING());
     if (FileUtils::exists(_neo4jDir)) {
-        BioLog::log(msg::INFO_NEO4J_STOPPING());
         const int stopRes =
             boost::process::system(_neo4jBinary.string(), "stop");
         if (stopRes != 0) {
             BioLog::log(msg::ERROR_NEO4J_FAILED_TO_STOP());
+            killJava();
             return false;
         }
+    } else {
+        killJava();
     }
 
     return true;
 }
 
-void Neo4JInstance::destroy() {
+void Neo4jInstance::destroy() {
     if (FileUtils::exists(_neo4jDir)) {
         stop();
 
@@ -89,15 +93,19 @@ void Neo4JInstance::destroy() {
     }
 }
 
-bool Neo4JInstance::isReady() const {
+bool Neo4jInstance::isRunning() {
     const bool res =
         !std::system("curl --request GET --url 127.0.0.1:7474 -s > /dev/null");
 
     return res;
 }
 
-bool Neo4JInstance::start() {
-    if (isReady()) {
+void Neo4jInstance::killJava() {
+    boost::process::system("pkill java");
+}
+
+bool Neo4jInstance::start() {
+    if (isRunning()) {
         BioLog::log(msg::ERROR_NEO4J_ALREADY_RUNNING());
         return false;
     }
@@ -122,7 +130,7 @@ bool Neo4JInstance::start() {
 
     // Wait for warmup
     BioLog::log(msg::INFO_NEO4J_WARMING_UP());
-    while (!isReady()) {
+    while (!isRunning()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     BioLog::log(msg::INFO_NEO4J_READY());
@@ -130,7 +138,7 @@ bool Neo4JInstance::start() {
     return true;
 }
 
-bool Neo4JInstance::importDumpedDB(
+bool Neo4jInstance::importDumpedDB(
     const std::filesystem::path& dbFilePath) const {
     if (!FileUtils::exists(dbFilePath)) {
         BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << dbFilePath.string());

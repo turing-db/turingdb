@@ -6,7 +6,6 @@
 #include "MsgCommon.h"
 
 #include <iostream>
-#include <regex>
 
 db::DB* getNeo4j4DB(const std::string& dbName) {
     db::DB* db = db::DB::create();
