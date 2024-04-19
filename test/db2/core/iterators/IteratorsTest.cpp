@@ -56,27 +56,27 @@ protected:
         {
             // NODE 0 (temp ID: 0)
             const EntityID tmpID = tempData1.addNode(LabelSet {0});
-            tempData1.addNodeProperty<UInt64PropertyType>(
+            tempData1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData1.addNodeProperty<StringPropertyType>(
+            tempData1.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // NODE 1 (temp ID: 1)
             const EntityID tmpID = tempData1.addNode(LabelSet {0});
-            tempData1.addNodeProperty<UInt64PropertyType>(
+            tempData1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData1.addNodeProperty<StringPropertyType>(
+            tempData1.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // NODE 2 (temp ID: 2)
             const EntityID tmpID = tempData1.addNode(LabelSet {1});
-            tempData1.addNodeProperty<UInt64PropertyType>(
+            tempData1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData1.addNodeProperty<StringPropertyType>(
+            tempData1.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
@@ -94,16 +94,16 @@ protected:
         {
             // NODE 4 (temp ID: 0))
             const EntityID tmpID = tempData2.addNode(LabelSet {0, 1});
-            tempData2.addNodeProperty<UInt64PropertyType>(
+            tempData2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData2.addNodeProperty<StringPropertyType>(
+            tempData2.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // NODE 3 (temp ID: 1)
             const EntityID tmpID = tempData2.addNode(LabelSet {1});
-            tempData2.addNodeProperty<UInt64PropertyType>(
+            tempData2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
@@ -134,36 +134,36 @@ protected:
         {
             // NODE 8 (temp ID: 5)
             const EntityID tmpID = tempData4.addNode(LabelSet {0, 1});
-            tempData4.addNodeProperty<UInt64PropertyType>(
+            tempData4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData4.addNodeProperty<StringPropertyType>(
+            tempData4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // NODE 5 (temp ID: 6)
             const EntityID tmpID = tempData4.addNode(LabelSet {0});
-            tempData4.addNodeProperty<UInt64PropertyType>(
+            tempData4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData4.addNodeProperty<StringPropertyType>(
+            tempData4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // NODE 6 (temp ID: 7)
             const EntityID tmpID = tempData4.addNode(LabelSet {1});
-            tempData4.addNodeProperty<UInt64PropertyType>(
+            tempData4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData4.addNodeProperty<StringPropertyType>(
+            tempData4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // NODE 7 (temp ID: 8)
             const EntityID tmpID = tempData4.addNode(LabelSet {1});
-            tempData4.addNodeProperty<UInt64PropertyType>(
+            tempData4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            tempData4.addNodeProperty<StringPropertyType>(
+            tempData4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
@@ -329,7 +329,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
         std::vector<uint64_t> compareSet {0, 1, 2, 1, 0, 6, 7, 8, 5};
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const uint64_t v : reader.scanNodeProperties<UInt64PropertyType>(0)) {
+        for (const uint64_t v : reader.scanNodeProperties<types::UInt64>(0)) {
             ASSERT_EQ(*it, v);
             count++;
             it++;
@@ -351,7 +351,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const std::string& v : reader.scanNodeProperties<StringPropertyType>(1)) {
+        for (const std::string& v : reader.scanNodeProperties<types::String>(1)) {
             ASSERT_STREQ(it->data(), v.c_str());
             count++;
             it++;
@@ -369,7 +369,7 @@ TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
         std::vector<uint64_t> compareSet {1, 1, 5};
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const uint64_t v : reader.getNodeProperties<UInt64PropertyType>(0, &inputNodeIDs)) {
+        for (const uint64_t v : reader.getNodeProperties<types::UInt64>(0, &inputNodeIDs)) {
             ASSERT_EQ(*it, v);
             count++;
             it++;
@@ -384,7 +384,7 @@ TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const std::string& v : reader.getNodeProperties<StringPropertyType>(1, &inputNodeIDs)) {
+        for (const std::string& v : reader.getNodeProperties<types::String>(1, &inputNodeIDs)) {
             ASSERT_STREQ(it->data(), v.c_str());
             count++;
             it++;

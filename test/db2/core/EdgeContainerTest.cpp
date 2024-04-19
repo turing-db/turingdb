@@ -1,8 +1,8 @@
 #include "EdgeContainer.h"
+#include "DataBuffer.h"
 #include "NodeContainer.h"
 #include "NodeData.h"
 #include "NodeEdgeView.h"
-#include "DataBuffer.h"
 
 #include <gtest/gtest.h>
 
@@ -108,7 +108,8 @@ TEST(EdgeContainerTest, Create) {
 
         for (const auto& edge : tmpNodeData._outEdges) {
             NodeData& target = nodesBuilder.getMutableNodeFromTempID(edge._otherID);
-            edgesBuilder.addCoreEdgeToCore(edge._edgeTypeID,
+            edgesBuilder.addCoreEdgeToCore(edge._edgeID,
+                                           edge._edgeTypeID,
                                            source,
                                            target);
         }

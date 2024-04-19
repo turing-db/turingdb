@@ -49,12 +49,12 @@ protected:
 
         size_t mandatoryPropertyCount = nodeIDs.size();
         for (size_t i = 0; i < mandatoryPropertyCount; i++) {
-            _tempBuffer.addNodeProperty<StringPropertyType>(i, 0, std::to_string(i));
+            _tempBuffer.addNodeProperty<types::String>(i, 0, std::to_string(i));
         }
 
         size_t optionalPropertyCount = 70;
         for (size_t i = 0; i < optionalPropertyCount; i++) {
-            _tempBuffer.addNodeProperty<Int64PropertyType>(i, 1, i);
+            _tempBuffer.addNodeProperty<types::Int64>(i, 1, i);
         }
     }
 

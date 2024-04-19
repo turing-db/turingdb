@@ -1,11 +1,13 @@
-#include "NodePropertyContainer.h"
 #include "BioLog.h"
 #include "FileUtils.h"
+#include "NodeContainer.h"
+#include "NodePropertyContainer.h"
 #include "NodePropertyView.h"
 #include "PerfStat.h"
 #include "PropertyView.h"
 #include "TestNodes.h"
 #include "TimerStat.h"
+#include "EdgeRecord.h"
 
 #include <gtest/gtest.h>
 
@@ -41,6 +43,7 @@ TEST(PropertyContainerTest, NodeProperties) {
     Log::BioLog::openFile(logPath.string());
     PerfStat::init(outDir + "/perf");
 
+    NodeContainer::Builder nodesBuilder;
     NodePropertyContainer::Builder::NodeCountsPerLabelSet nodeCounts;
     NodePropertyContainer::Builder builder;
 
@@ -65,40 +68,45 @@ TEST(PropertyContainerTest, NodeProperties) {
         nodeCounts[node._labelset]++;
     }
 
-    builder.initialize(0,
-                       nodes.size(),
-                       propertyTypeInfos,
-                       nodeCounts);
+    nodesBuilder.initialize(0, nodes.size(), nodeCounts);
+    builder.initialize(0, nodes.size(), propertyTypeInfos, nodeCounts);
 
     for (auto& n : nodes) {
+        TempNodeData tmpNodeData {
+            ._labelset = n._labelset};
+        nodesBuilder.addNode(tmpNodeData, n._id);
+    }
+
+    // nodesBuilder.addNode( )
+    for (const auto& n : nodes) {
         for (const auto& prop : n._props) {
             const auto& info = propertyTypeInfos.at(prop._typeID);
             switch (info._type) {
                 case ValueType::String: {
-                    builder.setNextProp<StringPropertyType>(
+                    builder.addProperty<types::String>(
                         prop._typeID,
-                        n._labelset,
+                        nodesBuilder.getNodePositionFromTempID(n._id),
                         std::get<std::string>(prop._value));
                     break;
                 }
                 case ValueType::Bool: {
-                    builder.setNextProp<BoolPropertyType>(
+                    builder.addProperty<types::Bool>(
                         prop._typeID,
-                        n._labelset,
+                        nodesBuilder.getNodePositionFromTempID(n._id),
                         std::get<bool>(prop._value));
                     break;
                 }
                 case ValueType::UInt64: {
-                    builder.setNextProp<UInt64PropertyType>(
+                    builder.addProperty<types::UInt64>(
                         prop._typeID,
-                        n._labelset,
+                        nodesBuilder.getNodePositionFromTempID(n._id),
                         std::get<uint64_t>(prop._value));
                     break;
                 }
                 case ValueType::Double: {
-                    builder.setNextProp<DoublePropertyType>(
+                    builder.addProperty<types::Double>(
                         prop._typeID,
-                        n._labelset,
+                        nodesBuilder.getNodePositionFromTempID(n._id),
                         std::get<double>(prop._value));
                     break;
                 }
@@ -111,7 +119,6 @@ TEST(PropertyContainerTest, NodeProperties) {
                 }
             }
         }
-        n._id = builder.finishNode(n._labelset);
     }
 
     std::unique_ptr<NodePropertyContainer> container = builder.build();
@@ -136,7 +143,7 @@ TEST(PropertyContainerTest, NodeProperties) {
     auto t0 = std::chrono::high_resolution_clock::now();
     TimerStat* timer1 = new TimerStat("Mandatory strings");
 
-    auto mandatorySpan = container->getAllMandatoryProperties<StringPropertyType>(1);
+    auto mandatorySpan = container->getAllMandatoryProperties<types::String>(1);
     for (size_t i = 0; i < repeatMeasure; i++) {
         for (const auto& v : mandatorySpan) {
             if (v.find(pattern) != std::string::npos) {
@@ -160,7 +167,7 @@ TEST(PropertyContainerTest, NodeProperties) {
     TimerStat* timer2 = new TimerStat("Mandatory Ints");
     t0 = std::chrono::high_resolution_clock::now();
 
-    auto mandatoryIntSpan = container->getAllMandatoryProperties<UInt64PropertyType>(0);
+    auto mandatoryIntSpan = container->getAllMandatoryProperties<types::UInt64>(0);
     for (size_t i = 0; i < repeatMeasure; i++) {
         for (const auto& v : mandatoryIntSpan) {
             if (v > 564476) {
@@ -185,7 +192,7 @@ TEST(PropertyContainerTest, NodeProperties) {
 
     TimerStat* timer3 = new TimerStat("Optional strings");
     t0 = std::chrono::high_resolution_clock::now();
-    auto optionalSpan = container->getAllOptionalProperties<StringPropertyType>(12);
+    auto optionalSpan = container->getAllOptionalProperties<types::String>(12);
     for (size_t i = 0; i < repeatMeasure; i++) {
         for (const auto& v : optionalSpan) {
             if (v.has_value()) {
@@ -248,10 +255,10 @@ TEST(PropertyContainerTest, NodeProperties) {
         };
         ASSERT_EQ(theoProps.size(), propertyView.getPropertyCount());
 
-        const auto& displayName = propertyView.getProperty<StringPropertyType>(1);
+        const auto& displayName = propertyView.getProperty<types::String>(1);
         ASSERT_STREQ(displayName.c_str(), "APOE-4 [extracellula");
 
-        const auto& speciesName = propertyView.getProperty<StringPropertyType>(5);
+        const auto& speciesName = propertyView.getProperty<types::String>(5);
         ASSERT_STREQ(speciesName.c_str(), "Homo sapiens");
 
         // All properties check
@@ -263,7 +270,7 @@ TEST(PropertyContainerTest, NodeProperties) {
         for (const auto& v : propertyView.strings()) {
             ASSERT_TRUE(theoProps.find(v._id) != theoProps.end());
             const auto& theo = std::get<std::string>(theoProps.at(v._id)._value);
-            const auto& prop = std::get<const StringPropertyType::Primitive*>(v._value);
+            const auto& prop = std::get<const types::String::Primitive*>(v._value);
             ASSERT_STREQ(theo.c_str(), prop->c_str());
         }
 
@@ -271,7 +278,7 @@ TEST(PropertyContainerTest, NodeProperties) {
         for (const auto& v : propertyView.bools()) {
             ASSERT_TRUE(theoProps.find(v._id) != theoProps.end());
             const auto& theo = std::get<bool>(theoProps.at(v._id)._value);
-            const auto& prop = std::get<const BoolPropertyType::Primitive*>(v._value);
+            const auto& prop = std::get<const types::Bool::Primitive*>(v._value);
             ASSERT_EQ(theo, prop->_boolean);
         }
 
@@ -279,7 +286,7 @@ TEST(PropertyContainerTest, NodeProperties) {
         for (const auto& v : propertyView.doubles()) {
             ASSERT_TRUE(theoProps.find(v._id) != theoProps.end());
             const auto& theo = std::get<double>(theoProps.at(v._id)._value);
-            const auto& prop = std::get<const DoublePropertyType::Primitive*>(v._value);
+            const auto& prop = std::get<const types::Double::Primitive*>(v._value);
             ASSERT_EQ(theo, *prop);
         }
 
@@ -287,7 +294,7 @@ TEST(PropertyContainerTest, NodeProperties) {
         for (const auto& v : propertyView.uint64s()) {
             ASSERT_TRUE(theoProps.find(v._id) != theoProps.end());
             const auto& theo = std::get<uint64_t>(theoProps.at(v._id)._value);
-            const auto& prop = std::get<const UInt64PropertyType::Primitive*>(v._value);
+            const auto& prop = std::get<const types::UInt64::Primitive*>(v._value);
             ASSERT_EQ(theo, *prop);
         }
     }

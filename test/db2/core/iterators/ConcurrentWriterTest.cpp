@@ -55,21 +55,21 @@ protected:
         {
             // NODE 0 (temp ID: 0)
             const EntityID tmpID = tempData1.addNode(LabelSet {0});
-            tempData1.addNodeProperty<UInt64PropertyType>(
+            tempData1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // NODE 1 (temp ID: 1)
             const EntityID tmpID = tempData1.addNode(LabelSet {0});
-            tempData1.addNodeProperty<UInt64PropertyType>(
+            tempData1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // NODE 2 (temp ID: 2)
             const EntityID tmpID = tempData1.addNode(LabelSet {1});
-            tempData1.addNodeProperty<UInt64PropertyType>(
+            tempData1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
@@ -79,14 +79,14 @@ protected:
         {
             // NODE 4 (temp ID: 3))
             const EntityID tmpID = tempData2.addNode(LabelSet {0, 1});
-            tempData2.addNodeProperty<UInt64PropertyType>(
+            tempData2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // NODE 3 (temp ID: 4)
             const EntityID tmpID = tempData2.addNode(LabelSet {1});
-            tempData2.addNodeProperty<UInt64PropertyType>(
+            tempData2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
@@ -97,28 +97,28 @@ protected:
         {
             // NODE 8 (temp ID: 5)
             const EntityID tmpID = tempData3.addNode(LabelSet {0, 1});
-            tempData3.addNodeProperty<UInt64PropertyType>(
+            tempData3.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // NODE 5 (temp ID: 6)
             const EntityID tmpID = tempData3.addNode(LabelSet {0});
-            tempData3.addNodeProperty<UInt64PropertyType>(
+            tempData3.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // NODE 6 (temp ID: 7)
             const EntityID tmpID = tempData3.addNode(LabelSet {1});
-            tempData3.addNodeProperty<UInt64PropertyType>(
+            tempData3.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // NODE 7 (temp ID: 8)
             const EntityID tmpID = tempData3.addNode(LabelSet {1});
-            tempData3.addNodeProperty<UInt64PropertyType>(
+            tempData3.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
