@@ -13,17 +13,37 @@ TEST(LabelSetTest, LabelSet) {
     LabelSet set;
     set.set(0);
     set.set(5);
+    set.set(2);
     set.set(50);
+    set.set(30);
+    set.set(121);
+    set.set(101);
     ASSERT_TRUE(set.hasLabel(0));
     ASSERT_TRUE(set.hasLabel(5));
+    ASSERT_TRUE(set.hasLabel(2));
     ASSERT_TRUE(set.hasLabel(50));
+    ASSERT_TRUE(set.hasLabel(30));
+    ASSERT_TRUE(set.hasLabel(121));
+    ASSERT_TRUE(set.hasLabel(101));
     ASSERT_FALSE(set.hasLabel(4));
     ASSERT_FALSE(set.hasLabel(51));
     ASSERT_TRUE(set.hasAtLeastLabels({5}));
     ASSERT_TRUE(set.hasAtLeastLabels({0, 5}));
     ASSERT_TRUE(set.hasAtLeastLabels({0, 50}));
     ASSERT_TRUE(set.hasAtLeastLabels({0, 5, 50}));
+    ASSERT_TRUE(set.hasAtLeastLabels({0, 101, 121}));
+    ASSERT_TRUE(set.hasAtLeastLabels({0, 2, 101, 30, 2}));
+    ASSERT_TRUE(set.hasAtLeastLabels({0, 2, 101, 30, 2, 5, 50, 121}));
     ASSERT_FALSE(set.hasAtLeastLabels({0, 1}));
+
+    std::vector<LabelID> labelIDs;
+    set.decompose(labelIDs);
+    ASSERT_EQ(labelIDs.size(), set.size());
+    std::cout << "Decomposed:";
+    for (LabelID id : labelIDs) {
+        std::cout << " " << id.getValue();
+    }
+    std::cout << std::endl;
 
     srand(0);
     constexpr size_t count = 500;
@@ -36,9 +56,9 @@ TEST(LabelSetTest, LabelSet) {
     for (size_t i = 0; i < count; i++) {
         auto& bitset = bitsets[i];
         auto& uint = uints[i];
-        size_t bitCount = rand() % TemplateLabelSet<IntegerType, IntegerCount>::bitCount();
+        size_t bitCount = rand() % TemplateLabelSet<IntegerType, IntegerCount>::BitCount;
         for (size_t j = 0; j < bitCount; j++) {
-            size_t index = rand() % TemplateLabelSet<IntegerType, IntegerCount>::bitCount();
+            size_t index = rand() % TemplateLabelSet<IntegerType, IntegerCount>::BitCount;
             bitset.set(index);
 
             uint |= (IntegerType)1 << index;

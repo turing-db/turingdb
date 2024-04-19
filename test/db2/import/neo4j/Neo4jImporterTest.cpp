@@ -54,8 +54,23 @@ protected:
         std::string_view apoe4ReactomeID = "R-HSA-9711070";
         PropertyType displayNameType = access.getPropertyType("displayName (String)");
         PropertyType stIDType = access.getPropertyType("stId (String)");
+        const LabelSet apoeLabelset = access.getLabelSet({
+            "DatabaseObject",
+            "PhysicalEntity",
+            "GenomeEncodedEntity",
+            "EntityWithAccessionedSequence",
+        });
+        {
+            std::vector<LabelID> labelIDs;
+            apoeLabelset.decompose(labelIDs);
+            std::cout << "Requested labels: ";
+            for (const auto& id : labelIDs) {
+                std::cout << " " << id.getValue();
+            }
+            std::cout << std::endl;
+        }
 
-        auto it = reader.scanNodeProperties<types::String>(stIDType._id).begin();
+        auto it = reader.scanNodePropertiesByLabel<types::String>(stIDType._id, apoeLabelset).begin();
         const auto findReactomeID = [&]() {
             for (; it.isValid(); it.next()) {
                 const types::String::Primitive& stID = it.get();
@@ -78,7 +93,12 @@ protected:
         NodeView apoe = reader.getNodeView(apoeID);
         t1 = Clock::now();
         std::cout << "Got APOE-4 view in: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
-
+        std::vector<LabelID> labelIDs;
+        apoe.labelset().decompose(labelIDs);
+        std::cout << "APOE-4 has labels: " << std::endl;
+        for (const LabelID id : labelIDs) {
+            std::cout << "  - " << access.getLabelName(id) << std::endl;
+        }
         const auto& apoeEdges = apoe.edges();
         const auto& apoeProperties = apoe.properties();
         const types::String::Primitive& apoeDisplayName =
@@ -107,9 +127,9 @@ protected:
 
         std::string_view address = "33 Plover Drive";
         PropertyType addressType = access.getPropertyType("address (String)");
-        // LabelSet locationLabels = access.getLabelSet({"Location"});
+        LabelSet locationLabels = access.getLabelSet({"Location"});
+        auto it = reader.scanNodePropertiesByLabel<types::String>(addressType._id, locationLabels).begin();
 
-        auto it = reader.scanNodeProperties<types::String>(addressType._id).begin();
         const auto findNodeID = [&]() {
             for (; it.isValid(); it.next()) {
                 const types::String::Primitive& v = it.get();
@@ -189,7 +209,7 @@ TEST_F(Neo4jImporterTest, General) {
     [[maybe_unused]] static constexpr size_t edgeCountLimit = 1000000;
 
     const std::string turingHome = std::getenv("TURING_HOME");
-    // const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
+    //  const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "pole-db";
     // const FileUtils::Path jsonDir = "/home/luclabarriere/jsonReactome";
     t0 = Clock::now();
