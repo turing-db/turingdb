@@ -5,8 +5,9 @@
 
 #include "NotebookRunner.h"
 
-#include "PerfStat.h"
 #include "BannerDisplay.h"
+#include "FileUtils.h"
+#include "LogUtils.h"
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("biorun");
@@ -83,6 +84,10 @@ int main(int argc, const char** argv) {
     notebookRunner.setEnvVars(std::move(nbArgs));
 
     for (const auto& path : notebooks) {
+        if (!FileUtils::exists(path)) {
+            logt::FileNotFound(path);
+            return EXIT_FAILURE;
+        }
         notebookRunner.addNotebook(path);
     }
 

@@ -45,7 +45,7 @@ void RegressTesting::run() {
         }
     }
 
-    spdlog::info("\nTests detected: {}", _testPaths.size());
+    spdlog::info("Tests detected: {}", _testPaths.size());
 
     runTests();
 

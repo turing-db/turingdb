@@ -25,6 +25,7 @@ int main(int argc, const char** argv) {
 
     bool cleanDir = false;
     bool cleanIfSuccess = true;
+    unsigned concurrency = 1;
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("-clean")
              .help("Clean all test directories")
@@ -34,6 +35,10 @@ int main(int argc, const char** argv) {
              .help("Do not clean test directories")
              .nargs(0)
              .action([&](const auto&){ cleanIfSuccess = false; });
+    argParser.add_argument("-j")
+             .help("Number of concurrent jobs")
+             .nargs(1)
+             .store_into(concurrency);
 
     toolInit.init(argc, argv);
 
@@ -44,6 +49,7 @@ int main(int argc, const char** argv) {
     signal(SIGTERM, signalHandler);
 
     regress->setCleanIfSuccess(cleanIfSuccess);
+    regress->setConcurrency(concurrency);
 
     if (cleanDir) {
         regress->clean();
