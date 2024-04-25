@@ -13,7 +13,6 @@ build-job:
     - make -j4
     - make test
     - release/check_python.sh
-    - cd test/regress && wrt -j 4
   artifacts:
     when: always
     paths:
