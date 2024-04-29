@@ -15,13 +15,17 @@ public:
         bool silent = false;
     };
 
-    Neo4JHttpRequest(RequestProps&& props);
-    Neo4JHttpRequest(std::string&& statement);
+    explicit Neo4JHttpRequest(const std::string& statement);
     Neo4JHttpRequest(const Neo4JHttpRequest&) = delete;
     Neo4JHttpRequest(Neo4JHttpRequest&&);
     ~Neo4JHttpRequest();
 
     void setStatement(const std::string& s) { _statement = s; }
+    void setUrl(const std::string& url) { _url = url; };
+    void setUrlSuffix(const std::string& urlSuffix) { _urlSuffix = urlSuffix; };
+    void setUsername(const std::string& username) { _username = username; };
+    void setPassword(const std::string& password) { _password = password; };
+    void setPort(uint64_t port) { _port = port; };
 
     void exec();
     bool writeToFile(const std::filesystem::path& path) const;
@@ -36,8 +40,10 @@ public:
 
 private:
     std::string _url;
+    std::string _urlSuffix;
     std::string _username;
     std::string _password;
+    uint64_t _port = 7474;
     std::string _statement;
     std::string _jsonRequest;
     std::string _data;

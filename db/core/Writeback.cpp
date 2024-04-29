@@ -89,6 +89,10 @@ NodeType* Writeback::createNodeType(StringRef name) {
     return nodeType;
 }
 
+EdgeType* Writeback::createEdgeType(StringRef name) {
+    return createEdgeType(name, std::vector<NodeType*>{}, std::vector<NodeType*>{});
+}
+
 EdgeType* Writeback::createEdgeType(StringRef name, NodeType* source, NodeType* target) {
     return createEdgeType(name, std::vector{source}, std::vector{target});
 }
@@ -97,10 +101,6 @@ EdgeType* Writeback::createEdgeType(StringRef name,
                                     const NodeTypes& sources,
                                     const NodeTypes& targets) {
     if (_db->getEdgeType(name)) {
-        return nullptr;
-    }
-
-    if (sources.empty() || targets.empty()) {
         return nullptr;
     }
 

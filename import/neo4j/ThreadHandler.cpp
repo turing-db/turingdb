@@ -1,8 +1,27 @@
 #include "ThreadHandler.h"
 #include "JsonParser.h"
 
+void ThreadHandler::initialize() {
+    if (_urlSuffix.empty()) {
+        _urlSuffix = "/db/data/transaction/commit";
+    }
+
+    if (_port == 0) {
+        _port = 7474;
+    }
+
+    if (_username.empty()) {
+        _username = "neo4j";
+    }
+
+    if (_password.empty()) {
+        _password = "turing";
+    }
+}
+
 bool ThreadHandler::start(JsonParser& parser) {
     // Retrieving the node and edge counts
+    setRequestParams(requests.stats);
     requests.stats.exec();
     if (!requests.stats.success()) {
         requests.stats.reportError();
@@ -19,13 +38,10 @@ bool ThreadHandler::start(JsonParser& parser) {
 
     // Preparing node requests
     while (nodeRequested < stats.nodeCount) {
-        requests.nodes.emplace_back(Neo4JHttpRequest::RequestProps{
-            .statement = "MATCH(n) "
-                         "RETURN labels(n), ID(n), properties(n) SKIP " +
-                         std::to_string(nodeRequested) + " LIMIT " +
-                         std::to_string(_nodeCountLimit) + ";",
-            .silent = true,
-        });
+        requests.nodes.emplace_back(
+            "MATCH(n) "
+            "RETURN labels(n), ID(n), properties(n) SKIP "
+            + std::to_string(nodeRequested) + " LIMIT " + std::to_string(_nodeCountLimit) + ";");
 
         nodeRequested += _nodeCountLimit;
     }
@@ -34,13 +50,10 @@ bool ThreadHandler::start(JsonParser& parser) {
 
     // Preparing node requests
     while (edgeRequested < stats.edgeCount) {
-        requests.edges.emplace_back(Neo4JHttpRequest::RequestProps{
-            .statement = "MATCH (n1)-[e]->(n2) "
-                         "RETURN type(e), ID(n1), ID(n2), properties(e) SKIP " +
-                         std::to_string(edgeRequested) + " LIMIT " +
-                         std::to_string(_edgeCountLimit) + ";",
-            .silent = true,
-        });
+        requests.edges.emplace_back(
+            "MATCH (n1)-[e]->(n2) "
+            "RETURN type(e), ID(n1), ID(n2), properties(e) SKIP "
+            + std::to_string(edgeRequested) + " LIMIT " + std::to_string(_edgeCountLimit) + ";");
 
         edgeRequested += _edgeCountLimit;
     }
@@ -50,27 +63,39 @@ bool ThreadHandler::start(JsonParser& parser) {
 }
 
 void ThreadHandler::exec() {
+    setRequestParams(requests.nodeProperties);
     requests.nodeProperties.exec();
     if (!requests.nodeProperties.success()) {
         return;
     }
 
     for (auto& nodeRequest : requests.nodes) {
+        setRequestParams(nodeRequest);
         nodeRequest.exec();
         if (!nodeRequest.success()) {
             return;
         }
     }
 
+    setRequestParams(requests.edgeProperties);
     requests.edgeProperties.exec();
     if (!requests.edgeProperties.success()) {
         return;
     }
 
     for (auto& edgeRequest : requests.edges) {
+        setRequestParams(edgeRequest);
         edgeRequest.exec();
         if (!edgeRequest.success()) {
             return;
         }
     }
+}
+
+void ThreadHandler::setRequestParams(Neo4JHttpRequest& req) {
+    req.setUrl(_url);
+    req.setUrlSuffix(_urlSuffix);
+    req.setUsername(_username);
+    req.setPassword(_password);
+    req.setPort(_port);
 }
