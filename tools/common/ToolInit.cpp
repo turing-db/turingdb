@@ -5,13 +5,19 @@
 
 #include <argparse.hpp>
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
+
 #include "FileUtils.h"
 #include "BannerDisplay.h"
 #include "PerfStat.h"
-#include "LogUtils.h"
-#include "LogSetup.h"
 
 namespace {
+
+void setLogPattern(std::shared_ptr<spdlog::logger> logger) {
+    logger->set_pattern("[%Y-%m-%d %T] [%l] %v");
+}
 
 void atexitHandler() {
     std::cout << "\n";
@@ -35,6 +41,7 @@ void ToolInit::setOutputDir(const std::string& outDir) {
 void ToolInit::setupArgParser() {
     auto& outArg = _argParser->add_argument("-o");
     outArg.help("Change the default output directory");
+    outArg.metavar("out_dir");
     outArg.nargs(1);
     outArg.store_into(_outputsDir);
 }
@@ -54,7 +61,7 @@ void ToolInit::createOutputDir() {
 
     if (FileUtils::exists(_outputsDir)) {
         if (!FileUtils::isDirectory(_outputsDir)) {
-            logt::NotADirectory(_outputsDir);
+            spdlog::error("The directory {} is not a directory", _outputsDir);
             exit(EXIT_FAILURE);
             return;
         }
@@ -77,14 +84,20 @@ void ToolInit::createOutputDir() {
     
     const auto reportsPath = FileUtils::Path(_reportsDir);
     const auto logFilePath = reportsPath/(_toolName + ".log");
-    LogSetup::setupLogFileBacked(logFilePath.string());
+
+    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath.string(), true);
+    spdlog::sinks_init_list sinkList = {consoleSink, fileSink};
+    auto logger = std::make_shared<spdlog::logger>("log_sink", sinkList.begin(), sinkList.end());
+    setLogPattern(logger);
+    spdlog::set_default_logger(logger);
 
     // Init PerfStat
     PerfStat::init(reportsPath/(_toolName + ".perf"));
 }
 
 void ToolInit::init(int argc, const char** argv) {
-    LogSetup::setupLogConsole();
+    setLogPattern(spdlog::default_logger());
 
     setupArgParser();
 
@@ -101,4 +114,8 @@ void ToolInit::init(int argc, const char** argv) {
     }
 
     atexit(atexitHandler);
+}
+
+void ToolInit::printHelp() const {
+    std::cout << *_argParser;
 }

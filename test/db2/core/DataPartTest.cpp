@@ -1,6 +1,6 @@
 #include "DataPart.h"
 #include "FileUtils.h"
-#include "TemporaryDataBuffer.h"
+#include "DataBuffer.h"
 
 #include <gtest/gtest.h>
 
@@ -59,7 +59,7 @@ protected:
 
     std::string _outDir;
     FileUtils::Path _logPath;
-    TemporaryDataBuffer _tempBuffer;
+    DataBuffer _tempBuffer;
 };
 
 TEST_F(DataPartTest, CreateTest) {

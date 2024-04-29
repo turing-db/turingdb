@@ -18,6 +18,8 @@ public:
     void disableOutputDir() { _outputDirEnabled = false; }
     void createOutputDir();
 
+    void printHelp() const;
+
     void init(int argc, const char** argv);
 
     const std::string& getOutputsDir() const { return _outputsDir; }

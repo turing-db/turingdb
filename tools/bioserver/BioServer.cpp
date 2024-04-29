@@ -9,14 +9,16 @@
 int main(int argc, const char** argv) {
     ToolInit toolInit("bioserver");
 
+    std::vector<std::string> dbNames;
+
     auto& argParser = toolInit.getArgParser();
-    argParser.add_argument("load")
+    argParser.add_argument("-load")
              .help("Load a database at the start")
-             .nargs(1);
+             .nargs(1)
+             .append()
+             .store_into(dbNames);
 
     toolInit.init(argc, argv);
-
-    const std::vector<std::string> dbNames = argParser.get<std::vector<std::string>>("-load");
 
     // Configuration of the DB Server
     DBServerConfig dbServerConfig;

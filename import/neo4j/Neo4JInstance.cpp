@@ -15,7 +15,8 @@
 Neo4JInstance::Neo4JInstance(const FileUtils::Path& baseDir)
     : _neo4jDir(baseDir / "neo4j"),
       _neo4jBinary(_neo4jDir / "bin" / "neo4j"),
-      _neo4jAdminBinary(_neo4jDir / "bin" / "neo4j-admin") {
+      _neo4jAdminBinary(_neo4jDir / "bin" / "neo4j-admin")
+{
 }
 
 Neo4JInstance::~Neo4JInstance() {
@@ -63,14 +64,17 @@ bool Neo4JInstance::setup() {
 }
 
 bool Neo4JInstance::stop() {
+    spdlog::info("Neo4J stopping");
     if (FileUtils::exists(_neo4jDir)) {
-        spdlog::info("Stopping Neo4J");
         const int stopRes =
             boost::process::system(_neo4jBinary.string(), "stop");
         if (stopRes != 0) {
             spdlog::error("Failed to stop Neo4J");
+            killJava();
             return false;
         }
+    } else {
+        killJava();
     }
 
     return true;
@@ -86,15 +90,19 @@ void Neo4JInstance::destroy() {
     }
 }
 
-bool Neo4JInstance::isReady() const {
+bool Neo4JInstance::isRunning() {
     const bool res =
         !std::system("curl --request GET --url 127.0.0.1:7474 -s > /dev/null");
 
     return res;
 }
 
+void Neo4JInstance::killJava() {
+    boost::process::system("pkill java");
+}
+
 bool Neo4JInstance::start() {
-    if (isReady()) {
+    if (isRunning()) {
         spdlog::error("Neo4J is already running");
         return false;
     }
@@ -119,7 +127,7 @@ bool Neo4JInstance::start() {
 
     // Wait for warmup
     spdlog::info("Neo4J warming up");
-    while (!isReady()) {
+    while (!isRunning()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     spdlog::info("Neo4J is running and ready");

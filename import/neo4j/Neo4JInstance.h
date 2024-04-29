@@ -11,7 +11,8 @@ public:
     bool start();
     bool stop();
     void destroy();
-    bool isReady() const;
+    static bool isRunning();
+    static void killJava();
 
     bool importDumpedDB(const FileUtils::Path& dbFilePath) const;
 

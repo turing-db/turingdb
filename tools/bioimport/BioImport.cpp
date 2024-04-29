@@ -27,6 +27,7 @@ using namespace db;
 
 enum class ImportType {
     NEO4J,
+    NEO4J_URL,
     JSON_NEO4J,
     GML,
     CSV,
@@ -37,7 +38,20 @@ struct ImportData {
     std::string path;
     std::string networkName;
     std::string primaryKey;
+    std::string url;
+    std::string urlSuffix;
+    uint64_t port = 0;
+    std::string username;
+    std::string password;
 };
+
+namespace {
+
+void neo4jURLNotProvided() {
+    spdlog::error("Neo4J URL not provided");
+}
+
+}
 
 int main(int argc, const char** argv) {
     BannerDisplay::printBanner();
@@ -64,11 +78,60 @@ int main(int argc, const char** argv) {
                     logt::DirectoryDoesNotExist(value);
                     exit(EXIT_FAILURE);
                 }
+            });
 
+    argParser.add_argument("-neo4j-url")
+             .help("Imports a neo4j database from an existing neo4j instance")
+             .metavar("localhost")
+             .action([&](const std::string& value){
                 importData.emplace_back(ImportData {
-                    .type = ImportType::NEO4J,
-                    .path = value,
+                    .type = ImportType::NEO4J_URL,
+                    .url = value,
                 });
+            });
+
+    argParser.add_argument("-port")
+             .help("Port for the query. Must follow a neo4j-url option")
+             .action([&](const std::string& value){
+                if (importData.empty()) {
+                    neo4jURLNotProvided();
+                    exit(EXIT_FAILURE);
+                }
+                auto& cmd = importData.back();
+                cmd.port = std::stoi(value);
+            });
+
+    argParser.add_argument("-user")
+             .help("Username for the query. Must follow a neo4j-url option")
+             .action([&](const std::string& value){
+                if (importData.empty()) {
+                    exit(EXIT_FAILURE);
+                }
+                auto& cmd = importData.back();
+                cmd.username = value;
+             });
+
+    argParser.add_argument("-password")
+             .help("Password for the query. Must follow a neo4j-url option")
+             .action([&](const std::string& value){
+                if (importData.empty()) {
+                    neo4jURLNotProvided();
+                    exit(EXIT_FAILURE);
+                }
+                auto& cmd = importData.back();
+                cmd.password = value;
+             });
+
+    argParser.add_argument("-url-suffix")
+             .help("Suffix for the url. Must follow a neo4j-url option")
+             .metavar("/db/data/transaction/commit")
+             .action([&](const std::string& value){
+                if (importData.empty()) {
+                    neo4jURLNotProvided();
+                    exit(EXIT_FAILURE);
+                }
+                auto& cmd = importData.back();
+                cmd.urlSuffix = value;
              });
 
     argParser.add_argument("-json-neo4j")
@@ -200,6 +263,11 @@ int main(int argc, const char** argv) {
         switch (data.type) {
             case ImportType::NEO4J: {
                 neo4jImport.importNeo4j(data.path, networkName);
+                break;
+            }
+            case ImportType::NEO4J_URL: {
+                neo4jImport.importNeo4jUrl(data.url, data.port, data.username,
+                                           data.password, data.urlSuffix, networkName);
                 break;
             }
             case ImportType::JSON_NEO4J: {
