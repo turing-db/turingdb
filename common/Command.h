@@ -27,7 +27,7 @@ public:
     void addArg(const std::string& arg);
 
     bool run();
-    ProcessChild runAsync(ProcessGroup& group);
+    ProcessChild runAsync(const ProcessGroup& group);
 
     int getReturnCode() const { return _returnCode; }
     void getLogs(std::string& data) const;
@@ -46,8 +46,9 @@ private:
     int _returnCode {-1};
 
     bool searchCmd();
-    void generateCmdString(std::string& cmdStr, bool async = false);
-    bool getBashCmd(std::string& bashCmd, bool async = false);
+    void generateCmdString(std::string& cmdStr);
+    bool getBashCmd(std::string& bashCmd);
+    ProcessChild createProcess(const ProcessGroup& group);
 };
 
 #endif

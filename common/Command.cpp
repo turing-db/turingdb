@@ -5,6 +5,7 @@
 
 #include "FileUtils.h"
 #include "LogUtils.h"
+#include "BioAssert.h"
 
 Command::Command(const std::string& cmd)
     : _cmd(cmd)
@@ -34,26 +35,41 @@ void Command::setEnvVar(const std::string& var, const std::string& value) {
     _env.emplace_back(var, value);
 }
 
+ProcessChild Command::runAsync(const ProcessGroup& group) {
+    return createProcess(group);
+}
+
 bool Command::run() {
-    std::string bashCmd;
-    if (!getBashCmd(bashCmd)) {
+    auto group = std::make_unique<boost::process::group>();
+    auto child = createProcess(group);
+    if (!child) {
         return false;
     }
 
-    if (bashCmd.empty()) {
-        return false;
-    }
-
-    if (_verbose) {
-        spdlog::info("Executing command {}", bashCmd);
-    }
-    _returnCode = system(bashCmd.c_str());
+    child->wait();
+    _returnCode = child->exit_code();
     return true;
 }
 
-ProcessChild Command::runAsync(ProcessGroup& group) {
+void Command::getLogs(std::string& data) const {
+    FileUtils::readContent(_logFile, data);
+}
+
+bool Command::searchCmd() {
+    const auto bpExecPath = boost::process::search_path(_cmd);
+    if (bpExecPath.empty()) {
+        return false;
+    }
+
+    _cmd = bpExecPath.string();
+
+    return true;
+}
+
+ProcessChild Command::createProcess(const ProcessGroup& group) {
+    bioassert(group);
     std::string bashCmd;
-    if (!getBashCmd(bashCmd, true)) {
+    if (!getBashCmd(bashCmd)) {
         return ProcessChild();
     }
 
@@ -77,30 +93,17 @@ ProcessChild Command::runAsync(ProcessGroup& group) {
         bashCmd,
         boost::process::std_in.close(),
         boost::process::std_out > boost::process::null,
-        boost::process::std_err > boost::process::null);
+        boost::process::std_err > boost::process::null,
+        *group);
 }
 
-void Command::getLogs(std::string& data) const {
-    FileUtils::readContent(_logFile, data);
-}
-
-bool Command::searchCmd() {
-    const auto bpExecPath = boost::process::search_path(_cmd);
-    if (bpExecPath.empty()) {
-        return false;
-    }
-
-    _cmd = bpExecPath.string();
-
-    return true;
-}
-
-void Command::generateCmdString(std::string& cmdStr, bool async) {
-    cmdStr = "cd '";
+void Command::generateCmdString(std::string& cmdStr) {
+    cmdStr = "cd ";
     cmdStr += _workingDir.string();
-    cmdStr += "'; ";
+    cmdStr += "; ";
 
     for (const auto& envEntry : _env) {
+        cmdStr += "'";
         cmdStr += envEntry.first;
         cmdStr += "='";
         cmdStr += envEntry.second;
@@ -116,10 +119,6 @@ void Command::generateCmdString(std::string& cmdStr, bool async) {
         cmdStr += "'";
     }
 
-    if (async) {
-        return;
-    }
-
     if (_stdoutEnabled) {
         cmdStr += " 2>&1 | tee '";
         cmdStr += _logFile.string();
@@ -133,7 +132,7 @@ void Command::generateCmdString(std::string& cmdStr, bool async) {
     cmdStr += "; exit ${PIPESTATUS[0]}";
 }
 
-bool Command::getBashCmd(std::string& bashCmd, bool async) {
+bool Command::getBashCmd(std::string& bashCmd) {
     bashCmd = "";
 
     // Working directory
@@ -169,7 +168,7 @@ bool Command::getBashCmd(std::string& bashCmd, bool async) {
     }
 
     std::string cmdStr;
-    generateCmdString(cmdStr, async);
+    generateCmdString(cmdStr);
     bashCmd = "bash ";
 
     if (_generateScript) {
@@ -185,7 +184,7 @@ bool Command::getBashCmd(std::string& bashCmd, bool async) {
 
         bashCmd += _scriptPath.string();
     } else {
-        bashCmd += "-c '" + cmdStr + "'";
+        bashCmd += "-c \"" + cmdStr + "\"";
     }
 
     return true;

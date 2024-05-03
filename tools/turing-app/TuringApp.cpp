@@ -9,16 +9,17 @@
 #include "ToolInit.h"
 #include "BannerDisplay.h"
 
-#include "TuringServer.h"
+#include "TuringAppServer.h"
 
 using namespace app;
 
 // This is necessary to handle unix signals
-std::unique_ptr<TuringServer> server;
+std::unique_ptr<TuringAppServer> server;
 
 void signalHandler(int signum) {
     if (server) {
         server->terminate();
+        server->waitAll();
     }
     exit(EXIT_SUCCESS);
 }
@@ -29,23 +30,21 @@ int main(int argc, const char** argv) {
     ToolInit toolInit("turing-app");
 
     bool isPrototypeMode = false;
+    bool isDevMode = false;
 
-    // Arguments parsing
+    // Arguments definition
+#ifdef TURING_DEV
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("--prototype")
              .store_into(isPrototypeMode);
 
+    argParser.add_argument("--dev")
+             .store_into(isDevMode);
+#endif
+
     toolInit.init(argc, argv);
 
-    bool isDevMode = false;
-    {
-        const char* turingDev = getenv("TURING_DEV");
-        if (turingDev) {
-            isDevMode = strcmp(turingDev, "1");
-        }
-    }
-
-    server = std::make_unique<TuringServer>(toolInit.getOutputsDir());
+    server = std::make_unique<TuringAppServer>(toolInit.getOutputsDir());
     server->setPrototypeMode(isPrototypeMode);
     server->setDevMode(isDevMode);
 
@@ -53,19 +52,10 @@ int main(int argc, const char** argv) {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
 
-    server->start();
+    server->run();
 
     // Wait for termination
-    const auto serverType = server->waitServerDone();
-    const int code = server->getReturnCode(serverType);
-
-    std::string output;
-    server->getOutput(serverType, output);
-
-    spdlog::info("Server {} terminated with exit code {}\n{}",
-                 server->getServerName(serverType),
-                 code,
-                 output);
+    server->waitAll();
 
     return EXIT_SUCCESS;
 }

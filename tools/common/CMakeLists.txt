@@ -1,5 +1,7 @@
 
 set(tools_common_s
+        ToolCommand.cpp
+        ToolCommandEngine.cpp
         ToolInit.cpp)
 
 add_library(tools_common_s STATIC ${tools_common_s})

@@ -1,35 +1,20 @@
 #include "TuringTool.h"
 
-#include "TuringServerComponent.h"
-#include "ToolInit.h"
-#include "BannerDisplay.h"
+#include "TuringStartCommand.h"
 
 TuringTool::TuringTool(ToolInit& toolInit)
-    : _toolInit(toolInit)
+    : _engine(toolInit)
 {
-    _components.emplace_back(new TuringServerComponent(toolInit));
+    _engine.addCommand(std::make_unique<TuringStartCommand>(toolInit));
 }
 
 TuringTool::~TuringTool() {
 }
 
 void TuringTool::setup() {
-    for (auto& component : _components) {
-        component->setup();
-    }
+    _engine.setup();
 }
 
 void TuringTool::run() {
-    bool inactive = true;
-    for (auto& component : _components) {
-        if (component->isActive()) {
-            inactive = false;
-            component->run();
-        }
-    }
-
-    if (inactive) {
-        BannerDisplay::printBanner();
-        _toolInit.printHelp();
-    }
+    _engine.run();
 }

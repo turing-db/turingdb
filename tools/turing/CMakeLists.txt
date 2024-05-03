@@ -1,8 +1,7 @@
 
 set(turing_sources
-        TuringToolComponent.cpp
-        TuringServerComponent.cpp
         TuringTool.cpp
+        TuringStartCommand.cpp
         Turing.cpp)
 
 add_executable(turing ${turing_sources})

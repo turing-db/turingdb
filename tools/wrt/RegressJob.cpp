@@ -16,7 +16,7 @@ RegressJob::RegressJob(const Path& path)
 RegressJob::~RegressJob() {
 }
 
-bool RegressJob::start(ProcessGroup& group) {
+bool RegressJob::start(const ProcessGroup& group) {
     const auto runScriptPath = _path/"run.sh";
     if (!FileUtils::exists(runScriptPath)) {
         logt::FileNotFound(runScriptPath.string());

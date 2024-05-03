@@ -14,7 +14,7 @@ public:
 
     const Path& getPath() const { return _path; }
 
-    bool start(ProcessGroup& group);
+    bool start(const ProcessGroup& group);
     bool isRunning();
     void terminate();
     void wait();
