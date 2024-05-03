@@ -9,6 +9,7 @@
 #include "ConcurrentWriter.h"
 #include "DB.h"
 #include "DataBuffer.h"
+#include "EdgeView.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
 #include "Neo4jImporter.h"
@@ -108,50 +109,74 @@ protected:
         // }
         const auto& apoeEdges = apoe.edges();
         const auto& apoeProperties = apoe.properties();
+        const auto printProperties = [&access](const EntityPropertyView& view) {
+            // if (!view.uint64s().empty()) {
+            std::cout << "  #  UInt64 properties" << std::endl;
+            for (const auto& prop : view.uint64s()) {
+                const std::string_view ptName = access.getPropertyTypeName(prop._id);
+                std::cout << "    - " << ptName << ": " << prop.get<types::UInt64>() << std::endl;
+            }
+            //}
 
-        std::cout << "  #  UInt64 properties" << std::endl;
-        for (const auto& prop : apoeProperties.uint64s()) {
-            const std::string_view ptName = access.getPropertyTypeName(prop._id);
-            std::cout << "    - " << ptName << ": " << prop.get<types::UInt64>() << std::endl;
-        }
+            // if (!view.int64s().empty()) {
+            std::cout << "  #  Int64 properties" << std::endl;
+            for (const auto& prop : view.int64s()) {
+                const std::string_view ptName = access.getPropertyTypeName(prop._id);
+                std::cout << "    - " << ptName << ": " << prop.get<types::Int64>() << std::endl;
+            }
+            //}
 
-        std::cout << "  #  Int64 properties" << std::endl;
-        for (const auto& prop : apoeProperties.int64s()) {
-            const std::string_view ptName = access.getPropertyTypeName(prop._id);
-            std::cout << "    - " << ptName << ": " << prop.get<types::Int64>() << std::endl;
-        }
+            // if (!view.doubles().empty()) {
+            std::cout << "  #  Double properties" << std::endl;
+            for (const auto& prop : view.doubles()) {
+                const std::string_view ptName = access.getPropertyTypeName(prop._id);
+                std::cout << "    - " << ptName << ": " << prop.get<types::Double>() << std::endl;
+            }
+            //}
 
-        std::cout << "  #  Double properties" << std::endl;
-        for (const auto& prop : apoeProperties.doubles()) {
-            const std::string_view ptName = access.getPropertyTypeName(prop._id);
-            std::cout << "    - " << ptName << ": " << prop.get<types::Double>() << std::endl;
-        }
+            // if (!view.strings().empty()) {
+            std::cout << "  #  String properties" << std::endl;
+            for (const auto& prop : view.strings()) {
+                const std::string_view ptName = access.getPropertyTypeName(prop._id);
+                std::cout << "    - " << ptName << ": " << prop.get<types::String>() << std::endl;
+            }
+            //}
 
-        std::cout << "  #  String properties" << std::endl;
-        for (const auto& prop : apoeProperties.strings()) {
-            const std::string_view ptName = access.getPropertyTypeName(prop._id);
-            std::cout << "    - " << ptName << ": " << prop.get<types::String>() << std::endl;
-        }
+            // if (!view.bools().empty()) {
+            std::cout << "  #  Bool properties" << std::endl;
+            for (const auto& prop : view.bools()) {
+                const std::string_view ptName = access.getPropertyTypeName(prop._id);
+                std::cout << "    - " << ptName << ": " << prop.get<types::Bool>() << std::endl;
+            }
+            //}
+        };
 
-        std::cout << "  #  Bool properties" << std::endl;
-        for (const auto& prop : apoeProperties.bools()) {
-            const std::string_view ptName = access.getPropertyTypeName(prop._id);
-            std::cout << "    - " << ptName << ": " << prop.get<types::Bool>() << std::endl;
-        }
+        printProperties(apoeProperties);
 
-        std::cout << "APOE has " << apoeEdges.getOutEdgeCount() << " out edges" << std::endl;
+        std::cout
+            << "APOE has " << apoeEdges.getOutEdgeCount() << " out edges" << std::endl;
         for (const auto& edge : apoe.edges().outEdges()) {
-            NodeView target = reader.getNodeView(edge._otherID);
+            const EdgeView edgeView = reader.getEdgeView(edge._edgeID);
+            const NodeView target = reader.getNodeView(edge._otherID);
             const types::String::Primitive& displayName =
                 target.properties().getProperty<types::String>(displayNameType._id);
-            std::cout << "  -> " << edge._otherID.getValue() << " " << displayName << std::endl;
+            std::cout << "  -> " << edge._otherID.getValue()
+                      << " with " << edgeView.properties().getCount() << " properties"
+                      << std::endl;
+            printProperties(edgeView.properties());
+            std::cout << "       * " << displayName << std::endl;
         }
         std::cout << "APOE has " << apoeEdges.getInEdgeCount() << " in edges" << std::endl;
         for (const auto& edge : apoe.edges().inEdges()) {
-            NodeView source = reader.getNodeView(edge._otherID);
+            const EdgeView edgeView = reader.getEdgeView(edge._edgeID);
+            const NodeView source = reader.getNodeView(edge._otherID);
             const types::String::Primitive& displayName =
                 source.properties().getProperty<types::String>(displayNameType._id);
-            std::cout << "  -> " << edge._otherID.getValue() << " " << displayName << std::endl;
+            std::cout << "  <- " << edge._otherID.getValue()
+                      << " with " << edgeView.properties().getCount() << " properties"
+                      << std::endl;
+            printProperties(edgeView.properties());
+            std::cout << "       * " << displayName << std::endl;
         }
     }
 
@@ -256,16 +281,17 @@ TEST_F(Neo4jImporterTest, Simple) {
         _db->uniqueAccess().pushDataPart(buf1);
 
         auto buf2 = newDataBuffer(_db.get());
-        buf2.addEdge(0, 1, 2); // Patch 212
+        buf2.addEdge(2, 1, 2);
         EntityID id1 = buf2.addNode(Labelset {0});
         buf2.addNodeProperty<types::String>(id1, 0, "test1");
 
-        buf2.addEdge(0, 0, 1); // Patch 101
+        buf2.addEdge(2, 0, 1);
         EntityID id2 = buf2.addNode(Labelset {0});
         buf2.addNodeProperty<types::String>(id2, 0, "test2");
         buf2.addNodeProperty<types::String>(2, 0, "test3");
         // buf2.addNodeProperty<types::UInt64>(5, 0, 17);
-        buf2.addEdge(0, 3, 4); // Core
+        EntityID edgeID = buf2.addEdge(4, 3, 4); // Core
+        buf2.addEdgeProperty<types::String>(edgeID, 0, "Edge property test");
         buf2.addNode(Labelset {0});
         buf2.addNode(Labelset {0});
         buf2.addNode(Labelset {0});
@@ -286,7 +312,9 @@ TEST_F(Neo4jImporterTest, Simple) {
         std::cout << edge._edgeID.getValue()
                   << edge._nodeID.getValue()
                   << edge._otherID.getValue()
-                  << " ";
+                  << std::endl;
+        auto view = reader.getEdgeView(edge._edgeID);
+        std::cout << "  Has " << view.properties().getCount() << " properties" << std::endl;
     }
     std::cout << std::endl;
     // std::cout << std::endl;
@@ -344,10 +372,10 @@ TEST_F(Neo4jImporterTest, General) {
     [[maybe_unused]] static constexpr size_t nodeCountLimit = 400000;
     [[maybe_unused]] static constexpr size_t edgeCountLimit = 1000000;
 
-    // const std::string turingHome = std::getenv("TURING_HOME");
-    //   const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
-    // const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "pole-db";
-    const FileUtils::Path jsonDir = "/home/luclabarriere/jsonReactome";
+    const std::string turingHome = std::getenv("TURING_HOME");
+    //  const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
+    const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "pole-db";
+    // const FileUtils::Path jsonDir = "/home/luclabarriere/jsonReactome";
     t0 = Clock::now();
     Neo4jImporter::importJsonDir(jobSystem,
                                  _db.get(),
@@ -360,11 +388,11 @@ TEST_F(Neo4jImporterTest, General) {
     t1 = Clock::now();
     std::cout << "Parsing: " << duration<Seconds>(t0, t1) << " s" << std::endl;
 
-    findApoe();
-    // findLocation();
+    // findApoe();
+    findLocation();
 
-    auto access = _db->access();
-    std::stringstream report;
-    access.getReport(report);
-    std::cout << report.view() << std::endl;
+    // auto access = _db->access();
+    // std::stringstream report;
+    // access.getReport(report);
+    // std::cout << report.view() << std::endl;
 }

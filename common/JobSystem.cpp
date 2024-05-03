@@ -39,16 +39,17 @@ void JobSystem::initialize(size_t numThreads) {
 
             while (true) {
                 _queueMutex.lock();
-                auto job = _jobs.pop();
+                auto j = _jobs.pop();
                 _queueMutex.unlock();
 
                 if (_stopRequested.load()) {
                     return;
                 }
 
-                if (job.has_value()) {
-                    auto& jobValue = job.value();
+                if (j.has_value()) {
+                    auto& jobValue = j.value();
                     jobValue._operation(jobValue._promise.get());
+                    jobValue._promise->finish();
                     _finishedCount.fetch_add(1);
                 } else {
                     // no job, put thread to sleep

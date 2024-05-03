@@ -214,19 +214,19 @@ TEST(PropertyContainerTest, NodeProperties) {
     t0 = std::chrono::high_resolution_clock::now();
     size_t totalPropCount = 0;
     for (const test_nodes::TestNode& n : nodes) {
-        const NodePropertyView view = container->getNodePropertyView(n._id);
+        const EntityPropertyView view = container->getNodePropertyView(n._id);
         totalPropCount += view.getPropertyCount();
     }
     ASSERT_TRUE(totalPropCount != 0);
     t1 = std::chrono::high_resolution_clock::now();
     float dur = duration_cast<nanoseconds>(t1 - t0).count();
-    std::cout << "NodePropertyView construct duration: "
+    std::cout << "EntityPropertyView construct duration: "
               << dur / 1000.0f << " us" << std::endl;
 
     t0 = std::chrono::high_resolution_clock::now();
     size_t count = 0;
     for (const test_nodes::TestNode& n : nodes) {
-        const NodePropertyView view = container->getNodePropertyView(n._id);
+        const EntityPropertyView view = container->getEntityPropertyView(n._id);
         if (view.hasProperty(3)) {
             count++;
         }
