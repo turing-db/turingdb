@@ -3,9 +3,10 @@
 #include <string>
 #include <signal.h>
 #include <sstream>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "StringToNumber.h"
-#include "FileUtils.h"
 
 bool ProcessUtils::killAllChildren(pid_t pid, int signal) {
     std::vector<pid_t> children;
@@ -43,4 +44,9 @@ bool ProcessUtils::getAllChildren(pid_t pid, std::vector<pid_t>& children) {
     }
 
     return true;
+}
+
+bool ProcessUtils::writePIDFile(const FileUtils::Path& file) {
+    const pid_t pid = getpid();
+    return FileUtils::writeFile(file, std::to_string(pid));
 }

@@ -34,8 +34,7 @@ void TuringStartCommand::run() {
     turingApp.addOption("-o", turingAppDir.string());
     turingApp.setWorkingDir(_toolInit.getOutputsDir());
     turingApp.setGenerateScript(true);
-    turingApp.setWriteOnStdout(true);
-    turingApp.setWriteLogFile(true);
+    turingApp.setWriteLogFile(false);
     turingApp.setScriptPath(_toolInit.getOutputsDirPath()/"turing-app.sh");
     turingApp.setLogFile(_toolInit.getOutputsDirPath()/"turing-app-launch.log");
 
@@ -50,14 +49,12 @@ void TuringStartCommand::run() {
         return;
     }
 
-    /*
     const auto turingDBDir = _toolInit.getOutputsDirPath()/"turingdb";
     Command db("turingdb");
     db.addOption("-o", turingDBDir.string());
     db.setWorkingDir(_toolInit.getOutputsDir());
     db.setGenerateScript(true);
-    db.setWriteOnStdout(false);
-    db.setWriteLogFile(true);
+    db.setWriteLogFile(false);
     db.setScriptPath(_toolInit.getOutputsDirPath()/"turingdb.sh");
     db.setLogFile(_toolInit.getOutputsDirPath()/"turingdb-launch.log");
 
@@ -71,5 +68,4 @@ void TuringStartCommand::run() {
         spdlog::error("Failed to start turingdb: turingdb command terminated with exit code {}", dbExitCode);
         return;
     }
-    */
 }

@@ -12,6 +12,7 @@
 
 #include "TuringAppServer.h"
 #include "Demonology.h"
+#include "ProcessUtils.h"
 
 using namespace app;
 
@@ -53,6 +54,13 @@ int main(int argc, const char** argv) {
     // Demonize
     if (!noDemonMode) {
         Demonology::demonize();
+    }
+
+    // Write PID file
+    const auto pidFilePath = toolInit.getOutputsDirPath()/"pid";
+    if (!ProcessUtils::writePIDFile(pidFilePath)) {
+        spdlog::error("Failed to write PID file {}", pidFilePath.string());
+        exit(EXIT_FAILURE);
     }
 
     // Setup app server
