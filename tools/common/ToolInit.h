@@ -4,6 +4,8 @@
 #include <string>
 #include <memory>
 
+#include "FileUtils.h"
+
 namespace argparse {
 class ArgumentParser;
 }
@@ -23,12 +25,12 @@ public:
     void init(int argc, const char** argv);
 
     const std::string& getOutputsDir() const { return _outputsDir; }
+    FileUtils::Path getOutputsDirPath() const { return FileUtils::Path(_outputsDir); }
+
     const std::string& getReportsDir() const { return _reportsDir; }
+    FileUtils::Path getReportsDirPath() const { return FileUtils::Path(_reportsDir); }
 
     argparse::ArgumentParser& getArgParser() { return *_argParser; }
-
-    void setupTerminalFileLogger();
-    void setupFileOnlyLogger();
 
 private:
     const std::string _toolName;
@@ -40,6 +42,7 @@ private:
 
     void setupArgParser();
     void parseArguments(int argc, const char** argv);
+    void setupLogger();
 };
 
 #endif

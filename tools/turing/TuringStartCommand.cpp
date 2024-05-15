@@ -1,11 +1,10 @@
 #include "TuringStartCommand.h"
 
 #include <spdlog/spdlog.h>
-#include <boost/process/group.hpp>
-#include <boost/process/child.hpp>
 
 #include "ToolInit.h"
 #include "Command.h"
+#include "FileUtils.h"
 
 TuringStartCommand::TuringStartCommand(ToolInit& toolInit)
     : ToolCommand(toolInit),
@@ -30,18 +29,47 @@ bool TuringStartCommand::isActive() {
 }
 
 void TuringStartCommand::run() {
-    Command cmd("turing-app");
-    cmd.setWorkingDir(_toolInit.getOutputsDir());
-    cmd.setGenerateScript(false);
-    cmd.setWriteOnStdout(false);
+    const auto turingAppDir = _toolInit.getOutputsDirPath()/"turing-app";
+    Command turingApp("turing-app");
+    turingApp.addOption("-o", turingAppDir.string());
+    turingApp.setWorkingDir(_toolInit.getOutputsDir());
+    turingApp.setGenerateScript(true);
+    turingApp.setWriteOnStdout(true);
+    turingApp.setWriteLogFile(true);
+    turingApp.setScriptPath(_toolInit.getOutputsDirPath()/"turing-app.sh");
+    turingApp.setLogFile(_toolInit.getOutputsDirPath()/"turing-app-launch.log");
 
-    ProcessGroup group(new boost::process::group());
-    auto child = cmd.runAsync(group);
-    if (!child) {
-        spdlog::error("Can not start Turing server, please look at logs of the turing-app command.");
+    if (!turingApp.run()) {
+        spdlog::error("Failed to start Turing application server");
+        return;
+    }
+    
+    const int appExitCode = turingApp.getReturnCode();
+    if (appExitCode != 0) {
+        spdlog::error("Failed to start turing-app: turing-app command terminated with exit code {}", appExitCode);
         return;
     }
 
-    child->detach();
-    group->detach();
+    /*
+    const auto turingDBDir = _toolInit.getOutputsDirPath()/"turingdb";
+    Command db("turingdb");
+    db.addOption("-o", turingDBDir.string());
+    db.setWorkingDir(_toolInit.getOutputsDir());
+    db.setGenerateScript(true);
+    db.setWriteOnStdout(false);
+    db.setWriteLogFile(true);
+    db.setScriptPath(_toolInit.getOutputsDirPath()/"turingdb.sh");
+    db.setLogFile(_toolInit.getOutputsDirPath()/"turingdb-launch.log");
+
+    if (!db.run()) {
+        spdlog::error("Failed to start Turing database server");
+        return;
+    }
+
+    const int dbExitCode = db.getReturnCode();
+    if (dbExitCode != 0) {
+        spdlog::error("Failed to start turingdb: turingdb command terminated with exit code {}", dbExitCode);
+        return;
+    }
+    */
 }

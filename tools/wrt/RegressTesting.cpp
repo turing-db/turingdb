@@ -6,7 +6,6 @@
 #include <thread>
 #include <iostream>
 
-#include <boost/process.hpp>
 #include <spdlog/spdlog.h>
 
 #include "FileUtils.h"
@@ -18,8 +17,7 @@
 using namespace std::chrono_literals;
 
 RegressTesting::RegressTesting(const Path& reportDir)
-    : _reportDir(reportDir),
-    _processGroup(std::make_unique<boost::process::group>())
+    : _reportDir(reportDir)
 {
 }
 
@@ -119,8 +117,6 @@ void RegressTesting::runTests() {
     populateRunQueue();
 
     while (!_runningTests.empty()) {
-        _ioContext.poll();
-
         // Check if a job is finished
         auto it = _runningTests.begin();
         while (it != _runningTests.end()) {
@@ -200,7 +196,7 @@ void RegressTesting::populateRunQueue() {
         const auto firstTest = _testWaitQueue.front();
         _testWaitQueue.pop();
         RegressJob* job = new RegressJob(firstTest);
-        if (!job->start(_processGroup)) {
+        if (!job->start()) {
             continue;
         }
 

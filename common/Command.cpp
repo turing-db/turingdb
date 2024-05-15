@@ -1,11 +1,12 @@
 #include "Command.h"
 
-#include <boost/process.hpp>
+#include <ranges>
 #include <spdlog/spdlog.h>
+#include <boost/process.hpp>
 
 #include "FileUtils.h"
 #include "LogUtils.h"
-#include "BioAssert.h"
+#include "Process.h"
 
 Command::Command(const std::string& cmd)
     : _cmd(cmd)
@@ -35,19 +36,34 @@ void Command::setEnvVar(const std::string& var, const std::string& value) {
     _env.emplace_back(var, value);
 }
 
-ProcessChild Command::runAsync(const ProcessGroup& group) {
-    return createProcess(group);
+std::unique_ptr<Process> Command::runAsync() {
+    
+    auto proc = std::make_unique<Process>();
+    proc->setWriteStdout(_stdoutEnabled);
+    proc->setReadStdin(false);
+
+    if (!generateBashCmd(*proc)) {
+        return nullptr;
+    }
+
+    if (!proc->startAsync()) {
+        return nullptr;
+    }
+
+    return proc;
 }
 
 bool Command::run() {
-    auto group = std::make_unique<boost::process::group>();
-    auto child = createProcess(group);
-    if (!child) {
+    auto proc = runAsync();
+    if (!proc) {
         return false;
     }
 
-    child->wait();
-    _returnCode = child->exit_code();
+    if (!proc->wait()) {
+        return false;
+    }
+
+    _returnCode = proc->getExitCode();
     return true;
 }
 
@@ -66,37 +82,6 @@ bool Command::searchCmd() {
     return true;
 }
 
-ProcessChild Command::createProcess(const ProcessGroup& group) {
-    bioassert(group);
-    std::string bashCmd;
-    if (!getBashCmd(bashCmd)) {
-        return ProcessChild();
-    }
-
-    if (_stdoutEnabled) {
-        return std::make_unique<boost::process::child>(
-            bashCmd,
-            boost::process::std_in.close(),
-            *group);
-    }
-
-    if (_writeLogFile) {
-        return std::make_unique<boost::process::child>(
-            bashCmd,
-            boost::process::std_in.close(),
-            boost::process::std_out > _logFile.string(),
-            boost::process::std_err > _logFile.string(),
-            *group);
-    }
-
-    return std::make_unique<boost::process::child>(
-        bashCmd,
-        boost::process::std_in.close(),
-        boost::process::std_out > boost::process::null,
-        boost::process::std_err > boost::process::null,
-        *group);
-}
-
 void Command::generateCmdString(std::string& cmdStr) {
     cmdStr = "cd ";
     cmdStr += _workingDir.string();
@@ -112,6 +97,14 @@ void Command::generateCmdString(std::string& cmdStr) {
 
     cmdStr += _cmd;
     cmdStr += " ";
+
+    for (const auto& [opt, arg] : _options) {
+        cmdStr += " ";
+        cmdStr += opt;
+        cmdStr += " '";
+        cmdStr += arg;
+        cmdStr += "'";
+    }
 
     for (const auto& arg : _args) {
         cmdStr += " '";
@@ -132,9 +125,7 @@ void Command::generateCmdString(std::string& cmdStr) {
     cmdStr += "; exit ${PIPESTATUS[0]}";
 }
 
-bool Command::getBashCmd(std::string& bashCmd) {
-    bashCmd = "";
-
+bool Command::generateBashCmd(Process& proc) {
     // Working directory
     if (_workingDir.empty()) {
         _workingDir = FileUtils::cwd();
@@ -158,7 +149,7 @@ bool Command::getBashCmd(std::string& bashCmd) {
     }
 
     // Command executable
-    if (FileUtils::exists(_cmd)) {
+    if (FileUtils::isAbsolute(_cmd) && FileUtils::exists(_cmd)) {
         _cmd = FileUtils::abspath(_cmd);
     } else {
         if (!searchCmd()) {
@@ -169,8 +160,9 @@ bool Command::getBashCmd(std::string& bashCmd) {
 
     std::string cmdStr;
     generateCmdString(cmdStr);
-    bashCmd = "bash ";
+    proc.setCmd("/bin/bash");
 
+    // Generate command script or direct bash command
     if (_generateScript) {
         if (_scriptPath.empty()) {
             _scriptPath = _workingDir / "cmd.sh";
@@ -182,10 +174,15 @@ bool Command::getBashCmd(std::string& bashCmd) {
             return false;
         }
 
-        bashCmd += _scriptPath.string();
+        proc.addArg(_scriptPath.string());
     } else {
-        bashCmd += "-c \"" + cmdStr + "\"";
+        proc.addArg("-c");
+        proc.addArg(cmdStr);
     }
 
     return true;
+}
+
+void Command::addOption(const std::string& optName, const std::string& arg) {
+    _options.emplace_back(optName, arg);
 }

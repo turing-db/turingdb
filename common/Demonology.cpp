@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <signal.h>
+
 #include <spdlog/spdlog.h>
 
 void Demonology::demonize() {

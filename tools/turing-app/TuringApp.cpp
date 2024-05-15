@@ -2,6 +2,7 @@
 #include <string.h>
 #include <memory>
 #include <signal.h>
+#include <unistd.h>
 
 #include <spdlog/spdlog.h>
 #include <argparse.hpp>
@@ -32,10 +33,14 @@ int main(int argc, const char** argv) {
 
     bool isPrototypeMode = false;
     bool isDevMode = false;
+    bool noDemonMode = false;
 
     // Arguments definition
-#ifdef TURING_DEV
     auto& argParser = toolInit.getArgParser();
+    argParser.add_argument("--nodemon")
+             .store_into(noDemonMode);
+
+#ifdef TURING_DEV
     argParser.add_argument("--prototype")
              .store_into(isPrototypeMode);
 
@@ -46,9 +51,9 @@ int main(int argc, const char** argv) {
     toolInit.init(argc, argv);
 
     // Demonize
-    Demonology::demonize();
-    toolInit.setupFileOnlyLogger();
-    spdlog::default_logger()->flush();
+    if (!noDemonMode) {
+        Demonology::demonize();
+    }
 
     // Setup app server
     server = std::make_unique<TuringAppServer>(toolInit.getOutputsDir());
@@ -61,6 +66,8 @@ int main(int argc, const char** argv) {
 
     // Run server
     server->run();
+
+    spdlog::info("Server components started");
 
     // Wait for termination
     server->waitAll();

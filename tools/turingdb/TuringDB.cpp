@@ -2,6 +2,7 @@
 
 #include "DBServer.h"
 #include "DBServerConfig.h"
+#include "Demonology.h"
 
 using namespace db;
 
@@ -9,6 +10,9 @@ int main(int argc, const char** argv) {
     ToolInit toolInit("turingdb");
 
     toolInit.init(argc, argv);
+
+    // Demonize
+    Demonology::demonize();
 
     DBServerConfig dbServerConfig;
 

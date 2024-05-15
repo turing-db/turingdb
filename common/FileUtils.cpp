@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <fstream>
+#include <sys/stat.h>
 
 bool FileUtils::exists(const FileUtils::Path& path) {
     try {
@@ -175,4 +176,14 @@ bool FileUtils::makeExecutable(const Path& path) {
 
     std::filesystem::permissions(path, execPerms, std::filesystem::perm_options::add);
     return !error;
+}
+
+bool FileUtils::isAbsolute(const Path& path) {
+    return path.is_absolute();
+}
+
+bool FileUtils::isOpenedDescriptor(int fd) {
+    struct stat statBuf;
+    const int res = fstat(fd, &statBuf);
+    return (res != EBADF && res != EIO);
 }
