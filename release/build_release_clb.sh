@@ -34,6 +34,7 @@ function build_package() {
 	cp -r build/turing_package/notebooks $package_name/notebooks
 	cp -r build/turing_package/scripts $package_name/scripts
 	cp -r build/turing_package/neo4j $package_name/neo4j
+	cp -r build/turing_package/datasets $package_name/datasets
 
 	# Create package archive
 	tar -czvf $package_name.tar.gz $package_name
