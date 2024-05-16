@@ -5,6 +5,7 @@
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("turing");
+    toolInit.disableOutputDir();
 
     TuringTool turingTool(toolInit);
     turingTool.setup();

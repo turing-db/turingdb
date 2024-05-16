@@ -10,18 +10,10 @@
 
 using namespace db;
 
-void signalHandler(int sig) {
-    spdlog::info("Server received signal {}, terminating", sig);
-    exit(EXIT_SUCCESS);
-}
-
 int main(int argc, const char** argv) {
     ToolInit toolInit("turingdb");
 
     toolInit.init(argc, argv);
-
-    signal(SIGINT, signalHandler);
-    signal(SIGTERM, signalHandler);
 
     // Demonize
     Demonology::demonize();
@@ -32,7 +24,6 @@ int main(int argc, const char** argv) {
         spdlog::error("Failed to write PID file {}", pidFilePath.string());
         exit(EXIT_FAILURE);
     }
-
 
     DBServerConfig dbServerConfig;
 

@@ -2,9 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include "TuringToolConfig.h"
 #include "ToolInit.h"
 #include "Command.h"
-#include "FileUtils.h"
 
 TuringStartCommand::TuringStartCommand(ToolInit& toolInit)
     : ToolCommand(toolInit),
@@ -29,7 +29,9 @@ bool TuringStartCommand::isActive() {
 }
 
 void TuringStartCommand::run() {
-    const auto turingAppDir = _toolInit.getOutputsDirPath()/"turing-app";
+    _toolInit.createOutputDir();
+
+    const auto turingAppDir = _toolInit.getOutputsDirPath()/TuringToolConfig::TURING_APP_DIR_NAME;
     Command turingApp("turing-app");
     turingApp.addOption("-o", turingAppDir.string());
     turingApp.setWorkingDir(_toolInit.getOutputsDir());
@@ -49,7 +51,7 @@ void TuringStartCommand::run() {
         return;
     }
 
-    const auto turingDBDir = _toolInit.getOutputsDirPath()/"turingdb";
+    const auto turingDBDir = _toolInit.getOutputsDirPath()/TuringToolConfig::TURING_DB_DIR_NAME;
     Command db("turingdb");
     db.addOption("-o", turingDBDir.string());
     db.setWorkingDir(_toolInit.getOutputsDir());

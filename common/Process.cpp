@@ -145,7 +145,7 @@ bool Process::wait() {
 
     siginfo_t siginfo;
     memset(&siginfo, 0, sizeof(siginfo_t));
-    if (waitid(P_PID, _pid, &siginfo, WEXITED | WSTOPPED) < 0) {
+    if (waitid(P_PID, _pid, &siginfo, WEXITED) < 0) {
         return false;
     }
 
@@ -156,15 +156,5 @@ bool Process::wait() {
 }
 
 bool Process::isRunning() const {
-    if (_pid < 0) {
-        return false;
-    }
-
-    siginfo_t siginfo;
-    memset(&siginfo, 0, sizeof(siginfo_t));
-    if (waitid(P_PID, _pid, &siginfo, WEXITED | WNOHANG | WNOWAIT) < 0) {
-        return false;
-    }
-
-    return siginfo.si_pid == 0;
+    return ProcessUtils::isProcessRunning(_pid);
 }

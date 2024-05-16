@@ -5,6 +5,7 @@
 #include <sstream>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include "StringToNumber.h"
 
@@ -49,4 +50,12 @@ bool ProcessUtils::getAllChildren(pid_t pid, std::vector<pid_t>& children) {
 bool ProcessUtils::writePIDFile(const FileUtils::Path& file) {
     const pid_t pid = getpid();
     return FileUtils::writeFile(file, std::to_string(pid));
+}
+
+bool ProcessUtils::isProcessRunning(pid_t pid) {
+    if (pid <= 0) {
+        return false;
+    }
+
+    return kill(pid, 0) == 0;
 }

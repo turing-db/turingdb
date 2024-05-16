@@ -16,15 +16,20 @@
 
 using namespace app;
 
+namespace {
+
 // This is necessary to handle unix signals
 std::unique_ptr<TuringAppServer> server;
 
 void signalHandler(int signum) {
+    spdlog::info("Server received signal {}, terminating", signum);
     if (server) {
         server->terminate();
         server->waitAll();
     }
     exit(EXIT_SUCCESS);
+}
+
 }
 
 int main(int argc, const char** argv) {
