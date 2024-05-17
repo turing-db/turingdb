@@ -22,5 +22,4 @@ target_include_directories(common_s PRIVATE ${BUILD_INFO_INCLUDE_DIR})
 
 target_link_libraries(common_s
     turing_log_s
-    spdlog
     ${Boost_LIBRARIES})

@@ -9,7 +9,7 @@ set(turing_sources
 add_executable(turing ${turing_sources})
 target_link_libraries(turing PRIVATE
     tools_common_s    
-    spdlog
+    turing_log_s
     argparse)
 
 install(TARGETS turing DESTINATION bin)

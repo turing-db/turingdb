@@ -9,7 +9,6 @@ target_link_libraries(bio_import_json_s
     turing_db_core_s
     common_s
     turing_log_s
-    spdlog
     nlohmann_json)
 
 target_include_directories(bio_import_json_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

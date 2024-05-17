@@ -9,5 +9,5 @@ add_library(turing_rpc_server_s STATIC
 target_include_directories(turing_rpc_server_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_rpc_server_s PRIVATE
-    spdlog
+    turing_log_s
     gRPC::grpc++)

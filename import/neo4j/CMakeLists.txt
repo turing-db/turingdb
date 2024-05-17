@@ -12,7 +12,6 @@ target_link_libraries(bio_import_neo4j_s
     turing_log_s
     turing_db_dumper_s
     bio_import_json_s
-    spdlog
     curl
     ${Boost_LIBRARIES})
 
