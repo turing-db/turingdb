@@ -2,7 +2,6 @@
 #include "DB.h"
 #include "Edge.h"
 #include "EdgeType.h"
-#include "FileUtils.h"
 #include "JsonExamples.h"
 #include "Network.h"
 #include "Node.h"
@@ -18,26 +17,10 @@ using namespace db;
 class ComparatorTest : public ::testing::Test, protected DBComparator {
 protected:
     void SetUp() override {
-        const testing::TestInfo* const testInfo =
-            testing::UnitTest::GetInstance()->current_test_info();
-
-        _outDir = testInfo->test_suite_name();
-        _outDir += "_";
-        _outDir += testInfo->name();
-        _outDir += ".out";
-        _logPath = FileUtils::Path(_outDir) / "log";
-
-        if (FileUtils::exists(_outDir)) {
-            FileUtils::removeDirectory(_outDir);
-        }
-        FileUtils::createDirectory(_outDir);
     }
 
     void TearDown() override {
     }
-
-    std::string _outDir;
-    FileUtils::Path _logPath;
 };
 
 TEST_F(ComparatorTest, ValueComparison) {
