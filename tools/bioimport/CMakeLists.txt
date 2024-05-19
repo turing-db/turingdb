@@ -10,8 +10,7 @@ target_link_libraries(bioimport
     bio_import_json_s
     turing_import_gml_s
     turing_import_csv_s
+    turing_log_s
     tools_common_s)
-
-target_include_directories(bioimport PRIVATE ${BIO_SOURCE_DIR}/messages)
 
 install(TARGETS bioimport DESTINATION bin)

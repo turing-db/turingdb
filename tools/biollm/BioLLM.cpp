@@ -4,14 +4,12 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/classification.hpp>
 
+#include <argparse.hpp>
+#include <spdlog/spdlog.h>
+
 #include "ModelBuilder.h"
 
-#include "BioLog.h"
-#include "MsgLLM.h"
-#include "PerfStat.h"
-
 using namespace mind;
-using namespace Log;
 
 namespace {
 
@@ -29,42 +27,32 @@ bool extractModuleAndClass(const std::string& arg,
     return true;
 }
 
-int cleanup(int code) {
-    BioLog::printSummary();
-    BioLog::destroy();
-    PerfStat::destroy();
-    return code;
-}
-
 }
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("biollm");
 
-    ArgParser& argParser = toolInit.getArgParser();
-    argParser.setArgsDesc("model:Model");
+    std::string modelArg;
+    auto& argParser = toolInit.getArgParser();
+    argParser.add_argument("model")
+             .help("Python module and class of the model, must be of the form model:Model")
+             .nargs(1)
+             .store_into(modelArg);
 
     toolInit.init(argc, argv);
 
-    const auto& args = argParser.args();
-    if (args.empty()) {
-        return cleanup(EXIT_FAILURE);
-    }
-
     std::string moduleName;
     std::string className;
-    if (!extractModuleAndClass(args.front(), moduleName, className)) {
-        return cleanup(EXIT_FAILURE);
+    if (!extractModuleAndClass(modelArg, moduleName, className)) {
+        spdlog::error("Can not extract python module and class name from argument '{}'", modelArg);
+        return EXIT_FAILURE;
     }
 
     ModelBuilder modelBuilder(toolInit.getOutputsDir());
     if (!modelBuilder.build(moduleName, className)) {
-        BioLog::log(msg::ERROR_LLM_MODEL_BUILDER_FAILED());
-        return cleanup(EXIT_FAILURE);
+        spdlog::error("Building LLM scripts failed");
+        return EXIT_FAILURE;
     }
 
-    BioLog::log(msg::INFO_LLM_MODEL_API_GENERATION_COMPLETE()
-                << toolInit.getOutputsDir());
-
-    return cleanup(EXIT_SUCCESS);
+    return EXIT_FAILURE;
 }

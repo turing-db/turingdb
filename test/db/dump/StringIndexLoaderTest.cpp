@@ -1,5 +1,4 @@
 #include "StringIndexLoader.h"
-#include "BioLog.h"
 #include "FileUtils.h"
 #include "StringIndex.h"
 #include "StringIndexDumper.h"
@@ -13,8 +12,6 @@ protected:
     void SetUp() override {
         const testing::TestInfo* const testInfo =
             testing::UnitTest::GetInstance()->current_test_info();
-
-        Log::BioLog::init();
 
         _indexPath = testInfo->test_suite_name();
         _indexPath += ".smap";
@@ -35,7 +32,7 @@ protected:
         dumper.dump(_index);
     }
 
-    void TearDown() override { Log::BioLog::destroy(); }
+    void TearDown() override {}
 
     std::string _indexPath;
     StringIndex _index;

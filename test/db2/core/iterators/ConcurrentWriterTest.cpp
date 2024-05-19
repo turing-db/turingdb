@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include "BioLog.h"
 #include "ConcurrentWriter.h"
 #include "DB.h"
 #include "FileUtils.h"
@@ -39,9 +38,6 @@ protected:
             FileUtils::removeDirectory(_outDir);
         }
         FileUtils::createDirectory(_outDir);
-
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
 
         _db = new DB();
         auto access = _db->uniqueAccess();
@@ -133,7 +129,6 @@ protected:
 
     void TearDown() override {
         delete _db;
-        Log::BioLog::destroy();
     }
 
     DB* _db = nullptr;

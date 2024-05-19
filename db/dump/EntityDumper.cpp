@@ -1,22 +1,22 @@
 #include "EntityDumper.h"
+
+#include <capnp/message.h>
+#include <capnp/serialize.h>
+#include <functional>
+#include <unistd.h>
+#include <spdlog/spdlog.h>
+
 #include "BioAssert.h"
-#include "BioLog.h"
 #include "DB.h"
 #include "Edge.h"
 #include "EdgeType.h"
-#include "MsgCommon.h"
-#include "MsgDB.h"
 #include "Network.h"
 #include "Node.h"
 #include "NodeType.h"
 #include "PropertyType.h"
 #include "Writeback.h"
 #include "capnp/EntityIndex.capnp.h"
-
-#include <capnp/message.h>
-#include <capnp/serialize.h>
-#include <functional>
-#include <unistd.h>
+#include "LogUtils.h"
 
 namespace db {
 static constexpr inline size_t entityCountLimit = 100000;
@@ -31,13 +31,14 @@ bool EntityDumper::dump() {
     // Remove data file if it already exists
     if (FileUtils::exists(_indexPath)) {
         if (!FileUtils::removeFile(_indexPath)) {
-            Log::BioLog::log(msg::ERROR_FAILED_TO_REMOVE_FILE() << _indexPath);
+            logt::CanNotRemove(_indexPath.string());
             return false;
         }
     }
 
     int indexFD = FileUtils::openForWrite(_indexPath);
     if (indexFD < 0) {
+        logt::CanNotWrite(_indexPath.string());
         return false;
     }
 
@@ -134,11 +135,11 @@ bool EntityDumper::dump() {
                         break;
                     }
                     case ValueType::VK_INVALID: {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        spdlog::error("Dumping invalid property type");
                         return false;
                     }
                     case ValueType::_SIZE: {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        spdlog::error("Dumping property of invalid size");
                         return false;
                     }
                 }
@@ -204,11 +205,11 @@ bool EntityDumper::dump() {
                         break;
                     }
                     case ValueType::VK_INVALID: {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        spdlog::error("Dumping invalid property");
                         return false;
                     }
                     case ValueType::_SIZE: {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_DUMP());
+                        spdlog::error("Dumping property of invalid size");
                         return false;
                     }
                 }

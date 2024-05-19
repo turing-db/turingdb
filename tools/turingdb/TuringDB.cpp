@@ -1,11 +1,12 @@
-#include "ToolInit.h"
+#include <signal.h>
 
+#include <spdlog/spdlog.h>
+
+#include "ToolInit.h"
 #include "DBServer.h"
 #include "DBServerConfig.h"
+#include "Demonology.h"
 
-#include "BioLog.h"
-
-using namespace Log;
 using namespace db;
 
 int main(int argc, const char** argv) {
@@ -13,13 +14,14 @@ int main(int argc, const char** argv) {
 
     toolInit.init(argc, argv);
 
+    // Demonize
+    Demonology::demonize();
+
     DBServerConfig dbServerConfig;
 
     // Database server
     DBServer server(dbServerConfig);
     server.start();
 
-    BioLog::printSummary();
-    BioLog::destroy();
     return EXIT_SUCCESS;
 }

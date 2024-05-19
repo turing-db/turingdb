@@ -1,5 +1,4 @@
 #include "LabelSet.h"
-#include "BioLog.h"
 #include "FileUtils.h"
 
 #include <gtest/gtest.h>

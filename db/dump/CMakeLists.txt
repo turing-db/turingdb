@@ -24,7 +24,6 @@ target_include_directories(turing_db_dumper_s
     ${CMAKE_CURRENT_SOURCE_DIR}
 
     PRIVATE
-    ${BIO_SOURCE_DIR}/messages
     ${CMAKE_CURRENT_BINARY_DIR} # CapnProto generated files
 )
 

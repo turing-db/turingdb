@@ -1,5 +1,4 @@
 #include "DataBuffer.h"
-#include "BioLog.h"
 #include "FileUtils.h"
 
 #include <gtest/gtest.h>
@@ -23,13 +22,9 @@ protected:
             FileUtils::removeDirectory(_outDir);
         }
         FileUtils::createDirectory(_outDir);
-
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
     }
 
     void TearDown() override {
-        Log::BioLog::destroy();
     }
 
     std::string _outDir;

@@ -1,28 +1,39 @@
-#include "ToolInit.h"
+#include <signal.h>
 
+#include <spdlog/spdlog.h>
+#include <argparse.hpp>
+
+#include "ToolInit.h"
 #include "DBServer.h"
 #include "DBServerConfig.h"
+#include "Demonology.h"
 
-#include "BioLog.h"
-
-using namespace Log;
+void signalHandler(int signum) {
+    spdlog::info("Server received signal {}, terminating", signum);
+    exit(EXIT_SUCCESS);
+}
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("bioserver");
 
-    ArgParser& argParser = toolInit.getArgParser();
-    argParser.addOption("load", "Loads the requested db at start", "db_name");
+    std::vector<std::string> dbNames;
+
+    auto& argParser = toolInit.getArgParser();
+    argParser.add_argument("-db")
+             .help("Load a database at the start")
+             .nargs(1)
+             .append()
+             .metavar("dbname")
+             .store_into(dbNames);
 
     toolInit.init(argc, argv);
 
-    std::vector<std::string> dbNames;
+    // Demonize
+    Demonology::demonize();
 
-    for (const auto& option : argParser.options()) {
-        const auto& optName = option.first;
-        if (optName == "load") {
-            dbNames.push_back(option.second);
-        }
-    }
+    // Install signal handler to handle ctrl+C
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
 
     // Configuration of the DB Server
     DBServerConfig dbServerConfig;
@@ -30,13 +41,11 @@ int main(int argc, const char** argv) {
     // Database server
     DBServer server(dbServerConfig);
 
+    spdlog::info("Server starting");
     if (!server.run(dbNames)) {
-        BioLog::printSummary();
-        BioLog::destroy();
+        spdlog::error("Database server terminated with an error");
         return EXIT_FAILURE;
-    };
+    }
 
-    BioLog::printSummary();
-    BioLog::destroy();
     return EXIT_SUCCESS;
 }

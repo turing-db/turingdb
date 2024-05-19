@@ -1,10 +1,10 @@
 #include "JsonParser.h"
-#include "BioLog.h"
-#include "DB.h"
-#include "MsgImport.h"
-#include "Neo4j4JsonParser.h"
 
 #include <regex>
+#include <spdlog/spdlog.h>
+
+#include "DB.h"
+#include "Neo4j4JsonParser.h"
 
 JsonParser::JsonParser(db::DB* db, const std::string& networkName)
     : _db(db),
@@ -21,7 +21,7 @@ bool JsonParser::parseJsonDir(const FileUtils::Path& jsonDir, DirFormat format) 
         }
 
     } catch (const std::exception& e) {
-        Log::BioLog::log(msg::ERROR_JSON_FAILED_TO_PARSE() << e.what());
+        spdlog::error("Failed to parse json {}", e.what());
     }
 
     return false;
@@ -37,21 +37,19 @@ bool JsonParser::parse(const std::string& data, FileFormat format) {
                 return _neo4j4Parser.parseNodeProperties(data);
 
             case FileFormat::Neo4j4_Nodes:
-                Log::BioLog::log(msg::INFO_JSON_DISPLAY_NODES_STATUS()
-                                 << _stats.parsedNodes << _stats.nodeCount);
+                spdlog::info("Parsing nodes {}/{}", _stats.parsedNodes, _stats.nodeCount);
                 return _neo4j4Parser.parseNodes(data, _networkName);
 
             case FileFormat::Neo4j4_EdgeProperties:
                 return _neo4j4Parser.parseEdgeProperties(data);
 
             case FileFormat::Neo4j4_Edges:
-                Log::BioLog::log(msg::INFO_JSON_DISPLAY_EDGES_STATUS()
-                                 << _stats.parsedEdges << _stats.edgeCount);
+                spdlog::info("Parsing edges {}/{}", _stats.parsedEdges, _stats.edgeCount);
                 return _neo4j4Parser.parseEdges(data);
         }
 
     } catch (const std::exception& e) {
-        Log::BioLog::log(msg::ERROR_JSON_FAILED_TO_PARSE() << e.what());
+        spdlog::error("Failed to parse json {}", e.what());
     }
 
     return false;

@@ -1,7 +1,0 @@
-.github
-.idea
-.vscode
-node_modules
-*.yml
-*.yaml
-src/visualizer

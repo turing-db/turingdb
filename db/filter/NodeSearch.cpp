@@ -6,10 +6,7 @@
 #include "Node.h"
 #include "PropertyType.h"
 
-#include "BioLog.h"
-
 using namespace db;
-using namespace Log;
 
 NodeSearch::NodeSearch(db::DB* db)
     : _db(db)

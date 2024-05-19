@@ -1,5 +1,7 @@
 #include "SchemaReport.h"
 
+#include <spdlog/spdlog.h>
+
 #include "Report.h"
 
 #include "Network.h"
@@ -10,11 +12,7 @@
 
 #include "TimerStat.h"
 
-#include "BioLog.h"
-#include "MsgDB.h"
-
 using namespace db;
-using namespace Log;
 
 namespace {
 
@@ -43,7 +41,7 @@ void SchemaReport::writeReport() {
 
     const auto reportPath = _reportsDir/"schema.rpt";
 
-    BioLog::log(msg::INFO_DB_GENERATING_SCHEMA_REPORT() << reportPath.string());
+    spdlog::info("Generating database schema report {}", reportPath.string());
 
     Report report(reportPath, "Database Schema Report");
 

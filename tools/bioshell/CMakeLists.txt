@@ -9,6 +9,4 @@ target_link_libraries(bioshell PRIVATE
     tools_common_s
     linenoise_s)
 
-target_include_directories(bioshell PRIVATE ${BIO_SOURCE_DIR}/messages)
-
 install(TARGETS bioshell DESTINATION bin)

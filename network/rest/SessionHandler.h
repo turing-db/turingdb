@@ -6,12 +6,11 @@
 #include <boost/asio/strand.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/streambuf.hpp>
+#include <spdlog/spdlog.h>
 
 #include "Buffer.h"
 #include "NetWriter.h"
 #include "HTTPParser.h"
-
-#include "BioLog.h"
 
 namespace net {
 
@@ -22,7 +21,7 @@ public:
     using std::enable_shared_from_this<SessionHandler<ServerContextT, SessionT>>::shared_from_this;
 
     ~SessionHandler() {
-        Log::BioLog::echo("Session destroyed");
+        spdlog::info("Session destroyed");
     }
 
     template <typename... Args>
@@ -31,7 +30,7 @@ public:
     }
 
     void start() {
-        Log::BioLog::echo("Session started");
+        spdlog::info("Session started");
 
         boost::asio::dispatch(_strand,
             [shared_this=shared_from_this()]{ return shared_this->doRead(); }); 
@@ -114,7 +113,7 @@ private:
         auto& lowest_layer = _socket.lowest_layer();
         lowest_layer.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
         if (error) {
-            Log::BioLog::echo("Session error while shutdown");
+            spdlog::info("Session error while shutdown");
         }
         lowest_layer.close();
     }

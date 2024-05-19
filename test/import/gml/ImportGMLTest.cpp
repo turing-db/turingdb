@@ -9,14 +9,8 @@
 #include "GMLImport.h"
 #include "StringBuffer.h"
 
-#include "BioLog.h"
-
 using namespace db;
-using namespace Log;
-
 TEST(ImportGMLTest, createEmpty) {
-    BioLog::init();
-
     DB* db = DB::create();
 
     Writeback wb(db);

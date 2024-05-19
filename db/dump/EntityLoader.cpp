@@ -1,10 +1,14 @@
 #include "EntityLoader.h"
+
+#include <capnp/message.h>
+#include <capnp/serialize.h>
+#include <unistd.h>
+#include <spdlog/spdlog.h>
+
 #include "BioAssert.h"
-#include "BioLog.h"
 #include "DB.h"
 #include "Edge.h"
 #include "EdgeType.h"
-#include "MsgDB.h"
 #include "Network.h"
 #include "Node.h"
 #include "NodeType.h"
@@ -13,10 +17,7 @@
 #include "StringIndexLoader.h"
 #include "Writeback.h"
 #include "capnp/EntityIndex.capnp.h"
-
-#include <capnp/message.h>
-#include <capnp/serialize.h>
-#include <unistd.h>
+#include "LogUtils.h"
 
 namespace db {
 
@@ -28,12 +29,13 @@ EntityLoader::EntityLoader(db::DB* db, const FileUtils::Path& indexPath)
 
 bool EntityLoader::load(const StringIndexLoader& strLoader) {
     if (!FileUtils::exists(_indexPath)) {
+        logt::FileNotFound(_indexPath.string());
         return false;
     }
 
     const int indexFD = FileUtils::openForRead(_indexPath);
-
     if (indexFD < 0) {
+        logt::CanNotRead(_indexPath.string());
         return false;
     }
 
@@ -103,11 +105,11 @@ bool EntityLoader::load(const StringIndexLoader& strLoader) {
                         break;
                     }
                     case (ValueType::VK_INVALID): {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
+                        spdlog::error("Load of invalid property");
                         return false;
                     }
                     case (ValueType::_SIZE): {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
+                        spdlog::error("Load of property of invalid size");
                         return false;
                     }
                 }
@@ -182,11 +184,11 @@ bool EntityLoader::load(const StringIndexLoader& strLoader) {
                         break;
                     }
                     case (ValueType::VK_INVALID): {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
+                        spdlog::error("Load of invalid property");
                         return false;
                     }
                     case (ValueType::_SIZE): {
-                        Log::BioLog::log(msg::FATAL_INVALID_PROPERTY_LOAD());
+                        spdlog::error("Load of property of invalid size");
                         return false;
                     }
                 }

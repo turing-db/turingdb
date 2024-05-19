@@ -2,6 +2,9 @@
 #include <string>
 #include <fstream>
 
+#include <argparse.hpp>
+#include <spdlog/spdlog.h>
+
 #include "NodeSearch.h"
 #include "Explorator.h"
 #include "SearchUtils.h"
@@ -20,49 +23,16 @@
 #include "Node.h"
 #include "NodeType.h"
 
-#include "MsgCommon.h"
 #include "BioAssert.h"
-#include "BioLog.h"
+#include "LogUtils.h"
 
-using namespace Log;
 using namespace db;
-
-namespace {
-
-int exitSuccess() {
-    BioLog::printSummary();
-    BioLog::destroy();
-    PerfStat::destroy();
-    return EXIT_SUCCESS;
-}
-
-}
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("biosearch");
 
-    ArgParser& argParser = toolInit.getArgParser();
-    argParser.addOption("db", "Import a database", "db_path");
-    argParser.addOption("seeds", "File containing a list of seed nodes", "seeds_path");
-    argParser.addOption("seed", "Add a seed node name", "name");
-    argParser.addOption("exclude", "Exclude nodes with a given name", "name");
-    argParser.addOption("target", "Add a schemaClass for target nodes (Drugs by default)", "schemaClass");
-    argParser.addOption("traverse_targets", "Traverse target nodes during exploration");
-    argParser.addOption("no_sets", "Exclude sets of entities (CandidateSet, DefinedSet..etc)");
-    argParser.addOption("max_dist", "Maximum distance", "distance");
-    argParser.addOption("no_default_excluded", "Do not use default exclusion rules for node names");
-    argParser.addOption("no_default_excluded_class", "Do not use default exclusion rules for schemaClass");
-    argParser.addOption("exclude_class", "Exclude a schemaClass", "schemaClass");
-    argParser.addOption("no_pathways", "Do not traverse pathways");
-    argParser.addOption("max_degree", "Maximum degree of a node", "degree");
-    argParser.addOption("use_failed_reaction", "Use FailedReaction information");
-
-    toolInit.init(argc, argv);
-
-    std::vector<std::string> seedNames;
-
-    // Parse options
     std::vector<std::string> dbPaths;
+    std::vector<std::string> seedNames;
     std::string seedFilePath;
     std::vector<std::string> excludedNames;
     std::vector<std::string> excludedClasses;
@@ -76,42 +46,88 @@ int main(int argc, const char** argv) {
     bool traverseSets = true;
     bool traverseFailedReaction = false;
 
-    for (const auto& option : argParser.options()) {
-        const auto& optName = option.first;
-        if (optName == "db") {
-            dbPaths.emplace_back(option.second);
-        } else if (optName == "seeds") {
-            seedFilePath = option.second;
-        } else if (optName == "exclude") {
-            excludedNames.push_back(option.second);
-        } else if (optName == "target") {
-            targetClasses.push_back(option.second);
-        } else if (optName == "traverse_targets") {
-            traverseTargets = true;
-        } else if (optName == "max_dist") {
-            maxDistance = std::stoul(option.second);
-        } else if (optName == "no_default_excluded") {
-            enableDefaultExcludedNames = false;
-        } else if (optName == "exclude_class") {
-            excludedClasses.push_back(option.second);
-        } else if (optName == "no_default_excluded_class") {
-            enableDefaultExcludedClasses = false;
-        } else if (optName == "no_pathways") {
-            traversePathways = false;
-        } else if (optName == "seed") {
-            seedNames.push_back(option.second);
-        } else if (optName == "max_degree") {
-            maxDegree = std::stoul(option.second);
-        } else if (optName == "no_sets") {
-            traverseSets = false;
-        } else if (optName == "use_failed_reaction") {
-            traverseFailedReaction = true;
-        }
-    }
+    auto& argParser = toolInit.getArgParser();
+
+    argParser.add_argument("-db")
+             .help("Import a database")
+             .nargs(1)
+             .append()
+             .store_into(dbPaths);
+
+    argParser.add_argument("-seeds")
+             .help("File containing a list of seed nodes")
+             .nargs(1)
+             .store_into(seedFilePath);
+
+    argParser.add_argument("-seed")
+             .help("Add a seed node name")
+             .nargs(1)
+             .append()
+             .store_into(seedNames);
+
+    argParser.add_argument("-exclude")
+             .help("Exclude nodes with a given name")
+             .nargs(1)
+             .append()
+             .store_into(excludedNames);
+
+    argParser.add_argument("-target")
+             .help("Add a schemaClass for target nodes (Drugs by default)")
+             .nargs(1)
+             .append()
+             .store_into(targetClasses);
+
+    argParser.add_argument("-traverse_targets")
+             .help("Traverse target nodes during exploration")
+             .nargs(0)
+             .action([&](const auto&){ traverseTargets = false; });
+
+    argParser.add_argument("-no_sets")
+             .help("Exclude sets of entities (CandidateSet, DefinedSet..etc)")
+             .nargs(0)
+             .action([&](const auto&){ traverseSets = false; });
+
+    argParser.add_argument("-max_dist")
+             .help("Maximum distance")
+             .nargs(1)
+             .store_into(maxDistance);
+
+    argParser.add_argument("-no_default_excluded")
+             .help("Do not use default exclusion rules for node names")
+             .nargs(0)
+             .action([&](const auto&){ enableDefaultExcludedNames = false; });
+
+    argParser.add_argument("-no_default_excluded_class")
+             .help("Do not use default exclusion rules for schemaClass")
+             .nargs(0)
+             .action([&](const auto&){ enableDefaultExcludedClasses = false; });
+
+    argParser.add_argument("-exclude_class")
+             .help("Exclude a schemaClass")
+             .nargs(1)
+             .append()
+             .store_into(excludedClasses);
+
+    argParser.add_argument("-no_pathways")
+             .help("Do not traverse pathways")
+             .nargs(0)
+             .action([&](const auto&){ traversePathways = false; });
+
+    argParser.add_argument("-max_degree")
+             .help("Maximum degree of a node")
+             .nargs(1)
+             .store_into(maxDegree);
+
+    argParser.add_argument("-use_failed_reaction")
+             .help("Use FailedReaction information")
+             .nargs(0)
+             .store_into(traverseFailedReaction);
+
+    toolInit.init(argc, argv);
 
     if (dbPaths.empty() || (seedFilePath.empty() && seedNames.empty())) {
-        BioLog::log(msg::ERROR_EXPECTED_OPTIONS() << "-db and -seeds or -seed");
-        return exitSuccess();
+        spdlog::error("The options -db and -seeds or -seed are expected");
+        return EXIT_FAILURE;
     }
 
     // Import db
@@ -128,8 +144,8 @@ int main(int argc, const char** argv) {
     if (!seedFilePath.empty()) {
         std::ifstream seedFile(seedFilePath);
         if (!seedFile.is_open()) {
-            BioLog::log(msg::ERROR_FAILED_TO_OPEN_FOR_READ() << seedFilePath);
-            return exitSuccess();
+            logt::CanNotRead(seedFilePath);
+            return EXIT_FAILURE;
         }
 
         std::string name;
@@ -143,7 +159,7 @@ int main(int argc, const char** argv) {
     {
         {
             TimerStat timerStat("Search seed nodes");
-            BioLog::echo("Searching seed nodes");
+            spdlog::info("Searching seed nodes");
             NodeSearch nodeSearch(db);
             nodeSearch.addProperty("speciesName", "Homo sapiens", NodeSearch::MatchType::EXACT);
             nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
@@ -158,7 +174,7 @@ int main(int argc, const char** argv) {
 
         // Write seed nodes report
         {
-            Report seedReport(toolInit.getReportsDir()/"seeds.rpt", "Search seed nodes");
+            Report seedReport(toolInit.getReportsDir()+"/seeds.rpt", "Search seed nodes");
             auto& seedFile = seedReport.getStream();
             for (const Node* node : seeds) {
                 seedFile << "========\n";
@@ -174,8 +190,8 @@ int main(int argc, const char** argv) {
             }
         }
 
-        BioLog::echo("Number of seed names: "+std::to_string(seedNames.size()));
-        BioLog::echo("Number of seed nodes found: "+std::to_string(seeds.size()));
+        spdlog::info("Number of seed names: {}", seedNames.size());
+        spdlog::info("Number of seed nodes found: {}", seeds.size());
     }
 
     // Graph exploration
@@ -201,7 +217,7 @@ int main(int argc, const char** argv) {
                     continue;
                 }
                 explorator.addTargetClass(targetClassName);
-                BioLog::echo("Added target schemaClass "+targetClassName);
+                spdlog::info("Added target schemaClass {}", targetClassName);
             }
         }
 
@@ -225,7 +241,7 @@ int main(int argc, const char** argv) {
 
         {
             TimerStat timerStat("Graph exploration");
-            BioLog::echo("Graph exploration");
+            spdlog::info("Graph exploration");
             explorator.run();
         }
 
@@ -234,7 +250,7 @@ int main(int argc, const char** argv) {
         const auto displayNameProp = db->getString("displayName");
 
         {
-            Report resultsReport(toolInit.getReportsDir()/"results.rpt", "Result nodes found");
+            Report resultsReport(toolInit.getReportsDir()+"/results.rpt", "Result nodes found");
             auto& resultsFile = resultsReport.getStream();
 
             for (const ExploratorTreeNode* target : explorator.targets()) {
@@ -244,15 +260,15 @@ int main(int argc, const char** argv) {
             }
         }
 
-        BioLog::echo("\nNumber of target nodes found: " + std::to_string(explorator.targets().size()));
+        spdlog::info("\nNumber of target nodes found: {}", explorator.targets().size());
     }
 
     {
-        BioLog::echo("Dumping result net as gml");
-        GMLDumper dumper(subNet, toolInit.getOutputsDir()/"out.gml");
+        spdlog::info("Dumping result net as gml");
+        GMLDumper dumper(subNet, toolInit.getOutputsDir()+"/out.gml");
         [[maybe_unused]] const bool res = dumper.dump();
         bioassert(res);
     }
 
-    return exitSuccess();
+    return EXIT_SUCCESS;
 }

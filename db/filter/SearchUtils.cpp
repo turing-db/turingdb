@@ -6,10 +6,7 @@
 
 #include "ExploratorTree.h"
 
-#include "BioLog.h"
-
 using namespace db;
-using namespace Log;
 
 namespace {
 

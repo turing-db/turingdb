@@ -1,12 +1,12 @@
 #include "JsonExamples.h"
-#include "BioLog.h"
-#include "DB.h"
-#include "FileUtils.h"
-#include "JsonParser.h"
-#include "MsgCommon.h"
 
 #include <iostream>
 #include <regex>
+
+#include "DB.h"
+#include "FileUtils.h"
+#include "JsonParser.h"
+#include "LogUtils.h"
 
 db::DB* getNeo4j4DB(const std::string& dbName) {
     db::DB* db = db::DB::create();
@@ -17,7 +17,7 @@ db::DB* getNeo4j4DB(const std::string& dbName) {
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / dbName;
 
     if (!FileUtils::exists(jsonDir)) {
-        Log::BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS() << jsonDir);
+        logt::DirectoryDoesNotExist(jsonDir.string());
         std::cout << std::flush;
         return nullptr;
     }
@@ -40,7 +40,7 @@ db::DB* getMultiNetNeo4j4DB(std::initializer_list<std::string> dbNames) {
         const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / dbName;
 
         if (!FileUtils::exists(jsonDir)) {
-            Log::BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS() << jsonDir);
+            logt::DirectoryDoesNotExist(jsonDir.string());
             std::cout << std::flush;
             return nullptr;
         }

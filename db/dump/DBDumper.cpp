@@ -1,16 +1,17 @@
 #include "DBDumper.h"
-#include "BioLog.h"
+
+#include <spdlog/spdlog.h>
+
 #include "DB.h"
 #include "FileUtils.h"
-#include "MsgCommon.h"
-#include "MsgDB.h"
 #include "StringIndexDumper.h"
 #include "EntityDumper.h"
 #include "TimerStat.h"
 #include "TypeDumper.h"
 
+#include "LogUtils.h"
+
 using namespace db;
-using namespace Log;
 
 DBDumper::DBDumper(const DB* db, const Path& dbPath)
     : _dbPath(dbPath),
@@ -27,36 +28,39 @@ bool DBDumper::dump() {
     Path typeIndexPath = _dbPath / "types";
     Path entityIndexPath = _dbPath / "data";
 
-    BioLog::log(msg::INFO_DB_DUMPING_DATABASE() << _dbPath);
+    spdlog::info("Dumping database in {}", _dbPath.string());
 
     // Remove DB dump directory if it already exists
     if (FileUtils::exists(_dbPath)) {
         if (!FileUtils::removeDirectory(_dbPath)) {
-            BioLog::log(msg::ERROR_FAILED_TO_REMOVE_DIRECTORY() << _dbPath);
+            logt::CanNotRemove(_dbPath.string());
             return false;
         }
     }
 
     if (!FileUtils::createDirectory(_dbPath)) {
-        BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _dbPath);
+        logt::CanNotCreateDir(_dbPath.string());
         return false;
     }
 
     StringIndexDumper strDumper{stringIndexPath};
     if (!strDumper.dump(_db->_strIndex)) {
-        BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << _dbPath);
+        spdlog::error("Error while dumping the database string index in {}",
+                      _dbPath.string());
         return false;
     }
 
     TypeDumper typeDumper {_db, typeIndexPath};
     if (!typeDumper.dump()) {
-        BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << _dbPath);
+        spdlog::error("Error while dumping the database type index in {}",
+                      _dbPath.string());
         return false;
     }
 
     EntityDumper entityDumper {_db, entityIndexPath};
     if (!entityDumper.dump()) {
-        BioLog::log(msg::ERROR_DB_DUMPING_DATABASE() << _dbPath);
+        spdlog::error("Error while dumping the database entity index in {}",
+                      _dbPath.string());
         return false;
     }
 

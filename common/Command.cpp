@@ -1,13 +1,12 @@
 #include "Command.h"
 
+#include <ranges>
+#include <spdlog/spdlog.h>
 #include <boost/process.hpp>
 
 #include "FileUtils.h"
-#include "BioLog.h"
-#include "MsgCommon.h"
-#include "MsgDB.h"
-
-using namespace Log;
+#include "LogUtils.h"
+#include "Process.h"
 
 Command::Command(const std::string& cmd)
     : _cmd(cmd)
@@ -37,46 +36,35 @@ void Command::setEnvVar(const std::string& var, const std::string& value) {
     _env.emplace_back(var, value);
 }
 
-bool Command::run() {
-    std::string bashCmd;
-    getBashCmd(bashCmd);
+std::unique_ptr<Process> Command::runAsync() {
+    
+    auto proc = std::make_unique<Process>();
+    proc->setWriteStdout(_stdoutEnabled);
+    proc->setReadStdin(false);
 
-    if (bashCmd.empty()) {
+    if (!generateBashCmd(*proc)) {
+        return nullptr;
+    }
+
+    if (!proc->startAsync()) {
+        return nullptr;
+    }
+
+    return proc;
+}
+
+bool Command::run() {
+    auto proc = runAsync();
+    if (!proc) {
         return false;
     }
 
-    if (_verbose) {
-        BioLog::echo("Executing command "+bashCmd);
+    if (!proc->wait()) {
+        return false;
     }
-    _returnCode = system(bashCmd.c_str());
+
+    _returnCode = proc->getExitCode();
     return true;
-}
-
-ProcessChild Command::runAsync(ProcessGroup& group) {
-    std::string bashCmd;
-    getBashCmd(bashCmd, true);
-
-    if (_stdoutEnabled) {
-        return std::make_unique<boost::process::child>(
-            bashCmd,
-            boost::process::std_in.close(),
-            *group);
-    }
-
-    if (_writeLogFile) {
-        return std::make_unique<boost::process::child>(
-            bashCmd,
-            boost::process::std_in.close(),
-            boost::process::std_out > _logFile.string(),
-            boost::process::std_err > _logFile.string(),
-            *group);
-    }
-
-    return std::make_unique<boost::process::child>(
-        bashCmd,
-        boost::process::std_in.close(),
-        boost::process::std_out > boost::process::null,
-        boost::process::std_err > boost::process::null);
 }
 
 void Command::getLogs(std::string& data) const {
@@ -94,12 +82,13 @@ bool Command::searchCmd() {
     return true;
 }
 
-void Command::generateCmdString(std::string& cmdStr, bool async) {
-    cmdStr = "cd '";
+void Command::generateCmdString(std::string& cmdStr) {
+    cmdStr = "cd ";
     cmdStr += _workingDir.string();
-    cmdStr += "'; ";
+    cmdStr += "; ";
 
     for (const auto& envEntry : _env) {
+        cmdStr += "'";
         cmdStr += envEntry.first;
         cmdStr += "='";
         cmdStr += envEntry.second;
@@ -109,14 +98,18 @@ void Command::generateCmdString(std::string& cmdStr, bool async) {
     cmdStr += _cmd;
     cmdStr += " ";
 
-    for (const auto& arg : _args) {
+    for (const auto& [opt, arg] : _options) {
+        cmdStr += " ";
+        cmdStr += opt;
         cmdStr += " '";
         cmdStr += arg;
         cmdStr += "'";
     }
 
-    if (async) {
-        return;
+    for (const auto& arg : _args) {
+        cmdStr += " '";
+        cmdStr += arg;
+        cmdStr += "'";
     }
 
     if (_stdoutEnabled) {
@@ -132,18 +125,15 @@ void Command::generateCmdString(std::string& cmdStr, bool async) {
     cmdStr += "; exit ${PIPESTATUS[0]}";
 }
 
-void Command::getBashCmd(std::string& bashCmd, bool async) {
-    bashCmd = "";
-
+bool Command::generateBashCmd(Process& proc) {
     // Working directory
     if (_workingDir.empty()) {
         _workingDir = FileUtils::cwd();
     }
 
     if (!FileUtils::exists(_workingDir)) {
-        BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
-                    << _workingDir.string());
-        return;
+        logt::DirectoryDoesNotExist(_workingDir.string());
+        return false;
     }
 
     _workingDir = FileUtils::abspath(_workingDir);
@@ -159,19 +149,20 @@ void Command::getBashCmd(std::string& bashCmd, bool async) {
     }
 
     // Command executable
-    if (FileUtils::exists(_cmd)) {
+    if (FileUtils::isAbsolute(_cmd) && FileUtils::exists(_cmd)) {
         _cmd = FileUtils::abspath(_cmd);
     } else {
         if (!searchCmd()) {
-            BioLog::log(msg::ERROR_EXECUTABLE_NOT_FOUND() << _cmd);
-            return;
+            logt::ExecutableNotFound(_cmd);
+            return false;
         }
     }
 
     std::string cmdStr;
-    generateCmdString(cmdStr, async);
-    bashCmd = "bash ";
+    generateCmdString(cmdStr);
+    proc.setCmd("/bin/bash");
 
+    // Generate command script or direct bash command
     if (_generateScript) {
         if (_scriptPath.empty()) {
             _scriptPath = _workingDir / "cmd.sh";
@@ -179,13 +170,19 @@ void Command::getBashCmd(std::string& bashCmd, bool async) {
 
         cmdStr.push_back('\n');
         if (!FileUtils::writeFile(_scriptPath, cmdStr)) {
-            BioLog::log(msg::ERROR_FAILED_TO_WRITE_COMMAND_SCRIPT()
-                        << _scriptPath.string());
-            return;
+            spdlog::error("Failed to write command script {}", _scriptPath.string());
+            return false;
         }
 
-        bashCmd += _scriptPath.string();
+        proc.addArg(_scriptPath.string());
     } else {
-        bashCmd += "-c '" + cmdStr + "'";
+        proc.addArg("-c");
+        proc.addArg(cmdStr);
     }
+
+    return true;
+}
+
+void Command::addOption(const std::string& optName, const std::string& arg) {
+    _options.emplace_back(optName, arg);
 }

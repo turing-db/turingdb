@@ -1,8 +1,6 @@
 #include "PropertyContainer.h"
-#include "BioLog.h"
 #include "FileUtils.h"
 #include "NodePropertyView.h"
-#include "PerfStat.h"
 #include "PropertyView.h"
 #include "TestNodes.h"
 #include "TimerStat.h"
@@ -30,10 +28,6 @@ TEST(PropertyContainerTest, Create) {
         FileUtils::removeDirectory(outDir);
     }
     FileUtils::createDirectory(outDir);
-
-    Log::BioLog::init();
-    Log::BioLog::openFile(logPath.string());
-    PerfStat::init(outDir + "/perf");
 
     PropertyContainer::Builder::NodeCountsPerLabelSet nodeCounts;
     PropertyContainer::Builder builder;
@@ -298,7 +292,4 @@ TEST(PropertyContainerTest, Create) {
             ASSERT_EQ(theo, *prop);
         }
     }
-
-    Log::BioLog::destroy();
-    PerfStat::destroy();
 }

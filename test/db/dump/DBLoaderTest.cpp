@@ -1,5 +1,4 @@
 #include "DBLoader.h"
-#include "BioLog.h"
 #include "DB.h"
 #include "DBDumper.h"
 #include "FileUtils.h"
@@ -26,13 +25,9 @@ protected:
             FileUtils::removeDirectory(_outDirName);
         }
         FileUtils::createDirectory(_outDirName);
-
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
     }
 
     void TearDown() override {
-        Log::BioLog::destroy();
     }
 
     void tryDump(DB* db, const FileUtils::Path& outDir) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <spdlog/spdlog.h>
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -55,8 +57,13 @@ private:
     void doSignalWait() {
         _signals.async_wait(
             [this](const boost::system::error_code& error , int signal) {
-                _ioContext.stop();
+                shutdown(signal);
         });
+    }
+
+    void shutdown(int sig) {
+        spdlog::info("Server terminating, signal {} received", sig);
+        _ioContext.stop();
     }
 
     void doAccept() {

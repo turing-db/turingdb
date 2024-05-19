@@ -10,4 +10,3 @@ target_link_libraries(turing_import_csv_s PRIVATE
     turing_db_core_s)
 
 target_include_directories(turing_import_csv_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(turing_import_csv_s PRIVATE ${BIO_SOURCE_DIR}/messages)
