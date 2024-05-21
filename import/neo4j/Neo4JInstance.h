@@ -4,7 +4,7 @@
 
 class Neo4jInstance {
 public:
-    Neo4jInstance(const FileUtils::Path& baseDir);
+    explicit Neo4jInstance(const FileUtils::Path& baseDir);
     ~Neo4jInstance();
 
     bool setup();

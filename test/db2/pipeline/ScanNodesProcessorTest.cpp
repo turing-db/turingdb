@@ -8,13 +8,13 @@
 #include "ScanNodesProcessor.h"
 #include "FileUtils.h"
 #include "PerfStat.h"
-#include "BioLog.h"
 
 #include "ColumnNodes.h"
 #include "DB.h"
 #include "DBAccess.h"
 #include "Stream.h"
 #include "TestUtils.h"
+#include "LogSetup.h"
 
 using namespace db;
 
@@ -36,13 +36,11 @@ protected:
         }
         FileUtils::createDirectory(_outDir);
 
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
+        LogSetup::setupLogFileBacked(_logPath.string());
         PerfStat::init(_perfPath);
     }
 
     void TearDown() override {
-        Log::BioLog::destroy();
         PerfStat::destroy();
     }
 

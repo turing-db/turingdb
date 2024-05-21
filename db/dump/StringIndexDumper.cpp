@@ -1,15 +1,14 @@
 #include "StringIndexDumper.h"
-#include "FileUtils.h"
-#include "MsgCommon.h"
-#include "MsgDB.h"
-#include "StringIndex.h"
-#include "BioLog.h"
-#include "capnp/StringIndex.capnp.h"
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <cassert>
 #include <unistd.h>
+
+#include "FileUtils.h"
+#include "StringIndex.h"
+#include "capnp/StringIndex.capnp.h"
+#include "LogUtils.h"
 
 namespace db {
 
@@ -22,7 +21,7 @@ bool StringIndexDumper::dump(const StringIndex& index) {
     // Remove smap file if it already exists
     if (FileUtils::exists(_indexPath)) {
         if (!FileUtils::removeFile(_indexPath)) {
-            Log::BioLog::log(msg::ERROR_FAILED_TO_REMOVE_FILE() << _indexPath);
+            logt::CanNotRemove(_indexPath.string()); 
             return false;
         }
     }
@@ -34,6 +33,7 @@ bool StringIndexDumper::dump(const StringIndex& index) {
 
     const int indexFD = FileUtils::openForWrite(_indexPath);
     if (indexFD < 0) {
+        logt::CanNotWrite(_indexPath.string());
         return false;
     }
 

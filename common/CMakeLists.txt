@@ -13,12 +13,13 @@ set(common_sources
         RWSpinLock.cpp
         ProcessUtils.cpp
         JobSystem.cpp
+        Demonology.cpp
+        Process.cpp
         Report.cpp)
 
 add_library(common_s STATIC ${common_sources})
 target_include_directories(common_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(common_s PRIVATE ${BUILD_INFO_INCLUDE_DIR})
-target_include_directories(common_s PRIVATE ${BIO_SOURCE_DIR}/messages)
 
 target_link_libraries(common_s
     turing_log_s

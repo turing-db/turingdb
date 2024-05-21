@@ -3,7 +3,6 @@
 
 #include "ScanNodesIterator.h"
 
-#include "BioLog.h"
 #include "ChunkConfig.h"
 #include "ColumnNodes.h"
 #include "DB.h"
@@ -12,6 +11,7 @@
 #include "DataPart.h"
 #include "FileUtils.h"
 #include "Reader.h"
+#include "LogSetup.h"
 
 using namespace db;
 
@@ -32,12 +32,10 @@ protected:
         }
         FileUtils::createDirectory(_outDir);
 
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
+        LogSetup::setupLogFileBacked(_logPath.string());
     }
 
     void TearDown() override {
-        Log::BioLog::destroy();
     }
 
     std::string _outDir;

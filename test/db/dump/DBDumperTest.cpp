@@ -1,5 +1,4 @@
 #include "DBDumper.h"
-#include "BioLog.h"
 #include "DB.h"
 #include "FileUtils.h"
 #include "JsonExamples.h"
@@ -30,17 +29,12 @@ protected:
         _stringIndexPath = _dbPath / "smap";
         _typeIndexPath = _dbPath / "types";
         _entityIndexPath = _dbPath / "data";
-
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
     }
 
     void TearDown() override {
         if (_db) {
             delete _db;
         }
-
-        Log::BioLog::destroy();
     }
 
     void tryDump() {

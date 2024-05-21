@@ -4,7 +4,6 @@
 #include <span>
 #include <thread>
 
-#include "BioLog.h"
 #include "DB.h"
 #include "DataBuffer.h"
 #include "EdgeView.h"
@@ -16,6 +15,7 @@
 #include "Reader.h"
 #include "ScanEdgesIterator.h"
 #include "Time.h"
+#include "LogSetup.h"
 
 using namespace db;
 
@@ -37,15 +37,13 @@ protected:
         }
         FileUtils::createDirectory(_outDir);
 
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
+        LogSetup::setupLogFileBacked(_logPath.string());
         PerfStat::init(_perfPath);
 
         _db = std::make_unique<DB>();
     }
 
     void TearDown() override {
-        Log::BioLog::destroy();
         PerfStat::destroy();
     }
 

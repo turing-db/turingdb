@@ -3,13 +3,12 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <fstream>
+#include <sys/stat.h>
 
 bool FileUtils::exists(const FileUtils::Path& path) {
-    try {
-        return std::filesystem::exists(path);
-    } catch (const std::filesystem::filesystem_error& e) {
-        return false;
-    }
+    std::error_code error;
+    const bool res = std::filesystem::exists(path, error);
+    return error ? false : res;
 }
 
 bool FileUtils::createDirectory(const FileUtils::Path& path) {
@@ -40,20 +39,15 @@ bool FileUtils::copy(const FileUtils::Path& from, const FileUtils::Path& to) {
 }
 
 bool FileUtils::isDirectory(const Path& path) {
-    try {
-        return std::filesystem::is_directory(path);
-    } catch (const std::filesystem::filesystem_error& e) {
-        return false;
-    }
+    std::error_code error;
+    const bool res = std::filesystem::is_directory(path, error);
+    return error ? false : res;
 }
 
 FileUtils::Path FileUtils::cwd() {
     std::error_code error;
     const auto path = std::filesystem::current_path(error);
-    if (error) {
-        return Path();
-    }
-    return path;
+    return error ? Path() : path;
 }
 
 bool FileUtils::writeFile(const Path& path, const std::string& content) {
@@ -78,11 +72,7 @@ bool FileUtils::writeFile(const Path& path, const std::string& content) {
 FileUtils::Path FileUtils::abspath(const Path& relativePath) {
     std::error_code error;
     const auto path = std::filesystem::absolute(relativePath, error);
-    if (error) {
-        return Path();
-    }
-
-    return path;
+    return error ? Path() : path;
 }
 
 bool FileUtils::writeBinary(const Path& path, const char* data, size_t size) {
@@ -121,8 +111,14 @@ int FileUtils::openForWrite(const Path& path) {
                 S_IRUSR | S_IWUSR);
 }
 
+bool FileUtils::isFile(const Path& path) {
+    std::error_code error;
+    const bool res = std::filesystem::is_regular_file(path, error);
+    return error ? false : res;
+}
+
 bool FileUtils::readContent(const Path& path, std::string& data) {
-    if (!std::filesystem::is_regular_file(path)) {
+    if (!isFile(path)) {
         return false;
     }
 
@@ -139,16 +135,20 @@ bool FileUtils::readContent(const Path& path, std::string& data) {
 }
 
 bool FileUtils::listFiles(const Path& dir, std::vector<Path>& paths) {
-    if (!FileUtils::exists(dir)) {
-        return false;
-    }
+    try {
+        if (!FileUtils::exists(dir)) {
+            return false;
+        }
 
-    if (!FileUtils::isDirectory(dir)) {
-        return false;
-    }
+        if (!FileUtils::isDirectory(dir)) {
+            return false;
+        }
 
-    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-        paths.push_back(entry);
+        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+            paths.push_back(entry);
+        }
+    } catch (std::filesystem::filesystem_error& e) {
+        return false;
     }
 
     return true;
@@ -175,4 +175,18 @@ bool FileUtils::makeExecutable(const Path& path) {
 
     std::filesystem::permissions(path, execPerms, std::filesystem::perm_options::add);
     return !error;
+}
+
+bool FileUtils::isAbsolute(const Path& path) {
+    try {
+        return path.is_absolute();
+    } catch (std::filesystem::filesystem_error& e) {
+        return false;
+    }
+}
+
+bool FileUtils::isOpenedDescriptor(int fd) {
+    struct stat statBuf;
+    const int res = fstat(fd, &statBuf);
+    return (res != EBADF && res != EIO);
 }

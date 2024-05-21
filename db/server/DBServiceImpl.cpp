@@ -1,5 +1,7 @@
 #include "DBServiceImpl.h"
 
+#include <spdlog/spdlog.h>
+
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
@@ -7,13 +9,11 @@
 #include "Edge.h"
 #include "EdgeType.h"
 #include "FileUtils.h"
-#include "MsgRPCServer.h"
 #include "Network.h"
 #include "Node.h"
 #include "NodeSearch.h"
 #include "NodeType.h"
 #include "Writeback.h"
-#include "BioLog.h"
 
 #define MAX_ENTITY_COUNT 20000
 
@@ -230,20 +230,20 @@ bool DBServiceImpl::loadDatabases(const std::vector<std::string>& dbNames) {
 
     for (const std::string& dbName : dbNames) {
         if (_dbNameMapping.find(dbName) != _dbNameMapping.end()) {
-            Log::BioLog::log(msg::ERROR_RPC_DB_ALREADY_LOADED() << dbName);
+            spdlog::error("Database already loaded {}", dbName);
             return false;
         }
 
         auto it = std::find(diskDbNames.cbegin(), diskDbNames.cend(), dbName);
         if (it == diskDbNames.cend()) {
-            Log::BioLog::log(msg::ERROR_RPC_DB_DOES_NOT_EXIST() << dbName);
+            spdlog::error("Database {} does not exist on disk", dbName);
             return false;
         }
 
         db::DB* db = db::DB::create();
         db::DBLoader loader {db, FileUtils::Path(_config.getDatabasesPath()) / dbName};
         if (!loader.load()) {
-            Log::BioLog::log(msg::ERROR_RPC_DURING_LOADING() << dbName);
+            spdlog::error("Error during loading of database {}", dbName);
             return false;
         }
 

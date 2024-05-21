@@ -3,7 +3,8 @@
 #include <memory>
 
 #include "FileUtils.h"
-#include "BoostProcess.h"
+
+class Process;
 
 class RegressJob {
 public:
@@ -14,7 +15,7 @@ public:
 
     const Path& getPath() const { return _path; }
 
-    bool start(ProcessGroup& group);
+    bool start();
     bool isRunning();
     void terminate();
     void wait();
@@ -23,5 +24,5 @@ public:
 
 private:
     const Path _path;
-    ProcessChild _process;
+    std::unique_ptr<Process> _process;
 };

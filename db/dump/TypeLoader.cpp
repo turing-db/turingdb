@@ -1,15 +1,16 @@
 #include "TypeLoader.h"
-#include "BioLog.h"
+
+#include <capnp/message.h>
+#include <capnp/serialize.h>
+#include <unistd.h>
+
 #include "DB.h"
 #include "EdgeType.h"
 #include "NodeType.h"
 #include "StringIndexLoader.h"
 #include "Writeback.h"
 #include "capnp/TypeIndex.capnp.h"
-
-#include <capnp/message.h>
-#include <capnp/serialize.h>
-#include <unistd.h>
+#include "LogUtils.cpp"
 
 namespace db {
 
@@ -30,12 +31,13 @@ TypeLoader::TypeLoader(db::DB* db, const FileUtils::Path& indexPath)
 
 bool TypeLoader::load(const StringIndexLoader& strLoader) {
     if (!FileUtils::exists(_indexPath)) {
+        logt::FileNotFound(_indexPath.string());
         return false;
     }
 
     const int indexFD = FileUtils::openForRead(_indexPath);
-
     if (indexFD < 0) {
+        logt::CanNotRead(_indexPath.string());
         return false;
     }
 

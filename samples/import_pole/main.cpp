@@ -1,4 +1,3 @@
-#include "BioLog.h"
 #include "DB.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -13,7 +12,6 @@
 using namespace db;
 
 int main() {
-    Log::BioLog::init();
     JobSystem jobSystem;
     jobSystem.initialize();
 

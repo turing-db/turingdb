@@ -1,12 +1,11 @@
 #pragma once
 
 #include <boost/asio/ip/tcp.hpp>
+#include <spdlog/spdlog.h>
 
 #include "IOContextThreadPool.h"
 #include "Listener.h"
 #include "ServerConfig.h"
-
-#include "BioLog.h"
 
 namespace net {
 
@@ -28,7 +27,7 @@ public:
 
     void start() {
         _listener.start();
-        Log::BioLog::echo("Server started");
+        spdlog::info("Server started");
         _threadPool.run();
         _threadPool.waitForShutdown();
     }

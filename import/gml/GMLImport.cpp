@@ -1,5 +1,7 @@
 #include "GMLImport.h"
 
+#include <spdlog/spdlog.h>
+
 #include "DB.h"
 #include "Edge.h"
 #include "EdgeType.h"
@@ -12,11 +14,7 @@
 #include "StringBuffer.h"
 #include "StringToNumber.h"
 
-#include "BioLog.h"
-#include "MsgImport.h"
-
 using namespace db;
-using namespace Log;
 
 GMLImport::GMLImport(const StringBuffer* buffer,
                      db::DB* db,
@@ -38,8 +36,7 @@ bool GMLImport::run() {
     const auto& token = _lexer.getToken();
     while (!token.isEnd() && !token.isError()) {
         if (!parseCommand()) {
-            BioLog::log(msg::ERROR_FAILED_PARSE_GML_COMMAND()
-                        << _lexer.getLine());
+            spdlog::error("Failed to parse GML command at line {}", _lexer.getLine());
             return false;
         }
         _lexer.nextToken();
@@ -50,9 +47,9 @@ bool GMLImport::run() {
 
 bool GMLImport::parseCommand() {
     if (_lexer.getToken().getType() != GMLToken::TK_STRING) {
-        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << std::string(_lexer.getToken().getData())
-                    << _lexer.getLine());
+        spdlog::error("Unexpected token '{}' at line {}",
+                      _lexer.getToken().getData(),
+                      _lexer.getLine());
         return false;
     }
 
@@ -75,9 +72,9 @@ bool GMLImport::parseNodeCommand() {
     _lexer.nextToken();
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
-        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << std::string(_lexer.getToken().getData())
-                    << _lexer.getLine());
+        spdlog::error("Unexpected token '{}' at line {}",
+                      _lexer.getToken().getData(),
+                      _lexer.getLine());
         return false;
     }
 
@@ -98,8 +95,7 @@ bool GMLImport::parseNodeCommand() {
     }
 
     if (errorID) {
-        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
-                    << _lexer.getLine());
+        spdlog::error("Node ID not found at line {}", _lexer.getLine());
         return false;
     }
 
@@ -114,7 +110,7 @@ bool GMLImport::parseNodeCommand() {
 
     Node* node = _wb.createNode(_outNet, nodeType);
     if (!node) {
-        BioLog::log(msg::ERROR_FAILED_TO_CREATE_NODE() << _lexer.getLine());
+        spdlog::error("Failed to create node for line {}", _lexer.getLine());
         return false;
     }
 
@@ -145,9 +141,9 @@ bool GMLImport::parseEdgeCommand() {
     _lexer.nextToken();
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
-        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << std::string(_lexer.getToken().getData())
-                    << _lexer.getLine());
+        spdlog::error("Unexpected token '{}' at line {}",
+                      _lexer.getToken().getData(),
+                      _lexer.getLine());
         return false;
     }
 
@@ -156,8 +152,7 @@ bool GMLImport::parseEdgeCommand() {
     }
 
     if (_source.empty() || _target.empty()) {
-        BioLog::log(msg::ERROR_NO_SOURCE_OR_NO_EDGE()
-                    << _lexer.getLine());
+        spdlog::error("No source node or target node at line {}", _lexer.getLine());
         return false;
     }
 
@@ -169,14 +164,12 @@ bool GMLImport::parseEdgeCommand() {
     targetID = StringToNumber<size_t>(_target, errorTarget);
 
     if (errorSource) {
-        BioLog::log(msg::ERROR_IMPOSSIBLE_TO_CONVERT_ID()
-                    << std::string(_source) << _lexer.getLine());
+        spdlog::error("Impossible to convert id '{}' at line {}", _source, _lexer.getLine());
         return false;
     }
 
     if (errorTarget) {
-        BioLog::log(msg::ERROR_IMPOSSIBLE_TO_CONVERT_ID()
-                    << std::string(_target) << _lexer.getLine());
+        spdlog::error("Impossible to convert id '{}' at line {}", _target, _lexer.getLine());
         return false;
     }
 
@@ -198,14 +191,16 @@ bool GMLImport::parseEdgeCommand() {
     Node* sourceNode = getNodeFromID(sourceID);
     Node* targetNode = getNodeFromID(targetID);
     if (!sourceNode) {
-        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
-                    << sourceID << _lexer.getLine());
+        spdlog::error("Node ID {} not found for node at line {}",
+                      sourceID,
+                      _lexer.getLine());
         return false;
     }
 
     if (!targetNode) {
-        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
-                    << targetID << _lexer.getLine());
+        spdlog::error("Node ID {} not found for node at line {}",
+                      sourceID,
+                      _lexer.getLine());
         return false;
     }
 
@@ -234,7 +229,7 @@ bool GMLImport::parseEdgeCommand() {
     // Create edge
     Edge* edge = _wb.createEdge(edgeType, sourceNode, targetNode);
     if (!edge) {
-        BioLog::log(msg::ERROR_FAILED_TO_CREATE_EDGE() << _lexer.getLine());
+        spdlog::error("Failed to create edge at line {}", _lexer.getLine());
         return false;
     }
 
@@ -269,28 +264,24 @@ bool::GMLImport::parseDBLinkageCommand(size_t sourceID, size_t targetID) {
     }
 
     if (sourceNetName.empty()) {
-        BioLog::log(msg::ERROR_SOURCE_NETWORK_NOT_SPECIFIED()
-                    << _lexer.getLine());
+        spdlog::error("Source network not specified");
         return false;
     }
 
     if (targetNetName.empty()) {
-        BioLog::log(msg::ERROR_TARGET_NETWORK_NOT_SPECIFIED()
-                    << _lexer.getLine());
+        spdlog::error("Target network not specified");
         return false;
     }
 
     Network* sourceNet = _db->getNetwork(_db->getString(sourceNetName));
     Network* targetNet = _db->getNetwork(_db->getString(targetNetName));
     if (!sourceNet) {
-        BioLog::log(msg::ERROR_SOURCE_NETWORK_NOT_FOUND()
-                    << sourceNetName);
+        spdlog::error("Network {} not found", sourceNetName);
         return false;
     }
 
     if (!targetNet) {
-        BioLog::log(msg::ERROR_TARGET_NETWORK_NOT_FOUND()
-                    << targetNetName);
+        spdlog::error("Network {} not found", targetNetName);
         return false;
     }
 
@@ -309,14 +300,14 @@ bool::GMLImport::parseDBLinkageCommand(size_t sourceID, size_t targetID) {
     Node* sourceNode = sourceNet->getNode((DBIndex)sourceID);
     Node* targetNode = targetNet->getNode((DBIndex)targetID);
     if (!sourceNode) {
-        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
-                    << sourceID << _lexer.getLine());
+        spdlog::error("Node ID {} not found for node at line {}",
+                      sourceID, _lexer.getLine());
         return false;
     }
 
     if (!targetNode) {
-        BioLog::log(msg::ERROR_NODE_ID_NOT_FOUND()
-                    << targetID << _lexer.getLine());
+        spdlog::error("Node ID {} not found for node at line {}",
+                      targetID, _lexer.getLine());
         return false;
     }
 
@@ -341,7 +332,7 @@ bool::GMLImport::parseDBLinkageCommand(size_t sourceID, size_t targetID) {
     // Create edge
     Edge* edge = _wb.createEdge(edgeType, sourceNode, targetNode);
     if (!edge) {
-        BioLog::log(msg::ERROR_FAILED_TO_CREATE_EDGE() << _lexer.getLine());
+        spdlog::error("Failed to create edge at line {}", _lexer.getLine());
         return false;
     }
 
@@ -365,9 +356,9 @@ bool GMLImport::parseGraphCommand() {
     _lexer.nextToken();
 
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
-        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << std::string(_lexer.getToken().getData())
-                    << _lexer.getLine());
+        spdlog::error("Unexpected token '{}' at line {}",
+                      _lexer.getToken().getData(),
+                      _lexer.getLine());
         return false;
     }
 
@@ -392,9 +383,9 @@ bool GMLImport::parseGenericCommand(std::string_view keyword) {
             break;
 
         default:
-            BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                        << std::string(_lexer.getToken().getData())
-                        << _lexer.getLine());
+            spdlog::error("Unexpected token '{}' at line {}",
+                          _lexer.getToken().getData(),
+                          _lexer.getLine());
             return false;
             break;
     }
@@ -421,9 +412,9 @@ bool GMLImport::handleCommand(std::string_view keyword,
 
 bool GMLImport::parseList() {
     if (_lexer.getToken().getType() != GMLToken::TK_OSBRACK) {
-        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << std::string(_lexer.getToken().getData())
-                    << _lexer.getLine());
+        spdlog::error("Unexpected token '{}' at line {}",
+                      _lexer.getToken().getData(),
+                      _lexer.getLine());
         return false;
     }
 
@@ -437,9 +428,9 @@ bool GMLImport::parseList() {
     }
 
     if (!token.isCSBRACK()) {
-        BioLog::log(msg::ERROR_UNEXPECTED_TOKEN()
-                    << std::string(token.getData())
-                    << _lexer.getLine());
+        spdlog::error("Unexpected token '{}' at line {}",
+                      _lexer.getToken().getData(),
+                      _lexer.getLine());
         return false;
     }
 

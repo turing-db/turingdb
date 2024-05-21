@@ -1,14 +1,11 @@
 #include "Neo4JHttpRequest.h"
 
 #include <cstdlib>
-
-#include "BioLog.h"
-#include "FileUtils.h"
-#include "MsgImport.h"
-#include "TimerStat.h"
 #include <curl/curl.h>
+#include <spdlog/spdlog.h>
 
-using namespace Log;
+#include "FileUtils.h"
+#include "TimerStat.h"
 
 static size_t writeCallback(char* contents, size_t size, size_t nmemb,
                             std::string* userp) {
@@ -76,12 +73,12 @@ void Neo4JHttpRequest::exec() {
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
 
     if (!_silent) {
-        BioLog::log(msg::INFO_NEO4J_HTTP_REQUEST() << _statement);
+        spdlog::info("Running HTTP request to Neo4J {}", _statement);
     }
     CURLcode res = curl_easy_perform(curl);
 
     if (res != 0) {
-        BioLog::log(msg::ERROR_NEO4J_HTTP_REQUEST() << _statement);
+        spdlog::error("HTTP request to Neo4J failed {}", _statement);
         _result = false;
         setReady();
         return;
@@ -103,7 +100,7 @@ void Neo4JHttpRequest::clear() {
 }
 
 void Neo4JHttpRequest::reportError() const {
-    BioLog::log(msg::ERROR_NEO4J_BAD_CURL_REQUEST() << _statement);
+    spdlog::error("Bad curl request {}", _statement);
 }
 
 void Neo4JHttpRequest::setReady() {

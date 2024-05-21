@@ -4,23 +4,20 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <iostream>
 
-#include <boost/process.hpp>
+#include <spdlog/spdlog.h>
 
 #include "FileUtils.h"
 #include "RegressJob.h"
 
 #include "TimerStat.h"
-#include "BioLog.h"
-#include "MsgCommon.h"
-#include "MsgWRT.h"
+#include "LogUtils.h"
 
-using namespace Log;
 using namespace std::chrono_literals;
 
 RegressTesting::RegressTesting(const Path& reportDir)
-    : _reportDir(reportDir),
-    _processGroup(std::make_unique<boost::process::group>())
+    : _reportDir(reportDir)
 {
 }
 
@@ -31,7 +28,7 @@ void RegressTesting::run() {
     // Check that TURING_HOME exists
     const char* turingHome = getenv("TURING_HOME");
     if (!turingHome) {
-        BioLog::log(msg::ERROR_INCORRECT_ENV_SETUP());
+        logt::TuringHomeUndefined();
         return;
     }
 
@@ -41,12 +38,12 @@ void RegressTesting::run() {
         TimerStat timerStat("Analyze tests");
         analyzeDir(currentDir);
         if (_error) {
-            BioLog::echo("Some tests have errors, please fix test setup errors and retry.");
+            spdlog::error("Some tests have errors, please fix test setup errors and retry.");
             return;
         }
     }
 
-    BioLog::echo("\nTests detected: "+std::to_string(_testPaths.size())+"\n");
+    spdlog::info("Tests detected: {}", _testPaths.size());
 
     runTests();
 
@@ -57,7 +54,7 @@ void RegressTesting::clean() {
     TimerStat timerStat("Clean tests");
     const auto currentDir = FileUtils::cwd();
 
-    BioLog::echo("Cleaning all tests");
+    spdlog::info("Cleaning all tests");
     cleanDir(currentDir);
 }
 
@@ -70,7 +67,7 @@ void RegressTesting::analyzeDir(const Path& dir) {
 
     std::string testList;
     if (!FileUtils::readContent(testListFile, testList)) {
-        BioLog::log(msg::ERROR_FAILED_TO_OPEN_FOR_READ() << testListFile.string());
+        logt::CanNotRead(testListFile.string());
         _error = true;
         return;
     }
@@ -82,7 +79,7 @@ void RegressTesting::analyzeDir(const Path& dir) {
         if (!line.empty()) {
             testPath = dir/line;
             if (!FileUtils::isDirectory(testPath)) {
-                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS() << testPath.string());
+                logt::DirectoryDoesNotExist(testPath.string());
                 _error = true;
                 continue;
             }
@@ -95,7 +92,7 @@ void RegressTesting::analyzeDir(const Path& dir) {
 void RegressTesting::analyzeTest(const Path& dir) {
     const auto runScriptPath = dir/"run.sh";
     if (!FileUtils::exists(runScriptPath)) {
-        BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << runScriptPath.string());
+        logt::FileNotFound(runScriptPath.string());
         _error = true;
         return;
     }
@@ -120,8 +117,6 @@ void RegressTesting::runTests() {
     populateRunQueue();
 
     while (!_runningTests.empty()) {
-        _ioContext.poll();
-
         // Check if a job is finished
         auto it = _runningTests.begin();
         while (it != _runningTests.end()) {
@@ -151,12 +146,11 @@ void RegressTesting::writeTestResults() {
     summary += "Tests failed: " + std::to_string(_testFail.size()) + "\n";
     summary += "Total tests detected: " + std::to_string(_testPaths.size()) + "\n";
 
-    BioLog::echo("");
-    BioLog::echo(summary);
+    std::cout << summary << '\n';
     
     const auto testSumFile = _reportDir/"wrt.sum";
     if (!FileUtils::writeFile(testSumFile, summary)) {
-        BioLog::log(msg::ERROR_FAILED_TO_WRITE_FILE() << testSumFile.string());
+        logt::CanNotWrite(testSumFile.string());
         return;
     }
 }
@@ -175,8 +169,7 @@ void RegressTesting::cleanDir(const Path& dir, bool keepTopLevelWRT) {
 
             if (entryPath.extension() == ".out") {
                 if (!FileUtils::removeDirectory(entryPath)) {
-                    BioLog::log(msg::ERROR_FAILED_TO_REMOVE_DIRECTORY()
-                                << entryPath.string());
+                    logt::CanNotRemove(entryPath.string());
                 }
             }
 
@@ -188,8 +181,7 @@ void RegressTesting::cleanDir(const Path& dir, bool keepTopLevelWRT) {
                 || name == "cmd.sh") {
 
                 if (!FileUtils::removeFile(entryPath)) {
-                    BioLog::log(msg::ERROR_FAILED_TO_REMOVE_FILE()
-                                << entryPath.string());
+                    logt::CanNotRemove(entryPath.string());
                 }
             }
         }
@@ -204,7 +196,7 @@ void RegressTesting::populateRunQueue() {
         const auto firstTest = _testWaitQueue.front();
         _testWaitQueue.pop();
         RegressJob* job = new RegressJob(firstTest);
-        if (!job->start(_processGroup)) {
+        if (!job->start()) {
             continue;
         }
 
@@ -219,14 +211,14 @@ void RegressTesting::processTestTermination(RegressJob* job) {
     const int exitCode = job->getExitCode();
     const auto& path = job->getPath();
     if (exitCode == 0) {
-        BioLog::echo("Pass: "+path.string());
+        spdlog::info("Pass: "+path.string());
         _testSuccess.emplace_back(path);
 
         if (_cleanIfSuccess) {
             cleanDir(path, true);
         }
     } else {
-        BioLog::echo("Fail: "+path.string());
+        spdlog::info("Fail: "+path.string());
         _testFail.emplace_back(path);
     }
 }

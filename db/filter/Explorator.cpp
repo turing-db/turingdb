@@ -1,6 +1,7 @@
 #include "Explorator.h"
 
 #include <queue>
+#include <spdlog/spdlog.h>
 
 #include "DB.h"
 #include "Edge.h"
@@ -8,11 +9,9 @@
 
 #include "SearchUtils.h"
 
-#include "BioLog.h"
 #include "BioAssert.h"
 
 using namespace db;
-using namespace Log;
 
 namespace {
 
@@ -125,7 +124,7 @@ void Explorator::run() {
 
     buildNetwork();
 
-    BioLog::echo("Nodes visited: "+std::to_string(_tree->getSize()));
+    spdlog::info("Nodes visited: {}", _tree->getSize());
 }
 
 bool Explorator::shouldExplore(const Node* node, const Edge* edge) const {
@@ -200,7 +199,8 @@ void Explorator::addDefaultExcludedNames() {
 
 void Explorator::addExcludedClass(const std::string& schemaClass) {
     if (_targetClasses.find(schemaClass) != _targetClasses.end()) {
-        BioLog::echo("Schema class "+schemaClass+" not excluded because it is a target class");
+        spdlog::error("Schema class {} not excluded because it is a target class",
+                      schemaClass);
         return;
     }
     _excludedClasses.insert(schemaClass);

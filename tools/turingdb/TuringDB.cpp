@@ -1,17 +1,21 @@
-#include "ToolInit.h"
+#include <signal.h>
 
+#include <spdlog/spdlog.h>
+
+#include "ToolInit.h"
 #include "DBServer.h"
 #include "DBServerConfig.h"
+#include "Demonology.h"
 
-#include "BioLog.h"
-
-using namespace Log;
 using namespace db;
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("turingdb");
 
     toolInit.init(argc, argv);
+
+    // Demonize
+    Demonology::demonize();
 
     DBServerConfig dbServerConfig;
 

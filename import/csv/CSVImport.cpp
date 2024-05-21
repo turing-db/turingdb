@@ -1,10 +1,11 @@
 #include "CSVImport.h"
+
+#include <spdlog/spdlog.h>
+
 #include "BioAssert.h"
-#include "BioLog.h"
 #include "DB.h"
 #include "Edge.h"
 #include "EdgeType.h"
-#include "MsgImport.h"
 #include "Node.h"
 #include "NodeType.h"
 #include "StringBuffer.h"
@@ -43,7 +44,7 @@ bool CSVImport::run() {
             db::NodeType* nt = _wb.createNodeType(_db->getString(std::string(token.data)));
             if (!nt) {
                 // sth went wrong with nt creation -> probably already exists;
-                Log::BioLog::log(msg::ERROR_CSV_DUPLICATE_IN_HEADER() << std::string(token.data));
+                spdlog::error("Duplicate in CSV header {}", token.data);
                 return false;
             }
 
@@ -61,7 +62,7 @@ bool CSVImport::run() {
 
     if (!primaryNodeType) {
         // Invalid primary node type
-        Log::BioLog::log(msg::ERROR_CSV_INVALID_PRIMARY_KEY() << _primaryColumn);
+        spdlog::error("Specified primary column {} is invalid", _primaryColumn);
         return false;
     }
 
@@ -111,7 +112,7 @@ bool CSVImport::run() {
 
             if (token.type == CSVLexer::Token::Type::STRING) {
                 if (i >= nodeTypes.size()) {
-                    Log::BioLog::log(msg::ERROR_CSV_TOO_MANY_ENTRIES() << line);
+                    spdlog::error("Too many entries at line {}", line);
                     return false;
                 }
 
@@ -147,7 +148,7 @@ bool CSVImport::run() {
         // if parsed at least one delimiter (parsed at least one node)
         // and did not parse enough nodes
         if (delimiterParsed != 0 && delimiterParsed + 1 != nodeTypes.size()) {
-            Log::BioLog::log(msg::ERROR_CSV_MISSING_ENTRY() << line);
+            spdlog::error("Missing CSV entry at line {}", line);
             return false;
         }
 

@@ -8,17 +8,15 @@
 #include <ctype.h>
 #include <string_view>
 
+#include <argparse.hpp>
+
 #include "ToolInit.h"
 #include "PerfStat.h"
 #include "TimerStat.h"
 
 #include "linenoise.h"
 
-#include "BioLog.h"
-#include "MsgShell.h"
-
 using namespace turing;
-using namespace Log;
 
 using Clock = std::chrono::system_clock;
 
@@ -119,18 +117,18 @@ std::string composePrompt(const TuringClient& turing) {
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("bioshell");
+
+    std::string dbName;
     auto& argParser = toolInit.getArgParser();
-    argParser.addOption("db", "Database name");
+    argParser.add_argument("-db")
+             .help("Database name")
+             .nargs(1)
+             .store_into(dbName);        
 
     toolInit.init(argc, argv);
 
     TuringClient turing;
-
-    for (const auto& [option, value] : argParser.options()) {
-        if (option == "db") {
-            turing.setDBName(value);
-        }
-    }
+    turing.setDBName(dbName);
 
     std::string shellPrompt = composePrompt(turing);
     char* line = NULL;
@@ -147,7 +145,5 @@ int main(int argc, const char** argv) {
         shellPrompt = composePrompt(turing);
     }
 
-    BioLog::destroy();
-    PerfStat::destroy();
     return EXIT_SUCCESS;
 }

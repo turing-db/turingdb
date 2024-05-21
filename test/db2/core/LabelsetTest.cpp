@@ -1,5 +1,4 @@
 #include "Labelset.h"
-#include "BioLog.h"
 
 #include <gtest/gtest.h>
 #include <unordered_set>

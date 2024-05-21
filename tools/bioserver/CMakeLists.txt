@@ -6,6 +6,4 @@ target_link_libraries(bioserver PRIVATE
     turing_db_server_s
     tools_common_s)
 
-target_include_directories(bioserver PRIVATE ${BIO_SOURCE_DIR}/messages)
-
 install(TARGETS bioserver DESTINATION bin)

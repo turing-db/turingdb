@@ -1,15 +1,15 @@
 #include "DBLoader.h"
-#include "BioLog.h"
+
+#include <spdlog/spdlog.h>
+
 #include "DB.h"
 #include "EntityLoader.h"
 #include "FileUtils.h"
-#include "MsgDB.h"
 #include "StringIndexLoader.h"
 #include "TypeLoader.h"
 #include "TimerStat.h"
 
 using namespace db;
-using namespace Log;
 
 DBLoader::DBLoader(DB* db, const Path& dbDir)
     : _dbDir(dbDir),
@@ -30,30 +30,30 @@ bool DBLoader::load() {
     Path typeIndexPath = _dbDir / "types";
     Path entityIndexPath = _dbDir / "data";
 
-    BioLog::log(msg::INFO_DB_LOADING_DATABASE() << _dbDir);
+    spdlog::info("Loading database {}", _dbDir.string());
 
-    BioLog::log(msg::INFO_DB_LOADING_STRING_INDEX());
+    spdlog::info("Loading database string index");
     StringIndexLoader strLoader {stringIndexPath};
     if (!strLoader.load(_db->_strIndex)) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << _dbDir);
+        spdlog::error("Error loading database string file {}", _dbDir.string());
         return false;
     }
 
-    BioLog::log(msg::INFO_DB_LOADING_TYPE_INDEX());
+    spdlog::info("Loading type index");
     TypeLoader typeLoader {_db, typeIndexPath};
     if (!typeLoader.load(strLoader)) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << _dbDir);
+        spdlog::error("Error loading database type file {}", _dbDir.string());
         return false;
     }
 
-    BioLog::log(msg::INFO_DB_LOADING_ENTITY_INDEX());
+    spdlog::info("Loading entity index");
     EntityLoader entityLoader {_db, entityIndexPath};
     if (!entityLoader.load(strLoader)) {
-        BioLog::log(msg::ERROR_DB_LOADING_DATABASE() << _dbDir);
+        spdlog::error("Error loading database type file {}", _dbDir.string());
         return false;
     }
 
-    BioLog::log(msg::INFO_DB_DONE_LOADING_DATABASE() << _dbDir);
+    spdlog::info("Done loading database {}", _dbDir.string());
 
     return true;
 }

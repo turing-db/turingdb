@@ -1,15 +1,15 @@
 #include "TypeDumper.h"
-#include "BioLog.h"
-#include "DB.h"
-#include "EdgeType.h"
-#include "MsgCommon.h"
-#include "NodeType.h"
-#include "PropertyType.h"
-#include "capnp/TypeIndex.capnp.h"
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <unistd.h>
+
+#include "DB.h"
+#include "EdgeType.h"
+#include "NodeType.h"
+#include "PropertyType.h"
+#include "capnp/TypeIndex.capnp.h"
+#include "LogUtils.h"
 
 namespace db {
 
@@ -23,13 +23,14 @@ bool TypeDumper::dump() {
     // Remove types file if it already exists
     if (FileUtils::exists(_indexPath)) {
         if (!FileUtils::removeFile(_indexPath)) {
-            Log::BioLog::log(msg::ERROR_FAILED_TO_REMOVE_FILE() << _indexPath);
+            logt::CanNotRemove(_indexPath.string());
             return false;
         }
     }
 
     const int indexFD = FileUtils::openForWrite(_indexPath);
     if (indexFD < 0) {
+        logt::CanNotWrite(_indexPath.string());
         return false;
     }
 

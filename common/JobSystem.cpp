@@ -1,7 +1,7 @@
 #include "JobSystem.h"
 #include "BioAssert.h"
-#include "BioLog.h"
-#include "MsgCommon.h"
+
+#include <spdlog/spdlog.h>
 
 void JobQueue::push(Job job) {
     _jobs.emplace_back(std::move(job));
@@ -60,7 +60,7 @@ void JobSystem::initialize(size_t numThreads) {
         });
     }
 
-    Log::BioLog::log(msg::INFO_JOB_SYSTEM_INITIALIZED() << numThreads);
+    spdlog::info("Job system initialized with {} threads", numThreads);
 }
 
 void JobSystem::wait() {
@@ -73,11 +73,11 @@ void JobSystem::wait() {
 void JobSystem::terminate() {
     msgbioassert(!_terminated, "Attempting to terminate the job system twice");
     _queueMutex.lock();
-    Log::BioLog::log(msg::INFO_JOB_SYSTEM_TERMINATING() << _jobs.size());
+    spdlog::info("Job system terminating, {} jobs remaining", _jobs.size());
     _queueMutex.unlock();
     _stopRequested.store(true);
     _wakeCondition.notify_all();
     wait();
     _terminated = true;
-    Log::BioLog::log(msg::INFO_JOB_SYSTEM_TERMINATED());
+    spdlog::info("Job system terminated");
 }

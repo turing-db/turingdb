@@ -1,18 +1,16 @@
 #include "Neo4JInstance.h"
-#include "BioLog.h"
-#include "FileUtils.h"
-#include "MsgCommon.h"
-#include "MsgImport.h"
 
 #include <boost/process.hpp>
 #include <chrono>
 #include <filesystem>
 #include <stdlib.h>
 #include <thread>
+#include <spdlog/spdlog.h>
+
+#include "FileUtils.h"
+#include "LogUtils.h"
 
 #define NEO4J_ARCHIVE_NAME "neo4j-4.3.23.tar.gz"
-
-using namespace Log;
 
 Neo4jInstance::Neo4jInstance(const FileUtils::Path& baseDir)
     : _neo4jDir(baseDir / "neo4j"),
@@ -28,7 +26,7 @@ bool Neo4jInstance::setup() {
     // Check that neo4j archive exists in installation
     std::string turingHome = std::getenv("TURING_HOME");
     if (turingHome.empty()) {
-        BioLog::log(msg::ERROR_INCORRECT_ENV_SETUP());
+        spdlog::error("Can not find TURING_HOME environment variable");
         return false;
     }
 
@@ -36,8 +34,8 @@ bool Neo4jInstance::setup() {
         FileUtils::Path {turingHome} / "neo4j" / NEO4J_ARCHIVE_NAME;
 
     if (!FileUtils::exists(neo4jArchive)) {
-        BioLog::log(msg::ERROR_NEO4J_CANNOT_FIND_ARCHIVE()
-                    << neo4jArchive.string());
+        spdlog::error("Can not find Neo4J archive {}",
+                      neo4jArchive.string());
         return false;
     }
 
@@ -47,19 +45,18 @@ bool Neo4jInstance::setup() {
     }
 
     if (!FileUtils::createDirectory(_neo4jDir)) {
-        BioLog::log(msg::ERROR_FAILED_TO_CREATE_DIRECTORY() << _neo4jDir);
+        logt::CanNotCreateDir(_neo4jDir.string());
         return false;
     }
 
     // Decompress neo4j archive
-    BioLog::log(msg::INFO_NEO4J_DECOMPRESS_ARCHIVE() << _neo4jDir.string());
+    spdlog::error("Decompressing Neo4J archive in {}", _neo4jDir.string());
     const int tarRes = boost::process::system(
         "/usr/bin/tar", "xf", neo4jArchive.string(), "-C", _neo4jDir.string(),
         "--strip-components=1");
 
     if (tarRes != 0) {
-        BioLog::log(msg::ERROR_NEO4J_CANNOT_DECOMPRESS_ARCHIVE()
-                    << neo4jArchive.string());
+        spdlog::error("Can not decompress Neo4J archive {}", neo4jArchive.string());
         return false;
     }
 
@@ -67,12 +64,12 @@ bool Neo4jInstance::setup() {
 }
 
 bool Neo4jInstance::stop() {
-    BioLog::log(msg::INFO_NEO4J_STOPPING());
+    spdlog::info("Neo4J stopping");
     if (FileUtils::exists(_neo4jDir)) {
         const int stopRes =
             boost::process::system(_neo4jBinary.string(), "stop");
         if (stopRes != 0) {
-            BioLog::log(msg::ERROR_NEO4J_FAILED_TO_STOP());
+            spdlog::error("Failed to stop Neo4J");
             killJava();
             return false;
         }
@@ -88,7 +85,7 @@ void Neo4jInstance::destroy() {
         stop();
 
         // Remove neo4j directory
-        BioLog::log(msg::INFO_NEO4J_CLEAN_SETUP());
+        spdlog::info("Cleaning Neo4J directory");
         FileUtils::removeDirectory(_neo4jDir);
     }
 }
@@ -106,7 +103,7 @@ void Neo4jInstance::killJava() {
 
 bool Neo4jInstance::start() {
     if (isRunning()) {
-        BioLog::log(msg::ERROR_NEO4J_ALREADY_RUNNING());
+        spdlog::error("Neo4J is already running");
         return false;
     }
 
@@ -115,25 +112,25 @@ bool Neo4jInstance::start() {
                            "turing");
 
     // Start daemon
-    BioLog::log(msg::INFO_NEO4J_STARTING() << _neo4jBinary.string());
+    spdlog::info("Starting Neo4J {}", _neo4jBinary.string());
 
     if (!FileUtils::exists(_neo4jBinary)) {
-        BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << _neo4jBinary.string());
+        logt::FileNotFound(_neo4jBinary.string());
         return false;
     }
 
     const int startRes = boost::process::system(_neo4jBinary.string(), "start");
     if (startRes != 0) {
-        BioLog::log(msg::ERROR_NEO4J_FAILED_TO_START());
+        spdlog::error("Neo4J failed to start");
         return false;
     }
 
     // Wait for warmup
-    BioLog::log(msg::INFO_NEO4J_WARMING_UP());
+    spdlog::info("Neo4J warming up");
     while (!isRunning()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
-    BioLog::log(msg::INFO_NEO4J_READY());
+    spdlog::info("Neo4J is running and ready");
 
     return true;
 }
@@ -141,7 +138,7 @@ bool Neo4jInstance::start() {
 bool Neo4jInstance::importDumpedDB(
     const std::filesystem::path& dbFilePath) const {
     if (!FileUtils::exists(dbFilePath)) {
-        BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << dbFilePath.string());
+        logt::FileNotFound(dbFilePath.string());
         return false;
     }
 

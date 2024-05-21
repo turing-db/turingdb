@@ -3,9 +3,6 @@
 #include "WorkflowServer.h"
 #include "WorkflowServerConfig.h"
 
-#include "BioLog.h"
-
-using namespace Log;
 using namespace workflow;
 
 int main(int argc, const char** argv) {

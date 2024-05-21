@@ -11,6 +11,4 @@ target_link_libraries(biosearch PRIVATE
     common_s
     tools_common_s)
 
-target_include_directories(biosearch PRIVATE ${BIO_SOURCE_DIR}/messages)
-
 install(TARGETS biosearch DESTINATION bin)

@@ -1,4 +1,3 @@
-#include "BioLog.h"
 #include "DB.h"
 #include "DBDumper.h"
 #include "DBLoader.h"
@@ -17,8 +16,6 @@ protected:
         const testing::TestInfo* const testInfo =
             testing::UnitTest::GetInstance()->current_test_info();
 
-        Log::BioLog::init();
-
         _outDir = testInfo->test_suite_name();
         _outDir += "_";
         _outDir += testInfo->name();
@@ -31,9 +28,6 @@ protected:
         }
         FileUtils::createDirectory(_outDir);
 
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
-
         _db = DB::create();
         DBLoader loader {_db, "/home/dev/reactome.out/turing.db"};
         loader.load();
@@ -43,8 +37,6 @@ protected:
         if (_db) {
             delete _db;
         }
-
-        Log::BioLog::destroy();
     }
 
     DB* _db {nullptr};

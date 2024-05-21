@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 #include <set>
 
-#include "BioLog.h"
 #include "DB.h"
 #include "DataBuffer.h"
 #include "FileUtils.h"
 #include "Reader.h"
+#include "LogSetup.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ScanEdgesIterator.h"
@@ -36,9 +36,7 @@ protected:
             FileUtils::removeDirectory(_outDir);
         }
         FileUtils::createDirectory(_outDir);
-
-        Log::BioLog::init();
-        Log::BioLog::openFile(_logPath.string());
+        LogSetup::setupLogFileBacked(_logPath.string());
 
         _db = new DB();
         auto access = _db->uniqueAccess();
@@ -229,7 +227,6 @@ protected:
     void
     TearDown() override {
         delete _db;
-        Log::BioLog::destroy();
     }
 
     DB* _db = nullptr;

@@ -1,74 +1,93 @@
 #include "ToolInit.h"
 
+#include <argparse.hpp>
+#include <spdlog/spdlog.h>
+
 #include "NotebookRunner.h"
 
-#include "MsgRun.h"
-#include "BioLog.h"
-#include "PerfStat.h"
-
-using namespace Log;
+#include "FileUtils.h"
+#include "LogUtils.h"
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("biorun");
 
-    ArgParser& argParser = toolInit.getArgParser();
-    argParser.setArgsDesc("notebook.ipynb ...");
-    argParser.addOption("q", "Launch the notebooks in quiet mode.");
-    argParser.addOption("convertonly", "Only convert the notebooks to a report, do not execute notebooks");
-    argParser.addOption("html", "Export each notebook as an html report");
-    argParser.addOption("pdf", "Export each notebook as a pdf report.");
-    argParser.addOption("report", "Export each notebook as a custom pdf report.");
-    argParser.addOption("nbarg", "Set notebook argument.", "arg_name=arg_value");
-
-    toolInit.init(argc, argv);
-
-    std::vector<NotebookRunner::EnvVar> nbArgs;
-    bool quiet = false;
+    std::vector<std::string> notebooks;
+    bool quietMode = false;
+    bool convertOnly = false;
     bool exportHTML = false;
     bool exportPDF = false;
     bool generateReport = false;
-    bool execNotebooks = true;
+    std::vector<NotebookRunner::EnvVar> nbArgs;
 
-    for (const auto& option : argParser.options()) {
-        const auto& optName = option.first;
-        if (optName == "q") {
-            quiet = true;
-        } else if (optName == "html") {
-            exportHTML = true;
-        } else if (optName == "pdf") {
-            exportPDF = true;
-        } else if (optName == "report") {
-            generateReport = true;
-        } else if (optName == "convertonly") {
-            execNotebooks = false;
-        } else if (optName == "nbarg") {
-            const size_t it = option.second.find('=');
-            if (it == std::string::npos) {
-                BioLog::log(msg::ERROR_FAILED_TO_PARSE_NB_ARG() << option.second);
-                return EXIT_FAILURE;
-            }
+    auto& argParser = toolInit.getArgParser();
 
-            const std::string argName = option.second.substr(0, it);
-            const std::string argValue = option.second.substr(it + 1, option.second.size() - 1);
+    argParser.add_argument("notebooks")
+             .append()
+             .store_into(notebooks);
 
-            nbArgs.emplace_back(NotebookRunner::EnvVar {
-                .argName = argName,
-                .argValue = argValue,
-            });
-        }
-    }
+    argParser.add_argument("-q")
+             .help("Launch the notebooks in quiet mode")
+             .nargs(0)
+             .store_into(quietMode);
+
+    argParser.add_argument("-convertonly")
+             .help("Only convert the notebooks to a report, do not execute notebooks")
+             .nargs(0)
+             .store_into(convertOnly);
+
+    argParser.add_argument("-html")
+             .help("Export each notebook as an html report")
+             .nargs(0)
+             .store_into(exportHTML);
+
+    argParser.add_argument("-pdf")
+             .help("Export each notebook as a pdf report")
+             .nargs(0)
+             .store_into(exportPDF);
+
+    argParser.add_argument("-report")
+             .help("Export each notebook as a custom pdf report.")
+             .nargs(1)
+             .store_into(generateReport);
+
+    argParser.add_argument("-nbarg")
+             .help("Set notebook argument arg_name=value")
+             .nargs(1)
+             .append()
+             .action([&](const auto& value){
+                const size_t it = value.find('=');
+                if (it == std::string::npos) {
+                    spdlog::error("Failed to parse notebook argument '{}' which must be of the form arg_name=value",
+                                  value);
+                    exit(EXIT_FAILURE);
+                }
+
+                const std::string argName = value.substr(0, it);
+                const std::string argValue = value.substr(it + 1, value.size() - 1);
+
+                nbArgs.emplace_back(NotebookRunner::EnvVar {
+                    .argName = argName,
+                    .argValue = argValue,
+                });
+             });
+
+    toolInit.init(argc, argv);
 
     // Run notebooks
     NotebookRunner notebookRunner(toolInit.getOutputsDir(), toolInit.getReportsDir());
-    notebookRunner.setQuiet(quiet);
-    notebookRunner.setExecEnabled(execNotebooks);
+    notebookRunner.setQuiet(quietMode);
+    notebookRunner.setExecEnabled(!convertOnly);
     notebookRunner.setExportHTML(exportHTML);
     notebookRunner.setExportPDF(exportPDF);
     notebookRunner.setGenerateReport(generateReport);
     notebookRunner.setEnvVars(std::move(nbArgs));
 
-    for (const auto& arg : argParser.args()) {
-        notebookRunner.addNotebook(arg);
+    for (const auto& path : notebooks) {
+        if (!FileUtils::exists(path)) {
+            logt::FileNotFound(path);
+            return EXIT_FAILURE;
+        }
+        notebookRunner.addNotebook(path);
     }
 
     if (!notebookRunner.run()) {

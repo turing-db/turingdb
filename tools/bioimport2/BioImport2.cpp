@@ -1,16 +1,16 @@
-#include "BioLog.h"
+#include <argparse.hpp>
+#include <spdlog/spdlog.h>
+
+#include "BannerDisplay.h"
 #include "DB.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
-#include "MsgCommon.h"
-#include "MsgImport.h"
-#include "Neo4jImporter.h"
+#include "LogUtils.h"
 #include "Neo4j/ParserConfig.h"
-#include "PerfStat.h"
+#include "Neo4jImporter.h"
 #include "Time.h"
 #include "ToolInit.h"
 
-using namespace Log;
 using namespace db;
 
 enum class ImportType {
@@ -33,137 +33,135 @@ struct ImportData {
     std::string password = "turing";
 };
 
+namespace {
+
+void neo4jURLNotProvided() {
+    spdlog::error("Neo4J URL not provided");
+}
+
+}
+
 int main(int argc, const char** argv) {
+    BannerDisplay::printBanner();
+
     ToolInit toolInit("bioimport2");
 
-    ArgParser& argParser = toolInit.getArgParser();
+    auto& argParser = toolInit.getArgParser();
+    argParser.set_usage_max_line_width(80);
 
-    argParser.addOption(
-        "j",
-        "Number or threads to use",
-        "16");
-
-    argParser.addOption(
-        "neo4j",
-        "Imports a .dump file (default network name: \"my_file\")",
-        "my_file.dump");
-
-    argParser.addOption(
-        "neo4j-json",
-        "Imports json files from a json/ directory (default network name: \"my_json_dir\")",
-        "my_json_dir");
-
-    argParser.addOption(
-        "neo4j-url",
-        "Imports a neo4j database from an existing neo4j instance",
-        "localhost");
-
-    argParser.addOption(
-        "port",
-        "Port for the query. Must follow a neo4j-url option",
-        "7474");
-
-    argParser.addOption(
-        "user",
-        "Username for the query. Must follow a neo4j-url option",
-        "neo4j");
-
-    argParser.addOption(
-        "password",
-        "Password for the query. Must follow a neo4j-url option",
-        "turing");
-
-    argParser.addOption(
-        "url-suffix",
-        "Suffix for the url. Must follow a neo4j-url option",
-        "/db/data/transaction/commit");
-
-    toolInit.init(argc, argv);
-
-    auto db = std::make_unique<DB>();
-    JobSystem jobSystem;
-
-    auto t0 = Clock::now();
-
-    std::vector<ImportData> importData;
     uint16_t nThreads = 0;
+    std::vector<ImportData> importData;
 
-    for (const auto& option : argParser.options()) {
-        const auto& optName = option.first;
-        if (optName == "j") {
-            try {
-                nThreads = std::stoul(option.second);
-            } catch (std::invalid_argument const& ex) {
-                BioLog::echo("Number of threads must be an unsigned integer. Got "
-                             + option.second + " instead");
-                return EXIT_FAILURE;
-            }
-        } else if (optName == "neo4j") {
-            if (!FileUtils::exists(option.second)) {
-                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
-                            << option.second);
-                return EXIT_FAILURE;
-            }
+    argParser.add_argument("-j")
+        .help("Numboer of threads to use")
+        .append()
+        .nargs(1)
+        .metavar("n")
+        .scan<'u', size_t>();
 
+    argParser.add_argument("-neo4j")
+        .help("Imports a .dump file (default network name: \"my_file\")")
+        .append()
+        .nargs(1)
+        .metavar("db.dump")
+        .action([&](const std::string& value) {
+            if (!FileUtils::exists(value)) {
+                logt::DirectoryDoesNotExist(value);
+                exit(EXIT_FAILURE);
+            }
             importData.emplace_back(ImportData {
                 .type = ImportType::NEO4J,
-                .path = option.second,
+                .path = value,
             });
-        } else if (optName == "neo4j-json") {
-            if (!FileUtils::exists(option.second)) {
-                BioLog::log(msg::ERROR_DIRECTORY_NOT_EXISTS()
-                            << option.second);
-                return EXIT_FAILURE;
+        });
+
+    argParser.add_argument("-neo4j-json")
+        .help("Imports json files from a json/ directory (default network name: \"my_json_dir\")")
+        .nargs(1)
+        .append()
+        .metavar("my_json_dir")
+        .action([&](const std::string& value) {
+            if (!FileUtils::exists(value)) {
+                logt::DirectoryDoesNotExist(value);
+                exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
                 .type = ImportType::JSON_NEO4J,
-                .path = option.second,
+                .path = value,
             });
-        } else if (optName == "neo4j-url") {
+        });
+
+    argParser.add_argument("-neo4j-url")
+        .help("Imports a neo4j database from an existing neo4j instance")
+        .metavar("localhost")
+        .action([&](const std::string& value) {
             importData.emplace_back(ImportData {
                 .type = ImportType::NEO4J_URL,
-                .url = option.second,
+                .url = value,
             });
-        } else if (optName == "port") {
+        });
+
+    argParser.add_argument("-port")
+        .help("Port for the query. Must follow a neo4j-url option")
+        .metavar("num")
+        .action([&](const std::string& value) {
             if (importData.empty()) {
-                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
-                argParser.printHelp();
-                return EXIT_FAILURE;
+                neo4jURLNotProvided();
+                exit(EXIT_FAILURE);
             }
             auto& cmd = importData.back();
-            cmd.port = std::stoi(option.second);
-        } else if (optName == "user") {
+            cmd.port = std::stoi(value);
+        });
+
+    argParser.add_argument("-user")
+        .help("Username for the query. Must follow a neo4j-url option")
+        .metavar("username")
+        .action([&](const std::string& value) {
             if (importData.empty()) {
-                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
-                argParser.printHelp();
-                return EXIT_FAILURE;
+                exit(EXIT_FAILURE);
             }
             auto& cmd = importData.back();
-            cmd.username = option.second;
-        } else if (optName == "password") {
+            cmd.username = value;
+        });
+
+    argParser.add_argument("-password")
+        .help("Password for the query. Must follow a neo4j-url option")
+        .metavar("pass")
+        .action([&](const std::string& value) {
             if (importData.empty()) {
-                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
-                argParser.printHelp();
-                return EXIT_FAILURE;
+                neo4jURLNotProvided();
+                exit(EXIT_FAILURE);
             }
             auto& cmd = importData.back();
-            cmd.password = option.second;
-        } else if (optName == "url-suffix") {
+            cmd.password = value;
+        });
+
+    argParser.add_argument("-url-suffix")
+        .help("Suffix for the url. Must follow a neo4j-url option")
+        .metavar("/db/data/transaction/commit")
+        .action([&](const std::string& value) {
             if (importData.empty()) {
-                BioLog::log(msg::ERROR_URL_NOT_PROVIDED());
-                argParser.printHelp();
-                return EXIT_FAILURE;
+                neo4jURLNotProvided();
+                exit(EXIT_FAILURE);
             }
             auto& cmd = importData.back();
-            cmd.urlSuffix = option.second;
-        }
+            cmd.urlSuffix = value;
+        });
+
+    toolInit.init(argc, argv);
+
+    nThreads = argParser.get<size_t>("-j");
+
+    const bool noPathsGiven = importData.empty();
+    if (noPathsGiven) {
+        spdlog::error("Please give an import option.");
+        toolInit.printHelp();
+        return EXIT_FAILURE;
     }
 
-    if (importData.empty()) {
-        BioLog::log(msg::ERROR_IMPORT_NO_PATH_GIVEN());
-        argParser.printHelp();
-        return EXIT_SUCCESS;
-    }
+    auto db = std::make_unique<DB>();
+    JobSystem jobSystem;
+    auto t0 = Clock::now();
 
     jobSystem.initialize(nThreads);
 
@@ -180,7 +178,6 @@ int main(int argc, const char** argv) {
                                                    nodeCountLimit,
                                                    edgeCountLimit,
                                                    args)) {
-                    BioLog::log(msg::ERROR_NEO4J_IMPORT());
                     return 1;
                 }
                 break;
@@ -200,7 +197,6 @@ int main(int argc, const char** argv) {
                                               nodeCountLimit,
                                               edgeCountLimit,
                                               args)) {
-                    BioLog::log(msg::ERROR_NEO4J_IMPORT());
                     return 1;
                 }
                 break;
@@ -211,11 +207,10 @@ int main(int argc, const char** argv) {
                 args._workDir = toolInit.getOutputsDir();
 
                 if (!Neo4jImporter::importJsonDir(jobSystem,
-                                                       db.get(),
-                                                       nodeCountLimit,
-                                                       edgeCountLimit,
-                                                       args)) {
-                    BioLog::log(msg::ERROR_NEO4J_IMPORT());
+                                                  db.get(),
+                                                  nodeCountLimit,
+                                                  edgeCountLimit,
+                                                  args)) {
                     return 1;
                 }
                 break;
@@ -225,7 +220,7 @@ int main(int argc, const char** argv) {
 
     jobSystem.terminate();
     float dur = duration<Seconds>(t0, Clock::now());
-    BioLog::log(msg::INFO_ELAPSED_TIME() << dur << "s");
+    logt::ElapsedTime(dur, "s");
 
     return EXIT_SUCCESS;
 }

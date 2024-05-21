@@ -2,18 +2,12 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <argparse.hpp>
+
 #include "RegressTesting.h"
 
 #include "ToolInit.h"
-#include "PerfStat.h"
-#include "TimerStat.h"
-#include "StringToNumber.h"
-
-#include "BioLog.h"
-#include "MsgCommon.h"
-#include "MsgWRT.h"
-
-using namespace Log;
+#include "BannerDisplay.h"
 
 // This is necessary to handle unix signals
 std::unique_ptr<RegressTesting> regress;
@@ -24,27 +18,28 @@ void signalHandler(int signum) {
 }
 
 int main(int argc, const char** argv) {
-    ToolInit toolInit("wrt");
-    ArgParser& argParser = toolInit.getArgParser();
-    argParser.addOption("clean", "Clean all test directories");
-    argParser.addOption("noclean", "Do not clean test directories");
+    BannerDisplay::printBanner();
 
-    toolInit.init(argc, argv);
+    ToolInit toolInit("wrt");
 
     bool cleanDir = false;
     bool cleanIfSuccess = true;
-    bool error = false;
-    for (const auto& option : argParser.options()) {
-        if (option.first == "clean") {
-            cleanDir = true;
-        } else if (option.first == "noclean") {
-            cleanIfSuccess = false;
-        }
-    }
+    unsigned concurrency = 1;
+    auto& argParser = toolInit.getArgParser();
+    argParser.add_argument("-clean")
+             .help("Clean all test directories")
+             .nargs(0)
+             .store_into(cleanDir);
+    argParser.add_argument("-noclean")
+             .help("Do not clean test directories")
+             .nargs(0)
+             .action([&](const auto&){ cleanIfSuccess = false; });
+    argParser.add_argument("-j")
+             .help("Number of concurrent jobs")
+             .nargs(1)
+             .store_into(concurrency);
 
-    if (error) {
-        return EXIT_FAILURE;
-    }
+    toolInit.init(argc, argv);
 
     regress = std::make_unique<RegressTesting>(toolInit.getReportsDir());
 
@@ -53,6 +48,7 @@ int main(int argc, const char** argv) {
     signal(SIGTERM, signalHandler);
 
     regress->setCleanIfSuccess(cleanIfSuccess);
+    regress->setConcurrency(concurrency);
 
     if (cleanDir) {
         regress->clean();
@@ -64,5 +60,6 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    return EXIT_FAILURE;
+    return EXIT_SUCCESS;
 }
+

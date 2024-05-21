@@ -1,10 +1,13 @@
 #include "Neo4j4JsonParser.h"
+
+#include <nlohmann/json.hpp>
+#include <regex>
+#include <spdlog/spdlog.h>
+
 #include "BioAssert.h"
-#include "BioLog.h"
 #include "DB.h"
 #include "Edge.h"
 #include "EdgeType.h"
-#include "MsgImport.h"
 #include "Network.h"
 #include "Node.h"
 #include "NodeType.h"
@@ -12,9 +15,6 @@
 #include "PropertyType.h"
 #include "TimerStat.h"
 #include "Writeback.h"
-
-#include <nlohmann/json.hpp>
-#include <regex>
 
 using JsonType = nlohmann::detail::value_t;
 using JsonObject = nlohmann::basic_json<>;
@@ -154,11 +154,11 @@ static void handleProperty(const PropertyContext& c) {
         const std::string val = c.val.dump() + jsonType + stlType;
 
         if (c.stats.propErrors.find(val) == c.stats.propErrors.end()) {
-            Log::BioLog::log(msg::ERROR_JSON_INCORRECT_TYPE()
-                             << c.val.dump()
-                             << c.propName
-                             << jsonType
-                             << stlType);
+            spdlog::warn("During JSON parsing, value '{}' of type {} was interpreted as '{}'",
+                         c.val.dump(),
+                         c.propName,
+                         jsonType,
+                         stlType);
             c.stats.propErrors.emplace(std::move(val));
         }
         c.stats.nodePropErrors++;
@@ -186,14 +186,13 @@ Neo4j4JsonParser::~Neo4j4JsonParser() {
 bool Neo4j4JsonParser::parseStats(const std::string& data) {
     TimerStat timer {"JSON Parser: parsing Neo4J stats"};
     if (!_reducedOutput) {
-        Log::BioLog::log(msg::INFO_NEO4J_READING_STATS());
+        spdlog::info("Parsing Neo4J stats");
     }
 
     const auto json = nlohmann::json::parse(data);
     auto errors = json.find("errors");
     if (errors != json.end() && !errors->empty()) {
-        Log::BioLog::log(msg::ERROR_JSON_CONTAINS_ERROR());
-        Log::BioLog::echo(data);
+        spdlog::error("JSON contains errors: {}", data);
     }
     const auto& row = json["results"].front()["data"].front()["row"];
     _stats.nodeCount = row.at(0).get<size_t>();
@@ -205,7 +204,7 @@ bool Neo4j4JsonParser::parseStats(const std::string& data) {
 bool Neo4j4JsonParser::parseNodeProperties(const std::string& data) {
     TimerStat timer {"JSON Parser: parsing Neo4J node properties"};
     if (!_reducedOutput) {
-        Log::BioLog::log(msg::INFO_NEO4J_READING_NODE_PROPERTIES());
+        spdlog::info("Parsing Neo4J node properties");
     }
 
     const auto json = nlohmann::json::parse(data);
@@ -245,7 +244,7 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data, const std::string& ne
     db::Network* net = getOrCreateNetwork(networkName);
 
     if (!_reducedOutput) {
-        Log::BioLog::log(msg::INFO_NEO4J_READING_NODES());
+        spdlog::info("Parsing Neo4J nodes");
     }
     const auto json = nlohmann::json::parse(data);
     const auto& results = json["results"].front()["data"];
@@ -330,9 +329,8 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data, const std::string& ne
 
                 default: {
                     // Something went wront
-                    Log::BioLog::echo("FATAL ERROR, SHOULD NOT OCCUR: Invalid "
-                                      "property type: "
-                                      + propName);
+                    spdlog::error("Invalid property type {}",
+                                  propName.getSharedString()->getString());
                     _stats.nodePropErrors += 1;
                     break;
                 }
@@ -348,7 +346,7 @@ bool Neo4j4JsonParser::parseNodes(const std::string& data, const std::string& ne
 bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
     TimerStat timer {"JSON Parser: parsing Neo4J edge properties"};
     if (!_reducedOutput) {
-        Log::BioLog::log(msg::INFO_NEO4J_READING_EDGE_PROPERTIES());
+        spdlog::info("Parsing Neo4J edge properties");
     }
 
     const auto json = nlohmann::json::parse(data);
@@ -390,10 +388,9 @@ bool Neo4j4JsonParser::parseEdgeProperties(const std::string& data) {
         }
 
         if (!_wb->addPropertyType(et, propName, valType)) {
-            Log::BioLog::echo(
-                "FATAL ERROR, SHOULD NOT OCCUR: Invalid property type: "
-                + propName + "for edge type: " + et->getName());
-
+            spdlog::error("Invalid property type {} for edge type {}",
+                          propName.getSharedString()->getString(),
+                          et->getName().getSharedString()->getString());
             _stats.edgePropErrors += 1;
         }
     }
@@ -405,7 +402,7 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
     TimerStat timer {"JSON Parser: parsing Neo4J edges"};
 
     if (!_reducedOutput) {
-        Log::BioLog::log(msg::INFO_NEO4J_READING_EDGES());
+        spdlog::info("Parsing Neo4J edges");
     }
     const auto json = nlohmann::json::parse(data);
     const auto& results = json["results"].front()["data"];
@@ -485,9 +482,8 @@ bool Neo4j4JsonParser::parseEdges(const std::string& data) {
 
                 default: {
                     // Something went wront
-                    Log::BioLog::echo("FATAL ERROR, SHOULD NOT OCCUR: Invalid "
-                                      "property type: "
-                                      + propName);
+                    spdlog::error("Invalid property type {}",
+                                  propName.getSharedString()->getString());
                     _stats.nodePropErrors += 1;
                     break;
                 }

@@ -8,7 +8,6 @@
 #include "ScanNodesIterator.h"
 #include "DataBuffer.h"
 #include "ChunkConfig.h"
-#include "BioLog.h"
 
 using namespace db;
 
@@ -90,8 +89,6 @@ bool run() {
 }
 
 int main() {
-    Log::BioLog::init();
     run();
-    Log::BioLog::destroy();
     return 0;
 }

@@ -1,15 +1,13 @@
 #include "NotebookRunner.h"
 
+#include <spdlog/spdlog.h>
+
 #include "FileUtils.h"
 #include "Command.h"
 
-#include "BioLog.h"
 #include "PerfStat.h"
 #include "TimerStat.h"
-#include "MsgCommon.h"
-#include "MsgRun.h"
-
-using namespace Log;
+#include "LogUtils.h"
 
 NotebookRunner::NotebookRunner(const Path& outDir, const Path& reportsDir)
     : _outDir(outDir),
@@ -29,7 +27,7 @@ bool NotebookRunner::run() {
     bool found = true;
     for (const auto& notebook : _notebooks) {
         if (!FileUtils::exists(notebook)) {
-            BioLog::log(msg::ERROR_FILE_NOT_EXISTS() << notebook.string());
+            logt::FileNotFound(notebook.string());
             found = false;
         }
     }
@@ -51,31 +49,28 @@ bool NotebookRunner::run() {
 bool NotebookRunner::runNotebook(const Path& path) {
     if (_execNotebooks) {
         if (!executeNotebook(path)) {
-            BioLog::log(msg::ERROR_FAILED_TO_RUN_NOTEBOOK() << path.string());
+            spdlog::error("Failed to run notebook {}", path.string());
             return false;
         }
     }
 
     if (_exportHTML) {
         if (!exportNotebook(path, "html")) {
-            BioLog::log(msg::ERROR_FAILED_TO_CONVERT_NOTEBOOK()
-                        << path.string() << "html");
+            spdlog::error("Failed to convert notebook {} to {}", path.string(), "html");
             return false;
         }
     }
 
     if (_exportPDF) {
         if (!exportNotebook(path, "pdf")) {
-            BioLog::log(msg::ERROR_FAILED_TO_CONVERT_NOTEBOOK()
-                        << path.string() << "pdf");
+            spdlog::error("Failed to convert notebook {} to {}", path.string(), "pdf");
             return false;
         }
     }
     
     if (_generateReport) {
         if (!generateReport(path)) {
-            BioLog::log(msg::ERROR_FAILED_TO_GENERATE_REPORT()
-                    << path.string());
+            spdlog::error("Failed to generate report for notebook {}", path.string());
             return false;
         }
     }
@@ -88,7 +83,7 @@ bool NotebookRunner::generateReport(const Path& path) {
     
     const char* turingHome = getenv("TURING_HOME");
     if (!turingHome) {
-        BioLog::log(msg::ERROR_INCORRECT_ENV_SETUP());
+        logt::TuringHomeUndefined();
         return false;
     }
 
@@ -144,8 +139,8 @@ bool NotebookRunner::executeNotebook(const Path& path) {
 
     jupyterCmd.setWriteOnStdout(!_silent);
 
-    BioLog::log(msg::INFO_RUNNING_NOTEBOOK() << path.string());
-    BioLog::log(msg::INFO_JUPYTER_LOG_FILE() << logFile.string());
+    spdlog::info("Running notebook {}", path.string());
+    spdlog::info("Jupyter log written in {}", logFile.string());
 
     if (!jupyterCmd.run()) {
         return false;
@@ -172,12 +167,11 @@ bool NotebookRunner::exportNotebook(const Path& path, const std::string& toDest)
         jupyterCmd.setEnvVar(envVar.argName, envVar.argValue);
     }
 
-    BioLog::log(msg::INFO_CONVERTING_NOTEBOOK() << path.string() << toDest);
+    spdlog::info("Converting notebook {} to {}", path.string(), toDest);
 
     const std::string notebookName = path.stem().string();
     const auto reportPath = _reportsDir/(notebookName+"."+toDest);
-    BioLog::log(msg::INFO_NOTEBOOK_REPORT()
-                << reportPath.string());
+    spdlog::info("Notebook report written in {}", reportPath.string());
 
     if (!jupyterCmd.run()) {
         return false;

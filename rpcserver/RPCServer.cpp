@@ -1,13 +1,9 @@
 #include "RPCServer.h"
 
 #include <grpcpp/grpcpp.h>
+#include <spdlog/spdlog.h>
 
 #include "RPCServerConfig.h"
-
-#include "BioLog.h"
-#include "MsgRPCServer.h"
-
-using namespace Log;
 
 RPCServer::RPCServer(const RPCServerConfig& config)
     : _config(config)
@@ -39,11 +35,11 @@ bool RPCServer::run() {
 
     std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
     if (!server) {
-        BioLog::log(msg::ERROR_RPC_SERVER_FAILED_TO_START() << addrStr);
+        spdlog::error("RPC server failed to start on address {}", addrStr);
         return false;
     }
 
-    BioLog::log(msg::INFO_RPC_SERVER_STARTED() << addrStr);
+    spdlog::info("RPC server started on address {}", addrStr);
 
     server->Wait();
     return true;
