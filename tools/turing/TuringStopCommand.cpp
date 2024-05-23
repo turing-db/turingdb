@@ -51,13 +51,6 @@ bool TuringStopCommand::isActive() {
 }
 
 void TuringStopCommand::run() {
-    const auto outDir = _toolInit.getOutputsDirPath();
-    if (!FileUtils::exists(outDir)) {
-        spdlog::error("The Turing output directory can not be found at {}",
-                      outDir.string());
-        return;
-    }
-
     stopTool("turing-app");
     stopTool("turingdb");
     stopTool("bioserver");

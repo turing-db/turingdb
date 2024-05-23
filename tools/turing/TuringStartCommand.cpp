@@ -23,6 +23,10 @@ void TuringStartCommand::setup() {
                  .metavar("dbname")
                  .default_value("reactome")
                  .nargs(1);
+    _startCommand.add_argument("-prototype")
+                 .implicit_value(true)
+                 .default_value(false);
+
     argParser.add_subparser(_startCommand);
 }
 
@@ -64,6 +68,10 @@ void TuringStartCommand::run() {
 
     Command turingApp("turing-app");
     turingApp.addOption("-o", turingAppDir);
+    if (isPrototypeRequested()) {
+        turingApp.addArg("-prototype");
+    }
+
     turingApp.setWorkingDir(outDir);
     turingApp.setGenerateScript(true);
     turingApp.setWriteLogFile(false);
@@ -111,4 +119,10 @@ std::string TuringStartCommand::getDBName() {
     auto& startCommand = argParser.at<argparse::ArgumentParser>("start");
     const std::string& dbName = startCommand.get<std::string>("-db");
     return dbName;
+}
+
+bool TuringStartCommand::isPrototypeRequested() {
+    auto& argParser = _toolInit.getArgParser();
+    auto& startCommand = argParser.at<argparse::ArgumentParser>("start");
+    return startCommand.get<bool>("-prototype");
 }

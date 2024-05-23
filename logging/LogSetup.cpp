@@ -18,6 +18,7 @@ void LogSetup::setupLogFileBacked(const std::string& path) {
     spdlog::sinks_init_list sinkList = {consoleSink, fileSink};
     auto logger = std::make_shared<spdlog::logger>("log_sink", sinkList.begin(), sinkList.end());
     setLogPattern(logger);
+    logger->flush_on(spdlog::level::info);
     spdlog::set_default_logger(logger);
 }
 

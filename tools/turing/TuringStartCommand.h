@@ -17,4 +17,5 @@ private:
     argparse::ArgumentParser _startCommand;
 
     std::string getDBName();
+    bool isPrototypeRequested();
 };

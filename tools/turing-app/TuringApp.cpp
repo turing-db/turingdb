@@ -42,14 +42,14 @@ int main(int argc, const char** argv) {
 
     // Arguments definition
     auto& argParser = toolInit.getArgParser();
-    argParser.add_argument("--nodemon")
+    argParser.add_argument("-nodemon")
              .store_into(noDemonMode);
 
-#ifdef TURING_DEV
-    argParser.add_argument("--prototype")
+    argParser.add_argument("-prototype")
              .store_into(isPrototypeMode);
 
-    argParser.add_argument("--dev")
+#ifdef TURING_DEV
+    argParser.add_argument("-dev")
              .store_into(isDevMode);
 #endif
 
