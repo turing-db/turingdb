@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+#include "JobSystem.h"
 #include "ScanNodesIterator.h"
 
 #include "ChunkConfig.h"
@@ -8,9 +9,7 @@
 #include "DB.h"
 #include "DBAccess.h"
 #include "DataBuffer.h"
-#include "DataPart.h"
 #include "FileUtils.h"
-#include "Reader.h"
 #include "LogSetup.h"
 
 using namespace db;
@@ -33,11 +32,15 @@ protected:
         FileUtils::createDirectory(_outDir);
 
         LogSetup::setupLogFileBacked(_logPath.string());
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->initialize();
     }
 
     void TearDown() override {
+        _jobSystem->terminate();
     }
 
+    std::unique_ptr<JobSystem> _jobSystem;
     std::string _outDir;
     FileUtils::Path _logPath;
 };
@@ -45,9 +48,8 @@ protected:
 TEST_F(ScanNodesIteratorTest, emptyDB) {
     auto db = std::make_unique<DB>();
     auto access = db->access();
-    auto reader = access.getReader();
 
-    auto it = reader.scanNodes().begin();
+    auto it = access.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
     ColumnNodes colNodes;
@@ -57,15 +59,18 @@ TEST_F(ScanNodesIteratorTest, emptyDB) {
 
 TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
 
     {
-        DataBuffer buf = access.newDataBuffer();
-        access.pushDataPart(buf);
+        auto buf = db->access().newDataBuffer();
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, *_jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     }
 
-    auto reader = access.getReader();
-    auto it = reader.scanNodes().begin();
+    auto access = db->access();
+    auto it = access.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
     ColumnNodes colNodes;
@@ -75,15 +80,18 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
 
 TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
 
     for (auto i = 0; i < 3; i++) {
-        DataBuffer buf = access.newDataBuffer();
-        access.pushDataPart(buf);
+        auto buf = db->access().newDataBuffer();
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, *_jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     }
 
-    auto reader = access.getReader();
-    auto it = reader.scanNodes().begin();
+    auto access = db->access();
+    auto it = access.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
     ColumnNodes colNodes;
@@ -93,24 +101,28 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
 
 TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
 
+    auto& labelsets = db->metaData()->labelsets();
     Labelset labelset = Labelset::fromList({0});
-    LabelsetID labelsetID = access.getLabelsetID(labelset);
+    LabelsetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
-        DataBuffer buf = access.newDataBuffer();
+        auto buf = db->access().newDataBuffer();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
-            buf.addNode(labelsetID);
+            buf->addNode(labelsetID);
         }
 
-        ASSERT_EQ(buf.nodeCount(), ChunkConfig::CHUNK_SIZE);
+        ASSERT_EQ(buf->nodeCount(), ChunkConfig::CHUNK_SIZE);
 
-        access.pushDataPart(buf);
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, *_jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     }
 
-    auto reader = access.getReader();
-    auto it = reader.scanNodes().begin();
+    auto access = db->access();
+    auto it = access.scanNodes().begin();
     ASSERT_TRUE(it.isValid());
 
     // Read node by node
@@ -124,7 +136,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 
     // Read nodes by chunks
     ColumnNodes colNodes;
-    it = reader.scanNodes().begin();
+    it = access.scanNodes().begin();
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(!colNodes.empty());
     ASSERT_EQ(colNodes.size(), ChunkConfig::CHUNK_SIZE);
@@ -139,24 +151,28 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 
 TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
 
+    auto& labelsets = db->metaData()->labelsets();
     Labelset labelset = Labelset::fromList({0});
-    LabelsetID labelsetID = access.getLabelsetID(labelset);
+    LabelsetID labelsetID = labelsets.getOrCreate(labelset);
 
     for (auto i = 0; i < 8; i++) {
-        DataBuffer buf = access.newDataBuffer();
+        auto buf = db->access().newDataBuffer();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
-            buf.addNode(labelsetID);
+            buf->addNode(labelsetID);
         }
 
-        ASSERT_EQ(buf.nodeCount(), ChunkConfig::CHUNK_SIZE);
+        ASSERT_EQ(buf->nodeCount(), ChunkConfig::CHUNK_SIZE);
 
-        access.pushDataPart(buf);
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, *_jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     }
 
-    auto reader = access.getReader();
-    auto it = reader.scanNodes().begin();
+    auto access = db->access();
+    auto it = access.scanNodes().begin();
     ASSERT_TRUE(it.isValid());
 
     // Read node by node
@@ -169,7 +185,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
 
     // Read nodes by chunks
     ColumnNodes colNodes;
-    it = reader.scanNodes().begin();
+    it = access.scanNodes().begin();
 
     expectedID = 0;
     while (it.isValid()) {
@@ -190,28 +206,32 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     const size_t nodeCount = 1.35 * ChunkConfig::CHUNK_SIZE;
 
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
 
+    auto& labelsets = db->metaData()->labelsets();
     Labelset labelset = Labelset::fromList({0});
-    LabelsetID labelsetID = access.getLabelsetID(labelset);
+    LabelsetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
-        DataBuffer buf = access.newDataBuffer();
+        auto buf = db->access().newDataBuffer();
         for (size_t i = 0; i < nodeCount; i++) {
-            buf.addNode(labelsetID);
+            buf->addNode(labelsetID);
         }
 
-        access.pushDataPart(buf);
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, *_jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     }
 
-    auto reader = access.getReader();
-    auto it = reader.scanNodes().begin();
+    auto access = db->access();
+    auto it = access.scanNodes().begin();
 
     ColumnNodes colNodes;
     colNodes.reserve(ChunkConfig::CHUNK_SIZE);
 
     // Read nodes by chunks
-    it = reader.scanNodes().begin();
+    it = access.scanNodes().begin();
     EntityID expectedID = 0;
     while (it.isValid()) {
         it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);

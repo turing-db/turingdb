@@ -5,10 +5,57 @@
 #include <thread>
 #include <vector>
 
+class AbstractFuture {
+public:
+    AbstractFuture() = default;
+    AbstractFuture(const AbstractFuture&) = default;
+    AbstractFuture(AbstractFuture&&) = default;
+    AbstractFuture& operator=(const AbstractFuture&) = default;
+    AbstractFuture& operator=(AbstractFuture&&) = default;
+    virtual ~AbstractFuture() = default;
+
+    virtual void wait() = 0;
+};
+
 template <typename T>
-using Future = std::future<T>;
+class Future : public std::future<T>, public AbstractFuture {
+public:
+    Future() = default;
+    Future(const Future&) = default;
+    Future(Future&&) noexcept = default;
+    Future& operator=(const Future&) = default;
+    Future& operator=(Future&&) noexcept = default;
+    ~Future() override = default;
+
+    explicit Future(std::future<T>&& future)
+        : std::future<T>(std::move(future))
+    {
+    }
+
+    void wait() override {
+        std::future<T>::wait();
+    }
+};
+
 template <typename T>
-using SharedFuture = std::shared_future<T>;
+class SharedFuture : public std::shared_future<T>, public AbstractFuture {
+public:
+    SharedFuture() = default;
+    SharedFuture(const SharedFuture&) = default;
+    SharedFuture(SharedFuture&&) noexcept = default;
+    SharedFuture& operator=(const SharedFuture&) = default;
+    SharedFuture& operator=(SharedFuture&&) noexcept = default;
+    ~SharedFuture() override = default;
+
+    explicit SharedFuture(std::shared_future<T>&& future)
+        : std::shared_future<T>(std::move(future))
+    {
+    }
+
+    void wait() override {
+        std::shared_future<T>::wait();
+    }
+};
 
 template <typename T>
 class TypedPromise;
@@ -40,6 +87,8 @@ public:
     }
 };
 
+
+
 using JobOperation = std::function<void(Promise*)>;
 using JobID = uint64_t;
 
@@ -58,23 +107,27 @@ private:
     std::vector<Job> _jobs;
 };
 
+class JobGroup;
+
 class JobSystem {
 public:
-    JobSystem() = default;
+    JobSystem();
+    explicit JobSystem(size_t nThreads);
+
     JobSystem(const JobSystem&) = delete;
     JobSystem(JobSystem&&) = delete;
     JobSystem& operator=(const JobSystem&) = delete;
     JobSystem& operator=(JobSystem&&) = delete;
     ~JobSystem();
 
-    void initialize(size_t numThreads = 0);
+    void initialize();
 
     template <typename T>
     Future<T> submit(JobOperation&& operation) {
         std::unique_lock lock(_queueMutex);
         _submitedCount += 1;
         TypedPromise<T>* promise = new TypedPromise<T>();
-        Future<T> future = promise->get_future();
+        Future<T> future {promise->get_future()};
 
         _jobs.push({
             std::move(operation),
@@ -89,7 +142,7 @@ public:
         std::unique_lock lock(_queueMutex);
         _submitedCount += 1;
         TypedPromise<T>* promise = new TypedPromise<T>;
-        SharedFuture<T> future = promise->get_future();
+        SharedFuture<T> future {promise->get_future().share()};
 
         _jobs.push({
             std::move(operation),
@@ -99,22 +152,48 @@ public:
         return future;
     }
 
+    JobGroup newGroup();
+
     void wait();
     void terminate();
 
-    template <typename T>
-    constexpr static TypedPromise<T>* cast(Promise* p) {
-        return static_cast<TypedPromise<T>*>(p);
-    }
-
 private:
+    size_t _nThreads = 0;
     std::mutex _queueMutex;
     std::mutex _wakeMutex;
     std::condition_variable _wakeCondition;
     JobQueue _jobs;
     std::vector<std::jthread> _workers;
-    std::atomic<size_t> _finishedCount = 0;
-    std::atomic<size_t> _submitedCount = 0;
-    std::atomic<bool> _stopRequested = false;
+    std::atomic<size_t> _finishedCount {0};
+    std::atomic<size_t> _submitedCount {0};
+    std::atomic<bool> _stopRequested {false};
     bool _terminated = false;
+};
+
+class JobGroup {
+public:
+    explicit JobGroup(JobSystem* jobSystem)
+        : _jobSystem(jobSystem)
+    {
+    }
+
+    void wait() {
+        for (auto& future : _futures) {
+            future->wait();
+        }
+
+        _futures.clear();
+    }
+
+    template <typename T>
+    SharedFuture<T> submit(JobOperation&& operation) {
+        auto future = _jobSystem->submitShared<T>(std::move(operation));
+        SharedFuture<T>* ptr = new SharedFuture<T>(future);
+        _futures.emplace_back(static_cast<AbstractFuture*>(ptr));
+        return future;
+    }
+
+private:
+    std::vector<std::shared_ptr<AbstractFuture>> _futures;
+    JobSystem* _jobSystem;
 };

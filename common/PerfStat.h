@@ -25,5 +25,11 @@ private:
     void open(const Path& logFile);
     void close();
     void reportTotalMem();
-    std::pair<size_t, size_t> getMemInMegabytes() const;
+
+    struct MemInfo {
+        size_t reserved {0};
+        size_t rss {0};
+    };
+
+    MemInfo getMemInMegabytes() const;
 };

@@ -2,9 +2,10 @@
 
 #include "ConcurrentWriter.h"
 #include "DB.h"
+#include "DBAccess.h"
 #include "DataBuffer.h"
 #include "FileUtils.h"
-#include "Reader.h"
+#include "JobSystem.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "iterators/ScanNodesIterator.h"
@@ -35,22 +36,24 @@ protected:
         }
         FileUtils::createDirectory(_outDir);
         LogSetup::setupLogFileBacked(_logPath.string());
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->initialize();
 
         _db = new DB();
-        auto access = _db->uniqueAccess();
         PropertyTypeID uint64ID = 0;
 
-        auto bufferManager = access.newConcurrentWriter();
+        auto bufferManager = _db->access().newConcurrentWriter();
         DataBuffer& tempData1 = bufferManager.newBuffer(3, 2);
         DataBuffer& tempData2 = bufferManager.newBuffer(2, 3);
         DataBuffer& tempData3 = bufferManager.newBuffer(4, 4);
 
+        auto& labelsets = _db->metaData()->labelsets();
         const Labelset l0 = Labelset::fromList({0});
         const Labelset l1 = Labelset::fromList({1});
         const Labelset l01 = Labelset::fromList({0, 1});
-        const LabelsetID l0ID = access.getLabelsetID(l0);
-        const LabelsetID l1ID = access.getLabelsetID(l1);
-        const LabelsetID l01ID = access.getLabelsetID(l01);
+        const LabelsetID l0ID = labelsets.getOrCreate(l0);
+        const LabelsetID l1ID = labelsets.getOrCreate(l1);
+        const LabelsetID l01ID = labelsets.getOrCreate(l01);
 
         {
             // NODE 0 (temp ID: 0)
@@ -128,21 +131,26 @@ protected:
         tempData3.addEdge(0, 2, 5); // EDGE 8
 
         std::unique_ptr<DataBuffer> tempData = bufferManager.build();
-        access.pushDataPart(*tempData);
+        {
+            auto datapart = _db->uniqueAccess().prepareNewDataPart(std::move(tempData));
+            _db->access().loadDataPart(*datapart, *_jobSystem);
+            _db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     }
 
     void TearDown() override {
+        _jobSystem->terminate();
         delete _db;
     }
 
     DB* _db = nullptr;
+    std::unique_ptr<JobSystem> _jobSystem;
     std::string _outDir;
     FileUtils::Path _logPath;
 };
 
 TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
     auto access = _db->access();
-    auto reader = access.getReader();
     std::vector<TestEdgeRecord> compareSet {
         {0, 0, 1},
         {1, 0, 3},
@@ -157,7 +165,7 @@ TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
 
     auto it = compareSet.begin();
     size_t count = 0;
-    for (const EdgeRecord& v : reader.scanOutEdges()) {
+    for (const EdgeRecord& v : access.scanOutEdges()) {
         ASSERT_EQ(it->_nodeID.getValue(), v._nodeID.getValue());
         ASSERT_EQ(it->_otherID.getValue(), v._otherID.getValue());
         count++;
@@ -168,12 +176,11 @@ TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
 
 TEST_F(ConcurrentWriterTest, ScanNodesIteratorTest) {
     auto access = _db->access();
-    auto reader = access.getReader();
     std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     auto it = compareSet.begin();
     size_t count = 0;
-    for (const EntityID id : reader.scanNodes()) {
+    for (const EntityID id : access.scanNodes()) {
         ASSERT_EQ(it->getValue(), id.getValue());
         count++;
         it++;
@@ -183,15 +190,15 @@ TEST_F(ConcurrentWriterTest, ScanNodesIteratorTest) {
 
 TEST_F(ConcurrentWriterTest, ScanNodesByLabelIteratorTest) {
     auto access = _db->access();
-    auto reader = access.getReader();
     std::vector<EntityID> compareSet {7, 8, 3, 4, 5, 6};
 
     auto it = compareSet.begin();
     size_t count = 0;
+    const auto& labelsets = _db->metaData()->labelsets();
     const Labelset labelset = Labelset::fromList({1});
-    const LabelsetID labelsetID = access.getLabelsetID(labelset);
+    const LabelsetID labelsetID = labelsets.get(labelset);
 
-    for (const EntityID id : reader.scanNodesByLabel(labelsetID)) {
+    for (const EntityID id : access.scanNodesByLabel(labelsetID)) {
         ASSERT_EQ(it->getValue(), id.getValue());
         count++;
         it++;

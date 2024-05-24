@@ -3,6 +3,7 @@
 
 #include "DebugDumpProcessor.h"
 #include "DiscardProcessor.h"
+#include "JobSystem.h"
 #include "Pipeline.h"
 #include "PipelineExecutor.h"
 #include "ScanNodesProcessor.h"
@@ -38,14 +39,17 @@ protected:
 
         LogSetup::setupLogFileBacked(_logPath.string());
         PerfStat::init(_perfPath);
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->initialize();
     }
 
     void TearDown() override {
+        _jobSystem->terminate();
         PerfStat::destroy();
     }
 
-private:
     std::string _outDir;
+    std::unique_ptr<JobSystem> _jobSystem;
     FileUtils::Path _logPath;
     FileUtils::Path _perfPath;
 };
@@ -68,9 +72,9 @@ TEST_F(ScanNodesProcessorTest, emptyDB) {
 
 TEST_F(ScanNodesProcessorTest, millionNodes) {
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
 
-    TestUtils::generateMillionTestDB(access);
+    TestUtils::generateMillionTestDB(*db, *_jobSystem);
+    auto access = db->access();
 
     Pipeline pipeline;
 

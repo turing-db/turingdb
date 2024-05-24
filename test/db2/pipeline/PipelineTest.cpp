@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 
 #include "DB.h"
+#include "DBAccess.h"
 #include "Pipeline.h"
 #include "ScanNodesProcessor.h"
 #include "DiscardProcessor.h"

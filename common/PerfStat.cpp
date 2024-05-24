@@ -1,7 +1,7 @@
 #include "PerfStat.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <string>
 
 #include "BioAssert.h"
@@ -56,11 +56,12 @@ void PerfStat::reportTotalMem() {
     }
 
     const auto [reserved, physical] = getMemInMegabytes();
-    _outStream << '\n' << "Total virtual memory reserved at exit: "
+    _outStream << '\n'
+               << "Total virtual memory reserved at exit: "
                << reserved << "MB (physical: " << physical << "MB)\n";
 }
 
-std::pair<size_t, size_t> PerfStat::getMemInMegabytes() const {
+PerfStat::MemInfo PerfStat::getMemInMegabytes() const {
     std::ifstream statusFile("/proc/self/status");
     bioassert(statusFile.is_open());
 
@@ -71,15 +72,18 @@ std::pair<size_t, size_t> PerfStat::getMemInMegabytes() const {
             statusFile >> str;
             bioassert(!str.empty());
             const size_t memKB = std::stoull(str);
-            reserved = memKB/1024;
+            reserved = memKB / 1024;
         } else if (str == "VmRSS:") {
             statusFile >> str;
             bioassert(!str.empty());
             const size_t memKB = std::stoull(str);
-            return {reserved, memKB / 1024};
+            return {
+                .reserved = reserved,
+                .rss = memKB / 1024,
+            };
         }
     }
 
     bioassert(false);
-    return {0, 0};
+    return {};
 }

@@ -21,19 +21,25 @@ size_t JobQueue::size() const {
     return _jobs.size();
 }
 
+JobSystem::JobSystem() = default;
+JobSystem::JobSystem(size_t nThreads)
+    : _nThreads(nThreads)
+{
+}
+
 JobSystem::~JobSystem() {
     if (!_terminated) {
         terminate();
     }
 }
 
-void JobSystem::initialize(size_t numThreads) {
-    if (numThreads == 0) {
+void JobSystem::initialize() {
+    if (_nThreads == 0) {
         size_t numCores = std::thread::hardware_concurrency();
-        numThreads = std::max(1ul, numCores);
+        _nThreads = std::max(1ul, numCores);
     }
 
-    for (size_t i = 0; i < numThreads; i++) {
+    for (size_t i = 0; i < _nThreads; i++) {
         _workers.emplace_back([&] {
             JobOperation job;
 
@@ -60,7 +66,7 @@ void JobSystem::initialize(size_t numThreads) {
         });
     }
 
-    spdlog::info("Job system initialized with {} threads", numThreads);
+    spdlog::info("Job system initialized with {} threads", _nThreads);
 }
 
 void JobSystem::wait() {
@@ -80,4 +86,8 @@ void JobSystem::terminate() {
     wait();
     _terminated = true;
     spdlog::info("Job system terminated");
+}
+
+JobGroup JobSystem::newGroup() {
+    return JobGroup(this);
 }

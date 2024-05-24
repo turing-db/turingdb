@@ -1,12 +1,14 @@
 #pragma once
 
+class JobSystem;
+
 namespace db {
 
-class DBAccess;
+class DB;
 
 }
 
 class TestUtils {
 public:
-    static void generateMillionTestDB(db::DBAccess& access);
+    static void generateMillionTestDB(db::DB& db, JobSystem& jobSystem);
 };

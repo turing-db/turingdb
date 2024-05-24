@@ -1,10 +1,11 @@
 #include "DB.h"
+#include "DBAccess.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
-#include "Neo4jImporter.h"
 #include "Neo4j/ParserConfig.h"
+#include "Neo4jImporter.h"
 #include "NodeView.h"
-#include "Reader.h"
+#include "PerfStat.h"
 #include "Time.h"
 
 #include <iostream>
@@ -14,9 +15,10 @@ using namespace db;
 int main() {
     JobSystem jobSystem;
     jobSystem.initialize();
+    PerfStat::init("import_pole.perf");
 
     auto database = std::make_unique<DB>();
-
+    const PropertyTypeMap& propTypes = database->metaData()->propTypes();
     const std::string turingHome = std::getenv("TURING_HOME");
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "pole-db";
 
@@ -33,11 +35,10 @@ int main() {
     std::cout << "Parsing: " << duration<Seconds>(t0, t1) << " s" << std::endl;
 
     auto access = database->access();
-    auto reader = access.getReader();
 
     std::string_view address = "33 Plover Drive";
-    PropertyType addressType = access.getPropertyType("address (String)");
-    auto it = reader.scanNodeProperties<types::String>(addressType._id).begin();
+    PropertyType addressType = propTypes.get("address (String)");
+    auto it = access.scanNodeProperties<types::String>(addressType._id).begin();
 
     const auto findNodeID = [&]() {
         for (; it.isValid(); it.next()) {
@@ -49,7 +50,7 @@ int main() {
             }
         }
         std::cout << "Could not find location 33 Plover Drive" << std::endl;
-        throw;
+        return EntityID {};
     };
 
     t0 = Clock::now();
@@ -58,7 +59,7 @@ int main() {
     std::cout << "found Location in: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
     t0 = Clock::now();
-    NodeView node = reader.getNodeView(nodeID);
+    NodeView node = access.getNodeView(nodeID);
     t1 = Clock::now();
     std::cout << "Got node view in: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
@@ -78,13 +79,13 @@ int main() {
 
     std::cout << "Location has " << nodeEdges.getOutEdgeCount() << " out edges" << std::endl;
     for (const auto& edge : nodeEdges.outEdges()) {
-        NodeView target = reader.getNodeView(edge._otherID);
+        NodeView target = access.getNodeView(edge._otherID);
         const auto& targetProps = target.properties();
 
         std::cout << "  -> " << edge._otherID.getValue() << std::endl;
 
         for (const auto& propView : targetProps.strings()) {
-            const auto& propName = access.getPropertyTypeName(propView._id);
+            const auto& propName = propTypes.getName(propView._id);
             std::cout << "    - " << propName << ": " << propView.get<types::String>()
                       << std::endl;
         }
@@ -92,13 +93,13 @@ int main() {
 
     std::cout << "Location has " << nodeEdges.getInEdgeCount() << " in edges" << std::endl;
     for (const auto& edge : node.edges().inEdges()) {
-        NodeView source = reader.getNodeView(edge._otherID);
+        NodeView source = access.getNodeView(edge._otherID);
         const auto& sourceProps = source.properties();
 
         std::cout << "  <- " << edge._otherID.getValue() << std::endl;
 
         for (const auto& propView : sourceProps.strings()) {
-            const auto& propName = access.getPropertyTypeName(propView._id);
+            const auto& propName = propTypes.getName(propView._id);
             std::cout << "    - " << propName << ": " << propView.get<types::String>()
                       << std::endl;
         }
@@ -108,5 +109,6 @@ int main() {
     access.getReport(report);
     std::cout << report.view() << std::endl;
 
+    PerfStat::destroy();
     return 0;
 }

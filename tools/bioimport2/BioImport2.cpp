@@ -160,10 +160,10 @@ int main(int argc, const char** argv) {
     }
 
     auto db = std::make_unique<DB>();
-    JobSystem jobSystem;
+    JobSystem jobSystem(nThreads);
     auto t0 = Clock::now();
 
-    jobSystem.initialize(nThreads);
+    jobSystem.initialize();
 
     for (auto& data : importData) {
         switch (data.type) {

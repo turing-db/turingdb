@@ -4,7 +4,7 @@
 
 #include "DB.h"
 #include "DBAccess.h"
-#include "Reader.h"
+#include "JobSystem.h"
 #include "ScanNodesIterator.h"
 #include "DataBuffer.h"
 #include "ChunkConfig.h"
@@ -22,23 +22,28 @@ bool run() {
     const size_t nodeCount = 100ull*1000000;
 
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
+    JobSystem jobSystem;
+    jobSystem.initialize();
 
     const auto timeStart = Clock::now();
 
     {
-        DataBuffer buf = access.newDataBuffer();
+        auto buf = db->access().newDataBuffer();
         for (size_t i = 0; i < nodeCount; i++) {
-            buf.addNode({0});
+            buf->addNode({0});
         } 
 
-        access.pushDataPart(buf);
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
     } 
 
     const auto partCreation = Clock::now();
 
-    auto reader = access.getReader();
-    auto it = reader.scanNodes().begin();
+    auto access = db->access();
+    auto it = access.scanNodes().begin();
 
     // Read node by node
     size_t count = 0;
@@ -58,7 +63,7 @@ bool run() {
     const auto chunkReadStart = Clock::now();
 
     // Read nodes by chunks
-    it = reader.scanNodes().begin();
+    it = access.scanNodes().begin();
     count = 0;
     size_t iterations = 0;
     while (it.isValid()) {
@@ -85,6 +90,7 @@ bool run() {
     printDuration("Chunk by chunk iteration", timeEnd-chunkReadStart);
     printDuration("Total", totalDuration);
 
+    jobSystem.terminate();
     return true;
 }
 

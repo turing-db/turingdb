@@ -1,17 +1,18 @@
-#include <memory>
 #include <chrono>
 #include <iostream>
+#include <memory>
 
+#include "ChunkConfig.h"
+#include "ColumnNodes.h"
 #include "DB.h"
 #include "DBAccess.h"
 #include "DataBuffer.h"
-#include "ScanNodesProcessor.h"
 #include "DiscardProcessor.h"
+#include "JobSystem.h"
 #include "Pipeline.h"
 #include "PipelineExecutor.h"
 #include "ScanNodesIterator.h"
-#include "ColumnNodes.h"
-#include "ChunkConfig.h"
+#include "ScanNodesProcessor.h"
 
 using namespace db;
 
@@ -35,22 +36,27 @@ void chunkTest(DB* db) {
 }
 
 bool run() {
-    const size_t nodeCount = 100ul*1000000;
+    const size_t nodeCount = 100ul * 1000000;
 
     auto db = std::make_unique<DB>();
-    auto access = db->uniqueAccess();
+    JobSystem jobSystem;
+    jobSystem.initialize();
 
     // Part creation
     const auto timeStart = Clock::now();
 
     {
-        DataBuffer buf = access.newDataBuffer();
+        auto buf = db->access().newDataBuffer();
         for (size_t i = 0; i < nodeCount; i++) {
-            buf.addNode({0});
+            buf->addNode({0});
         }
 
-        access.pushDataPart(buf);
-    } 
+        {
+            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
+            db->access().loadDataPart(*datapart, jobSystem);
+            db->uniqueAccess().pushDataPart(std::move(datapart));
+        }
+    }
 
     const auto partCreation = Clock::now();
 
@@ -78,11 +84,12 @@ bool run() {
     const auto timeEnd = Clock::now();
     const auto totalDuration = timeEnd - timeStart;
 
-    printDuration("Part creation", partCreation-timeStart);
-    printDuration("Pipeline test", execEnd-execStartTime);
-    printDuration("Chunk test", itEnd-itBegin);
+    printDuration("Part creation", partCreation - timeStart);
+    printDuration("Pipeline test", execEnd - execStartTime);
+    printDuration("Chunk test", itEnd - itBegin);
     printDuration("Total", totalDuration);
 
+    jobSystem.terminate();
     return true;
 }
 
