@@ -24,6 +24,7 @@ int main(int argc, const char** argv) {
 
     argParser.add_argument("notebooks")
              .append()
+             .nargs(argparse::nargs_pattern::any)
              .store_into(notebooks);
 
     argParser.add_argument("-q")
