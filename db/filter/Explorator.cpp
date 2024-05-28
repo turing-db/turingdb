@@ -184,7 +184,6 @@ bool Explorator::hasTargetSchemaClass(const db::Node* node) const {
 bool Explorator::hasTargetName(const db::Node* node) const {
     const std::string displayName = SearchUtils::getProperty(node, _displayName);
     for (const auto& targetName : _targetNodeNames) {
-        spdlog::info("Check {} {}", targetName, displayName);
         if (isTargetNameMatch(targetName, displayName)) {
             return true;
         }
