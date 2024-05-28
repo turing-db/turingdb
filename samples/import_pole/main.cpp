@@ -57,7 +57,7 @@ int main() {
     t0 = Clock::now();
     EntityID nodeID = findNodeID();
     t1 = Clock::now();
-    std::cout << "found Location in: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
+    std::cout << "Found Location in: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
     t0 = Clock::now();
     NodeView node = access.getNodeView(nodeID);

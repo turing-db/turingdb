@@ -20,7 +20,7 @@ macro(turing_sample SAMPLE_NAME SOURCES)
 endmacro()
 
 add_subdirectory(import_pole)
-#add_subdirectory(import_reactome)
+add_subdirectory(import_reactome)
 add_subdirectory(scan_nodes_iterator)
 add_subdirectory(scan_nodes_processor)
 

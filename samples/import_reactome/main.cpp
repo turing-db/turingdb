@@ -24,7 +24,7 @@ int main() {
     const LabelMap& labels = database->metaData()->labels();
     LabelsetMap& labelsets = database->metaData()->labelsets();
 
-    const FileUtils::Path jsonDir = "/net/db/reactome/json";
+    const FileUtils::Path jsonDir = "/home/luclabarriere/jsonReactome";
 
     auto t0 = Clock::now();
     Neo4jImporter::importJsonDir(jobSystem,
@@ -160,10 +160,6 @@ int main() {
         printProperties(edgeView.properties());
         std::cout << "       * " << displayName << std::endl;
     }
-
-    std::stringstream report;
-    access.getReport(report);
-    std::cout << report.view() << std::endl;
 
     PerfStat::destroy();
     return 0;

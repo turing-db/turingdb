@@ -53,16 +53,14 @@ int main(int argc, const char** argv) {
     std::vector<ImportData> importData;
 
     argParser.add_argument("-j")
-        .help("Numboer of threads to use")
-        .append()
-        .nargs(1)
+        .help("Number of threads to use")
         .metavar("n")
-        .scan<'u', size_t>();
+        .default_value(uint16_t(0))
+        .store_into(nThreads);
 
     argParser.add_argument("-neo4j")
         .help("Imports a .dump file (default network name: \"my_file\")")
         .append()
-        .nargs(1)
         .metavar("db.dump")
         .action([&](const std::string& value) {
             if (!FileUtils::exists(value)) {
@@ -149,8 +147,6 @@ int main(int argc, const char** argv) {
         });
 
     toolInit.init(argc, argv);
-
-    nThreads = argParser.get<size_t>("-j");
 
     const bool noPathsGiven = importData.empty();
     if (noPathsGiven) {

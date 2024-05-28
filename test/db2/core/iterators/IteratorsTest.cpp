@@ -13,6 +13,7 @@
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "iterators/ScanNodesIterator.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -328,7 +329,9 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
 
     auto it = compareSet.begin();
     size_t count = 0;
+    spdlog::info("-- Out edges");
     for (const EdgeRecord& v : access.getOutEdges(&inputNodeIDs)) {
+        spdlog::info("[{}: {}->{}]", v._edgeID, v._nodeID, v._otherID);
         ASSERT_EQ(it->_nodeID.getValue(), v._nodeID.getValue());
         ASSERT_EQ(it->_otherID.getValue(), v._otherID.getValue());
         count++;
@@ -347,7 +350,9 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
     };
     it = compareSet.begin();
 
+    spdlog::info("-- In edges");
     for (const EdgeRecord& v : access.getInEdges(&inputNodeIDs)) {
+        spdlog::info("[{}: {}->{}]", v._edgeID, v._otherID, v._nodeID);
         ASSERT_EQ(it->_nodeID.getValue(), v._otherID.getValue());
         ASSERT_EQ(it->_otherID.getValue(), v._nodeID.getValue());
         count++;
