@@ -24,6 +24,10 @@ class Explorator {
 public:
     using TreeNodes = std::set<ExploratorTreeNode*, ExploratorTreeNode::Comparator>;
 
+    enum class TargetNameMatchType {
+        EXACT, PREFIX, SUBWORD
+    };
+
     Explorator(db::DB* db);
     ~Explorator();
 
@@ -38,6 +42,8 @@ public:
 
     void setNoDefaultTargets();
     void addTargetClass(const std::string& name);
+    void addTargetNodeName(const std::string& name);
+    void setTargetNameMatchType(TargetNameMatchType matchType) { _targetNameMatchType = matchType; }
 
     void addExcludedName(const std::string& name);
     void addDefaultExcludedNames();
@@ -69,6 +75,9 @@ private:
     std::unordered_set<std::string> _excludedNames;
     std::unordered_set<std::string> _excludedClasses;
     std::unordered_set<std::string> _targetClasses;
+    std::unordered_set<std::string> _targetNodeNames;
+
+    TargetNameMatchType _targetNameMatchType {TargetNameMatchType::PREFIX};
 
     TreeNodes _targets;
 
@@ -79,5 +88,8 @@ private:
     bool shouldExplore(const db::Node* node, const db::Edge* edge) const;
     void buildNetwork();
     bool hasTargetSchemaClass(const db::Node* node) const;
+    bool hasTargetName(const db::Node* node) const;
     void addDefaultTargetClasses();
+    bool isTargetNameMatch(const std::string& target, const std::string& displayName) const;
+    bool isTarget(const db::Node* node) const;
 };

@@ -37,6 +37,7 @@ int main(int argc, const char** argv) {
     std::vector<std::string> excludedNames;
     std::vector<std::string> excludedClasses;
     std::vector<std::string> targetClasses;
+    std::vector<std::string> targetNodes;
     size_t maxDistance = 5;
     size_t maxDegree = 0;
     bool traverseTargets = false;
@@ -45,6 +46,9 @@ int main(int argc, const char** argv) {
     bool traversePathways = true;
     bool traverseSets = true;
     bool traverseFailedReaction = false;
+    bool targetNameMatchExact = false;
+    bool targetNameMatchPrefix = true;
+    bool targetNameMatchSubword = false;
 
     auto& argParser = toolInit.getArgParser();
 
@@ -72,10 +76,31 @@ int main(int argc, const char** argv) {
              .store_into(excludedNames);
 
     argParser.add_argument("-target")
+             .help("Add a target node by name")
+             .nargs(1)
+             .append()
+             .store_into(targetNodes);
+
+    argParser.add_argument("-target-class")
              .help("Add a schemaClass for target nodes (Drugs by default)")
              .nargs(1)
              .append()
              .store_into(targetClasses);
+
+    argParser.add_argument("-target-exact")
+             .help("Match target node names exactly by string equality")
+             .nargs(0)
+             .store_into(targetNameMatchExact);
+
+    argParser.add_argument("-target-prefix")
+             .help("Match target nodes using only prefix matching (default)")
+             .nargs(0)
+             .store_into(targetNameMatchPrefix);
+
+    argParser.add_argument("-target-subword")
+             .help("Find target node names that contain only a target word")
+             .nargs(0)
+             .store_into(targetNameMatchSubword);
 
     argParser.add_argument("-traverse_targets")
              .help("Traverse target nodes during exploration")
@@ -219,6 +244,23 @@ int main(int argc, const char** argv) {
                 explorator.addTargetClass(targetClassName);
                 spdlog::info("Added target schemaClass {}", targetClassName);
             }
+        }
+
+        // Add target nodes
+        if (!targetNodes.empty()) {
+            explorator.setNoDefaultTargets();
+            for (const auto& targetName : targetNodes) {
+                explorator.addTargetNodeName(targetName);
+                spdlog::info("Added target node {}", targetName);
+            }
+        }
+
+        if (targetNameMatchPrefix) {
+            explorator.setTargetNameMatchType(Explorator::TargetNameMatchType::PREFIX);
+        } else if (targetNameMatchExact) {
+            explorator.setTargetNameMatchType(Explorator::TargetNameMatchType::EXACT);
+        } else if (targetNameMatchSubword) {
+            explorator.setTargetNameMatchType(Explorator::TargetNameMatchType::SUBWORD);
         }
 
         // Add excluded names

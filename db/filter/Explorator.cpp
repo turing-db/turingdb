@@ -8,6 +8,7 @@
 #include "NodeType.h"
 
 #include "SearchUtils.h"
+#include "NodeSearch.h"
 
 #include "BioAssert.h"
 
@@ -99,7 +100,7 @@ void Explorator::run() {
 
         Node* node = currentTreeNode->getNode();
 
-        if (hasTargetSchemaClass(node)) {
+        if (isTarget(node)) {
             _targets.insert(currentTreeNode);
             if (!_traverseTargets) {
                 continue;
@@ -168,9 +169,41 @@ void Explorator::addExcludedName(const std::string& name) {
     _excludedNames.insert(name);
 }
 
+bool Explorator::isTarget(const db::Node* node) const {
+    if (!_targetNodeNames.empty()) {
+        return hasTargetName(node);
+    }
+    return hasTargetSchemaClass(node);
+}
+
 bool Explorator::hasTargetSchemaClass(const db::Node* node) const {
     const std::string schemaClass = SearchUtils::getProperty(node, _schemaClassName);
     return (_targetClasses.find(schemaClass) != _targetClasses.end());
+}
+
+bool Explorator::hasTargetName(const db::Node* node) const {
+    const std::string displayName = SearchUtils::getProperty(node, _displayName);
+    for (const auto& targetName : _targetNodeNames) {
+        spdlog::info("Check {} {}", targetName, displayName);
+        if (isTargetNameMatch(targetName, displayName)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool Explorator::isTargetNameMatch(const std::string& target, const std::string& displayName) const {
+    switch (_targetNameMatchType) {
+        case TargetNameMatchType::EXACT:
+            return target == displayName;
+        case TargetNameMatchType::PREFIX:
+            return NodeSearch::isPrefixMatch(displayName, target);
+        case TargetNameMatchType::SUBWORD:
+            return NodeSearch::isApproximateMatch(displayName, target);
+        default:
+            return false;
+    }
 }
 
 void Explorator::setNoDefaultTargets() {
@@ -179,6 +212,10 @@ void Explorator::setNoDefaultTargets() {
 
 void Explorator::addTargetClass(const std::string& name) {
     _targetClasses.insert(name);
+}
+
+void Explorator::addTargetNodeName(const std::string& name) {
+    _targetNodeNames.insert(name);
 }
 
 void Explorator::addDefaultTargetClasses() {
