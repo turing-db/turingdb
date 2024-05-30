@@ -1,6 +1,6 @@
 #pragma once
 #include "PropertyType.h"
-#include "Labelset.h"
+#include "LabelSet.h"
 #include "EntityID.h"
 
 #include <variant>
@@ -20,7 +20,7 @@ struct TestProperty {
 
 struct TestNode {
     EntityID _id = 0;
-    Labelset _labelset = {0};
+    LabelSet _labelset = {0};
     std::vector<TestProperty> _props;
 };
 

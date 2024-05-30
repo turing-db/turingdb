@@ -52,7 +52,7 @@ void Process::updateExitCode() {
         return;
     }
 
-    int status {};
+    int status;
     if (waitpid(_pid, &status, WNOHANG) == 0) {
         return;
     }

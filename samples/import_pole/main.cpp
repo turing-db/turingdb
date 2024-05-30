@@ -1,6 +1,7 @@
 #include "DB.h"
 #include "DBAccess.h"
-#include "DBMetaData.h"
+#include "DBMetadata.h"
+#include "DBReport.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
 #include "Neo4j/ParserConfig.h"
@@ -19,7 +20,7 @@ int main() {
     PerfStat::init("import_pole.perf");
 
     auto database = std::make_unique<DB>();
-    const PropertyTypeMap& propTypes = database->metaData()->propTypes();
+    const PropertyTypeMap& propTypes = database->getMetadata()->propTypes();
     const std::string turingHome = std::getenv("TURING_HOME");
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "pole-db";
 
@@ -107,7 +108,7 @@ int main() {
     }
 
     std::stringstream report;
-    access.getReport(report);
+    DBReport::getReport(database->access(), report);
     std::cout << report.view() << std::endl;
 
     PerfStat::destroy();

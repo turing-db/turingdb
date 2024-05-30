@@ -34,8 +34,8 @@ bool run() {
         } 
 
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     } 

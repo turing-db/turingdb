@@ -15,6 +15,7 @@ set(common_sources
         JobSystem.cpp
         Demonology.cpp
         Process.cpp
+        Panic.cpp
         Report.cpp)
 
 add_library(common_s STATIC ${common_sources})

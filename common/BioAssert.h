@@ -1,8 +1,8 @@
 #pragma once
 
 #ifdef NDEBUG
-#define bioassert(C) (void)(C)
-#define msgbioassert(C, msg) (void)(C)
+#define bioassert(C)
+#define msgbioassert(C, msg)
 #else
 void __bioAssertWithLocation(const char* file, unsigned line, const char* expr, const char* msg = "");
 

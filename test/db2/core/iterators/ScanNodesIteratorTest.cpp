@@ -7,7 +7,7 @@
 #include "ChunkConfig.h"
 #include "ColumnNodes.h"
 #include "DB.h"
-#include "DBMetaData.h"
+#include "DBMetadata.h"
 #include "DBAccess.h"
 #include "DataBuffer.h"
 #include "FileUtils.h"
@@ -64,8 +64,8 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     {
         auto buf = db->access().newDataBuffer();
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), *_jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
@@ -85,8 +85,8 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     for (auto i = 0; i < 3; i++) {
         auto buf = db->access().newDataBuffer();
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), *_jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
@@ -103,9 +103,9 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
 TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     auto db = std::make_unique<DB>();
 
-    auto& labelsets = db->metaData()->labelsets();
-    Labelset labelset = Labelset::fromList({0});
-    LabelsetID labelsetID = labelsets.getOrCreate(labelset);
+    auto& labelsets = db->getMetadata()->labelsets();
+    LabelSet labelset = LabelSet::fromList({0});
+    LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
         auto buf = db->access().newDataBuffer();
@@ -116,8 +116,8 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
         ASSERT_EQ(buf->nodeCount(), ChunkConfig::CHUNK_SIZE);
 
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), *_jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
@@ -153,9 +153,9 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto db = std::make_unique<DB>();
 
-    auto& labelsets = db->metaData()->labelsets();
-    Labelset labelset = Labelset::fromList({0});
-    LabelsetID labelsetID = labelsets.getOrCreate(labelset);
+    auto& labelsets = db->getMetadata()->labelsets();
+    LabelSet labelset = LabelSet::fromList({0});
+    LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     for (auto i = 0; i < 8; i++) {
         auto buf = db->access().newDataBuffer();
@@ -166,8 +166,8 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         ASSERT_EQ(buf->nodeCount(), ChunkConfig::CHUNK_SIZE);
 
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), *_jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
@@ -208,9 +208,9 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
 
     auto db = std::make_unique<DB>();
 
-    auto& labelsets = db->metaData()->labelsets();
-    Labelset labelset = Labelset::fromList({0});
-    LabelsetID labelsetID = labelsets.getOrCreate(labelset);
+    auto& labelsets = db->getMetadata()->labelsets();
+    LabelSet labelset = LabelSet::fromList({0});
+    LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
         auto buf = db->access().newDataBuffer();
@@ -219,8 +219,8 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
         }
 
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), *_jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }

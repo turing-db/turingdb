@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 
-#include "DBMetaData.h"
+#include "DBMetadata.h"
 #include "EdgeContainer.h"
 #include "EntityID.h"
 
@@ -15,7 +15,7 @@ protected:
     void TearDown() override {
     }
 
-    DBMetaData _metaData;
+    DBMetadata _metadata;
 };
 
 TEST_F(EdgeContainerTest, General) {

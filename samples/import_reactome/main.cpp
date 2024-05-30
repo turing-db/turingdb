@@ -2,7 +2,7 @@
 #include "DBAccess.h"
 #include "EdgeView.h"
 #include "FileUtils.h"
-#include "DBMetaData.h"
+#include "DBMetadata.h"
 #include "JobSystem.h"
 #include "Neo4j/ParserConfig.h"
 #include "Neo4jImporter.h"
@@ -20,11 +20,11 @@ int main() {
     PerfStat::init("import_reactome.perf");
 
     auto database = std::make_unique<DB>();
-    const PropertyTypeMap& propTypes = database->metaData()->propTypes();
-    const LabelMap& labels = database->metaData()->labels();
-    LabelsetMap& labelsets = database->metaData()->labelsets();
+    const PropertyTypeMap& propTypes = database->getMetadata()->propTypes();
+    const LabelMap& labels = database->getMetadata()->labels();
+    LabelSetMap& labelsets = database->getMetadata()->labelsets();
 
-    const FileUtils::Path jsonDir = "/net/db/reactome/json";
+    const FileUtils::Path jsonDir = "/home/luclabarriere/jsonReactome";
 
     auto t0 = Clock::now();
     Neo4jImporter::importJsonDir(jobSystem,
@@ -45,12 +45,12 @@ int main() {
     PropertyType stIDType = propTypes.get("stId (String)");
 
     const auto findReactomeID = [&]() {
-        Labelset labelset;
+        LabelSet labelset;
         labelset.set(labels.get("DatabaseObject"));
         labelset.set(labels.get("PhysicalEntity"));
         labelset.set(labels.get("GenomeEncodedEntity"));
         labelset.set(labels.get("EntityWithAccessionedSequence"));
-        const LabelsetID labelsetID = labelsets.getOrCreate(labelset);
+        const LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
         auto it = access.scanNodePropertiesByLabel<types::String>(stIDType._id, labelsetID).begin();
         size_t i = 0;
@@ -79,8 +79,8 @@ int main() {
     t1 = Clock::now();
     std::cout << "Got APOE-4 view in: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
-    LabelsetID labelsetID = apoe.labelset();
-    const Labelset& labelset = labelsets.getValue(labelsetID);
+    LabelSetID labelsetID = apoe.labelset();
+    const LabelSet& labelset = labelsets.getValue(labelsetID);
 
     std::vector<LabelID> labelIDs;
     labelset.decompose(labelIDs);

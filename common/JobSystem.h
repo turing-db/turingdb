@@ -17,6 +17,12 @@ public:
     virtual void wait() = 0;
 };
 
+/* @brief Wrapper class around std::future<T>
+ *
+ * The contained state is only accessible by move operations, which consume
+ * the future object. If multiple access to the same state is required,
+ * use ShareFuture<T> instead.
+ * */
 template <typename T>
 class Future : public std::future<T>, public AbstractFuture {
 public:
@@ -37,6 +43,13 @@ public:
     }
 };
 
+/* @brief Wrapper class around std::shared_future<T>
+ *
+ * The contained state is shared by multiple SharedFuture<T>
+ * ojects. Accessing the internal state is thread safe if called from
+ * different SharedFuture<T> objects.
+ * Mostly used with JobGroups
+ * */
 template <typename T>
 class SharedFuture : public std::shared_future<T>, public AbstractFuture {
 public:
@@ -89,6 +102,11 @@ public:
 
 
 
+/* @brief Closure to be executed by the JobSystem
+ *
+ * Takes in an abstract Promise* that can be casted
+ * into a TypedPromise<T>
+ * */
 using JobOperation = std::function<void(Promise*)>;
 using JobID = uint64_t;
 
@@ -122,6 +140,11 @@ public:
 
     void initialize();
 
+    /* @brief submits a job to be executed
+     *
+     * @param operation closure to be executed on one of the threads
+     * @return Future<T> holding the state of the TypedPromise<T>
+     * */
     template <typename T>
     Future<T> submit(JobOperation&& operation) {
         std::unique_lock lock(_queueMutex);
@@ -137,6 +160,11 @@ public:
         return future;
     }
 
+    /* @brief submits a job to be executed
+     *
+     * @param operation closure to be executed on one of the threads
+     * @return SharedFuture<T> holding the shared state of the TypedPromise<T>
+     * */
     template <typename T>
     SharedFuture<T> submitShared(JobOperation&& operation) {
         std::unique_lock lock(_queueMutex);
@@ -152,6 +180,10 @@ public:
         return future;
     }
 
+    /* @brief Creates a new job group
+     *
+     * Allows to wait on a subset of the submitted jobs
+     * */
     JobGroup newGroup();
 
     void wait();
@@ -167,7 +199,7 @@ private:
     std::atomic<size_t> _finishedCount {0};
     std::atomic<size_t> _submitedCount {0};
     std::atomic<bool> _stopRequested {false};
-    bool _terminated = false;
+    bool _terminated {false};
 };
 
 class JobGroup {

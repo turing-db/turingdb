@@ -3,7 +3,7 @@
 
 #include "DB.h"
 #include "DBAccess.h"
-#include "DBMetaData.h"
+#include "DBMetadata.h"
 #include "DataBuffer.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -52,7 +52,7 @@ protected:
 
         {
             // Node 0
-            const EntityID tmpID = tempData1->addNode(Labelset::fromList({0}));
+            const EntityID tmpID = tempData1->addNode(LabelSet::fromList({0}));
             tempData1->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData1->addNodeProperty<types::String>(
@@ -61,7 +61,7 @@ protected:
 
         {
             // Node 1
-            const EntityID tmpID = tempData1->addNode(Labelset::fromList({0}));
+            const EntityID tmpID = tempData1->addNode(LabelSet::fromList({0}));
             tempData1->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData1->addNodeProperty<types::String>(
@@ -70,7 +70,7 @@ protected:
 
         {
             // Node 2
-            const EntityID tmpID = tempData1->addNode(Labelset::fromList({1}));
+            const EntityID tmpID = tempData1->addNode(LabelSet::fromList({1}));
             tempData1->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
@@ -98,7 +98,7 @@ protected:
 
         {
             // Node 4
-            const EntityID tmpID = tempData2->addNode(Labelset::fromList({0, 1}));
+            const EntityID tmpID = tempData2->addNode(LabelSet::fromList({0, 1}));
             tempData2->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData2->addNodeProperty<types::String>(
@@ -107,7 +107,7 @@ protected:
 
         {
             // Node 3
-            const EntityID tmpID = tempData2->addNode(Labelset::fromList({1}));
+            const EntityID tmpID = tempData2->addNode(LabelSet::fromList({1}));
             tempData2->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
@@ -139,22 +139,22 @@ protected:
 
         // PUSH DATAPARTS
         {
-            auto datapart = _db->uniqueAccess().prepareNewDataPart(std::move(tempData1));
-            _db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData1));
+            datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
         }
 
         {
-            auto datapart = _db->uniqueAccess().prepareNewDataPart(std::move(tempData2));
-            _db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData2));
+            datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
         }
 
         /* THIRD BUFFER (Empty) */
         std::unique_ptr<DataBuffer> tempData3 = _db->access().newDataBuffer();
         {
-            auto datapart = _db->uniqueAccess().prepareNewDataPart(std::move(tempData3));
-            _db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData3));
+            datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
         }
 
@@ -163,7 +163,7 @@ protected:
 
         {
             // Node 8
-            const EntityID tmpID = tempData4->addNode(Labelset::fromList({0, 1}));
+            const EntityID tmpID = tempData4->addNode(LabelSet::fromList({0, 1}));
             tempData4->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData4->addNodeProperty<types::String>(
@@ -172,7 +172,7 @@ protected:
 
         {
             // Node 5
-            const EntityID tmpID = tempData4->addNode(Labelset::fromList({0}));
+            const EntityID tmpID = tempData4->addNode(LabelSet::fromList({0}));
             tempData4->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData4->addNodeProperty<types::String>(
@@ -181,7 +181,7 @@ protected:
 
         {
             // Node 6
-            const EntityID tmpID = tempData4->addNode(Labelset::fromList({1}));
+            const EntityID tmpID = tempData4->addNode(LabelSet::fromList({1}));
             tempData4->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData4->addNodeProperty<types::String>(
@@ -190,7 +190,7 @@ protected:
 
         {
             // Node 7
-            const EntityID tmpID = tempData4->addNode(Labelset::fromList({1}));
+            const EntityID tmpID = tempData4->addNode(LabelSet::fromList({1}));
             tempData4->addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             tempData4->addNodeProperty<types::String>(
@@ -241,8 +241,8 @@ protected:
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         {
-            auto datapart = _db->uniqueAccess().prepareNewDataPart(std::move(tempData4));
-            _db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData4));
+            datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
@@ -306,9 +306,9 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 
     auto it = compareSet.begin();
     size_t count = 0;
-    const auto& labelsets = _db->metaData()->labelsets();
-    const auto labelset = Labelset::fromList({1});
-    const LabelsetID labelsetID = labelsets.get(labelset);
+    const auto& labelsets = _db->getMetadata()->labelsets();
+    const auto labelset = LabelSet::fromList({1});
+    const LabelSetID labelsetID = labelsets.get(labelset);
 
     for (const EntityID id : access.scanNodesByLabel(labelsetID)) {
         ASSERT_EQ(it->getValue(), id.getValue());
@@ -441,9 +441,9 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
 TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
     auto access = _db->access();
 
-    const auto& labelsets = _db->metaData()->labelsets();
-    const auto labelset = Labelset::fromList({1});
-    const LabelsetID labelsetID = labelsets.get(labelset);
+    const auto& labelsets = _db->getMetadata()->labelsets();
+    const auto labelset = LabelSet::fromList({1});
+    const LabelSetID labelsetID = labelsets.get(labelset);
 
     {
         std::vector<uint64_t> compareSet {2, 0, 1, 5, 7, 8};

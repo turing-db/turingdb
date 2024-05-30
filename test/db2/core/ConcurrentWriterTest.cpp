@@ -3,7 +3,7 @@
 #include "ConcurrentWriter.h"
 #include "DB.h"
 #include "DBAccess.h"
-#include "DBMetaData.h"
+#include "DBMetadata.h"
 #include "DataBuffer.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -49,13 +49,13 @@ protected:
         DataBuffer& tempData2 = bufferManager.newBuffer(2, 3);
         DataBuffer& tempData3 = bufferManager.newBuffer(4, 4);
 
-        auto& labelsets = _db->metaData()->labelsets();
-        const Labelset l0 = Labelset::fromList({0});
-        const Labelset l1 = Labelset::fromList({1});
-        const Labelset l01 = Labelset::fromList({0, 1});
-        const LabelsetID l0ID = labelsets.getOrCreate(l0);
-        const LabelsetID l1ID = labelsets.getOrCreate(l1);
-        const LabelsetID l01ID = labelsets.getOrCreate(l01);
+        auto& labelsets = _db->getMetadata()->labelsets();
+        const LabelSet l0 = LabelSet::fromList({0});
+        const LabelSet l1 = LabelSet::fromList({1});
+        const LabelSet l01 = LabelSet::fromList({0, 1});
+        const LabelSetID l0ID = labelsets.getOrCreate(l0);
+        const LabelSetID l1ID = labelsets.getOrCreate(l1);
+        const LabelSetID l01ID = labelsets.getOrCreate(l01);
 
         {
             // NODE 0 (temp ID: 0)
@@ -134,8 +134,8 @@ protected:
 
         std::unique_ptr<DataBuffer> tempData = bufferManager.build();
         {
-            auto datapart = _db->uniqueAccess().prepareNewDataPart(std::move(tempData));
-            _db->access().loadDataPart(*datapart, *_jobSystem);
+            auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData));
+            datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
@@ -196,9 +196,9 @@ TEST_F(ConcurrentWriterTest, ScanNodesByLabelIteratorTest) {
 
     auto it = compareSet.begin();
     size_t count = 0;
-    const auto& labelsets = _db->metaData()->labelsets();
-    const Labelset labelset = Labelset::fromList({1});
-    const LabelsetID labelsetID = labelsets.get(labelset);
+    const auto& labelsets = _db->getMetadata()->labelsets();
+    const LabelSet labelset = LabelSet::fromList({1});
+    const LabelSetID labelsetID = labelsets.get(labelset);
 
     for (const EntityID id : access.scanNodesByLabel(labelsetID)) {
         ASSERT_EQ(it->getValue(), id.getValue());

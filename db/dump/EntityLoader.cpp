@@ -49,7 +49,7 @@ bool EntityLoader::load(const StringIndexLoader& strLoader) {
     const auto entityIndexReader = message.getRoot<OnDisk::EntityIndex>();
 
     for (auto diskNetwork : entityIndexReader.getNetworks()) {
-        Network* net = wb.createNetwork(strLoader[diskNetwork.getNameId()]);
+        [[maybe_unused]] Network* net = wb.createNetwork(strLoader[diskNetwork.getNameId()]);
         bioassert(net);
     }
 

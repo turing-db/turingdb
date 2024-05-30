@@ -41,8 +41,6 @@ void JobSystem::initialize() {
 
     for (size_t i = 0; i < _nThreads; i++) {
         _workers.emplace_back([&] {
-            JobOperation job;
-
             while (true) {
                 _queueMutex.lock();
                 auto j = _jobs.pop();

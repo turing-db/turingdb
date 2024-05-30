@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 
-#include "DBMetaData.h"
+#include "DBMetadata.h"
 #include "EdgeContainer.h"
 #include "EdgeIndexer.h"
 #include "EntityID.h"
@@ -17,20 +17,20 @@ protected:
     void TearDown() override {
     }
 
-    DBMetaData _metaData;
+    DBMetadata _metadata;
 };
 
 TEST_F(EdgeIndexerTest, General) {
     const EntityID firstNodeID = 0;
     const EntityID firstEdgeID = 0;
 
-    DBMetaData _metaData;
-    std::vector<LabelsetID> nodeLabelsets = {0, 0, 1, 1, 1, 2, 3, 3, 3, 4, 4, 5};
+    DBMetadata _metadata;
+    std::vector<LabelSetID> nodeLabelSets = {0, 0, 1, 1, 1, 2, 3, 3, 3, 4, 4, 5};
     auto nodes = NodeContainer::create(0,
-                                       &_metaData,
-                                       nodeLabelsets);
+                                       &_metadata,
+                                       nodeLabelSets);
 
-    std::map<EntityID, LabelsetID> patchNodeLabelsets;
+    std::map<EntityID, LabelSetID> patchNodeLabelSets;
 
     std::vector<EdgeRecord> outEdges = {
         {0, 1, 2, 0},
@@ -47,7 +47,7 @@ TEST_F(EdgeIndexerTest, General) {
     auto indexer = EdgeIndexer::create(*edges,
                                        *nodes,
                                        0,
-                                       patchNodeLabelsets,
+                                       patchNodeLabelSets,
                                        3);
 
     {

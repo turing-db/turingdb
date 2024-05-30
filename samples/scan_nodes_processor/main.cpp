@@ -48,12 +48,12 @@ bool run() {
     {
         auto buf = db->access().newDataBuffer();
         for (size_t i = 0; i < nodeCount; i++) {
-            buf->addNode(LabelsetID{0});
+            buf->addNode(LabelSetID{0});
         }
 
         {
-            auto datapart = db->uniqueAccess().prepareNewDataPart(std::move(buf));
-            db->access().loadDataPart(*datapart, jobSystem);
+            auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
+            datapart->load(db->access(), jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }

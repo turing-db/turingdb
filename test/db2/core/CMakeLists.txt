@@ -6,7 +6,7 @@ function(add_db2_core_gtest exe_name cpp_file)
     gtest_discover_tests(${exe_name})
 endfunction()
 
-add_db2_core_gtest(db2_core_labelset_test LabelsetTest.cpp)
+add_db2_core_gtest(db2_core_labelset_test LabelSetTest.cpp)
 add_db2_core_gtest(db2_core_labelmap_test LabelMapTest.cpp)
 add_db2_core_gtest(db2_core_nodecontainer_test NodeContainerTest.cpp)
 add_db2_core_gtest(db2_core_edgecontainer_test EdgeContainerTest.cpp)
