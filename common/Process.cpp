@@ -52,7 +52,7 @@ void Process::updateExitCode() {
         return;
     }
 
-    int status;
+    int status {};
     if (waitpid(_pid, &status, WNOHANG) == 0) {
         return;
     }
@@ -172,11 +172,11 @@ bool Process::wait() {
 
     _waited = true;
 
+    updateExitCode();
+
     if (_exitCode != -1) {
         return true;
     }
-
-    updateExitCode();
 
     return true;
 }
@@ -184,4 +184,10 @@ bool Process::wait() {
 bool Process::isRunning() {
     updateExitCode();
     return _running;
+}
+
+
+int Process::getExitCode() {
+    updateExitCode();
+    return _exitCode;
 }
