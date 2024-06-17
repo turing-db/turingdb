@@ -12,8 +12,8 @@ build-job:
     - source /turing/setup.sh
     - make -j4
     - make test
-    - cd test/regress/ && wrt -j 4 -output-on-failure
     - release/check_python.sh
+    - cd test/regress/ && wrt -j 4 -output-on-failure
   artifacts:
     when: always
     paths:
