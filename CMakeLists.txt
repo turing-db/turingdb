@@ -27,14 +27,14 @@ if (DEFINED ENV{TURING_DEV})
 endif()
 
 # Debug settings
-# if (${DEBUG_BUILD})
-#     message(STATUS "Debug build")
-#     set(OPTIMIZE_FLAGS "-O0 -g -fcf-protection=none")
-# else()
-#     message(STATUS "Optimized build")
-#     add_definitions(-DNDEBUG)
-#     set(OPTIMIZE_FLAGS "-O3")
-# endif()
+if (${DEBUG_BUILD})
+    message(STATUS "Debug build")
+    set(OPTIMIZE_FLAGS "-O0 -g -fcf-protection=none")
+else()
+    message(STATUS "Optimized build")
+    add_definitions(-DNDEBUG)
+    set(OPTIMIZE_FLAGS "-O3")
+endif()
 
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_FEATURES} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
