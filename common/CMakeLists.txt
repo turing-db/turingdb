@@ -16,6 +16,7 @@ set(common_sources
         Demonology.cpp
         Process.cpp
         Panic.cpp
+        TuringException.cpp
         Report.cpp)
 
 add_library(common_s STATIC ${common_sources})
