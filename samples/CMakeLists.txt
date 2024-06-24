@@ -22,6 +22,7 @@ endmacro()
 add_subdirectory(import_pole)
 add_subdirectory(import_reactome)
 add_subdirectory(scan_nodes_iterator)
+add_subdirectory(bytecompiler)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
