@@ -21,6 +21,7 @@ public:
     void wait();
 
     int getExitCode() const;
+    Path getLogPath() const { return _path / "run.log"; }
 
 private:
     const Path _path;

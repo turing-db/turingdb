@@ -218,7 +218,14 @@ void RegressTesting::processTestTermination(RegressJob* job) {
             cleanDir(path, true);
         }
     } else {
-        spdlog::info("Fail: {} (exit code: {})", path.string(), exitCode);
+        std::string logContent;
+        FileUtils::readContent(job->getLogPath(), logContent);
+        spdlog::info("-FAIL-\n"
+                     "{} (exit code: {})\n"
+                     "Output:\n{}\n\n",
+                     path.string(),
+                     exitCode,
+                     logContent);
         _testFail.emplace_back(path);
     }
 }

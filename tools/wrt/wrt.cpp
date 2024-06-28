@@ -24,6 +24,7 @@ int main(int argc, const char** argv) {
 
     bool cleanDir = false;
     bool cleanIfSuccess = true;
+    bool outputOnFailure = false;
     unsigned concurrency = 1;
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("-clean")
@@ -38,6 +39,10 @@ int main(int argc, const char** argv) {
              .help("Number of concurrent jobs")
              .nargs(1)
              .store_into(concurrency);
+    argParser.add_argument("-output-on-failure")
+             .help("Prints the output of the script if it fails")
+             .nargs(0)
+             .action([&](const auto&){ outputOnFailure= true; });
 
     toolInit.init(argc, argv);
 
@@ -49,6 +54,7 @@ int main(int argc, const char** argv) {
 
     regress->setCleanIfSuccess(cleanIfSuccess);
     regress->setConcurrency(concurrency);
+    regress->setOutputOnFailure(outputOnFailure);
 
     if (cleanDir) {
         regress->clean();

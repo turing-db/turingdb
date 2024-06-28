@@ -88,7 +88,6 @@ void Command::generateCmdString(std::string& cmdStr) {
     cmdStr += "; ";
 
     for (const auto& envEntry : _env) {
-        cmdStr += "'";
         cmdStr += envEntry.first;
         cmdStr += "='";
         cmdStr += envEntry.second;

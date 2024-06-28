@@ -25,7 +25,7 @@ bool RegressJob::start() {
 
     Command cmd(runScriptPath.string());
     cmd.setWorkingDir(_path);
-    cmd.setLogFile(_path/"run.log");
+    cmd.setLogFile(getLogPath());
     cmd.setGenerateScript(true);
 
     spdlog::info("Run: {}", _path.string());

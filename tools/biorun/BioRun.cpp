@@ -53,7 +53,7 @@ int main(int argc, const char** argv) {
 
     argParser.add_argument("-nbarg")
              .help("Set notebook argument arg_name=value")
-             .nargs(1)
+             .nargs(argparse::nargs_pattern::at_least_one)
              .append()
              .action([&](const auto& value){
                 const size_t it = value.find('=');

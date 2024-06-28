@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 
@@ -52,8 +53,9 @@ void Process::updateExitCode() {
         return;
     }
 
-    int status;
-    if (waitpid(_pid, &status, WNOHANG) == 0) {
+    int status = 0;
+    const auto res = waitpid(_pid, &status, WNOHANG);
+    if (res == -1) {
         return;
     }
 
@@ -164,19 +166,40 @@ bool Process::wait() {
         return false;
     }
 
-    siginfo_t siginfo;
-    memset(&siginfo, 0, sizeof(siginfo_t));
-    if (waitid(P_PID, _pid, &siginfo, WEXITED) < 0) {
-        return false;
-    }
-
-    _waited = true;
-
-    if (_exitCode != -1) {
+    if (!_running) {
         return true;
     }
 
-    updateExitCode();
+    int status = 0;
+    const auto res = waitpid(_pid, &status, 0);
+    _running = false;
+    _waited = true;
+
+    if (res == -1) {
+        switch (errno) {
+            case ECHILD: {
+                spdlog::error("Could not wait on process: child error");
+                break;
+            }
+            case EINTR: {
+                spdlog::error("Could not wait on process: EINTR");
+                break;
+            }
+            case EINVAL: {
+                spdlog::error("Could not wait on process: EINVAL");
+                break;
+            }
+        }
+        return false;
+    }
+
+    if (WIFEXITED(status)) {
+        _exitCode = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        _exitCode = WTERMSIG(status);
+    } else if (WIFSTOPPED(status)) {
+        _exitCode = WSTOPSIG(status);
+    }
 
     return true;
 }
@@ -184,4 +207,10 @@ bool Process::wait() {
 bool Process::isRunning() {
     updateExitCode();
     return _running;
+}
+
+
+int Process::getExitCode() {
+    updateExitCode();
+    return _exitCode;
 }

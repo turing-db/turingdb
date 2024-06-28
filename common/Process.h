@@ -36,7 +36,7 @@ public:
 
     bool wait();
 
-    int getExitCode() const { return _exitCode; }
+    int getExitCode();
 
 private:
     std::string _cmd;

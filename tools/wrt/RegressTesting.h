@@ -16,6 +16,7 @@ public:
 
     void setCleanIfSuccess(bool enabled) { _cleanIfSuccess = enabled; }
     void setConcurrency(size_t jobs) { _concurrency = jobs; }
+    void setOutputOnFailure(bool v) { _outputOnFailure = v; }
 
     void run();
     void clean();
@@ -28,6 +29,7 @@ private:
     size_t _concurrency {1};
     bool _error {false};
     bool _cleanIfSuccess {true};
+    bool _outputOnFailure {false};
     std::vector<Path> _testPaths;
     std::vector<Path> _testFail;
     std::vector<Path> _testSuccess;

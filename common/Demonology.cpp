@@ -43,6 +43,7 @@ void Demonology::demonize() {
 
     if (pid > 0) {
         // We are in the parent process, kill ourselves
+        spdlog::info("Spawned process {}", pid);
         exit(EXIT_SUCCESS);
     }
 
