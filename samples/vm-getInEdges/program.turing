@@ -9,11 +9,9 @@ ALIAS %out,      r5
 .text:
 
 DEFINE_OUTPUT %out
-ADD_INDICES %out, %indices1
-ADD_INDICES %out, %indices2
-ADD_COL     %out, %input, %indices1
-ADD_COL     %out, %srcs1, %indices2
-ADD_COL     %out, %srcs2
+ADD_COL     %out, %input, _
+ADD_COL     %out, %srcs1, %indices1
+ADD_COL     %out, %srcs2, %indices2
 
 GET_IN_EDGES i0, %input, %indices1, {_, %srcs1}
     i0_START:
