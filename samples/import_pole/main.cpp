@@ -9,6 +9,7 @@
 #include "NodeView.h"
 #include "PerfStat.h"
 #include "Time.h"
+#include "LogSetup.h"
 
 #include <iostream>
 
@@ -16,6 +17,9 @@ using namespace db;
 
 int main() {
     JobSystem jobSystem;
+    LogSetup::setupLogFileBacked(SAMPLE_NAME ".log");
+    PerfStat::init(SAMPLE_NAME ".perf");
+
     jobSystem.initialize();
     PerfStat::init("import_pole.perf");
 

@@ -139,12 +139,14 @@ protected:
 
         // PUSH DATAPARTS
         {
+            spdlog::info("Pushing 1");
             auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData1));
             datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
         }
 
         {
+            spdlog::info("Pushing 2");
             auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData2));
             datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
@@ -153,6 +155,7 @@ protected:
         /* THIRD BUFFER (Empty) */
         std::unique_ptr<DataBuffer> tempData3 = _db->access().newDataBuffer();
         {
+            spdlog::info("Pushing 3");
             auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData3));
             datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
@@ -241,6 +244,7 @@ protected:
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         {
+            spdlog::info("Pushing 4");
             auto datapart = _db->uniqueAccess().createDataPart(std::move(tempData4));
             datapart->load(_db->access(), *_jobSystem);
             _db->uniqueAccess().pushDataPart(std::move(datapart));
@@ -278,6 +282,7 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
     for (const EdgeRecord& v : access.scanOutEdges()) {
         ASSERT_EQ(it->_nodeID.getValue(), v._nodeID.getValue());
         ASSERT_EQ(it->_otherID.getValue(), v._otherID.getValue());
+        spdlog::info("Node: {} has labelset {}", it->_nodeID, access.getNodeLabelSetID(it->_nodeID));
         count++;
         it++;
     }
@@ -321,7 +326,7 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 
 TEST_F(IteratorsTest, GetEdgesIteratorTest) {
     auto access = _db->access();
-    ColumnNodes inputNodeIDs = {1, 2, 3, 8};
+    ColumnIDs inputNodeIDs = {1, 2, 3, 8};
     std::vector<TestEdgeRecord> compareSet {
         {2, 3, 4},
         {5, 2, 8},
@@ -479,7 +484,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
 
 TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
     auto access = _db->access();
-    ColumnNodes inputNodeIDs = {1, 3, 8};
+    ColumnIDs inputNodeIDs = {1, 3, 8};
 
     {
         std::vector<uint64_t> compareSet {1, 1, 5};

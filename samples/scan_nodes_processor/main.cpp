@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "ChunkConfig.h"
-#include "ColumnNodes.h"
+#include "ColumnIDs.h"
 #include "DB.h"
 #include "DBAccess.h"
 #include "DataBuffer.h"
@@ -25,7 +25,7 @@ void printDuration(const char* title, std::chrono::duration<double, std::milli> 
 
 [[gnu::noinline]]
 void chunkTest(DB* db) {
-    ColumnNodes* col = new ColumnNodes();
+    ColumnIDs* col = new ColumnIDs();
     col->reserve(ChunkConfig::CHUNK_SIZE);
 
     ScanNodesIterator it(db);
@@ -67,7 +67,7 @@ bool run() {
     auto* discard = pipe.addProcessor<DiscardProcessor>();
     discard->setInput(&discard->inputData, scanNodesOut);
 
-    ColumnNodes* myCol = new ColumnNodes();
+    ColumnIDs* myCol = new ColumnIDs();
     myCol->reserve(ChunkConfig::CHUNK_SIZE);
 
     PipelineExecutor pipeExec(&pipe);

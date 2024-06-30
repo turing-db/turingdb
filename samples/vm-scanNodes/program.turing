@@ -1,0 +1,11 @@
+.text:
+SCAN_NODES i0, {r0}
+    i0_start:
+    JEND i0, i0_end
+    UPDATE i0
+
+    GOTO i0_start
+
+i0_end:
+
+EXIT

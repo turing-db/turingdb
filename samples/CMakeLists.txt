@@ -1,7 +1,9 @@
 macro(turing_sample SAMPLE_NAME SOURCES)
     list(APPEND SAMPLE_LIST ${SAMPLE_NAME})
+    set(_SOURCES ${SOURCES} ${ARGN}) # Hack to parse SOURCES as a list
+
     set(SAMPLE_LIST ${SAMPLE_LIST} PARENT_SCOPE)
-    add_executable(${SAMPLE_NAME} ${SOURCES})
+    add_executable(${SAMPLE_NAME} ${_SOURCES})
 
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/run.sh
                "#!/bin/bash\n"
@@ -17,12 +19,21 @@ macro(turing_sample SAMPLE_NAME SOURCES)
         PROGRAMS    ${CMAKE_CURRENT_BINARY_DIR}/run.sh
         PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
         DESTINATION samples/${SAMPLE_NAME})
+    target_compile_definitions(
+        ${SAMPLE_NAME}
+        PRIVATE SAMPLE_NAME="${SAMPLE_NAME}")
 endmacro()
 
 add_subdirectory(import_pole)
-add_subdirectory(import_reactome)
+#add_subdirectory(import_reactome)
 add_subdirectory(scan_nodes_iterator)
 add_subdirectory(bytecompiler)
+#add_subdirectory(scan_nodes_processor)
+add_subdirectory(vm-basic)
+add_subdirectory(vm-scanEdges)
+add_subdirectory(vm-scanNodes)
+add_subdirectory(vm-getOutEdges)
+add_subdirectory(vm-getInEdges)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
