@@ -1,7 +1,7 @@
 #include <range/v3/view/zip.hpp>
 #include <spdlog/spdlog.h>
 
-#include "Compiler.h"
+#include "Assembler.h"
 #include "DataEnv.h"
 #include "LogSetup.h"
 #include "LogUtils.h"
@@ -25,8 +25,8 @@ int main() {
     JobSystem jobSystem;
     jobSystem.initialize();
 
-    // Create compiler
-    auto compiler = Compiler::create();
+    // Create assembler
+    auto assembler = Assembler::create();
 
     // Initialize system
     auto system = std::make_unique<SystemManager>();
@@ -49,7 +49,7 @@ int main() {
     spdlog::info("== Compilation ==");
     auto t0 = Clock::now();
 
-    Program program = compiler->compileFile(sampleDir + "/program.turing");
+    Program program = assembler->compileFile(sampleDir + "/program.turing");
     if (program.size() == 0) {
         spdlog::error("Error program invalid");
         return 1;

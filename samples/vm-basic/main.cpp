@@ -4,7 +4,7 @@
 #include <range/v3/view/zip.hpp>
 #include <spdlog/spdlog.h>
 
-#include "Compiler.h"
+#include "Assembler.h"
 #include "DataEnv.h"
 #include "LogSetup.h"
 #include "LogUtils.h"
@@ -23,8 +23,8 @@ int main() {
     const std::string turingHome = std::getenv("TURING_HOME");
     const std::string sampleDir = turingHome + "/samples/" SAMPLE_NAME;
 
-    // Create compiler
-    auto compiler = Compiler::create();
+    // Create assembler
+    auto assembler = Assembler::create();
 
     // Initialize system
     auto system = std::make_unique<SystemManager>();
@@ -33,11 +33,11 @@ int main() {
     VM vm(system.get());
 
 
-    // Compile program
-    spdlog::info("== Compilation ==");
+    // Assemble program
+    spdlog::info("== Assembly ==");
     auto t0 = Clock::now();
 
-    Program program = compiler->compileFile(sampleDir + "/program.turing");
+    Program program = assembler->compileFile(sampleDir + "/program.turing");
     if (program.size() == 0) {
         spdlog::error("Error program invalid");
         return 1;
