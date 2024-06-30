@@ -56,7 +56,7 @@ int main() {
     spdlog::info("== Execution ==");
     t0 = Clock::now();
 
-    vm.exec(program.get(), env);
+    vm.exec(program.get(), &env);
     spdlog::info("Sum: {}", vm.readRegister(0));
     logt::ElapsedTime(Milliseconds(Clock::now() - t0).count(), "ms");
 
