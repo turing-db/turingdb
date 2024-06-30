@@ -1,0 +1,25 @@
+.alias:
+ALIAS %edgeIDs, r0
+ALIAS %srcIDs,  r1
+ALIAS %tgtIDs,  r2
+ALIAS %indices, r3
+ALIAS %out,     r4
+
+.text:
+DEFINE_OUTPUT %out
+ADD_COL %out, %srcIDs, _
+ADD_COL %out, %edgeIDs, _
+ADD_COL %out, %tgtIDs, _
+
+SCAN_EDGES i0, %indices, {%srcIDs, %edgeIDs, %tgtIDs}
+    i0_start:
+    JEND i0, i0_end
+    UPDATE i0
+
+    WRITE %out
+
+    GOTO i0_start
+
+i0_end:
+
+EXIT

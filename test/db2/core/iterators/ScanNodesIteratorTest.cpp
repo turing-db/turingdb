@@ -5,7 +5,7 @@
 #include "ScanNodesIterator.h"
 
 #include "ChunkConfig.h"
-#include "ColumnNodes.h"
+#include "ColumnIDs.h"
 #include "DB.h"
 #include "DBMetadata.h"
 #include "DBAccess.h"
@@ -53,7 +53,7 @@ TEST_F(ScanNodesIteratorTest, emptyDB) {
     auto it = access.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(colNodes.empty());
 }
@@ -74,7 +74,7 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto it = access.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(colNodes.empty());
 }
@@ -95,7 +95,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     auto it = access.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(colNodes.empty());
 }
@@ -136,7 +136,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     ASSERT_TRUE(!it.isValid());
 
     // Read nodes by chunks
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     it = access.scanNodes().begin();
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(!colNodes.empty());
@@ -185,7 +185,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     ASSERT_TRUE(!it.isValid());
 
     // Read nodes by chunks
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     it = access.scanNodes().begin();
 
     expectedID = 0;
@@ -228,7 +228,7 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     auto access = db->access();
     auto it = access.scanNodes().begin();
 
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     colNodes.reserve(ChunkConfig::CHUNK_SIZE);
 
     // Read nodes by chunks

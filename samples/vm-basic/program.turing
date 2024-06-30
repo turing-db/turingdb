@@ -1,0 +1,14 @@
+.alias:
+ALIAS %sum, r0
+ALIAS %i, r1
+
+.text:
+XOR %i, %i
+XOR %sum, %sum
+
+loop_start:
+    ADD %sum, %i
+    INC %i
+    CMP %i, 400001
+    JNE loop_start
+EXIT

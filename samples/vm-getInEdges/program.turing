@@ -1,0 +1,34 @@
+.alias:
+ALIAS %input,    r0
+ALIAS %indices1, r1
+ALIAS %indices2, r2
+ALIAS %srcs1,    r3
+ALIAS %srcs2,    r4
+ALIAS %out,      r5
+
+.text:
+
+DEFINE_OUTPUT %out
+ADD_COL     %out, %input, _
+ADD_COL     %out, %srcs1, %indices1
+ADD_COL     %out, %srcs2, %indices2
+
+GET_IN_EDGES i0, %input, %indices1, {_, %srcs1}
+    i0_START:
+    JEND   i0, i0_END
+    UPDATE i0
+
+    GET_IN_EDGES i1, %srcs1, %indices2, {_, %srcs2}
+        i1_START:
+        JEND   i1, i1_END
+        UPDATE i1
+
+        WRITE %out
+
+        GOTO i1_START
+    i1_END:
+
+    GOTO i0_START
+i0_END:
+
+EXIT

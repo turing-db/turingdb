@@ -57,7 +57,7 @@ bool run() {
 
     const auto nodeByNodeRead = Clock::now();
 
-    ColumnNodes colNodes;
+    ColumnIDs colNodes;
     colNodes.reserve(ChunkConfig::CHUNK_SIZE);
 
     const auto chunkReadStart = Clock::now();

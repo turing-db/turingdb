@@ -29,7 +29,7 @@ endif()
 # Debug settings
 if (${DEBUG_BUILD})
     message(STATUS "Debug build")
-    set(OPTIMIZE_FLAGS "-O0 -g")
+    set(OPTIMIZE_FLAGS "-O0 -g -fcf-protection=none")
 else()
     message(STATUS "Optimized build")
     add_definitions(-DNDEBUG)
