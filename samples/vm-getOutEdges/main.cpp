@@ -67,18 +67,18 @@ int main() {
 
 
     // Setup DataEnv (initial conditions for registers
-    DataEnv env;
-    env.addEntityIDColumn(0, {9953, 9954, 9955, 9956, 9957, 9958});
-    env.addIndices(1, {});
-    env.addIndices(2, {});
-    env.addEntityIDColumn(3, {});
-    env.addEntityIDColumn(4, {});
+    // DataEnv env;
+    //env.add<ColumnIDs>({9953, 9954, 9955, 9956, 9957, 9958});
+    //env.add<ColumnVector<size_t>>({});
+    //env.add<ColumnVector<size_t>>({});
+    //env.add<ColumnIDs>({});
+    //env.add<ColumnIDs>({});
 
     // Execution
     spdlog::info("== Execution ==");
     t0 = Clock::now();
 
-    vm.exec(program.get(), &env);
+    vm.exec(program.get());
     logt::ElapsedTime(Milliseconds(Clock::now() - t0).count(), "ms");
 
     spdlog::info("Output:");
