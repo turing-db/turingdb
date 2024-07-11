@@ -33,6 +33,8 @@ add_subdirectory(vm-basic)
 add_subdirectory(vm-scanEdges)
 add_subdirectory(vm-scanNodes)
 add_subdirectory(vm-scanNodesByLabel)
+add_subdirectory(vm-scanOutEdgesByLabel)
+add_subdirectory(vm-scanInEdgesByLabel)
 add_subdirectory(vm-getOutEdges)
 add_subdirectory(vm-getInEdges)
 

@@ -48,7 +48,10 @@ TEST_F(EdgeIndexerTest, General) {
                                        *nodes,
                                        0,
                                        patchNodeLabelSets,
-                                       3);
+                                       3,
+                                       0,
+                                       0,
+                                       _metadata);
 
     {
         std::vector<EdgeRecord> compareSet = {

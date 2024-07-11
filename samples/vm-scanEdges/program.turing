@@ -7,20 +7,23 @@ OUTPUT     $out
 
 .alias:
 ALIAS %out,      r0
-ALIAS %indices,  r4
+ALIAS %indices,  r1
+ALIAS %srcIDs,   r2
+ALIAS %edgeIDs,  r3
+ALIAS %tgtIDs,   r4
 
 .text:
 LOAD %indices, $indices
 LOAD %out,     $out
-LOAD r1,       $edgeIDs
-LOAD r2,       $srcIDs
-LOAD r3,       $tgtIDs
+LOAD %srcIDs,  $srcIDs
+LOAD %edgeIDs, $edgeIDs
+LOAD %tgtIDs,  $tgtIDs
 
-ADD_COL %out, r1, _
-ADD_COL %out, r2, _
-ADD_COL %out, r3, _
+ADD_COL %out, %srcIDs, _
+ADD_COL %out, %edgeIDs, _
+ADD_COL %out, %tgtIDs, _
 
-SCAN_EDGES i0, %indices, {r1, r2, r3}
+SCAN_EDGES i0, %indices, {%srcIDs, %edgeIDs, %tgtIDs}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
