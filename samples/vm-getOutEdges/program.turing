@@ -1,4 +1,4 @@
-# Example of SELECT a,c FROM a{.id in {0, 1, 2}}->b->c
+# Example of SELECT a.id,c.id,e2.type FROM a{.id in {0, 1, 2}}-[e1]-b-[e2]>c
 
 .data:
 ENTITY_IDS $input, {0, 1 ,2}
@@ -6,12 +6,13 @@ ENTITY_IDS $tgts2, {}
 OUTPUT     $out
 
 .alias:
-ALIAS %out,      r0
-ALIAS %indices1, r1
-ALIAS %indices2, r2
-ALIAS %input,    r3
-ALIAS %tgts1,    r4
-ALIAS %tgts2,    r5
+ALIAS %out,       r0
+ALIAS %indices1,  r1
+ALIAS %indices2,  r2
+ALIAS %input,     r3
+ALIAS %tgts1,     r4
+ALIAS %tgts2,     r5
+ALIAS %types2,    r6
 
 .text:
 LOAD %out,      $out
@@ -21,19 +22,21 @@ LOAD %tgts2,    $tgts2
 # Only used by the program
 # (not stored as output, so can be dynamically allocated)
 ALLOC_ENTITY_IDS %tgts1
+ALLOC_EDGE_TYPES %types2
 ALLOC_INDICES    %indices1
 ALLOC_INDICES    %indices2
 
-ADD_COL %out, %input, _
-ADD_COL %out, _,      %indices1
-ADD_COL %out, %tgts2, %indices2
+ADD_COL %out, %input,  _
+ADD_COL %out, _,       %indices1 # Required to store the indices of the iterator
+ADD_COL %out, %tgts2,  %indices2
+ADD_COL %out, %types2, %indices2
 
-GET_OUT_EDGES i0, %input, %indices1, {_, %tgts1}
+GET_OUT_EDGES i0, %input, %indices1, {_, %tgts1, _}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
 
-    GET_OUT_EDGES i1, %tgts1, %indices2, {_, %tgts2}
+    GET_OUT_EDGES i1, %tgts1, %indices2, {_, %tgts2, %types2}
         i1_START:
         JEND   i1, i1_END
         UPDATE i1
@@ -47,6 +50,7 @@ GET_OUT_EDGES i0, %input, %indices1, {_, %tgts1}
 i0_END:
 
 DEALLOC_ENTITY_IDS %tgts1
+DEALLOC_EDGE_TYPES %types2
 DEALLOC_INDICES    %indices1
 DEALLOC_INDICES    %indices2
 

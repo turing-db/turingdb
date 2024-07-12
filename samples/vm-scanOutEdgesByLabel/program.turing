@@ -14,6 +14,7 @@ ALIAS %labelset, r2
 ALIAS %srcIDs,   r3
 ALIAS %edgeIDs,  r4
 ALIAS %tgtIDs,   r5
+ALIAS %types,    r6
 
 .text:
 LOAD %indices,  $indices
@@ -23,12 +24,15 @@ LOAD %srcIDs,   $srcIDs
 LOAD %edgeIDs,  $edgeIDs
 LOAD %tgtIDs,   $tgtIDs
 
+ALLOC_EDGE_TYPES %types
+
 BUILD_LABELSET  %labelset
 ADD_COL         %out, %srcIDs, _
 ADD_COL         %out, %edgeIDs, _
 ADD_COL         %out, %tgtIDs, _
+ADD_COL         %out, %types, _
 
-SCAN_OUT_EDGES_BY_LABEL i0, %indices, %labelset, {%srcIDs, %edgeIDs, %tgtIDs}
+SCAN_OUT_EDGES_BY_LABEL i0, %indices, %labelset, {%srcIDs, %edgeIDs, %tgtIDs, %types}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
@@ -37,5 +41,7 @@ SCAN_OUT_EDGES_BY_LABEL i0, %indices, %labelset, {%srcIDs, %edgeIDs, %tgtIDs}
 
     GOTO i0_START
 i0_END:
+
+DEALLOC_EDGE_TYPES %types
 
 EXIT
