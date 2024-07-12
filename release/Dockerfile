@@ -5,7 +5,7 @@ EXPOSE 22
 EXPOSE 8088
 
 USER root
-RUN apt-get install -qqy openssh-server
+RUN apt-get update && apt-get install -qqy openssh-server
 USER dev
 
 ARG TURING_PACKAGE
