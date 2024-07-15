@@ -2,7 +2,7 @@
 
 set -e
 
-prod_ready_bins=biorun
+prod_ready_bins="biorun turing bioserver bioimport turing-app"
 
 package_name=turing
 turing_img=799170964164.dkr.ecr.eu-west-2.amazonaws.com/turing:latest
@@ -22,7 +22,7 @@ function build_package() {
 	# Create final package directory
 	rm -rf $package_name
 	mkdir -p $package_name/bin
-	for bin_file in "$prod_ready_bins"
+	for bin_file in $prod_ready_bins
 	do
 		echo "Copying $bin_file binary into release package"
 		cp build/turing_package/bin/$bin_file $package_name/bin
