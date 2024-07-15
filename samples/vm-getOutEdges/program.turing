@@ -1,34 +1,39 @@
+# Example of SELECT a,c FROM a{.id in {0, 1, 2}}->b->c
+
 .data:
 ENTITY_IDS $input, {0, 1 ,2}
-ENTITY_IDS $tgts1, {}
 ENTITY_IDS $tgts2, {}
-INDICES    $indices1
-INDICES    $indices2
 OUTPUT     $out
 
 .alias:
 ALIAS %out,      r0
 ALIAS %indices1, r1
 ALIAS %indices2, r2
+ALIAS %input,    r3
+ALIAS %tgts1,    r4
+ALIAS %tgts2,    r5
 
 .text:
-LOAD %indices1, $indices1
-LOAD %indices2, $indices2
 LOAD %out,      $out
-LOAD r3,        $input
-LOAD r4,        $tgts1
-LOAD r5,        $tgts2
+LOAD %input,    $input
+LOAD %tgts2,    $tgts2
 
-ADD_COL %out, r3, _
-ADD_COL %out, r4, %indices1
-ADD_COL %out, r5, %indices2
+# Only used by the program
+# (not stored as output, so can be dynamically allocated)
+ALLOC_ENTITY_IDS %tgts1
+ALLOC_INDICES    %indices1
+ALLOC_INDICES    %indices2
 
-GET_OUT_EDGES i0, r3, %indices1, {_, r4}
+ADD_COL %out, %input, _
+ADD_COL %out, _,      %indices1
+ADD_COL %out, %tgts2, %indices2
+
+GET_OUT_EDGES i0, %input, %indices1, {_, %tgts1}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
 
-    GET_OUT_EDGES i1, r4, %indices2, {_, r5}
+    GET_OUT_EDGES i1, %tgts1, %indices2, {_, %tgts2}
         i1_START:
         JEND   i1, i1_END
         UPDATE i1
@@ -40,5 +45,9 @@ GET_OUT_EDGES i0, r3, %indices1, {_, r4}
 
     GOTO i0_START
 i0_END:
+
+DEALLOC_ENTITY_IDS %tgts1
+DEALLOC_INDICES    %indices1
+DEALLOC_INDICES    %indices2
 
 EXIT

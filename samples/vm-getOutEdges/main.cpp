@@ -45,7 +45,7 @@ int main() {
     VM vm(system.get());
 
     // Compile & execute program
-    spdlog::info("== Compilation ==");
+    spdlog::info("== Code Generation ==");
     auto t0 = Clock::now();
 
     if (!assembler.generateFromFile(program, sampleDir + "/program.turing")) {
