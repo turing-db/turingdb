@@ -1,9 +1,5 @@
 .data:
-ENTITY_IDS $input, {15396, 15395}
-ENTITY_IDS $srcs1, {}
-ENTITY_IDS $srcs2, {}
-INDICES    $indices1
-INDICES    $indices2
+ENTITY_IDS $input,    {15396, 15395}
 OUTPUT     $out
 
 .alias:
@@ -15,30 +11,36 @@ ALIAS %srcs1,    r4
 ALIAS %srcs2,    r5
 ALIAS %types1,   r6
 ALIAS %types2,   r7
+ALIAS %edgeIDs1, r8
+ALIAS %edgeIDs2, r9
 
 .text:
-LOAD %indices1, $indices1
-LOAD %indices2, $indices2
 LOAD %out,      $out
 LOAD %input,    $input
-LOAD %srcs1,    $srcs1
-LOAD %srcs2,    $srcs2
 
+ALLOC_INDICES    %indices1
+ALLOC_INDICES    %indices2
 ALLOC_EDGE_TYPES %types1
 ALLOC_EDGE_TYPES %types2
+ALLOC_ENTITY_IDS %srcs1
+ALLOC_ENTITY_IDS %srcs2
+ALLOC_ENTITY_IDS %edgeIDs1
+ALLOC_ENTITY_IDS %edgeIDs2
 
-ADD_COL %out, %input,  _
-ADD_COL %out, %types1, %indices1
-ADD_COL %out, %srcs1,  %indices1
-ADD_COL %out, %types2, %indices2
-ADD_COL %out, %srcs2,  %indices2
+ADD_COL %out, %input,     _
+ADD_COL %out, %types1,    %indices1
+ADD_COL %out, %edgeIDs1,  %indices1
+ADD_COL %out, %srcs1,     %indices1
+ADD_COL %out, %types2,    %indices2
+ADD_COL %out, %edgeIDs2,  %indices2
+ADD_COL %out, %srcs2,     %indices2
 
-GET_IN_EDGES i0, %input, %indices1, {_, %srcs1, %types1}
+GET_IN_EDGES i0, %input, %indices1, {%edgeIDs1, %srcs1, %types1}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
 
-    GET_IN_EDGES i1, %srcs1, %indices2, {_, %srcs2, %types2}
+    GET_IN_EDGES i1, %srcs1, %indices2, {%edgeIDs2, %srcs2, %types2}
         i1_START:
         JEND   i1, i1_END
         UPDATE i1
@@ -51,7 +53,13 @@ GET_IN_EDGES i0, %input, %indices1, {_, %srcs1, %types1}
     GOTO i0_START
 i0_END:
 
+DEALLOC_INDICES    %indices1
+DEALLOC_INDICES    %indices2
 DEALLOC_EDGE_TYPES %types1
 DEALLOC_EDGE_TYPES %types2
+DEALLOC_ENTITY_IDS %srcs1
+DEALLOC_ENTITY_IDS %srcs2
+DEALLOC_ENTITY_IDS %edgeIDs1
+DEALLOC_ENTITY_IDS %edgeIDs2
 
 EXIT

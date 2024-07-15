@@ -1,6 +1,6 @@
 # Example query:
-#     SELECT src1.id, e1.type, e1.id, e2.type, e2.id, tgt2.id
-#     FROM   (src1 .id = {0, 1, 2})-e1-(tgt1)-e2-(tgt2)
+#     SELECT src1.id, tgt3.id
+#     FROM   (src1 .id = {0, 1, 2})--()--()--(tgt3)
 
 .data:
 ENTITY_IDS $input, {0, 1 ,2}
@@ -22,41 +22,53 @@ ALIAS %tgts2,    r7
 ALIAS %types2,   r8
 ALIAS %edgeIDs2, r9
 
+# Third edge
+ALIAS %indices3, r10
+ALIAS %tgts3,    r11
+ALIAS %types3,   r12
+ALIAS %edgeIDs3, r13
+
 .text:
 LOAD %out,      $out
 LOAD %input,    $input
 
 # First Edge
 ALLOC_INDICES    %indices1
-ALLOC_EDGE_TYPES %types1
 ALLOC_ENTITY_IDS %tgts1
-ALLOC_ENTITY_IDS %edgeIDs1
 
 # Second Edge
 ALLOC_INDICES    %indices2
-ALLOC_EDGE_TYPES %types2
 ALLOC_ENTITY_IDS %tgts2
-ALLOC_ENTITY_IDS %edgeIDs2
 
-ADD_COL %out, %input,     _
-ADD_COL %out, %types1,    %indices1
-ADD_COL %out, %edgeIDs1,  %indices1
-# ADD_COL %out, %tgts1,   %indices1   # This column is not outputed
-ADD_COL %out, %types2,    %indices2
-ADD_COL %out, %edgeIDs2,  %indices2
-ADD_COL %out, %tgts2,     %indices2
+# Third Edge
+ALLOC_INDICES    %indices3
+ALLOC_ENTITY_IDS %tgts3
 
-GET_OUT_EDGES i0, %input, %indices1, {%edgeIDs1, %tgts1, %types1}
+ADD_COL %out, %input, _
+ADD_COL %out, _     , %indices1 # Store indices for the transformation pipeline
+ADD_COL %out, _     , %indices2
+ADD_COL %out, %tgts3, %indices3
+
+GET_OUT_EDGES i0, %input, %indices1, {_, %tgts1, _}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
 
-    GET_OUT_EDGES i1, %tgts1, %indices2, {%edgeIDs2, %tgts2, %types2}
+    GET_OUT_EDGES i1, %tgts1, %indices2, {_, %tgts2, _}
         i1_START:
         JEND   i1, i1_END
         UPDATE i1
 
-        WRITE %out
+        GET_OUT_EDGES i2, %tgts2, %indices3, {_, %tgts3, _}
+            i2_START:
+            JEND   i2, i2_END
+            UPDATE i2
+
+
+            WRITE %out
+
+            GOTO i2_START
+        i2_END:
 
         GOTO i1_START
     i1_END:
@@ -66,14 +78,14 @@ i0_END:
 
 # First Edge
 DEALLOC_INDICES    %indices1
-DEALLOC_EDGE_TYPES %types1
 DEALLOC_ENTITY_IDS %tgts1
-DEALLOC_ENTITY_IDS %edgeIDs1
 
 # Second Edge
 DEALLOC_INDICES    %indices2
-DEALLOC_EDGE_TYPES %types2
 DEALLOC_ENTITY_IDS %tgts2
-DEALLOC_ENTITY_IDS %edgeIDs2
+
+# Third Edge
+DEALLOC_INDICES    %indices3
+DEALLOC_ENTITY_IDS %tgts3
 
 EXIT

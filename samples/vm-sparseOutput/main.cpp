@@ -73,19 +73,15 @@ int main() {
     spdlog::info("Output:");
     const auto& output = vm.readRegister<OutputWriter>(0)->getResult();
     std::string str;
-    str += fmt::format("{:>12}", "SrcID_1");
-    str += fmt::format("{:>12}", "EdgeType_1");
-    str += fmt::format("{:>12}", "EdgeID_1");
-    str += fmt::format("{:>12}", "EdgeType_2");
-    str += fmt::format("{:>12}", "EdgeID_2");
-    str += fmt::format("{:>12}", "TgtID_2");
+    str += fmt::format("{:>11}", "SrcID_1");
+    str += fmt::format("{:>11}", "TgtID_3");
     str += "\n";
     for (size_t i = 0; i < output[0].size(); i++) {
         for (size_t j = 0; j < output.size(); j++) {
             if (output[j][i] > 5000000) {
-                str += fmt::format("{:>12}", "...");
+                str += fmt::format("{:>11}", "...");
             } else {
-                str += fmt::format("{:>12}", output[j][i]);
+                str += fmt::format("{:>11}", output[j][i]);
             }
         }
         str += '\n';
