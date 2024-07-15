@@ -1,4 +1,6 @@
-# Example of SELECT a.id,c.id,e2.type FROM a{.id in {0, 1, 2}}-[e1]-b-[e2]>c
+# Example query:
+#     SELECT src1.id, tgt3.id
+#     FROM   (src1 .id = {0, 1, 2})--()--()--(tgt3)
 
 .data:
 ENTITY_IDS $input, {0, 1 ,2}
