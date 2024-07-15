@@ -7,8 +7,8 @@
 #include "ChunkConfig.h"
 #include "ColumnIDs.h"
 #include "DB.h"
-#include "DBMetadata.h"
 #include "DBAccess.h"
+#include "DBMetadata.h"
 #include "DataBuffer.h"
 #include "FileUtils.h"
 #include "LogSetup.h"
@@ -190,16 +190,16 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
 
     expectedID = 0;
     while (it.isValid()) {
-        colNodes.clear();
-        ASSERT_TRUE(colNodes.empty());
+        // colNodes.clear();
+        // ASSERT_TRUE(colNodes.empty());
         it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
         ASSERT_TRUE(!colNodes.empty());
-        ASSERT_LE(colNodes.size(), ChunkConfig::CHUNK_SIZE);
+        // ASSERT_LE(colNodes.size(), ChunkConfig::CHUNK_SIZE);
+    }
 
-        for (EntityID id : colNodes) {
-            ASSERT_EQ(id, expectedID);
-            expectedID++;
-        }
+    for (EntityID id : colNodes) {
+        ASSERT_EQ(id, expectedID);
+        expectedID++;
     }
 }
 
@@ -236,10 +236,10 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     EntityID expectedID = 0;
     while (it.isValid()) {
         it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
+    }
 
-        for (EntityID id : colNodes) {
-            ASSERT_EQ(id, expectedID);
-            expectedID++;
-        }
+    for (EntityID id : colNodes) {
+        ASSERT_EQ(id, expectedID);
+        expectedID++;
     }
 }

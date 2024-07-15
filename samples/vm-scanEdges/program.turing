@@ -11,8 +11,11 @@ ALIAS %indices,  r1
 ALIAS %srcIDs,   r2
 ALIAS %edgeIDs,  r3
 ALIAS %tgtIDs,   r4
+ALIAS %types,    r5
 
 .text:
+ALLOC_EDGE_TYPES %types
+
 LOAD %indices, $indices
 LOAD %out,     $out
 LOAD %srcIDs,  $srcIDs
@@ -22,8 +25,9 @@ LOAD %tgtIDs,  $tgtIDs
 ADD_COL %out, %srcIDs, _
 ADD_COL %out, %edgeIDs, _
 ADD_COL %out, %tgtIDs, _
+ADD_COL %out, %types, _
 
-SCAN_EDGES i0, %indices, {%srcIDs, %edgeIDs, %tgtIDs}
+SCAN_EDGES i0, %indices, {%srcIDs, %edgeIDs, %tgtIDs, %types}
     i0_START:
     JEND   i0, i0_END
     UPDATE i0
@@ -32,5 +36,7 @@ SCAN_EDGES i0, %indices, {%srcIDs, %edgeIDs, %tgtIDs}
 
     GOTO i0_START
 i0_END:
+
+DEALLOC_EDGE_TYPES %types
 
 EXIT
