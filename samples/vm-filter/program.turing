@@ -1,0 +1,36 @@
+.data:
+ENTITY_IDS $edgeIDs, {}
+ENTITY_IDS $srcIDs,  {}
+ENTITY_IDS $tgtIDs,  {}
+INDICES    $indices
+OUTPUT     $out
+
+.alias:
+ALIAS %out,      r0
+ALIAS %indices,  r1
+ALIAS %srcIDs,   r2
+ALIAS %edgeIDs,  r3
+ALIAS %tgtIDs,   r4
+
+.text:
+LOAD %indices, $indices
+LOAD %out,     $out
+LOAD %srcIDs,  $srcIDs
+LOAD %edgeIDs, $edgeIDs
+LOAD %tgtIDs,  $tgtIDs
+
+ADD_COL %out, %srcIDs, _
+ADD_COL %out, %edgeIDs, _
+ADD_COL %out, %tgtIDs, _
+
+SCAN_EDGES i0, %indices, {%srcIDs, %edgeIDs, %tgtIDs}
+    i0_START:
+    JEND   i0, i0_END
+    UPDATE i0
+
+    WRITE %out
+
+    GOTO i0_START
+i0_END:
+
+EXIT

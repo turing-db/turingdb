@@ -37,6 +37,7 @@ add_subdirectory(vm-scanOutEdgesByLabel)
 add_subdirectory(vm-scanInEdgesByLabel)
 add_subdirectory(vm-getOutEdges)
 add_subdirectory(vm-getInEdges)
+add_subdirectory(vm-filter)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
