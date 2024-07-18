@@ -73,17 +73,16 @@ public:
         return std::get<std::vector<T>>(_containers.at(id));
     }
 
-    constexpr uint64_t getAddress(RegID regID) const {
+    constexpr void* getAddress(RegID regID) const {
         const auto& reg = _regInfo[regID];
         const size_t i = reg._index;
         const ContainerID cID = reg._container;
         const Variant& c = _containers.at(cID);
         return std::visit(
             [i]<typename T>(const std::vector<T>& container) {
-                return reinterpret_cast<uint64_t>(&container[i]);
+                return (void*)&container[i];
             },
             c);
-        return i;
     }
 
     constexpr void clear() {
