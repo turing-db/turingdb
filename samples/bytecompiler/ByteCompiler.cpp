@@ -37,8 +37,8 @@ QueryCommand* selectGenesAndProteins(ASTContext* ctxt) {
         panic("Syntax error in the query");
     }
 
-    QueryAnalyzer analyzer(ctxt);
-    if (!analyzer.analyze(query)) {
+    QueryAnalyzer analyzer(ctxt, query);
+    if (!analyzer.analyze()) {
         panic("Query analysis failed");
     }
 
@@ -53,8 +53,8 @@ QueryCommand* parseQuery(ASTContext* ctxt, const std::string queryStr) {
         panic("Syntax error in the query");
     }
 
-    QueryAnalyzer analyzer(ctxt);
-    if (!analyzer.analyze(query)) {
+    QueryAnalyzer analyzer(ctxt, query);
+    if (!analyzer.analyze()) {
         panic("Query analysis failed");
     }
 
@@ -89,7 +89,10 @@ int main(int argc, const char** argv) {
         // Code generation
         BytecodeCompiler byteGen(queryCmd);
 
-        byteGen.generate();
+        if (!byteGen.generate()) {
+            spdlog::error("Bytecode generation failed");
+            return EXIT_FAILURE;
+        }
     } catch (const TuringException& e) {
         spdlog::error("Exception: {}", e.what());
         spdlog::error("Bytecode compilation failed");
