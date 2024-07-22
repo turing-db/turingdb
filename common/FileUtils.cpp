@@ -61,6 +61,7 @@ bool FileUtils::writeFile(const Path& path, const std::string& content) {
     const size_t contentSize = content.size();
     ssize_t bytesWritten = write(fd, content.c_str(), contentSize);
     if (bytesWritten < 0 || bytesWritten < (ssize_t)contentSize) {
+        close (fd);
         return false;
     }
 
