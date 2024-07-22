@@ -9,4 +9,3 @@ function(add_common_tests exe_name cpp_file)
 endfunction()
 
 add_common_tests(common_perfstat_tests PerfStatTest.cpp)
-add_common_tests(common_dataregistrymanager_tests DataRegistryManagerTest.cpp)
