@@ -12,6 +12,7 @@ public:
     // If exe is an absolute path, write in pids the processes with that executable if any
     // If exe is not a path,  write in pids the processes with that executable file name
     static bool searchProcess(const std::string& exe, std::vector<pid_t>& pids);
+    static void stopTool(const std::string& toolName);
 
     ProcessUtils() = delete;
 };

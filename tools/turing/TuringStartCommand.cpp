@@ -1,10 +1,16 @@
 #include "TuringStartCommand.h"
 
+#include <csignal>
 #include <spdlog/spdlog.h>
 
 #include "ToolInit.h"
 #include "Command.h"
 #include "ProcessUtils.h"
+
+void signalHandler(int signum) {
+    ProcessUtils::stopTool("bioserver");
+    exit(EXIT_SUCCESS);
+}
 
 TuringStartCommand::TuringStartCommand(ToolInit& toolInit)
     : ToolCommand(toolInit),
@@ -26,6 +32,17 @@ void TuringStartCommand::setup() {
     _startCommand.add_argument("-prototype")
                  .implicit_value(true)
                  .default_value(false);
+    _startCommand.add_argument("-nodemon")
+                 .implicit_value(true)
+                 .default_value(false);
+#ifdef TURING_DEV
+    _startCommand.add_argument("-dev")
+                 .implicit_value(true)
+                 .default_value(false);
+    _startCommand.add_argument("-build")
+                 .implicit_value(true)
+                 .default_value(false);
+#endif
 
     argParser.add_subparser(_startCommand);
 }
@@ -60,36 +77,16 @@ void TuringStartCommand::run() {
         return;
     }
 
+    if (noDemonRequested()) {
+        signal(SIGINT, signalHandler);
+        signal(SIGTERM, signalHandler);
+    }
+
     _toolInit.createOutputDir();
     const auto dbName = getDBName();
     const auto& outDir = _toolInit.getOutputsDirPath();
     const auto turingAppDir = outDir/"turing-app";
     const auto bioServerDir = outDir/"bioserver";
-
-    Command turingApp("turing-app");
-    turingApp.addOption("-o", turingAppDir);
-    if (isPrototypeRequested()) {
-        turingApp.addArg("-prototype");
-    }
-
-    turingApp.setWorkingDir(outDir);
-    turingApp.setGenerateScript(true);
-    turingApp.setWriteLogFile(false);
-    turingApp.setScriptPath(outDir/"turing-app.sh");
-    turingApp.setLogFile(outDir/"turing-app-launch.log");
-
-    if (!turingApp.run()) {
-        spdlog::error("Failed to start Turing application server");
-        return;
-    }
-    
-    const int appExitCode = turingApp.getReturnCode();
-    if (appExitCode != 0) {
-        spdlog::error("Failed to start turing-app: turing-app command terminated with exit code {}", appExitCode);
-        return;
-    }
-
-    spdlog::info("Starting turing-app");
 
     Command db("bioserver");
     db.addOption("-o", bioServerDir);
@@ -97,9 +94,11 @@ void TuringStartCommand::run() {
     db.setWorkingDir(outDir);
     db.setGenerateScript(true);
     db.setWriteLogFile(false);
+    db.setWriteOnStdout(true);
     db.setScriptPath(outDir/"bioserver.sh");
     db.setLogFile(outDir/"bioserver-launch.log");
 
+    spdlog::info("Starting bioserver");
     if (!db.run()) {
         spdlog::error("Failed to start Turing database server");
         return;
@@ -111,7 +110,41 @@ void TuringStartCommand::run() {
         return;
     }
 
-    spdlog::info("Starting bioserver");
+    Command turingApp("turing-app");
+    turingApp.addOption("-o", turingAppDir);
+    if (isPrototypeRequested()) {
+        turingApp.addArg("-prototype");
+    }
+    if (noDemonRequested()) {
+        turingApp.addArg("-nodemon");
+    }
+#ifdef TURING_DEV
+    if (isDevRequested()) {
+        turingApp.addArg("-dev");
+    }
+    if (isBuildRequested()) {
+        turingApp.addArg("-build");
+    }
+#endif
+
+    turingApp.setWorkingDir(outDir);
+    turingApp.setGenerateScript(true);
+    turingApp.setWriteLogFile(false);
+    turingApp.setWriteOnStdout(true);
+    turingApp.setScriptPath(outDir/"turing-app.sh");
+    turingApp.setLogFile(outDir/"turing-app-launch.log");
+
+    spdlog::info("Starting turing-app");
+    if (!turingApp.run()) {
+        spdlog::error("Failed to start Turing application server");
+        return;
+    }
+    
+    const int appExitCode = turingApp.getReturnCode();
+    if (appExitCode != 0) {
+        spdlog::error("Failed to start turing-app: turing-app command terminated with exit code {}", appExitCode);
+        return;
+    }
 }
 
 std::string TuringStartCommand::getDBName() {
@@ -125,4 +158,22 @@ bool TuringStartCommand::isPrototypeRequested() {
     auto& argParser = _toolInit.getArgParser();
     auto& startCommand = argParser.at<argparse::ArgumentParser>("start");
     return startCommand.get<bool>("-prototype");
+}
+
+bool TuringStartCommand::isDevRequested() {
+    auto& argParser = _toolInit.getArgParser();
+    auto& startCommand = argParser.at<argparse::ArgumentParser>("start");
+    return startCommand.get<bool>("-dev");
+}
+
+bool TuringStartCommand::isBuildRequested() {
+    auto& argParser = _toolInit.getArgParser();
+    auto& startCommand = argParser.at<argparse::ArgumentParser>("start");
+    return startCommand.get<bool>("-build");
+}
+
+bool TuringStartCommand::noDemonRequested() {
+    auto& argParser = _toolInit.getArgParser();
+    auto& startCommand = argParser.at<argparse::ArgumentParser>("start");
+    return startCommand.get<bool>("-nodemon");
 }

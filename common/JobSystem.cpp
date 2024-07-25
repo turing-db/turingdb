@@ -3,8 +3,8 @@
 
 #include <spdlog/spdlog.h>
 
-void JobQueue::push(Job job) {
-    _jobs.emplace_back(std::move(job));
+Job& JobQueue::push(Job job) {
+    return _jobs.emplace_back(std::move(job));
 }
 
 std::optional<Job> JobQueue::pop() {
@@ -21,9 +21,14 @@ size_t JobQueue::size() const {
     return _jobs.size();
 }
 
-JobSystem::JobSystem() = default;
+JobSystem::JobSystem() 
+    : _mainThreadID(std::this_thread::get_id())
+{
+}
+
 JobSystem::JobSystem(size_t nThreads)
-    : _nThreads(nThreads)
+    : _mainThreadID(std::this_thread::get_id()),
+      _nThreads(nThreads)
 {
 }
 

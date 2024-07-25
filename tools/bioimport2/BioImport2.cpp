@@ -15,6 +15,7 @@ using namespace db;
 
 enum class ImportType {
     NEO4J,
+    NEO4J_TO_JSON,
     NEO4J_URL,
     JSON_NEO4J,
     // GML,
@@ -64,7 +65,7 @@ int main(int argc, const char** argv) {
         .metavar("db.dump")
         .action([&](const std::string& value) {
             if (!FileUtils::exists(value)) {
-                logt::DirectoryDoesNotExist(value);
+                logt::FileNotFound(value);
                 exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
@@ -146,6 +147,21 @@ int main(int argc, const char** argv) {
             cmd.urlSuffix = value;
         });
 
+    argParser.add_argument("-neo4j-to-json")
+        .help("Converts a neo4j dump into json files")
+        .append()
+        .metavar("db.dump")
+        .action([&](const std::string& value) {
+            if (!FileUtils::exists(value)) {
+                logt::FileNotFound(value);
+                exit(EXIT_FAILURE);
+            }
+            importData.emplace_back(ImportData {
+                .type = ImportType::NEO4J_TO_JSON,
+                .path = value,
+            });
+        });
+
     toolInit.init(argc, argv);
 
     const bool noPathsGiven = importData.empty();
@@ -178,6 +194,22 @@ int main(int argc, const char** argv) {
                 }
                 break;
             }
+            case ImportType::NEO4J_TO_JSON: {
+                Neo4jImporter::ImportDumpFileArgs args;
+                args._workDir = toolInit.getOutputsDir();
+                args._writeFiles = true;
+                args._writeFilesOnly = true;
+                args._dumpFilePath = std::move(data.path);
+
+                if (!Neo4jImporter::importDumpFile(jobSystem,
+                                                   db.get(),
+                                                   nodeCountLimit,
+                                                   edgeCountLimit,
+                                                   args)) {
+                    return 1;
+                }
+                break;
+            }
             case ImportType::NEO4J_URL: {
                 Neo4jImporter::ImportUrlArgs args;
                 args._url = std::move(data.url);
@@ -186,6 +218,7 @@ int main(int argc, const char** argv) {
                 args._password = std::move(data.password);
                 args._port = data.port;
                 args._workDir = toolInit.getOutputsDir();
+                args._writeFilesOnly = false;
                 args._writeFiles = true;
 
                 if (!Neo4jImporter::importUrl(jobSystem,

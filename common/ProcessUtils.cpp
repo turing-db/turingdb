@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <spdlog/spdlog.h>
 
 #include "StringToNumber.h"
 #include "FileUtils.h"
@@ -90,4 +91,22 @@ bool ProcessUtils::searchProcess(const std::string& exe, std::vector<pid_t>& pid
     }
 
     return true;
+}
+
+void ProcessUtils::stopTool(const std::string& toolName) {
+    std::vector<pid_t> pids;
+    if (!ProcessUtils::searchProcess(toolName, pids)) {
+        spdlog::error("Can not search system processes");
+        return;
+    }
+
+    const int signum = SIGTERM;
+    for (pid_t pid : pids) {
+        spdlog::info("Killing process: {}", pid);
+        if (kill(pid, signum) < 0) {
+            spdlog::error("Failed to send signal {} to process {}. Check that you have the necessary permissions.",
+                          signum, pid);
+        }
+        spdlog::info("Stopping {}", toolName);
+    }
 }

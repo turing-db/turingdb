@@ -9,6 +9,7 @@
 
 #include "ToolInit.h"
 #include "BannerDisplay.h"
+#include "ProcessUtils.h"
 
 #include "TuringAppServer.h"
 #include "Demonology.h"
@@ -38,6 +39,7 @@ int main(int argc, const char** argv) {
 
     bool isPrototypeMode = false;
     bool isDevMode = false;
+    bool buildRequested = false;
     bool noDemonMode = false;
 
     // Arguments definition
@@ -51,6 +53,8 @@ int main(int argc, const char** argv) {
 #ifdef TURING_DEV
     argParser.add_argument("-dev")
              .store_into(isDevMode);
+    argParser.add_argument("-build")
+             .store_into(buildRequested);
 #endif
 
     toolInit.init(argc, argv);
@@ -64,6 +68,7 @@ int main(int argc, const char** argv) {
     server = std::make_unique<TuringAppServer>(toolInit.getOutputsDir());
     server->setPrototypeMode(isPrototypeMode);
     server->setDevMode(isDevMode);
+    server->setBuildRequested(buildRequested);
 
     // Install signal handler to handle ctrl+C
     signal(SIGINT, signalHandler);

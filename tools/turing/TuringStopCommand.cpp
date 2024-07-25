@@ -7,27 +7,6 @@
 #include "ToolInit.h"
 #include "ProcessUtils.h"
 
-namespace {
-
-void stopTool(const std::string& toolName) {
-    std::vector<pid_t> pids;
-    if (!ProcessUtils::searchProcess(toolName, pids)) {
-        spdlog::error("Can not search system processes");
-        return;
-    }
-
-    const int signum = SIGTERM;
-    for (pid_t pid : pids) {
-        if (kill(pid, signum) < 0) {
-            spdlog::error("Failed to send signal {} to process {}. Check that you have the necessary permissions.",
-                          signum, pid);
-        }
-        spdlog::info("Stopping {}", toolName);
-    }
-}
-
-}
-
 TuringStopCommand::TuringStopCommand(ToolInit& toolInit)
     : ToolCommand(toolInit),
     _stopCommand("stop")
@@ -51,7 +30,7 @@ bool TuringStopCommand::isActive() {
 }
 
 void TuringStopCommand::run() {
-    stopTool("turing-app");
-    stopTool("turingdb");
-    stopTool("bioserver");
+    ProcessUtils::stopTool("turing-app");
+    ProcessUtils::stopTool("turingdb");
+    ProcessUtils::stopTool("bioserver");
 }
