@@ -4,7 +4,7 @@
 #include <spdlog/spdlog.h>
 
 Job& JobQueue::push(Job job) {
-    return _jobs.emplace_back(std::move(job));
+    return _jobs.emplace(std::move(job));
 }
 
 std::optional<Job> JobQueue::pop() {
@@ -13,7 +13,7 @@ std::optional<Job> JobQueue::pop() {
     }
 
     Job job = std::move(_jobs.front());
-    _jobs.erase(_jobs.begin());
+    _jobs.pop();
     return job;
 }
 
@@ -81,9 +81,12 @@ void JobSystem::wait() {
 
 void JobSystem::terminate() {
     msgbioassert(!_terminated, "Attempting to terminate the job system twice");
-    _queueMutex.lock();
-    spdlog::info("Job system terminating, {} jobs remaining", _jobs.size());
-    _queueMutex.unlock();
+
+    {
+        std::unique_lock<std::mutex> lock(_queueMutex);
+        spdlog::info("Job system terminating, {} jobs remaining", _jobs.size());
+    }
+
     _stopRequested.store(true);
     _wakeCondition.notify_all();
     wait();

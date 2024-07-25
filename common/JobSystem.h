@@ -3,7 +3,7 @@
 #include <future>
 #include <optional>
 #include <thread>
-#include <vector>
+#include <queue>
 
 class AbstractFuture {
 public:
@@ -122,7 +122,7 @@ public:
     size_t size() const;
 
 private:
-    std::vector<Job> _jobs;
+    std::queue<Job> _jobs;
 };
 
 class JobGroup;
