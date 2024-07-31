@@ -81,6 +81,13 @@ include_directories(${BIO_SOURCE_DIR})
 
 enable_testing()
 
+# ======== Git Info =================
+# Get hash of current HEAD commit
+execute_process(COMMAND git rev-parse HEAD
+                OUTPUT_VARIABLE HEAD_COMMIT_HASH
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_subdirectory(app)
 add_subdirectory(external)
 add_subdirectory(build)
 add_subdirectory(common)
@@ -94,7 +101,6 @@ add_subdirectory(import)
 add_subdirectory(sgc)
 add_subdirectory(network)
 add_subdirectory(mind)
-add_subdirectory(app)
 #add_subdirectory(workflow)
 add_subdirectory(python)
 add_subdirectory(tools)
