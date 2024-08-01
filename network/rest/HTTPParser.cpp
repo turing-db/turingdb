@@ -4,7 +4,7 @@
 
 using namespace net;
 
-static constexpr size_t MIN_METHOD_SIZE = 3;
+// static constexpr size_t MIN_METHOD_SIZE = 3;
 
 namespace {
 

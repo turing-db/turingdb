@@ -8,6 +8,7 @@
 #include "Program.h"
 #include "SystemManager.h"
 #include "VM.h"
+#include "DBAccess.h"
 
 class VMSample {
 public:
@@ -36,6 +37,7 @@ public:
                              uint8_t outRegister = 0,
                              size_t maxLineCount = 20,
                              size_t colSize = 16) const;
+    db::DBAccess readDB() const;
 
     db::EntityID findNode(const std::string& ptName, const std::string& prop) const;
 

@@ -2,10 +2,12 @@
 
 #include <gtest/gtest.h>
 #include <unordered_set>
+#include <spdlog/spdlog.h>
+
+#include "LogUtils.h"
+#include "Time.h"
 
 using namespace db;
-using namespace std;
-using namespace chrono;
 
 TEST(LabelSetTest, LabelSet) {
     LabelSet set;
@@ -66,43 +68,39 @@ TEST(LabelSetTest, LabelSet) {
     std::cout << "Sorting" << std::endl;
     // Sorting
     {
-        auto t0 = std::chrono::high_resolution_clock::now();
+        const auto t0 = Clock::now();
         std::sort(bitsets.begin(), bitsets.end());
-        auto t1 = std::chrono::high_resolution_clock::now();
-        auto dur = duration_cast<microseconds>(t1 - t0).count();
-        std::cout << "Bitsets: " << dur / 1000.0f << " ms" << std::endl;
+        spdlog::info("Bitsets");
+        logt::ElapsedTime(duration<Milliseconds>(t0, Clock::now()), "ms");
     }
 
     {
-        auto t0 = std::chrono::high_resolution_clock::now();
+        const auto t0 = Clock::now();
         std::sort(uints.begin(), uints.end());
-        auto t1 = std::chrono::high_resolution_clock::now();
-        auto dur = duration_cast<microseconds>(t1 - t0).count();
-        std::cout << "Uints: " << dur / 1000.0f << " ms" << std::endl;
+        spdlog::info("Uints");
+        logt::ElapsedTime(duration<Milliseconds>(t0, Clock::now()), "ms");
     }
 
     std::cout << "Hashing" << std::endl;
     // Hashing
     {
         std::vector<size_t> hashes(bitsets.size());
-        auto t0 = std::chrono::high_resolution_clock::now();
+        const auto t0 = Clock::now();
         for (size_t i = 0; i < hashes.size(); i++) {
             hashes[i] = std::hash<TemplateLabelSet<IntegerType, IntegerCount>> {}(bitsets[i]);
         }
-        auto t1 = std::chrono::high_resolution_clock::now();
-        auto dur = duration_cast<microseconds>(t1 - t0).count();
-        std::cout << "Bitsets: " << dur / 1000.0f << " ms" << std::endl;
+        spdlog::info("Bitsets");
+        logt::ElapsedTime(duration<Milliseconds>(t0, Clock::now()), "ms");
     }
 
     {
         std::vector<size_t> hashes(uints.size());
-        auto t0 = std::chrono::high_resolution_clock::now();
+        const auto t0 = Clock::now();
         for (size_t i = 0; i < hashes.size(); i++) {
             hashes[i] = std::hash<IntegerType> {}(uints[i]);
         }
-        auto t1 = std::chrono::high_resolution_clock::now();
-        auto dur = duration_cast<microseconds>(t1 - t0).count();
-        std::cout << "Integers: " << dur / 1000.0f << " ms" << std::endl;
+        spdlog::info("Integers");
+        logt::ElapsedTime(duration<Milliseconds>(t0, Clock::now()), "ms");
     }
 }
 
@@ -151,7 +149,7 @@ TEST(LabelSetTest, HashCollisions) {
     std::unordered_set<CustomLabelSet, thirdHash> labelsets3;
 
     const auto fill = [](auto& labelsets) {
-        auto t0 = std::chrono::high_resolution_clock::now();
+        const auto t0 = Clock::now();
         for (size_t i = 0; i < count; i++) {
             CustomLabelSet labelset;
             for (size_t j = 0; j < integerCount; j++) {
@@ -159,9 +157,8 @@ TEST(LabelSetTest, HashCollisions) {
             }
             labelsets.emplace(labelset);
         }
-        auto t1 = std::chrono::high_resolution_clock::now();
-        auto dur = duration_cast<microseconds>(t1 - t0).count();
-        std::cout << "Fill       : " << dur / 1000.0f << " ms" << std::endl;
+        spdlog::info("Fill");
+        logt::ElapsedTime(duration<Milliseconds>(t0, Clock::now()), "ms");
     };
 
     const auto checkCollisions = [](auto& labelsets) {

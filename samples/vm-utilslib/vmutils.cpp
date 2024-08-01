@@ -196,16 +196,16 @@ void VMSample::printOutput(std::initializer_list<std::string_view> colNames,
 
     std::string str;
     for (const auto& name : colNames) {
-        str += fmt::format("{1:>{0}}", colSize, name);
+        str += fmt::format("{1:^{0}}", colSize, name);
     }
 
     str += "\n";
     for (size_t i = 0; i < out[0].size(); i++) {
         for (size_t j = 0; j < out.size(); j++) {
             if (out[j][i] > 5000000) {
-                str += fmt::format("{1:>{0}}", colSize, "...");
+                str += fmt::format("{1:^{0}}", colSize, "...");
             } else {
-                str += fmt::format("{1:>{0}}", colSize, out[j][i]);
+                str += fmt::format("{1:^{0}}", colSize, out[j][i]);
             }
         }
         str += '\n';
@@ -226,21 +226,20 @@ void VMSample::printOutputProperty(const std::string& propName,
 
     const auto& idOutput = getOutput(outRegister);
 
-    if (idOutput.empty()) {
-        spdlog::error("Output is empty");
+    if (idOutput.empty()) { spdlog::error("Output is empty");
         return;
     }
 
     std::string str;
     for (const auto& name : colNames) {
-        str += fmt::format("{1:>{0}}", colSize, name);
+        str += fmt::format("{1:^{0}}", colSize, name);
     }
 
     str += "\n";
     auto* db = _system->getDefaultDB();
     const auto* metadata = db->getMetadata();
     const auto ptype = metadata->propTypes().get(propName);
-    auto access = _system->getDefaultDB()->access();
+    auto access = db->access();
     db::ColumnVector<db::ColumnVector<std::string>> out;
     out.resize(idOutput.size());
     for (const auto& [ids, col] : ranges::views::zip(idOutput, out)) {
@@ -252,7 +251,7 @@ void VMSample::printOutputProperty(const std::string& propName,
 
     for (size_t i = 0; i < out[0].size(); i++) {
         for (size_t j = 0; j < out.size(); j++) {
-            str += fmt::format("{1:>{0}}", colSize, out[j][i]);
+            str += fmt::format("{1:^{0}}", colSize, out[j][i]);
         }
         str += '\n';
         if (i == maxLineCount) {
@@ -262,6 +261,10 @@ void VMSample::printOutputProperty(const std::string& propName,
     }
     spdlog::info("\n{}", str);
     spdlog::info("NLines in output: {}", out[0].size());
+}
+
+db::DBAccess VMSample::readDB() const {
+    return _system->getDefaultDB()->access();
 }
 
 db::EntityID VMSample::findNode(const std::string& ptName, const std::string& prop) const {
