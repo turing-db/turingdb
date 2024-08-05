@@ -15,12 +15,18 @@ int main() {
     }
 
     sample.execute();
-    sample.printOutput({
-        "SrcID",
-        "EdgeID",
-        "EdgeType",
-        "TgtID",
-    });
+    //sample.printOutput({
+    //    "SrcID",
+    //    "EdgeID",
+    //    "EdgeType",
+    //    "TgtID",
+    //});
+    const auto* props = sample._vm->readRegister<ColumnVector<std::string>>(2);
+    for (const auto& prop : *props) {
+        spdlog::info(prop);
+    }
+
+
     sample.destroy();
 
     return 0;
