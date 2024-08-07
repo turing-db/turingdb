@@ -1,5 +1,5 @@
 .data:
-STRING  $edgetype1, "INTERESTED_IN"
+STRING  $edgetype1, "KNOWS_WELL"
 STRING  $edgetype2, "INTERESTED_IN"
 OUTPUT  $out
 
@@ -9,7 +9,6 @@ ALIAS %edgetype1, r1
 ALIAS %edgetype2, r2
 
 # Scan edges
-ALIAS %indices0, r3
 ALIAS %srcs0,    r4
 ALIAS %edges0,   r5
 ALIAS %tgts0,    r6
@@ -38,103 +37,94 @@ ALIAS %mask3_2,  r20
 LOAD %out,     $out
 
 ALLOC_EDGE_TYPE  %edgetype1
-GET_EDGE_TYPE    %edgetype1, $edgetype1
 ALLOC_EDGE_TYPE  %edgetype2
+GET_EDGE_TYPE    %edgetype1, $edgetype1
 GET_EDGE_TYPE    %edgetype2, $edgetype2
 
-## Allocations
-    # Scan edges
-ALLOC_INDICES    %indices0
+## Indices
+ALLOC_INDICES    %indices1
+ALLOC_INDICES    %indices2
+ALLOC_INDICES    %indices3
+ADD_INDICES %out, %indices1
+ADD_INDICES %out, %indices2
+ADD_INDICES %out, %indices3
+
+# Scan edges
 ALLOC_ENTITY_IDS %srcs0
 ALLOC_ENTITY_IDS %edges0
 ALLOC_ENTITY_IDS %tgts0
 ALLOC_EDGE_TYPES %types0
-    # Filter
-ALLOC_INDICES    %indices1
+
+# Filter1
 ALLOC_FILTER     %filter1, %indices1
 ALLOC_ENTITY_IDS %tgts1
 ALLOC_MASK       %mask1
-    # Get out edges
-ALLOC_INDICES    %indices2
+
+# Get out edges
 ALLOC_ENTITY_IDS %edges2
 ALLOC_ENTITY_IDS %tgts2
 ALLOC_EDGE_TYPES %types2
-    # Filter
-ALLOC_INDICES    %indices3
+
+# Filter3
 ALLOC_FILTER     %filter3, %indices3
 ALLOC_MASK       %mask3_0
 ALLOC_MASK       %mask3_1
 ALLOC_MASK       %mask3_2
 
-## Columns outputs
-    # Scan edges
-ADD_COL %out, %srcs0,  %indices0
-#ADD_COL %out, %edges0, %indices0
-#ADD_COL %out, %types0, %indices0
-ADD_COL %out, %tgts0,  %indices0
-    # Filter
-ADD_COL %out, _,       %indices1
-    # GetOutEdges
-#ADD_COL %out, %edges2, %indices2
-#ADD_COL %out, %types2, %indices2
-#ADD_COL %out, %tgts2,  %indices2
+## Columns
+ADD_COL %out, %srcs0,  0
+ADD_COL %out, %tgts0,  0
+ADD_COL %out, %tgts2,  2
 
-#ADD_COL %out,  %tgts2,  %indices2
-    # Filter
-#ADD_COL %out, _,       %indices3
-
-    # Setting up filter1
+## Filter setup
 ADD_FILTER_EXPR %filter1, %mask1, {EQUAL, %types0, %edgetype1}
-    # Setting up filter3
-#ADD_FILTER_EXPR %filter3, %mask3_2, {EQUAL, %types2, %edgetype1}
-#ADD_FILTER_EXPR %filter3, %mask3_1, {EQUAL, %types2, %edgetype2}
-#ADD_FILTER_EXPR %filter3, %mask3_0, {EQUAL, %types2, %edgetype1}
+ADD_FILTER_EXPR %filter3, %mask3_1, {EQUAL, %types2, %edgetype2}
 
-SCAN_EDGES r20, %indices0, {%srcs0, %edges0, %tgts0, %types0}
+SCAN_EDGES r100, {%srcs0, %edges0, %tgts0, %types0}
     r100_START:
     JEND   r100, r100_END
     UPDATE r100
 
     EXEC_FILTER %filter1
-    #APPLY_MASK  %mask1, %tgts1, %tgts0
+    APPLY_MASK  %mask1, %tgts1, %tgts0
 
-    #GET_OUT_EDGES r101, %tgts1, %indices2, {%edges2, %tgts2, %types2}
-    #    r101_START:
-    #    JEND   r101, r101_END
-    #    UPDATE r101
+    GET_OUT_EDGES r101, %tgts1, %indices2, {%edges2, %tgts2, %types2}
+        r101_START:
+        JEND   r101, r101_END
+        UPDATE r101
 
-        #EXEC_FILTER %filter3
+        EXEC_FILTER %filter3
 
         WRITE %out
 
-    #    GOTO r101_START
-    #r101_END:
+        GOTO r101_START
+    r101_END:
 
     GOTO r100_START
 r100_END:
 
 ## Deallocations
+DEALLOC_INDICES    %indices1
+DEALLOC_INDICES    %indices2
+DEALLOC_INDICES    %indices3
+
 DEALLOC_EDGE_TYPE  %edgetype1
 DEALLOC_EDGE_TYPE  %edgetype2
     # Scan edges
-DEALLOC_INDICES    %indices0
 DEALLOC_ENTITY_IDS %srcs0
 DEALLOC_ENTITY_IDS %edges0
 DEALLOC_ENTITY_IDS %tgts0
 DEALLOC_EDGE_TYPES %types0
     # Filter
 DEALLOC_FILTER     %filter1
-DEALLOC_INDICES    %indices1
 DEALLOC_ENTITY_IDS %tgts1
 DEALLOC_MASK       %mask1
     # Get out edges
-DEALLOC_INDICES    %indices2
 DEALLOC_ENTITY_IDS %edges2
 DEALLOC_ENTITY_IDS %tgts2
 DEALLOC_EDGE_TYPES %types2
     # Filter
 DEALLOC_FILTER     %filter3
-DEALLOC_INDICES    %indices3
 DEALLOC_MASK       %mask3_0
 DEALLOC_MASK       %mask3_1
 DEALLOC_MASK       %mask3_2

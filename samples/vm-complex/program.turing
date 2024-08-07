@@ -5,118 +5,92 @@ OUTPUT     $out
 ALIAS %out,      r0
 ALIAS %input,    r1
 
-# First edge
-ALIAS %indices0, r10
-ALIAS %tgts0,    r11
+ALIAS %indices1, r10
+ALIAS %indices2, r20
+ALIAS %indices3, r30
+ALIAS %indices4, r40
+ALIAS %indices5, r50
+ALIAS %indices6, r60
+ALIAS %indices7, r70
+ALIAS %indices8, r80
 
-# Second edge
-ALIAS %indices1, r20
-ALIAS %tgts1,    r21
-
-# Third edge
-ALIAS %indices2, r30
-ALIAS %tgts2,    r31
-
-# Fourth edge
-ALIAS %indices3, r40
-ALIAS %tgts3,    r41
-
-# Fifth edge
-ALIAS %indices4, r50
-ALIAS %tgts4,    r51
-
-# Sixth edge
-ALIAS %indices5, r60
-ALIAS %tgts5,    r61
-
-# Seventh edge
-ALIAS %indices6, r70
-ALIAS %tgts6,    r71
-
-# Eighth edge
-ALIAS %indices7, r80
-ALIAS %tgts7,    r81
+ALIAS %tgts1,    r11
+ALIAS %tgts2,    r21
+ALIAS %tgts3,    r31
+ALIAS %tgts4,    r41
+ALIAS %tgts5,    r51
+ALIAS %tgts6,    r61
+ALIAS %tgts7,    r71
+ALIAS %tgts8,    r81
 
 .text:
 LOAD %out,      $out
 
-# First Edge
-ALLOC_INDICES    %indices0
-ALLOC_ENTITY_IDS %tgts0
-
-# Second Edge
 ALLOC_INDICES    %indices1
-ALLOC_ENTITY_IDS %tgts1
-
-# Third Edge
 ALLOC_INDICES    %indices2
-ALLOC_ENTITY_IDS %tgts2
-
-# Fourth Edge
 ALLOC_INDICES    %indices3
-ALLOC_ENTITY_IDS %tgts3
-
-# Fifth Edge
 ALLOC_INDICES    %indices4
-ALLOC_ENTITY_IDS %tgts4
-
-# Sixth Edge
 ALLOC_INDICES    %indices5
-ALLOC_ENTITY_IDS %tgts5
-
-# Seventh Edge
 ALLOC_INDICES    %indices6
-ALLOC_ENTITY_IDS %tgts6
-
-# Eighth Edge
 ALLOC_INDICES    %indices7
+ALLOC_INDICES    %indices8
+ALLOC_ENTITY_IDS %tgts1
+ALLOC_ENTITY_IDS %tgts2
+ALLOC_ENTITY_IDS %tgts3
+ALLOC_ENTITY_IDS %tgts4
+ALLOC_ENTITY_IDS %tgts5
+ALLOC_ENTITY_IDS %tgts6
 ALLOC_ENTITY_IDS %tgts7
+ALLOC_ENTITY_IDS %tgts8
 
-ADD_COL %out, %input, %indices0
-ADD_COL %out, _,      %indices1
-ADD_COL %out, _,      %indices2
-ADD_COL %out, _,      %indices3
-ADD_COL %out, _,      %indices4
-ADD_COL %out, _,      %indices5
-ADD_COL %out, _,      %indices6
-ADD_COL %out, %tgts7, %indices7
+ADD_INDICES %out, %indices1
+ADD_INDICES %out, %indices2
+ADD_INDICES %out, %indices3
+ADD_INDICES %out, %indices4
+ADD_INDICES %out, %indices5
+ADD_INDICES %out, %indices6
+ADD_INDICES %out, %indices7
+ADD_INDICES %out, %indices8
 
-GET_OUT_EDGES r100, %input, %indices0, {_, %tgts0, _}
+ADD_COL %out, %input, 0
+ADD_COL %out, %tgts7, 8
+
+GET_OUT_EDGES r100, %input, %indices1, {_, %tgts1, _}
     r100_START:
     JEND   r100, r100_END
     UPDATE r100
 
-    GET_OUT_EDGES r101, %tgts0, %indices1, {_, %tgts1, _}
+    GET_OUT_EDGES r101, %tgts1, %indices2, {_, %tgts2, _}
         r101_START:
         JEND   r101, r101_END
         UPDATE r101
 
-        GET_OUT_EDGES r102, %tgts1, %indices2, {_, %tgts2, _}
+        GET_OUT_EDGES r102, %tgts2, %indices3, {_, %tgts3, _}
             r102_START:
             JEND   r102, r102_END
             UPDATE r102
 
-            GET_OUT_EDGES r103, %tgts2, %indices3, {_, %tgts3, _}
+            GET_OUT_EDGES r103, %tgts3, %indices4, {_, %tgts4, _}
                 r103_START:
                 JEND   r103, r103_END
                 UPDATE r103
 
-                GET_OUT_EDGES r104, %tgts3, %indices4, {_, %tgts4, _}
+                GET_OUT_EDGES r104, %tgts4, %indices5, {_, %tgts5, _}
                     r104_START:
                     JEND   r104, r104_END
                     UPDATE r104
 
-                    GET_OUT_EDGES r105, %tgts4, %indices5, {_, %tgts5, _}
+                    GET_OUT_EDGES r105, %tgts5, %indices6, {_, %tgts6, _}
                         r105_START:
                         JEND   r105, r105_END
                         UPDATE r105
 
-                        GET_OUT_EDGES r106, %tgts5, %indices6, {_, %tgts6, _}
+                        GET_OUT_EDGES r106, %tgts6, %indices7, {_, %tgts7, _}
                             r106_START:
                             JEND   r106, r106_END
                             UPDATE r106
 
-                            GET_OUT_EDGES r107, %tgts6, %indices7, {_, %tgts7, _}
+                            GET_OUT_EDGES r107, %tgts7, %indices8, {_, %tgts8, _}
                                 r107_START:
                                 JEND   r107, r107_END
                                 UPDATE r107
@@ -147,36 +121,21 @@ GET_OUT_EDGES r100, %input, %indices0, {_, %tgts0, _}
     GOTO r100_START
 r100_END:
 
-# First Edge
-DEALLOC_INDICES    %indices0
-DEALLOC_ENTITY_IDS %tgts0
-
-# Second Edge
 DEALLOC_INDICES    %indices1
-DEALLOC_ENTITY_IDS %tgts1
-
-# Third Edge
 DEALLOC_INDICES    %indices2
-DEALLOC_ENTITY_IDS %tgts2
-
-# Fourth Edge
 DEALLOC_INDICES    %indices3
-DEALLOC_ENTITY_IDS %tgts3
-
-# Fifth Edge
 DEALLOC_INDICES    %indices4
-DEALLOC_ENTITY_IDS %tgts4
-
-# Sixth Edge
 DEALLOC_INDICES    %indices5
-DEALLOC_ENTITY_IDS %tgts5
-
-# Seventh Edge
 DEALLOC_INDICES    %indices6
-DEALLOC_ENTITY_IDS %tgts6
-
-# Eighth Edge
 DEALLOC_INDICES    %indices7
+DEALLOC_INDICES    %indices8
+DEALLOC_ENTITY_IDS %tgts1
+DEALLOC_ENTITY_IDS %tgts2
+DEALLOC_ENTITY_IDS %tgts3
+DEALLOC_ENTITY_IDS %tgts4
+DEALLOC_ENTITY_IDS %tgts5
+DEALLOC_ENTITY_IDS %tgts6
 DEALLOC_ENTITY_IDS %tgts7
+DEALLOC_ENTITY_IDS %tgts8
 
 EXIT

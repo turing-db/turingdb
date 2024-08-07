@@ -27,9 +27,9 @@ int main() {
     }, 0, 20);
     sample.destroy();
 
-    for (const auto& p : sample.readDB().scanNodeProperties<types::String>(0)) {
-        spdlog::info(p);
-    }
+    //for (const auto& p : sample.readDB().scanNodeProperties<types::String>(0)) {
+    //    spdlog::info(p);
+    //}
 
     return 0;
 }

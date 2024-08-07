@@ -3,7 +3,6 @@ OUTPUT     $out
 
 .alias:
 ALIAS %out,      r0
-ALIAS %indices0, r10
 ALIAS %srcs0,    r11
 ALIAS %tgts0,    r12
 ALIAS %indices1, r20
@@ -14,20 +13,23 @@ ALIAS %tgts2,    r31
 .text:
 LOAD %out,      $out
 
-ALLOC_INDICES    %indices0
+
+ALLOC_INDICES    %indices1
+ALLOC_INDICES    %indices2
 ALLOC_ENTITY_IDS %srcs0
 ALLOC_ENTITY_IDS %tgts0
-ALLOC_INDICES    %indices1
 ALLOC_ENTITY_IDS %tgts1
-ALLOC_INDICES    %indices2
 ALLOC_ENTITY_IDS %tgts2
 
-ADD_COL %out, %srcs0, %indices0
-ADD_COL %out, %tgts0, %indices0
-ADD_COL %out, %tgts1, %indices1
-ADD_COL %out, %tgts2, %indices2
+ADD_INDICES %out, %indices1
+ADD_INDICES %out, %indices2
 
-SCAN_EDGES r100, %indices0, {%srcs0, _, %tgts0, _}
+ADD_COL %out, %srcs0, 0
+ADD_COL %out, %tgts0, 0
+ADD_COL %out, %tgts1, 1
+ADD_COL %out, %tgts2, 2
+
+SCAN_EDGES r100, {%srcs0, _, %tgts0, _}
     r100_START:
     JEND   r100, r100_END
     UPDATE r100
@@ -53,7 +55,6 @@ SCAN_EDGES r100, %indices0, {%srcs0, _, %tgts0, _}
     GOTO r100_START
 r100_END:
 
-DEALLOC_INDICES    %indices0
 DEALLOC_ENTITY_IDS %srcs0
 DEALLOC_ENTITY_IDS %tgts0
 DEALLOC_INDICES    %indices1

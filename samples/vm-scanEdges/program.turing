@@ -22,12 +22,12 @@ LOAD %srcIDs,  $srcIDs
 LOAD %edgeIDs, $edgeIDs
 LOAD %tgtIDs,  $tgtIDs
 
-ADD_COL %out, %srcIDs, _
-ADD_COL %out, %edgeIDs, _
-ADD_COL %out, %types, _
-ADD_COL %out, %tgtIDs, _
+ADD_COL %out, %srcIDs,  0
+ADD_COL %out, %edgeIDs, 0
+ADD_COL %out, %types,   0
+ADD_COL %out, %tgtIDs,  0
 
-SCAN_EDGES r100, %indices, {%srcIDs, %edgeIDs, %tgtIDs, %types}
+SCAN_EDGES r100, {%srcIDs, %edgeIDs, %tgtIDs, %types}
     r100_START:
     JEND   r100, r100_END
     UPDATE r100

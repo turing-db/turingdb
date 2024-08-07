@@ -12,9 +12,9 @@ LOAD %indices, $indices
 LOAD %out,     $out
 LOAD r1,       $nodeIDs
 
-ADD_COL %out, r1, _
+ADD_COL %out, r1, 0
 
-SCAN_NODES r100, %indices, {r1}
+SCAN_NODES r100, {r1}
     r100_START:
     JEND   r100, r100_END
     UPDATE r100

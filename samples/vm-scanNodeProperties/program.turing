@@ -17,9 +17,9 @@ ALLOC_STRINGS %props
 ALLOC_PROP_TYPE %propType
 GET_PROP_TYPE   %propType, $propTypeName
 
-ADD_COL %out, %props, _
+ADD_COL %out, %props, 0
 
-SCAN_NODE_PROPS r100, %indices, %propType, { %props }
+SCAN_NODE_PROPS r100, %propType, { %props }
     r100_START:
     JEND   r100, r100_END
     UPDATE r100

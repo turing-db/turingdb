@@ -43,7 +43,7 @@ add_subdirectory(vm-sparseOutput)
 add_subdirectory(vm-complex)
 add_subdirectory(vm-simpleGraph)
 add_subdirectory(vm-scanNodeProperties)
-#add_subdirectory(vm-filters)
+add_subdirectory(vm-filters)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
