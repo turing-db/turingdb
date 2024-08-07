@@ -17,6 +17,7 @@ int main(int argc, const char** argv) {
     ToolInit toolInit("bioserver");
 
     std::vector<std::string> dbNames;
+    bool noDemonRequested = false;
 
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("-db")
@@ -26,10 +27,16 @@ int main(int argc, const char** argv) {
              .metavar("dbname")
              .store_into(dbNames);
 
+    argParser.add_argument("-nodemon")
+             .help("Do not spawn the server in the background as a daemon")
+             .store_into(noDemonRequested);
+
     toolInit.init(argc, argv);
 
     // Demonize
-    Demonology::demonize();
+    if (!noDemonRequested) {
+        Demonology::demonize();
+    }
 
     // Install signal handler to handle ctrl+C
     signal(SIGINT, signalHandler);

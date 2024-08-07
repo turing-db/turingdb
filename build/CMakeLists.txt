@@ -1,10 +1,4 @@
 
-# ======== Git Info =================
-
-# Get hash of current HEAD commit
-execute_process(COMMAND git rev-parse HEAD
-                OUTPUT_VARIABLE HEAD_COMMIT_HASH
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Get build timestamp
 execute_process(COMMAND date +%s
