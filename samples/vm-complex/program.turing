@@ -53,7 +53,7 @@ ADD_INDICES %out, %indices7
 ADD_INDICES %out, %indices8
 
 ADD_COL %out, %input, 0
-ADD_COL %out, %tgts7, 8
+ADD_COL %out, %tgts8, 8
 
 GET_OUT_EDGES i0, %input, %indices1, {_, %tgts1, _}
     i0_START:
