@@ -1,0 +1,106 @@
+.data:
+STRING  $edgetype1, "KNOWS_WELL"
+STRING  $edgetype2, "INTERESTED_IN"
+OUTPUT  $out
+
+.alias:
+ALIAS %out,       r0
+ALIAS %edgetype1, r1
+ALIAS %edgetype2, r2
+
+# Scan edges
+ALIAS %srcs0,    r4
+ALIAS %edges0,   r5
+ALIAS %tgts0,    r6
+ALIAS %types0,   r7
+
+# Filter
+ALIAS %filter1,  r8
+ALIAS %indices1, r9
+ALIAS %mask1,    r10
+ALIAS %tgts1,    r11
+
+# Get out edges
+ALIAS %indices2, r12
+ALIAS %edges2,   r13
+ALIAS %tgts2,    r14
+ALIAS %types2,   r15
+
+# Filter
+ALIAS %filter3,  r16
+ALIAS %indices3, r17
+ALIAS %mask3_0,  r18
+ALIAS %mask3_1,  r19
+ALIAS %mask3_2,  r20
+
+.text:
+LOAD %out,     $out
+
+ALLOC_EDGE_TYPE  %edgetype1
+ALLOC_EDGE_TYPE  %edgetype2
+GET_EDGE_TYPE    %edgetype1, $edgetype1
+GET_EDGE_TYPE    %edgetype2, $edgetype2
+
+## Indices
+ALLOC_INDICES    %indices1
+ALLOC_INDICES    %indices2
+ALLOC_INDICES    %indices3
+ADD_INDICES %out, %indices1
+ADD_INDICES %out, %indices2
+ADD_INDICES %out, %indices3
+
+# Scan edges
+ALLOC_ENTITY_IDS %srcs0
+ALLOC_ENTITY_IDS %edges0
+ALLOC_ENTITY_IDS %tgts0
+ALLOC_EDGE_TYPES %types0
+
+# Filter1
+ALLOC_FILTER     %filter1, %indices1
+ALLOC_ENTITY_IDS %tgts1
+ALLOC_MASK       %mask1
+
+# Get out edges
+ALLOC_ENTITY_IDS %edges2
+ALLOC_ENTITY_IDS %tgts2
+ALLOC_EDGE_TYPES %types2
+
+# Filter3
+ALLOC_FILTER     %filter3, %indices3
+ALLOC_MASK       %mask3_0
+ALLOC_MASK       %mask3_1
+ALLOC_MASK       %mask3_2
+
+## Columns
+ADD_COL %out, %srcs0,  0
+ADD_COL %out, %tgts0,  0
+ADD_COL %out, %tgts2,  2
+
+## Filter setup
+ADD_FILTER_EXPR %filter1, %mask1, {EQUAL, %types0, %edgetype1}
+ADD_FILTER_EXPR %filter3, %mask3_1, {EQUAL, %types2, %edgetype2}
+
+SCAN_EDGES r100, {%srcs0, %edges0, %tgts0, %types0}
+    r100_START:
+    JEND   r100, r100_END
+    UPDATE r100
+
+    EXEC_FILTER %filter1
+    APPLY_MASK  %mask1, %tgts1, %tgts0
+
+    GET_OUT_EDGES r101, %tgts1, %indices2, {%edges2, %tgts2, %types2}
+        r101_START:
+        JEND   r101, r101_END
+        UPDATE r101
+
+        EXEC_FILTER %filter3
+
+        WRITE %out
+
+        GOTO r101_START
+    r101_END:
+
+    GOTO r100_START
+r100_END:
+
+EXIT

@@ -3,13 +3,11 @@ ENTITY_IDS $srcIDs,  {}
 ENTITY_IDS $edgeIDs, {}
 ENTITY_IDS $tgtIDs,  {}
 STRING     $person,  "Person"
-INDICES    $indices
 OUTPUT     $out
 LABELSET   $labelset
 
 .alias:
 ALIAS %out,      r0
-ALIAS %indices,  r1
 ALIAS %labelset, r2
 ALIAS %srcIDs,   r3
 ALIAS %edgeIDs,  r4
@@ -18,7 +16,6 @@ ALIAS %types,    r6
 ALIAS %label1,   r7
 
 .text:
-LOAD %indices,  $indices
 LOAD %out,      $out
 LOAD %labelset, $labelset
 LOAD %srcIDs,   $srcIDs
@@ -30,21 +27,19 @@ ALLOC_EDGE_TYPES %types
 GET_LABEL %label1,   $person
 ADD_LABEL %labelset, %label1
 
-ADD_COL %out, %srcIDs,  _
-ADD_COL %out, %edgeIDs, _
-ADD_COL %out, %types,   _
-ADD_COL %out, %tgtIDs,  _
+ADD_COL %out, %srcIDs,  0
+ADD_COL %out, %edgeIDs, 0
+ADD_COL %out, %types,   0
+ADD_COL %out, %tgtIDs,  0
 
-SCAN_OUT_EDGES_BY_LABEL i0, %indices, %labelset, {%srcIDs, %edgeIDs, %tgtIDs, %types}
-    i0_START:
-    JEND   i0, i0_END
-    UPDATE i0
+SCAN_OUT_EDGES_BY_LABEL r100, %labelset, {%srcIDs, %edgeIDs, %tgtIDs, %types}
+    r100_START:
+    JEND   r100, r100_END
+    UPDATE r100
 
     WRITE %out
 
-    GOTO i0_START
-i0_END:
-
-DEALLOC_EDGE_TYPES %types
+    GOTO r100_START
+r100_END:
 
 EXIT

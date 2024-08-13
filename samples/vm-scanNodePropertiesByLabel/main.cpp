@@ -15,16 +15,8 @@ int main() {
     if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
         return 1;
     }
+    sample.printOutput({"Name"});
 
-    sample.printOutput({
-        "TgtID_1",
-        "EdgeID_1",
-        "EdgeType_1",
-        "SrcID_1",
-        "EdgeID_2",
-        "EdgeType_2",
-        "SrcID_2",
-    });
     sample.destroy();
 
     return 0;

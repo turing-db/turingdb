@@ -9,26 +9,12 @@ int main() {
         return 1;
     }
 
-    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+    if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
         return 1;
     }
-
-    sample.execute();
-    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+    if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
         return 1;
     }
-
-    sample.execute();
-    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-        return 1;
-    }
-
-    sample.execute();
-    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-        return 1;
-    }
-
-    sample.execute();
 
     sample.printOutput({
         "SrcID_1",

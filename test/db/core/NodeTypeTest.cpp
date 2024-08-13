@@ -97,7 +97,7 @@ TEST(NodeTypeTest, create2) {
     EXPECT_TRUE(protein);
 
     // EdgeTypes
-    EdgeType* locatedInsideCell = wb.createEdgeType(db->getString("LocatedInsideCell"), {protein}, {cellularLoc});
+    EdgeType* locatedInsideCell = wb.createEdgeType(db->getString("LocatedInsideCell"), protein, cellularLoc);
     EXPECT_TRUE(locatedInsideCell);
 
     delete db;

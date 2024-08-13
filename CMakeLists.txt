@@ -33,7 +33,7 @@ if (${DEBUG_BUILD})
 else()
     message(STATUS "Optimized build")
     add_definitions(-DNDEBUG)
-    set(OPTIMIZE_FLAGS "-O3")
+    set(OPTIMIZE_FLAGS "-O3 -fcf-protection=none")
 endif()
 
 # C++ flags

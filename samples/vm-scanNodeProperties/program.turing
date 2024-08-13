@@ -1,0 +1,29 @@
+.data:
+OUTPUT     $out
+STRING     $propTypeName, "name"
+
+.alias:
+ALIAS %out,      r0
+ALIAS %props,    r2
+ALIAS %propType, r3
+
+.text:
+LOAD %out,    $out
+ALLOC_STRINGS %props
+
+ALLOC_PROP_TYPE %propType
+GET_PROP_TYPE   %propType, $propTypeName
+
+ADD_COL %out, %props, 0
+
+SCAN_NODE_PROPS r100, %propType, { %props, _ }
+    r100_START:
+    JEND   r100, r100_END
+    UPDATE r100
+
+    WRITE %out
+
+    GOTO r100_START
+r100_END:
+
+EXIT

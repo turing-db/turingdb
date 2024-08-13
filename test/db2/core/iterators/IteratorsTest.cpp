@@ -337,7 +337,7 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 
         ColumnIDs nodeIDs;
         for (const EntityID nodeID : access.scanNodesByLabel(&labelset)) {
-            nodeIDs = {nodeID};
+            nodeIDs = ColumnVector{nodeID};
             for (const EdgeRecord& edge : access.getOutEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
             }

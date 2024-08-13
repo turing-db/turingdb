@@ -9,10 +9,6 @@ int main() {
         return 1;
     }
 
-    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-        return 1;
-    }
-
     const EntityID nodeID = sample.findNode("nhs_no (String)", "117-66-8129");
     if (!nodeID.isValid()) {
         return 1;
@@ -22,30 +18,16 @@ int main() {
 
     ColumnIDs ids {nodeID};
     sample._vm->setRegisterValue(1, &ids);
-    sample.execute();
 
-//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-//        return 1;
-//    }
-//    sample._vm->setRegisterValue(1, &ids);
-//    sample.execute();
-//
-//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-//        return 1;
-//    }
-//    sample._vm->setRegisterValue(1, &ids);
-//    sample.execute();
-//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-//        return 1;
-//    }
-//    sample._vm->setRegisterValue(1, &ids);
-//    sample.execute();
-//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
-//        return 1;
-//    }
-//    sample._vm->setRegisterValue(1, &ids);
-//    sample.execute();
-//
+    if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
+        return 1;
+    }
+    sample._vm->setRegisterValue(1, &ids);
+
+    if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
+        return 1;
+    }
+
     sample.printOutput({"InputID", "TgtID_2"});
 
     sample.destroy();

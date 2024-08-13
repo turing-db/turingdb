@@ -9,11 +9,12 @@ int main() {
         return 1;
     }
 
-    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+    if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
         return 1;
     }
-
-    sample.execute();
+    if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
+        return 1;
+    }
     sample.printOutput({"SrcID_0", "TgtID_2"});
     sample.destroy();
 

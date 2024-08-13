@@ -1,10 +1,3 @@
-# Example query:
-#     SELECT src0.id, tgt2.id
-#     FROM   (src0)-e0-()-e1-()-e2-(tgt2)
-#
-# Neo4j equivalent:
-#     MATCH (n0)-[e0]->(n1)-[e1]->(n2)-[e2]->(n3) RETURN ID(n0), ID(n3) 
-
 .data:
 OUTPUT     $out
 
@@ -13,23 +6,21 @@ ALIAS %out,      r0
 ALIAS %input,    r1
 
 # First edge
-ALIAS %indices0, r2
-ALIAS %srcs0,    r3
-ALIAS %tgts0,    r4
+ALIAS %srcs0,    r2
+ALIAS %tgts0,    r3
 
 # Second edge
-ALIAS %indices1, r5
-ALIAS %tgts1,    r6
+ALIAS %indices1, r4
+ALIAS %tgts1,    r5
 
 # Third edge
-ALIAS %indices2, r7
-ALIAS %tgts2,    r8
+ALIAS %indices2, r6
+ALIAS %tgts2,    r7
 
 .text:
 LOAD %out,      $out
 
 # First Edge
-ALLOC_INDICES    %indices0
 ALLOC_ENTITY_IDS %srcs0
 ALLOC_ENTITY_IDS %tgts0
 
@@ -41,47 +32,36 @@ ALLOC_ENTITY_IDS %tgts1
 ALLOC_INDICES    %indices2
 ALLOC_ENTITY_IDS %tgts2
 
-ADD_COL %out, %srcs0, %indices0
-ADD_COL %out, _,      %indices1 # Store indices for the transformation pipeline
-ADD_COL %out, %tgts2, %indices2
+ADD_INDICES %out, %indices1
+ADD_INDICES %out, %indices2
 
-SCAN_EDGES i0, %indices0, {%srcs0, _, %tgts0, _}
-    i0_START:
-    JEND   i0, i0_END
-    UPDATE i0
+ADD_COL %out, %srcs0, 0
+ADD_COL %out, %tgts2, 2
 
-    GET_OUT_EDGES i1, %tgts0, %indices1, {_, %tgts1, _}
-        i1_START:
-        JEND   i1, i1_END
-        UPDATE i1
+SCAN_EDGES r100, {%srcs0, _, %tgts0, _}
+    r100_START:
+    JEND   r100, r100_END
+    UPDATE r100
 
-        GET_OUT_EDGES i2, %tgts1, %indices2, {_, %tgts2, _}
-            i2_START:
-            JEND   i2, i2_END
-            UPDATE i2
+    GET_OUT_EDGES r101, %tgts0, %indices1, {_, %tgts1, _}
+        r101_START:
+        JEND   r101, r101_END
+        UPDATE r101
+
+        GET_OUT_EDGES r102, %tgts1, %indices2, {_, %tgts2, _}
+            r102_START:
+            JEND   r102, r102_END
+            UPDATE r102
 
             WRITE %out
 
-            GOTO i2_START
-        i2_END:
+            GOTO r102_START
+        r102_END:
 
-        GOTO i1_START
-    i1_END:
+        GOTO r101_START
+    r101_END:
 
-    GOTO i0_START
-i0_END:
-
-# First Edge
-DEALLOC_INDICES    %indices0
-DEALLOC_ENTITY_IDS %srcs0
-DEALLOC_ENTITY_IDS %tgts0
-
-# Second Edge
-DEALLOC_INDICES    %indices1
-DEALLOC_ENTITY_IDS %tgts1
-
-# Third Edge
-DEALLOC_INDICES    %indices2
-DEALLOC_ENTITY_IDS %tgts2
+    GOTO r100_START
+r100_END:
 
 EXIT

@@ -5,7 +5,8 @@ using namespace db;
 int main() {
     auto sample = VMSample::createSample(SAMPLE_NAME);
 
-    if (!sample.loadJsonDB(sample._turingHome + "/neo4j/pole-db/")) {
+    //if (!sample.loadJsonDB(sample._turingHome + "/neo4j/pole-db/")) {
+    if (!sample.loadJsonDB("/home/dev/json-dbs/reactome-json/")) {
         return 1;
     }
 
@@ -16,15 +17,8 @@ int main() {
         return 1;
     }
 
-    sample.printOutput({
-        "TgtID_1",
-        "EdgeID_1",
-        "EdgeType_1",
-        "SrcID_1",
-        "EdgeID_2",
-        "EdgeType_2",
-        "SrcID_2",
-    });
+    sample.printOutput({"Name", "NodeID"});
+
     sample.destroy();
 
     return 0;

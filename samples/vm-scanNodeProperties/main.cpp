@@ -5,9 +5,7 @@ using namespace db;
 int main() {
     auto sample = VMSample::createSample(SAMPLE_NAME);
 
-    if (!sample.loadJsonDB(sample._turingHome + "/neo4j/pole-db/")) {
-        return 1;
-    }
+    sample.createSimpleGraph();
 
     if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
         return 1;
@@ -15,16 +13,8 @@ int main() {
     if (!sample.executeFile(sample._sampleDir + "/program.turing")) {
         return 1;
     }
+    sample.printOutput({"Name"});
 
-    sample.printOutput({
-        "TgtID_1",
-        "EdgeID_1",
-        "EdgeType_1",
-        "SrcID_1",
-        "EdgeID_2",
-        "EdgeType_2",
-        "SrcID_2",
-    });
     sample.destroy();
 
     return 0;

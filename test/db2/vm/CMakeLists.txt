@@ -7,3 +7,4 @@ function(add_db2_vm_gtest exe_name cpp_file)
 endfunction()
 
 add_db2_vm_gtest(db2_vm_dataregistrymanager_test DataRegistryManagerTest.cpp)
+add_db2_vm_gtest(db2_vm_filter_test FilterTest.cpp)
