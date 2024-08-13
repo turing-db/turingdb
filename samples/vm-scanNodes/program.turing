@@ -1,5 +1,4 @@
 .data:
-ENTITY_IDS $nodeIDs, {}
 INDICES    $indices
 OUTPUT     $out
 
@@ -10,7 +9,8 @@ ALIAS %indices, r2
 .text:
 LOAD %indices, $indices
 LOAD %out,     $out
-LOAD r1,       $nodeIDs
+
+ALLOC_ENTITY_IDS r1
 
 ADD_COL %out, r1, _
 

@@ -20,11 +20,34 @@ int main() {
 
     spdlog::info("Found node at index {}", nodeID);
 
-
     ColumnIDs ids {nodeID};
     sample._vm->setRegisterValue(1, &ids);
     sample.execute();
+
+//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+//        return 1;
+//    }
+//    sample._vm->setRegisterValue(1, &ids);
+//    sample.execute();
+//
+//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+//        return 1;
+//    }
+//    sample._vm->setRegisterValue(1, &ids);
+//    sample.execute();
+//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+//        return 1;
+//    }
+//    sample._vm->setRegisterValue(1, &ids);
+//    sample.execute();
+//    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+//        return 1;
+//    }
+//    sample._vm->setRegisterValue(1, &ids);
+//    sample.execute();
+//
     sample.printOutput({"InputID", "TgtID_2"});
+
     sample.destroy();
 
     return 0;

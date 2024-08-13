@@ -14,6 +14,21 @@ int main() {
     }
 
     sample.execute();
+    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+        return 1;
+    }
+
+    sample.execute();
+    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+        return 1;
+    }
+
+    sample.execute();
+    if (!sample.generateFromFile(sample._sampleDir + "/program.turing")) {
+        return 1;
+    }
+
+    sample.execute();
     sample.printOutput({
         "TgtID_1",
         "EdgeID_1",

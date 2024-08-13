@@ -76,8 +76,6 @@ ADD_COL %out, %input, %indices0
 ADD_COL %out, _,      %indices1
 ADD_COL %out, _,      %indices2
 ADD_COL %out, _,      %indices3
-ADD_COL %out, _,      %indices4
-ADD_COL %out, _,      %indices5
 ADD_COL %out, _,      %indices6
 ADD_COL %out, %tgts7, %indices7
 
@@ -147,36 +145,36 @@ GET_OUT_EDGES i0, %input, %indices0, {_, %tgts0, _}
     GOTO i0_START
 i0_END:
 
-# First Edge
-DEALLOC_INDICES    %indices0
-DEALLOC_ENTITY_IDS %tgts0
-
-# Second Edge
-DEALLOC_INDICES    %indices1
-DEALLOC_ENTITY_IDS %tgts1
-
-# Third Edge
-DEALLOC_INDICES    %indices2
-DEALLOC_ENTITY_IDS %tgts2
-
-# Fourth Edge
-DEALLOC_INDICES    %indices3
-DEALLOC_ENTITY_IDS %tgts3
-
-# Fifth Edge
-DEALLOC_INDICES    %indices4
-DEALLOC_ENTITY_IDS %tgts4
-
-# Sixth Edge
-DEALLOC_INDICES    %indices5
-DEALLOC_ENTITY_IDS %tgts5
-
-# Seventh Edge
-DEALLOC_INDICES    %indices6
-DEALLOC_ENTITY_IDS %tgts6
-
-# Eighth Edge
-DEALLOC_INDICES    %indices7
-DEALLOC_ENTITY_IDS %tgts7
+# # First Edge
+# DEALLOC_INDICES    %indices0
+# DEALLOC_ENTITY_IDS %tgts0
+#
+# # Second Edge
+# DEALLOC_INDICES    %indices1
+# DEALLOC_ENTITY_IDS %tgts1
+#
+# # Third Edge
+# DEALLOC_INDICES    %indices2
+# DEALLOC_ENTITY_IDS %tgts2
+#
+# # Fourth Edge
+# DEALLOC_INDICES    %indices3
+# DEALLOC_ENTITY_IDS %tgts3
+#
+# # Fifth Edge
+# DEALLOC_INDICES    %indices4
+# DEALLOC_ENTITY_IDS %tgts4
+#
+# # Sixth Edge
+# DEALLOC_INDICES    %indices5
+# DEALLOC_ENTITY_IDS %tgts5
+#
+# # Seventh Edge
+# DEALLOC_INDICES    %indices6
+# DEALLOC_ENTITY_IDS %tgts6
+#
+# # Eighth Edge
+# DEALLOC_INDICES    %indices7
+# DEALLOC_ENTITY_IDS %tgts7
 
 EXIT
