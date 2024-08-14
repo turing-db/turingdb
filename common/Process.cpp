@@ -55,10 +55,35 @@ void Process::updateExitCode() {
 
     int status = 0;
     const auto res = waitpid(_pid, &status, WNOHANG);
+
+    // if error occured
     if (res == -1) {
+        spdlog::error("Could no wait on pid: {}", _pid);
+
+        switch (errno) {
+            case ECHILD: {
+                spdlog::error("Could not wait on process: child error");
+                break;
+            }
+            case EINTR: {
+                spdlog::error("Could not wait on process: EINTR");
+                break;
+            }
+            case EINVAL: {
+                spdlog::error("Could not wait on process: EINVAL");
+                break;
+            }
+        }
+
         return;
     }
 
+    // If the process is still running, don't update exit code
+    if (res == 0) {
+        return;
+    }
+
+    // Process exited, update exit code
     if (WIFEXITED(status)) {
         _exitCode = WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
