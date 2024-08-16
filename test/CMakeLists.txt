@@ -1,7 +1,5 @@
-#add_compile_options(-Wno-implicit-int-float-conversion)
 add_subdirectory(googletest EXCLUDE_FROM_ALL SYSTEM)
 include(GoogleTest)
-#add_compile_options(-Wimplicit-int-float-conversion)
 
 add_subdirectory(common)
 add_subdirectory(db)
