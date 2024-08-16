@@ -4,9 +4,10 @@ OUTPUT     $out
 STRING     $propTypeName, "displayName (String)"
 STRING     $prop1,        "APOE-4 [extracellular region]"
 STRING     $prop2,        "AKT1 [plasma membrane]"
-#STRING     $propTypeName, "surname (String)"
-#STRING     $prop1,        "Hamilton"
-#STRING     $prop2,        "Smith"
+
+# STRING     $propTypeName, "surname (String)"
+# STRING     $prop1,        "Hamilton"
+# STRING     $prop2,        "Smith"
 
 .alias:
 ALIAS %out,      r0
