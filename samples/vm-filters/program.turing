@@ -77,8 +77,10 @@ ADD_COL %out, %tgts0,  0
 ADD_COL %out, %tgts2,  2
 
 ## Filter setup
-ADD_FILTER_EXPR %filter1, %mask1,   {EQUAL, %types0, %edgetype1}
-ADD_FILTER_EXPR %filter3, %mask3_1, {EQUAL, %types2, %edgetype2}
+ADD_FILTER_EXPR %filter1, %mask1,   {EQUAL, %types0,  %edgetype1}
+ADD_FILTER_EXPR %filter3, %mask3_2, {EQUAL, %types2,  %edgetype1}
+ADD_FILTER_EXPR %filter3, %mask3_1, {EQUAL, %types2,  %edgetype2}
+ADD_FILTER_EXPR %filter3, %mask3_0, {OR,    %mask3_1, %mask3_2  }
 
 SCAN_EDGES i0, {%srcs0, %edges0, %tgts0, %types0}
     i0_START:
