@@ -14,10 +14,8 @@ int main() {
     }
 
     sample.execute();
-    sample.printOutput({"  (n1)  ",
-                        "->(n2)  ",
-                        "->(n3)  "},
-                       0, 20);
+    sample.printOutput({"Name", "NodeID"}, 0, 30);
+
     sample.destroy();
 
     return 0;

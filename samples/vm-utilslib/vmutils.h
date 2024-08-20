@@ -32,14 +32,9 @@ public:
                      uint8_t outRegister = 0,
                      size_t maxLineCount = 20,
                      size_t colSize = 12) const;
-    void printOutputProperty(const std::string& propName,
-                             std::initializer_list<std::string_view> colNames,
-                             uint8_t outRegister = 0,
-                             size_t maxLineCount = 20,
-                             size_t colSize = 16) const;
     db::DBAccess readDB() const;
 
     db::EntityID findNode(const std::string& ptName, const std::string& prop) const;
 
-    const db::OutputWriter::Output& getOutput(uint8_t reg = 0) const;
+    const db::Block& getOutput(uint8_t reg = 0) const;
 };

@@ -22,7 +22,7 @@ int main() {
         "EdgeID_2",
         "EdgeType_2",
         "SrcID_2",
-    });
+    }, 0, 10);
     sample.destroy();
 
     return 0;
