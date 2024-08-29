@@ -154,6 +154,12 @@ bool Explorator::shouldExplore(const Node* node, const Edge* edge) const {
         if (_excludedNames.find(displayName) != _excludedNames.end()) {
             return false;
         }
+
+        for (const auto& excludedSubWord : _excludedSubwords) {
+            if (NodeSearch::isApproximateMatch(displayName, excludedSubWord)) {
+                return false;
+            }
+        }
     }
 
     return true;
@@ -167,6 +173,10 @@ void Explorator::buildNetwork() {
 
 void Explorator::addExcludedName(const std::string& name) {
     _excludedNames.insert(name);
+}
+
+void Explorator::addExcludedSubword(const std::string& name) {
+    _excludedSubwords.emplace_back(name);
 }
 
 bool Explorator::isTarget(const db::Node* node) const {
