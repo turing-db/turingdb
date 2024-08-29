@@ -46,6 +46,7 @@ public:
     void setTargetNameMatchType(TargetNameMatchType matchType) { _targetNameMatchType = matchType; }
 
     void addExcludedName(const std::string& name);
+    void addExcludedSubword(const std::string& name);
     void addDefaultExcludedNames();
 
     void addExcludedClass(const std::string& schemaClass);
@@ -73,6 +74,7 @@ private:
     std::unique_ptr<SubNetBuilder> _subNetBuilder;
 
     std::unordered_set<std::string> _excludedNames;
+    std::vector<std::string> _excludedSubwords;
     std::unordered_set<std::string> _excludedClasses;
     std::unordered_set<std::string> _targetClasses;
     std::unordered_set<std::string> _targetNodeNames;

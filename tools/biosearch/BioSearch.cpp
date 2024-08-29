@@ -33,10 +33,13 @@ int main(int argc, const char** argv) {
     std::vector<std::string> dbPaths;
     std::vector<std::string> seedNames;
     std::string seedFilePath;
+    std::vector<std::string> seedClasses;
+    std::vector<std::string> seedReferenceTypes;
     std::vector<std::string> excludedNames;
     std::vector<std::string> excludedClasses;
     std::vector<std::string> targetClasses;
     std::vector<std::string> targetNodes;
+    std::vector<std::string> excludedSubwords;
     size_t maxDistance = 5;
     size_t maxDegree = 0;
     bool traverseTargets = false;
@@ -48,6 +51,7 @@ int main(int argc, const char** argv) {
     bool targetNameMatchExact = false;
     bool targetNameMatchPrefix = true;
     bool targetNameMatchSubword = false;
+    bool noSeedClass = false;
 
     auto& argParser = toolInit.getArgParser();
 
@@ -67,6 +71,23 @@ int main(int argc, const char** argv) {
              .nargs(1)
              .append()
              .store_into(seedNames);
+
+    argParser.add_argument("-no-seed-class")
+             .help("Do not restrict the class of seed nodes")
+             .nargs(1)
+             .store_into(noSeedClass);
+
+    argParser.add_argument("-seed-class")
+             .help("Restrict the schema class of seed nodes (EntityWithAccessionedSequence by default)")
+             .nargs(1)
+             .append()
+             .store_into(seedClasses);
+
+    argParser.add_argument("-seed-reference-type")
+             .help("Restrict seed nodes referenceType property (ReferenceGeneProduct by default)")
+             .nargs(1)
+             .append()
+             .store_into(seedReferenceTypes);
 
     argParser.add_argument("-exclude")
              .help("Exclude nodes with a given name")
@@ -100,6 +121,12 @@ int main(int argc, const char** argv) {
              .help("Find target node names that contain only a target word")
              .nargs(0)
              .store_into(targetNameMatchSubword);
+
+    argParser.add_argument("-exclude-subword")
+             .help("Exclude nodes names that contain a given word")
+             .nargs(0)
+             .append()
+             .store_into(excludedSubwords);
 
     argParser.add_argument("-traverse_targets")
              .help("Traverse target nodes during exploration")
@@ -186,8 +213,24 @@ int main(int argc, const char** argv) {
             spdlog::info("Searching seed nodes");
             NodeSearch nodeSearch(db);
             nodeSearch.addProperty("speciesName", "Homo sapiens", NodeSearch::MatchType::EXACT);
-            nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
-            nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
+
+            if (!noSeedClass) {
+                if (seedClasses.empty()) {
+                    nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
+                } else {
+                    for (const auto& className : seedClasses) {
+                        nodeSearch.addProperty("schemaClass", className, NodeSearch::MatchType::EXACT);
+                    }
+                }
+
+                if (seedReferenceTypes.empty()) {
+                    nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
+                } else {
+                    for (const auto& seedReferenceType : seedReferenceTypes) {
+                        nodeSearch.addProperty("referenceType", seedReferenceType, NodeSearch::MatchType::EXACT);
+                    }
+                }
+            }
 
             for (const auto& name : seedNames) {
                 nodeSearch.addProperty("displayName", name, NodeSearch::MatchType::PREFIX_AND_LOC);
@@ -269,6 +312,10 @@ int main(int argc, const char** argv) {
 
         for (const auto& excludedName : excludedNames) {
             explorator.addExcludedName(excludedName);
+        }
+
+        for (const auto& excludedWord : excludedSubwords) {
+            explorator.addExcludedSubword(excludedWord);
         }
 
         // Add excluded classes
