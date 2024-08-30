@@ -124,7 +124,7 @@ int main(int argc, const char** argv) {
 
     argParser.add_argument("-exclude-subword")
              .help("Exclude nodes names that contain a given word")
-             .nargs(0)
+             .nargs(1)
              .append()
              .store_into(excludedSubwords);
 
