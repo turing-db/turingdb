@@ -245,7 +245,7 @@ void Explorator::addDefaultExcludedNames() {
 
 void Explorator::addExcludedClass(const std::string& schemaClass) {
     if (_targetClasses.find(schemaClass) != _targetClasses.end()) {
-        spdlog::error("Schema class {} not excluded because it is a target class",
+        spdlog::info("Schema class {} not excluded because it is a target class",
                       schemaClass);
         return;
     }

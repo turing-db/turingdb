@@ -51,7 +51,9 @@ int main(int argc, const char** argv) {
     bool targetNameMatchExact = false;
     bool targetNameMatchPrefix = true;
     bool targetNameMatchSubword = false;
-    bool noSeedClass = false;
+    bool onlyGeneProductsSeeds = false;
+    bool debugSeeds = false;
+    bool allowNonHumanSeeds = false;
 
     auto& argParser = toolInit.getArgParser();
 
@@ -72,10 +74,10 @@ int main(int argc, const char** argv) {
              .append()
              .store_into(seedNames);
 
-    argParser.add_argument("-no-seed-class")
-             .help("Do not restrict the class of seed nodes")
+    argParser.add_argument("-only-gene-products-seeds")
+             .help("Search only for seeds nodes which are genes or gene products")
              .nargs(1)
-             .store_into(noSeedClass);
+             .store_into(onlyGeneProductsSeeds);
 
     argParser.add_argument("-seed-class")
              .help("Restrict the schema class of seed nodes (EntityWithAccessionedSequence by default)")
@@ -174,6 +176,16 @@ int main(int argc, const char** argv) {
              .nargs(0)
              .store_into(traverseFailedReaction);
 
+    argParser.add_argument("-debug-seeds")
+             .help("Display verbose debugging information during seed nodes search")
+             .nargs(0)
+             .store_into(debugSeeds);
+
+    argParser.add_argument("-allow-non-human-seeds")
+             .help("Use seed nodes that may not be explicitly annotated as Homo Sapiens")
+             .nargs(0)
+             .store_into(allowNonHumanSeeds);
+
     toolInit.init(argc, argv);
 
     if (dbPaths.empty() || (seedFilePath.empty() && seedNames.empty())) {
@@ -212,23 +224,25 @@ int main(int argc, const char** argv) {
             TimerStat timerStat("Search seed nodes");
             spdlog::info("Searching seed nodes");
             NodeSearch nodeSearch(db);
-            nodeSearch.addProperty("speciesName", "Homo sapiens", NodeSearch::MatchType::EXACT);
+            nodeSearch.setDebug(debugSeeds);
 
-            if (!noSeedClass) {
-                if (seedClasses.empty()) {
-                    nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
-                } else {
-                    for (const auto& className : seedClasses) {
-                        nodeSearch.addProperty("schemaClass", className, NodeSearch::MatchType::EXACT);
-                    }
+            if (!allowNonHumanSeeds) {
+                nodeSearch.addProperty("speciesName", "Homo sapiens", NodeSearch::MatchType::EXACT);
+            }
+
+            if (onlyGeneProductsSeeds) {
+                nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
+            } else {
+                for (const auto& className : seedClasses) {
+                    nodeSearch.addProperty("schemaClass", className, NodeSearch::MatchType::EXACT);
                 }
+            }
 
-                if (seedReferenceTypes.empty()) {
-                    nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
-                } else {
-                    for (const auto& seedReferenceType : seedReferenceTypes) {
-                        nodeSearch.addProperty("referenceType", seedReferenceType, NodeSearch::MatchType::EXACT);
-                    }
+            if (onlyGeneProductsSeeds) {
+                nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
+            } else {
+                for (const auto& seedReferenceType : seedReferenceTypes) {
+                    nodeSearch.addProperty("referenceType", seedReferenceType, NodeSearch::MatchType::EXACT);
                 }
             }
 

@@ -27,6 +27,8 @@ public:
     NodeSearch(db::DB* db);
     ~NodeSearch();
 
+    void setDebug(bool debug) { _trace = debug; }
+
     void addProperty(const std::string& propName,
                      const std::string& value,
                      MatchType matchType = MatchType::SUBWORD);
@@ -51,4 +53,5 @@ private:
     std::unordered_set<const db::NodeType*> _types;
     std::unordered_set<db::DBIndex> _ids;
     std::map<PropertyName, std::pair<Values, MatchType>> _properties;
+    bool _trace {true};
 };

@@ -6,6 +6,8 @@
 #include "Node.h"
 #include "PropertyType.h"
 
+#include <spdlog/spdlog.h>
+
 using namespace db;
 
 NodeSearch::NodeSearch(db::DB* db)
@@ -67,46 +69,107 @@ void NodeSearch::run(std::vector<db::Node*>& result) {
                     }
 
                     const std::string& valueStr = value.getString();
+                    if (_trace) {
+                        spdlog::info("FOUND PROPERTY prop={} value='{}' node id={}",
+                                     expectedPropName.getSharedString()->getString(),
+                                     valueStr,
+                                     node->getIndex().getObjectID());
+                    }
+
                     for (const auto& expectedValue : expectedValueSet) {
                         if (matchType == MatchType::EXACT) {
                             if (valueStr == expectedValue) {
                                 propFound = true;
                                 break;
+                            } else {
+                                if (_trace) {
+                                    spdlog::info("MATCH EXACT FAILED prop={} value='{}' expected='{}' node id={}",
+                                     expectedPropName.getSharedString()->getString(),
+                                     valueStr,
+                                     expectedValue,
+                                     node->getIndex().getObjectID());
+                                }
                             }
                         } else if (matchType == MatchType::PREFIX) {
                             if (isPrefixMatch(valueStr, expectedValue)) {
                                 propFound = true;
                                 break;
+                            } else {
+                                if (_trace) {
+                                    spdlog::info("MATCH PREFIX FAILED prop={} value='{}' expected='{}' node id={}",
+                                     expectedPropName.getSharedString()->getString(),
+                                     valueStr,
+                                     expectedValue,
+                                     node->getIndex().getObjectID());
+                                }
                             }
                         } else if (matchType == MatchType::PREFIX_AND_LOC) {
                             if (isPrefixAndLocMatch(valueStr, expectedValue)) {
                                 propFound = true;
                                 break;
+                            } else {
+                                if (_trace) {
+                                    spdlog::info("MATCH PREFIX AND LOC FAILED prop={} value='{}' expected='{}' node id={}",
+                                     expectedPropName.getSharedString()->getString(),
+                                     valueStr,
+                                     expectedValue,
+                                     node->getIndex().getObjectID());
+                                }
                             }
                         } else {
                             if (isApproximateMatch(valueStr, expectedValue)) {
                                 propFound = true;
                                 break;
+                            } else {
+                                if (_trace) {
+                                    spdlog::info("MATCH APPROXIMATE FAILED prop={} value='{}' expected='{}' node id={}",
+                                     expectedPropName.getSharedString()->getString(),
+                                     valueStr,
+                                     expectedValue,
+                                     node->getIndex().getObjectID());
+                                }
                             }
                         }
                     }
 
                     if (propFound) {
+                        if (_trace) {
+                            spdlog::info("MATCHED PROPERTY prop={} value='{}' node id={}",
+                                         expectedPropName.getSharedString()->getString(),
+                                         valueStr,
+                                         node->getIndex().getObjectID());
+                        }
                         break;
                     }
                 }
 
                 if (!propFound) {
                     allPropsFound = false;
+
+                    if (_trace) {
+                        spdlog::info("NOT MATCHED PROPERTY prop={} node id={}",
+                                     expectedPropName.getSharedString()->getString(),
+                                     node->getIndex().getObjectID());
+                    }
                 }
             }
 
             if (!allPropsFound) {
+                if (_trace) {
+                    spdlog::info("NOT ALL MATCHED PROPERTIES node id={}",
+                                 node->getIndex().getObjectID());
+                }
+
                 continue;
             }
         }
 
         result.push_back(node);
+
+        if (_trace) {
+            spdlog::info("NODE MATCH id={}",
+                         node->getIndex().getObjectID());
+        }
     }
 }
 
