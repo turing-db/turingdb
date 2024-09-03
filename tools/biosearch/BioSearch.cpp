@@ -54,6 +54,7 @@ int main(int argc, const char** argv) {
     bool onlyGeneProductsSeeds = false;
     bool debugSeeds = false;
     bool allowNonHumanSeeds = false;
+    bool seedMatchSubword = false;
 
     auto& argParser = toolInit.getArgParser();
 
@@ -186,6 +187,11 @@ int main(int argc, const char** argv) {
              .nargs(0)
              .store_into(allowNonHumanSeeds);
 
+    argParser.add_argument("-seed-subword")
+             .help("Match seed names that contain only contain a word of the seeds provided") 
+             .nargs(0)
+             .store_into(seedMatchSubword);
+
     toolInit.init(argc, argv);
 
     if (dbPaths.empty() || (seedFilePath.empty() && seedNames.empty())) {
@@ -212,7 +218,7 @@ int main(int argc, const char** argv) {
         }
 
         std::string name;
-        while (seedFile >> name) {
+        while (std::getline(seedFile, name)) {
             seedNames.emplace_back(name);
         }
     }
@@ -246,8 +252,13 @@ int main(int argc, const char** argv) {
                 }
             }
 
+            auto seedMatchType = NodeSearch::MatchType::PREFIX_AND_LOC;
+            if (seedMatchSubword) {
+                seedMatchType = NodeSearch::MatchType::SUBWORD;
+            }
+
             for (const auto& name : seedNames) {
-                nodeSearch.addProperty("displayName", name, NodeSearch::MatchType::PREFIX_AND_LOC);
+                nodeSearch.addProperty("displayName", name, seedMatchType);
             }
 
             nodeSearch.run(seeds);
