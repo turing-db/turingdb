@@ -31,6 +31,8 @@ public:
     Explorator(db::DB* db);
     ~Explorator();
 
+    void setDebug(bool debug) { _debug = debug; }
+
     void addSeeds(const std::vector<db::Node*>& seeds);
 
     void setMaximumDistance(size_t maxDist) { _maxDist = maxDist; }
@@ -65,6 +67,7 @@ private:
     bool _traversePathways {true};
     bool _traverseSets {true};
     bool _traverseFailedReaction {false};
+    bool _debug {false};
 
     db::DB* _db {nullptr};
     db::Writeback _wb;

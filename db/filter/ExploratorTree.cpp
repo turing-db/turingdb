@@ -21,8 +21,10 @@ ExploratorTreeNode* ExploratorTreeNode::create(ExploratorTree* tree,
     if (parent) {
         node->setParent(parent);
         parent->addChild(node);
+        node->setDistance(parent->getDistance()+1);
     } else {
         tree->addRoot(node);
+        node->setDistance(0);
     }
 
     return node;

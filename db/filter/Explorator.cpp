@@ -1,6 +1,7 @@
 #include "Explorator.h"
 
 #include <queue>
+#include <unordered_set>
 #include <spdlog/spdlog.h>
 
 #include "DB.h"
@@ -15,6 +16,17 @@
 using namespace db;
 
 namespace {
+
+struct QueueRecord {
+    QueueRecord(Node* node, ExploratorTreeNode* parent)
+        : _node(node),
+        _parent(parent)
+    {
+    }
+
+    Node* _node {nullptr};
+    ExploratorTreeNode* _parent {nullptr};
+};
 
 void buildNetworkRec(const ExploratorTreeNode* treeNode, SubNetBuilder* subNetBuilder) {
     Node* node = treeNode->getNode();
@@ -58,7 +70,8 @@ void Explorator::run() {
         return;
     }
 
-    std::queue<ExploratorTreeNode*> queue;
+    std::queue<QueueRecord> queue;
+    std::unordered_set<Node*> discovered;
 
     const auto searchSeedName = _db->getString("searchSeed");
 
@@ -72,54 +85,98 @@ void Explorator::run() {
         bioassert(searchSeedPropType);
         const auto searchSeedProp = Property(searchSeedPropType, Value::createString("1"));
         _wb.setProperty(seed, searchSeedProp);
-        ExploratorTreeNode* seedNode =  ExploratorTreeNode::create(_tree, seed, nullptr);
-        queue.push(seedNode);
+        queue.emplace(seed, nullptr);
+        discovered.insert(seed);
     }
 
     // Little lambda to explore the next DB node following the current one
     // during exploration
-    const auto exploreNext = [this, &queue](ExploratorTreeNode* currentTreeNode,
-                                            Node* next,
-                                            Edge* edge) {
-        if (!shouldExplore(next, edge)) {
+    const auto exploreNext = [this, &queue, &discovered](ExploratorTreeNode* current,
+                                                         Node* next,
+                                                         Edge* edge) {
+        if (_debug) {
+            const std::string displayName = SearchUtils::getProperty(next, _displayName);
+            spdlog::info("??? Should explore node id={} displayName='{}' ???",
+                         next->getIndex().getObjectID(),
+                         displayName);
+        }
+
+        if (discovered.find(next) != discovered.end()) {
+            if (_debug) {
+                const std::string displayName = SearchUtils::getProperty(next, _displayName);
+                spdlog::info("ALREADY IN QUEUE node id={} displayName='{}' ?",
+                            next->getIndex().getObjectID(),
+                            displayName);
+            }
             return;
         }
 
-        auto nextTreeNode = _tree->getNode(next);
-        if (!nextTreeNode) {
-            // We create the next tree node if not already discovered
-            nextTreeNode = ExploratorTreeNode::create(_tree, next, currentTreeNode);
-            nextTreeNode->setDistance(currentTreeNode->getDistance()+1);
-            queue.push(nextTreeNode);
+        if (!shouldExplore(next, edge)) {
+            if (_debug) {
+                const std::string displayName = SearchUtils::getProperty(next, _displayName);
+                spdlog::info("Should NOT explore node id={} displayName='{}'",
+                            next->getIndex().getObjectID(),
+                            displayName);
+            }
+            return;
         }
+
+        if (_debug) {
+            const std::string displayName = SearchUtils::getProperty(next, _displayName);
+            spdlog::info("Add to queue node id={} displayName='{}'",
+                        next->getIndex().getObjectID(),
+                        displayName);
+        }
+        queue.emplace(next, current);
+        discovered.insert(next);
     };
 
     while (!queue.empty()) {
-        ExploratorTreeNode* currentTreeNode = queue.front();
+        const QueueRecord current = queue.front();
         queue.pop();
+        Node* node = current._node;
+        ExploratorTreeNode* parent = current._parent;
 
-        Node* node = currentTreeNode->getNode();
+        if (_debug) {
+            const std::string displayName = SearchUtils::getProperty(node, _displayName);
+            spdlog::info("Visit node id={} displayName={}",
+                         node->getIndex().getObjectID(),
+                         displayName);
+        }
+
+        // Create ExploratorTreeNode
+        ExploratorTreeNode* treeNode = ExploratorTreeNode::create(_tree, node, parent);
 
         if (isTarget(node)) {
-            _targets.insert(currentTreeNode);
+            if (_debug) {
+                spdlog::info("Node id={} is a target node",
+                             node->getIndex().getObjectID());
+            }
+
+            _targets.insert(treeNode);
             if (!_traverseTargets) {
+                if (_debug) {
+                    spdlog::info("Traverse targets option is false stop here");
+                }
                 continue;
             }
         }
 
-        if (currentTreeNode->getDistance() >= _maxDist) {
+        if (treeNode->getDistance() >= _maxDist) {
+            if (_debug) {
+                spdlog::info("Maximum distance reached, stop here");
+            }
             continue;
         }
 
-        Node* current = currentTreeNode->getNode();
-        for (Edge* edge : current->inEdges()) {
+        for (Edge* edge : node->inEdges()) {
             Node* next = edge->getSource();
-            exploreNext(currentTreeNode, next, edge); 
+            exploreNext(treeNode, next, edge); 
         }
 
-        for (Edge* edge : current->outEdges()) {
+        for (Edge* edge : node->outEdges()) {
             Node* next = edge->getTarget();
-            exploreNext(currentTreeNode, next, edge);
+            exploreNext(treeNode, next, edge);
         }
     }
 
@@ -132,6 +189,13 @@ bool Explorator::shouldExplore(const Node* node, const Edge* edge) const {
     if (_maxDegree > 0) {
         const size_t edgeCount = node->inEdges().size() + node->outEdges().size();
         if (edgeCount > _maxDegree) {
+            if (_debug) {
+                const std::string displayName = SearchUtils::getProperty(node, _displayName);
+                spdlog::info("NODE WITH TOO MUCH DEGREE {} node id={} displayName='{}'",
+                            edgeCount,
+                            node->getIndex().getObjectID(),
+                            displayName);
+            }
             return false;
         }
     }
@@ -139,12 +203,26 @@ bool Explorator::shouldExplore(const Node* node, const Edge* edge) const {
     // Check species name
     const std::string speciesName = SearchUtils::getProperty(node, _speciesName);
     if (!speciesName.empty() && speciesName != "Homo sapiens") {
+        if (_debug) {
+            const std::string displayName = SearchUtils::getProperty(node, _displayName);
+            spdlog::info("NOT HUMAN SPECIES '{}' node id={} displayName='{}'",
+                        speciesName,
+                        node->getIndex().getObjectID(),
+                        displayName);
+        }
         return false;
     }
 
     // Check schema class
     const std::string schemaClass = SearchUtils::getProperty(node, _schemaClassName);
     if (_excludedClasses.find(schemaClass) != _excludedClasses.end()) {
+        if (_debug) {
+            const std::string displayName = SearchUtils::getProperty(node, _displayName);
+            spdlog::info("EXCLUDED SCHEMA CLASS '{}' node id={} displayName='{}'",
+                        schemaClass,
+                        node->getIndex().getObjectID(),
+                        displayName);
+        }
         return false;
     }
 
@@ -152,11 +230,24 @@ bool Explorator::shouldExplore(const Node* node, const Edge* edge) const {
     const std::string displayName = SearchUtils::getProperty(node, _displayName);
     if (!displayName.empty()) {
         if (_excludedNames.find(displayName) != _excludedNames.end()) {
+            if (_debug) {
+                const std::string displayName = SearchUtils::getProperty(node, _displayName);
+                spdlog::info("EXCLUDED NAME node id={} displayName='{}'",
+                            node->getIndex().getObjectID(),
+                            displayName);
+            }
             return false;
         }
 
         for (const auto& excludedSubWord : _excludedSubwords) {
             if (NodeSearch::isApproximateMatch(displayName, excludedSubWord)) {
+                if (_debug) {
+                    const std::string displayName = SearchUtils::getProperty(node, _displayName);
+                    spdlog::info("EXCLUDED SUBWORD '{}' node id={} displayName='{}'",
+                                excludedSubWord,
+                                node->getIndex().getObjectID(),
+                                displayName);
+                }
                 return false;
             }
         }

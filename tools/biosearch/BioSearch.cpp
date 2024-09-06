@@ -55,6 +55,7 @@ int main(int argc, const char** argv) {
     bool debugSeeds = false;
     bool allowNonHumanSeeds = false;
     bool seedMatchSubword = false;
+    bool debugVisit = false;
 
     auto& argParser = toolInit.getArgParser();
 
@@ -134,7 +135,7 @@ int main(int argc, const char** argv) {
     argParser.add_argument("-traverse_targets")
              .help("Traverse target nodes during exploration")
              .nargs(0)
-             .action([&](const auto&){ traverseTargets = false; });
+             .store_into(traverseTargets);
 
     argParser.add_argument("-no_sets")
              .help("Exclude sets of entities (CandidateSet, DefinedSet..etc)")
@@ -191,6 +192,11 @@ int main(int argc, const char** argv) {
              .help("Match seed names that contain only contain a word of the seeds provided") 
              .nargs(0)
              .store_into(seedMatchSubword);
+
+    argParser.add_argument("-debug-visit")
+             .help("Print verbose information while exploring nodes")
+             .nargs(0)
+             .store_into(debugVisit);
 
     toolInit.init(argc, argv);
 
@@ -290,6 +296,7 @@ int main(int argc, const char** argv) {
     Network* subNet = nullptr;
     {
         Explorator explorator(db);
+        explorator.setDebug(debugVisit);
         explorator.addSeeds(seeds);
         explorator.setMaximumDistance(maxDistance);
         explorator.setTraverseTargets(traverseTargets);
