@@ -33,10 +33,13 @@ int main(int argc, const char** argv) {
     std::vector<std::string> dbPaths;
     std::vector<std::string> seedNames;
     std::string seedFilePath;
+    std::vector<std::string> seedClasses;
+    std::vector<std::string> seedReferenceTypes;
     std::vector<std::string> excludedNames;
     std::vector<std::string> excludedClasses;
     std::vector<std::string> targetClasses;
     std::vector<std::string> targetNodes;
+    std::vector<std::string> excludedSubwords;
     size_t maxDistance = 5;
     size_t maxDegree = 0;
     bool traverseTargets = false;
@@ -48,6 +51,11 @@ int main(int argc, const char** argv) {
     bool targetNameMatchExact = false;
     bool targetNameMatchPrefix = true;
     bool targetNameMatchSubword = false;
+    bool onlyGeneProductsSeeds = false;
+    bool debugSeeds = false;
+    bool allowNonHumanSeeds = false;
+    bool seedMatchSubword = false;
+    bool debugVisit = false;
 
     auto& argParser = toolInit.getArgParser();
 
@@ -67,6 +75,23 @@ int main(int argc, const char** argv) {
              .nargs(1)
              .append()
              .store_into(seedNames);
+
+    argParser.add_argument("-only-gene-products-seeds")
+             .help("Search only for seeds nodes which are genes or gene products")
+             .nargs(1)
+             .store_into(onlyGeneProductsSeeds);
+
+    argParser.add_argument("-seed-class")
+             .help("Restrict the schema class of seed nodes (EntityWithAccessionedSequence by default)")
+             .nargs(1)
+             .append()
+             .store_into(seedClasses);
+
+    argParser.add_argument("-seed-reference-type")
+             .help("Restrict seed nodes referenceType property (ReferenceGeneProduct by default)")
+             .nargs(1)
+             .append()
+             .store_into(seedReferenceTypes);
 
     argParser.add_argument("-exclude")
              .help("Exclude nodes with a given name")
@@ -101,10 +126,16 @@ int main(int argc, const char** argv) {
              .nargs(0)
              .store_into(targetNameMatchSubword);
 
+    argParser.add_argument("-exclude-subword")
+             .help("Exclude nodes names that contain a given word")
+             .nargs(1)
+             .append()
+             .store_into(excludedSubwords);
+
     argParser.add_argument("-traverse_targets")
              .help("Traverse target nodes during exploration")
              .nargs(0)
-             .action([&](const auto&){ traverseTargets = false; });
+             .store_into(traverseTargets);
 
     argParser.add_argument("-no_sets")
              .help("Exclude sets of entities (CandidateSet, DefinedSet..etc)")
@@ -147,6 +178,26 @@ int main(int argc, const char** argv) {
              .nargs(0)
              .store_into(traverseFailedReaction);
 
+    argParser.add_argument("-debug-seeds")
+             .help("Display verbose debugging information during seed nodes search")
+             .nargs(0)
+             .store_into(debugSeeds);
+
+    argParser.add_argument("-allow-non-human-seeds")
+             .help("Use seed nodes that may not be explicitly annotated as Homo Sapiens")
+             .nargs(0)
+             .store_into(allowNonHumanSeeds);
+
+    argParser.add_argument("-seed-subword")
+             .help("Match seed names that contain only contain a word of the seeds provided") 
+             .nargs(0)
+             .store_into(seedMatchSubword);
+
+    argParser.add_argument("-debug-visit")
+             .help("Print verbose information while exploring nodes")
+             .nargs(0)
+             .store_into(debugVisit);
+
     toolInit.init(argc, argv);
 
     if (dbPaths.empty() || (seedFilePath.empty() && seedNames.empty())) {
@@ -173,7 +224,7 @@ int main(int argc, const char** argv) {
         }
 
         std::string name;
-        while (seedFile >> name) {
+        while (std::getline(seedFile, name)) {
             seedNames.emplace_back(name);
         }
     }
@@ -185,12 +236,35 @@ int main(int argc, const char** argv) {
             TimerStat timerStat("Search seed nodes");
             spdlog::info("Searching seed nodes");
             NodeSearch nodeSearch(db);
-            nodeSearch.addProperty("speciesName", "Homo sapiens", NodeSearch::MatchType::EXACT);
-            nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
-            nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
+            nodeSearch.setDebug(debugSeeds);
+
+            if (!allowNonHumanSeeds) {
+                nodeSearch.addProperty("speciesName", "Homo sapiens", NodeSearch::MatchType::EXACT);
+            }
+
+            if (onlyGeneProductsSeeds) {
+                nodeSearch.addProperty("schemaClass", "EntityWithAccessionedSequence", NodeSearch::MatchType::EXACT);
+            } else {
+                for (const auto& className : seedClasses) {
+                    nodeSearch.addProperty("schemaClass", className, NodeSearch::MatchType::EXACT);
+                }
+            }
+
+            if (onlyGeneProductsSeeds) {
+                nodeSearch.addProperty("referenceType", "ReferenceGeneProduct", NodeSearch::MatchType::EXACT);
+            } else {
+                for (const auto& seedReferenceType : seedReferenceTypes) {
+                    nodeSearch.addProperty("referenceType", seedReferenceType, NodeSearch::MatchType::EXACT);
+                }
+            }
+
+            auto seedMatchType = NodeSearch::MatchType::PREFIX_AND_LOC;
+            if (seedMatchSubword) {
+                seedMatchType = NodeSearch::MatchType::SUBWORD;
+            }
 
             for (const auto& name : seedNames) {
-                nodeSearch.addProperty("displayName", name, NodeSearch::MatchType::PREFIX_AND_LOC);
+                nodeSearch.addProperty("displayName", name, seedMatchType);
             }
 
             nodeSearch.run(seeds);
@@ -222,6 +296,7 @@ int main(int argc, const char** argv) {
     Network* subNet = nullptr;
     {
         Explorator explorator(db);
+        explorator.setDebug(debugVisit);
         explorator.addSeeds(seeds);
         explorator.setMaximumDistance(maxDistance);
         explorator.setTraverseTargets(traverseTargets);
@@ -269,6 +344,10 @@ int main(int argc, const char** argv) {
 
         for (const auto& excludedName : excludedNames) {
             explorator.addExcludedName(excludedName);
+        }
+
+        for (const auto& excludedWord : excludedSubwords) {
+            explorator.addExcludedSubword(excludedWord);
         }
 
         // Add excluded classes
