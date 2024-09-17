@@ -1,0 +1,9 @@
+UPDATES:
+- removed dash from process names
+- wrapped processes code in seperate scripts
+- fixed argument constraints
+- wf run coded
+
+TO NOTE:
+- ast/aws s3 instances: check them and fix them when ast bash tool exists
+- Absolute paths: change to turing home 
