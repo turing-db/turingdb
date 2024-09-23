@@ -14,7 +14,7 @@ if [[ -f ${OTP}/${PROJECT}/${DATASET}/data/.getdata.txt ]]; then
     echo -e "Fetching data from:"
     for path in `cat ${OTP}/${PROJECT}/${DATASET}/data/.getdata.txt`; do
         echo -e "$path"
-        ast sync ${path} ${OTP}/${PROJECT}/${DATASET}/data/01.Data
+        ast syncup ${path} ${OTP}/${PROJECT}/${DATASET}/data/01.Data
     done
 fi
 
@@ -22,7 +22,7 @@ if [[ -f ${OTP}/${PROJECT}/${DATASET}/metadata/.getmetadata.txt ]]; then
     echo -e "Fetching data from:"
     for path in `cat ${OTP}/${PROJECT}/${DATASET}/metadata/.getmetadata.txt`; do
         echo -e "$path"
-        ast sync ${path} ${OTP}/${PROJECT}/${DATASET}/metadata/
+        ast syncup ${path} ${OTP}/${PROJECT}/${DATASET}/metadata/
     done
 fi
 
