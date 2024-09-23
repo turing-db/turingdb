@@ -15,7 +15,7 @@ if [ -z "$output" ]; then
     echo "False"
 else
     # Check for exact match
-    if echo "$output" | grep -q -E "^ *PRE *$(basename "$s3uri")/|$(basename "$s3uri")$"; then
+    if echo "$output" | grep -q -E "^ *PRE *$(basename "$s3uri")\/|\s\S* ${basename}$"; then
         echo "True"
     else
         echo "False"

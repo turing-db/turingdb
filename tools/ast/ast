@@ -44,6 +44,14 @@ case $STEP in
 
         bash ${wd}/ast_syncup.sh ${source_path} ${destination_path}
         ;;
+    typecheck)
+        if [ $# -ne 1 ]; then
+            echo -e "ERROR: you need to provide a <S3Uri>"
+            usage
+        fi
+
+        bash ${wd}/ast_typecheck.sh $1
+        ;;
     *)
         aws s3 $STEP $@
         ;;
