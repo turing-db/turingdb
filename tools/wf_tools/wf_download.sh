@@ -14,10 +14,10 @@ if [[ -f ${OTP}/${PROJECT}/${DATASET}/data/.getdata.txt ]]; then
     echo -e "Fetching data from:"
     for path in `cat ${OTP}/${PROJECT}/${DATASET}/data/.getdata.txt`; do
         echo -e "$path"
-        if [[ $( ast typecheck ${path} | awk '{print $3}' ) == "file" ]]; then
+        if [[ $( ast typecheck ${path} | awk '{print $4}' ) == "file" ]]; then
             fl_name=$(basename ${path})
             ast syncup ${path} ${OTP}/${PROJECT}/${DATASET}/data/01.Data/${fl_name}
-        elif [[ $( ast typecheck ${path} | awk '{print $3}' ) == "folder" ]]; then
+        elif [[ $( ast typecheck ${path} | awk '{print $4}' ) == "folder" ]]; then
             ast syncup ${path} ${OTP}/${PROJECT}/${DATASET}/data/01.Data/
         else
             echo -e "[S3Uri error]: check provided path in .getdata.txt file."
