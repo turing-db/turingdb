@@ -7,9 +7,11 @@
 #include "JobSystem.h"
 #include "Neo4j/ParserConfig.h"
 #include "Neo4jImporter.h"
-#include "PlannerContext.h"
-#include "QueryPlanner.h"
-#include "MemoryManager.h"
+
+#include "DB.h"
+#include "QueryInterpreter.h"
+#include "InterpreterContext.h"
+#include "QueryParams.h"
 
 #include "Time.h"
 #include "LogUtils.h"
@@ -67,13 +69,17 @@ bool PipeSample::loadJsonDB(const std::string& jsonDir) {
     return res;
 }
 
-bool PipeSample::compileQuery(const std::string& queryStr) {
-    _mem = std::make_unique<MemoryManager>();
-    _planCtxt = std::make_unique<PlannerContext>(_system->getDefaultDB(), _mem.get());
-    _queryPlanner = std::make_unique<QueryPlanner>(_ctxt.get(), _query);
-    return false;
-}
+bool PipeSample::executeQuery(const std::string& queryStr) {
+    InterpreterContext interpCtxt(_system.get());
+    QueryInterpreter interp(&interpCtxt);
 
-bool PipeSample::execute() {
-    return false;
+    const QueryParams queryParams(queryStr, _system->getDefaultDB()->getName());
+    const auto res = interp.execute(queryParams);
+
+    if (res != QueryStatus::OK) {
+        spdlog::error("QueryInterpreter status={}", (size_t)res);
+        return false;
+    }
+    
+    return true;
 }

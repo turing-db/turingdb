@@ -10,4 +10,5 @@ target_link_libraries(turing_samples_pipe_utilslib_s
             turing_db2_system_s
             turing_db2_core_s
             turing_db2_import_neo4j_s
-            turing_db2_pipeline_s)
+            turing_db2_query_interpreter_s
+            turing_log_s)

@@ -9,11 +9,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (!sample.compileQuery("SELECT * FROM n:")) {
-        return EXIT_FAILURE;
-    }
-
-    if (!sample.execute()) {
+    if (!sample.executeQuery("SELECT * FROM n:")) {
         return EXIT_FAILURE;
     }
 
