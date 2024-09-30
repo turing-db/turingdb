@@ -2,6 +2,8 @@
 
 #include "PipeUtils.h"
 
+#include <spdlog/spdlog.h>
+
 int main() {
     PipeSample sample("pipe_scan_nodes");
 
@@ -10,6 +12,7 @@ int main() {
     }
 
     if (!sample.executeQuery("SELECT * FROM n:")) {
+        spdlog::error("Failed to execute query");
         return EXIT_FAILURE;
     }
 
