@@ -1,0 +1,59 @@
+#!/bin/bash
+set -eou pipefail 
+
+usage() {
+    echo "Usage:"
+    echo "ast exist <S3Uri>"
+    echo "ast typecheck <S3Uri>"
+    echo "ast syncup <LocalPath> <S3Uri> or ast syncup <S3Uri> <LocalPath>"
+    exit 1
+}
+
+# at least one argument has to be passed
+if [ $# -lt 1 ]; then
+    usage
+fi
+
+wd=$(dirname $0)
+STEP=$1
+shift
+
+case $STEP in
+    exist)
+        if [ $# -ne 1 ]; then
+            echo -e "ERROR: you need to provide a <S3Uri>"
+            usage
+        fi
+
+        bash ${wd}/ast_exist.sh $1
+        ;;
+    syncup)
+        if [ $# -ne 2 ]; then
+            echo -e "ERROR: you need to provide at least 2 arguments: [<LocalPath> and  <S3Uri>] or  [<S3Uri> and <LocalPath>]"
+            usage
+        fi 
+
+        source_path=${1%/}
+        destination_path=${2%/}
+        if [[ $source_path !=  s3://* ]] && [[ $destination_path !=  s3://* ]]; then
+            echo -e "ERROR: S3Uri not provided."
+            usage
+        elif [[ $source_path ==  s3://* ]] && [[ $destination_path ==  s3://* ]]; then
+            echo -e "ERROR: local path not provided."
+            usage
+        fi
+
+        bash ${wd}/ast_syncup.sh ${source_path} ${destination_path}
+        ;;
+    typecheck)
+        if [ $# -ne 1 ]; then
+            echo -e "ERROR: you need to provide a <S3Uri>"
+            usage
+        fi
+
+        bash ${wd}/ast_typecheck.sh $1
+        ;;
+    *)
+        aws s3 $STEP $@
+        ;;
+esac

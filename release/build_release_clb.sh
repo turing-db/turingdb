@@ -2,7 +2,7 @@
 
 set -e
 
-prod_ready_bins="biorun turing bioserver bioimport turing-app"
+prod_ready_bins="biorun turing bioserver bioimport turing-app wf"
 
 package_name=turing
 turing_img=799170964164.dkr.ecr.eu-west-2.amazonaws.com/turing:latest
@@ -30,6 +30,8 @@ function build_package() {
 
 	cp -r build/turing_package/lib $package_name/lib
 	rm -rf $package_name/lib/python/turing/db
+
+	cp -r build/turing_package/bin/wfconfig $package_name/bin
 
 	cp -r build/turing_package/notebooks $package_name/notebooks
 	cp -r build/turing_package/scripts $package_name/scripts
