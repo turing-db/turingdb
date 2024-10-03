@@ -1,10 +1,11 @@
 #!/bin/bash
-set -eou pipefail 
+set -eou pipefail
 
 usage() {
     echo "Usage:"
-    echo "wf setup -project <project_name> -dataset <dataset_name> -s3 <s3://bucket> -nf <nfcore1,nfcore2> -module <module1,module2> -otp <otp dir>"
-    echo "wf download -project <project_name> -dataset <dataset_name> -s3 <s3://bucket/path> -otp <otp dir>"
+    echo "wf init -module <module_name> [-repo <path/to/turing>]"
+    echo "wf setup -project <project_name> -dataset <dataset_name> -s3 <s3://bucket> [-nf <nfcore1,nfcore2>] [-module <module1,module2>] [-otp <otp dir>]"
+    echo "wf download -project <project_name> -dataset <dataset_name> -s3 <s3://bucket/path> [-otp <otp dir>]"
     echo "wf configure -config <project.gigaConfig>"
     echo "wf run -config <project.gigaConfig>"
     echo "wf save -config <project_name> [-copy]"
@@ -21,155 +22,180 @@ STEP=$1
 shift
 
 case $STEP in
-    setup) 
-        PROJECT=""
-        DATASET=""
-        S3=""
-        NF="null"
-        OTP="."
-        MODULES="null"
-        while [[ "$#" -gt 0 ]]; do
-            
-            key="$1"
-            case ${key} in
-                -project)
-                    PROJECT=${2%/}
-                    shift
-                    shift
-                    ;;
-                -dataset)
-                    DATASET=${2%/}
-                    shift
-                    shift
-                    ;;
-                -s3)
-                    #S3=$2
-                    S3=${2%/}
-                    shift
-                    shift
-                    ;;
-                -nf)
-                    NF=$2
-                    shift
-                    shift
-                    ;;
-                -module)
-                    MODULES=$2
-                    shift
-                    shift
-                    ;;
-                -otp)
-                    OTP=${2%/}
-                    shift
-                    shift
-                    ;;
-                *)
-                    echo -e "ERROR: ${key}. Invalid argument"
-                    usage
-                    ;;
-            esac
-        done
+setup)
+    PROJECT=""
+    DATASET=""
+    S3=""
+    NF="null"
+    OTP="."
+    MODULES="null"
+    while [[ "$#" -gt 0 ]]; do
 
-        echo -e "Running: wf setup -project ${PROJECT} -dataset ${DATASET} -s3 ${S3} -nf ${NF} -module ${MODULES} -otp ${OTP}"
-        echo -e "Creating folder structure for project ${PROJECT}, dataset ${DATASET} and syncing it to S3 bucket.\n"
+        key="$1"
+        case "${key}" in
+        -project)
+            PROJECT="${2%/}"
+            shift
+            shift
+            ;;
+        -dataset)
+            DATASET="${2%/}"
+            shift
+            shift
+            ;;
+        -s3)
+            #S3=$2
+            S3="${2%/}"
+            shift
+            shift
+            ;;
+        -nf)
+            NF=$2
+            shift
+            shift
+            ;;
+        -module)
+            MODULES="$2"
+            shift
+            shift
+            ;;
+        -otp)
+            OTP="${2%/}"
+            shift
+            shift
+            ;;
+        *)
+            echo -e "ERROR: ${key}. Invalid argument"
+            usage
+            ;;
+        esac
+    done
 
-        bash ${wd}/wf_setup.sh ${PROJECT} ${DATASET} ${S3} ${NF} ${MODULES} ${OTP}
+    echo -e "Running: wf setup -project ${PROJECT} -dataset ${DATASET} -s3 ${S3} -nf ${NF} -module ${MODULES} -otp ${OTP}"
+    echo -e "Creating folder structure for project ${PROJECT}, dataset ${DATASET} and syncing it to S3 bucket.\n"
 
-        ;;
+    bash "${wd}"/wf_setup.sh "${PROJECT}" "${DATASET}" "${S3}" "${NF}" "${MODULES}" "${OTP}"
 
-    download)
-        OTP=.
-        PROJECT=""
-        DATASET=""
-        S3=""
-        while [[ "$#" -gt 0 ]]; do
-            key="$1"
-            case ${key} in
-                -project)
-                    PROJECT=${2%/}
-                    shift
-                    shift
-                    ;;
-                -dataset)
-                    DATASET=${2%/}
-                    shift
-                    shift
-                    ;;
-                -s3)
-                    #S3=$2
-                    S3=${2%/}
-                    shift
-                    shift
-                    ;;
-                -otp)
-                    OTP=${2%/}
-                    shift
-                    shift
-                    ;;
-                *)
-                    echo -e "ERROR: invalid argument"
-                    usage
-                    ;;
-            esac
-        done
-        echo -e "Running: wf download -project ${PROJECT} -dataset ${DATASET} -s3 ${S3} -otp ${OTP}"
-        echo -e "Fetching project ${PROJECT} from S3 bucket.\nDownloading to ${OTP}/${PROJECT}/${DATASET}"
-        
-        bash ${wd}/wf_download.sh ${PROJECT} ${DATASET} ${S3} ${OTP}
+    ;;
 
-        ;;
-
-    configure)
-        if [ "$#" -ne 2 ] || [ "$1" != "-config" ]; then
+download)
+    OTP=.
+    PROJECT=""
+    DATASET=""
+    S3=""
+    while [[ "$#" -gt 0 ]]; do
+        key="$1"
+        case "${key}" in
+        -project)
+            PROJECT="${2%/}"
+            shift
+            shift
+            ;;
+        -dataset)
+            DATASET="${2%/}"
+            shift
+            shift
+            ;;
+        -s3)
+            S3="${2%/}"
+            shift
+            shift
+            ;;
+        -otp)
+            OTP="${2%/}"
+            shift
+            shift
+            ;;
+        *)
             echo -e "ERROR: invalid argument"
             usage
-        fi
-        gigaConfig=$(realpath $2)
+            ;;
+        esac
+    done
+    echo -e "Running: wf download -project ${PROJECT} -dataset ${DATASET} -s3 ${S3} -otp ${OTP}"
+    echo -e "Fetching project ${PROJECT} from S3 bucket.\nDownloading to ${OTP}/${PROJECT}/${DATASET}"
 
-        echo -e "Running: wf configure -config ${gigaConfig}"
-        echo -e "Getting default config files, ready to be customized.\n"
+    bash "${wd}"/wf_download.sh "${PROJECT}" "${DATASET}" "${S3}" "${OTP}"
 
-        bash ${wd}/wf_configure.sh ${gigaConfig}
+    ;;
 
-        ;;
+configure)
+    if [[ "$#" -ne 2 ]] || [[ "$1" != "-config" ]]; then
+        echo -e "ERROR: invalid argument"
+        usage
+    fi
+    gigaConfig=$(realpath "$2")
 
-    run)
-        if [ "$#" -ne 2 ] || [ "$1" != "-config" ]; then
-            echo -e "ERROR: invalid argument"
-            usage
-        fi
-        gigaConfig=$(realpath $2)
-        echo -e "Running: wf run $1 ${gigaConfig}"
+    echo -e "Running: wf configure -config ${gigaConfig}"
+    echo -e "Getting default config files, ready to be customized.\n"
 
-        bash ${wd}/wf_run.sh ${gigaConfig}
-        
-        ;;
+    bash "${wd}"/wf_configure.sh "${gigaConfig}"
 
-    save)
-        while [[ "$#" -gt 0 ]]; do
-            key="$1"
-            copymode=False
-            case ${key} in
-                -config)
-                    gigaConfig=$2
-                    shift
-                    shift
-                    ;;
-                -copy)
-                    copymode=True
-                    shift
-                    ;;
-            esac
-        done
-        
-        bash  ${wd}/wf_save.sh ${gigaConfig} ${copymode}
+    ;;
 
-        ;;
+run)
+    if [[ "$#" -ne 2 ]] || [[ "$1" != "-config" ]]; then
+        echo -e "ERROR: invalid argument"
+        usage
+    fi
+    gigaConfig=$(realpath "$2")
+    echo -e "Running: wf run $1 ${gigaConfig}"
 
-    *)
-        echo -e "ERROR: invalid process called."
-        echo -e "Valid processes for wf are: setup, download, cofnigure, save, run."
-        usage 
-        ;;
+    bash "${wd}"/wf_run.sh "${gigaConfig}"
+
+    ;;
+
+save)
+    while [[ "$#" -gt 0 ]]; do
+        key="$1"
+        copymode=False
+        case ${key} in
+        -config)
+            gigaConfig=$2
+            shift
+            shift
+            ;;
+        -copy)
+            copymode=True
+            shift
+            shift
+            ;;
+        esac
+    done
+
+    bash "${wd}"/wf_save.sh "${gigaConfig}" "${copymode}"
+
+    ;;
+init)
+    if [[ "$#" -lt 2 ]]; then
+        echo -e "ERROR: invalid argument"
+        usage
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        key="$1"
+        turing_repo=${HOME}/turing
+        case "${key}" in
+        -module)
+            module="$2"
+            shift
+            shift
+            ;;
+        -repo)
+            turing_repo="${2%/}"
+            shift
+            shift
+            ;;
+        esac
+    done
+
+    bash "${wd}"/wf_init.sh "${module}" "${turing_repo}"
+
+    ;;
+
+*)
+    echo -e "ERROR: invalid process called."
+    echo -e "Valid processes for wf are: setup, download, cofnigure, save, run."
+    usage
+    ;;
 esac
-            
