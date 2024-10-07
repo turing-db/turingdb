@@ -17,7 +17,7 @@ if [ $# -lt 1 ]; then
     usage
 fi
 
-wd=$(dirname $0)
+wd=$(dirname "$0")
 STEP=$1
 shift
 
@@ -44,7 +44,6 @@ setup)
             shift
             ;;
         -s3)
-            #S3=$2
             S3="${2%/}"
             shift
             shift
@@ -148,7 +147,8 @@ run)
 save)
     while [[ "$#" -gt 0 ]]; do
         key="$1"
-        copymode=False
+        COPYMODE=False
+        SUFFIX=False
         case ${key} in
         -config)
             gigaConfig=$2
@@ -156,14 +156,19 @@ save)
             shift
             ;;
         -copy)
-            copymode=True
+            COPYMODE=True
+            shift
+            shift
+            ;;
+        -suffix)
+            SUFFIX=$2
             shift
             shift
             ;;
         esac
     done
 
-    bash "${wd}"/wf_save.sh "${gigaConfig}" "${copymode}"
+    bash "${wd}"/wf_save.sh "${gigaConfig}" "${COPYMODE}" "${SUFFIX}"
 
     ;;
 init)

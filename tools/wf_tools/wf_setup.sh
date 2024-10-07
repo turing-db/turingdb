@@ -1,4 +1,5 @@
 #! /bin/bash
+set -e
 
 PROJECT=$1
 DATASET=$2
@@ -8,7 +9,7 @@ MODULES=$5
 OTP=$6
 wd=$(dirname "$0")
 
-mkdir -p "${OTP}/${PROJECT}/${DATASET}/data"
+mkdir -p "${OTP}/${PROJECT}/${DATASET}/data/01.Data"
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/metadata"
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/config"
 cp "${wd}/wfconfig/template.config" "${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig"
@@ -31,13 +32,18 @@ if [[ "${MODULES}" != "null" ]]; then
     echo "Checking Turing modules requirements.."
     mkdir -p "${OTP}/${PROJECT}/${DATASET}/analysis/notebooks"
 
-    IFS=',' read -r -a MODULE_list <<<${MODULES}
+    IFS=',' read -r -a MODULE_list <<<"${MODULES}"
     cat /dev/null >"${OTP}/${PROJECT}/${DATASET}/analysis/notebooks/.modules.txt" # reset module if it existes already
     for module in "${MODULE_list[@]}"; do
         echo "${module}" >>"${OTP}/${PROJECT}/${DATASET}/analysis/notebooks/.modules.txt"
         echo -e "Copying notebooks for module: ${module}.."
+        baseline_notebooks="${OTP}/${PROJECT}/${DATASET}/analysis/notebooks/${module}"
+        if [[ -d "${baseline_notebooks}" ]]; then
+            # empty the folder if it already exists. Make sure to remove also hidden files
+            rm -rf "${baseline_notebooks:?}"/* # with :? the command fails if variable undefined -> avoid deleting content of root!!!
+        fi
         # to substitute with ${TURING_HOME}
-        cp -r "/home/dev/turing/src/bioinfo/notebooks/api-notebooks/${module}/baseline_notebooks/" "${OTP}/${PROJECT}/${DATASET}/analysis/notebooks/${module}"
+        cp -rT "/home/dev/turing/src/bioinfo/notebooks/api-notebooks/${module}/baseline_notebooks/" "${baseline_notebooks}"
         mkdir -p "${OTP}/${PROJECT}/${DATASET}/analysis/notebooks/${module}/results"
     done
     echo -e "[DONE].\n"
