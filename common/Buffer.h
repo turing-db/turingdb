@@ -31,9 +31,6 @@ public:
         void writeString(const char* str, size_t size) {
             char* buffer = getBuffer();
             memcpy(buffer, str, size);
-            if(str[size-1] != '\0') {
-                writeChar('\0');
-            }
             setWrittenBytes(size);
         }
 

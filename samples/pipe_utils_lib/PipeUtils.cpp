@@ -18,6 +18,11 @@
 #include "DBAccess.h"
 #include "DataBuffer.h"
 
+#include "DBServerConfig.h"
+#include "Server.h"
+#include "DBServerContext.h"
+#include "DBServerSession.h"
+
 #include "Time.h"
 #include "LogUtils.h"
 #include "LogSetup.h"
@@ -25,6 +30,7 @@
 #include "Panic.h"
 
 using namespace db;
+using namespace net;
 
 PipeSample::PipeSample(const std::string& sampleName)
     : _sampleName(sampleName)
@@ -178,4 +184,13 @@ void PipeSample::createSimpleGraph() {
     auto part = db->uniqueAccess().createDataPart(std::move(buf));
     part->load(db->access(), *_jobSystem);
     db->uniqueAccess().pushDataPart(std::move(part));
+}
+
+void PipeSample::startHttpServer() {
+    DBServerConfig config;
+    InterpreterContext interpCtxt(_system.get());
+    DBServerContext serverContext(&interpCtxt);
+    Server<DBServerContext, DBServerSession> server(&serverContext,
+                                                    config.getServerConfig());
+    server.start();
 }

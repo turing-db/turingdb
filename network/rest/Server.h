@@ -16,7 +16,8 @@ public:
 
     Server(ServerContextT* serverContext,
            const ServerConfig& serverConfig)
-        : _endpoint(
+        : _serverConfig(serverConfig),
+        _endpoint(
             boost::asio::ip::address::from_string(serverConfig.getAddress()),
             serverConfig.getPort()
         ),
@@ -27,7 +28,9 @@ public:
 
     void start() {
         _listener.start();
-        spdlog::info("Server started");
+        spdlog::info("Server started on {}:{}",
+                     _serverConfig.getAddress(),
+                     _serverConfig.getPort());
         _threadPool.run();
         _threadPool.waitForShutdown();
     }
@@ -37,6 +40,7 @@ public:
     }
 
 private:
+    const ServerConfig& _serverConfig;
     ServerEndpoint _endpoint;
     IOContextThreadPool _threadPool;
     Listener<ServerContextT, SessionT> _listener;

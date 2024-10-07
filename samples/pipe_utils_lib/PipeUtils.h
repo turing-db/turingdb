@@ -21,6 +21,8 @@ public:
 
     bool executeQuery(const std::string& queryStr);
 
+    void startHttpServer();
+
 private:
     std::string _sampleName;
     std::unique_ptr<JobSystem> _jobSystem;
