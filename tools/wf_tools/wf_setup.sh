@@ -9,7 +9,7 @@ MODULES=$5
 OTP=$6
 wd=$(dirname "$0")
 
-mkdir -p "${OTP}/${PROJECT}/${DATASET}/data"
+mkdir -p "${OTP}/${PROJECT}/${DATASET}/data/01.Data"
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/metadata"
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/config"
 cp "${wd}/wfconfig/template.config" "${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig"

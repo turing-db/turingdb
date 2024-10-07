@@ -75,7 +75,10 @@ if [[ "${biorun}" = "true" ]]; then
     done
 
     if [[ "${s3sync}" == "true" ]] && [[ "${final_exitcode}" -eq 0 ]]; then # not robust to earlier errors than when final_exitcode is actually updated
+        echo -e "Sync'ing up the results to the dedicated s3 bucket.."
         ast syncup "${basedir}/${project_name}/${dataset}" "${s3bucket}/${project_name}/${dataset}"
+        echo -e "[DONE].\n"
     fi
-
+    echo -e "Workflow completed!\n"
+    
 fi
