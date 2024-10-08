@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <boost/asio/ip/tcp.hpp>
 
 #include "Buffer.h"
@@ -15,15 +16,19 @@ public:
     ~NetWriter();
 
     void writeString(const std::string& str) {
+        writeStringView(str);
+    }
+
+    void writeStringView(std::string_view str) {
         if (str.empty()) {
             return;
         }
 
-        if (str.size() <= _writer.getBufferSize()) {
-            _writer.writeString(str);
+        if (str.size() < _writer.getBufferSize()) {
+            _writer.writeString(str.data(), str.size());
         } else {
             flush();
-            sendString(str.c_str(), str.size());
+            sendString(str.data(), str.size());
         }
     }
 

@@ -1,7 +1,5 @@
 #include "HTTPParser.h"
 
-#include <iostream>
-
 using namespace net;
 
 namespace {
@@ -143,9 +141,7 @@ bool HTTPParser::parseURI() {
     }
 
     _params._path = std::string_view(pathBegin, pathPtr-pathBegin);
-    std::cout << "path=" << _params._path << "\n";
-    std::cout << "uri=" << _params._uri << "\n";
-    
+
     // We can stop here if we are already at the end of the URI
     if (pathPtr >= uriEnd) {
         return true;
