@@ -1,19 +1,30 @@
 #include <stdlib.h>
 
-#include <spdlog/spdlog.h>
+#include <argparse.hpp>
 
 #include "PipeUtils.h"
 
-int main() {
+#include "ToolInit.h"
+
+int main(int argc, const char** argv) {
+    ToolInit toolInit("simple_server");
+    toolInit.disableOutputDir();
+
+    bool startServer = false;
+    auto& argparser = toolInit.getArgParser();
+    argparser.add_argument("-s")
+             .help("Start server")
+             .store_into(startServer);
+
+    toolInit.init(argc, argv);
+
     PipeSample sample("simple_server");
 
-/*
-    if (!sample.loadJsonDB(sample.getTuringHome() + "/neo4j/pole-db/")) {
-        return EXIT_FAILURE;
-    }
-*/
     sample.createSimpleGraph();
-    sample.startHttpServer();
+
+    if (startServer) {
+        sample.startHttpServer();
+    }
 
     return EXIT_SUCCESS;
 }
