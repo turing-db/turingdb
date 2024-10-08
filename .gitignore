@@ -1,6 +1,7 @@
 *.swp
 .code_change
 __pycache__/
+.cache
 wrt.out
 node_modules
 ui/frontend/site

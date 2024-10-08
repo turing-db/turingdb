@@ -75,6 +75,9 @@ find_package(CapnProto REQUIRED
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
+# aws-sdk-cpp
+find_package(AWSSDK REQUIRED COMPONENTS s3)
+
 # Root source directory
 set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${BIO_SOURCE_DIR})
