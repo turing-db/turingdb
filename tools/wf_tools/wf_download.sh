@@ -21,11 +21,10 @@ for fetcher in ${hidden_fetchers[@]}; do
         echo -e "Fetching data from:"
         for path in `cat ${fetcher}`; do
             echo -e "$path"
-            if [[ $( ast typecheck ${path} | awk '{print $4}' ) == "file" ]]; then
+            output=$(ast typecheck ${path} | awk '{print $4}')
+            if [[ ${output} == "file" ]] || [[ ${output} == "folder" ]]; then
                 fl_name=$(basename ${path})
                 ast syncup ${path} ${OTP}/${PROJECT}/${DATASET}/data/01.Data/${fl_name}
-            elif [[ $( ast typecheck ${path} | awk '{print $4}' ) == "folder" ]]; then
-                ast syncup ${path} ${OTP}/${PROJECT}/${DATASET}/data/01.Data/
             else
                 echo -e "[S3Uri error]: check provided path in .getdata.txt file."
                 exit 1
