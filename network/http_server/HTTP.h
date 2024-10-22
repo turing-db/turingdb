@@ -87,6 +87,5 @@ static constexpr size_t getCode(HTTP::Status status) {
 }
 
 
-
 }
 

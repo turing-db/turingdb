@@ -26,9 +26,11 @@ void TCPConnectionStorage::initialize() {
         _connections[i].setStorageIndex(i);
         _connections[i].setStorage(this);
     }
+    _initialized = true;
 }
 
 TCPConnection* TCPConnectionStorage::alloc(utils::DataSocket socket) {
+    bioassert(_initialized);
     std::unique_lock lock(_mutex);
 
     if (_free.empty()) {

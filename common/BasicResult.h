@@ -1,29 +1,9 @@
 #pragma once
 
-#include <optional>
+#include <expected.hpp>
 
-template <class TError, class TValue>
-class BasicResult {
-public:
-    BasicResult(const TValue& value)
-        : _value(value)
-    {
-    }
+template <class TValue, class TError>
+using BasicResult = nonstd::expected<TValue, TError>;
 
-    BasicResult(const TError& error)
-        : _error(error)
-    {
-    }
-
-    operator bool() const { return !hasError(); }
-
-    bool hasValue() const { return _value.has_value(); }
-    bool hasError() const { return _error.has_error(); }
-
-    const TValue& getValue() const { return *_value; }
-    const TError& getError() const { return *_error; }
-
-private:
-    std::optional<TValue> _value;
-    std::optional<TError> _error;
-};
+template <class TError>
+using BadResult = nonstd::unexpected_type<TError>;

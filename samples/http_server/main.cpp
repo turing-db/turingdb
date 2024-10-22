@@ -67,7 +67,7 @@ int main(int argc, const char** argv) {
     server.setAddress("127.0.0.1");
     server.setPort(6665);
     server.setWorkerCount(16);
-    server.setMaxConnections(2048);
+    server.setMaxConnections(1024);
 
     if (auto res = server.initialize(); res != net::FlowStatus::OK) {
         logt::error("Could not initialize server: {}", (uint32_t)res);

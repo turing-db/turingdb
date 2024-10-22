@@ -41,7 +41,7 @@ private:
     const char* _address = "127.0.0.1";
     uint32_t _port = 6666;
     uint32_t _workerCount = 8;
-    uint32_t _maxConnections = 2048;
+    uint32_t _maxConnections = 1024;
 
     utils::ServerSocket _serverSocket {};
     utils::EpollInstance _epollInstance {};

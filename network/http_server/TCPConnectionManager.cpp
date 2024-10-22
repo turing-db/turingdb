@@ -28,7 +28,7 @@ void TCPConnectionManager::process(utils::EpollEvent& ev) {
 
     if (eventType & EPOLLIN) {
         auto inputWriter = connection.getInputBuffer().getWriter();
-        const ssize_t bytesRead = ::recv(s, inputWriter.getBuffer(), inputWriter.getChunkSize(), 0);
+        const ssize_t bytesRead = ::recv(s, inputWriter.getBuffer(), inputWriter.getBufferSize(), 0);
         if (bytesRead <= 0) {
             connection.close();
             return;
@@ -36,8 +36,17 @@ void TCPConnectionManager::process(utils::EpollEvent& ev) {
         inputWriter.setWrittenBytes(bytesRead);
 
         auto& parser = connection.getParser();
-        const bool finished = parser.analyze();
+        auto analyzeRes = parser.analyze();
 
+        if (!analyzeRes) {
+            // Analyze HTTP Request failed
+            parser.reset();
+            inputWriter.reset();
+            connection.close();
+            return;
+        }
+
+        const bool finished = analyzeRes.value();
 
         if (finished) {
             // Process with stored callback

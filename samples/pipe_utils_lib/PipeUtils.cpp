@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <spdlog/spdlog.h>
 
+#include "MemoryManagerStorage.h"
 #include "SystemManager.h"
 #include "JobSystem.h"
 #include "Neo4j/ParserConfig.h"
@@ -38,7 +39,7 @@ PipeSample::PipeSample(const std::string& sampleName)
     LogSetup::setupLogFileBacked(sampleName + ".log");
     PerfStat::init(sampleName + ".perf");
     spdlog::set_level(spdlog::level::info);
-    _system = std::make_unique<db::SystemManager>();
+    _system = std::make_unique<db::SystemManager>(4);
     _jobSystem = std::make_unique<JobSystem>();
     _jobSystem->initialize();
 }
@@ -82,6 +83,7 @@ bool PipeSample::loadJsonDB(const std::string& jsonDir) {
 
 bool PipeSample::executeQuery(const std::string& queryStr) {
     InterpreterContext interpCtxt(_system.get());
+    auto& memStorage = interpCtxt.getSystemManager()->getMemoryManagerStorage();
 
     EncodingParams encodingParams(EncodingParams::EncodingType::DEBUG_DUMP, std::cout);
 
@@ -89,7 +91,9 @@ bool PipeSample::executeQuery(const std::string& queryStr) {
     interp.setEncodingParams(&encodingParams);
 
     const QueryParams queryParams(queryStr, _system->getDefaultDB()->getName());
-    const auto res = interp.execute(queryParams);
+    MemoryManager* mem = memStorage.alloc();
+    const auto res = interp.execute(mem, queryParams);
+    memStorage.dealloc(mem);
 
     if (res != QueryStatus::OK) {
         spdlog::error("QueryInterpreter status={}", (size_t)res);

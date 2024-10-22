@@ -35,7 +35,7 @@ int main(int argc, const char** argv) {
 
     argParser.add_argument("-c")
         .store_into(config._maxConnections)
-        .default_value((uint32_t)2048)
+        .default_value((uint32_t)1024)
         .nargs(1)
         .help("Maximum number of concurrent connections before starting to close existing ones");
 

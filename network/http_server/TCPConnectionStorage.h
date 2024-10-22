@@ -27,8 +27,9 @@ private:
     std::mutex _mutex;
     std::vector<TCPConnection> _connections;
     std::vector<size_t> _free;
-    uint32_t _maxConnections = 2048;
+    uint32_t _maxConnections {1024};
     uint32_t _aliveThreshold {};
+    bool _initialized {false};
 };
 
 }

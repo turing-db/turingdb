@@ -13,8 +13,7 @@ namespace net {
 class NetWriter {
 public:
     explicit NetWriter(utils::DataSocket socket)
-        : _socket(socket)
-    {
+        : _socket(socket) {
         // - First 8 bytes are saved to store the chunk size
         // - We need to send \r\n after the size of the chunk
         memcpy(_chunk._content.data() + 8, "\r\n", 2);
@@ -134,6 +133,54 @@ public:
         _chunk.increment(1);
     }
 
+    void write(std::unsigned_integral auto value) {
+        if (_errorOccured) {
+            return;
+        }
+
+        static constexpr std::string_view maxValue = "18446744073709551615";
+        static constexpr size_t stringSize = maxValue.size();
+
+        if (_chunk._remaining <= stringSize) {
+            flush();
+        }
+
+        static constexpr char digits[201] =
+            "0001020304050607080910111213141516171819"
+            "2021222324252627282930313233343536373839"
+            "4041424344454647484950515253545556575859"
+            "6061626364656667686970717273747576777879"
+            "8081828384858687888990919293949596979899";
+
+        uint8_t pos = stringSize - 1;
+        auto* first = &_chunk._content[_chunk._position];
+        auto num = value;
+        bool firstPath = false;
+
+        while (value >= 100) {
+            num = (value % 100) * 2;
+            value /= 100;
+            first[pos] = digits[num + 1];
+            first[pos - 1] = digits[num];
+            pos -= 2;
+        }
+
+        if (value >= 10) {
+            num = value * 2;
+            first[1] = digits[num + 1];
+            first[0] = digits[num];
+            firstPath = true;
+        } else {
+            first[0] = '0' + value;
+        }
+
+        const uint8_t actualSize = stringSize - pos + firstPath;
+        const uint8_t copyCount = stringSize - pos - 1;
+        memcpy(first + 1 + firstPath, first + stringSize - copyCount, copyCount);
+
+        _chunk.increment(actualSize);
+    }
+
     void reset() {
         _chunk.reset();
         _header.reset();
@@ -159,7 +206,7 @@ public:
 
 private:
     static inline constexpr size_t _maxHeaderSize = 512;
-    static inline constexpr size_t _maxChunkSize = 1024ul * 64ul;
+    static inline constexpr size_t _maxChunkSize = 1024ul * 32ul;
     static inline constexpr size_t _safety = 64; // Includes the size + opening/closing \r\n tokens
 
     utils::DataSocket _socket {};
