@@ -40,7 +40,7 @@ if [[ "${biorun}" = "true" ]]; then
     echo -e "Biorun flag is set to true. Running biorun routine.."
     for module in $(cat "${basedir}/${project_name}/${dataset}/analysis/notebooks/.modules.txt"); do
         echo -e "Turing module: ${module}"
-        if [[ "${subset_specfic_params}" == "true" ]]; then
+        if [[ "${subset_specific_params}" == "true" ]]; then
             # Creating subset specific
             mkdir -p "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/tmp"
 
@@ -60,14 +60,14 @@ if [[ "${biorun}" = "true" ]]; then
                 fi
 
                 echo -e "Running analays on ${dataset}, subset: ${subset}.."
-                (biorun -html -o "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/${subset}.out" \
+                (biorun "${biorun_args}" -o "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/${subset}.out" \
                     "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}"/*-api-*"${subset}".ipynb \
                     -nbarg config="${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/config_${project_name}_${dataset}_${subset}.json" && echo -e "[DONE].") || final_exitcode=1
 
             done
         else
             echo -e "Running analays on ${dataset}"
-            (biorun -html -o "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/${dataset}.out" \
+            (biorun "${biorun_args}" -o "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/${dataset}.out" \
                 "${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}"/*-api-*.ipynb \
                 -nbarg config="${basedir}/${project_name}/${dataset}/analysis/notebooks/${module}/config_${project_name}_${dataset}.json" && echo -e "[DONE].") || final_exitcode=1
 
