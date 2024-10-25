@@ -32,6 +32,7 @@ public:
 
         memcpy(_header._content.data() + _header._position, statusStr.data(), statusStr.size());
         _header.increment(statusStr.size());
+
         _header.endLine();
     }
 
@@ -56,8 +57,6 @@ public:
         msgbioassert(encoding.size() <= _header._remaining, "Header does not fit in buffer");
         memcpy(_header._content.data() + _header._position, encoding.data(), encoding.size());
         _header.increment(encoding.size());
-
-        _header.endLine();
     }
 
     void addConnection(ConnectionHeader connection) {
@@ -78,6 +77,10 @@ public:
                 return;
             }
         }
+    }
+
+    void endHeader() {
+        _header.endLine();
     }
 
     void flushHeader() {
