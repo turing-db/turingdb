@@ -7,6 +7,8 @@
 
 class Buffer {
 public:
+    static constexpr size_t BUFFER_SIZE = 10ul*1024;
+
     Buffer();
     ~Buffer();
 
@@ -66,7 +68,6 @@ public:
     Reader getReader() { return Reader(this); }
 
 private:
-    static constexpr size_t BUFFER_SIZE = 10*1024*1024;
     static constexpr size_t SAFETY_MARGIN = 256;
     std::array<char, BUFFER_SIZE+SAFETY_MARGIN> _data;
     size_t _bytes {0};

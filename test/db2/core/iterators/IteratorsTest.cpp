@@ -223,7 +223,7 @@ protected:
         builder4->addNodeProperty<types::String>(
             2, stringID, "TmpID2 patch");
 
-        const EdgeRecord* edgeToPatch = _db->access().read().getEdge(2);
+        const EdgeRecord* edgeToPatch = _db->view().read().getEdge(2);
         builder4->addEdgeProperty<types::String>(
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
@@ -244,8 +244,8 @@ protected:
 };
 
 TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::vector<TestEdgeRecord> compareSet {
         {0, 0, 1},
         {1, 0, 2},
@@ -272,8 +272,8 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     auto it = compareSet.begin();
@@ -288,8 +288,8 @@ TEST_F(IteratorsTest, ScanNodesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::vector<EntityID> compareSet {2, 4, 3, 8, 6, 7};
 
     auto it = compareSet.begin();
@@ -306,8 +306,8 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
@@ -345,8 +345,8 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
@@ -384,8 +384,8 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetEdgesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     ColumnIDs inputNodeIDs = {1, 2, 3, 8};
     std::vector<TestEdgeRecord> compareSet {
         {2, 3, 4},
@@ -428,8 +428,8 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
 
     {
         std::vector<uint64_t> compareSet {0, 1, 2, 1, 0, 6, 7, 8, 5};
@@ -467,8 +467,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
 
     {
         std::vector<uint64_t> compareSet {0, 1, 2, 0, 1, 8, 5, 6, 7};
@@ -506,8 +506,8 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     const auto labelset = LabelSet::fromList({1});
 
     {
@@ -543,8 +543,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     ColumnIDs inputNodeIDs = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     {
@@ -594,8 +594,8 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     ColumnIDs inputNodeIDs = {1, 3, 8};
 
     {

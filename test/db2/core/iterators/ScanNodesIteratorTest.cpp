@@ -49,8 +49,8 @@ protected:
 
 TEST_F(ScanNodesIteratorTest, emptyDB) {
     auto db = std::make_unique<DB>();
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
 
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
@@ -65,8 +65,8 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto builder = db->newPartWriter();
     builder->commit(*_jobSystem);
 
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
@@ -83,8 +83,8 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
         builder->commit(*_jobSystem);
     }
 
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
@@ -110,8 +110,8 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
         builder->commit(*_jobSystem);
     }
 
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(it.isValid());
 
@@ -156,8 +156,8 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         builder->commit(*_jobSystem);
     }
 
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(it.isValid());
 
@@ -205,8 +205,8 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
         builder->commit(*_jobSystem);
     }
 
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
     auto it = reader.scanNodes().begin();
 
     ColumnIDs colNodes;

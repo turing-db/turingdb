@@ -41,8 +41,8 @@ int main() {
 
     std::cout << "Parsing: " << duration<Seconds>(t0, t1) << " s" << std::endl;
 
-    const auto access = database->access();
-    const auto reader = access.read();
+    const auto view = database->view();
+    const auto reader = view.read();
 
     std::string_view address = "33 Plover Drive";
     PropertyType addressType = propTypes.get("address (String)");

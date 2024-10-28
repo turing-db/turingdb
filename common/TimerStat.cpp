@@ -2,7 +2,6 @@
 #include "PerfStat.h"
 
 using namespace std::literals;
-using Clock = std::chrono::system_clock;
 using FloatDuration = std::chrono::duration<float>;
 
 TimerStat::TimerStat()

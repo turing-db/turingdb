@@ -48,7 +48,7 @@ if [[ "${libraryprep_run}" = "true" ]]; then
     mkdir -p "${NXF_LAUNCH}"
     cd "${NXF_LAUNCH}"
 
-    nextflow run $"{pod_basedir}/nextflow/nf-turing/libraryprep" \
+    nextflow run "${pod_basedir}/nextflow/nf-turing/libraryprep" \
         -profile docker \
         --samplesheet "${pod_samplesheet}" \
         --outdir "${pod_basedir}/${project_name}/${dataset}/data/02.CleanData"
@@ -58,32 +58,32 @@ if [[ "${libraryprep_run}" = "true" ]]; then
     ast syncup ${pod_basedir}/${project_name}/${dataset} ${s3bucket}/${dataset}
 fi
 
-if [[ ${nfcore_run} = "true" ]]; then
+if [[ "${nfcore_run}" = "true" ]]; then
     # EDIT PATHS
     echo -e "Correcting the input file paths within the submitter pod.."
-    cp "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params.yaml" "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod.yaml"
-    jq -c ".params_file[]" "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/.${nfcore_name}.json" |
+    cp "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params.yaml" "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod.yaml"
+    jq -c ".params_file[]" "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/.${nf_name}.json" |
         while read -r param_columns_pair; do
             param=$(echo "${param_columns_pair}" | jq -e ".[0]" | sed 's/"//g')
             columns=$(echo "${param_columns_pair}" | jq -e ".[1]" | sed 's/"//g')
 
             # EDIT PARAMS_FILE PATHS
-            prepend_var="${pod_basedir}/${project_name}/${dataset}/analysis/${dataset}_${nfcore_name}_processing/Inputs"
+            prepend_var="${pod_basedir}/${project_name}/${dataset}/analysis/${dataset}_${nf_name}_processing/Inputs"
             # Here we read the params file. we accept both a blank space or no space between key and value
             awk -v pre="${prepend_var}" -v param="${param}" \
                 ' { if ($1~param ":") { 
                     if (NF==1) { split($1,a,":"); $1= a[1] ":" pre "/" a[2] } 
                     else {$2= pre "/" $2} }
                     print $0 
-                } ' "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod.yaml" >"${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod_tmp.yaml" &&
-                mv "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod_tmp.yaml" "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod.yaml"
+                } ' "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod.yaml" >"${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod_tmp.yaml" &&
+                mv "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod_tmp.yaml" "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod.yaml"
 
             # EDIT PATHS OF PARAMS FILES # there always has to be a header..
             file_toedit=$(awk -v param="${param}" \
                 ' { if ($1~param ":") { 
                     if (NF==1) { split($1,a,":"); print a[2] } 
                     else {print $2} }
-                } ' "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod.yaml")
+                } ' "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod.yaml")
             IFS="," read -r -a column_paths <<<"${columns}"
 
             head -1 "${file_toedit}" >"${file_toedit}_tmp"
@@ -101,11 +101,11 @@ if [[ ${nfcore_run} = "true" ]]; then
     echo -e "[DONE].\n"
 
     # Fetch nfcore requirements..
-    if [ -f "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/.${nfcore_name}.json" ]; then # if file exits
+    if [ -f "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/.${nf_name}.json" ]; then # if file exits
         echo -e "Fetching nf-core pipeline requirements.."
         # check if there are any requirements (list not empty!!)
         # AND CHECK IF NOT ALREADY DOWNLOADED
-        for path in $(jq -c ".requirements[]" "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/.${nfcore_name}.json" | sed 's/"//g'); do
+        for path in $(jq -c ".requirements[]" "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/.${nf_name}.json" | sed 's/"//g'); do
             bname=$(basename "${path}")
             echo -e "Fetching: ${path}"
             ast syncup "${path}" "${pod_basedir}/${project_name}/${dataset}/analysis/.nfpipelines/${bname}"
@@ -124,10 +124,10 @@ if [[ ${nfcore_run} = "true" ]]; then
     mkdir -p "${NXF_LAUNCH}"
     cd "${NXF_LAUNCH}"
 
-    nextflow run "${pod_basedir}/nextflow/nf-core/${nfcore_name}" \
+    nextflow run "${pod_basedir}/nextflow/nf-core/${nf_name}" \
         -profile docker \
-        -params-file "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params_pod.yaml" \
-        -c "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_k8s.config" \
+        -params-file "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params_pod.yaml" \
+        -c "${pod_basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_k8s.config" \
         --outdir "${NXF_OUT}" \
         -resume
 
@@ -137,7 +137,7 @@ if [[ ${nfcore_run} = "true" ]]; then
     echo "${err_status}" >"${NXF_LAUNCH}/${latest_nfrun}_STATUS.txt"
 
     if [[ ${err_status} == "OK" ]]; then
-        ast sync "${NXF_OUT}/" "${s3bucket}/${project_name}/${dataset}/analysis/${dataset}_${nfcore_name}_processing/results/"
+        ast sync "${NXF_OUT}/" "${s3bucket}/${project_name}/${dataset}/analysis/${dataset}_${nf_name}_processing/results/"
     elif [[ ${err_status} == "ERR" ]]; then
         echo -e "[ERR]: pipeline run ${latest_nfrun} completed with errors."
         dt=$(date +"%Y_%m_%d_%H_%M_%S")

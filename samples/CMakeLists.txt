@@ -57,6 +57,7 @@ add_subdirectory(pipe_scan_nodes)
 add_subdirectory(pipe_getOutEdges)
 add_subdirectory(pipe_scanNodesByLabel)
 add_subdirectory(simple_server)
+add_subdirectory(http_server)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)

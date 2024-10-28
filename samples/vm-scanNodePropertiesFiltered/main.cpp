@@ -22,7 +22,7 @@ int main() {
 
     sample.printOutput({"Name", "NodeID"}, 0, 20, 25);
 
-    auto access = sample.readDB();
+    auto view = sample.readDB();
     ColumnVector<std::string_view> namesRaw;
     ColumnVector<EntityID> nodeIDsRaw;
     namesRaw.reserve(1369);
@@ -31,8 +31,8 @@ int main() {
     ColumnVector<EntityID> nodeIDs;
 
     auto t0 = Clock::now();
-    const auto displayNameType = access.getDB()->getMetadata()->propTypes().get("surname (String)");
-    ScanNodePropertiesChunkWriter<types::String> chunkWriter(access.getDB(), displayNameType._id);
+    const auto displayNameType = view.getDB()->getMetadata()->propTypes().get("surname (String)");
+    ScanNodePropertiesChunkWriter<types::String> chunkWriter(view.getDB(), displayNameType._id);
     chunkWriter.setPropertiesColumn(&namesRaw);
     chunkWriter.setNodeIDsColumn(&nodeIDsRaw);
 

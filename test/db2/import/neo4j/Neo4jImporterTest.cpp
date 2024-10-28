@@ -86,8 +86,8 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder2->commit(*_jobSystem);
     }
 
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::cout << "All out edges: ";
     for (const auto& edge : reader.scanOutEdges()) {
         std::cout << edge._edgeID.getValue()
@@ -126,8 +126,8 @@ TEST_F(Neo4jImporterTest, General) {
     ASSERT_TRUE(res);
     std::cout << "Parsing: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::stringstream report;
     DBReport::getReport(reader, report);
     std::cout << report.view() << std::endl;

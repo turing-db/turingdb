@@ -1,7 +1,6 @@
 
 set(common_sources
         Command.cpp
-        Buffer.cpp
         StringBuffer.cpp
         BannerDisplay.cpp
         FileUtils.cpp
@@ -12,6 +11,7 @@ set(common_sources
         SpinLock.cpp
         RWSpinLock.cpp
         ProcessUtils.cpp
+        Buffer.cpp
         JobSystem.cpp
         Demonology.cpp
         Process.cpp
@@ -27,5 +27,6 @@ if (${DEBUG_BUILD})
 endif()
 
 target_link_libraries(common_s
-    turing_log_s
-    ${Boost_LIBRARIES})
+    PUBLIC expected::expected
+           turing_log_s
+           ${Boost_LIBRARIES})

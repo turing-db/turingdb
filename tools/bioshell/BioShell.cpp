@@ -18,8 +18,6 @@
 
 using namespace turing;
 
-using Clock = std::chrono::system_clock;
-
 namespace {
 
 const char* whiteChars = " \n\r\t";

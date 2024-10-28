@@ -10,9 +10,23 @@ OTP=$6
 wd=$(dirname "$0")
 
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/data/01.Data"
+touch "${OTP}/${PROJECT}/${DATASET}/data/.getdata.txt"
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/metadata"
+touch "${OTP}/${PROJECT}/${DATASET}/metadata/.getmetadata.txt"
 mkdir -p "${OTP}/${PROJECT}/${DATASET}/config"
-cp "${wd}/wfconfig/template.config" "${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig"
+cp "${wd}/wfconfig/template.config" "${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig_tmp"
+
+# Let's update the gigaConfig with command line parameters
+yq \
+    --arg PROJECT "${PROJECT}" \
+    --arg DATASET "${DATASET}" \
+    --arg S3 "${S3}" \
+    --arg OTP "${OTP}" \
+    '.submission.project_name = $PROJECT | 
+    .submission.dataset = $DATASET  |
+    .submission.s3bucket = $S3 |
+    .submission.basedir = $OTP ' "${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig_tmp" >"${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig"
+rm "${OTP}/${PROJECT}/${DATASET}/config/${DATASET}.gigaConfig_tmp"
 
 if [[ "${NF}" != "null" ]]; then
     echo "Checking NF pipeline requirements.."
@@ -42,8 +56,8 @@ if [[ "${MODULES}" != "null" ]]; then
             # empty the folder if it already exists. Make sure to remove also hidden files
             rm -rf "${baseline_notebooks:?}"/* # with :? the command fails if variable undefined -> avoid deleting content of root!!!
         fi
-        # to substitute with ${TURING_HOME}
-        cp -rT "/home/dev/turing/src/bioinfo/notebooks/api-notebooks/${module}/baseline_notebooks/" "${baseline_notebooks}"
+        # ${TURING_HOME%/*/*} gives you /home/dev/turing
+        cp -rT "${TURING_HOME%/*/*}/src/bioinfo/notebooks/api-notebooks/${module}/baseline_notebooks/" "${baseline_notebooks}"
         mkdir -p "${OTP}/${PROJECT}/${DATASET}/analysis/notebooks/${module}/results"
     done
     echo -e "[DONE].\n"

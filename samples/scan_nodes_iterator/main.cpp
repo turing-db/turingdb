@@ -38,8 +38,8 @@ bool run() {
 
     const auto partCreation = Clock::now();
 
-    const auto access = db->access();
-    const auto reader = access.read();
+    const auto view = db->view();
+    const auto reader = view.read();
     auto it = reader.scanNodes().begin();
 
     // Read node by node

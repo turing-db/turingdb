@@ -21,7 +21,7 @@ fi
 if [[ "${biorun}" == "true" ]]; then
     for module in $(cat "${basedir}/${project_name}/${dataset}/analysis/notebooks/.modules.txt"); do
         echo -e "Creating parameter files for module: ${module}."
-        if [[ "${subset_specfic_params}" == "true" ]]; then
+        if [[ "${subset_specific_params}" == "true" ]]; then
             # Creating subset specific
             echo -e "Creating subset specific config files:"
             for subs in $(jq -r '.submission.subset_list | .[]' "${gigaConfig}"); do

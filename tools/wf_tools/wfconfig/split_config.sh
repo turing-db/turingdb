@@ -34,8 +34,8 @@ fi
 
 ## export nfcore pipeline specific parmas.yaml
 if [[ "${nfcore_run}" == "true" ]]; then
-    jq ".nf_core" "${source_json}" | yq --yaml-output >"${basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params.yaml"
-    echo -e "NF params file for the ${nfcore_name} workflow created: ${basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_params.yaml"
+    jq ".nf_core" "${source_json}" | yq --yaml-output >"${basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params.yaml"
+    echo -e "NF params file for the ${nf_name} workflow created: ${basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_params.yaml"
 
     # export nfcore nextflow.cofig
     for part in $(jq -r ".nfcore_k8s_config |   keys[] " "${source_json}"); do
@@ -46,7 +46,7 @@ if [[ "${nfcore_run}" == "true" ]]; then
             awk 'BEGIN{OFS=""};{$1=$1 "="; print}'
         echo "}"
     done |
-        sed 's/\"\[/\[/; s/\]\"/\]/' >"${basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_k8s.config"
-    echo -e "K8s config file for the ${nfcore_name} workflow created: ${basedir}/${project_name}/${dataset}/config/${dataset}_${nfcore_name}_k8s.config"
+        sed 's/\"\[/\[/; s/\]\"/\]/' >"${basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_k8s.config"
+    echo -e "K8s config file for the ${nf_name} workflow created: ${basedir}/${project_name}/${dataset}/config/${dataset}_${nf_name}_k8s.config"
 fi
 ####

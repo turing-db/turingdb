@@ -1,1 +1,2 @@
-add_subdirectory(rest)
+add_subdirectory(http_parser)
+add_subdirectory(http_server)

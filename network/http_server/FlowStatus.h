@@ -1,0 +1,25 @@
+#pragma once
+
+namespace net {
+
+enum class FlowStatus {
+    OK = 0,
+    ALREADY_INITIALIZED,
+    CREATE_ERROR,
+    BIND_ERROR,
+    LISTEN_ERROR,
+    ACCEPT_ERROR,
+    WAIT_ERROR,
+    CTL_ERROR,
+
+    OPT_NODELAY_ERR,
+    OPT_REUSEADDR_ERR,
+    OPT_REUSEPORT_ERR,
+    OPT_NONBLOCK_ERR,
+    OPT_KEEPALIVE_ERR,
+    OPT_KEEPIDLE_ERR,
+    OPT_KEEPCNT_ERR,
+    OPT_KEEPINTVL_ERR,
+};
+
+}

@@ -147,8 +147,8 @@ protected:
 };
 
 TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::vector<TestEdgeRecord> compareSet {
         {0, 0, 1},
         {1, 0, 2},
@@ -175,8 +175,8 @@ TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
 }
 
 TEST_F(ConcurrentWriterTest, ScanNodesIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     auto it = compareSet.begin();
@@ -190,8 +190,8 @@ TEST_F(ConcurrentWriterTest, ScanNodesIteratorTest) {
 }
 
 TEST_F(ConcurrentWriterTest, ScanNodesByLabelIteratorTest) {
-    const auto access = _db->access();
-    const auto reader = access.read();
+    const auto view = _db->view();
+    const auto reader = view.read();
     std::vector<EntityID> compareSet {2, 4, 3, 8, 6, 7};
 
     auto it = compareSet.begin();

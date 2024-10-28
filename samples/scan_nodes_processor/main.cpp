@@ -46,14 +46,14 @@ bool run() {
     const auto timeStart = Clock::now();
 
     {
-        auto buf = db->access().createDataPart();
+        auto buf = db->view().createDataPart();
         for (size_t i = 0; i < nodeCount; i++) {
             buf->addNode(LabelSetID{0});
         }
 
         {
             auto datapart = db->uniqueAccess().createDataPart(std::move(buf));
-            datapart->load(db->access(), jobSystem);
+            datapart->load(db->view(), jobSystem);
             db->uniqueAccess().pushDataPart(std::move(datapart));
         }
     }
