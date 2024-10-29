@@ -32,7 +32,6 @@ enum class Error {
 template <class TValue>
 using Result = BasicResult<TValue, Error>;
 
-
 enum class Method {
     UNKNOWN,
     GET,

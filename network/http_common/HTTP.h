@@ -3,7 +3,6 @@
 #include <string_view>
 
 #include "EnumToString.h"
-#include "HTTPParsingInfo.h"
 
 namespace net::HTTP {
 
@@ -85,6 +84,8 @@ static inline constexpr CodeArray STATUS_CODES {
 static constexpr size_t getCode(HTTP::Status status) {
     return STATUS_CODES[(size_t)status];
 }
+
+HTTP::Status codeToStatus(size_t httpCode);
 
 }
 

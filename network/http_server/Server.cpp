@@ -20,7 +20,8 @@ Server::Server(Functions&& functions)
 {
 }
 
-Server::~Server() = default;
+Server::~Server() {
+}
 
 FlowStatus Server::initialize() {
     _serverSocket = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
@@ -96,7 +97,6 @@ FlowStatus Server::initialize() {
 FlowStatus Server::start() {
     _running.store(true);
 
-    std::vector<std::thread> threads;
     ServerContext ctxt {
         ._socket = _serverSocket,
         ._instance = _epollInstance,
@@ -109,17 +109,19 @@ FlowStatus Server::start() {
         ._createThreadContext = _functions._createThreadContext,
     };
 
-    threads.reserve(_workerCount);
+    _threads.reserve(_workerCount);
 
     for (size_t i = 0; i < _workerCount; i++) {
-        threads.emplace_back([&ctxt, i] {
+        _threads.emplace_back([&ctxt, i] {
             runThread(i + 1, ctxt);
         });
     }
 
-    for (auto& thread : threads) {
+    for (auto& thread : _threads) {
         thread.join();
     }
+
+    _threads.clear();
 
     ::close(_serverSocket);
 
@@ -127,8 +129,17 @@ FlowStatus Server::start() {
 }
 
 void Server::terminate() {
+    if (!_running.load()) {
+        return;
+    }
+
     spdlog::info("Terminating server");
     _running.store(false);
+
+    // Terminate all threads
+    for (auto& thread : _threads) {
+        pthread_kill(thread.native_handle(), SIGTERM);
+    }
 }
 
 void Server::runThread(size_t threadID, ServerContext& ctxt) {

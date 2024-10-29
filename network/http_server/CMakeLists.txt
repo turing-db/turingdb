@@ -13,7 +13,8 @@ target_include_directories(turing_http_server_s
   PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_http_server_s
-  PUBLIC  spdlog::spdlog
+  PUBLIC  turing_http_common_s
+          spdlog::spdlog
           turing_http_parser_s
           turing_log_s
           common_s)
