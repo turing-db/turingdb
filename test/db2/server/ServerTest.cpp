@@ -2,7 +2,6 @@
 
 #include <thread>
 #include <string>
-#include <spdlog/spdlog.h>
 
 #include "DBServerConfig.h"
 #include "DBServer.h"
@@ -59,5 +58,6 @@ TEST_F(ServerTest, queryEndpointOK) {
     clientThread.join();
 
     // Terminate server thread
-    serverThread.detach();
+    server.stop();
+    serverThread.join();
 }

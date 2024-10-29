@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <thread>
 
 #include "AbstractHTTPParser.h"
 #include "FlowStatus.h"
@@ -55,6 +56,7 @@ private:
     std::atomic<FlowStatus> _status;
     std::atomic<bool> _running = false;
     Functions _functions;
+    std::vector<std::thread> _threads;
 
     static void runThread(size_t threadID, ServerContext& ctxt);
 };
