@@ -1,4 +1,5 @@
-#include <iostream>
+#include "TuringShell.h"
+
 #include <chrono>
 #include <ratio>
 #include <string>
@@ -6,30 +7,11 @@
 #include <ctype.h>
 #include <string_view>
 
-#include <argparse.hpp>
+#include <linenoise.h>
+#include <tabulate/table.hpp>
 
-#include "TuringClient.h"
-
-#include "ToolInit.h"
-#include "PerfStat.h"
-#include "TimerStat.h"
-#include "BasicResult.h"
 #include "LogUtils.h"
-
-#include "linenoise.h"
-
-using namespace turing;
-
-enum class CommandType {
-    LOCAL_CMD,
-    REMOTE_CMD
-};
-
-enum class CommandError {
-    ARG_EXPECTED
-};
-
-using Result = BasicResult<CommandType, CommandError>;
+#include "TimerStat.h"
 
 namespace {
 
@@ -73,7 +55,40 @@ void extractWords(std::vector<std::string_view>& words, const std::string& line)
     }
 }
 
-Result processCommand(TuringClient& turing, std::string& line) {
+}
+
+TuringShell::TuringShell()
+{
+    _table = std::make_unique<Table>();
+}
+
+TuringShell::~TuringShell() {
+}
+
+void TuringShell::startLoop() {
+    std::string shellPrompt = composePrompt();
+    char* line = NULL;
+    std::string lineStr;
+    while ((line = linenoise(shellPrompt.c_str())) != NULL) {
+        lineStr = line;
+        if (lineStr.empty()) {
+            continue;
+        }
+
+        process(lineStr);
+
+        linenoiseHistoryAdd(line);
+        shellPrompt = composePrompt();
+    }
+}
+
+std::string TuringShell::composePrompt() {
+    const std::string basePrompt = "turing";
+    const char* separator = ":";
+    return basePrompt + separator + _turing.getDBName() + "> ";
+}
+
+TuringShell::Result TuringShell::processCommand(const std::string& line) {
     // Get first word
     const auto firstWord = getFirstWord(line);
     
@@ -85,7 +100,7 @@ Result processCommand(TuringClient& turing, std::string& line) {
             return BadResult(CommandError::ARG_EXPECTED);
         }
 
-        turing.setDBName(std::string(words[1]));
+        _turing.setDBName(std::string(words[1]));
         return CommandType::LOCAL_CMD;
     } else if (firstWord == "exit" || firstWord == "quit" || firstWord == "q") {
         exit(EXIT_SUCCESS);
@@ -95,67 +110,34 @@ Result processCommand(TuringClient& turing, std::string& line) {
     return CommandType::REMOTE_CMD;
 }
 
-void process(TuringClient& turing, std::string& line) {
+void TuringShell::process(std::string& line) {
     // Remove leading whitespace
     trim(line);
 
     // Stop here if it was a special command
-    const auto processRes = processCommand(turing, line);
+    const auto processRes = processCommand(line);
     if (processRes != CommandType::REMOTE_CMD) {
         return;
     }
 
     const auto timeExecStart = Clock::now();
 
-    const bool success = turing.query(line);
+    // Send query
+    const bool success = _turing.query(line, _df);
     if (!success) {
         logt::LogError("ERROR: can not send request to server");
         return;
     }
 
+    // Format result table
+    displayTable();
+
+    // Query execution time
     const auto timeExecEnd = Clock::now();
     const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
-    std::cout << "Request done in " << duration.count() << " ms.\n";
+    std::cout << "Request executed in " << duration.count() << " ms.\n";
 }
 
-std::string composePrompt(const TuringClient& turing) {
-    const std::string basePrompt = "turing";
-    const char* separator = ":";
-    return basePrompt + separator + turing.getDBName() + "> ";
-}
-
-}
-
-int main(int argc, const char** argv) {
-    ToolInit toolInit("tsh");
-    toolInit.disableOutputDir();
-
-    std::string dbName;
-    auto& argParser = toolInit.getArgParser();
-    argParser.add_argument("-db")
-             .help("Database name")
-             .nargs(1)
-             .store_into(dbName);        
-
-    toolInit.init(argc, argv);
-
-    TuringClient turing;
-    turing.setDBName(dbName);
-
-    std::string shellPrompt = composePrompt(turing);
-    char* line = NULL;
-    std::string lineStr;
-    while ((line = linenoise(shellPrompt.c_str())) != NULL) {
-        lineStr = line;
-        if (lineStr.empty()) {
-            continue;
-        }
-
-        process(turing, lineStr);
-
-        linenoiseHistoryAdd(line);
-        shellPrompt = composePrompt(turing);
-    }
-
-    return EXIT_SUCCESS;
+void TuringShell::displayTable() {
+    _table.reset();
 }
