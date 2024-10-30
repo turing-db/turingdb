@@ -24,8 +24,10 @@ HTTPClient::HTTPClient()
 }
 
 HTTPClient::~HTTPClient() {
-    curl_easy_cleanup(_curl);
-    _curl = nullptr;
+    if (_curl) {
+        curl_easy_cleanup(_curl);
+        _curl = nullptr;
+    }
 }
 
 Status HTTPClient::fetch(std::string_view url,

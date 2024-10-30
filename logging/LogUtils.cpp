@@ -48,4 +48,8 @@ void ElapsedTime(float time, std::string_view unit) {
     spdlog::info("Elapsed time: {} {}", time, unit);
 }
 
+void LogError(const char* msg) {
+    spdlog::error("{}", msg);
+}
+
 }

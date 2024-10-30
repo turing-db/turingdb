@@ -20,4 +20,6 @@ void ImpossibleToRunCommand(const std::string& cmd);
 
 void ElapsedTime(float time, std::string_view unit);
 
+void LogError(const char* msg);
+
 }
