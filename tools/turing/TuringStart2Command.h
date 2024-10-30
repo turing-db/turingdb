@@ -6,8 +6,13 @@
 
 class TuringStart2Command : public ToolCommand {
 public:
-    TuringStart2Command(ToolInit& toolInit);
-    ~TuringStart2Command();
+    explicit TuringStart2Command(ToolInit& toolInit);
+    ~TuringStart2Command() override;
+
+    TuringStart2Command(const TuringStart2Command&) = delete;
+    TuringStart2Command(TuringStart2Command&&) = delete;
+    TuringStart2Command& operator=(const TuringStart2Command&) = delete;
+    TuringStart2Command& operator=(TuringStart2Command&&) = delete;
 
     void setup() override;
     bool isActive() override;
@@ -15,4 +20,8 @@ public:
 
 private:
     argparse::ArgumentParser _startCommand;
+
+    bool isDevRequested();
+    bool isBuildRequested();
+    bool noDemonRequested();
 };

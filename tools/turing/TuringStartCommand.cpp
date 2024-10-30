@@ -7,7 +7,7 @@
 #include "Command.h"
 #include "ProcessUtils.h"
 
-void signalHandler(int signum) {
+inline void signalHandler(int signum) {
     ProcessUtils::stopTool("bioserver");
     exit(EXIT_SUCCESS);
 }

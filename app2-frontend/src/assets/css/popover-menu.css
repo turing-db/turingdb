@@ -1,0 +1,72 @@
+.bp5-dark .app-popover,
+.bp5-dark .bp5-submenu.app-popover {
+  @apply border border-grey-900 bg-grey-800;
+
+  box-shadow:
+    0px 0px 0px 1px rgba(0, 0, 0, 0.76),
+    0px 1px 2px 0px rgba(43, 49, 60, 0.24);
+}
+
+.bp5-dark .app-popover .bp5-popover-content,
+.bp5-dark .bp5-submenu.app-popover .bp5-popover-content {
+  @apply bg-grey-800;
+}
+
+.bp5-dark .app-popover .bp5-popover-arrow-fill,
+.bp5-popover.bp5-dark .bp5-popover-arrow-fill {
+  @apply fill-grey-800;
+}
+
+.bp5-dark .app-popover .bp5-popover-arrow-border,
+.bp5-popover.bp5-dark .bp5-popover-arrow-border {
+  @apply fill-grey-900;
+  fill-opacity: 1;
+}
+
+.bp5-dark .app-popover .bp5-popover-arrow::before,
+.bp5-popover.bp5-dark .bp5-popover-arrow::before {
+  @apply shadow-none;
+
+  @apply border border-grey-900;
+
+  box-shadow:
+    0px 0px 0px 1px rgba(0, 0, 0, 0.76),
+    0px 1px 2px 0px rgba(43, 49, 60, 0.24);
+}
+
+.bp5-submenu.app-popover {
+  @apply p-0;
+}
+
+.bp5-submenu.app-popover .bp5-popover-content {
+  @apply !shadow-none;
+}
+
+.bp5-dark .app-popover-menu,
+.bp5-dark .bp5-submenu.app-popover .bp5-menu {
+  @apply grid gap-y-0.5 bg-grey-800 p-2 text-content-primary;
+}
+
+.bp5-dark .app-popover-menu-item {
+  @apply px-2 py-1.5 text-sm font-medium transition-colors hover:bg-grey-700;
+}
+
+.bp5-dark .app-popover-menu-item > * {
+  @apply mr-2;
+}
+
+.bp5-dark .app-popover-menu-item > :last-child {
+  @apply mr-0;
+}
+
+.bp5-dark .app-popover-menu-item.bp5-active {
+  @apply bg-grey-600 text-content-primary;
+}
+
+.bp5-dark .app-popover-menu-item.bp5-active .bp5-menu-item-icon {
+  @apply text-content-primary;
+}
+
+.bp5-dark .app-menu-divider {
+  @apply -mx-2 my-0.5 border-grey-700;
+}

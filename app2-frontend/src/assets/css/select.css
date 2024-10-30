@@ -1,0 +1,28 @@
+@tailwind components;
+
+@layer components {
+  .bp5-dark .app-select-popover .bp5-menu {
+    @apply bg-grey-800;
+  }
+
+  .bp5-dark .app-select-popover .bp5-menu::-webkit-scrollbar-thumb {
+    @apply rounded-[1.5625rem] bg-grey-600;
+  }
+
+  .bp5-dark .app-select-popover .bp5-menu::-webkit-scrollbar {
+    @apply h-1 w-1;
+  }
+
+  .bp5-dark .app-select-popover .bp5-menu::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .bp5-dark .app-select-popover .bp5-menu-item.bp5-active {
+    @apply bg-primary-default/10 text-content-primary;
+  }
+
+  .bp5-dark .app-select-popover .bp5-menu-item {
+    padding-left: 7px;
+    @apply text-content-secondary;
+  }
+}

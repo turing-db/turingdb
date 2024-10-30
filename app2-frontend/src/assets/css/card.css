@@ -1,0 +1,33 @@
+.bp5-dark .app-card-list,
+.bp5-dark .bp5-card-list {
+  @apply rounded-[8px] bg-transparent p-0 shadow-none;
+}
+
+.bp5-dark .app-card-list .app-card,
+.bp5-dark .bp5-card-list .bp5-card {
+  @apply min-h-[initial] rounded-[8px]  border-0 bg-transparent px-4 py-3 shadow-none transition-colors;
+}
+.bp5-dark .app-card-list .app-card.bp5-interactive,
+.bp5-dark .bp5-card-list .bp5-card.bp5-interactive {
+  @apply hover:bg-grey-700;
+}
+
+.bp5-dark .app-dialog-card-list {
+  @apply mt-3.5 grid gap-y-2 overflow-auto px-5;
+}
+
+.bp5-dark .app-dialog-card-list.app-card-list--scrollbar-visible {
+  padding-right: calc(1.25rem - 0.25rem);
+}
+
+.bp5-dark .app-card.icon-only-on-hover .app-card-header-icon {
+  @apply opacity-0 transition-opacity;
+}
+
+.bp5-dark .app-card.icon-only-on-hover:hover .app-card-header-icon {
+  @apply opacity-100;
+}
+
+.bp5-dark .bp5-dialog .bp5-card-list {
+  @apply mt-3.5;
+}

@@ -1,0 +1,30 @@
+.bp5-form-group.app-form-input .bp5-label {
+  @apply mb-2;
+}
+
+.bp5-form-group.app-form-input .bp5-form-content {
+  @apply flex flex-wrap;
+  @apply items-center;
+  @apply rounded-[0.125rem] text-sm;
+}
+
+.bp5-form-group.app-form-input .bp5-form-content > .bp5-icon {
+  @apply px-4;
+}
+
+.bp5-form-group.app-form-input .bp5-form-content > input {
+  @apply h-9 w-64 pl-2;
+  @apply bg-grey-700 outline-none;
+}
+
+.bp5-form-group.app-form-input .bp5-form-content input:focus {
+  box-shadow: 0px 0px 12px 2px rgb(103 156 255 / 70%);
+  /* opacity: 0.4; */
+  /* animation: highlight-glow 5s ease-in-out alternate infinite; */
+}
+
+@keyframes highlight-glow {
+  50% {
+    opacity: 0.8;
+  }
+}

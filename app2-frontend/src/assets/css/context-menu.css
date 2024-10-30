@@ -1,0 +1,26 @@
+/* .bp5-dark .bp5-context-menu-popover {
+  box-shadow: none;
+  width: 240px;
+}
+
+.bp5-dark .bp5-context-menu-popover .bp5-popover-content {
+  @apply border border-grey-900 bg-grey-800 px-2 py-2;
+
+  box-shadow:
+    0px 0px 0px 1px rgba(0, 0, 0, 0.76),
+    0px 1px 2px 0px rgba(43, 49, 60, 0.24) !important;
+}
+
+.bp5-context-menu-popover .bp5-popover-content .bp5-menu {
+  @apply bg-grey-800 px-0 font-medium text-content-primary;
+}
+
+.bp5-context-menu-popover .bp5-popover-content .bp5-menu-header {
+  @apply border-grey-700;
+} */
+
+.bp5-overlay-backdrop,
+.bp5-popover-transition-container,
+.bp5-overlay-content {
+  @apply z-[1000];
+}

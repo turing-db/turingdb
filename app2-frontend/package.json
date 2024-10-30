@@ -1,0 +1,35 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5000 --host 0.0.0.0",
+    "build": "vite build",
+    "build-and-start": "vite build && vite preview --port 5000 --host 0.0.0.0",
+    "start": "vite preview --port 5000 --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@blueprintjs/core": "^5.13.1",
+    "@blueprintjs/select": "^5.2.5",
+    "@types/eslint__js": "^8.42.3",
+    "preact": "10.22.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "globals": "^15.11.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "autoprefixer": "^10.4.20",
+    "vite": "^5.3.3",
+    "@preact/preset-vite": "^2.9.0",
+    "eslint": "^9.13.0",
+    "eslint-config-preact": "^1.5.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.12.1",
+    "@eslint/compat": "^1.2.2",
+    "@eslint/js": "^9.13.0"
+  },
+  "eslintConfig": {
+    "extends": "preact"
+  },
+  "name": "turingapp"
+}

@@ -99,6 +99,7 @@ execute_process(COMMAND git rev-parse HEAD
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(app)
+add_subdirectory(app2-backend)
 add_subdirectory(external)
 add_subdirectory(build)
 add_subdirectory(common)
