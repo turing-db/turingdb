@@ -33,17 +33,25 @@ Status HTTPClient::fetch(std::string_view url,
                          ResponseBuffer& resp) {
     resp.clear();
 
-    curl_easy_reset(_curl);
     curl_easy_setopt(_curl, CURLOPT_URL, url.data());
+    curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(_curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(_curl, CURLOPT_WRITEDATA, &resp);
+
+    if (_verbose) {
+        curl_easy_setopt(_curl, CURLOPT_VERBOSE, 1);
+    }
+
+    if (!reqData.empty()) {
+        curl_easy_setopt(_curl, CURLOPT_POSTFIELDS, reqData.data());
+    }
     
     const CURLcode res = curl_easy_perform(_curl);
     if (res != CURLE_OK) {
-        long httpCode = 0;
-        curl_easy_getinfo(_curl, CURLINFO_RESPONSE_CODE, &httpCode);
-        return net::HTTP::codeToStatus((size_t)httpCode);
+        return Status::BAD_REQUEST;
     }
 
-    return Status::OK;
+    long httpCode = 0;
+    curl_easy_getinfo(_curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    return net::HTTP::codeToStatus((size_t)httpCode);
 }

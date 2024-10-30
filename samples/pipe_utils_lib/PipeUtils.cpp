@@ -20,7 +20,6 @@
 #include "DBView.h"
 #include "DataPartBuilder.h"
 
-#include "DBServerConfig.h"
 #include "DBServerContext.h"
 #include "DBServerProcessor.h"
 #include "Server.h"
@@ -191,8 +190,6 @@ void PipeSample::createSimpleGraph() {
 }
 
 void PipeSample::startHttpServer() {
-    DBServerConfig config;
-    DBServer server(config);
-
-    server.start();
+    _server = std::make_unique<DBServer>(_serverConfig);
+    _server->start();
 }

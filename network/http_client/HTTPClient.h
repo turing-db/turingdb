@@ -30,11 +30,14 @@ public:
     HTTPClient& operator=(const HTTPClient&) = delete;
     HTTPClient& operator=(HTTPClient&&) = delete;
 
+    void setVerbose(bool verbose) { _verbose = verbose; }
+
     net::HTTP::Status fetch(std::string_view url,
                             std::string_view reqData,
                             ResponseBuffer& resp);
 
 private:
+    bool _verbose {false};
     CURL* _curl {nullptr};
 };
 

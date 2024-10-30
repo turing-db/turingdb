@@ -4,6 +4,8 @@ function(add_db2_server_gtest exe_name cpp_file)
         PRIVATE turing_db2_core_s
                 turing_db2_server_s
                 turing_http_client_s
+                turing_samples_pipe_utilslib_s
+                nlohmann_json
                 gtest_main)
     gtest_discover_tests(${exe_name})
 endfunction()
