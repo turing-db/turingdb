@@ -2,7 +2,6 @@
 
 #include <thread>
 #include <string>
-#include <iostream>
 
 #include <nlohmann/json.hpp>
 
@@ -49,8 +48,6 @@ TEST_F(ServerTest, queryEndpointOK) {
             bufferQueryEmpty = true;
             return true;
         }
-
-        std::cout << _buffer.getString() << "\n";
 
         // Parse json response and check that we got data
         const auto json = nlohmann::json::parse(_buffer.getString());
