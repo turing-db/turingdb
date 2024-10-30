@@ -1,2 +1,4 @@
+add_subdirectory(http_common)
+add_subdirectory(http_client)
 add_subdirectory(http_parser)
 add_subdirectory(http_server)

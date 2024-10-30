@@ -20,7 +20,6 @@
 #include "DBView.h"
 #include "DataPartBuilder.h"
 
-#include "DBServerConfig.h"
 #include "DBServerContext.h"
 #include "DBServerProcessor.h"
 #include "Server.h"
@@ -40,9 +39,12 @@ PipeSample::PipeSample(const std::string& sampleName)
     LogSetup::setupLogFileBacked(sampleName + ".log");
     PerfStat::init(sampleName + ".perf");
     spdlog::set_level(spdlog::level::info);
-    _system = std::make_unique<db::SystemManager>();
+
     _jobSystem = std::make_unique<JobSystem>();
     _jobSystem->initialize();
+    
+    _server = std::make_unique<DBServer>(_serverConfig);
+    _system = _server->getSystemManager();
 }
 
 PipeSample::~PipeSample() {
@@ -83,7 +85,7 @@ bool PipeSample::loadJsonDB(const std::string& jsonDir) {
 }
 
 bool PipeSample::executeQuery(const std::string& queryStr) {
-    InterpreterContext interpCtxt(_system.get());
+    InterpreterContext interpCtxt(_system);
     MemoryManagerStorage memStorage(1);
     memStorage.initialize();
 
@@ -191,8 +193,5 @@ void PipeSample::createSimpleGraph() {
 }
 
 void PipeSample::startHttpServer() {
-    DBServerConfig config;
-    DBServer server(config);
-
-    server.start();
+    _server->start();
 }
