@@ -10,10 +10,6 @@
 #include "TuringClient.h"
 #include "DataFrame.h"
 
-namespace tabulate {
-class Table;
-}
-
 class TuringShell {
 public:
     struct Command {
@@ -33,7 +29,6 @@ public:
 private:
     turing::TuringClient _turing;
     turing::DataFrame _df;
-    std::unique_ptr<tabulate::Table> _table;
     std::unordered_map<std::string_view, Command> _localCommands;
 
     void processLine(std::string& line);

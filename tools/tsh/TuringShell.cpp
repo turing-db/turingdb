@@ -85,8 +85,6 @@ TuringShell::TuringShell()
     _localCommands.emplace("quit", Command{quitCommand});
     _localCommands.emplace("exit", Command{quitCommand});
     _localCommands.emplace("print_json", Command{printJsonCommand});
-
-    _table = std::make_unique<tabulate::Table>();
 }
 
 TuringShell::~TuringShell() {
@@ -143,34 +141,37 @@ void TuringShell::processLine(std::string& line) {
         // Query execution time
         const auto timeExecEnd = Clock::now();
         const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
-        std::cout << "Request executed in " << duration.count() << " ms.\n\n";
+        std::cout << "Request received in " << duration.count() << " ms.\n";
     }
 
-    std::cout << "Columns=" << _df.colCount() << " Rows=" << _df.rowCount() << "\n";
+    {
+        const auto rowCount = _df.rowCount();
+        std::cout << "Received " << rowCount << " record";
+        if (rowCount == 0 || rowCount > 1) {
+            std::cout << "s";
+        }
+
+        std::cout << "\n\n";
+    }
 
     // Format result table
     displayTable();
+
+    std::cout << "\n";
 }
 
 void TuringShell::displayTable() {
-    _table.reset();
+    tabulate::Table table;
 
-    using Row = tabulate::Table::Row_t;
-
-    Row tableRow;
     for (const auto& row : _df.rows()) {
-        std::cout << "Row ";
-        //tableRow.clear();
+        tabulate::RowStream rs;
 
         for (const auto& value : row) {
-            std::cout << value.toString() << " ";
-            //tableRow.emplace_back(value.toString());
+            rs << value.toString();
         }
 
-        std::cout << "\n";
-
-        //_table->add_row(tableRow);
+        table.add_row(std::move(rs));
     }
 
-    //std::cout << _table << "\n";
+    std::cout << table << "\n";
 }

@@ -6553,6 +6553,12 @@ public:
     return *this;
   }
 
+  Format& show_row_separator() {
+    show_border_top_ = true;
+    show_row_separator_ = true;
+    return *this;
+  }
+
   Format &corner(const std::string &value) {
     corner_top_left_ = value;
     corner_top_right_ = value;
@@ -6698,6 +6704,18 @@ public:
 
   Format &locale(const std::string &value) {
     locale_ = value;
+    return *this;
+  }
+
+  enum class TrimMode {
+    kNone = 0,
+    kLeft = 1 << 0,
+    kRight = 1 << 1,
+    kBoth = kLeft | kRight,
+  };
+
+  Format &trim_mode(TrimMode trim_mode) {
+    trim_mode_ = trim_mode;
     return *this;
   }
 
@@ -6975,7 +6993,6 @@ public:
     else
       result.corner_bottom_right_background_color_ = second.corner_bottom_right_background_color_;
 
-    // Column separator
     if (first.column_separator_.has_value())
       result.column_separator_ = first.column_separator_;
     else
@@ -7001,6 +7018,16 @@ public:
       result.locale_ = first.locale_;
     else
       result.locale_ = second.locale_;
+
+    if (first.trim_mode_.has_value())
+      result.trim_mode_ = first.trim_mode_;
+    else
+      result.trim_mode_ = second.trim_mode_;
+
+    if (first.show_row_separator_.has_value())
+		  result.show_row_separator_ = first.show_row_separator_;
+	  else
+		  result.show_row_separator_ = second.show_row_separator_;
 
     return result;
   }
@@ -7037,6 +7064,8 @@ private:
     column_separator_color_ = column_separator_background_color_ = Color::none;
     multi_byte_characters_ = false;
     locale_ = "";
+    trim_mode_ = TrimMode::kBoth;
+    show_row_separator_ = false;
   }
 
   // Helper methods for word wrapping:
@@ -7168,6 +7197,10 @@ private:
   // Internationalization
   optional<bool> multi_byte_characters_{};
   optional<std::string> locale_{};
+
+  optional<TrimMode> trim_mode_{};
+
+  optional<bool> show_row_separator_{};
 };
 
 } // namespace tabulate
@@ -8460,7 +8493,20 @@ inline void Printer::print_row_in_cell(std::ostream &stream, TableInternal &tabl
       stream << std::string(padding_left, ' ');
 
       // Print word-wrapped line
-      line = Format::trim(line);
+      switch (*format.trim_mode_) {
+      case Format::TrimMode::kBoth:
+        line = Format::trim(line);
+        break;
+      case Format::TrimMode::kLeft:
+        line = Format::trim_left(line);
+        break;
+      case Format::TrimMode::kRight:
+        line = Format::trim_right(line);
+        break;
+      case Format::TrimMode::kNone:
+        break;
+      }
+
       auto line_with_padding_size =
           get_sequence_length(line, cell.locale(), is_multi_byte_character_support_enabled) +
           padding_left + padding_right;
@@ -8519,13 +8565,26 @@ inline bool Printer::print_cell_border_top(std::ostream &stream, TableInternal &
     return false;
 
   apply_element_style(stream, corner_color, corner_background_color, {});
-  stream << corner;
+  if (*format.show_row_separator_) {
+    if (index.first != 0)
+      stream << corner;
+    else
+      stream << " ";
+  }
+  else
+    stream << corner;
   reset_element_style(stream);
 
   for (size_t i = 0; i < column_width; ++i) {
     apply_element_style(stream, *format.border_top_color_, *format.border_top_background_color_,
                         {});
-    stream << border_top;
+    if (*format.show_row_separator_) {
+      if (index.first != 0)
+        stream << border_top;
+      else
+        stream << " ";
+    } else
+      stream << border_top;
     reset_element_style(stream);
   }
 
@@ -8536,7 +8595,14 @@ inline bool Printer::print_cell_border_top(std::ostream &stream, TableInternal &
     corner_background_color = *format.corner_top_right_background_color_;
 
     apply_element_style(stream, corner_color, corner_background_color, {});
-    stream << corner;
+    if (*format.show_row_separator_) {
+      if (index.first != 0)
+        stream << corner;
+      else
+        stream << " ";
+    }
+    else
+      stream << corner;
     reset_element_style(stream);
   }
   std::locale::global(old_locale);
@@ -8742,6 +8808,70 @@ inline std::ostream &operator<<(std::ostream &stream, const Table &table) {
   const_cast<Table &>(table).print(stream);
   return stream;
 }
+
+class RowStream {
+public:
+  operator const Table::Row_t &() const { return row_; }
+
+  template <typename T, typename = typename std::enable_if<
+                            !std::is_convertible<T, Table::Row_t::value_type>::value>::type>
+  RowStream &operator<<(const T &obj) {
+    oss_ << obj;
+    std::string cell{oss_.str()};
+    oss_.str("");
+    if (!cell.empty()) {
+      row_.push_back(cell);
+    }
+    return *this;
+  }
+
+  RowStream &operator<<(const Table::Row_t::value_type &cell) {
+    row_.push_back(cell);
+    return *this;
+  }
+
+  RowStream &copyfmt(const RowStream &other) {
+    oss_.copyfmt(other.oss_);
+    return *this;
+  }
+
+  RowStream &copyfmt(const std::ios &other) {
+    oss_.copyfmt(other);
+    return *this;
+  }
+
+  std::ostringstream::char_type fill() const { return oss_.fill(); }
+  std::ostringstream::char_type fill(std::ostringstream::char_type ch) { return oss_.fill(ch); }
+
+  std::ios_base::iostate exceptions() const { return oss_.exceptions(); }
+  void exceptions(std::ios_base::iostate except) { oss_.exceptions(except); }
+
+  std::locale imbue(const std::locale &loc) { return oss_.imbue(loc); }
+  std::locale getloc() const { return oss_.getloc(); }
+
+  char narrow(std::ostringstream::char_type c, char dfault) const { return oss_.narrow(c, dfault); }
+  std::ostringstream::char_type widen(char c) const { return oss_.widen(c); }
+
+  std::ios::fmtflags flags() const { return oss_.flags(); }
+  std::ios::fmtflags flags(std::ios::fmtflags flags) { return oss_.flags(flags); }
+
+  std::ios::fmtflags setf(std::ios::fmtflags flags) { return oss_.setf(flags); }
+  std::ios::fmtflags setf(std::ios::fmtflags flags, std::ios::fmtflags mask) {
+    return oss_.setf(flags, mask);
+  }
+
+  void unsetf(std::ios::fmtflags flags) { oss_.unsetf(flags); }
+
+  std::streamsize precision() const { return oss_.precision(); }
+  std::streamsize precision(std::streamsize new_precision) { return oss_.precision(new_precision); }
+
+  std::streamsize width() const { return oss_.width(); }
+  std::streamsize width(std::streamsize new_width) { return oss_.width(new_width); }
+
+private:
+  Table::Row_t row_;
+  std::ostringstream oss_;
+};
 
 } // namespace tabulate
 

@@ -234,6 +234,12 @@ public:
     return *this;
   }
 
+  Format& show_row_separator() {
+    show_border_top_ = true;
+    show_row_separator_ = true;
+    return *this;
+  }
+
   Format &corner(const std::string &value) {
     corner_top_left_ = value;
     corner_top_right_ = value;
@@ -379,6 +385,18 @@ public:
 
   Format &locale(const std::string &value) {
     locale_ = value;
+    return *this;
+  }
+
+  enum class TrimMode {
+    kNone = 0,
+    kLeft = 1 << 0,
+    kRight = 1 << 1,
+    kBoth = kLeft | kRight,
+  };
+
+  Format &trim_mode(TrimMode trim_mode) {
+    trim_mode_ = trim_mode;
     return *this;
   }
 
@@ -656,7 +674,6 @@ public:
     else
       result.corner_bottom_right_background_color_ = second.corner_bottom_right_background_color_;
 
-    // Column separator
     if (first.column_separator_.has_value())
       result.column_separator_ = first.column_separator_;
     else
@@ -682,6 +699,16 @@ public:
       result.locale_ = first.locale_;
     else
       result.locale_ = second.locale_;
+
+    if (first.trim_mode_.has_value())
+      result.trim_mode_ = first.trim_mode_;
+    else
+      result.trim_mode_ = second.trim_mode_;
+
+    if (first.show_row_separator_.has_value())
+		  result.show_row_separator_ = first.show_row_separator_;
+	  else
+		  result.show_row_separator_ = second.show_row_separator_;
 
     return result;
   }
@@ -718,6 +745,8 @@ private:
     column_separator_color_ = column_separator_background_color_ = Color::none;
     multi_byte_characters_ = false;
     locale_ = "";
+    trim_mode_ = TrimMode::kBoth;
+    show_row_separator_ = false;
   }
 
   // Helper methods for word wrapping:
@@ -849,6 +878,10 @@ private:
   // Internationalization
   optional<bool> multi_byte_characters_{};
   optional<std::string> locale_{};
+
+  optional<TrimMode> trim_mode_{};
+
+  optional<bool> show_row_separator_{};
 };
 
 } // namespace tabulate
