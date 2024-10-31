@@ -2,15 +2,12 @@
 
 #include <chrono>
 #include <ratio>
-#include <string>
-#include <algorithm>
-#include <ctype.h>
-#include <string_view>
 
 #include <linenoise.h>
 #include <tabulate/table.hpp>
+#include <argparse.hpp>
+#include <spdlog/spdlog.h>
 
-#include "LogUtils.h"
 #include "TimerStat.h"
 
 namespace {
@@ -34,7 +31,7 @@ inline std::string_view getFirstWord(const std::string& str) {
     return std::string_view(str.c_str(), pos);
 }
 
-void extractWords(std::vector<std::string_view>& words, const std::string& line) {
+void extractWords(std::vector<std::string>& words, const std::string& line) {
     size_t pos = 0;
     while (pos < line.size()) {
         // Skip whitespace
@@ -50,16 +47,46 @@ void extractWords(std::vector<std::string_view>& words, const std::string& line)
             newPos = line.size();
         }
 
-        words.emplace_back(line.c_str()+pos, newPos-pos);
+        words.emplace_back(std::string(line.c_str()+pos, newPos-pos));
         pos = newPos;
     }
+}
+
+// Commands
+void quitCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+    exit(EXIT_SUCCESS);
+}
+
+void printJsonCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+    std::string enabledMode = "on";
+    argparse::ArgumentParser argParser("print_json", "", argparse::default_arguments::help, false);
+    argParser.add_description("Enable or disable the printing of raw JSON on standard output");
+    argParser.add_argument("enabled")
+             .nargs(1)
+             .store_into(enabledMode)
+             .choices("on", "off")
+             .default_value("on");
+    argParser.parse_args(args);
+
+    if (enabledMode == "on") {
+        shell.setDebugDumpJSON(true);
+    } else if (enabledMode == "off") {
+        shell.setDebugDumpJSON(false);
+    }
+
+    std::cout << "\n";
 }
 
 }
 
 TuringShell::TuringShell()
 {
-    _table = std::make_unique<Table>();
+    _localCommands.emplace("q", Command{quitCommand});
+    _localCommands.emplace("quit", Command{quitCommand});
+    _localCommands.emplace("exit", Command{quitCommand});
+    _localCommands.emplace("print_json", Command{printJsonCommand});
+
+    _table = std::make_unique<tabulate::Table>();
 }
 
 TuringShell::~TuringShell() {
@@ -75,7 +102,7 @@ void TuringShell::startLoop() {
             continue;
         }
 
-        process(lineStr);
+        processLine(lineStr);
 
         linenoiseHistoryAdd(line);
         shellPrompt = composePrompt();
@@ -88,56 +115,62 @@ std::string TuringShell::composePrompt() {
     return basePrompt + separator + _turing.getDBName() + "> ";
 }
 
-TuringShell::Result TuringShell::processCommand(const std::string& line) {
-    // Get first word
-    const auto firstWord = getFirstWord(line);
-    
-    if (firstWord == "cd") {
-        std::vector<std::string_view> words;
-        extractWords(words, line);
-        if (words.size() != 2) {
-            logt::LogError("ERROR: the command 'cd' expects one argument");
-            return BadResult(CommandError::ARG_EXPECTED);
-        }
-
-        _turing.setDBName(std::string(words[1]));
-        return CommandType::LOCAL_CMD;
-    } else if (firstWord == "exit" || firstWord == "quit" || firstWord == "q") {
-        exit(EXIT_SUCCESS);
-        return CommandType::LOCAL_CMD;
-    }
-
-    return CommandType::REMOTE_CMD;
-}
-
-void TuringShell::process(std::string& line) {
+void TuringShell::processLine(std::string& line) {
     // Remove leading whitespace
     trim(line);
 
-    // Stop here if it was a special command
-    const auto processRes = processCommand(line);
-    if (processRes != CommandType::REMOTE_CMD) {
+    // Check if it is a local command
+    const auto cmdName = getFirstWord(line);
+    const auto localCmdIt = _localCommands.find(cmdName);
+    if (localCmdIt != _localCommands.end()) {
+        Command::Words words;
+        extractWords(words, line);
+        localCmdIt->second._func(words, *this);
         return;
     }
 
-    const auto timeExecStart = Clock::now();
+    // Otherwise execute as a query
+    {
+        const auto timeExecStart = Clock::now();
 
-    // Send query
-    const bool success = _turing.query(line, _df);
-    if (!success) {
-        logt::LogError("ERROR: can not send request to server");
-        return;
+        // Send query
+        const auto queryInfo = _turing.query(line, _df);
+        if (!queryInfo) {
+            spdlog::error("{}", queryInfo.getError());
+            return;
+        }
+
+        // Query execution time
+        const auto timeExecEnd = Clock::now();
+        const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
+        std::cout << "Request executed in " << duration.count() << " ms.\n\n";
     }
+
+    std::cout << "Columns=" << _df.colCount() << " Rows=" << _df.rowCount() << "\n";
 
     // Format result table
     displayTable();
-
-    // Query execution time
-    const auto timeExecEnd = Clock::now();
-    const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
-    std::cout << "Request executed in " << duration.count() << " ms.\n";
 }
 
 void TuringShell::displayTable() {
     _table.reset();
+
+    using Row = tabulate::Table::Row_t;
+
+    Row tableRow;
+    for (const auto& row : _df.rows()) {
+        std::cout << "Row ";
+        //tableRow.clear();
+
+        for (const auto& value : row) {
+            std::cout << value.toString() << " ";
+            //tableRow.emplace_back(value.toString());
+        }
+
+        std::cout << "\n";
+
+        //_table->add_row(tableRow);
+    }
+
+    //std::cout << _table << "\n";
 }
