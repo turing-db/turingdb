@@ -8,7 +8,7 @@ set(turing_sources
 
 add_executable(turing ${turing_sources})
 target_link_libraries(turing PRIVATE
-    tools_common_s    
+    tools_common_s
     turing_log_s
     argparse)
 

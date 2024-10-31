@@ -1,13 +1,13 @@
 #include "TuringStartCommand.h"
 
-#include <csignal>
+#include <signal.h>
 #include <spdlog/spdlog.h>
 
 #include "ToolInit.h"
 #include "Command.h"
 #include "ProcessUtils.h"
 
-void signalHandler(int signum) {
+inline void signalHandler(int signum) {
     ProcessUtils::stopTool("bioserver");
     exit(EXIT_SUCCESS);
 }
