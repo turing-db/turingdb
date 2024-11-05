@@ -141,9 +141,7 @@ std::string TuringShell::composePrompt() {
 
     std::string prompt = basePrompt;
     prompt += separator;
-    prompt += "\033[0;35m";
     prompt += _turing.getDBName();
-    prompt += "\033[0m";
     prompt += "> ";
     return prompt;
 }
