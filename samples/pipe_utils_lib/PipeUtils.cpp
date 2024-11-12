@@ -9,7 +9,7 @@
 #include "MemoryManagerStorage.h"
 #include "SystemManager.h"
 #include "JobSystem.h"
-#include "Neo4j/ParserConfig.h"
+#include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 
 #include "DB.h"
@@ -45,6 +45,8 @@ PipeSample::PipeSample(const std::string& sampleName)
     
     _server = std::make_unique<DBServer>(_serverConfig);
     _system = _server->getSystemManager();
+
+    QueryInterpreter::init();
 }
 
 PipeSample::~PipeSample() {
@@ -66,12 +68,12 @@ bool PipeSample::loadJsonDB(const std::string& jsonDir) {
 
     auto t0 = Clock::now();
 
-    const bool res = db::Neo4jImporter::importJsonDir(
+    const bool res = Neo4jImporter::importJsonDir(
         *_jobSystem,
         _system->getDefaultDB(),
-        db::nodeCountLimit,
-        db::edgeCountLimit,
-        db::Neo4jImporter::ImportJsonDirArgs {
+        db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+        db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+        Neo4jImporter::ImportJsonDirArgs {
             ._jsonDir = jsonDir,
         }
     );

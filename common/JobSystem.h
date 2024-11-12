@@ -235,7 +235,7 @@ public:
 
 private:
     std::thread::id _mainThreadID;
-    size_t _nThreads = 0;
+    size_t _nThreads {0};
     std::mutex _queueMutex;
     std::mutex _wakeMutex;
     std::condition_variable _wakeCondition;

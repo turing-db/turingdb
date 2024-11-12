@@ -5,7 +5,7 @@
 #include "DBReport.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
-#include "Neo4j/ParserConfig.h"
+#include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 #include "NodeView.h"
 #include "PerfStat.h"
@@ -32,8 +32,8 @@ int main() {
     auto t0 = Clock::now();
     Neo4jImporter::importJsonDir(jobSystem,
                                  database.get(),
-                                 nodeCountLimit,
-                                 edgeCountLimit,
+                                 db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                 db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                  {
                                      ._jsonDir = jsonDir,
                                  });

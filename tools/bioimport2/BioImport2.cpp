@@ -6,7 +6,7 @@
 #include "FileUtils.h"
 #include "JobSystem.h"
 #include "LogUtils.h"
-#include "Neo4j/ParserConfig.h"
+#include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 #include "Time.h"
 #include "ToolInit.h"
@@ -187,8 +187,8 @@ int main(int argc, const char** argv) {
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
                                                    db.get(),
-                                                   nodeCountLimit,
-                                                   edgeCountLimit,
+                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
                     return 1;
                 }
@@ -203,8 +203,8 @@ int main(int argc, const char** argv) {
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
                                                    db.get(),
-                                                   nodeCountLimit,
-                                                   edgeCountLimit,
+                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
                     return 1;
                 }
@@ -223,8 +223,8 @@ int main(int argc, const char** argv) {
 
                 if (!Neo4jImporter::importUrl(jobSystem,
                                               db.get(),
-                                              nodeCountLimit,
-                                              edgeCountLimit,
+                                              db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                              db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                               args)) {
                     return 1;
                 }
@@ -237,8 +237,8 @@ int main(int argc, const char** argv) {
 
                 if (!Neo4jImporter::importJsonDir(jobSystem,
                                                   db.get(),
-                                                  nodeCountLimit,
-                                                  edgeCountLimit,
+                                                  db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                  db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   args)) {
                     return 1;
                 }

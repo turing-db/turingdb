@@ -25,7 +25,30 @@ struct VectorHash {
             x = (x >> 16) ^ x;
             value ^= x + 0x9e3779b9 + (value << 6) + (value >> 2);
         }
-
         return value;
     }
+
+    struct Equal {
+        bool operator()(const std::vector<T>& lhs,
+                        const std::vector<T>& rhs) const {
+            if (lhs.size() != rhs.size()) {
+                return false;
+            }
+
+            const std::size_t size = lhs.size();
+            for (size_t i = 0; i < size; i++) {
+                if constexpr (std::is_pointer_v<T>) {
+                    if (*lhs[i] != *rhs[i]) {
+                        return false;
+                    }
+                } else {
+                    if (lhs[i] != rhs[i]) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+    };
 };

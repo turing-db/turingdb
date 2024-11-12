@@ -9,7 +9,7 @@
 #include "FileUtils.h"
 #include "JobSystem.h"
 #include "LogSetup.h"
-#include "Neo4j/ParserConfig.h"
+#include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 #include "PerfStat.h"
 #include "Time.h"
@@ -116,8 +116,8 @@ TEST_F(Neo4jImporterTest, General) {
     t0 = Clock::now();
     const bool res = Neo4jImporter::importJsonDir(jobSystem,
                                                   _db.get(),
-                                                  nodeCountLimit,
-                                                  edgeCountLimit,
+                                                  db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                  db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   {
                                                       ._jsonDir = jsonDir,
                                                       ._workDir = _outDir,
