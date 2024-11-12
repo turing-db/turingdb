@@ -88,6 +88,7 @@ void TuringStart2Command::run() {
 
     Command db("turingdb");
     db.addOption("-o", turingdbDir);
+    db.addOption("-p", "6666");
     db.setWorkingDir(outDir);
     db.setGenerateScript(true);
     db.setWriteLogFile(false);

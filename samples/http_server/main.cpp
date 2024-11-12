@@ -80,7 +80,7 @@ int main(int argc, const char** argv) {
     net::Server server(std::move(functions));
 
     server.setAddress("127.0.0.1");
-    server.setPort(6665);
+    server.setPort(6666);
     server.setWorkerCount(16);
     server.setMaxConnections(1024);
 
