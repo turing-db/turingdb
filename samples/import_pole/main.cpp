@@ -45,8 +45,8 @@ int main() {
     const auto reader = view.read();
 
     std::string_view address = "33 Plover Drive";
-    const PropertyType* addressType = propTypes.get("address (String)");
-    auto it = reader.scanNodeProperties<types::String>(addressType->_id).begin();
+    PropertyType addressType = propTypes.get("address (String)");
+    auto it = reader.scanNodeProperties<types::String>(addressType._id).begin();
 
     const auto findNodeID = [&]() {
         for (; it.isValid(); it.next()) {
@@ -73,7 +73,7 @@ int main() {
 
     const auto& nodeProperties = node.properties();
     const types::String::Primitive& addressValue =
-        nodeProperties.getProperty<types::String>(addressType->_id);
+        nodeProperties.getProperty<types::String>(addressType._id);
 
     std::cout << "Location has address: " << addressValue << std::endl;
 
