@@ -161,36 +161,34 @@ void TuringShell::processLine(std::string& line) {
     }
 
     // Otherwise execute as a query
-    {
-        const auto timeExecStart = Clock::now();
+    const auto timeExecStart = Clock::now();
 
-        // Send query
-        const auto queryInfo = _turing.query(line, _df);
-        if (!queryInfo) {
-            spdlog::error("{}", queryInfo.getError());
-            return;
-        }
-
-        // Query execution time
-        const auto timeExecEnd = Clock::now();
-        const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
-        std::cout << "Request received in " << duration.count() << " ms.\n";
+    // Send query
+    const auto queryInfo = _turing.query(line, _df);
+    if (!queryInfo.isOk()) {
+        spdlog::error("{}", queryInfo.getError());
+        return;
     }
 
-    {
-        const auto rowCount = _df.rowCount();
-        std::cout << "Received " << rowCount << " record";
-        if (rowCount == 0 || rowCount > 1) {
-            std::cout << "s";
-        }
-
-        std::cout << "\n\n";
-    }
+    // Query execution time
+    const auto timeExecEnd = Clock::now();
+    const std::chrono::duration<double, std::milli> duration = timeExecEnd - timeExecStart;
 
     // Format result table
     displayTable();
 
     std::cout << "\n";
+
+    std::cout << "Query executed in " << queryInfo.getTotalTime().count() << " ms.\n";
+    {
+        const auto rowCount = _df.rowCount();
+        std::cout << "Downloaded " << rowCount << " record";
+        if (rowCount == 0 || rowCount > 1) {
+            std::cout << "s";
+        }
+
+        std::cout << " in " << duration.count() << "ms.\n";
+    }
 }
 
 void TuringShell::displayTable() {

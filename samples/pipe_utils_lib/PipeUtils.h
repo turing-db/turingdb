@@ -17,7 +17,7 @@ public:
     PipeSample(const std::string& sampleName);
     ~PipeSample();
 
-    const db::DBServerConfig& getServerConfig() const { return _serverConfig; }
+    db::DBServerConfig& getServerConfig() { return _serverConfig; }
     db::DBServer* getServer() const { return _server.get(); }
 
     std::string getTuringHome() const;

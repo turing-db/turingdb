@@ -9,3 +9,4 @@ bioinfo/notebooks/api-notebooks/spatial_transcriptomics/datasets/*/data
 bioinfo/notebooks/api-notebooks/spatial_transcriptomics/datasets/cohort_analysis/
 bioinfo/notebooks/api-notebooks/spatial_transcriptomics/datasets/10X_Visium*
 compile_commands.json
+tsconfig.tsbuildinfo
