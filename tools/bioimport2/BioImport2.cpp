@@ -196,7 +196,7 @@ int main(int argc, const char** argv) {
         switch (data.type) {
             case ImportType::GML: {
                 GMLImporter parser;
-                if (!parser.parse(FileUtils::Path(data.path))) {
+                if (!parser.importFile(jobSystem, db.get(), FileUtils::Path(data.path))) {
                     return 1;
                 }
                 break;

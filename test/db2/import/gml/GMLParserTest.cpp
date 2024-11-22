@@ -5,21 +5,66 @@ using namespace db;
 
 class GMLSax {
 public:
-    void onNodeProperty(std::string_view k, std::string_view v) { spdlog::info("NODEPROP[{}, {}]", k, v); }
-    void onNodeProperty(std::string_view k, uint64_t v) { spdlog::info("NODEPROP[{}, {}]", k, v); }
-    void onNodeProperty(std::string_view k, int64_t v) { spdlog::info("NODEPROP[{}, {}]", k, v); }
-    void onNodeProperty(std::string_view k, double v) { spdlog::info("NODEPROP[{}, {}]", k, v); }
-    void onNodeID(uint64_t id) { spdlog::info("NODEID[{}]", id); }
-    void onEdgeProperty(std::string_view k, std::string_view v) { spdlog::info("EDGEPROP[{}, {}]", k, v); }
-    void onEdgeProperty(std::string_view k, uint64_t v) { spdlog::info("EDGEPROP[{}, {}]", k, v); }
-    void onEdgeProperty(std::string_view k, int64_t v) { spdlog::info("EDGEPROP[{}, {}]", k, v); }
-    void onEdgeProperty(std::string_view k, double v) { spdlog::info("EDGEPROP[{}, {}]", k, v); }
-    void onEdgeSource(uint64_t id) { spdlog::info("EDGESOURCE[{}]", id); }
-    void onEdgeTarget(uint64_t id) { spdlog::info("EDGETARGET[{}]", id); }
-    void onNodeBegin() { spdlog::info("NodeBegin >>>"); }
-    void onNodeEnd() { spdlog::info("<<< NodeEnd"); }
-    void onEdgeBegin() { spdlog::info("EdgeBegin >>>"); }
-    void onEdgeEnd() { spdlog::info("<<< EdgeEnd"); }
+    bool onNodeProperty(std::string_view k, std::string_view v) {
+        spdlog::info("NODEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onNodeProperty(std::string_view k, uint64_t v) {
+        spdlog::info("NODEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onNodeProperty(std::string_view k, int64_t v) {
+        spdlog::info("NODEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onNodeProperty(std::string_view k, double v) {
+        spdlog::info("NODEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onNodeID(uint64_t id) {
+        spdlog::info("NODEID[{}]", id);
+        return true;
+    }
+    bool onEdgeProperty(std::string_view k, std::string_view v) {
+        spdlog::info("EDGEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onEdgeProperty(std::string_view k, uint64_t v) {
+        spdlog::info("EDGEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onEdgeProperty(std::string_view k, int64_t v) {
+        spdlog::info("EDGEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onEdgeProperty(std::string_view k, double v) {
+        spdlog::info("EDGEPROP[{}, {}]", k, v);
+        return true;
+    }
+    bool onEdgeSource(uint64_t id) {
+        spdlog::info("EDGESOURCE[{}]", id);
+        return true;
+    }
+    bool onEdgeTarget(uint64_t id) {
+        spdlog::info("EDGETARGET[{}]", id);
+        return true;
+    }
+    bool onNodeBegin() {
+        spdlog::info("NodeBegin >>>");
+        return true;
+    }
+    bool onNodeEnd() {
+        spdlog::info("<<< NodeEnd");
+        return true;
+    }
+    bool onEdgeBegin() {
+        spdlog::info("EdgeBegin >>>");
+        return true;
+    }
+    bool onEdgeEnd() {
+        spdlog::info("<<< EdgeEnd");
+        return true;
+    }
 };
 
 class GMLParserTest : public TuringTest {
@@ -56,6 +101,8 @@ protected:
     }
 
 TEST_F(GMLParserTest, Empty) {
+    EXPECT_ERROR("", "");
+    EXPECT_ERROR("         \n\n\r", "");
     EXPECT_SUCCESS("graph []");
     EXPECT_SUCCESS("graph[]");
     EXPECT_SUCCESS(" graph []");
@@ -147,6 +194,12 @@ TEST_F(GMLParserTest, Nodes) {
         "graph [\n"
         "  node [ id 0 label ]\n"
         "]",
+        "GML Error at line 2: Unexpected token ']'. Expected: 'property value'");
+
+    EXPECT_ERROR(
+        "graph [\n"
+        "  node               \n"
+        " ",
         "GML Error at line 2: Unexpected token ']'. Expected: 'property value'");
 }
 
