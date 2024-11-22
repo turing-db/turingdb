@@ -82,7 +82,7 @@ protected:
         spdlog::info("Parsing...");                            \
         GMLSax sax;                                            \
         GMLParser<GMLSax> parser(sax);                         \
-        auto res = parser.parse(data##sv);                     \
+        auto res = parser.parse(data);                         \
         ASSERT_FALSE(res);                                     \
         const auto& err = res.error();                         \
         ASSERT_EQ(err.getMessage(), errMsg##sv);               \
@@ -101,8 +101,8 @@ protected:
     }
 
 TEST_F(GMLParserTest, Empty) {
-    EXPECT_ERROR("", "");
-    EXPECT_ERROR("         \n\n\r", "");
+    EXPECT_ERROR("", "GML Error at line 1: Unexpected end of file. Expected: 'graph'");
+    EXPECT_ERROR("         \n\n\r", "GML Error at line 3: Unexpected end of file. Expected: 'graph'");
     EXPECT_SUCCESS("graph []");
     EXPECT_SUCCESS("graph[]");
     EXPECT_SUCCESS(" graph []");
@@ -113,10 +113,10 @@ TEST_F(GMLParserTest, Empty) {
     EXPECT_SUCCESS("\n\n\r graph [] \n");
 
     EXPECT_ERROR("\n\n\r graph [] dsqd\n",
-                 "GML Error at line 3: Unexpected token 'd'. Expected: end of file");
+                 "GML Error at line 3: Unexpected token 'd'. Expected: 'end of file'");
 
     EXPECT_ERROR("\tdsqd [] \n",
-                 "GML Error at line 1: Unexpected token 'dsqd ', Expected: 'graph'");
+                 "GML Error at line 1: Unexpected token 'dsqd '. Expected: 'graph'");
 
     {
         GMLSax sax;
@@ -135,14 +135,14 @@ TEST_F(GMLParserTest, Nodes) {
         "graph [\n"
         "  node [\n"
         "]",
-        "GML Error at line 3: Unexpected token ']'. Missing node ID");
+        "GML Error at line 3: Unexpected token ']'. Expected: 'node ID'");
 
     // Missing node ID
     EXPECT_ERROR(
         "graph [\n"
         "  node []\n"
         "]",
-        "GML Error at line 3: Unexpected token ']'. Missing node ID");
+        "GML Error at line 3: Unexpected token ']'. Expected: 'node ID'");
 
     // Missing closing bracket
     EXPECT_ERROR(
@@ -183,7 +183,7 @@ TEST_F(GMLParserTest, Nodes) {
         "]");
     EXPECT_SUCCESS(
         "graph [\n"
-        "  node [id 0 label \"quoted prop\"] \"n"
+        "  node [id 0 label \"quoted prop\"] \n"
         "  node [id 1 label test]\n"
         "]");
     EXPECT_SUCCESS(
@@ -200,7 +200,7 @@ TEST_F(GMLParserTest, Nodes) {
         "graph [\n"
         "  node               \n"
         " ",
-        "GML Error at line 2: Unexpected token ']'. Expected: 'property value'");
+        "GML Error at line 3: Unexpected end of file. Expected: '['");
 }
 
 TEST_F(GMLParserTest, Edges) {
@@ -209,28 +209,28 @@ TEST_F(GMLParserTest, Edges) {
         "graph [\n"
         "  edge []\n"
         "]",
-        "GML Error at line 3: Unexpected token ']'. Missing edge source ID");
+        "GML Error at line 3: Unexpected token ']'. Expected: 'edge source ID'");
 
     // Missing closing bracket
     EXPECT_ERROR(
         "graph [\n"
         "  edge [ \n"
         "]",
-        "GML Error at line 3: Unexpected token ']'. Missing edge source ID");
+        "GML Error at line 3: Unexpected token ']'. Expected: 'edge source ID'");
 
     // Missing source ID
     EXPECT_ERROR(
         "graph [\n"
         "  edge [ target 1 ]\n"
         "]",
-        "GML Error at line 3: Unexpected token ']'. Missing edge source ID");
+        "GML Error at line 3: Unexpected token ']'. Expected: 'edge source ID'");
 
     // Missing source ID
     EXPECT_ERROR(
         "graph [\n"
         "  edge [ source 1 ]\n"
         "]",
-        "GML Error at line 3: Unexpected token ']'. Missing edge target ID");
+        "GML Error at line 3: Unexpected token ']'. Expected: 'edge target ID'");
 
     EXPECT_SUCCESS(
         "graph [\n"
@@ -239,3 +239,31 @@ TEST_F(GMLParserTest, Edges) {
     EXPECT_SUCCESS(
         "graph[node[id 0]node[id 1]edge[source 0 target 1]edge[source 1 target 0]]");
 }
+
+
+TEST_F(GMLParserTest, NestedProperties) {
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  node[id 0 label \"My node\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "]");
+
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  node[id 0 label \"My node0\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "  node[id 1 label \"My node1\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "  edge[source 0 target 1 label \"My edge0\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "  edge[source 1 target 0 label \"My edge1\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "]");
+
+
+    // Missing bracket (first edge after value3)
+    EXPECT_ERROR(
+        "graph [\n"
+        "  node[id 0 label \"My node0\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "  node[id 1 label \"My node1\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "  edge[source 0 target 1 label \"My edge0\" attr[key0 value0 key1[key2 value2]key3 value3 key4 value4]\n"
+        "  edge[source 1 target 0 label \"My edge1\" attr[key0 value0 key1[key2 value2]key3 value3]key4 value4]\n"
+        "]",
+        "GML Error at line 6: Unexpected end of file. Expected: ']'");
+}
+
