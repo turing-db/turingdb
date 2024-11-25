@@ -4,6 +4,7 @@
 #include "BannerDisplay.h"
 #include "DB.h"
 #include "FileUtils.h"
+#include "GMLImporter.h"
 #include "JobSystem.h"
 #include "LogUtils.h"
 #include "Neo4j/Neo4JParserConfig.h"
@@ -18,14 +19,13 @@ enum class ImportType {
     NEO4J_TO_JSON,
     NEO4J_URL,
     JSON_NEO4J,
-    // GML,
+    GML,
     // CSV,
 };
 
 struct ImportData {
     ImportType type;
     std::string path;
-    std::string networkName;
     std::string primaryKey;
     std::string url = "localhost";
     std::string urlSuffix = "/db/data/transaction/commit";
@@ -59,8 +59,23 @@ int main(int argc, const char** argv) {
         .default_value(uint16_t(0))
         .store_into(nThreads);
 
+    argParser.add_argument("-gml")
+        .help("Imports a .gml file")
+        .append()
+        .metavar("db.gml")
+        .action([&](const std::string& value) {
+            if (!FileUtils::exists(value)) {
+                logt::FileNotFound(value);
+                exit(EXIT_FAILURE);
+            }
+            importData.emplace_back(ImportData {
+                .type = ImportType::GML,
+                .path = value,
+            });
+        });
+
     argParser.add_argument("-neo4j")
-        .help("Imports a .dump file (default network name: \"my_file\")")
+        .help("Imports a .dump file")
         .append()
         .metavar("db.dump")
         .action([&](const std::string& value) {
@@ -75,7 +90,7 @@ int main(int argc, const char** argv) {
         });
 
     argParser.add_argument("-neo4j-json")
-        .help("Imports json files from a json/ directory (default network name: \"my_json_dir\")")
+        .help("Imports json files from a json/ directory")
         .nargs(1)
         .append()
         .metavar("my_json_dir")
@@ -179,6 +194,13 @@ int main(int argc, const char** argv) {
 
     for (auto& data : importData) {
         switch (data.type) {
+            case ImportType::GML: {
+                GMLImporter parser;
+                if (!parser.importFile(jobSystem, db.get(), FileUtils::Path(data.path))) {
+                    return 1;
+                }
+                break;
+            }
             case ImportType::NEO4J: {
                 Neo4jImporter::ImportDumpFileArgs args;
                 args._workDir = toolInit.getOutputsDir();
@@ -253,3 +275,4 @@ int main(int argc, const char** argv) {
 
     return EXIT_SUCCESS;
 }
+

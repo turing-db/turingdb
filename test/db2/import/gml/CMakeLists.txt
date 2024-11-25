@@ -1,0 +1,4 @@
+add_turing_test(db2_import_gml_gmlimporter_test GMLParserTest.cpp)
+
+target_link_libraries(db2_import_gml_gmlimporter_test
+    PRIVATE turing_db2_import_gml_s)
