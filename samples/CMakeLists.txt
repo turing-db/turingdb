@@ -22,6 +22,9 @@ macro(turing_sample SAMPLE_NAME SOURCES)
     target_compile_definitions(
         ${SAMPLE_NAME}
         PRIVATE SAMPLE_NAME="${SAMPLE_NAME}")
+    target_compile_definitions(
+        ${SAMPLE_NAME}
+        PRIVATE SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 endmacro()
 
 #add_subdirectory(vm-utilslib)
@@ -30,6 +33,7 @@ endmacro()
 #add_subdirectory(aws-s3-stream)
 #add_subdirectory(aws-s3-write)
 add_subdirectory(import_pole)
+add_subdirectory(import-gml)
 #add_subdirectory(import_reactome)
 add_subdirectory(scan_nodes_iterator)
 #add_subdirectory(bytecompiler)
