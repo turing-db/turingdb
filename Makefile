@@ -20,6 +20,14 @@ build:
 debug: BUILD_ENV += DEBUG_BUILD=1
 debug: build
 
+.PHONY: reldebug
+reldebug: BUILD_ENV += RELDEBUG=1
+reldebug: build
+
+.PHONY: callgrind
+callgrind: BUILD_ENV += CALLGRIND_PROFILE=1
+callgrind: build
+
 .PHONY: clean
 clean:
 
