@@ -20,9 +20,36 @@ if (DEFINED ENV{DEBUG_BUILD})
     endif()
 endif()
 
+# Detect RELDEBUG
+set(RELDEBUG FALSE)
+if (DEFINED ENV{RELDEBUG})
+    if ($ENV{RELDEBUG} EQUAL "1")
+        set(RELDEBUG TRUE)
+    endif()
+endif()
+
+# Detect CALLGRIND_PROFILE
+set(CALLGRIND_PROFILE FALSE)
+if (DEFINED ENV{CALLGRIND_PROFILE})
+    if ($ENV{CALLGRIND_PROFILE} EQUAL "1")
+        set(CALLGRIND_PROFILE TRUE)
+    endif()
+endif()
+
+if(${CALLGRIND_PROFILE})
+    if (NOT ${DEBUG_BUILD})
+        set(RELDEBUG TRUE)
+    endif()
+    add_definitions(-DCALLGRIND_PROFILE)
+endif()
+
+# Detect TURING_DEV
 set(TURING_DEV FALSE)
 if (DEFINED ENV{TURING_DEV})
     set(TURING_DEV TRUE)
+endif()
+
+if (${TURING_DEV})
     add_definitions(-DTURING_DEV)
 endif()
 
@@ -34,6 +61,10 @@ else()
     message(STATUS "Optimized build")
     add_definitions(-DNDEBUG)
     set(OPTIMIZE_FLAGS "-O3 -fcf-protection=none")
+
+    if (${RELDEBUG})
+        set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -g")
+    endif()
 endif()
 
 # C++ flags
@@ -104,6 +135,7 @@ add_subdirectory(external)
 add_subdirectory(build)
 add_subdirectory(common)
 add_subdirectory(logging)
+add_subdirectory(perf)
 add_subdirectory(db)
 add_subdirectory(db2)
 add_subdirectory(rpcserver)
