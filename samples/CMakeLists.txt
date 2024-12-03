@@ -63,6 +63,7 @@ add_subdirectory(pipe_scanNodesByLabel)
 add_subdirectory(simple_server)
 add_subdirectory(http_server)
 add_subdirectory(fs-mapped)
+add_subdirectory(fs-aio)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)

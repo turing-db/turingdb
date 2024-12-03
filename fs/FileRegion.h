@@ -16,12 +16,14 @@ public:
 
     FileRegion(char* map, size_t size)
         : _map(map),
-          _size(size) {
+          _size(size)
+    {
     }
 
     FileRegion(FileRegion&& other) noexcept
         : _map(other._map),
-          _size(other._size) {
+          _size(other._size)
+    {
         other._map = nullptr;
         other._size = 0;
     }

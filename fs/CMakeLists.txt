@@ -1,5 +1,6 @@
 set(fs_sources File.cpp
                FileRegion.cpp
+               AIOEngine.cpp
                Path.cpp)
 
 add_library(turing_fs_s
