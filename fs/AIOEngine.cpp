@@ -129,6 +129,7 @@ FileResult<void> AIOEngine::submitRead(const ReadableFile auto& f,
     }
 
     _free.pop_back();
+
     _submittedCount++;
 
     return {};

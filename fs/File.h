@@ -38,8 +38,8 @@ public:
     File& operator=(const File&) = delete;
 
     [[nodiscard]] static FileResult<File<IO>> open(Path&& path);
-    [[nodiscard]] FileResult<void> close();
     [[nodiscard]] FileResult<FileRegion<IO>> map();
+    FileResult<void> close();
 
     const Path& getPath() const { return _path; }
     const FileInfo& getInfo() const { return _info; }

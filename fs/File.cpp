@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
+#include "Panic.h"
+
 using namespace fs;
 
 template <IOType IO>
@@ -16,42 +18,46 @@ template <IOType IO>
 FileResult<File<IO>> File<IO>::open(Path&& path) {
     auto info = path.getFileInfo();
 
-    if (!info) {
-        return info.get_unexpected();
-    }
-
-    if (info->_type != FileType::File) {
-        return FileError::result(path.get(), "Not a file");
-    }
-
-    if constexpr (WritableFile<File<IO>>) {
-        if (!info->readable()) {
-            return FileError::result(path.get(), "Read access denied");
-        }
-    }
-
-    if constexpr (ReadableFile<File<IO>>) {
-        if (!info->writable()) {
-            return FileError::result(path.get(), "Write access denied");
+    if constexpr (!WritableFile<File<IO>>) {
+        if (!info) {
+            return info.get_unexpected();
         }
     }
 
     int access = 0;
+    int permissions = 0;
 
     if constexpr (IO == IOType::R) {
         access = O_RDONLY;
+        permissions = S_IRUSR;
     } else if constexpr (IO == IOType::RW) {
-        access = O_RDWR;
+        access = O_WRONLY| O_CREAT | O_TRUNC;
+        permissions = S_IRUSR | S_IWUSR;
     } else {
-        ([]<bool flag = false> { static_assert(flag); })();
+        COMPILE_ERROR("Added an IO Type");
     }
+    // R  -> Read
+    // RW  -> Write + Create
+    // RA  -> Write + Append + Create
+    // RW -> Read + Write + Create
+    // RC  -> Create (Write + Truncate + Append + Create)
 
-    const int fd = ::open(path.get().data(), access);
+    const int fd = ::open(path.get().data(), access, permissions);
 
     if (fd == -1) {
         return FileError::result(path.get(),
                                  "Could not open file: {}",
                                  ::strerror(errno));
+    }
+
+    if constexpr (WritableFile<File<IO>>) {
+        if (!info) {
+            info = path.getFileInfo();
+        }
+
+        if (!info) {
+            return info.get_unexpected();
+        }
     }
 
     File file;

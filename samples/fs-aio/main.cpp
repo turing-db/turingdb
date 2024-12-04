@@ -1,4 +1,7 @@
+#include <fcntl.h>
+#include <numeric>
 #include <spdlog/fmt/bundled/core.h>
+#include <sys/stat.h>
 
 #include "File.h"
 #include "Time.h"
@@ -13,22 +16,49 @@ int main() {
     }
 
     std::unique_ptr<fs::AIOEngine> engine = std::move(engineRes.value());
+    std::string content;
 
-    // FileInfo
+    // Write for the read test
     {
-        fs::Path p {SAMPLE_DIR "/test"};
+        fs::Path p {SAMPLE_DIR "/testread"};
+
+        constexpr size_t charCount = 30000000;
+        content.resize(charCount);
+        std::iota(content.begin(), content.end(), '0');
+
+        int fd = open(p.get().c_str(), O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
+        if (fd < 0) {
+            fmt::print("Could not open {} for write\n", p.get());
+            return 1;
+        }
+
+        const auto t0 = Clock::now();
+        ssize_t bytesWritten = write(fd, content.c_str(), content.size());
+        if (bytesWritten < 0 || bytesWritten < (ssize_t)content.size()) {
+            close(fd);
+            fmt::print("Could not write\n", p.get());
+            return 1;
+        }
+
+        const size_t mib = (float)charCount / 1024.f / 1024.f;
+        const float d = duration<Seconds>(t0, Clock::now());
+        fmt::print("## Write with ::write()\n");
+        fmt::print("- Wrote {} MiB in {} s\n", mib, d);
+        fmt::print("- Bandwith {} MiB/s\n", mib / d);
+        fmt::print("\n");
+
+        close(fd);
+        content.resize(0);
+    }
+
+    // Read
+    {
+        fs::Path p {SAMPLE_DIR "/testread"};
         const auto info = p.getFileInfo();
 
-        fmt::print("## FileInfo struct\n");
+        fmt::print("## Read\n");
         fmt::print("- File: {}\n", p.get());
-        fmt::print("- Exists: {}\n", info.has_value());
-        fmt::print("- IsFile: {}\n", info->_type == fs::FileType::File);
-        fmt::print("- IsDir: {}\n", info->_type == fs::FileType::Directory);
-        fmt::print("- IsReadable: {}\n", info->readable());
-        fmt::print("- IsWritable: {}\n", info->writable());
-        fmt::print("- Size: {}\n", info->_size);
 
-        std::string content;
         auto file = fs::IFile::open(std::move(p));
         if (!file) {
             fmt::print("{}\n", file.error().getMessage());
@@ -41,94 +71,40 @@ int main() {
         engine->submitRead(file.value(), content);
         engine->wait();
         const float d = duration<Seconds>(t0, Clock::now());
-        fmt::print("- Read content in {} s\n", d);
-        fmt::print("- Bandwith {} MiB/s\n", (float)info->_size / 1024.f / 1024.f / d );
+        const size_t mib = (float)info->_size / 1024.f / 1024.f;
+        fmt::print("- Read {} MiB in {} s\n", mib, d);
+        fmt::print("- Bandwith {} MiB/s\n", mib / d);
         fmt::print("\n");
+        content.resize(0);
     }
 
-    // // Read mapped file
-    // {
-    //     fs::Path p {SAMPLE_DIR "/test"};
-    //     fmt::print("## Read mapped file\n");
+    // Write
+    {
+        fs::Path p {SAMPLE_DIR "/testwrite"};
+        constexpr size_t charCount = 30000000;
 
-    //     {
-    //         fmt::print("- Opening file for input: {}\n", p.get());
-    //         auto file = fs::IFile::open(std::move(p));
-    //         if (!file) {
-    //             fmt::print("{}\n", file.error().getMessage());
-    //             return 1;
-    //         }
+        fmt::print("## Write\n");
+        fmt::print("- File: {}\n", p.get());
 
-    //         auto region = file->map();
-    //         if (!region) {
-    //             fmt::print("{}\n", region.error().getMessage());
-    //             return 1;
-    //         }
+        auto file = fs::IOFile::open(std::move(p));
+        if (!file) {
+            fmt::print("[Open]: {}\n", file.error().getMessage());
+            return 1;
+        }
 
-    //         fmt::print("- File content before: {:?}\n", region->view());
-    //         fmt::print("- Closing file\n");
+        content.resize(charCount);
+        std::iota(content.begin(), content.end(), '0');
 
-    //         if (auto res = file->close(); !res) {
-    //             fmt::print("{}\n", res.error().getMessage());
-    //             return 1;
-    //         }
-    //     }
-    //     fmt::print("\n");
-    // }
-
-    // {
-    //     fs::Path p {SAMPLE_DIR "/testbinary"};
-    //     fmt::print("## Read/Write binary values to file\n");
-
-    //     {
-    //         fmt::print("- Opening to write binary: {}\n", p.get());
-    //         auto file = fs::IOFile::open(fs::Path(p));
-    //         if (!file) {
-    //             fmt::print("{}\n", file.error().getMessage());
-    //             return 1;
-    //         }
-
-    //         auto region = file->map();
-    //         if (!region) {
-    //             fmt::print("{}\n", region.error().getMessage());
-    //             return 1;
-    //         }
-
-    //         const uint64_t value = ::rand();
-    //         fmt::print("- Writing uint64_t value at pos 0: {:x}\n", value);
-    //         region->write<uint64_t>(value);
-
-    //         fmt::print("- Closing file\n");
-
-    //         if (auto res = file->close(); !res) {
-    //             fmt::print("{}\n", res.error().getMessage());
-    //             return 1;
-    //         }
-    //     }
-
-    //     {
-    //         fmt::print("- Opening to read binary: {}\n", p.get());
-    //         auto file = fs::IFile::open(fs::Path(p));
-    //         if (!file) {
-    //             fmt::print("{}\n", file.error().getMessage());
-    //             return 1;
-    //         }
-
-    //         auto region = file->map();
-    //         if (!region) {
-    //             fmt::print("{}\n", region.error().getMessage());
-    //             return 1;
-    //         }
-
-    //         fmt::print("- Reading uint64 at pos 0: {:x}\n", region->read<uint64_t>(0));
-    //         fmt::print("- Closing file\n");
-
-    //         if (auto res = file->close(); !res) {
-    //             fmt::print("{}\n", res.error().getMessage());
-    //             return 1;
-    //         }
-    //     }
-    // }
+        auto t0 = Clock::now();
+        engine->submitWrite(file.value(), content);
+        engine->wait();
+        const size_t mib = (float)charCount / 1024.f / 1024.f;
+        const float d = duration<Seconds>(t0, Clock::now());
+        fmt::print("- Wrote {} MiB in {} s\n", mib, d);
+        fmt::print("- Bandwith {} MiB/s\n", mib / d);
+        fmt::print("\n");
+        content.resize(0);
+    }
 
     return 0;
 }
