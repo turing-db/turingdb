@@ -4,11 +4,6 @@
 
 using namespace fs;
 
-template <IOType IO>
-FileRegion<IO>::~FileRegion() {
+FileRegion::~FileRegion() {
     ::munmap(_map, _size);
 }
-
-
-template class fs::FileRegion<IOType::R>;
-template class fs::FileRegion<IOType::RW>;

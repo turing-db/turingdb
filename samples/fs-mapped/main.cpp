@@ -1,6 +1,10 @@
-#include <spdlog/fmt/bundled/core.h>
-
 #include "File.h"
+
+#define CHECK_RES(code)                               \
+    if (auto res = (code); !res) {                    \
+        fmt::print("{}\n", res.error().fmtMessage()); \
+        return 1;                                     \
+    }
 
 int main() {
     ::srand(::time(nullptr));
@@ -19,15 +23,15 @@ int main() {
         fmt::print("- IsWritable: {}\n", info->writable());
         fmt::print("- Size: {}\n", info->_size);
 
-        auto file = fs::IFile::open(std::move(p));
+        auto file = fs::File::open(std::move(p));
         if (!file) {
-            fmt::print("{}\n", file.error().getMessage());
+            fmt::print("{}\n", file.error().fmtMessage());
             return 1;
         }
 
-        auto region = file->map();
+        auto region = file->map(info->_size);
         if (!region) {
-            fmt::print("{}\n", region.error().getMessage());
+            fmt::print("{}\n", region.error().fmtMessage());
             return 1;
         }
 
@@ -42,28 +46,26 @@ int main() {
 
         {
             fmt::print("- Opening file for input: {}\n", p.get());
-            auto file = fs::IFile::open(std::move(p));
+            auto file = fs::File::open(std::move(p));
             if (!file) {
-                fmt::print("{}\n", file.error().getMessage());
+                fmt::print("{}\n", file.error().fmtMessage());
                 return 1;
             }
 
-            auto region = file->map();
+            auto region = file->map(file->getInfo()._size);
             if (!region) {
-                fmt::print("{}\n", region.error().getMessage());
+                fmt::print("{}\n", region.error().fmtMessage());
                 return 1;
             }
 
             fmt::print("- File content before: {:?}\n", region->view());
             fmt::print("- Closing file\n");
 
-            if (auto res = file->close(); !res) {
-                fmt::print("{}\n", res.error().getMessage());
-                return 1;
-            }
+            CHECK_RES(file->close());
         }
         fmt::print("\n");
     }
+
 
     {
         fs::Path p {SAMPLE_DIR "/testbinary"};
@@ -71,51 +73,45 @@ int main() {
 
         {
             fmt::print("- Opening to write binary: {}\n", p.get());
-            auto file = fs::IOFile::open(fs::Path(p));
+            auto file = fs::File::open(fs::Path(p));
             if (!file) {
-                fmt::print("{}\n", file.error().getMessage());
+                fmt::print("{}\n", file.error().fmtMessage());
                 return 1;
             }
 
-            auto region = file->map();
+            auto region = file->map(file->getInfo()._size);
             if (!region) {
-                fmt::print("{}\n", region.error().getMessage());
+                fmt::print("{}\n", region.error().fmtMessage());
                 return 1;
             }
 
             const uint64_t value = ::rand();
             fmt::print("- Writing uint64_t value at pos 0: {:x}\n", value);
-            region->write<uint64_t>(value);
+            region->write(value);
 
             fmt::print("- Closing file\n");
 
-            if (auto res = file->close(); !res) {
-                fmt::print("{}\n", res.error().getMessage());
-                return 1;
-            }
+            CHECK_RES(file->close());
         }
 
         {
             fmt::print("- Opening to read binary: {}\n", p.get());
-            auto file = fs::IFile::open(fs::Path(p));
+            auto file = fs::File::open(fs::Path(p));
             if (!file) {
-                fmt::print("{}\n", file.error().getMessage());
+                fmt::print("{}\n", file.error().fmtMessage());
                 return 1;
             }
 
-            auto region = file->map();
+            auto region = file->map(file->getInfo()._size);
             if (!region) {
-                fmt::print("{}\n", region.error().getMessage());
+                fmt::print("{}\n", region.error().fmtMessage());
                 return 1;
             }
 
             fmt::print("- Reading uint64 at pos 0: {:x}\n", region->read<uint64_t>(0));
             fmt::print("- Closing file\n");
 
-            if (auto res = file->close(); !res) {
-                fmt::print("{}\n", res.error().getMessage());
-                return 1;
-            }
+            CHECK_RES(file->close());
         }
     }
 

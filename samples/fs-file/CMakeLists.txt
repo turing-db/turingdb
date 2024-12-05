@@ -1,4 +1,4 @@
-set(SAMPLE_NAME fs-mapped)
+set(SAMPLE_NAME fs-file)
 set(SOURCES     main.cpp)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})

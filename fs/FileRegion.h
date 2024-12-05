@@ -1,15 +1,11 @@
 #pragma once
 
-#include <concepts>
 #include <cstddef>
 #include <cstring>
 #include <string_view>
 
-#include "IOType.h"
-
 namespace fs {
 
-template <IOType IO>
 class FileRegion {
 public:
     FileRegion() = default;
@@ -54,17 +50,12 @@ public:
         return *reinterpret_cast<T*>(_map + offset);
     }
 
-    template <IOType CurrentIO = IO>
-    void write(std::string_view content, size_t offset = 0) {
-        static_assert(CurrentIO == IOType::RW,
-                      "Cannot write with a IFileRegion (Read only)");
-        std::memcpy(_map + offset, content.data(), content.size());
+    void write(void* buf, size_t size, size_t offset = 0) {
+        std::memcpy(_map + offset, buf, size);
     }
 
-    template <typename T, IOType CurrentIO = IO>
+    template <typename T>
     void write(const T& content, size_t offset = 0) {
-        static_assert(CurrentIO == IOType::RW,
-                      "Cannot write with a IFileRegion (Read only)");
         std::memcpy(_map + offset, &content, sizeof(content));
     }
 
@@ -72,16 +63,6 @@ private:
     char* _map {nullptr};
     size_t _size {};
 };
-
-using IFileRegion = FileRegion<IOType::R>;
-using IOFileRegion = FileRegion<IOType::RW>;
-
-template <typename T>
-concept ReadableFileRegion = std::same_as<T, IFileRegion>
-                          || std::same_as<T, IOFileRegion>;
-
-template <typename T>
-concept WritableFileRegion = std::same_as<T, IOFileRegion>;
 
 }
 

@@ -12,7 +12,7 @@ Path::Path(std::string path)
 FileResult<FileInfo> Path::getFileInfo() const {
     struct ::stat s {};
     if (::stat(_path.c_str(), &s) != 0) {
-        return FileError::result(_path, "Does not exist");
+        return FileError::result(_path.c_str(), "Does not exist");
     }
 
     uint8_t access {};

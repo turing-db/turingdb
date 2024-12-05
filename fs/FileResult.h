@@ -2,48 +2,69 @@
 
 #include "BasicResult.h"
 
-#include "spdlog/fmt/bundled/format.h"
+#include <spdlog/fmt/bundled/format.h>
 
 namespace fs {
 
 class Error {
 public:
-    template <typename... T>
-    explicit Error(fmt::format_string<T...> fmt, T&&... args)
-        : _msg(fmt::format("Filesystem Error: {}",
-                           fmt::format(fmt, std::forward<T>(args)...))) {
+    explicit Error(const char* msg, const char* info = nullptr)
+        : _msg(msg),
+          _info(info)
+    {
     }
 
     [[nodiscard]] std::string_view getMessage() const { return _msg; }
 
+    [[nodiscard]] std::string fmtMessage() const {
+        return _info == nullptr
+                 ? fmt::format("Filesystem error: {}", _msg)
+                 : fmt::format("Filesystem error: {} ({})", _msg, _info);
+    }
+
     template <typename... T>
-    static BadResult<Error> result(fmt::format_string<T...> fmt, T&&... args) {
-        return BadResult(Error(fmt, std::forward<T>(args)...));
+    static BadResult<Error> result(const char* msg,
+                                   const char* info = nullptr) {
+        return BadResult(Error(msg, info));
     }
 
 private:
-    std::string _msg;
+    const char* _msg {nullptr};
+    const char* _info {nullptr};
 };
 
 class FileError {
 public:
-    template <typename... T>
-    explicit FileError(std::string_view path, fmt::format_string<T...> fmt, T&&... args)
+    explicit FileError(const char* path,
+                       const char* msg,
+                       const char* info = nullptr)
         : _path(path),
-          _msg(fmt::format("File error '{}': {}", path, fmt::format(fmt, std::forward<T>(args)...))) {
+          _msg(msg),
+          _info(info)
+    {
     }
 
     [[nodiscard]] std::string_view getPath() const { return _path; }
+    [[nodiscard]] std::string_view getInfo() const { return _info; }
     [[nodiscard]] std::string_view getMessage() const { return _msg; }
 
+    [[nodiscard]] std::string fmtMessage() const {
+        return _info == nullptr
+                 ? fmt::format("File ({}) error: {}", _path, _msg)
+                 : fmt::format("File ({}) error: {} ({})", _path, _msg, _info);
+    }
+
     template <typename... T>
-    static BadResult<FileError> result(std::string_view path, fmt::format_string<T...> fmt, T&&... args) {
-        return BadResult(FileError(path, fmt, std::forward<T>(args)...));
+    static BadResult<FileError> result(const char* path,
+                                       const char* msg,
+                                       const char* info = nullptr) {
+        return BadResult(FileError(path, msg, info));
     }
 
 private:
-    std::string_view _path;
-    std::string _msg;
+    const char* _path;
+    const char* _msg;
+    const char* _info = nullptr;
 };
 
 template <typename T>

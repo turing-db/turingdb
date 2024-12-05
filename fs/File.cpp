@@ -3,61 +3,32 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#include "Panic.h"
+#include "BioAssert.h"
 
 using namespace fs;
 
-template <IOType IO>
-File<IO>::~File() {
+File::~File() {
     if (_fd != -1) {
         ::close(_fd);
     }
 }
 
-template <IOType IO>
-FileResult<File<IO>> File<IO>::open(Path&& path) {
-    auto info = path.getFileInfo();
+FileResult<File> File::open(Path&& path) {
+    int access = O_RDWR | O_CREAT | O_APPEND;
+    int permissions = S_IRUSR | S_IWUSR;
 
-    if constexpr (!WritableFile<File<IO>>) {
-        if (!info) {
-            return info.get_unexpected();
-        }
-    }
-
-    int access = 0;
-    int permissions = 0;
-
-    if constexpr (IO == IOType::R) {
-        access = O_RDONLY;
-        permissions = S_IRUSR;
-    } else if constexpr (IO == IOType::RW) {
-        access = O_WRONLY| O_CREAT | O_TRUNC;
-        permissions = S_IRUSR | S_IWUSR;
-    } else {
-        COMPILE_ERROR("Added an IO Type");
-    }
-    // R  -> Read
-    // RW  -> Write + Create
-    // RA  -> Write + Append + Create
-    // RW -> Read + Write + Create
-    // RC  -> Create (Write + Truncate + Append + Create)
-
-    const int fd = ::open(path.get().data(), access, permissions);
+    const int fd = ::open(path.c_str(), access, permissions);
 
     if (fd == -1) {
-        return FileError::result(path.get(),
-                                 "Could not open file: {}",
+        return FileError::result(path.c_str(),
+                                 "Could not open file",
                                  ::strerror(errno));
     }
 
-    if constexpr (WritableFile<File<IO>>) {
-        if (!info) {
-            info = path.getFileInfo();
-        }
+    const auto info = path.getFileInfo();
 
-        if (!info) {
-            return info.get_unexpected();
-        }
+    if (!info) {
+        return info.get_unexpected();
     }
 
     File file;
@@ -68,11 +39,114 @@ FileResult<File<IO>> File<IO>::open(Path&& path) {
     return std::move(file);
 }
 
-template <IOType IO>
-FileResult<void> File<IO>::close() {
+FileResult<FileRegion> File::map(size_t size, size_t offset) {
+    int prot = PROT_READ | PROT_WRITE;
+
+    char* map = (char*)::mmap(nullptr, size, prot, MAP_SHARED, _fd, offset);
+
+    if (map == MAP_FAILED) {
+        ::close(_fd);
+        return FileError::result(_path.c_str(),
+                                 "Could not map file",
+                                 ::strerror(errno));
+    }
+
+    return FileRegion {map, _info._size};
+}
+
+FileResult<void> File::reopen() {
+    if (auto res = close(); !res) {
+        return res;
+    }
+
+    int access = O_RDWR | O_APPEND;
+    int permissions = S_IRUSR | S_IWUSR;
+
+    _fd = ::open(_path.c_str(), access, permissions);
+
+    if (_fd == -1) {
+        return FileError::result(_path.c_str(),
+                                 "Could not re-open file",
+                                 ::strerror(errno));
+    }
+
+    return refreshInfo();
+}
+
+FileResult<void> File::read(void* buf, size_t size) const {
+    bioassert(size <= std::numeric_limits<int>::max());
+    int nbytes = ::read(_fd, buf, size);
+
+    if (nbytes < 0) {
+        return FileError::result(_path.c_str(),
+                                 "Could not read file",
+                                 ::strerror(errno));
+    }
+
+    if (nbytes != (int)size) {
+        return FileError::result(_path.c_str(), "Could not read entire file");
+    }
+
+    return {};
+}
+
+FileResult<void> File::write(void* data, size_t size) {
+    bioassert(size <= std::numeric_limits<int>::max());
+    int nbytes = ::write(_fd, data, size);
+
+    if (nbytes < 0) {
+        return FileError::result(_path.c_str(),
+                                 "Could not write file",
+                                 ::strerror(errno));
+    }
+
+    if (nbytes != (int)size) {
+        return FileError::result(_path.c_str(), "Could not write entire buffer");
+    }
+
+    return refreshInfo();
+}
+
+FileResult<void> File::clearContent() {
+    if (auto res = this->close(); !res) {
+        return res;
+    }
+
+    int access = O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
+    int permissions = S_IRUSR | S_IWUSR;
+
+    const int fd = ::open(_path.c_str(), access, permissions);
+
+    if (fd == -1) {
+        return FileError::result(_path.c_str(),
+                                 "Could clear file content",
+                                 ::strerror(errno));
+    }
+
+    _fd = fd;
+
+    return refreshInfo();
+
+    return {};
+}
+
+FileResult<void> File::refreshInfo() {
+    const auto info = _path.getFileInfo();
+
+    if (!info) {
+        return info.get_unexpected();
+    }
+
+    _info = info.value();
+
+    return {};
+}
+
+
+FileResult<void> File::close() {
     if (::close(_fd) != 0) {
-        return FileError::result(_path.get(),
-                                 "Could not close file: {}",
+        return FileError::result(_path.c_str(),
+                                 "Could not close file",
                                  ::strerror(errno));
     }
 
@@ -81,28 +155,3 @@ FileResult<void> File<IO>::close() {
     return {};
 }
 
-template <IOType IO>
-FileResult<FileRegion<IO>> File<IO>::map() {
-    int prot = 0;
-    if constexpr (IO == IOType::R) {
-        prot = PROT_READ;
-    } else if constexpr (IO == IOType::RW) {
-        prot = PROT_READ | PROT_WRITE;
-    } else {
-        ([]<bool flag = false> { static_assert(flag); })();
-    }
-
-    char* map = (char*)mmap(nullptr, _info._size, prot, MAP_SHARED, _fd, 0);
-
-    if (map == MAP_FAILED) {
-        ::close(_fd);
-        return FileError::result(_path.get(),
-                                 "Could not map file: {}",
-                                 ::strerror(errno));
-    }
-
-    return FileRegion<IO> {map, _info._size};
-}
-
-template class fs::File<IOType::R>;
-template class fs::File<IOType::RW>;

@@ -1,8 +1,9 @@
-set(SAMPLE_NAME fs-aio)
+set(SAMPLE_NAME fs-reader-writer)
 set(SOURCES     main.cpp)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
 target_link_libraries(${SAMPLE_NAME}
-    PRIVATE turing_db2_core_s
+    PRIVATE common_s
+            turing_log_s
             turing_fs_s)
