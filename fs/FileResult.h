@@ -62,9 +62,9 @@ public:
     }
 
 private:
-    const char* _path;
-    const char* _msg;
-    const char* _info = nullptr;
+    const char* _path {nullptr};
+    const char* _msg {nullptr};
+    const char* _info {nullptr};
 };
 
 template <typename T>

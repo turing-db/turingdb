@@ -14,8 +14,8 @@ File::~File() {
 }
 
 FileResult<File> File::open(Path&& path) {
-    int access = O_RDWR | O_CREAT | O_APPEND;
-    int permissions = S_IRUSR | S_IWUSR;
+    const int access = O_RDWR | O_CREAT | O_APPEND;
+    const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
 
@@ -40,7 +40,7 @@ FileResult<File> File::open(Path&& path) {
 }
 
 FileResult<FileRegion> File::map(size_t size, size_t offset) {
-    int prot = PROT_READ | PROT_WRITE;
+    const int prot = PROT_READ | PROT_WRITE;
 
     char* map = (char*)::mmap(nullptr, size, prot, MAP_SHARED, _fd, offset);
 
@@ -59,8 +59,8 @@ FileResult<void> File::reopen() {
         return res;
     }
 
-    int access = O_RDWR | O_APPEND;
-    int permissions = S_IRUSR | S_IWUSR;
+    const int access = O_RDWR | O_APPEND;
+    const int permissions = S_IRUSR | S_IWUSR;
 
     _fd = ::open(_path.c_str(), access, permissions);
 
@@ -74,34 +74,41 @@ FileResult<void> File::reopen() {
 }
 
 FileResult<void> File::read(void* buf, size_t size) const {
-    bioassert(size <= std::numeric_limits<int>::max());
-    int nbytes = ::read(_fd, buf, size);
+    bioassert(size <= std::numeric_limits<ssize_t>::max());
 
-    if (nbytes < 0) {
-        return FileError::result(_path.c_str(),
-                                 "Could not read file",
-                                 ::strerror(errno));
-    }
+    while (size != 0) {
+        const ssize_t nbytes = ::read(_fd, buf, size);
 
-    if (nbytes != (int)size) {
-        return FileError::result(_path.c_str(), "Could not read entire file");
+        if (nbytes < 0) {
+            return FileError::result(_path.c_str(),
+                                     "Could not read file",
+                                     ::strerror(errno));
+        }
+
+        if (nbytes == 0) {
+            // EOF
+            break;
+        }
+
+        size -= nbytes;
     }
 
     return {};
 }
 
 FileResult<void> File::write(void* data, size_t size) {
-    bioassert(size <= std::numeric_limits<int>::max());
-    int nbytes = ::write(_fd, data, size);
+    bioassert(size <= std::numeric_limits<ssize_t>::max());
 
-    if (nbytes < 0) {
-        return FileError::result(_path.c_str(),
-                                 "Could not write file",
-                                 ::strerror(errno));
-    }
+    while (size != 0) {
+        const ssize_t nbytes = ::write(_fd, data, size);
 
-    if (nbytes != (int)size) {
-        return FileError::result(_path.c_str(), "Could not write entire buffer");
+        if (nbytes < 0) {
+            return FileError::result(_path.c_str(),
+                                     "Could not write file",
+                                     ::strerror(errno));
+        }
+
+        size -= nbytes;
     }
 
     return refreshInfo();
@@ -112,8 +119,8 @@ FileResult<void> File::clearContent() {
         return res;
     }
 
-    int access = O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
-    int permissions = S_IRUSR | S_IWUSR;
+    const int access = O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
+    const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(_path.c_str(), access, permissions);
 
@@ -126,8 +133,6 @@ FileResult<void> File::clearContent() {
     _fd = fd;
 
     return refreshInfo();
-
-    return {};
 }
 
 FileResult<void> File::refreshInfo() {
