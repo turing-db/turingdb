@@ -3,6 +3,7 @@ include(GoogleTest)
 
 add_subdirectory(testutils)
 add_subdirectory(common)
+add_subdirectory(fs)
 add_subdirectory(db)
 add_subdirectory(import)
 add_subdirectory(formats)

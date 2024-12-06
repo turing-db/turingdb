@@ -5,7 +5,16 @@
 #include "LogSetup.h"
 #include "PerfStat.h"
 
-class TuringTest: public ::testing::Test {
+class TuringTest : public ::testing::Test {
+public:
+    TuringTest() = default;
+    ~TuringTest() override = default;
+
+    TuringTest(const TuringTest&) = delete;
+    TuringTest(TuringTest&&) = delete;
+    TuringTest& operator=(const TuringTest&) = delete;
+    TuringTest& operator=(TuringTest&&) = delete;
+
 protected:
     void SetUp() final {
         const testing::TestInfo* const testInfo =
