@@ -11,11 +11,11 @@
 
 namespace fs {
 
+template <size_t BufferSizeT = 1024ul * 1024>
 class FileWriter {
 public:
     using Byte = uint8_t;
-
-    static constexpr size_t BUFFER_SIZE = 1024ul * 1024;
+    static constexpr size_t BUFFER_SIZE = BufferSizeT;
 
     FileWriter() = default;
 
