@@ -26,7 +26,7 @@ public:
         return *ptr;
     }
 
-    template <TrivialPrimitive T>
+    template <TrivialNonCharPrimitive T>
     std::span<const T> get(size_t count) {
         const auto* ptr = reinterpret_cast<const T*>(_data);
         _data += sizeof(T) * count;

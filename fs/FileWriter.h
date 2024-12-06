@@ -42,8 +42,8 @@ public:
         std::memcpy(ptr + prevSize, &v, size);
     }
 
-    template <TrivialPrimitive T>
-    void write(std::span<T> span) {
+    template <TrivialPrimitive T, size_t SpanSizeT>
+    void write(std::span<T, SpanSizeT> span) {
         flush();
 
         if (_error.has_value()) {

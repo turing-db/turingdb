@@ -18,9 +18,10 @@ concept CharPrimitive = std::same_as<T, char>
                      || std::same_as<T, char32_t>;
 
 template <typename T>
-concept TrivialPrimitive = (std::integral<T>
-                            || std::floating_point<T>
-                            || std::same_as<T, bool>)
-                        && !CharPrimitive<T>;
+concept TrivialPrimitive = std::is_trivial_v<T>
+                        && std::is_standard_layout_v<T>;
+
+template <typename T>
+concept TrivialNonCharPrimitive = TrivialPrimitive<T> && !CharPrimitive<T>;
 
 }
