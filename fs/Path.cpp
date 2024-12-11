@@ -100,6 +100,27 @@ std::string_view Path::filename() const {
     return std::string_view {_path}.substr(pos + 1);
 }
 
+std::string_view Path::basename() const {
+    const std::string_view fname = filename();
+    const auto pos = _path.find_last_of('.');
+
+    if (pos == std::string::npos) {
+        return fname;
+    }
+
+    return std::string_view{_path}.substr(0, pos);
+}
+
+std::string_view Path::extension() const {
+    const auto pos = _path.find_last_of('.');
+
+    if (pos == std::string::npos) {
+        return "";
+    }
+
+    return std::string_view{_path}.substr(pos);
+}
+
 FileResult<void> Path::mkdir() {
     if (exists()) {
         return FileError::result(_path.c_str(), "Cannot mkdir, already exists");

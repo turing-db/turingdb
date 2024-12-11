@@ -1,5 +1,3 @@
-#include <memory>
-
 #include "gtest/gtest.h"
 
 #include "SystemManager.h"
