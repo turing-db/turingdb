@@ -38,7 +38,7 @@ endif
 
 .PHONY: test
 test:
-	cd $(BUILD_DIR) && ctest --output-junit ../unit_tests.xml --force-new-ctest-process 
+	cd $(BUILD_DIR) && ctest --output-on-failure --output-junit ../unit_tests.xml --force-new-ctest-process
 regress:
 	cd $(SRC_DIR)/test/regress && wrt -output-on-failure -j 4
 run_samples:

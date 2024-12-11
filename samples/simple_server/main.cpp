@@ -2,6 +2,7 @@
 
 #include <argparse.hpp>
 
+#include "DBServerConfig.h"
 #include "PipeUtils.h"
 
 #include "ToolInit.h"

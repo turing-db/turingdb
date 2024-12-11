@@ -39,6 +39,7 @@ TEST_F(ServerTest, queryEndpointOK) {
         const std::string url = serverConfig.getURL()+"/query";
         const std::string query = "SELECT * FROM n:";
 
+        spdlog::info("Fetching url: {:?}", url);
         const auto res = client.fetch(url, query, _buffer);
 
         if (res != Status::OK) {
@@ -83,6 +84,7 @@ TEST_F(ServerTest, queryEndpointOK) {
 
         const std::string url = serverConfig.getURL()+endpoint;
 
+        spdlog::info("Fetching url: {:?}", url);
         const auto res = client.fetch(url, "hello", _buffer);
         if (res != Status::NOT_FOUND) {
             spdlog::error("Endpoint {} status={}",
@@ -95,7 +97,7 @@ TEST_F(ServerTest, queryEndpointOK) {
     };
 
     std::thread serverThread([&]() {
-        sample.startHttpServer();
+        ASSERT_TRUE(sample.startHttpServer());
     });
 
     std::thread clientThread([&]() {

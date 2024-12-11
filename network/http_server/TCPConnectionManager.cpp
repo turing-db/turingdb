@@ -11,7 +11,8 @@
 using namespace net;
 
 TCPConnectionManager::TCPConnectionManager(ServerContext& ctxt)
-    : _ctxt(ctxt) {
+    : _ctxt(ctxt)
+{
 }
 
 void TCPConnectionManager::process(AbstractThreadContext* threadContext,

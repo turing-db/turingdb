@@ -17,7 +17,7 @@ public:
     PipeSample(const std::string& sampleName);
     ~PipeSample();
 
-    db::DBServerConfig& getServerConfig() { return _serverConfig; }
+    db::DBServerConfig& getServerConfig() { return *_serverConfig; }
     db::DBServer* getServer() const { return _server.get(); }
 
     std::string getTuringHome() const;
@@ -27,11 +27,11 @@ public:
 
     bool executeQuery(const std::string& queryStr);
 
-    void startHttpServer();
+    bool startHttpServer();
 
 private:
     std::string _sampleName;
-    db::DBServerConfig _serverConfig;
+    db::DBServerConfig* _serverConfig;
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<db::DBServer> _server;
     db::SystemManager* _system {nullptr};

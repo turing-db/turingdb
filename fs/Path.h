@@ -23,6 +23,25 @@ public:
     [[nodiscard]] const std::string& get() const { return _path; }
     [[nodiscard]] const char* c_str() const { return _path.c_str(); }
     [[nodiscard]] Path copy() const { return Path(_path); }
+    [[nodiscard]] bool exists() const { return getFileInfo().has_value(); }
+    [[nodiscard]] FileResult<std::vector<Path>> listDir() const;
+    [[nodiscard]] std::string_view filename() const;
+    [[nodiscard]] std::string_view basename() const;
+    [[nodiscard]] std::string_view extension() const;
+
+    [[nodiscard]] Path operator/(std::string_view rhs) const {
+        std::string p = _path + "/";
+        p += rhs;
+        return Path(std::move(p));
+    };
+
+    Path& operator/=(const std::string_view rhs) {
+        _path += "/";
+        _path += rhs;
+        return *this;
+    }
+
+    [[nodiscard]] FileResult<void> mkdir();
 
 private:
     std::string _path;

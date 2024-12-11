@@ -38,7 +38,7 @@ public:
     void setWorkerCount(uint32_t count) { _workerCount = count; };
     void setMaxConnections(uint32_t count) { _maxConnections = count; }
 
-    std::string_view getAddress() const { return {_actualAddress.data(), _actualAddress.size()}; };
+    std::string_view getAddress() const { return {_actualAddress.data()}; };
     uint32_t getPort() const { return _port; };
 
 private:

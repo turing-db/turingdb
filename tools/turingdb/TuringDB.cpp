@@ -12,7 +12,8 @@ int main(int argc, const char** argv) {
 
     auto& argParser = toolInit.getArgParser();
 
-    DBServerConfig config;
+    auto config = std::make_unique<DBServerConfig>();
+    config->setHome();
 
     bool nodemon = true;
     argParser.add_argument("-nodemon")
@@ -23,18 +24,18 @@ int main(int argc, const char** argv) {
 
     argParser.add_argument("-p")
         .default_value((uint32_t)6666)
-        .store_into(config._port)
+        .store_into(config->_port)
         .nargs(1)
         .help("Listening port");
 
     argParser.add_argument("-j")
         .default_value((uint32_t)8)
-        .store_into(config._workerCount)
+        .store_into(config->_workerCount)
         .nargs(1)
         .help("Number of threads");
 
     argParser.add_argument("-c")
-        .store_into(config._maxConnections)
+        .store_into(config->_maxConnections)
         .default_value((uint32_t)1024)
         .nargs(1)
         .help("Maximum number of concurrent connections before starting to close existing ones");
@@ -47,7 +48,7 @@ int main(int argc, const char** argv) {
     }
 
     // Database server
-    DBServer server(config);
+    DBServer server(std::move(config));
     server.start();
 
     return EXIT_SUCCESS;

@@ -163,6 +163,16 @@ public:
         _chunk.increment(1);
     }
 
+    void write(std::floating_point auto value) {
+        const auto str = std::to_string(value);
+        write(str);
+    }
+
+    void write(std::signed_integral auto value) {
+        const auto str = std::to_string(value);
+        write(str);
+    }
+
     void write(std::unsigned_integral auto value) {
         if (_errorOccured) {
             return;

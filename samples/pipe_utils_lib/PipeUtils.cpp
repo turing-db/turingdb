@@ -22,7 +22,6 @@
 
 #include "DBServerContext.h"
 #include "DBServerProcessor.h"
-#include "Server.h"
 
 #include "Time.h"
 #include "LogUtils.h"
@@ -42,8 +41,11 @@ PipeSample::PipeSample(const std::string& sampleName)
 
     _jobSystem = std::make_unique<JobSystem>();
     _jobSystem->initialize();
-    
-    _server = std::make_unique<DBServer>(_serverConfig);
+
+    auto config = std::make_unique<DBServerConfig>();
+    config->setHome();
+    _serverConfig = config.get();
+    _server = std::make_unique<DBServer>(std::move(config));
     _system = _server->getSystemManager();
 
     QueryInterpreter::init();
@@ -194,6 +196,6 @@ void PipeSample::createSimpleGraph() {
     builder->commit(*_jobSystem);
 }
 
-void PipeSample::startHttpServer() {
-    _server->start();
+bool PipeSample::startHttpServer() {
+    return _server->start();
 }
