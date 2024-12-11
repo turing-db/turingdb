@@ -22,7 +22,6 @@
 
 #include "DBServerContext.h"
 #include "DBServerProcessor.h"
-#include "Server.h"
 
 #include "Time.h"
 #include "LogUtils.h"
@@ -44,6 +43,7 @@ PipeSample::PipeSample(const std::string& sampleName)
     _jobSystem->initialize();
 
     auto config = std::make_unique<DBServerConfig>();
+    config->setHome();
     _serverConfig = config.get();
     _server = std::make_unique<DBServer>(std::move(config));
     _system = _server->getSystemManager();

@@ -13,6 +13,7 @@ int main(int argc, const char** argv) {
     auto& argParser = toolInit.getArgParser();
 
     auto config = std::make_unique<DBServerConfig>();
+    config->setHome();
 
     bool nodemon = true;
     argParser.add_argument("-nodemon")
