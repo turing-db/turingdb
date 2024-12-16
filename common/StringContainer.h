@@ -60,12 +60,6 @@ public:
     ViewVector::const_iterator end() const { return _views.end(); }
 
 private:
-    struct StringRepr {
-        size_t _offset {};
-        size_t _size {};
-        size_t _bucket {};
-    };
-
     std::vector<std::vector<char>> _buckets;
     size_t _remainingSize = BUCKET_SIZE;
     ViewVector _views;
