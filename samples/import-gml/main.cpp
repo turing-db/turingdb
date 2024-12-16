@@ -42,8 +42,8 @@ int main() {
             const auto* edge = rd.getEdge(id);
             const auto src = rd.getNodeView(edge->_nodeID);
             const auto tgt = rd.getNodeView(edge->_otherID);
-            const std::string& srcName = src.properties().getProperty<types::String>(0);
-            const std::string& tgtName = tgt.properties().getProperty<types::String>(0);
+            std::string_view srcName = src.properties().getProperty<types::String>(0);
+            std::string_view tgtName = tgt.properties().getProperty<types::String>(0);
             fmt::print("[Edge \"{}\" from={} to={}]\n", it.get(), srcName, tgtName);
         }
     }

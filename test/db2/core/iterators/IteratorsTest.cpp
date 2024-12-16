@@ -37,7 +37,7 @@ protected:
         FileUtils::createDirectory(_outDir);
         LogSetup::setupLogFileBacked(_logPath.string());
 
-        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem = std::make_unique<JobSystem>(1);
         _jobSystem->initialize();
         _db = new DB();
 
@@ -457,8 +457,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const std::string& v : reader.scanNodeProperties<types::String>(1)) {
-            ASSERT_STREQ(it->data(), v.c_str());
+        for (std::string_view v : reader.scanNodeProperties<types::String>(1)) {
+            ASSERT_TRUE(*it == v);
             count++;
             it++;
         }
@@ -496,8 +496,8 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const std::string& v : reader.scanEdgeProperties<types::String>(1)) {
-            ASSERT_STREQ(it->data(), v.c_str());
+        for (std::string_view v : reader.scanEdgeProperties<types::String>(1)) {
+            ASSERT_TRUE(*it == v);
             count++;
             it++;
         }
@@ -533,8 +533,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const std::string& v : reader.scanNodePropertiesByLabel<types::String>(1, &labelset)) {
-            ASSERT_STREQ(it->data(), v.c_str());
+        for (std::string_view v : reader.scanNodePropertiesByLabel<types::String>(1, &labelset)) {
+            ASSERT_TRUE(*it == v);
             count++;
             it++;
         }
@@ -617,8 +617,9 @@ TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const std::string& v : reader.getNodeProperties<types::String>(1, &inputNodeIDs)) {
-            ASSERT_STREQ(it->data(), v.c_str());
+        for (std::string_view v : reader.getNodeProperties<types::String>(1, &inputNodeIDs)) {
+            spdlog::info("{} ?= {}", *it, v);
+            ASSERT_TRUE(*it == v);
             count++;
             it++;
         }
