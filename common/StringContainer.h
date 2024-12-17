@@ -8,7 +8,7 @@
 
 class StringContainer {
 public:
-    static constexpr size_t BUCKET_SIZE = 13;
+    static constexpr size_t BUCKET_SIZE = 2ul * 1024;
     using ViewVector = std::vector<std::string_view>;
 
     StringContainer()
