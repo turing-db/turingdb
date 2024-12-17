@@ -271,7 +271,6 @@ void VMSample::printOutput(std::initializer_list<std::string_view> colNames,
             PRINT_CASE(ColumnVector<types::Int64::Primitive>)
             PRINT_CASE(ColumnVector<types::Double::Primitive>)
             PRINT_CASE(ColumnVector<types::String::Primitive>)
-            PRINT_CASE(ColumnVector<types::String::PrimitiveView>)
             PRINT_CASE(ColumnVector<types::Bool::Primitive>)
             default: {
                 panic("Printing column of type {} is not supported", col->getKind());

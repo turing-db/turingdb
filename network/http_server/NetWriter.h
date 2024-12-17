@@ -9,6 +9,7 @@
 #include "HTTP.h"
 #include "Utils.h"
 #include "ConnectionHeader.h"
+#include "spdlog/spdlog.h"
 
 namespace net {
 
@@ -142,6 +143,9 @@ public:
         }
 
         if (content.size() > _chunk._remaining) {
+            if (content.size() > _maxChunkSize) {
+                spdlog::info("String does not fit in buffer:\n{}", content.size());
+            }
             msgbioassert(content.size() <= _maxChunkSize, "String does not fit in buffer");
             flush();
         }
