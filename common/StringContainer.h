@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstring>
-#include <span>
 #include <vector>
 #include <string_view>
 
@@ -9,7 +8,7 @@
 
 class StringContainer {
 public:
-    static constexpr size_t BUCKET_SIZE = 1024ul * 16;
+    static constexpr size_t BUCKET_SIZE = 13;
     using ViewVector = std::vector<std::string_view>;
 
     StringContainer()
@@ -19,20 +18,31 @@ public:
     }
 
     ~StringContainer() = default;
-    StringContainer(StringContainer&& other) = default;
-    StringContainer& operator=(StringContainer&& other) = default;
+    StringContainer(StringContainer&& other) noexcept = default;
+    StringContainer& operator=(StringContainer&& other) noexcept = default;
     StringContainer(const StringContainer& other) = delete;
     StringContainer& operator=(const StringContainer& other) = delete;
 
     void alloc(std::string_view content) {
         if (_remainingSize < content.size()) {
-            _remainingSize = BUCKET_SIZE;
-            auto& chars = _buckets.emplace_back();
-            chars.resize(BUCKET_SIZE);
+            if (content.size() > BUCKET_SIZE) {
+                auto& chars = _buckets.emplace_back();
+                chars.resize(content.size());
+                std::memcpy(chars.data(), content.data(), content.size());
+                _views.push_back({chars.data(), content.size()});
+
+                _remainingSize = 0;
+                return;
+            } else {
+                _remainingSize = BUCKET_SIZE;
+                auto& chars = _buckets.emplace_back();
+                chars.resize(BUCKET_SIZE);
+            }
         }
 
         auto& chars = _buckets.back();
         const size_t offset = chars.size() - _remainingSize;
+        _remainingSize -= content.size();
 
         std::memcpy(chars.data() + offset, content.data(), content.size());
         _views.push_back({chars.data() + offset, content.size()});
