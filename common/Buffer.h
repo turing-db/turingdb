@@ -6,7 +6,7 @@
 
 class Buffer {
 public:
-    static constexpr size_t BUFFER_SIZE = 40ul*1024;
+    static constexpr size_t BUFFER_SIZE = 1024ul * 1024;
 
     Buffer();
     ~Buffer();
