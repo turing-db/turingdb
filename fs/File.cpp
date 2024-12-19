@@ -41,8 +41,11 @@ FileResult<File> File::open(Path&& path) {
 
 FileResult<FileRegion> File::map(size_t size, size_t offset) {
     const int prot = PROT_READ | PROT_WRITE;
+    static const size_t pageSize = sysconf(_SC_PAGE_SIZE);
+    const size_t alignment = (offset / pageSize) * pageSize;
+    const size_t alignmentOffset = (offset % pageSize);
 
-    char* map = (char*)::mmap(nullptr, size, prot, MAP_SHARED, _fd, offset);
+    char* map = (char*)::mmap(nullptr, size + alignmentOffset, prot, MAP_SHARED, _fd, alignment);
 
     if (map == MAP_FAILED) {
         ::close(_fd);
@@ -51,7 +54,7 @@ FileResult<FileRegion> File::map(size_t size, size_t offset) {
                                  ::strerror(errno));
     }
 
-    return FileRegion {map, _info._size};
+    return FileRegion {map, size, alignmentOffset};
 }
 
 FileResult<void> File::reopen() {

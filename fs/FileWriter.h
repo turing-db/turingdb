@@ -120,6 +120,8 @@ public:
     const std::vector<uint8_t>& getBuffer() const { return _buffer; }
     bool errorOccured() const { return _error.has_value(); }
     const std::optional<FileError>& error() const { return _error; }
+    File& file() { return *_file; }
+    const File& file() const { return *_file; }
 
 private:
     File* _file {nullptr};
