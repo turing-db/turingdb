@@ -1,7 +1,7 @@
 #include "Graph.h"
 #include "DBView.h"
 #include "DBReader.h"
-#include "DBMetadata.h"
+#include "GraphMetadata.h"
 #include "DBReport.h"
 #include "FileUtils.h"
 #include "JobSystem.h"

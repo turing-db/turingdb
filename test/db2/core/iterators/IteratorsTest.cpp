@@ -3,7 +3,7 @@
 #include "Graph.h"
 #include "DBView.h"
 #include "DBReader.h"
-#include "DBMetadata.h"
+#include "GraphMetadata.h"
 #include "DataPartBuilder.h"
 #include "FileUtils.h"
 #include "JobSystem.h"

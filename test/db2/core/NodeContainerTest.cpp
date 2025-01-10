@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "DBMetadata.h"
+#include "GraphMetadata.h"
 #include "EntityID.h"
 #include "NodeContainer.h"
 
@@ -14,7 +14,7 @@ protected:
     void TearDown() override {
     }
 
-    DBMetadata _metadata;
+    GraphMetadata _metadata;
 };
 
 TEST_F(NodeContainerTest, UnsortedFail) {
