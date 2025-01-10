@@ -100,19 +100,59 @@ public:
     static constexpr size_t Capacity = CapacityT;
 
     explicit AlignedBufferIterator(const AlignedBuffer<CapacityT>& buf)
-        : _buf(buf),
+        : _buf(&buf),
           _data(buf.data())
     {
     }
 
     AlignedBufferIterator(const AlignedBuffer<CapacityT>& buf, size_t offset)
-        : _buf(buf),
+        : _buf(&buf),
           _data(buf.data() + offset)
     {
     }
 
+    ~AlignedBufferIterator() = default;
+
+    AlignedBufferIterator(const AlignedBufferIterator& other)
+        : _buf(other._buf),
+          _data(other._data)
+    {
+    }
+
+    AlignedBufferIterator(AlignedBufferIterator&& other) noexcept
+        : _buf(other._buf),
+          _data(other._data)
+    {
+        other._buf = nullptr;
+        other._data = nullptr;
+    }
+
+    AlignedBufferIterator& operator=(const AlignedBufferIterator& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        _buf = other._buf;
+        _data = other._data;
+
+        return *this;
+    }
+
+    AlignedBufferIterator& operator=(AlignedBufferIterator&& other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        _buf = other._buf;
+        _data = other._data;
+        other._buf = nullptr;
+        other._data = nullptr;
+
+        return *this;
+    }
+
     void reset() {
-        _data = _buf.data();
+        _data = _buf->data();
     }
 
     template <TrivialPrimitive T>
@@ -137,11 +177,11 @@ public:
     }
 
     [[nodiscard]] AlignedBufferIterator begin() const {
-        return AlignedBufferIterator {_buf};
+        return AlignedBufferIterator {*_buf};
     }
 
     [[nodiscard]] AlignedBufferIterator end() const {
-        return AlignedBufferIterator {_buf, _buf.size()};
+        return AlignedBufferIterator {*_buf, _buf->size()};
     }
 
     void increment(size_t offset) {
@@ -176,8 +216,10 @@ public:
         return _data != other._data;
     }
 
+    const Byte* data() const { return _data; }
+
 private:
-    const AlignedBuffer<CapacityT>& _buf;
+    const AlignedBuffer<CapacityT>* _buf;
     const Byte* _data {nullptr};
 };
 

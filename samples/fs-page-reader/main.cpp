@@ -15,7 +15,8 @@
 namespace {
 
 using Integer = uint64_t;
-inline constexpr size_t INTEGER_COUNT = 1024ul * 1024 * 128; // 1GB
+inline constexpr size_t INTEGER_COUNT = 1024ul * 1024 * 128 + 7; // 1GB + 7B
+inline constexpr size_t SUM = INTEGER_COUNT * (INTEGER_COUNT + 1) / 2 - INTEGER_COUNT;
 
 int writeFileContent(const fs::Path& path) {
     // Open file
@@ -40,10 +41,6 @@ int writeFileContent(const fs::Path& path) {
     std::vector<Integer> integers(INTEGER_COUNT);
     std::iota(integers.begin(), integers.end(), 0);
     writer.write(std::span {integers});
-
-    // Write Hello world
-    std::string str = "Hello world!";
-    writer.write(str);
     writer.flush();
 
     file->close();
@@ -75,6 +72,8 @@ int main() {
 
     fmt::print("- Iterating buffer\n");
     fs::AlignedBufferIterator it = reader->begin();
+    fs::AlignedBufferIterator end = reader->end();
+
     fmt::print("- FirstValue: {}\n", it.get<int>());
     fmt::print("- SecondValue: {}\n", it.get<int>());
     fmt::print("- First 10 Integers:");
@@ -89,21 +88,37 @@ int main() {
 
     size_t bytesRead = 0;
     const auto t0 = Clock::now();
-    while (!reader->reachedEnd()) {
-        auto end = it.end();
 
+    for (;;) {
         while (it != end) {
             sum += it.get<Integer>();
         }
 
         bytesRead += reader->getBuffer().size();
+
+        if (reader->reachedEnd()) {
+            break;
+        }
+
         reader->nextPage();
+        it = reader->begin();
+        end = reader->end();
+
+        if (reader->errorOccured()) {
+            fmt::print("{}\n", reader.error().fmtMessage());
+            return 1;
+        }
     }
     const auto t1 = Clock::now();
 
     const float duration = Seconds(t1 - t0).count();
 
     fmt::print("- Sum: {}\n", sum);
+    if (sum != SUM) {
+        fmt::print("Error: Sum is {}, should be {}\n", sum, SUM);
+        return 1;
+    }
+
     fmt::print("- Elapsed time: {} s\n", duration);
     fmt::print("- Read speed: {} MiB/s\n", (float)bytesRead / duration / 1024.0f / 1024.0f);
 
