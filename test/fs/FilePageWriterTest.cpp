@@ -52,6 +52,7 @@ TEST_F(FilePageWriterTest, HardwareChecks) {
 }
 
 TEST_F(FilePageWriterTest, Pages) {
+    testOnes<uint64_t>(0);
     testOnes<uint64_t>(7);
     testOnes<uint64_t>(512);
     testOnes<uint64_t>(1024);
@@ -59,4 +60,47 @@ TEST_F(FilePageWriterTest, Pages) {
     testOnes<uint64_t>(1024ul * 1024 + 7);
     testOnes<uint64_t>(1024ul * 1024 * 2); // Exactly two pages (2MiB * sizeof(uint64_t))
     testOnes<uint64_t>(1024ul * 1024 * 2 + 7);
+}
+
+TEST_F(FilePageWriterTest, Types) {
+    testOnes<uint8_t>(0);
+    testOnes<uint8_t>(7);
+    testOnes<uint8_t>(512);
+    testOnes<uint8_t>(1024);
+    testOnes<uint8_t>(1024ul * 1024);
+    testOnes<uint8_t>(1024ul * 1024 + 7);
+    testOnes<uint8_t>(1024ul * 1024 * 2);
+    testOnes<uint8_t>(1024ul * 1024 * 2 + 7);
+
+    testOnes<int8_t>(7);
+    testOnes<int8_t>(512);
+    testOnes<int8_t>(1024);
+    testOnes<int8_t>(1024ul * 1024);
+    testOnes<int8_t>(1024ul * 1024 + 7);
+    testOnes<int8_t>(1024ul * 1024 * 2);
+    testOnes<int8_t>(1024ul * 1024 * 2 + 7);
+
+    {
+        constexpr std::string_view helloWorld = "Hello world!";
+        {
+            auto writer = fs::FilePageWriter::open(_testfilePath);
+            ASSERT_TRUE(writer.has_value());
+            writer->write(helloWorld);
+        }
+
+        {
+            auto f = fs::File::open(_testfilePath);
+            ASSERT_TRUE(f);
+
+            fs::FileReader reader;
+            reader.setFile(&f.value());
+            reader.read();
+            ASSERT_FALSE(reader.errorOccured());
+
+            auto it = reader.iterateBuffer();
+
+            std::string_view str = it.get<char>(helloWorld.size());
+            ASSERT_TRUE(str == helloWorld);
+        }
+    }
 }
