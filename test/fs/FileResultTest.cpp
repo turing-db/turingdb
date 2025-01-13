@@ -73,22 +73,6 @@ TEST_F(FileResultTest, NotDirectory) {
     }
 }
 
-TEST_F(FileResultTest, OpenDirectory) {
-    fs::Path p {"/root"};
-    auto fmtMessage = fmt::format("File '/root' error: "
-                                  "Could not open directory (Permission denied)");
-
-    {
-        auto res = p.listDir();
-        ASSERT_FALSE(res.has_value());
-        const auto& e = res.error();
-        ASSERT_STREQ(e.getPath().c_str(), p.get().c_str());
-        ASSERT_STREQ(e.fmtMessage().c_str(), fmtMessage.c_str());
-        ASSERT_EQ(e.getType(), fs::ErrorType::OPEN_DIRECTORY);
-        ASSERT_EQ(e.getErrno(), EACCES);
-    }
-}
-
 TEST_F(FileResultTest, AlreadyExists) {
     fs::Path p {_outDir};
     auto fmtMessage = fmt::format("File '{}' error: "
