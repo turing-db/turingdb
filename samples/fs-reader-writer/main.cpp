@@ -19,7 +19,7 @@ int main() {
     fmt::print("- File: {}\n", p.get());
 
     // Open file
-    auto fileRes = fs::File::open(std::move(p));
+    auto fileRes = fs::File::open(p);
     if (!fileRes) {
         fmt::print("{}\n", fileRes.error().fmtMessage());
         return 1;
@@ -53,7 +53,14 @@ int main() {
     writer.flush();
 
     // Reopen file (start back at the beginning + resets info);
-    CHECK_RES(file.reopen());
+    CHECK_RES(file.close());
+    auto reopenRes = fs::File::open(p);
+    if (!reopenRes) {
+        fmt::print("{}\n", reopenRes.error().fmtMessage());
+        return 1;
+    }
+
+    file = reopenRes.value();
 
     // Store whole content of file into buffer
     reader.read();

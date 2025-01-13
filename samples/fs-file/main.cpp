@@ -9,7 +9,7 @@
 int main() {
     fs::Path p {SAMPLE_DIR "/test"};
 
-    auto file = fs::File::open(std::move(p));
+    auto file = fs::File::open(p);
     if (!file) {
         fmt::print("{}\n", file.error().fmtMessage());
         return 1;
@@ -23,14 +23,18 @@ int main() {
     std::string hello = "Hello world!\n";
 
     CHECK_RES(file->write(hello.data(), hello.size()));
-    CHECK_RES(file->reopen());
+    CHECK_RES(file->close());
+
+    file = fs::File::open(p);
+    if (!file) {
+        fmt::print("{}\n", file.error().fmtMessage());
+        return 1;
+    }
 
     std::string fileContent;
     fileContent.resize(file->getInfo()._size);
 
     CHECK_RES(file->read(fileContent.data(), fileContent.size()));
-
-    fmt::print("- Content: {:?}\n", fileContent);
 
     return 0;
 }

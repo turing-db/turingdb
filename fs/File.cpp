@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "BioAssert.h"
 
@@ -13,14 +14,14 @@ File::~File() {
     }
 }
 
-FileResult<File> File::open(Path path) {
+Result<File> File::open(const Path& path) {
     const int access = O_RDWR | O_CREAT | O_APPEND;
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
 
     if (fd == -1) {
-        return FileError::result((std::string&&)path, ErrorType::OPEN_FILE, errno);
+        return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
     const auto info = path.getFileInfo();
@@ -31,13 +32,12 @@ FileResult<File> File::open(Path path) {
 
     File file;
     file._fd = fd;
-    file._path = std::move(path);
     file._info = info.value();
 
     return std::move(file);
 }
 
-FileResult<FileRegion> File::map(size_t size, size_t offset) {
+Result<FileRegion> File::map(size_t size, size_t offset) {
     const int prot = PROT_READ | PROT_WRITE;
     static const size_t pageSize = sysconf(_SC_PAGE_SIZE);
     const size_t alignment = (offset / pageSize) * pageSize;
@@ -46,38 +46,22 @@ FileResult<FileRegion> File::map(size_t size, size_t offset) {
     char* map = (char*)::mmap(nullptr, size + alignmentOffset, prot, MAP_SHARED, _fd, alignment);
 
     if (map == MAP_FAILED) {
+        const int err = errno;
         ::close(_fd);
-        return FileError::result(_path.get(), ErrorType::MAP, errno);
+        return Error::result(ErrorType::MAP, err);
     }
 
     return FileRegion {map, size, alignmentOffset};
 }
 
-FileResult<void> File::reopen() {
-    if (auto res = close(); !res) {
-        return res;
-    }
-
-    const int access = O_RDWR | O_APPEND;
-    const int permissions = S_IRUSR | S_IWUSR;
-
-    _fd = ::open(_path.c_str(), access, permissions);
-
-    if (_fd == -1) {
-        return FileError::result(_path.get(), ErrorType::REOPEN_FILE, errno);
-    }
-
-    return refreshInfo();
-}
-
-FileResult<void> File::read(void* buf, size_t size) const {
+Result<void> File::read(void* buf, size_t size) const {
     bioassert(size <= std::numeric_limits<ssize_t>::max());
 
     while (size != 0) {
         const ssize_t nbytes = ::read(_fd, buf, size);
 
         if (nbytes < 0) {
-            return FileError::result(_path.get(), ErrorType::READ_FILE, errno);
+            return Error::result(ErrorType::READ_FILE, errno);
         }
 
         if (nbytes == 0) {
@@ -91,14 +75,14 @@ FileResult<void> File::read(void* buf, size_t size) const {
     return {};
 }
 
-FileResult<void> File::write(void* data, size_t size) {
+Result<void> File::write(void* data, size_t size) {
     bioassert(size <= std::numeric_limits<ssize_t>::max());
 
     while (size != 0) {
         const ssize_t nbytes = ::write(_fd, data, size);
 
         if (nbytes < 0) {
-            return FileError::result(_path.get(), ErrorType::WRITE_FILE, errno);
+            return Error::result(ErrorType::WRITE_FILE, errno);
         }
 
         size -= nbytes;
@@ -107,41 +91,82 @@ FileResult<void> File::write(void* data, size_t size) {
     return refreshInfo();
 }
 
-FileResult<void> File::clearContent() {
-    if (auto res = this->close(); !res) {
-        return res;
+Result<void> File::clearContent() {
+    int res = ::ftruncate(_fd, 0);
+
+    if (res == -1) {
+        return Error::result(ErrorType::CLEAR_FILE, errno);
     }
-
-    const int access = O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
-    const int permissions = S_IRUSR | S_IWUSR;
-
-    const int fd = ::open(_path.c_str(), access, permissions);
-
-    if (fd == -1) {
-        return FileError::result(_path.get(), ErrorType::CLEAR_FILE, errno);
-    }
-
-    _fd = fd;
 
     return refreshInfo();
 }
 
-FileResult<void> File::refreshInfo() {
-    const auto info = _path.getFileInfo();
-
-    if (!info) {
-        return info.get_unexpected();
+Result<void> File::refreshInfo() {
+    struct ::stat s {};
+    if (::fstat(_fd, &s) != 0) {
+        return Error::result(ErrorType::NOT_EXISTS, errno);
     }
 
-    _info = info.value();
+    const uid_t euid = geteuid();
+    const gid_t egid = getegid();
+
+    uint8_t access {};
+
+    if (euid == s.st_uid) {
+        // If file belongs to user
+        if ((s.st_mode & S_IRUSR) != 0) {
+            access |= (uint8_t)AccessRights::Read;
+        }
+
+        if ((s.st_mode & S_IWUSR) != 0) {
+            access |= (uint8_t)AccessRights::Write;
+        }
+    } else if (egid == s.st_gid) {
+        // If file belongs to group
+        if ((s.st_mode & S_IRGRP) != 0) {
+            access |= (uint8_t)AccessRights::Read;
+        }
+
+        if ((s.st_mode & S_IWGRP) != 0) {
+            access |= (uint8_t)AccessRights::Write;
+        }
+    } else {
+        // If file belongs to others
+        if ((s.st_mode & S_IROTH) != 0) {
+            access |= (uint8_t)AccessRights::Read;
+        }
+
+        if ((s.st_mode & S_IWOTH) != 0) {
+            access |= (uint8_t)AccessRights::Write;
+        }
+    }
+
+    FileType type {};
+    if (S_ISREG(s.st_mode)) {
+        type = FileType::File;
+    } else if (S_ISDIR(s.st_mode)) {
+        type = FileType::Directory;
+    } else {
+        type = FileType::Unknown;
+    }
+
+    const size_t size = type == FileType::File
+                          ? s.st_size
+                          : 0;
+
+    _info = FileInfo {
+        ._size = size,
+        ._type = type,
+        ._access = static_cast<AccessRights>(access),
+    };
 
     return {};
 }
 
 
-FileResult<void> File::close() {
+Result<void> File::close() {
     if (::close(_fd) != 0) {
-        return FileError::result(_path.get(), ErrorType::CLOSE_FILE, errno);
+        return Error::result(ErrorType::CLOSE_FILE, errno);
     }
 
     _fd = -1;

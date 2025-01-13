@@ -34,12 +34,12 @@ public:
     const ByteBuffer& getBuffer() const { return _buffer; }
     ByteBufferIterator iterateBuffer() const { return ByteBufferIterator {_buffer}; }
     bool errorOccured() const { return _error.has_value(); }
-    const std::optional<FileError>& error() const { return _error; }
+    const std::optional<Error>& error() const { return _error; }
 
 private:
     const File* _file {nullptr};
     ByteBuffer _buffer;
-    std::optional<FileError> _error;
+    std::optional<Error> _error;
 };
 
 }

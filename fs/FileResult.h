@@ -18,7 +18,6 @@ enum class ErrorType {
     OPEN_DIRECTORY,
     CLOSE_DIRECTORY,
     OPEN_FILE,
-    REOPEN_FILE,
     MAP,
     READ_FILE,
     READ_PAGE,
@@ -40,7 +39,6 @@ using ErrorTypeDescription = EnumToString<ErrorType>::Create<
     EnumStringPair<ErrorType::OPEN_DIRECTORY, "Could not open directory">,
     EnumStringPair<ErrorType::CLOSE_DIRECTORY, "Could not close directory">,
     EnumStringPair<ErrorType::OPEN_FILE, "Could not open file">,
-    EnumStringPair<ErrorType::REOPEN_FILE, "Could not re-open file">,
     EnumStringPair<ErrorType::MAP, "Could not map file">,
     EnumStringPair<ErrorType::READ_FILE, "Could not read file">,
     EnumStringPair<ErrorType::READ_PAGE, "Could not read page">,
@@ -72,39 +70,7 @@ private:
     ErrorType _type {};
 };
 
-class FileError {
-public:
-    explicit FileError(std::string path,
-                       ErrorType type,
-                       int errnumber = -1)
-        : _path(std::move(path)),
-          _errno(errnumber),
-          _type(type)
-    {
-    }
-
-    [[nodiscard]] const std::string& getPath() const { return _path; }
-    [[nodiscard]] ErrorType getType() const { return _type; }
-    [[nodiscard]] int getErrno() const { return _errno; }
-    [[nodiscard]] std::string fmtMessage() const;
-
-    template <typename... T>
-    static BadResult<FileError> result(std::string path,
-                                       ErrorType type,
-                                       int errnumber = -1) {
-        return BadResult<FileError>(FileError(std::move(path), type, errnumber));
-    }
-
-private:
-    std::string _path;
-    int _errno {-1};
-    ErrorType _type {};
-};
-
 template <typename T>
 using Result = BasicResult<T, class Error>;
-
-template <typename T>
-using FileResult = BasicResult<T, class FileError>;
 
 }

@@ -11,8 +11,7 @@ public:
     ~File();
 
     File(File&& other) noexcept
-        : _path(std::move(other._path)),
-          _info(other._info),
+        : _info(other._info),
           _fd(other._fd)
     {
         other._fd = -1;
@@ -23,31 +22,28 @@ public:
             return *this;
         }
 
-        _path = std::move(other._path);
         _info = other._info;
-        _fd = -1;
+        _fd = other._fd;
+        other._fd = -1;
 
         return *this;
     }
 
-    File(const File&) = delete;
-    File& operator=(const File&) = delete;
+    File(const File&) = default;
+    File& operator=(const File&) = default;
 
-    [[nodiscard]] static FileResult<File> open(Path path);
-    [[nodiscard]] FileResult<FileRegion> map(size_t size, size_t offset = 0);
-    FileResult<void> reopen();
-    FileResult<void> read(void* buf, size_t size) const;
-    FileResult<void> write(void* data, size_t size);
-    FileResult<void> clearContent();
-    FileResult<void> refreshInfo();
-    FileResult<void> close();
+    [[nodiscard]] static Result<File> open(const Path& path);
+    [[nodiscard]] Result<FileRegion> map(size_t size, size_t offset = 0);
+    Result<void> read(void* buf, size_t size) const;
+    Result<void> write(void* data, size_t size);
+    Result<void> clearContent();
+    Result<void> refreshInfo();
+    Result<void> close();
 
-    const Path& getPath() const { return _path; }
     const FileInfo& getInfo() const { return _info; }
     int getDescriptor() const { return _fd; }
 
 private:
-    Path _path;
     FileInfo _info {};
     int _fd {-1};
 };

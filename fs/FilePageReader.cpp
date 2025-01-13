@@ -4,33 +4,33 @@
 
 using namespace fs;
 
-FileResult<FilePageReader> FilePageReader::open(Path path) {
+Result<FilePageReader> FilePageReader::open(const Path& path) {
     const int access = O_RDONLY | O_DIRECT;
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
 
     if (fd == -1) {
-        return FileError::result((std::string&&)path, ErrorType::OPEN_FILE, errno);
+        return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageReader {std::move(path), fd};
+    return FilePageReader {fd};
 }
 
-FileResult<FilePageReader> FilePageReader::openNoDirect(Path path) {
+Result<FilePageReader> FilePageReader::openNoDirect(const Path& path) {
     const int access = O_RDONLY;
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
 
     if (fd == -1) {
-        return FileError::result((std::string&&)path, ErrorType::OPEN_FILE, errno);
+        return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageReader {std::move(path), fd};
+    return FilePageReader {fd};
 }
 
-FileResult<void> FilePageReader::nextPage() {
+Result<void> FilePageReader::nextPage() {
     size_t bytesRead = 0;
 
     while (bytesRead != PAGE_SIZE) {
@@ -41,7 +41,7 @@ FileResult<void> FilePageReader::nextPage() {
                 continue;
             }
 
-            return FileError::result(_path.get(), ErrorType::READ_PAGE, errno);
+            return Error::result(ErrorType::READ_PAGE, errno);
         }
 
         if (nbytes == 0) {

@@ -10,7 +10,8 @@ namespace fs {
 class Path {
 public:
     Path() = default;
-    explicit Path(std::string path);
+    explicit Path(const std::string& path);
+    explicit Path(std::string&& path);
 
     ~Path() = default;
 
@@ -19,12 +20,12 @@ public:
     Path& operator=(const Path& path) = default;
     Path& operator=(Path&& path) noexcept = default;
 
-    [[nodiscard]] FileResult<FileInfo> getFileInfo() const;
+    [[nodiscard]] Result<FileInfo> getFileInfo() const;
     [[nodiscard]] const std::string& get() const { return _path; }
     [[nodiscard]] const char* c_str() const { return _path.c_str(); }
     [[nodiscard]] Path copy() const { return Path(_path); }
     [[nodiscard]] bool exists() const { return getFileInfo().has_value(); }
-    [[nodiscard]] FileResult<std::vector<Path>> listDir() const;
+    [[nodiscard]] Result<std::vector<Path>> listDir() const;
     [[nodiscard]] std::string_view filename() const;
     [[nodiscard]] std::string_view basename() const;
     [[nodiscard]] std::string_view extension() const;
@@ -41,11 +42,7 @@ public:
         return *this;
     }
 
-    explicit operator std::string&&() {
-        return std::move(_path);
-    }
-
-    [[nodiscard]] FileResult<void> mkdir();
+    [[nodiscard]] Result<void> mkdir();
 
 private:
     std::string _path;

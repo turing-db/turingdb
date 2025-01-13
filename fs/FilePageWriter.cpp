@@ -4,30 +4,30 @@
 
 using namespace fs;
 
-FileResult<FilePageWriter> FilePageWriter::open(Path path) {
+Result<FilePageWriter> FilePageWriter::open(const Path& path) {
     const int access = O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT;
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
 
     if (fd == -1) {
-        return FileError::result((std::string&&)path, ErrorType::OPEN_FILE, errno);
+        return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageWriter {std::move(path), fd};
+    return FilePageWriter {fd};
 }
 
-FileResult<FilePageWriter> FilePageWriter::openNoDirect(Path path) {
+Result<FilePageWriter> FilePageWriter::openNoDirect(const Path& path) {
     const int access = O_WRONLY | O_TRUNC | O_CREAT;
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
 
     if (fd == -1) {
-        return FileError::result((std::string&&)path, ErrorType::OPEN_FILE, errno);
+        return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageWriter {std::move(path), fd};
+    return FilePageWriter {fd};
 }
 
 void FilePageWriter::write(const Byte* data, size_t size) {
@@ -49,7 +49,7 @@ void FilePageWriter::write(const Byte* data, size_t size) {
 
 void FilePageWriter::sync() {
     if (auto res = ::fsync(_fd); res != 0) {
-        _error = FileError(_path.get(), ErrorType::SYNC_FILE, errno);
+        _error = Error(ErrorType::SYNC_FILE, errno);
     }
 }
 
@@ -77,7 +77,7 @@ void FilePageWriter::flush() {
                 continue;
             }
 
-            _error = FileError(_path.get(), ErrorType::WRITE_PAGE, errno);
+            _error = Error(ErrorType::WRITE_PAGE, errno);
             _buffer.resize(0);
             return;
         }

@@ -16,29 +16,27 @@ public:
 
     FilePageReader() = default;
 
-    [[nodiscard]] static FileResult<FilePageReader> open(Path path);
-    [[nodiscard]] static FileResult<FilePageReader> openNoDirect(Path path);
+    [[nodiscard]] static Result<FilePageReader> open(const Path& path);
+    [[nodiscard]] static Result<FilePageReader> openNoDirect(const Path& path);
 
-    FileResult<void> nextPage();
+    Result<void> nextPage();
 
     const InternalBuffer& getBuffer() const { return _buffer; }
     bool errorOccured() const { return _error.has_value(); }
     bool reachedEnd() const { return _reachedEnd; }
-    const std::optional<FileError>& error() const { return _error; }
+    const std::optional<Error>& error() const { return _error; }
 
     [[nodiscard]] InternalBufferIterator begin() const { return _buffer.begin(); }
     [[nodiscard]] InternalBufferIterator end() const { return _buffer.end(); }
 
 private:
-    Path _path;
     int _fd {};
     InternalBuffer _buffer;
-    std::optional<FileError> _error;
+    std::optional<Error> _error;
     bool _reachedEnd = false;
 
-    FilePageReader(Path&& path, int fd)
-        : _path(std::move(path)),
-          _fd(fd)
+    explicit FilePageReader(int fd)
+        : _fd(fd)
     {
     }
 };

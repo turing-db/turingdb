@@ -25,8 +25,8 @@ public:
     FilePageWriter& operator=(const FilePageWriter&) = delete;
     FilePageWriter& operator=(FilePageWriter&&) noexcept = default;
 
-    [[nodiscard]] static FileResult<FilePageWriter> open(Path path);
-    [[nodiscard]] static FileResult<FilePageWriter> openNoDirect(Path path);
+    [[nodiscard]] static Result<FilePageWriter> open(const Path& path);
+    [[nodiscard]] static Result<FilePageWriter> openNoDirect(const Path& path);
 
     void write(const Byte* data, size_t size);
     void sync();
@@ -54,19 +54,18 @@ public:
     size_t getBytesWritten() const { return _written; };
     bool errorOccured() const { return _error.has_value(); }
     bool reachedEnd() const { return _reachedEnd; }
-    const std::optional<FileError>& error() const { return _error; }
+    const std::optional<Error>& error() const { return _error; }
 
 private:
-    Path _path;
-    std::optional<FileError> _error;
+    std::optional<Error> _error;
     InternalBuffer _buffer;
     int _fd {};
     size_t _written {};
     bool _reachedEnd = false;
 
-    FilePageWriter(Path&& path, int fd)
-        : _path(std::move(path)),
-          _fd(fd) {
+    explicit FilePageWriter(int fd)
+        : _fd(fd)
+    {
     }
 
     void flush();
