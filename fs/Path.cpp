@@ -153,7 +153,7 @@ std::string_view Path::extension() const {
     return std::string_view {_path}.substr(pos);
 }
 
-Result<void> Path::mkdir() {
+FileResult<void> Path::mkdir() const {
     if (exists()) {
         return Error::result(ErrorType::ALREADY_EXISTS);
     }
