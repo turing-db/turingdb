@@ -15,7 +15,8 @@ TEST_F(FileWriterTest, General) {
     fs::FileWriter<64> writer;
 
     {
-        auto fileRes = fs::File::open(fs::Path("testfile"));
+        const fs::Path path {"testFile"};
+        auto fileRes = fs::File::createAndOpen(path);
         ASSERT_TRUE(fileRes.has_value());
 
         auto file = std::move(fileRes.value());

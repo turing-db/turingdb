@@ -64,6 +64,8 @@ add_subdirectory(simple_server)
 add_subdirectory(http_server)
 add_subdirectory(fs-mapped)
 add_subdirectory(fs-file)
+add_subdirectory(fs-page-reader)
+add_subdirectory(fs-page-writer)
 add_subdirectory(fs-reader-writer)
 
 set (SCRIPT_LIST_CONTENT "")

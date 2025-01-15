@@ -23,7 +23,7 @@ int main() {
         fmt::print("- IsWritable: {}\n", info->writable());
         fmt::print("- Size: {}\n", info->_size);
 
-        auto file = fs::File::open(std::move(p));
+        auto file = fs::File::open(p);
         if (!file) {
             fmt::print("{}\n", file.error().fmtMessage());
             return 1;
@@ -38,7 +38,7 @@ int main() {
 
         {
             // Create testbinary file
-            auto file = fs::File::open(p.copy());
+            auto file = fs::File::createAndOpen(p);
             if (!file) {
                 fmt::print("{}\n", file.error().fmtMessage());
                 return 1;
@@ -49,7 +49,7 @@ int main() {
 
         {
             fmt::print("- Opening to write binary: {}\n", p.get());
-            auto file = fs::File::open(p.copy());
+            auto file = fs::File::open(p);
             if (!file) {
                 fmt::print("{}\n", file.error().fmtMessage());
                 return 1;
@@ -72,7 +72,7 @@ int main() {
 
         {
             fmt::print("- Opening to read binary: {}\n", p.get());
-            auto file = fs::File::open(fs::Path(p));
+            auto file = fs::File::open(p);
             if (!file) {
                 fmt::print("{}\n", file.error().fmtMessage());
                 return 1;

@@ -6,7 +6,15 @@
 
 using namespace fs;
 
-Path::Path(std::string path)
+Path::Path(const std::string& path)
+    : _path(path)
+{
+    if (!_path.empty() && _path.back() == '/') {
+        _path.pop_back();
+    }
+}
+
+Path::Path(std::string&& path)
     : _path(std::move(path))
 {
     if (!_path.empty() && _path.back() == '/') {
@@ -14,20 +22,44 @@ Path::Path(std::string path)
     }
 }
 
-FileResult<FileInfo> Path::getFileInfo() const {
+Result<FileInfo> Path::getFileInfo() const {
     struct ::stat s {};
     if (::stat(_path.c_str(), &s) != 0) {
-        return FileError::result(_path.c_str(), "Does not exist");
+        return Error::result(ErrorType::NOT_EXISTS, errno);
     }
+
+    const uid_t euid = geteuid();
+    const gid_t egid = getegid();
 
     uint8_t access {};
 
-    if (::access(_path.c_str(), R_OK) == 0) {
-        access |= (uint8_t)AccessRights::Read;
-    }
+    if (euid == s.st_uid) {
+        // If file belongs to user
+        if ((s.st_mode & S_IRUSR) != 0) {
+            access |= (uint8_t)AccessRights::Read;
+        }
 
-    if (::access(_path.c_str(), W_OK) == 0) {
-        access |= (uint8_t)AccessRights::Write;
+        if ((s.st_mode & S_IWUSR) != 0) {
+            access |= (uint8_t)AccessRights::Write;
+        }
+    } else if (egid == s.st_gid) {
+        // If file belongs to group
+        if ((s.st_mode & S_IRGRP) != 0) {
+            access |= (uint8_t)AccessRights::Read;
+        }
+
+        if ((s.st_mode & S_IWGRP) != 0) {
+            access |= (uint8_t)AccessRights::Write;
+        }
+    } else {
+        // If file belongs to others
+        if ((s.st_mode & S_IROTH) != 0) {
+            access |= (uint8_t)AccessRights::Read;
+        }
+
+        if ((s.st_mode & S_IWOTH) != 0) {
+            access |= (uint8_t)AccessRights::Write;
+        }
     }
 
     FileType type {};
@@ -50,7 +82,7 @@ FileResult<FileInfo> Path::getFileInfo() const {
     };
 }
 
-FileResult<std::vector<Path>> Path::listDir() const {
+Result<std::vector<Path>> Path::listDir() const {
     auto info = getFileInfo();
 
     if (!info) {
@@ -58,13 +90,13 @@ FileResult<std::vector<Path>> Path::listDir() const {
     }
 
     if (info->_type != FileType::Directory) {
-        return FileError::result(_path.c_str(), "Not a directory");
+        return Error::result(ErrorType::NOT_DIRECTORY);
     }
 
     DIR* d = ::opendir(_path.c_str());
 
     if (!d) {
-        return FileError::result(_path.c_str(), "Could not open directory");
+        return Error::result(ErrorType::OPEN_DIRECTORY, errno);
     }
 
     std::vector<Path> paths;
@@ -84,7 +116,7 @@ FileResult<std::vector<Path>> Path::listDir() const {
     }
 
     if (::closedir(d) == -1) {
-        return FileError::result(_path.c_str(), "Could not close directory");
+        return Error::result(ErrorType::CLOSE_DIRECTORY);
     }
 
     return std::move(paths);
@@ -108,7 +140,7 @@ std::string_view Path::basename() const {
         return fname;
     }
 
-    return std::string_view{_path}.substr(0, pos);
+    return std::string_view {_path}.substr(0, pos);
 }
 
 std::string_view Path::extension() const {
@@ -118,16 +150,16 @@ std::string_view Path::extension() const {
         return "";
     }
 
-    return std::string_view{_path}.substr(pos);
+    return std::string_view {_path}.substr(pos);
 }
 
-FileResult<void> Path::mkdir() {
+Result<void> Path::mkdir() {
     if (exists()) {
-        return FileError::result(_path.c_str(), "Cannot mkdir, already exists");
+        return Error::result(ErrorType::ALREADY_EXISTS);
     }
 
     if (::mkdir(_path.c_str(), 0700) == -1) {
-        return FileError::result(_path.c_str(), "Cannot mkdir: {}", strerror(errno));
+        return Error::result(ErrorType::CANNOT_MKDIR, errno);
     }
 
     return {};

@@ -19,7 +19,7 @@ int main() {
     fmt::print("- File: {}\n", p.get());
 
     // Open file
-    auto fileRes = fs::File::open(std::move(p));
+    auto fileRes = fs::File::createAndOpen(p);
     if (!fileRes) {
         fmt::print("{}\n", fileRes.error().fmtMessage());
         return 1;
@@ -38,10 +38,10 @@ int main() {
 
     // Write 4085 4086
     // [f5 f 0 0 ] [f6 f 0 0]
-    writer.write((int)4085);
-    writer.write((int)4086);
+    writer.write(4085);
+    writer.write(4086);
 
-    // Write 0 1 2 3 4 (as uint8_t)
+    // Write 0 1 2 3 4 (as uint16_t)
     // [0 0] [1 0] [2 0] [3 0] [4 0]
     std::vector<uint16_t> integers(5);
     std::iota(integers.begin(), integers.end(), 0);
@@ -53,13 +53,20 @@ int main() {
     writer.flush();
 
     // Reopen file (start back at the beginning + resets info);
-    CHECK_RES(file.reopen());
+    CHECK_RES(file.close());
+    auto reopenRes = fs::File::open(p);
+    if (!reopenRes) {
+        fmt::print("{}\n", reopenRes.error().fmtMessage());
+        return 1;
+    }
+
+    file = reopenRes.value();
 
     // Store whole content of file into buffer
     reader.read();
 
     // Printing whole buffer
-    fmt::print("Buffer content:");
+    fmt::print("- Buffer content:");
     for (auto byte : reader.getBuffer()) {
         fmt::print(" {:x}", byte);
     }

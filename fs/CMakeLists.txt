@@ -1,5 +1,8 @@
 set(fs_sources File.cpp
+               FileResult.cpp
                FileRegion.cpp
+               FilePageReader.cpp
+               FilePageWriter.cpp
                Path.cpp)
 
 add_library(turing_fs_s

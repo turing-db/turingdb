@@ -1,76 +1,76 @@
 #pragma once
 
 #include "BasicResult.h"
+#include "EnumToString.h"
 
 #include <spdlog/fmt/bundled/format.h>
 
 namespace fs {
 
-class Error {
-public:
-    explicit Error(const char* msg, const char* info = nullptr)
-        : _msg(msg),
-          _info(info)
-    {
-    }
+class Path;
 
-    [[nodiscard]] std::string_view getMessage() const { return _msg; }
+enum class ErrorType {
+    UNKNOWN = 0,
+    NOT_EXISTS,
+    NOT_DIRECTORY,
+    ALREADY_EXISTS,
+    CANNOT_MKDIR,
+    OPEN_DIRECTORY,
+    CLOSE_DIRECTORY,
+    OPEN_FILE,
+    MAP,
+    READ_FILE,
+    READ_PAGE,
+    WRITE_FILE,
+    WRITE_PAGE,
+    CLEAR_FILE,
+    CLOSE_FILE,
+    SYNC_FILE,
 
-    [[nodiscard]] std::string fmtMessage() const {
-        return _info == nullptr
-                 ? fmt::format("Filesystem error: {}", _msg)
-                 : fmt::format("Filesystem error: {} ({})", _msg, _info);
-    }
-
-    template <typename... T>
-    static BadResult<Error> result(const char* msg,
-                                   const char* info = nullptr) {
-        return BadResult(Error(msg, info));
-    }
-
-private:
-    const char* _msg {nullptr};
-    const char* _info {nullptr};
+    _SIZE,
 };
 
-class FileError {
+using ErrorTypeDescription = EnumToString<ErrorType>::Create<
+    EnumStringPair<ErrorType::UNKNOWN, "Unknown">,
+    EnumStringPair<ErrorType::NOT_EXISTS, "Does not exist">,
+    EnumStringPair<ErrorType::NOT_DIRECTORY, "Not a directory">,
+    EnumStringPair<ErrorType::ALREADY_EXISTS, "Already exists">,
+    EnumStringPair<ErrorType::CANNOT_MKDIR, "Could not make directory">,
+    EnumStringPair<ErrorType::OPEN_DIRECTORY, "Could not open directory">,
+    EnumStringPair<ErrorType::CLOSE_DIRECTORY, "Could not close directory">,
+    EnumStringPair<ErrorType::OPEN_FILE, "Could not open file">,
+    EnumStringPair<ErrorType::MAP, "Could not map file">,
+    EnumStringPair<ErrorType::READ_FILE, "Could not read file">,
+    EnumStringPair<ErrorType::READ_PAGE, "Could not read page">,
+    EnumStringPair<ErrorType::WRITE_FILE, "Could not write file">,
+    EnumStringPair<ErrorType::WRITE_PAGE, "Could not write page">,
+    EnumStringPair<ErrorType::CLEAR_FILE, "Could not clear file">,
+    EnumStringPair<ErrorType::CLOSE_FILE, "Could not close file">,
+    EnumStringPair<ErrorType::SYNC_FILE, "Could not sync file">>;
+
+class Error {
 public:
-    explicit FileError(const char* path,
-                       const char* msg,
-                       const char* info = nullptr)
-        : _path(path),
-          _msg(msg),
-          _info(info)
+    explicit Error(ErrorType type, int errnumber = -1)
+        : _errno(errnumber),
+          _type(type)
     {
     }
 
-    [[nodiscard]] std::string_view getPath() const { return _path; }
-    [[nodiscard]] std::string_view getInfo() const { return _info; }
-    [[nodiscard]] std::string_view getMessage() const { return _msg; }
-
-    [[nodiscard]] std::string fmtMessage() const {
-        return _info == nullptr
-                 ? fmt::format("File ({}) error: {}", _path, _msg)
-                 : fmt::format("File ({}) error: {} ({})", _path, _msg, _info);
-    }
+    [[nodiscard]] ErrorType getType() const { return _type; }
+    [[nodiscard]] int getErrno() const { return _errno; }
+    [[nodiscard]] std::string fmtMessage() const;
 
     template <typename... T>
-    static BadResult<FileError> result(const char* path,
-                                       const char* msg,
-                                       const char* info = nullptr) {
-        return BadResult(FileError(path, msg, info));
+    static BadResult<Error> result(ErrorType type, int errnumber = -1) {
+        return BadResult<Error>(Error(type, errnumber));
     }
 
 private:
-    const char* _path {nullptr};
-    const char* _msg {nullptr};
-    const char* _info {nullptr};
+    int _errno {-1};
+    ErrorType _type {};
 };
 
 template <typename T>
 using Result = BasicResult<T, class Error>;
-
-template <typename T>
-using FileResult = BasicResult<T, class FileError>;
 
 }
