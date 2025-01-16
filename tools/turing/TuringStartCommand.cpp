@@ -35,6 +35,11 @@ void TuringStartCommand::setup() {
     _startCommand.add_argument("-nodemon")
                  .implicit_value(true)
                  .default_value(false);
+    _startCommand.add_argument("-p")
+                 .default_value(_bioserverPort)
+                 .store_into(_bioserverPort)
+                 .nargs(1)
+                 .help("REST API listening port");
 #ifdef TURING_DEV
     _startCommand.add_argument("-dev")
                  .implicit_value(true)
@@ -87,10 +92,12 @@ void TuringStartCommand::run() {
     const auto& outDir = _toolInit.getOutputsDirPath();
     const auto turingAppDir = outDir/"turing-app";
     const auto bioServerDir = outDir/"bioserver";
+    const std::string bioserverPort = std::to_string(_bioserverPort);
 
     Command db("bioserver");
     db.addOption("-o", bioServerDir);
     db.addOption("-db", dbName);
+    db.addOption("-p", bioserverPort);
     db.setWorkingDir(outDir);
     db.setGenerateScript(true);
     db.setWriteLogFile(false);
@@ -112,6 +119,7 @@ void TuringStartCommand::run() {
 
     Command turingApp("turing-app");
     turingApp.addOption("-o", turingAppDir);
+    turingApp.addOption("-p", bioserverPort);
     if (isPrototypeRequested()) {
         turingApp.addArg("-prototype");
     }

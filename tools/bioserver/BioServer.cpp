@@ -19,17 +19,27 @@ int main(int argc, const char** argv) {
     std::vector<std::string> dbNames;
     bool noDemonRequested = false;
 
+    // Configuration of the DB Server
+    DBServerConfig dbServerConfig;
+
+    uint32_t port = 6666;
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("-db")
-             .help("Load a database at the start")
-             .nargs(1)
-             .append()
-             .metavar("dbname")
-             .store_into(dbNames);
+        .help("Load a database at the start")
+        .nargs(1)
+        .append()
+        .metavar("dbname")
+        .store_into(dbNames);
 
     argParser.add_argument("-nodemon")
-             .help("Do not spawn the server in the background as a daemon")
-             .store_into(noDemonRequested);
+        .help("Do not spawn the server in the background as a daemon")
+        .store_into(noDemonRequested);
+
+    argParser.add_argument("-p")
+        .default_value(port)
+        .store_into(port)
+        .nargs(1)
+        .help("Listening port");
 
     toolInit.init(argc, argv);
 
@@ -42,8 +52,7 @@ int main(int argc, const char** argv) {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
 
-    // Configuration of the DB Server
-    DBServerConfig dbServerConfig;
+    dbServerConfig.getRPCConfig().setPort(port);
 
     // Database server
     DBServer server(dbServerConfig);

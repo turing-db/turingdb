@@ -50,6 +50,13 @@ int main(int argc, const char** argv) {
     argParser.add_argument("-prototype")
              .store_into(isPrototypeMode);
 
+    uint32_t port = 6666;
+    argParser.add_argument("-p")
+        .default_value(port)
+        .store_into(port)
+        .nargs(1)
+        .help("REST API listening port");
+
 #ifdef TURING_DEV
     argParser.add_argument("-dev")
              .store_into(isDevMode);
@@ -70,6 +77,7 @@ int main(int argc, const char** argv) {
     server->setPrototypeMode(isPrototypeMode);
     server->setDevMode(isDevMode);
     server->setBuildRequested(buildRequested);
+    server->setApiPort(port);
 
     // Install signal handler to handle ctrl+C
     signal(SIGINT, signalHandler);

@@ -20,7 +20,7 @@ inline void noDemonSignalHandler(int signum) {
 
 TuringStart2Command::TuringStart2Command(ToolInit& toolInit)
     : ToolCommand(toolInit),
-    _startCommand("start2")
+      _startCommand("start2")
 {
 }
 
@@ -34,6 +34,11 @@ void TuringStart2Command::setup() {
     _startCommand.add_argument("-nodemon")
         .implicit_value(true)
         .default_value(false);
+    _startCommand.add_argument("-p")
+        .default_value(_turingDBPort)
+        .store_into(_turingDBPort)
+        .nargs(1)
+        .help("REST API listening port");
 #ifdef TURING_DEV
     _startCommand.add_argument("-dev")
         .implicit_value(true)
@@ -85,10 +90,11 @@ void TuringStart2Command::run() {
     const auto& outDir = _toolInit.getOutputsDirPath();
     const auto turingAppDir = outDir / "turing-app";
     const auto turingdbDir = outDir / "turingdb";
+    const std::string turingDBPort = std::to_string(_turingDBPort);
 
     Command db("turingdb");
     db.addOption("-o", turingdbDir);
-    db.addOption("-p", "6665");
+    db.addOption("-p", turingDBPort);
     db.setWorkingDir(outDir);
     db.setGenerateScript(true);
     db.setWriteLogFile(false);
@@ -113,6 +119,7 @@ void TuringStart2Command::run() {
     if (noDemonRequested()) {
         turingApp.addArg("-nodemon");
     }
+    turingApp.addOption("-p", turingDBPort);
 #ifdef TURING_DEV
     if (isDevRequested()) {
         turingApp.addArg("-dev");

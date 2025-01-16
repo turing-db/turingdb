@@ -20,6 +20,7 @@ public:
 
 private:
     argparse::ArgumentParser _startCommand;
+    uint32_t _turingDBPort = 6666;
 
     bool isDevRequested();
     bool isBuildRequested();

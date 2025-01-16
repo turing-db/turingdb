@@ -23,7 +23,7 @@ int main(int argc, const char** argv) {
         .help("Do not spawn as a background process");
 
     argParser.add_argument("-p")
-        .default_value((uint32_t)6666)
+        .default_value(config->_port)
         .store_into(config->_port)
         .nargs(1)
         .help("Listening port");

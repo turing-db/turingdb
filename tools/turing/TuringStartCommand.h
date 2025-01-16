@@ -15,6 +15,7 @@ public:
 
 private:
     argparse::ArgumentParser _startCommand;
+    uint32_t _bioserverPort = 6666;
 
     std::string getDBName();
     bool isPrototypeRequested();
