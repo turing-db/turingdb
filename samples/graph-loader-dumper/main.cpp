@@ -1,13 +1,13 @@
-#include "DB.h"
+#include "Graph.h"
 #include "DataPartBuilder.h"
-#include "DBMetadata.h"
+#include "GraphMetadata.h"
 #include "GraphDumper.h"
 #include "JobSystem.h"
 
 using namespace db;
 
-static std::unique_ptr<DB> createSimpleGraph() {
-    auto graph = std::make_unique<DB>();
+static std::unique_ptr<Graph> createSimpleGraph() {
+    auto graph = std::make_unique<Graph>();
     auto builder = graph->newPartWriter();
     auto* metadata = graph->getMetadata();
     auto& labels = metadata->labels();

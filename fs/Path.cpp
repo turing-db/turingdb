@@ -8,14 +8,16 @@
 using namespace fs;
 
 Path::Path(const std::string& path)
-    : _path(path) {
+    : _path(path)
+{
     if (!_path.empty() && _path.back() == '/') {
         _path.pop_back();
     }
 }
 
 Path::Path(std::string&& path)
-    : _path(std::move(path)) {
+    : _path(std::move(path))
+{
     if (!_path.empty() && _path.back() == '/') {
         _path.pop_back();
     }
