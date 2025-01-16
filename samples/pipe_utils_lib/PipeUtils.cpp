@@ -12,12 +12,12 @@
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 
-#include "DB.h"
+#include "Graph.h"
 #include "QueryInterpreter.h"
 #include "InterpreterContext.h"
 #include "QueryParams.h"
 #include "QueryPlannerParams.h"
-#include "DBView.h"
+#include "GraphView.h"
 #include "DataPartBuilder.h"
 
 #include "DBServerContext.h"
@@ -72,7 +72,7 @@ bool PipeSample::loadJsonDB(const std::string& jsonDir) {
 
     const bool res = Neo4jImporter::importJsonDir(
         *_jobSystem,
-        _system->getDefaultDB(),
+        _system->getDefaultGraph(),
         db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
         db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
         Neo4jImporter::ImportJsonDirArgs {
@@ -98,7 +98,7 @@ bool PipeSample::executeQuery(const std::string& queryStr) {
     QueryInterpreter interp(&interpCtxt);
     interp.setEncodingParams(&encodingParams);
 
-    const QueryParams queryParams(queryStr, _system->getDefaultDB()->getName());
+    const QueryParams queryParams(queryStr, _system->getDefaultGraph()->getName());
     MemoryManagerHandle mem = memStorage.alloc();
     const auto res = interp.execute(mem.get(), queryParams);
 
@@ -112,9 +112,9 @@ bool PipeSample::executeQuery(const std::string& queryStr) {
 }
 
 void PipeSample::createSimpleGraph() {
-    DB* db = _system->getDefaultDB();
-    auto builder = db->newPartWriter();
-    auto* metadata = db->getMetadata();
+    Graph* graph = _system->getDefaultGraph();
+    auto builder = graph->newPartWriter();
+    auto* metadata = graph->getMetadata();
     auto& labels = metadata->labels();
     auto& labelsets = metadata->labelsets();
     auto& proptypes = metadata->propTypes();

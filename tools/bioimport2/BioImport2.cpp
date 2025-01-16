@@ -2,7 +2,7 @@
 #include <spdlog/spdlog.h>
 
 #include "BannerDisplay.h"
-#include "DB.h"
+#include "Graph.h"
 #include "FileUtils.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
@@ -186,7 +186,7 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    auto db = std::make_unique<DB>();
+    auto graph = std::make_unique<Graph>();
     JobSystem jobSystem(nThreads);
     auto t0 = Clock::now();
 
@@ -196,7 +196,7 @@ int main(int argc, const char** argv) {
         switch (data.type) {
             case ImportType::GML: {
                 GMLImporter parser;
-                if (!parser.importFile(jobSystem, db.get(), FileUtils::Path(data.path))) {
+                if (!parser.importFile(jobSystem, graph.get(), FileUtils::Path(data.path))) {
                     return 1;
                 }
                 break;
@@ -208,7 +208,7 @@ int main(int argc, const char** argv) {
                 args._dumpFilePath = std::move(data.path);
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
-                                                   db.get(),
+                                                   graph.get(),
                                                    db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
@@ -224,7 +224,7 @@ int main(int argc, const char** argv) {
                 args._dumpFilePath = std::move(data.path);
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
-                                                   db.get(),
+                                                   graph.get(),
                                                    db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
@@ -244,7 +244,7 @@ int main(int argc, const char** argv) {
                 args._writeFiles = true;
 
                 if (!Neo4jImporter::importUrl(jobSystem,
-                                              db.get(),
+                                              graph.get(),
                                               db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                               db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                               args)) {
@@ -258,7 +258,7 @@ int main(int argc, const char** argv) {
                 args._workDir = toolInit.getOutputsDir();
 
                 if (!Neo4jImporter::importJsonDir(jobSystem,
-                                                  db.get(),
+                                                  graph.get(),
                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   args)) {

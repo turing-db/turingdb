@@ -6,10 +6,10 @@
 
 #include "ChunkConfig.h"
 #include "ColumnIDs.h"
-#include "DB.h"
-#include "DBView.h"
-#include "DBReader.h"
-#include "DBMetadata.h"
+#include "Graph.h"
+#include "GraphView.h"
+#include "GraphReader.h"
+#include "GraphMetadata.h"
 #include "DataPartBuilder.h"
 #include "FileUtils.h"
 #include "LogSetup.h"
@@ -48,8 +48,8 @@ protected:
 };
 
 TEST_F(ScanNodesIteratorTest, emptyDB) {
-    auto db = std::make_unique<DB>();
-    const auto view = db->view();
+    auto graph = std::make_unique<Graph>();
+    const auto view = graph->view();
     const auto reader = view.read();
 
     auto it = reader.scanNodes().begin();
@@ -61,11 +61,11 @@ TEST_F(ScanNodesIteratorTest, emptyDB) {
 }
 
 TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
-    auto db = std::make_unique<DB>();
-    auto builder = db->newPartWriter();
+    auto graph = std::make_unique<Graph>();
+    auto builder = graph->newPartWriter();
     builder->commit(*_jobSystem);
 
-    const auto view = db->view();
+    const auto view = graph->view();
     const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
@@ -76,14 +76,14 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
 }
 
 TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
-    auto db = std::make_unique<DB>();
+    auto graph = std::make_unique<Graph>();
 
     for (auto i = 0; i < 3; i++) {
-        auto builder = db->newPartWriter();
+        auto builder = graph->newPartWriter();
         builder->commit(*_jobSystem);
     }
 
-    const auto view = db->view();
+    const auto view = graph->view();
     const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
@@ -94,14 +94,14 @@ TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
 }
 
 TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
-    auto db = std::make_unique<DB>();
+    auto graph = std::make_unique<Graph>();
 
-    auto& labelsets = db->getMetadata()->labelsets();
+    auto& labelsets = graph->getMetadata()->labelsets();
     LabelSet labelset = LabelSet::fromList({0});
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
-        auto builder = db->newPartWriter();
+        auto builder = graph->newPartWriter();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
             builder->addNode(labelsetID);
         }
@@ -110,7 +110,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
         builder->commit(*_jobSystem);
     }
 
-    const auto view = db->view();
+    const auto view = graph->view();
     const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(it.isValid());
@@ -140,14 +140,14 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 }
 
 TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
-    auto db = std::make_unique<DB>();
+    auto graph = std::make_unique<Graph>();
 
-    auto& labelsets = db->getMetadata()->labelsets();
+    auto& labelsets = graph->getMetadata()->labelsets();
     LabelSet labelset = LabelSet::fromList({0});
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     for (auto i = 0; i < 8; i++) {
-        auto builder = db->newPartWriter();
+        auto builder = graph->newPartWriter();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
             builder->addNode(labelsetID);
         }
@@ -156,7 +156,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         builder->commit(*_jobSystem);
     }
 
-    const auto view = db->view();
+    const auto view = graph->view();
     const auto reader = view.read();
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(it.isValid());
@@ -191,21 +191,21 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
 TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     const size_t nodeCount = 1.35 * ChunkConfig::CHUNK_SIZE;
 
-    auto db = std::make_unique<DB>();
+    auto graph = std::make_unique<Graph>();
 
-    auto& labelsets = db->getMetadata()->labelsets();
+    auto& labelsets = graph->getMetadata()->labelsets();
     LabelSet labelset = LabelSet::fromList({0});
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
-        auto builder = db->newPartWriter();
+        auto builder = graph->newPartWriter();
         for (size_t i = 0; i < nodeCount; i++) {
             builder->addNode(labelsetID);
         }
         builder->commit(*_jobSystem);
     }
 
-    const auto view = db->view();
+    const auto view = graph->view();
     const auto reader = view.read();
     auto it = reader.scanNodes().begin();
 

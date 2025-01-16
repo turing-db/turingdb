@@ -63,24 +63,24 @@ void quitCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
 }
 
 void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
-    std::string dbName;
+    std::string graphName;
     argparse::ArgumentParser argParser("cd",
                                "",
                               argparse::default_arguments::help,
              false);
     argParser.add_description("Print Turing Shell help");
-    argParser.add_argument("db_name")
+    argParser.add_argument("graph")
              .nargs(1)
-             .metavar("db_name")
-             .store_into(dbName);
+             .metavar("graph_name")
+             .store_into(graphName);
     argParser.parse_args(args);
 
-    if (dbName.empty()) {
-        spdlog::error("Database name can not be empty");
+    if (graphName.empty()) {
+        spdlog::error("Graph name can not be empty");
         return;
     }
 
-    shell.setDBName(dbName);
+    shell.setGraphName(graphName);
 }
 
 void printJsonCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
@@ -141,7 +141,7 @@ std::string TuringShell::composePrompt() {
 
     std::string prompt = basePrompt;
     prompt += separator;
-    prompt += _turing.getDBName();
+    prompt += _turing.getGraphName();
     prompt += "> ";
     return prompt;
 }

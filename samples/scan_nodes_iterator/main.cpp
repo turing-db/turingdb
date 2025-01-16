@@ -2,9 +2,9 @@
 #include <chrono>
 #include <iostream>
 
-#include "DB.h"
-#include "DBView.h"
-#include "DBReader.h"
+#include "Graph.h"
+#include "GraphView.h"
+#include "GraphReader.h"
 #include "JobSystem.h"
 #include "ScanNodesIterator.h"
 #include "DataPartBuilder.h"
@@ -22,14 +22,14 @@ void printDuration(const char* title, std::chrono::duration<double, std::milli> 
 bool run() {
     const size_t nodeCount = 100'000'000ull;
 
-    auto db = std::make_unique<DB>();
+    auto graph = std::make_unique<Graph>();
     JobSystem jobSystem;
     jobSystem.initialize();
 
     const auto timeStart = Clock::now();
 
     {
-        auto builder = db->newPartWriter();
+        auto builder = graph->newPartWriter();
         for (size_t i = 0; i < nodeCount; i++) {
             builder->addNode({0});
         }
@@ -38,7 +38,7 @@ bool run() {
 
     const auto partCreation = Clock::now();
 
-    const auto view = db->view();
+    const auto view = graph->view();
     const auto reader = view.read();
     auto it = reader.scanNodes().begin();
 

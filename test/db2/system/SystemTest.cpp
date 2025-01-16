@@ -1,42 +1,42 @@
 #include "gtest/gtest.h"
 
 #include "SystemManager.h"
-#include "DB.h"
+#include "Graph.h"
 
 using namespace db;
 
 class SystemManagerTest : public ::testing::Test {
 };
 
-TEST_F(SystemManagerTest, createDB) {
+TEST_F(SystemManagerTest, createGraph) {
     SystemManager sysMan;
 
-    // The default db exists
-    DB* defaultDB = sysMan.getDefaultDB();
-    ASSERT_TRUE(defaultDB);
-    ASSERT_EQ(defaultDB->getName(), "default");
+    // The default graph exists
+    Graph* defaultGraph = sysMan.getDefaultGraph();
+    ASSERT_TRUE(defaultGraph);
+    ASSERT_EQ(defaultGraph->getName(), "default");
 
     // We can find back the default db by its name
-    ASSERT_EQ(sysMan.getDefaultDB(), sysMan.getDB("default"));
+    ASSERT_EQ(sysMan.getDefaultGraph(), sysMan.getGraph("default"));
 
-    // Create DB
-    DB* mydb = sysMan.createDB("mydb");
-    ASSERT_TRUE(mydb);
-    ASSERT_NE(defaultDB, mydb);
-    ASSERT_EQ(mydb->getName(), "mydb");
+    // Create graph
+    Graph* myGraph = sysMan.createGraph("mygraph");
+    ASSERT_TRUE(myGraph);
+    ASSERT_NE(defaultGraph, myGraph);
+    ASSERT_EQ(myGraph->getName(), "mygraph");
 
-    // Try to create a db with the same name, should return nullptr
-    DB* mydb2 = sysMan.createDB("mydb");
-    ASSERT_TRUE(!mydb2);
+    // Try to create a graph with the same name, should return nullptr
+    Graph* myGraph2 = sysMan.createGraph("mygraph");
+    ASSERT_TRUE(!myGraph2);
 
-    // Create a db with a different name
-    DB* diffDB = sysMan.createDB("diffdb");
-    ASSERT_TRUE(diffDB);
-    ASSERT_EQ(diffDB->getName(), "diffdb");
-    ASSERT_NE(diffDB, mydb);
-    ASSERT_NE(diffDB, defaultDB);
+    // Create a graph with a different name
+    Graph* diffGraph = sysMan.createGraph("diffgraph");
+    ASSERT_TRUE(diffGraph);
+    ASSERT_EQ(diffGraph->getName(), "diffgraph");
+    ASSERT_NE(diffGraph, myGraph);
+    ASSERT_NE(diffGraph, defaultGraph);
 
-    // Test that we get back mydb when we search by name
-    ASSERT_EQ(sysMan.getDB("mydb"), mydb);
-    ASSERT_EQ(sysMan.getDB("diffdb"), diffDB);
+    // Test that we get back mygraph when we search by name
+    ASSERT_EQ(sysMan.getGraph("mygraph"), myGraph);
+    ASSERT_EQ(sysMan.getGraph("diffgraph"), diffGraph);
 }

@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 
-#include "DB.h"
-#include "DBView.h"
-#include "DBReader.h"
-#include "DBReport.h"
+#include "Graph.h"
+#include "GraphView.h"
+#include "GraphReader.h"
+#include "GraphReport.h"
 #include "DataPartBuilder.h"
 #include "EdgeView.h"
 #include "FileUtils.h"
@@ -37,7 +37,7 @@ protected:
         LogSetup::setupLogFileBacked(_logPath.string());
         PerfStat::init(_perfPath);
 
-        _db = std::make_unique<DB>();
+        _graph = std::make_unique<Graph>();
         _jobSystem = std::make_unique<JobSystem>();
         _jobSystem->initialize();
     }
@@ -48,7 +48,7 @@ protected:
     }
 
     std::unique_ptr<JobSystem> _jobSystem;
-    std::unique_ptr<DB> _db = nullptr;
+    std::unique_ptr<Graph> _graph {nullptr};
     std::string _outDir;
     FileUtils::Path _logPath;
     FileUtils::Path _perfPath;
@@ -56,7 +56,7 @@ protected:
 
 TEST_F(Neo4jImporterTest, Simple) {
     {
-        auto builder1 = _db->newPartWriter();
+        auto builder1 = _graph->newPartWriter();
         builder1->addNode(LabelSet::fromList({1})); // 0
         builder1->addNode(LabelSet::fromList({0})); // 1
         builder1->addNode(LabelSet::fromList({1})); // 2
@@ -64,7 +64,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder1->addEdge(0, 0, 1);
         builder1->commit(*_jobSystem);
 
-        auto builder2 = _db->newPartWriter();
+        auto builder2 = _graph->newPartWriter();
         builder2->addEdge(2, 1, 2);
         EntityID id1 = builder2->addNode(LabelSet::fromList({0}));
         builder2->addNodeProperty<types::String>(id1, 0, "test1");
@@ -86,7 +86,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder2->commit(*_jobSystem);
     }
 
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::cout << "All out edges: ";
     for (const auto& edge : reader.scanOutEdges()) {
@@ -115,7 +115,7 @@ TEST_F(Neo4jImporterTest, General) {
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
     t0 = Clock::now();
     const bool res = Neo4jImporter::importJsonDir(jobSystem,
-                                                  _db.get(),
+                                                  _graph.get(),
                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   {
@@ -126,9 +126,9 @@ TEST_F(Neo4jImporterTest, General) {
     ASSERT_TRUE(res);
     std::cout << "Parsing: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::stringstream report;
-    DBReport::getReport(reader, report);
+    GraphReport::getReport(reader, report);
     std::cout << report.view() << std::endl;
 }

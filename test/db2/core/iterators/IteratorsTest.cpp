@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 
-#include "DB.h"
-#include "DBView.h"
-#include "DBReader.h"
-#include "DBMetadata.h"
+#include "Graph.h"
+#include "GraphView.h"
+#include "GraphReader.h"
+#include "GraphMetadata.h"
 #include "DataPartBuilder.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -39,10 +39,10 @@ protected:
 
         _jobSystem = std::make_unique<JobSystem>(1);
         _jobSystem->initialize();
-        _db = new DB();
+        _graph = new Graph();
 
         /* FIRST BUFFER */
-        std::unique_ptr<DataPartBuilder> builder1 = _db->newPartWriter();
+        std::unique_ptr<DataPartBuilder> builder1 = _graph->newPartWriter();
         PropertyTypeID uint64ID = 0;
         PropertyTypeID stringID = 1;
 
@@ -90,7 +90,7 @@ protected:
         }
 
         /* SECOND BUFFER (Concurrent to the first one) */
-        std::unique_ptr<DataPartBuilder> builder2 = _db->newPartWriter();
+        std::unique_ptr<DataPartBuilder> builder2 = _graph->newPartWriter();
 
         {
             // Node 4
@@ -141,12 +141,12 @@ protected:
         builder2->commit(*_jobSystem);
 
         /* THIRD BUFFER (Empty) */
-        std::unique_ptr<DataPartBuilder> builder3 = _db->newPartWriter();
+        std::unique_ptr<DataPartBuilder> builder3 = _graph->newPartWriter();
         spdlog::info("Pushing 3");
         builder3->commit(*_jobSystem);
 
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
-        std::unique_ptr<DataPartBuilder> builder4 = _db->newPartWriter();
+        std::unique_ptr<DataPartBuilder> builder4 = _graph->newPartWriter();
 
         {
             // Node 8
@@ -223,7 +223,7 @@ protected:
         builder4->addNodeProperty<types::String>(
             2, stringID, "TmpID2 patch");
 
-        const EdgeRecord* edgeToPatch = _db->view().read().getEdge(2);
+        const EdgeRecord* edgeToPatch = _graph->view().read().getEdge(2);
         builder4->addEdgeProperty<types::String>(
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
@@ -233,18 +233,18 @@ protected:
 
     void TearDown() override {
         _jobSystem->terminate();
-        delete _db;
+        delete _graph;
     }
 
     std::unique_ptr<JobSystem> _jobSystem;
-    DB* _db = nullptr;
+    Graph* _graph = nullptr;
     std::string _outDir;
     FileUtils::Path _logPath;
     static inline const EdgeTypeID _edgeTypeID {0};
 };
 
 TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::vector<TestEdgeRecord> compareSet {
         {0, 0, 1},
@@ -272,7 +272,7 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -288,7 +288,7 @@ TEST_F(IteratorsTest, ScanNodesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::vector<EntityID> compareSet {2, 4, 3, 8, 6, 7};
 
@@ -306,12 +306,12 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
-    const auto& labelsets = _db->getMetadata()->labelsets();
+    const auto& labelsets = _graph->getMetadata()->labelsets();
     const size_t labelsetCount = labelsets.getCount();
 
     // For each existing labelset compare scanOutEdgesByLabel to scanNodesByLabel -> getOutEdges
@@ -345,12 +345,12 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
-    const auto& labelsets = _db->getMetadata()->labelsets();
+    const auto& labelsets = _graph->getMetadata()->labelsets();
     const size_t labelsetCount = labelsets.getCount();
 
     // For each existing labelset compare scanInEdgesByLabel to scanNodesByLabel -> getInEdges
@@ -384,7 +384,7 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetEdgesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     ColumnIDs inputNodeIDs = {1, 2, 3, 8};
     std::vector<TestEdgeRecord> compareSet {
@@ -428,7 +428,7 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
 
     {
@@ -467,7 +467,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
 
     {
@@ -506,7 +506,7 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     const auto labelset = LabelSet::fromList({1});
 
@@ -543,7 +543,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     ColumnIDs inputNodeIDs = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -594,7 +594,7 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     ColumnIDs inputNodeIDs = {1, 3, 8};
 

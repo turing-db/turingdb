@@ -19,7 +19,10 @@ public:
     TuringShell();
     ~TuringShell();
 
-    void setDBName(const std::string& dbName) { _turing.setDBName(dbName); }
+    void setPort(unsigned portNum) { _turing.setPort(portNum); }
+    void setAddress(const std::string& address) { _turing.setAddress(address); }
+
+    void setGraphName(const std::string& graphName) { _turing.setGraphName(graphName); }
 
     void setDebugDumpJSON(bool enabled) { _turing.setDebugDumpJSON(enabled); }
 

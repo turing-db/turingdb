@@ -3,10 +3,10 @@
 #include <spdlog/spdlog.h>
 
 #include "ConcurrentWriter.h"
-#include "DB.h"
-#include "DBView.h"
-#include "DBReader.h"
-#include "DBMetadata.h"
+#include "Graph.h"
+#include "GraphView.h"
+#include "GraphReader.h"
+#include "GraphMetadata.h"
 #include "DataPartBuilder.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -41,15 +41,15 @@ protected:
         _jobSystem = std::make_unique<JobSystem>();
         _jobSystem->initialize();
 
-        _db = new DB();
+        _graph = new Graph();
         PropertyTypeID uint64ID = 0;
 
-        auto writer = _db->newConcurrentPartWriter();
+        auto writer = _graph->newConcurrentPartWriter();
         DataPartBuilder& builder1 = writer->newBuilder(3, 2);
         DataPartBuilder& builder2 = writer->newBuilder(2, 3);
         DataPartBuilder& builder3 = writer->newBuilder(4, 4);
 
-        auto& labelsets = _db->getMetadata()->labelsets();
+        auto& labelsets = _graph->getMetadata()->labelsets();
         const LabelSet l0 = LabelSet::fromList({0});
         const LabelSet l1 = LabelSet::fromList({1});
         const LabelSet l01 = LabelSet::fromList({0, 1});
@@ -137,17 +137,17 @@ protected:
 
     void TearDown() override {
         _jobSystem->terminate();
-        delete _db;
+        delete _graph;
     }
 
-    DB* _db = nullptr;
+    Graph* _graph = nullptr;
     std::unique_ptr<JobSystem> _jobSystem;
     std::string _outDir;
     FileUtils::Path _logPath;
 };
 
 TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::vector<TestEdgeRecord> compareSet {
         {0, 0, 1},
@@ -175,7 +175,7 @@ TEST_F(ConcurrentWriterTest, ScanEdgesIteratorTest) {
 }
 
 TEST_F(ConcurrentWriterTest, ScanNodesIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -190,7 +190,7 @@ TEST_F(ConcurrentWriterTest, ScanNodesIteratorTest) {
 }
 
 TEST_F(ConcurrentWriterTest, ScanNodesByLabelIteratorTest) {
-    const auto view = _db->view();
+    const auto view = _graph->view();
     const auto reader = view.read();
     std::vector<EntityID> compareSet {2, 4, 3, 8, 6, 7};
 

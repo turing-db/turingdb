@@ -1,7 +1,7 @@
 #include <spdlog/fmt/bundled/core.h>
 
-#include "DB.h"
-#include "DBReader.h"
+#include "Graph.h"
+#include "GraphReader.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
 #include "LogSetup.h"
@@ -20,15 +20,15 @@ int main() {
 
     {
         FileUtils::Path path = SAMPLE_DIR "/simple_graph.gml";
-        auto database = std::make_unique<DB>();
+        auto graph = std::make_unique<Graph>();
         GMLImporter importer;
 
         fmt::print("Importing {}\n", path.c_str());
-        if (!importer.importFile(jobSystem, database.get(), path)) {
+        if (!importer.importFile(jobSystem, graph.get(), path)) {
             return 1;
         }
 
-        const auto rd = database->read();
+        const auto rd = graph->read();
         fmt::print("Node count: {}\n", rd.getNodeCount());
         fmt::print("Edge count: {}\n", rd.getEdgeCount());
 

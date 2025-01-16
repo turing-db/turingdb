@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 
-#include "DBMetadata.h"
+#include "GraphMetadata.h"
 #include "EdgeContainer.h"
 #include "EdgeIndexer.h"
 #include "EntityID.h"
@@ -17,14 +17,14 @@ protected:
     void TearDown() override {
     }
 
-    DBMetadata _metadata;
+    GraphMetadata _metadata;
 };
 
 TEST_F(EdgeIndexerTest, General) {
     const EntityID firstNodeID = 0;
     const EntityID firstEdgeID = 0;
 
-    DBMetadata _metadata;
+    GraphMetadata _metadata;
     std::vector<LabelSetID> nodeLabelSets = {0, 0, 1, 1, 1, 2, 3, 3, 3, 4, 4, 5};
     auto nodes = NodeContainer::create(0,
                                        _metadata,

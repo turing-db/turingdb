@@ -2,8 +2,8 @@
 
 #include <range/v3/view/zip.hpp>
 
-#include "DBReader.h"
-#include "DB.h"
+#include "GraphReader.h"
+#include "Graph.h"
 #include "DataPartBuilder.h"
 #include "comparators/DataPartComparator.h"
 #include "JobSystem.h"
@@ -21,10 +21,10 @@ protected:
         _jobSystem.terminate();
     }
 
-    [[nodiscard]] std::unique_ptr<DB> createDB1() {
-        auto database = std::make_unique<DB>();
+    [[nodiscard]] std::unique_ptr<Graph> createDB1() {
+        auto graph = std::make_unique<Graph>();
 
-        auto* metadata = database->getMetadata();
+        auto* metadata = graph->getMetadata();
         auto& labels = metadata->labels();
         auto person = labels.getOrCreate("Person");
         auto officer = labels.getOrCreate("Officer");
@@ -40,7 +40,7 @@ protected:
         auto has = edgetypes.getOrCreate("HasObject");
         auto knows = edgetypes.getOrCreate("Knows");
 
-        auto change = database->newPartWriter();
+        auto change = graph->newPartWriter();
         auto p1 = change->addNode(LabelSet::fromList({person}));
         auto p2 = change->addNode(LabelSet::fromList({person, officer}));
         auto o1 = change->addNode(LabelSet::fromList({object}));
@@ -63,13 +63,13 @@ protected:
 
         change->commit(_jobSystem);
 
-        return database;
+        return graph;
     }
 
-    [[nodiscard]] std::unique_ptr<DB> createDB2() {
-        auto database = std::make_unique<DB>();
+    [[nodiscard]] std::unique_ptr<Graph> createDB2() {
+        auto graph = std::make_unique<Graph>();
 
-        auto* metadata = database->getMetadata();
+        auto* metadata = graph->getMetadata();
         auto& labels = metadata->labels();
         auto person = labels.getOrCreate("Person");
         auto officer = labels.getOrCreate("Officer");
@@ -85,7 +85,7 @@ protected:
         auto has = edgetypes.getOrCreate("HasObject");
         auto knows = edgetypes.getOrCreate("Knows");
 
-        auto change = database->newPartWriter();
+        auto change = graph->newPartWriter();
         auto p1 = change->addNode(LabelSet::fromList({person}));
         auto p2 = change->addNode(LabelSet::fromList({person, officer}));
         auto o1 = change->addNode(LabelSet::fromList({object}));
@@ -114,7 +114,7 @@ protected:
 
         change->commit(_jobSystem);
 
-        return database;
+        return graph;
     }
 
     JobSystem _jobSystem;
@@ -125,8 +125,8 @@ TEST_F(ComparatorTest, Equal) {
     auto db1 = createDB1();
     auto db2 = createDB1();
 
-    DBReader reader1 = db1->read();
-    DBReader reader2 = db2->read();
+    GraphReader reader1 = db1->read();
+    GraphReader reader2 = db2->read();
 
     auto parts1 = reader1.dataparts();
     auto parts2 = reader2.dataparts();
@@ -141,8 +141,8 @@ TEST_F(ComparatorTest, NotEqual) {
     auto db1 = createDB1();
     auto db2 = createDB2();
 
-    DBReader reader1 = db1->read();
-    DBReader reader2 = db2->read();
+    GraphReader reader1 = db1->read();
+    GraphReader reader2 = db2->read();
 
     auto parts1 = reader1.dataparts();
     auto parts2 = reader2.dataparts();
