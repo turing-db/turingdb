@@ -42,7 +42,7 @@ public:
         return *this;
     }
 
-    [[nodiscard]] FileResult<void> mkdir() const;
+    [[nodiscard]] Result<void> mkdir() const;
 
 private:
     std::string _path;
