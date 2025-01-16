@@ -31,6 +31,7 @@ bool TuringStopCommand::isActive() {
 
 void TuringStopCommand::run() {
     ProcessUtils::stopTool("turing-app");
+    ProcessUtils::stopTool("turing-app2");
     ProcessUtils::stopTool("turingdb");
     ProcessUtils::stopTool("bioserver");
 }
