@@ -34,7 +34,7 @@ void TuringStart2Command::setup() {
     _startCommand.add_argument("-nodemon")
         .implicit_value(true)
         .default_value(false);
-    _startCommand.add_argument("-api-port")
+    _startCommand.add_argument("-p")
         .default_value(_turingDBPort)
         .store_into(_turingDBPort)
         .nargs(1)
@@ -119,7 +119,7 @@ void TuringStart2Command::run() {
     if (noDemonRequested()) {
         turingApp.addArg("-nodemon");
     }
-    turingApp.addOption("-api-port", turingDBPort);
+    turingApp.addOption("-p", turingDBPort);
 #ifdef TURING_DEV
     if (isDevRequested()) {
         turingApp.addArg("-dev");

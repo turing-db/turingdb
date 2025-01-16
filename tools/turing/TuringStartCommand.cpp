@@ -35,7 +35,7 @@ void TuringStartCommand::setup() {
     _startCommand.add_argument("-nodemon")
                  .implicit_value(true)
                  .default_value(false);
-    _startCommand.add_argument("-api-port")
+    _startCommand.add_argument("-p")
                  .default_value(_bioserverPort)
                  .store_into(_bioserverPort)
                  .nargs(1)
@@ -119,7 +119,7 @@ void TuringStartCommand::run() {
 
     Command turingApp("turing-app");
     turingApp.addOption("-o", turingAppDir);
-    turingApp.addOption("-api-port", bioserverPort);
+    turingApp.addOption("-p", bioserverPort);
     if (isPrototypeRequested()) {
         turingApp.addArg("-prototype");
     }

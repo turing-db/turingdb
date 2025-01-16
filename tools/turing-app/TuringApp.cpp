@@ -51,7 +51,7 @@ int main(int argc, const char** argv) {
              .store_into(isPrototypeMode);
 
     uint32_t port = 6666;
-    argParser.add_argument("-api-port")
+    argParser.add_argument("-p")
         .default_value(port)
         .store_into(port)
         .nargs(1)
