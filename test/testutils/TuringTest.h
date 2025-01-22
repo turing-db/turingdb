@@ -54,6 +54,4 @@ protected:
     FileUtils::Path _perfPath;
 };
 
-#define TURING_TEST(TestSuite, TestName) TEST_F(TestSuite, TestName)
-
 }

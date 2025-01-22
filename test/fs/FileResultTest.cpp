@@ -14,7 +14,7 @@ protected:
     }
 };
 
-TURING_TEST(FileResultTest, NotExists) {
+TEST_F(FileResultTest, NotExists) {
     fs::Path p {"/path/to/non/existing"};
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Does not exist (No such file or directory)");
@@ -38,7 +38,7 @@ TURING_TEST(FileResultTest, NotExists) {
     }
 }
 
-TURING_TEST(FileResultTest, OpenFile) {
+TEST_F(FileResultTest, OpenFile) {
     fs::Path p {"/path/to/non/existing"};
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Could not open file (No such file or directory)");
@@ -53,7 +53,7 @@ TURING_TEST(FileResultTest, OpenFile) {
     }
 }
 
-TURING_TEST(FileResultTest, NotDirectory) {
+TEST_F(FileResultTest, NotDirectory) {
     fs::Path p {"/dev/null"};
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Not a directory");
@@ -68,7 +68,7 @@ TURING_TEST(FileResultTest, NotDirectory) {
     }
 }
 
-TURING_TEST(FileResultTest, AlreadyExists) {
+TEST_F(FileResultTest, AlreadyExists) {
     fs::Path p {_outDir};
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Already exists",
@@ -84,7 +84,7 @@ TURING_TEST(FileResultTest, AlreadyExists) {
     }
 }
 
-TURING_TEST(FileResultTest, CannotMkdir) {
+TEST_F(FileResultTest, CannotMkdir) {
     fs::Path p {"/path/to/non/existing"};
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Could not make directory (No such file or directory)");

@@ -20,7 +20,7 @@ using namespace turing::test;
 class ScanNodesIteratorTest : public TuringTest {
 protected:
     void initialize() override {
-        _jobSystem = std::make_unique<JobSystem>(1);
+        _jobSystem = std::make_unique<JobSystem>();
         _jobSystem->initialize();
     }
 
@@ -33,7 +33,7 @@ protected:
     FileUtils::Path _logPath;
 };
 
-TURING_TEST(ScanNodesIteratorTest, emptyDB) {
+TEST_F(ScanNodesIteratorTest, emptyDB) {
     auto graph = std::make_unique<Graph>();
     const auto view = graph->view();
     const auto reader = view.read();
@@ -46,7 +46,7 @@ TURING_TEST(ScanNodesIteratorTest, emptyDB) {
     ASSERT_TRUE(colNodes.empty());
 }
 
-TURING_TEST(ScanNodesIteratorTest, oneEmptyPart) {
+TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto graph = std::make_unique<Graph>();
     auto builder = graph->newPartWriter();
     builder->commit(*_jobSystem);
@@ -61,7 +61,7 @@ TURING_TEST(ScanNodesIteratorTest, oneEmptyPart) {
     ASSERT_TRUE(colNodes.empty());
 }
 
-TURING_TEST(ScanNodesIteratorTest, threeEmptyParts) {
+TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     auto graph = std::make_unique<Graph>();
 
     for (auto i = 0; i < 3; i++) {
@@ -79,7 +79,7 @@ TURING_TEST(ScanNodesIteratorTest, threeEmptyParts) {
     ASSERT_TRUE(colNodes.empty());
 }
 
-TURING_TEST(ScanNodesIteratorTest, oneChunkSizePart) {
+TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     auto graph = std::make_unique<Graph>();
 
     auto& labelsets = graph->getMetadata()->labelsets();
@@ -125,7 +125,7 @@ TURING_TEST(ScanNodesIteratorTest, oneChunkSizePart) {
     ASSERT_TRUE(!it.isValid());
 }
 
-TURING_TEST(ScanNodesIteratorTest, manyChunkSizePart) {
+TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto graph = std::make_unique<Graph>();
 
     auto& labelsets = graph->getMetadata()->labelsets();
@@ -174,7 +174,7 @@ TURING_TEST(ScanNodesIteratorTest, manyChunkSizePart) {
     }
 }
 
-TURING_TEST(ScanNodesIteratorTest, chunkAndALeftover) {
+TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     const size_t nodeCount = 1.35 * ChunkConfig::CHUNK_SIZE;
 
     auto graph = std::make_unique<Graph>();
@@ -213,6 +213,6 @@ TURING_TEST(ScanNodesIteratorTest, chunkAndALeftover) {
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 1;
+        testing::GTEST_FLAG(repeat) = 4;
     });
 }
