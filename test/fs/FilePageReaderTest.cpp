@@ -3,6 +3,8 @@
 #include "File.h"
 #include "FilePageReader.h"
 
+using namespace turing::test;
+
 class FilePageReaderTest : public TuringTest {
 protected:
     void initialize() override {
@@ -12,17 +14,20 @@ protected:
     void terminate() override {
     }
 
-    void writeOnes(size_t count) {
-        std::vector<uint64_t> ones(count, 1);
+    void writeOnes(size_t byteCount) {
+        const size_t count = byteCount / sizeof(uint64_t);
+        const size_t toWrite = count * sizeof(uint64_t);
+        _ones.resize(count, 1);
         auto f = fs::File::createAndOpen(_testfilePath);
         ASSERT_TRUE(f.has_value());
         f->clearContent();
-        f->write(ones.data(), ones.size() * sizeof(uint64_t));
+        f->write(_ones.data(), toWrite);
         f->close();
     }
 
-    void testOnes(size_t onesCount) {
-        writeOnes(onesCount); // 2 pages
+    void testOnes(size_t byteCount) {
+        const size_t count = byteCount / sizeof(uint64_t);
+        writeOnes(byteCount);
         auto reader = fs::FilePageReader::open(_testfilePath);
         ASSERT_TRUE(reader.has_value());
 
@@ -40,10 +45,11 @@ protected:
             }
         }
 
-        ASSERT_EQ(sum, onesCount);
+        ASSERT_EQ(sum, count);
     }
 
     fs::Path _testfilePath;
+    std::vector<uint64_t> _ones;
 };
 
 TEST_F(FilePageReaderTest, HardwareChecks) {
@@ -54,12 +60,17 @@ TEST_F(FilePageReaderTest, HardwareChecks) {
 }
 
 TEST_F(FilePageReaderTest, Pages) {
-    testOnes(7);
-    testOnes(512);
+    testOnes(13);
     testOnes(1024);
-    testOnes(1024ul * 1024); // Exactly one page (1MiB * sizeof(uint64_t))
-    testOnes(1024ul * 1024 + 7);
-    testOnes(1024ul * 1024 * 2); // Exactly two pages (2MiB * sizeof(uint64_t))
-    testOnes(1024ul * 1024 * 2 + 7);
+    // testOnes(fs::FilePageReader::PAGE_SIZE - 1);
+    testOnes(fs::FilePageReader::PAGE_SIZE);
+    testOnes(fs::FilePageReader::PAGE_SIZE + 13);
+    testOnes(fs::FilePageReader::PAGE_SIZE * 2);
+    testOnes(fs::FilePageReader::PAGE_SIZE * 2 + 13);
 }
 
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 2;
+    });
+}

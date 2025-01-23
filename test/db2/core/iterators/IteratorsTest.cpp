@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 using namespace db;
+using namespace js;
 
 struct TestEdgeRecord {
     EntityID _edgeID;
@@ -37,7 +38,7 @@ protected:
         FileUtils::createDirectory(_outDir);
         LogSetup::setupLogFileBacked(_logPath.string());
 
-        _jobSystem = std::make_unique<JobSystem>(1);
+        _jobSystem = std::make_unique<JobSystem>();
         _jobSystem->initialize();
         _graph = new Graph();
 

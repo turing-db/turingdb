@@ -12,33 +12,20 @@
 #include "GraphMetadata.h"
 #include "DataPartBuilder.h"
 #include "FileUtils.h"
-#include "LogSetup.h"
+#include "TuringTest.h"
 
 using namespace db;
+using namespace js;
+using namespace turing::test;
 
-class ScanNodesIteratorTest : public ::testing::Test {
+class ScanNodesIteratorTest : public TuringTest {
 protected:
-    void SetUp() override {
-        const testing::TestInfo* const testInfo =
-            testing::UnitTest::GetInstance()->current_test_info();
-
-        _outDir = testInfo->test_suite_name();
-        _outDir += "_";
-        _outDir += testInfo->name();
-        _outDir += ".out";
-        _logPath = FileUtils::Path(_outDir) / "log";
-
-        if (FileUtils::exists(_outDir)) {
-            FileUtils::removeDirectory(_outDir);
-        }
-        FileUtils::createDirectory(_outDir);
-
-        LogSetup::setupLogFileBacked(_logPath.string());
+    void initialize() override {
         _jobSystem = std::make_unique<JobSystem>();
         _jobSystem->initialize();
     }
 
-    void TearDown() override {
+    void terminate() override {
         _jobSystem->terminate();
     }
 
@@ -223,4 +210,10 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
         ASSERT_EQ(id, expectedID);
         expectedID++;
     }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 4;
+    });
 }

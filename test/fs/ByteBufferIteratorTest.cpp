@@ -2,6 +2,8 @@
 #include "ByteBuffer.h"
 #include "ByteBufferIterator.h"
 
+using namespace turing::test;
+
 class ByteBufferIteratorTest : public TuringTest {
 protected:
     void initialize() override {

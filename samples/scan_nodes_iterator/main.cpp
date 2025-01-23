@@ -11,6 +11,7 @@
 #include "ChunkConfig.h"
 
 using namespace db;
+using namespace js;
 
 using Clock = std::chrono::system_clock;
 

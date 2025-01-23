@@ -12,7 +12,6 @@ set(common_sources
         RWSpinLock.cpp
         ProcessUtils.cpp
         Buffer.cpp
-        JobSystem.cpp
         Demonology.cpp
         Process.cpp
         Panic.cpp
@@ -29,4 +28,5 @@ endif()
 target_link_libraries(common_s
     PUBLIC expected::expected
            turing_log_s
+           turing_jobsystem_s
            ${Boost_LIBRARIES})

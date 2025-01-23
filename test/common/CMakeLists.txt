@@ -5,7 +5,9 @@ function(add_common_tests exe_name cpp_file)
             turing_log_s
             gtest_main)
 
-    gtest_discover_tests(${exe_name})
+    gtest_discover_tests(${exe_name}
+        DISCOVERY_TIMEOUT 10
+        DISCOVER_MODE PRE_TEST)
 endfunction()
 
 add_common_tests(common_perfstat_tests PerfStatTest.cpp)

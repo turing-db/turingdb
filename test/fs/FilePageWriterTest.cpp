@@ -5,6 +5,8 @@
 #include "Path.h"
 #include "FilePageWriter.h"
 
+using namespace turing::test;
+
 class FilePageWriterTest : public TuringTest {
 protected:
     void initialize() override {
@@ -14,24 +16,33 @@ protected:
     void terminate() override {
     }
 
+
     template <std::integral IntegerT>
-    void testOnes(size_t count) {
+    void testOnes(size_t byteCount) {
+        const size_t count = byteCount / sizeof(IntegerT);
         {
             auto writer = fs::FilePageWriter::open(_testfilePath);
             ASSERT_TRUE(writer.has_value());
-            std::vector<IntegerT> ones(count, (IntegerT)1);
-            writer->write(std::span {ones});
+            if constexpr (std::same_as<IntegerT, uint64_t>) {
+                _uint64s.resize(count, (IntegerT)1);
+                writer->write(std::span {_uint64s});
+            } else if constexpr (std::same_as<IntegerT, uint8_t>) {
+                _uint8s.resize(count, (IntegerT)1);
+                writer->write(std::span {_uint8s});
+            } else if constexpr (std::same_as<IntegerT, int8_t>) {
+                _int8s.resize(count, (IntegerT)1);
+                writer->write(std::span {_int8s});
+            }
         }
 
         auto f = fs::File::open(_testfilePath);
         ASSERT_TRUE(f);
 
-        fs::FileReader reader;
-        reader.setFile(&f.value());
-        reader.read();
-        ASSERT_FALSE(reader.errorOccured());
+        _reader.setFile(&f.value());
+        _reader.read();
+        ASSERT_FALSE(_reader.errorOccured());
 
-        auto it = reader.iterateBuffer();
+        auto it = _reader.iterateBuffer();
         size_t sum = 0;
 
         for (; it != it.end();) {
@@ -41,6 +52,10 @@ protected:
         ASSERT_EQ(sum, count);
     }
 
+    std::vector<uint64_t> _uint64s;
+    std::vector<uint8_t> _uint8s;
+    std::vector<int8_t> _int8s;
+    fs::FileReader _reader;
     fs::Path _testfilePath;
 };
 
@@ -53,32 +68,33 @@ TEST_F(FilePageWriterTest, HardwareChecks) {
 
 TEST_F(FilePageWriterTest, Pages) {
     testOnes<uint64_t>(0);
-    testOnes<uint64_t>(7);
-    testOnes<uint64_t>(512);
+    testOnes<uint64_t>(13);
     testOnes<uint64_t>(1024);
-    testOnes<uint64_t>(1024ul * 1024); // Exactly one page (1MiB * sizeof(uint64_t))
-    testOnes<uint64_t>(1024ul * 1024 + 7);
-    testOnes<uint64_t>(1024ul * 1024 * 2); // Exactly two pages (2MiB * sizeof(uint64_t))
-    testOnes<uint64_t>(1024ul * 1024 * 2 + 7);
+    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE - 1);
+    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE);
+    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE + 13);
+    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE * 2);
+    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE * 2 + 13);
 }
 
 TEST_F(FilePageWriterTest, Types) {
     testOnes<uint8_t>(0);
-    testOnes<uint8_t>(7);
-    testOnes<uint8_t>(512);
+    testOnes<uint8_t>(13);
     testOnes<uint8_t>(1024);
-    testOnes<uint8_t>(1024ul * 1024);
-    testOnes<uint8_t>(1024ul * 1024 + 7);
-    testOnes<uint8_t>(1024ul * 1024 * 2);
-    testOnes<uint8_t>(1024ul * 1024 * 2 + 7);
+    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE - 1);
+    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE);
+    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE + 13);
+    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE * 2);
+    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE * 2 + 13);
 
-    testOnes<int8_t>(7);
-    testOnes<int8_t>(512);
+    testOnes<int8_t>(0);
+    testOnes<int8_t>(13);
     testOnes<int8_t>(1024);
-    testOnes<int8_t>(1024ul * 1024);
-    testOnes<int8_t>(1024ul * 1024 + 7);
-    testOnes<int8_t>(1024ul * 1024 * 2);
-    testOnes<int8_t>(1024ul * 1024 * 2 + 7);
+    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE - 1);
+    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE);
+    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE + 13);
+    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE * 2);
+    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE * 2 + 13);
 
     {
         constexpr std::string_view helloWorld = "Hello world!";
@@ -103,4 +119,10 @@ TEST_F(FilePageWriterTest, Types) {
             ASSERT_TRUE(str == helloWorld);
         }
     }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 2;
+    });
 }

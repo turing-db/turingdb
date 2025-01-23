@@ -1,27 +1,13 @@
 #include "JobSystem.h"
-#include "BioAssert.h"
 
 #include <spdlog/spdlog.h>
+#include <cassert>
 
-Job& JobQueue::push(Job job) {
-    return _jobs.emplace(std::move(job));
-}
+#include "JobGroup.h"
 
-std::optional<Job> JobQueue::pop() {
-    if (_jobs.empty()) {
-        return std::nullopt;
-    }
+using namespace js;
 
-    Job job = std::move(_jobs.front());
-    _jobs.pop();
-    return job;
-}
-
-size_t JobQueue::size() const {
-    return _jobs.size();
-}
-
-JobSystem::JobSystem() 
+JobSystem::JobSystem()
     : _mainThreadID(std::this_thread::get_id())
 {
 }
@@ -47,24 +33,31 @@ void JobSystem::initialize() {
     for (size_t i = 0; i < _nThreads; i++) {
         _workers.emplace_back([&] {
             while (true) {
-                _queueMutex.lock();
-                auto j = _jobs.pop();
-                _queueMutex.unlock();
+                std::optional<Job> j;
+                {
+                    std::unique_lock queueLock {_queueMutex};
 
-                if (_stopRequested.load()) {
+                    // Wait until new job is pushed or stop is requested
+                    _wakeCondition.wait(queueLock, [&] {
+                        return !_jobs.empty() || _stopRequested.load();
+                    });
+
+                    // Retrieving job while queue is still locked
+                    j = _jobs.pop();
+
+                    // Release JobQueue at the end of this block
+                }
+
+                if (!j && _stopRequested.load()) {
+                    // No more job available and stop requested
                     return;
                 }
 
-                if (j.has_value()) {
-                    auto& jobValue = j.value();
-                    jobValue._operation(jobValue._promise.get());
-                    jobValue._promise->finish();
-                    _finishedCount.fetch_add(1);
-                } else {
-                    // no job, put thread to sleep
-                    std::unique_lock<std::mutex> lock(_wakeMutex);
-                    _wakeCondition.wait(lock);
-                }
+                auto& job = j.value();
+
+                job._operation(job._promise.get());
+                job._promise->finish();
+                _finishedCount.fetch_add(1);
             }
         });
     }
@@ -80,8 +73,7 @@ void JobSystem::wait() {
 }
 
 void JobSystem::terminate() {
-    msgbioassert(!_terminated, "Attempting to terminate the job system twice");
-
+    assert(!_terminated);
     {
         std::unique_lock<std::mutex> lock(_queueMutex);
         spdlog::info("Job system terminating, {} jobs remaining", _jobs.size());
