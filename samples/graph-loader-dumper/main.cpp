@@ -14,6 +14,7 @@
 #include "Neo4j/Neo4JParserConfig.h"
 
 using namespace db;
+using namespace js;
 
 static std::unique_ptr<Graph> createSimpleGraph() {
     auto graph = std::make_unique<Graph>();
@@ -192,7 +193,7 @@ int main() {
             return 1;
         }
         const auto t1 = Clock::now();
-        logt::ElapsedTime(duration<Milliseconds>(t0, t1), "ms");
+        logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
 
         const std::unique_ptr<Graph> loadedGraph = std::move(loadedGraphRes.value());
 
