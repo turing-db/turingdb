@@ -3,6 +3,8 @@
 #include "FileReader.h"
 #include "File.h"
 
+using namespace turing::test;
+
 class FileResultTest : public TuringTest {
 protected:
     void initialize() override {
@@ -81,7 +83,6 @@ TEST_F(FileResultTest, AlreadyExists) {
         ASSERT_EQ(e.getErrno(), -1);
     }
 }
-
 
 TEST_F(FileResultTest, CannotMkdir) {
     fs::Path p {"/path/to/non/existing"};

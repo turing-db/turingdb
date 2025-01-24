@@ -62,7 +62,7 @@ public:
     }
 
     void write(const uint8_t* data, size_t size) {
-        bioassert(avail() > size);
+        bioassert(avail() >= size);
         std::memcpy(_buffer, data, size);
         _size += size;
     }

@@ -14,6 +14,7 @@
 #include "DataPart.h"
 
 using namespace db;
+using namespace js;
 
 struct TestEdgeRecord {
     EntityID _edgeID;

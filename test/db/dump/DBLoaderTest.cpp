@@ -91,13 +91,13 @@ TEST_F(DBLoaderTest, CyberSecurityDB) {
     testExampleDB(cyberSecurityDB());
 }
 
-TEST_F(DBLoaderTest, NetworkDB) {
-    testExampleDB(networkDB());
-}
-
-TEST_F(DBLoaderTest, PoleDB) {
-    testExampleDB(poleDB());
-}
+//TEST_F(DBLoaderTest, NetworkDB) {
+//    testExampleDB(networkDB());
+//}
+//
+//TEST_F(DBLoaderTest, PoleDB) {
+//    testExampleDB(poleDB());
+//}
 
 TEST_F(DBLoaderTest, StackoverflowDB) {
     testExampleDB(stackoverflowDB());

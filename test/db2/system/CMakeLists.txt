@@ -4,7 +4,9 @@ function(add_db2_system_gtest exe_name cpp_file)
         PRIVATE turing_db2_core_s
                 turing_db2_system_s
                 gtest_main)
-    gtest_discover_tests(${exe_name})
+    gtest_discover_tests(${exe_name}
+        DISCOVERY_TIMEOUT 10
+        DISCOVER_MODE PRE_TEST)
 endfunction()
 
 add_db2_system_gtest(db2_system_test SystemTest.cpp)

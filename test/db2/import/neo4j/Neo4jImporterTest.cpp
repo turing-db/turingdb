@@ -15,6 +15,7 @@
 #include "Time.h"
 
 using namespace db;
+using namespace js;
 
 class Neo4jImporterTest : public ::testing::Test {
 protected:

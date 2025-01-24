@@ -15,6 +15,7 @@
 #include <iostream>
 
 using namespace db;
+using namespace js;
 
 int main() {
     JobSystem jobSystem;

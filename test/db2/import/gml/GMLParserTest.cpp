@@ -2,6 +2,7 @@
 #include "GMLParser.h"
 
 using namespace db;
+using namespace turing::test;
 
 class GMLSax {
 public:

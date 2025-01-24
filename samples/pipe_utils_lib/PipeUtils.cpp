@@ -31,6 +31,7 @@
 
 using namespace db;
 using namespace net;
+using namespace js;
 
 PipeSample::PipeSample(const std::string& sampleName)
     : _sampleName(sampleName)

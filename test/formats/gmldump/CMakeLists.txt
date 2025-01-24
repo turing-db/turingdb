@@ -4,4 +4,6 @@ target_link_libraries(gml_dump_tests PRIVATE
     turing_db_core_s
     gtest_main)
 
-gtest_discover_tests(gml_dump_tests)
+gtest_discover_tests(gml_dump_tests
+    DISCOVERY_TIMEOUT 10
+    DISCOVER_MODE PRE_TEST)

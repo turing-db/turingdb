@@ -2,6 +2,8 @@
 #include "FileWriter.h"
 #include "FileReader.h"
 
+using namespace turing::test;
+
 class FileWriterTest : public TuringTest {
 protected:
     void initialize() override {

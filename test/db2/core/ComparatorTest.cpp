@@ -8,7 +8,10 @@
 #include "comparators/DataPartComparator.h"
 #include "JobSystem.h"
 
+using namespace turing::test;
 using namespace db;
+using namespace js;
+
 namespace rv = ranges::views;
 
 class ComparatorTest : public TuringTest {

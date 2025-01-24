@@ -8,6 +8,7 @@
 #include "PerfStat.h"
 
 using namespace db;
+using namespace js;
 
 int main() {
     JobSystem jobSystem;

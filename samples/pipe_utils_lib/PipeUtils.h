@@ -10,7 +10,9 @@ namespace db {
     class DBServer;
 }
 
+namespace js {
 class JobSystem;
+}
 
 class PipeSample {
 public:
@@ -32,7 +34,7 @@ public:
 private:
     std::string _sampleName;
     db::DBServerConfig* _serverConfig;
-    std::unique_ptr<JobSystem> _jobSystem;
+    std::unique_ptr<js::JobSystem> _jobSystem;
     std::unique_ptr<db::DBServer> _server;
     db::SystemManager* _system {nullptr};
 };

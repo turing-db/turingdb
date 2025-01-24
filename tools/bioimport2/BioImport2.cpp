@@ -13,6 +13,7 @@
 #include "ToolInit.h"
 
 using namespace db;
+using namespace js;
 
 enum class ImportType {
     NEO4J,
