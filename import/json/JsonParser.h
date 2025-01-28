@@ -1,39 +1,57 @@
 #pragma once
 
-#include "JsonParsingStats.h"
-#include "Neo4j4JsonParser.h"
-#include "FileUtils.h"
+#include "writers/ConcurrentWriter.h"
+#include "views/GraphView.h"
+
+namespace db {
+
+class Graph;
+class PropertyTypeMap;
+class LabelMap;
+class EdgeTypeMap;
+class IDMapper;
+class JobSystem;
+
+struct GraphStats {
+    size_t nodeCount = 0;
+    size_t edgeCount = 0;
+};
 
 class JsonParser {
 public:
-    enum class FileFormat {
-        Neo4j4_NodeProperties = 0,
-        Neo4j4_Nodes,
-        Neo4j4_EdgeProperties,
-        Neo4j4_Edges,
-        Neo4j4_Stats,
+    enum class FileType {
+        Neo4j_4_Stats = 0,
+        Neo4j_4_NodeProperties,
+        Neo4j_4_EdgeProperties,
+        Neo4j_4_Nodes,
+        Neo4j_4_Edges,
     };
 
-    enum class DirFormat {
-        Neo4j4 = 0,
-    };
+    explicit JsonParser(Graph* graph);
+    JsonParser(const JsonParser&) = delete;
+    JsonParser(JsonParser&&) = delete;
+    JsonParser& operator=(const JsonParser&) = delete;
+    JsonParser& operator=(JsonParser&&) = delete;
+    ~JsonParser();
 
-    JsonParser(db::DB* db, const std::string& networkName);
+    void resetGraphView();
+    GraphStats parseStats(const std::string& data);
+    bool parseNodeLabels(const std::string& data);
+    bool parseNodeProperties(const std::string& data);
+    bool parseEdgeTypes(const std::string& data);
+    bool parseEdgeProperties(const std::string& data);
+    bool parseNodes(const std::string& data, DataPartBuilder&);
+    bool parseEdges(const std::string& data, DataPartBuilder&);
 
-    bool parseJsonDir(const FileUtils::Path& jsonDir, DirFormat format);
-    bool parse(const std::string& data, FileFormat format);
-    db::DB* getDB() const;
-
-    const JsonParsingStats& getStats() const { return _stats; };
-
-    void setReducedOutput(bool value) { _neo4j4Parser.setReducedOutput(value); }
+    DataPartBuilder& newDataBuffer(size_t nodeCount, size_t edgeCount);
+    void pushDataParts(Graph& graph, JobSystem& jobSystem);
 
 private:
-    db::DB* _db {nullptr};
-    std::string _networkName;
-    JsonParsingStats _stats;
-    Neo4j4JsonParser _neo4j4Parser;
-    bool _reducedOutput = false;
-
-    bool parseNeo4jJsonDir(const FileUtils::Path& jsonDir);
+    Graph* _graph {nullptr};
+    GraphView _view;
+    std::unique_ptr<ConcurrentWriter> _writer;
+    GraphMetadata* _graphMetadata {nullptr};
+    std::unique_ptr<IDMapper> _nodeIDMapper;
 };
+
+}

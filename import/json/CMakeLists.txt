@@ -1,14 +1,11 @@
-set(import_json_sources
-    JsonExamples.cpp
-    JsonParser.cpp
-    Neo4j4JsonParser.cpp)
+add_library(turing_db_import_json_s
+    STATIC  JsonParser.cpp)
 
-add_library(bio_import_json_s STATIC ${import_json_sources})
+target_link_libraries(turing_db_import_json_s
+    PUBLIC  turing_db_common_s
+            turing_db_jobs_s
+            turing_db_storage_s
+    PRIVATE nlohmann_json
+            range-v3)
 
-target_link_libraries(bio_import_json_s
-    turing_db_core_s
-    common_s
-    turing_log_s
-    nlohmann_json)
-
-target_include_directories(bio_import_json_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(turing_db_import_json_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

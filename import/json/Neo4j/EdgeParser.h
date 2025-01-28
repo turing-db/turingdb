@@ -1,0 +1,239 @@
+#pragma once
+
+#include <nlohmann/json.hpp>
+#include <regex>
+#include <spdlog/spdlog.h>
+
+#include "Graph.h"
+#include "views/GraphView.h"
+#include "reader/GraphReader.h"
+#include "writers/DataPartBuilder.h"
+#include "IDMapper.h"
+#include "Parser.h"
+
+namespace db::json::neo4j {
+
+using json = nlohmann::json;
+
+class EdgeParser : public json::json_sax_t, public Parser {
+public:
+    EdgeParser(GraphMetadata* graphMetadata,
+               DataPartBuilder* buf,
+               IDMapper* nodeIDMapper,
+               const GraphView& dbView)
+        : _propTypeMap(&graphMetadata->propTypes()),
+          _edgeTypeMap(&graphMetadata->edgeTypes()),
+          _buf(buf),
+          _nodeIDMapper(nodeIDMapper),
+          _dbView(dbView),
+          _reader(dbView)
+    {
+    }
+
+    bool null() override {
+        return true;
+    }
+
+    bool boolean(bool val) override {
+        if (!_parsingEdge) {
+            return true;
+        }
+
+        if (_nesting == 7) {
+            _currentPropName += " (Bool)";
+            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            if (!propType.isValid()) {
+                spdlog::info("Property type {} not supported", _currentPropName);
+                return true;
+            }
+
+            _buf->addEdgeProperty<types::Bool>(*_currentEdge, propType._id, val);
+            return true;
+        }
+
+        return true;
+    }
+
+    bool number_integer(number_integer_t val) override {
+        if (!_parsingEdge) {
+            return true;
+        }
+
+        if (_nesting == 7) {
+            _currentPropName += " (Int64)";
+            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            if (!propType.isValid()) {
+                spdlog::info("Property type {} not supported", _currentPropName);
+                return true;
+            }
+
+            _buf->addEdgeProperty<types::Int64>(*_currentEdge, propType._id, val);
+            return true;
+        }
+
+        return true;
+    }
+
+    bool number_unsigned(number_unsigned_t val) override {
+        if (!_parsingEdge) {
+            return true;
+        }
+
+        if (_nesting == 7) {
+            _currentPropName += " (UInt64)";
+            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            if (!propType.isValid()) {
+                spdlog::info("Property type {} not supported", _currentPropName);
+                return true;
+            }
+
+            _buf->addEdgeProperty<types::UInt64>(*_currentEdge, propType._id, val);
+            return true;
+        }
+
+        if (_nesting == 6) {
+            if (!_parsedSourceID) {
+                _sourceID = val;
+                _parsedSourceID = true;
+                return true;
+            }
+
+            if (!_parsedTargetID) {
+                _targetID = val;
+                _parsedTargetID = true;
+                EntityID tmpSrcID = _nodeIDMapper->getID(_sourceID);
+                EntityID tmpTgtID = _nodeIDMapper->getID(_targetID);
+                _currentEdge = &_buf->addEdge(_edgeTypeID,
+                                              _reader.getFinalNodeID(tmpSrcID),
+                                              _reader.getFinalNodeID(tmpTgtID));
+                return true;
+            }
+
+            // Error
+            return false;
+        }
+        return true;
+    }
+
+    bool number_float(number_float_t val, const string_t&) override {
+        if (!_parsingEdge) {
+            return true;
+        }
+
+        if (_nesting == 7) {
+            _currentPropName += " (Double)";
+            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            if (!propType.isValid()) {
+                spdlog::info("Property type {} not supported", _currentPropName);
+                return true;
+            }
+
+            _buf->addEdgeProperty<types::Double>(*_currentEdge, propType._id, val);
+            return true;
+        }
+
+        return true;
+    }
+
+    bool string(string_t& val) override {
+        if (!_parsingEdge) {
+            return true;
+        }
+
+        if (_nesting == 7) {
+            _currentPropName += " (String)";
+            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            if (!propType.isValid()) {
+                spdlog::info("Property type {} not supported", _currentPropName);
+                return true;
+            }
+
+            std::string escaped;
+            ControlCharactersEscaper::escape(val, escaped);
+            _buf->addEdgeProperty<types::String>(*_currentEdge, propType._id, std::move(escaped));
+            return true;
+        }
+
+        if (_nesting == 6) {
+            if (!_parsedEdgeType) {
+                _parsedEdgeType = true;
+                _edgeTypeID = _edgeTypeMap->get(val);
+                return true;
+            }
+        }
+        return true;
+    }
+
+    bool start_object(std::size_t) override {
+        _nesting++;
+        _parsedEdgeType = false;
+        _parsedSourceID = false;
+        _parsedTargetID = false;
+        return true;
+    }
+
+    bool end_object() override {
+        _nesting--;
+        return true;
+    }
+
+    bool start_array(std::size_t) override {
+        _nesting++;
+        return true;
+    }
+
+    bool end_array() override {
+        _nesting--;
+        return true;
+    }
+
+    bool key(string_t& val) override {
+        if (_nesting == 5) {
+            if (val == "row") {
+                _parsingEdge = true;
+                return true;
+            } else {
+                _parsingEdge = false;
+                return true;
+            }
+        }
+
+        if (_nesting == 7) {
+            _currentPropName = val;
+            return true;
+        }
+
+        return true;
+    }
+
+    bool binary(json::binary_t&) override {
+        return true;
+    }
+
+    bool parse_error(std::size_t,
+                     const std::string&,
+                     const json::exception&) override {
+        return false;
+    }
+
+private:
+    PropertyTypeMap* _propTypeMap = nullptr;
+    EdgeTypeMap* _edgeTypeMap;
+    DataPartBuilder* _buf;
+    const IDMapper* _nodeIDMapper;
+    GraphView _dbView;
+    GraphReader _reader;
+    size_t _nesting = 0;
+    const EdgeRecord* _currentEdge {nullptr};
+    bool _parsingEdge = false;
+    bool _parsedEdgeType = false;
+    bool _parsedSourceID = false;
+    bool _parsedTargetID = false;
+    std::string _currentPropName;
+    EdgeTypeID _edgeTypeID = 0;
+    uint64_t _sourceID = 0;
+    uint64_t _targetID = 0;
+    std::regex _regEscapes {"\"|\\\\"};
+    std::regex _regNewline {"\n"};
+};
+}

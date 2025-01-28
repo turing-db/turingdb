@@ -1,117 +1,124 @@
 #include "Neo4JHttpRequest.h"
 
-#include <cstdlib>
 #include <curl/curl.h>
 #include <spdlog/spdlog.h>
 
-#include "FileUtils.h"
 #include "TimerStat.h"
 
-static size_t writeCallback(char* contents, size_t size, size_t nmemb,
-                            std::string* userp) {
-    std::string content(contents, nmemb);
-    (*userp) += content;
+namespace {
+
+size_t writeCallback(char* contents, size_t size, size_t nmemb,
+                     std::string* userp) {
+
+    userp->append(contents, nmemb);
     return size * nmemb;
 }
 
-Neo4JHttpRequest::Neo4JHttpRequest(const std::string& statement)
-    : _statement(statement) {
 }
 
-Neo4JHttpRequest::Neo4JHttpRequest(Neo4JHttpRequest&& other) noexcept
-    : _url(std::move(other._url)),
-      _username(std::move(other._username)),
-      _password(std::move(other._password)),
-      _port(other._port),
-      _statement(std::move(other._statement)),
-      _jsonRequest(std::move(other._jsonRequest)),
-      _data(std::move(other._data)),
-      _isReady(other._isReady),
-      _result(other._result),
-      _silent(other._silent)
-{
-}
+namespace db {
 
-Neo4JHttpRequest::~Neo4JHttpRequest() {
-}
-
-void Neo4JHttpRequest::exec() {
+bool Neo4JHttpRequest::exec() {
     TimerStat timer {"Neo4j HTTP Request: " + _statement};
-    _data = "";
     CURL* curl = curl_easy_init();
 
     if (!curl) {
-        _result = false;
-        setReady();
-        return;
+        return false;
     }
 
-    _jsonRequest =
-        R"({"statements": [{"statement": ")" + _statement + "\"}]}";
-
+    std::string jsonData = R"({"statements": [{"statement": ")" + _statement + "\"}]}";
     std::string userPwd = _username + ":" + _password;
+    std::string url = _url + _urlSuffix;
 
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Accept: application/json");
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    std::string url = _port != 0
-                        ? _url + ":" + std::to_string(_port) + _urlSuffix
-                        : _url + _urlSuffix;
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_PORT, _port);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
     curl_easy_setopt(curl, CURLOPT_USERPWD, userPwd.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &_data);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, _jsonRequest.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &_response);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/7.81.0");
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50L);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, _method.c_str());
     curl_easy_setopt(curl, CURLOPT_FTP_SKIP_PASV_IP, 1L);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
-    if (!_silent) {
-        spdlog::info("Running HTTP request to Neo4J {}", _statement);
+    if (_method == "POST") {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonData.c_str());
     }
+
     CURLcode res = curl_easy_perform(curl);
 
     if (res != 0) {
-        spdlog::error("HTTP request to Neo4J failed {}", _statement);
-        _result = false;
-        setReady();
-        return;
+        spdlog::error("Error in request to Neo4j '{}'", curl_easy_strerror(res));
+        return false;
     }
 
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
-    _result = true;
-    setReady();
+    return true;
 }
 
-bool Neo4JHttpRequest::writeToFile(const std::filesystem::path& path) const {
-    return FileUtils::writeFile(path, _data);
-}
+bool Neo4JHttpRequest::execStatic(std::string* response,
+                             const std::string& url,
+                             const std::string& urlSuffix,
+                             const std::string& username,
+                             const std::string& password,
+                             uint64_t port,
+                             std::string_view method,
+                             const std::string& statement) {
+    TimerStat timer {"Neo4j HTTP Request: " + statement};
+    CURL* curl = curl_easy_init();
 
-void Neo4JHttpRequest::clear() {
-    _data.clear();
-    _data.resize(0);
-}
-
-void Neo4JHttpRequest::reportError() const {
-    spdlog::error("Bad curl request {}", _statement);
-}
-
-void Neo4JHttpRequest::setReady() {
-    std::unique_lock lock(_readyMutex);
-    _isReady = true;
-    _readyCond.notify_all();
-}
-
-void Neo4JHttpRequest::waitReady() {
-    std::unique_lock lock(_readyMutex);
-    while (!_isReady) {
-        _readyCond.wait(lock);
+    if (!curl) {
+        return false;
     }
+
+    std::string jsonData = R"({"statements": [{"statement": ")" + statement + "\"}]}";
+    std::string userPwd = username + ":" + password;
+    std::string finalUrl = url + urlSuffix;
+
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_PORT, port);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERPWD, userPwd.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/7.81.0");
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.data());
+    curl_easy_setopt(curl, CURLOPT_FTP_SKIP_PASV_IP, 1L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+
+    if (method == "POST") {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonData.c_str());
+    }
+
+    CURLcode res = curl_easy_perform(curl);
+
+    if (res != 0) {
+        spdlog::error("Error in request to Neo4j '{}'", curl_easy_strerror(res));
+        return false;
+    }
+
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(headers);
+    return true;
+}
+
 }

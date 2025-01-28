@@ -1,10 +1,10 @@
 #include "Panic.h"
 
 void panic() {
-    throw TuringException();
+    throw TuringDBException();
 }
 
 void panic(std::string&& msg) {
-    throw TuringException(std::move(msg));
+    throw TuringDBException(std::move(msg));
 }
 

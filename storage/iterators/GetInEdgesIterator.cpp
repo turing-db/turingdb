@@ -1,0 +1,164 @@
+#include "GetInEdgesIterator.h"
+
+#include <algorithm>
+
+#include "indexers/EdgeIndexer.h"
+#include "IteratorUtils.h"
+
+namespace db {
+
+GetInEdgesIterator::GetInEdgesIterator(const GraphView& view, const ColumnIDs* inputNodeIDs)
+    : Iterator(view),
+      _inputNodeIDs(inputNodeIDs),
+      _nodeIt(inputNodeIDs->cend())
+{
+    init();
+}
+
+GetInEdgesIterator::~GetInEdgesIterator() {
+}
+
+void GetInEdgesIterator::reset() {
+    Iterator::reset();
+    _nodeIt = _inputNodeIDs->cend();
+    init();
+}
+
+void GetInEdgesIterator::init() {
+    for (; _partIt.isValid(); _partIt.next()) {
+        _nodeIt = _inputNodeIDs->cbegin();
+
+        const DataPart* part = _partIt.get();
+        const EdgeIndexer& indexer = part->edgeIndexer();
+
+        for (; _nodeIt != _inputNodeIDs->cend(); _nodeIt++) {
+            const EntityID nodeID = *_nodeIt;
+            _edges = indexer.getNodeInEdges(nodeID);
+
+            if (!_edges.empty()) {
+                _edgeIt = _edges.begin();
+                return;
+            }
+        }
+    }
+}
+
+void GetInEdgesIterator::next() {
+    _edgeIt++;
+    nextValid();
+}
+
+void GetInEdgesIterator::nextValid() {
+    while (_edgeIt == _edges.end()) {
+        // No more edges for the current node -> next node
+        _nodeIt++;
+
+        while (_nodeIt == _inputNodeIDs->cend()) {
+            // No more requested node in the current datapart.
+            // -> Next datapart
+            _nodeIt = _inputNodeIDs->cbegin();
+            _partIt.next();
+        }
+
+        if (!_partIt.isValid()) {
+            return;
+        }
+
+        const DataPart* part = _partIt.get();
+        const EntityID nodeID = *_nodeIt;
+        const EdgeIndexer& indexer = part->edgeIndexer();
+
+        _edges = indexer.getNodeInEdges(nodeID);
+        _edgeIt = _edges.begin();
+    }
+}
+
+GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
+                                               const ColumnIDs* inputNodeIDs)
+    : GetInEdgesIterator(view, inputNodeIDs)
+{
+}
+
+static constexpr size_t NColumns = 3;
+static constexpr size_t NCombinations = 1 << NColumns;
+
+void GetInEdgesChunkWriter::fill(size_t maxCount) {
+    size_t remainingToMax = maxCount;
+    static constexpr auto bools = generateArray<NColumns, NCombinations>();
+    static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
+
+    _indices->clear();
+
+    if (_edgeIDs) {
+        _edgeIDs->clear();
+    }
+    if (_tgts) {
+        _tgts->clear();
+    }
+    if (_types) {
+        _types->clear();
+    }
+
+    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+        while (isValid() && remainingToMax > 0) {
+            const auto nodeInEdges = _partIt.get()->edgeIndexer().getNodeInEdges(*_nodeIt);
+            const auto nodeInEdgesEnd = nodeInEdges.end();
+            const size_t availInPart = std::distance(_edgeIt, nodeInEdgesEnd);
+            const size_t rangeSize = std::min(maxCount, availInPart);
+            const size_t prevSize = _indices->size();
+            const size_t newSize = prevSize + rangeSize;
+            _indices->resize(newSize);
+
+            const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
+            std::fill(_indices->begin() + prevSize, _indices->end(), index);
+            remainingToMax -= rangeSize;
+
+            if constexpr (conditions[0]) {
+                _edgeIDs->resize(newSize);
+                std::generate((_edgeIDs)->begin() + prevSize,
+                              (_edgeIDs)->end(),
+                              [edgeIt = this->_edgeIt]() mutable {
+                                  const EntityID id = edgeIt->_edgeID;
+                                  ++edgeIt;
+                                  return id;
+                              });
+            }
+            if constexpr (conditions[1]) {
+                _tgts->resize(newSize);
+                std::generate((_tgts)->begin() + prevSize,
+                              (_tgts)->end(),
+                              [edgeIt = this->_edgeIt]() mutable {
+                                  const EntityID id = edgeIt->_otherID;
+                                  ++edgeIt;
+                                  return id;
+                              });
+            }
+            if constexpr (conditions[2]) {
+                _types->resize(newSize);
+                std::generate((_types)->begin() + prevSize,
+                              (_types)->end(),
+                              [edgeIt = this->_edgeIt]() mutable {
+                                  const EntityID id = edgeIt->_edgeTypeID;
+                                  ++edgeIt;
+                                  return id;
+                              });
+            }
+
+            _edgeIt += rangeSize;
+            nextValid();
+        };
+    };
+
+    switch (bitmask::create(_edgeIDs, _tgts, _types)) {
+        CASE(0);
+        CASE(1);
+        CASE(2);
+        CASE(3);
+        CASE(4);
+        CASE(5);
+        CASE(6);
+        CASE(7);
+    }
+}
+
+}

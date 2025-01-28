@@ -1,8 +1,7 @@
 
 cmake_minimum_required(VERSION 3.6)
 
-project(biodesigner)
-
+project(turingdb)
 
 # Check of newlines at EOF
 message(STATUS "Checking for newlines at EOF")
@@ -79,9 +78,7 @@ else()
 endif()
 
 # C++ flags
-set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_FEATURES} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 # Create compilation database and symlink in the src folder
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -90,11 +87,6 @@ execute_process(
         ${CMAKE_BINARY_DIR}/compile_commands.json
         ${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
 )
-
-# Boost
-set(BOOST_VERSION boost-1.74)
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS regex filesystem system)
 
 # Threads
 find_package(Threads REQUIRED)
@@ -114,23 +106,12 @@ message(STATUS "Protobuf version ${Protobuf_VERSION}")
 # gRPC
 find_package(gRPC REQUIRED)
 
-# Cython utilities
-include(CythonLibrary)
-
-# CapnProto
-find_package(CapnProto REQUIRED
-    PATHS "/turing/tools/lib/cmake/CapnProto")
-
 # Bison and Flex
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
 # aws-sdk-cpp
 find_package(AWSSDK REQUIRED COMPONENTS s3)
-
-# Root source directory
-set(BIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${BIO_SOURCE_DIR})
 
 enable_testing()
 
@@ -145,27 +126,12 @@ execute_process(COMMAND git show --no-patch --format=%at
                 OUTPUT_VARIABLE HEAD_COMMIT_TIMESTAMP
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_subdirectory(app)
-add_subdirectory(app2)
 add_subdirectory(external)
-add_subdirectory(build)
-add_subdirectory(jobsystem)
 add_subdirectory(common)
-add_subdirectory(logging)
-add_subdirectory(perf)
-add_subdirectory(db)
-add_subdirectory(db2)
-add_subdirectory(rpcserver)
-add_subdirectory(fs)
-#add_subdirectory(demo)
-add_subdirectory(formats)
+add_subdirectory(base)
+add_subdirectory(log)
+add_subdirectory(jobs)
+add_subdirectory(io)
 add_subdirectory(import)
-add_subdirectory(sgc)
-add_subdirectory(network)
-add_subdirectory(mind)
-#add_subdirectory(workflow)
-add_subdirectory(python)
-add_subdirectory(tools)
-add_subdirectory(test)
-add_subdirectory(bioinfo)
-add_subdirectory(samples)
+add_subdirectory(storage)
+add_subdirectory(system)

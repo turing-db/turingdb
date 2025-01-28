@@ -1,57 +1,50 @@
 #pragma once
 
-#include <condition_variable>
-#include <filesystem>
-#include <mutex>
+#include <string>
+
+namespace db {
 
 class Neo4JHttpRequest {
 public:
-    struct RequestProps {
-        std::string statement;
-        std::string host = "localhost";
-        std::string user = "neo4j";
-        std::string password = "turing";
-        uint16_t port = 7474;
-        bool silent = false;
-    };
+    Neo4JHttpRequest() = default;
+    ~Neo4JHttpRequest() = default;
 
-    Neo4JHttpRequest& operator=(const Neo4JHttpRequest&) = delete;
-    Neo4JHttpRequest& operator=(Neo4JHttpRequest&&) = delete;
-    explicit Neo4JHttpRequest(const std::string& statement);
     Neo4JHttpRequest(const Neo4JHttpRequest&) = delete;
-    Neo4JHttpRequest(Neo4JHttpRequest&&) noexcept;
-    ~Neo4JHttpRequest();
+    Neo4JHttpRequest(Neo4JHttpRequest&&) noexcept = default;
+    Neo4JHttpRequest& operator=(const Neo4JHttpRequest&) = delete;
+    Neo4JHttpRequest& operator=(Neo4JHttpRequest&&) noexcept = default;
 
-    void setStatement(const std::string& s) { _statement = s; }
-    void setUrl(const std::string& url) { _url = url; };
-    void setUrlSuffix(const std::string& urlSuffix) { _urlSuffix = urlSuffix; };
-    void setUsername(const std::string& username) { _username = username; };
-    void setPassword(const std::string& password) { _password = password; };
-    void setPort(uint64_t port) { _port = port; };
+    bool exec();
 
-    void exec();
-    bool writeToFile(const std::filesystem::path& path) const;
-    void clear();
-    void reportError() const;
-    void setReady();
-    void waitReady();
+    void setStatement(std::string statement) { _statement = std::move(statement); }
+    void setUrl(std::string url) { _url = std::move(url); }
+    void setUrlSuffix(std::string urlSuffix) { _urlSuffix = std::move(urlSuffix); }
+    void setPort(uint64_t port) { _port = port; }
+    void setUsername(std::string username) { _username = std::move(username); }
+    void setPassword(std::string password) { _password = std::move(password); }
+    void setMethod(std::string method) { _method = std::move(method); }
 
-    const std::string& getData() const { return _data; }
+    [[nodiscard]] const std::string& getResponse() const { return _response; }
+    [[nodiscard]] std::string consumeResponse() { return std::move(_response); }
 
-    bool success() const { return _result; }
+    static bool execStatic(std::string* response,
+                           const std::string& url,
+                           const std::string& urlSuffix,
+                           const std::string& username,
+                           const std::string& password,
+                           uint64_t port,
+                           std::string_view method,
+                           const std::string& statement);
 
 private:
-    std::string _url;
-    std::string _urlSuffix;
-    std::string _username;
-    std::string _password;
-    uint64_t _port = 7474;
+    std::string _response;
+    std::string _url = "localhost";
+    std::string _urlSuffix = "/db/data/transaction/commmit";
+    std::string _username = "neo4j";
+    std::string _password = "turing";
+    std::string _method = "POST";
     std::string _statement;
-    std::string _jsonRequest;
-    std::string _data;
-    std::mutex _readyMutex;
-    std::condition_variable _readyCond;
-    bool _isReady {false};
-    bool _result {false};
-    bool _silent {false};
+    uint64_t _port = 7474;
 };
+
+}

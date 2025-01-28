@@ -1,135 +1,104 @@
 #include "JsonParser.h"
 
-#include <regex>
-#include <spdlog/spdlog.h>
+#include <range/v3/view/enumerate.hpp>
 
-#include "DB.h"
-#include "Neo4j4JsonParser.h"
+#include "Graph.h"
+#include "views/GraphView.h"
+#include "writers/DataPartBuilder.h"
+#include "IDMapper.h"
+#include "JobSystem.h"
+#include "Neo4j/EdgeParser.h"
+#include "Neo4j/EdgePropertyParser.h"
+#include "Neo4j/EdgeTypeParser.h"
+#include "Neo4j/NodeLabelParser.h"
+#include "Neo4j/NodeParser.h"
+#include "Neo4j/NodePropertyParser.h"
+#include "Neo4j/StatParser.h"
 
-JsonParser::JsonParser(db::DB* db, const std::string& networkName)
-    : _db(db),
-      _networkName(networkName),
-      _neo4j4Parser(_db, _stats)
+namespace db {
+
+JsonParser::JsonParser(Graph* graph)
+    : _graph(graph),
+      _view(graph->view()),
+      _writer(graph->newConcurrentPartWriter()),
+      _graphMetadata(graph->getMetadata()),
+      _nodeIDMapper(new IDMapper)
 {
 }
 
-bool JsonParser::parseJsonDir(const FileUtils::Path& jsonDir, DirFormat format) {
-    try {
-        switch (format) {
-            case DirFormat::Neo4j4:
-                return parseNeo4jJsonDir(jsonDir);
-        }
+JsonParser::~JsonParser() = default;
 
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to parse json {}", e.what());
-    }
-
-    return false;
+void JsonParser::resetGraphView() {
+    _view = _graph->view();
 }
 
-bool JsonParser::parse(const std::string& data, FileFormat format) {
-    try {
-        switch (format) {
-            case FileFormat::Neo4j4_Stats:
-                return _neo4j4Parser.parseStats(data);
-
-            case FileFormat::Neo4j4_NodeProperties:
-                return _neo4j4Parser.parseNodeProperties(data);
-
-            case FileFormat::Neo4j4_Nodes:
-                spdlog::info("Parsing nodes {}/{}", _stats.parsedNodes, _stats.nodeCount);
-                return _neo4j4Parser.parseNodes(data, _networkName);
-
-            case FileFormat::Neo4j4_EdgeProperties:
-                return _neo4j4Parser.parseEdgeProperties(data);
-
-            case FileFormat::Neo4j4_Edges:
-                spdlog::info("Parsing edges {}/{}", _stats.parsedEdges, _stats.edgeCount);
-                return _neo4j4Parser.parseEdges(data);
-        }
-
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to parse json {}", e.what());
-    }
-
-    return false;
+GraphStats JsonParser::parseStats(const std::string& data) {
+    auto parser = json::neo4j::StatParser();
+    nlohmann::json::sax_parse(data,
+                              &parser,
+                              nlohmann::json::input_format_t::json,
+                              true,
+                              true);
+    _nodeIDMapper->reserve(parser.getNodeCount());
+    return {parser.getNodeCount(), parser.getEdgeCount()};
 }
 
-db::DB* JsonParser::getDB() const {
-    return _db;
+bool JsonParser::parseNodeLabels(const std::string& data) {
+    auto parser = json::neo4j::NodeLabelParser(_graphMetadata);
+    return nlohmann::json::sax_parse(data,
+                                     &parser,
+                                     nlohmann::json::input_format_t::json,
+                                     true,
+                                     true);
 }
 
-bool JsonParser::parseNeo4jJsonDir(const FileUtils::Path& jsonDir) {
-    const FileUtils::Path statsFile = jsonDir / "stats.json";
-    const FileUtils::Path nodePropertiesFile = jsonDir / "nodeProperties.json";
-    const FileUtils::Path edgePropertiesFile = jsonDir / "edgeProperties.json";
-    std::string data;
+bool JsonParser::parseEdgeTypes(const std::string& data) {
+    auto parser = json::neo4j::EdgeTypeParser(_graphMetadata);
+    return nlohmann::json::sax_parse(data,
+                                     &parser,
+                                     nlohmann::json::input_format_t::json,
+                                     true,
+                                     true);
+}
 
-    FileUtils::readContent(statsFile, data);
+bool JsonParser::parseNodeProperties(const std::string& data) {
+    auto parser = json::neo4j::NodePropertyParser(_graphMetadata);
+    return nlohmann::json::sax_parse(data,
+                                     &parser,
+                                     nlohmann::json::input_format_t::json,
+                                     true,
+                                     true);
+}
 
-    if (!parse(data, JsonParser::FileFormat::Neo4j4_Stats)) {
-        return false;
-    }
+bool JsonParser::parseEdgeProperties(const std::string& data) {
+    auto parser = json::neo4j::EdgePropertyParser(_graphMetadata);
+    return nlohmann::json::sax_parse(data,
+                                     &parser,
+                                     nlohmann::json::input_format_t::json,
+                                     true,
+                                     true);
+}
 
-    // Parsing node properties data
-    FileUtils::readContent(nodePropertiesFile, data);
+bool JsonParser::parseNodes(const std::string& data, DataPartBuilder& buf) {
+    auto parser = json::neo4j::NodeParser(_graphMetadata, &buf, _nodeIDMapper.get());
+    return nlohmann::json::sax_parse(data, &parser,
+                                     nlohmann::json::input_format_t::json,
+                                     true, true);
+}
 
-    if (!parse(data, JsonParser::FileFormat::Neo4j4_NodeProperties)) {
-        return false;
-    }
+bool JsonParser::parseEdges(const std::string& data, DataPartBuilder& buf) {
+    auto parser = json::neo4j::EdgeParser(_graphMetadata, &buf, _nodeIDMapper.get(), _view);
+    return nlohmann::json::sax_parse(data, &parser,
+                                     nlohmann::json::input_format_t::json,
+                                     true, true);
+}
 
-    // Nodes
-    std::vector<FileUtils::Path> nodeFiles;
-    FileUtils::listFiles(jsonDir, nodeFiles);
-    std::regex nodeRegex {"nodes_([0-9]*).json"};
-    std::map<size_t, FileUtils::Path> nodeFilesOrdered;
+DataPartBuilder& JsonParser::newDataBuffer(size_t nodeCount, size_t edgeCount) {
+    return _writer->newBuilder(nodeCount, edgeCount);
+}
 
-    for (const FileUtils::Path& path : nodeFiles) {
-        if (std::regex_search(path.string(), nodeRegex)) {
-            size_t count = std::stoul(std::regex_replace(
-                path.filename().string(),
-                nodeRegex, "$1"));
-            nodeFilesOrdered[count] = path;
-        }
-    }
+void JsonParser::pushDataParts(Graph& graph, JobSystem& jobSystem) {
+    _writer->commitAll(jobSystem);
+}
 
-    for (const auto& [id, path] : nodeFilesOrdered) {
-        FileUtils::readContent(path, data);
-
-        if (!parse(data, JsonParser::FileFormat::Neo4j4_Nodes)) {
-            return false;
-        }
-    }
-
-    // Parsing edge properties data
-    FileUtils::readContent(edgePropertiesFile, data);
-
-    if (!parse(data, JsonParser::FileFormat::Neo4j4_EdgeProperties)) {
-        return false;
-    }
-
-    // Edges
-    std::vector<FileUtils::Path> edgeFiles;
-    FileUtils::listFiles(jsonDir, edgeFiles);
-    std::regex edgeRegex {"edges_([0-9]*).json"};
-    std::map<size_t, FileUtils::Path> edgeFilesOrdered;
-
-    for (const FileUtils::Path& path : edgeFiles) {
-        if (std::regex_search(path.string(), edgeRegex)) {
-            size_t count = std::stoul(std::regex_replace(
-                path.filename().string(),
-                edgeRegex, "$1"));
-            edgeFilesOrdered[count] = path;
-        }
-    }
-
-    for (const auto& [id, path] : edgeFilesOrdered) {
-        FileUtils::readContent(path, data);
-
-        if (!parse(data, JsonParser::FileFormat::Neo4j4_Edges)) {
-            return false;
-        }
-    }
-
-    return true;
 }

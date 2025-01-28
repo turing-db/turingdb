@@ -1,0 +1,184 @@
+#include "ScanNodePropertiesByLabelIterator.h"
+
+#include "DataPart.h"
+#include "IteratorUtils.h"
+#include "properties/PropertyManager.h"
+#include "Panic.h"
+
+namespace db {
+
+template <SupportedType T>
+ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
+    const GraphView& view,
+    PropertyTypeID propTypeID,
+    const LabelSet* labelset)
+    : Iterator(view),
+      _propTypeID(propTypeID),
+      _labelset(labelset)
+{
+    for (; _partIt.isValid(); _partIt.next()) {
+        const DataPart* part = _partIt.get();
+        const PropertyManager& nodeProperties = part->nodeProperties();
+
+        if (nodeProperties.hasPropertyType(_propTypeID)) {
+            const auto& indexer = nodeProperties.getIndexer(_propTypeID);
+            const TypedPropertyContainer<T>& props = nodeProperties.getContainer<T>(_propTypeID);
+            _labelsetIt = indexer.matchIterate(labelset);
+
+            for (; _labelsetIt.isValid(); _labelsetIt.next()) {
+                const auto& ranges = _labelsetIt.getValue()._ranges;
+                _rangeIt = ranges.begin();
+
+                for (; _rangeIt != ranges.end(); _rangeIt++) {
+                    const auto& range = *_rangeIt;
+
+                    _props = props.getSpan(range._firstPos, range._count);
+                    _propIt = _props.begin();
+
+                    if (!_props.empty()) {
+                        _currentID = range._firstID;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <SupportedType T>
+ScanNodePropertiesByLabelIterator<T>::~ScanNodePropertiesByLabelIterator() = default;
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelIterator<T>::next() {
+    _propIt++;
+    _currentID++;
+    nextValid();
+}
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelIterator<T>::nextValid() {
+    while (_propIt == _props.end()) {
+        _rangeIt++;
+        while (_rangeIt == _labelsetIt.getValue()._ranges.end()) {
+            _labelsetIt++;
+
+            while (!_labelsetIt.isValid()) {
+                _partIt.next();
+
+                if (!_partIt.isValid()) {
+                    return;
+                }
+
+                const DataPart* part = _partIt.get();
+                const PropertyManager& nodeProperties = part->nodeProperties();
+
+                if (nodeProperties.hasPropertyType(_propTypeID)) {
+                    const auto& indexer = nodeProperties.getIndexer(_propTypeID);
+                    _labelsetIt = indexer.matchIterate(_labelset);
+                }
+            }
+
+            _rangeIt = _labelsetIt.getValue()._ranges.begin();
+        }
+
+        const DataPart* part = _partIt.get();
+        const PropertyManager& nodeProperties = part->nodeProperties();
+        const TypedPropertyContainer<T>& props = nodeProperties.getContainer<T>(_propTypeID);
+        const auto& range = *_rangeIt;
+        _props = props.getSpan(range._firstPos, range._count);
+        _propIt = _props.begin();
+        _currentID = range._firstID;
+    }
+}
+
+template <SupportedType T>
+ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter() = default;
+
+template <SupportedType T>
+ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(
+    const GraphView& view,
+    PropertyTypeID propTypeID,
+    const LabelSet* labelset)
+    : ScanNodePropertiesByLabelIterator<T>(view, propTypeID, labelset)
+{
+}
+
+static constexpr size_t NColumns = 2;
+static constexpr size_t NCombinations = 1 << NColumns;
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
+    size_t remainingToMax = maxCount;
+    msgbioassert(_properties || _nodeIDs,
+                 "ScanNodePropertiesByLabelChunkWriter must be initialized with a valid column");
+    static constexpr auto bools = generateArray<NColumns, NCombinations>();
+    static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
+
+    const auto getPrevSize = [&]() {
+        if (_properties) {
+            return _properties->size();
+        }
+        if (_nodeIDs) {
+            return _nodeIDs->size();
+        }
+        panic("At least one column must be set");
+    };
+
+    if (_properties) {
+        _properties->clear();
+    }
+    if (_nodeIDs) {
+        _nodeIDs->clear();
+    }
+
+    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+        while (this->isValid() && remainingToMax > 0) {
+            const size_t availInPart = std::distance(this->_propIt, this->_props.end());
+            const size_t rangeSize = std::min(maxCount, availInPart);
+            const size_t prevSize = getPrevSize();
+            const size_t newSize = prevSize + rangeSize;
+
+            if constexpr (conditions[0]) {
+                this->_properties->resize(newSize);
+            }
+            if constexpr (conditions[1]) {
+                this->_nodeIDs->resize(newSize);
+            }
+            remainingToMax -= rangeSize;
+
+            for (size_t i = prevSize; i < newSize; i++) {
+                if constexpr (conditions[0]) {
+                    (*this->_properties)[i] = *this->_propIt;
+                }
+                if constexpr (conditions[1]) {
+                    (*this->_nodeIDs)[i] = this->_currentID;
+                }
+                ++this->_propIt;
+                ++this->_currentID++;
+            }
+            this->nextValid();
+        }
+    };
+
+    switch (bitmask::create(_properties, _nodeIDs)) {
+        CASE(0);
+        CASE(1);
+        CASE(2);
+        CASE(3);
+    }
+}
+
+
+template class ScanNodePropertiesByLabelIterator<types::Int64>;
+template class ScanNodePropertiesByLabelIterator<types::UInt64>;
+template class ScanNodePropertiesByLabelIterator<types::Double>;
+template class ScanNodePropertiesByLabelIterator<types::String>;
+template class ScanNodePropertiesByLabelIterator<types::Bool>;
+
+template class ScanNodePropertiesByLabelChunkWriter<types::Int64>;
+template class ScanNodePropertiesByLabelChunkWriter<types::UInt64>;
+template class ScanNodePropertiesByLabelChunkWriter<types::Double>;
+template class ScanNodePropertiesByLabelChunkWriter<types::String>;
+template class ScanNodePropertiesByLabelChunkWriter<types::Bool>;
+
+}

@@ -1,14 +1,3 @@
-*.swp
-.code_change
-__pycache__/
-.cache
-wrt.out
-node_modules
-biorun.out
-bioinfo/notebooks/api-notebooks/spatial_transcriptomics/datasets/*/data
-bioinfo/notebooks/api-notebooks/spatial_transcriptomics/datasets/cohort_analysis/
-bioinfo/notebooks/api-notebooks/spatial_transcriptomics/datasets/10X_Visium*
+build/
+.cache/
 compile_commands.json
-tsconfig.tsbuildinfo
-samples/fs-aio/testread
-samples/fs-aio/testwrite

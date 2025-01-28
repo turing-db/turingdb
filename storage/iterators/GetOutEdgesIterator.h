@@ -1,0 +1,88 @@
+#pragma once
+
+#include "Iterator.h"
+
+#include <span>
+
+#include "PartIterator.h"
+#include "ChunkWriter.h"
+#include "columns/ColumnEdgeTypes.h"
+#include "columns/ColumnIDs.h"
+#include "EdgeRecord.h"
+
+namespace db {
+
+class GetOutEdgesIterator : public Iterator {
+public:
+    GetOutEdgesIterator() = default;
+    GetOutEdgesIterator(const GetOutEdgesIterator&) = default;
+    GetOutEdgesIterator(GetOutEdgesIterator&&) noexcept = default;
+    GetOutEdgesIterator& operator=(const GetOutEdgesIterator&) = default;
+    GetOutEdgesIterator& operator=(GetOutEdgesIterator&&) noexcept = default;
+
+    GetOutEdgesIterator(const GraphView& view, const ColumnIDs* inputNodeIDs);
+    ~GetOutEdgesIterator() override;
+
+    void reset();
+
+    void next() override;
+
+    const EdgeRecord& get() const {
+        return *_edgeIt;
+    }
+
+    GetOutEdgesIterator& operator++() {
+        next();
+        return *this;
+    }
+
+    const EdgeRecord& operator*() const {
+        return get();
+    }
+
+protected:
+    const ColumnIDs* _inputNodeIDs {nullptr};
+    ColumnIDs::ConstIterator _nodeIt;
+
+    std::span<const EdgeRecord> _edges;
+    std::span<const EdgeRecord>::iterator _edgeIt;
+
+    void init();
+    void nextValid();
+};
+
+class GetOutEdgesChunkWriter : public GetOutEdgesIterator {
+public:
+    GetOutEdgesChunkWriter() = default;
+    GetOutEdgesChunkWriter(const GraphView& view, const ColumnIDs* inputNodeIDs);
+
+    void fill(size_t maxCount);
+
+    void setInputNodeIDs(const ColumnIDs* inputNodeIDs) { _inputNodeIDs = inputNodeIDs; }
+    void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
+    void setEdgeIDs(ColumnIDs* edgeIDs) { _edgeIDs = edgeIDs; }
+    void setTgtIDs(ColumnIDs* tgts) { _tgts = tgts; }
+    void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
+
+private:
+    ColumnVector<size_t>* _indices {nullptr};
+    ColumnIDs* _edgeIDs {nullptr};
+    ColumnIDs* _tgts {nullptr};
+    ColumnEdgeTypes* _types {nullptr};
+};
+
+struct GetOutEdgesRange {
+    GraphView _view;
+    const ColumnIDs* _inputNodeIDs {nullptr};
+
+    GetOutEdgesIterator begin() const { return {_view, _inputNodeIDs}; }
+    DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }
+    GetOutEdgesChunkWriter chunkWriter() const { return {_view, _inputNodeIDs}; }
+};
+
+static_assert(NonRootChunkWriter<GetOutEdgesChunkWriter>);
+static_assert(EdgeIDsChunkWriter<GetOutEdgesChunkWriter>);
+static_assert(TgtIDsChunkWriter<GetOutEdgesChunkWriter>);
+static_assert(EdgeTypesChunkWriter<GetOutEdgesChunkWriter>);
+
+}
