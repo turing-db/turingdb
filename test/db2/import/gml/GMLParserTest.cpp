@@ -113,6 +113,9 @@ TEST_F(GMLParserTest, Empty) {
     EXPECT_SUCCESS("\ngraph [] \n");
     EXPECT_SUCCESS("\n\n\r graph [] \n");
 
+    EXPECT_ERROR("graphRANDOM [] dsqd\n",
+                 "GML Error at line 1: Unexpected token 'R'. Expected: '['");
+
     EXPECT_ERROR("\n\n\r graph [] dsqd\n",
                  "GML Error at line 3: Unexpected token 'd'. Expected: 'end of file'");
 
@@ -156,6 +159,12 @@ TEST_F(GMLParserTest, Nodes) {
         "graph [\n"
         "  node [ id 0 ]\n"
         "]");
+
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  node [ id 0 identifier 1]\n"
+        "]");
+
     EXPECT_SUCCESS(
         "graph [\n"
         "  node [\n"
@@ -237,6 +246,12 @@ TEST_F(GMLParserTest, Edges) {
         "graph [\n"
         "  node [ id 0 ] node [id 1] edge [ source 0 target 1 label edgeName] \n"
         "]");
+
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  node [ id 0 ] node [id 1] edge [ source 0 target 1 label source_Test 4 target_test 6 edgeName] \n"
+        "]");
+
     EXPECT_SUCCESS(
         "graph[node[id 0]node[id 1]edge[source 0 target 1]edge[source 1 target 0]]");
 }
