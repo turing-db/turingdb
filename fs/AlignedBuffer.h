@@ -23,7 +23,8 @@ public:
     static constexpr size_t ALIGNMENT {4096ul};
     static constexpr size_t Capacity = CapacityT;
 
-    AlignedBuffer() {
+    AlignedBuffer()
+    {
         void* ptr {nullptr};
         if (posix_memalign(&ptr, ALIGNMENT, Capacity) != 0) {
             throw std::runtime_error("AlignedBuffer error: Failed to allocate aligned memory");
@@ -35,7 +36,8 @@ public:
     AlignedBuffer(const AlignedBuffer&) = delete;
     AlignedBuffer& operator=(const AlignedBuffer&) = delete;
 
-    AlignedBuffer(AlignedBuffer&& other) noexcept {
+    AlignedBuffer(AlignedBuffer&& other) noexcept
+    {
         if (this == &other) {
             return;
         }
@@ -105,24 +107,28 @@ public:
 
     explicit AlignedBufferIterator(const AlignedBuffer<CapacityT>& buf)
         : _buf(&buf),
-          _data(buf.data()) {
+          _data(buf.data())
+    {
     }
 
     AlignedBufferIterator(const AlignedBuffer<CapacityT>& buf, size_t offset)
         : _buf(&buf),
-          _data(buf.data() + offset) {
+          _data(buf.data() + offset)
+    {
     }
 
     ~AlignedBufferIterator() = default;
 
     AlignedBufferIterator(const AlignedBufferIterator& other)
         : _buf(other._buf),
-          _data(other._data) {
+          _data(other._data)
+    {
     }
 
     AlignedBufferIterator(AlignedBufferIterator&& other) noexcept
         : _buf(other._buf),
-          _data(other._data) {
+          _data(other._data)
+    {
         other._buf = nullptr;
         other._data = nullptr;
     }

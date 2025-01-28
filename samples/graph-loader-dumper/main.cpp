@@ -121,7 +121,7 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
     auto loadedGraphRes = GraphLoader::load(path);
     if (!loadedGraphRes) {
         fmt::print("{}\n", loadedGraphRes.error().fmtMessage());
-        return 1;
+        return false;
     }
     const auto t1 = Clock::now();
     logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
@@ -188,48 +188,16 @@ int main() {
         }
     }
 
-    {
-        // Dump reactome
-        const fs::Path path {SAMPLE_DIR "/reactome"};
-
-        JobSystem jobSystem;
-        jobSystem.initialize();
-
-        auto graph = std::make_unique<Graph>();
-        const std::string turingHome = std::getenv("HOME");
-        const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "reactome";
-
-        Neo4jImporter::importJsonDir(jobSystem,
-                                     graph.get(),
-                                     db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                     db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                     {
-                                         ._jsonDir = FileUtils::Path {jsonDir.get()},
-                                     });
-
-        if (path.exists()) {
-            // Removing existing dir
-            if (auto res = path.rm(); !res) {
-                fmt::print("{}\n", res.error().fmtMessage());
-                return 1;
-            }
-        }
-
-        if (!testGraph(*graph, path)) {
-            return 1;
-        }
-    }
-
     // {
-    //     // Dump ckg
-    //     const fs::Path path {SAMPLE_DIR "/ckg"};
+    //     // Dump reactome
+    //     const fs::Path path {SAMPLE_DIR "/reactome"};
 
-    //     JobSystem jobSystem {1};
+    //     JobSystem jobSystem;
     //     jobSystem.initialize();
 
     //     auto graph = std::make_unique<Graph>();
     //     const std::string turingHome = std::getenv("HOME");
-    //     const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "ckg";
+    //     const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "reactome";
 
     //     Neo4jImporter::importJsonDir(jobSystem,
     //                                  graph.get(),
@@ -247,10 +215,42 @@ int main() {
     //         }
     //     }
 
-    //    if (!testGraph(*graph, path)) {
-    //        return 1;
-    //    }
+    //     if (!testGraph(*graph, path)) {
+    //         return 1;
+    //     }
     // }
+
+    //{
+    //    // Dump ckg
+    //    const fs::Path path {SAMPLE_DIR "/ckg"};
+
+    //    JobSystem jobSystem {1};
+    //    jobSystem.initialize();
+
+    //    auto graph = std::make_unique<Graph>();
+    //    const std::string turingHome = std::getenv("HOME");
+    //    const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "ckg";
+
+    //    Neo4jImporter::importJsonDir(jobSystem,
+    //                                 graph.get(),
+    //                                 db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+    //                                 db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+    //                                 {
+    //                                     ._jsonDir = FileUtils::Path {jsonDir.get()},
+    //                                 });
+
+    //    if (path.exists()) {
+    //        // Removing existing dir
+    //        if (auto res = path.rm(); !res) {
+    //            fmt::print("{}\n", res.error().fmtMessage());
+    //            return 1;
+    //        }
+    //    }
+
+    //   if (!testGraph(*graph, path)) {
+    //       return 1;
+    //   }
+    //}
 
     return 0;
 }

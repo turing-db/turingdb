@@ -6,7 +6,6 @@
 #include <string_view>
 
 #include "BioAssert.h"
-#include "spdlog/spdlog.h"
 
 class StringContainer {
 public:
@@ -15,7 +14,8 @@ public:
 
     StringContainer()
         : _buckets(1),
-          _countsPerBucket({0}) {
+          _countsPerBucket({0})
+    {
         _buckets.back().resize(BUCKET_SIZE);
     }
 
