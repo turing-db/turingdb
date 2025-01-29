@@ -5,6 +5,7 @@
 #include "Column.h"
 
 #include "DebugDump.h"
+#include "BioAssert.h"
 
 namespace db {
 
@@ -94,15 +95,10 @@ public:
     ConstReverseIterator rend() const { return _data.rend(); }
     ConstReverseIterator crend() const { return _data.crend(); }
 
-    Status assign(const Column* other) override {
+    void assign(const Column* other) override {
         const ColumnMask* otherCol = dynamic_cast<const ColumnMask*>(other);
-        if (!otherCol) {
-            return Status(DBError::COLUMNS_WITH_DIFFERENT_TYPE);
-        }
-
+        msgbioassert(otherCol, "ColumnMask::assign: other is not a ColumnMask of the same type");
         _data = otherCol->_data;
-
-        return Status::ok();
     }
 
     void clear() { _data.clear(); }

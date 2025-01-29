@@ -4,6 +4,7 @@
 #include "ColumnKind.h"
 
 #include "DebugDump.h"
+#include "BioAssert.h"
 
 namespace db {
 
@@ -38,15 +39,10 @@ public:
 
     size_t size() const override { return 1; }
 
-    Status assign(const Column* other) override {
+    void assign(const Column* other) override {
         const ColumnConst<T>* otherCol = dynamic_cast<const ColumnConst<T>*>(other);
-        if (!otherCol) {
-            return Status(DBError::COLUMNS_WITH_DIFFERENT_TYPE);
-        }
-
+        msgbioassert(otherCol, "ColumnConst::assign: other is not a ColumnConst of the same type");
         _value = otherCol->_value;
-
-        return Status::ok();
     }
 
     void set(const T& value) { _value = value; }

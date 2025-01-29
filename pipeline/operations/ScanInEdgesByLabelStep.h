@@ -1,0 +1,48 @@
+#pragma once
+
+#include <memory>
+
+#include "ScanInEdgesByLabelIterator.h"
+#include "EdgeWriteInfo.h"
+#include "ChunkConfig.h"
+#include "ExecutionContext.h"
+
+namespace db {
+
+class ScanInEdgesByLabelStep {
+public:
+    struct Tag {};
+
+    ScanInEdgesByLabelStep(const EdgeWriteInfo& edgeWriteInfo, const LabelSet* labelSet);
+
+    ScanInEdgesByLabelStep(ScanInEdgesByLabelStep&& other) = default;
+
+    ~ScanInEdgesByLabelStep();
+
+    void prepare(ExecutionContext* ctxt) {
+        _it = std::make_unique<ScanInEdgesByLabelChunkWriter>(ctxt->getGraphView(), _labelSet);
+        _it->setSrcIDs(_edgeWriteInfo._sourceNodes);
+        _it->setEdgeIDs(_edgeWriteInfo._edges);
+        _it->setTgtIDs(_edgeWriteInfo._targetNodes);
+        _it->setEdgeTypes(_edgeWriteInfo._edgeTypes);
+    }
+
+    inline void reset() {
+        _it->reset();
+    }
+
+    inline bool isFinished() const {
+        return !_it->isValid();
+    }
+
+    inline void execute() {
+        _it->fill(ChunkConfig::CHUNK_SIZE);
+    }
+
+private:
+    EdgeWriteInfo _edgeWriteInfo;
+    const LabelSet* _labelSet;
+    std::unique_ptr<ScanInEdgesByLabelChunkWriter> _it;
+};
+
+}

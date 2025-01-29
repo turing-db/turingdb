@@ -1,0 +1,50 @@
+#pragma once
+
+#include <memory>
+
+#include "GetOutEdgesIterator.h"
+#include "EdgeWriteInfo.h"
+#include "ColumnIDs.h"
+#include "ChunkConfig.h"
+#include "ExecutionContext.h"
+
+namespace db {
+
+class GetOutEdgesChunkWriter;
+
+class GetOutEdgesStep {
+public:
+    struct Tag {};
+    
+    GetOutEdgesStep(const ColumnIDs* inputNodeIDs,
+                    const EdgeWriteInfo& edgeWriteInfo);
+    GetOutEdgesStep(GetOutEdgesStep&& other) = default;
+    ~GetOutEdgesStep();
+
+    void prepare(ExecutionContext* ctxt) {
+        _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), _inputNodeIDs);
+        _it->setIndices(_edgeWriteInfo._indices);
+        _it->setEdgeIDs(_edgeWriteInfo._edges);
+        _it->setTgtIDs(_edgeWriteInfo._targetNodes);
+        _it->setEdgeTypes(_edgeWriteInfo._edgeTypes);
+    }
+
+    inline void reset() {
+        _it->reset();
+    }
+
+    inline bool isFinished() const {
+        return !_it->isValid();
+    }
+
+    inline void execute() {
+        _it->fill(ChunkConfig::CHUNK_SIZE);
+    }
+
+private:
+    const ColumnIDs* _inputNodeIDs {nullptr};
+    EdgeWriteInfo _edgeWriteInfo;
+    std::unique_ptr<GetOutEdgesChunkWriter> _it;
+};
+
+}
