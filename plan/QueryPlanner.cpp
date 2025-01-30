@@ -6,7 +6,7 @@
 #include <range/v3/all.hpp>
 
 #include "PlannerContext.h"
-#include "MemoryManager.h"
+#include "LocalMemory.h"
 #include "Pipeline.h"
 #include "QueryCommand.h"
 #include "FromTarget.h"

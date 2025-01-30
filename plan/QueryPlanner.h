@@ -5,9 +5,9 @@
 #include <string>
 #include <unordered_map>
 
-#include "ColumnIDs.h"
+#include "columns/ColumnIDs.h"
+#include "labels/LabelSet.h"
 #include "VectorHash.h"
-#include "LabelSet.h"
 
 #include "QueryPlannerParams.h"
 

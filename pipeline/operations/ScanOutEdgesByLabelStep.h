@@ -2,9 +2,9 @@
 
 #include <memory>
 
-#include "ScanOutEdgesByLabelIterator.h"
+#include "iterators/ScanOutEdgesByLabelIterator.h"
 #include "EdgeWriteInfo.h"
-#include "ChunkConfig.h"
+#include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
 
 namespace db {

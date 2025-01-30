@@ -1,7 +1,5 @@
 set(pipeline_sources
         operations/TransformStep.cpp
-        operations/JsonEncoderStep.cpp
-        operations/DebugDumpStep.cpp
         operations/GetOutEdgesStep.cpp
         operations/ScanEdgesStep.cpp
         operations/ScanNodesByLabelStep.cpp

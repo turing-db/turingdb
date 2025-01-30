@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ColumnIDs.h"
-#include "ColumnEdgeTypes.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnEdgeTypes.h"
 
 namespace db {
 

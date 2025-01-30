@@ -2,10 +2,10 @@
 
 #include <memory>
 
-#include "GetOutEdgesIterator.h"
+#include "iterators/GetOutEdgesIterator.h"
 #include "EdgeWriteInfo.h"
-#include "ColumnIDs.h"
-#include "ChunkConfig.h"
+#include "columns/ColumnIDs.h"
+#include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
 
 namespace db {

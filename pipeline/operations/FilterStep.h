@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "ColumnVector.h"
-#include "ColumnOperator.h"
+#include "columns/ColumnVector.h"
+#include "columns/ColumnOperator.h"
 
 namespace db {
 

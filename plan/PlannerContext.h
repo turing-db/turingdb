@@ -3,12 +3,12 @@
 namespace db {
 
 class GraphView;
-class MemoryManager;
+class LocalMemory;
 
 class PlannerContext {
 public:
     PlannerContext(const GraphView& dbView,
-                   MemoryManager* mem)
+                   LocalMemory* mem)
         : _dbView(dbView),
         _mem(mem)
     {
@@ -16,11 +16,11 @@ public:
 
     const GraphView& getGraphView() const { return _dbView; }
 
-    MemoryManager* getMemoryManager() const { return _mem; }
+    LocalMemory* getMemory() const { return _mem; }
 
 private:
     const GraphView& _dbView;
-    MemoryManager* _mem {nullptr};
+    LocalMemory* _mem {nullptr};
 };
 
 }

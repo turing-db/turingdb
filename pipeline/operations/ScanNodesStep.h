@@ -2,9 +2,9 @@
 
 #include <memory>
 
-#include "ScanNodesIterator.h"
-#include "ColumnIDs.h"
-#include "ChunkConfig.h"
+#include "iterators/ScanNodesIterator.h"
+#include "columns/ColumnIDs.h"
+#include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
 
 namespace db {

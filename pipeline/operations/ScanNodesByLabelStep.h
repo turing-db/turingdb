@@ -2,10 +2,10 @@
 
 #include <memory>
 
-#include "ScanNodesByLabelIterator.h"
-#include "ColumnIDs.h"
-#include "LabelSet.h"
-#include "ChunkConfig.h"
+#include "iterators/ScanNodesByLabelIterator.h"
+#include "columns/ColumnIDs.h"
+#include "labels/LabelSet.h"
+#include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
 
 namespace db {

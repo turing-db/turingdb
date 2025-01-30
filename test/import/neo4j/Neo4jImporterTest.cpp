@@ -113,6 +113,9 @@ TEST_F(Neo4jImporterTest, General) {
 
     const std::string turingHome = std::getenv("TURING_HOME");
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
+
+    ASSERT_TRUE(FileUtils::exists(jsonDir));
+
     t0 = Clock::now();
     const bool res = Neo4jImporter::importJsonDir(jobSystem,
                                                   _graph.get(),
