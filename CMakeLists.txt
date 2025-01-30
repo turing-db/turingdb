@@ -126,6 +126,7 @@ execute_process(COMMAND git show --no-patch --format=%at
                 OUTPUT_VARIABLE HEAD_COMMIT_TIMESTAMP
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_subdirectory(cmake)
 add_subdirectory(external)
 add_subdirectory(common)
 add_subdirectory(base)
@@ -140,7 +141,8 @@ add_subdirectory(query)
 #add_subdirectory(plan)
 add_subdirectory(system)
 add_subdirectory(report)
-#add_subdirectory(db)
+add_subdirectory(db)
 add_subdirectory(server)
+add_subdirectory(tools)
 add_subdirectory(test)
 add_subdirectory(samples)
