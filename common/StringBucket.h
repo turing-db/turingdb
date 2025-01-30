@@ -16,7 +16,7 @@ public:
         uint32_t _count {0};
     };
 
-    static constexpr uint32_t BUCKET_SIZE = 256 * 1024;
+    static constexpr uint32_t BUCKET_SIZE = 256ul * 1024;
     static_assert(BUCKET_SIZE <= std::numeric_limits<uint32_t>::max());
 
     StringBucket() 
