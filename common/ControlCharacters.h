@@ -4,7 +4,7 @@
 
 class ControlCharactersEscaper {
 public:
-    static void escape(const std::string& src, std::string& result) {
+    static void escape(std::string_view src, std::string& result) {
         result.clear();
         for (const char c : src) {
             switch (c) {

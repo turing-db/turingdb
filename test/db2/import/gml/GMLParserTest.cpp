@@ -197,6 +197,11 @@ TEST_F(GMLParserTest, Nodes) {
         "  node [id 1 label test]\n"
         "]");
     EXPECT_SUCCESS(
+        "graph [\n"
+        "  node [id 0 label \"quoted [with bracketsprop]\"] \n"
+        "  node [id 1 label test]\n"
+        "]");
+    EXPECT_SUCCESS(
         "graph[node[id 0 label node1]node[id 1 label node2]]");
 
     // Missing property value
