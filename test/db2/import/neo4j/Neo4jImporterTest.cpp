@@ -1,60 +1,37 @@
 #include <gtest/gtest.h>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <range/v3/view/enumerate.hpp>
 
 #include "Graph.h"
 #include "GraphView.h"
+#include "TuringTest.h"
 #include "GraphReader.h"
 #include "GraphReport.h"
 #include "DataPartBuilder.h"
 #include "EdgeView.h"
-#include "FileUtils.h"
 #include "JobSystem.h"
-#include "LogSetup.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
-#include "PerfStat.h"
 #include "Time.h"
 
 using namespace db;
 using namespace js;
+namespace rv = ranges::views;
 
-class Neo4jImporterTest : public ::testing::Test {
+class Neo4jImporterTest : public turing::test::TuringTest {
 protected:
-    void SetUp() override {
-        const testing::TestInfo* const testInfo =
-            testing::UnitTest::GetInstance()->current_test_info();
-
-        _outDir = testInfo->test_suite_name();
-        _outDir += "_";
-        _outDir += testInfo->name();
-        _outDir += ".out";
-        _logPath = FileUtils::Path(_outDir) / "log";
-        _perfPath = FileUtils::Path(_outDir) / "perf";
-
-        if (FileUtils::exists(_outDir)) {
-            FileUtils::removeDirectory(_outDir);
-        }
-        FileUtils::createDirectory(_outDir);
-
-        LogSetup::setupLogFileBacked(_logPath.string());
-        PerfStat::init(_perfPath);
-
+    void initialize() override {
         _graph = std::make_unique<Graph>();
-        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem = std::make_unique<JobSystem>(1);
         _jobSystem->initialize();
     }
 
-    void TearDown() override {
+    void terminate() override {
         _jobSystem->terminate();
-        PerfStat::destroy();
     }
 
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<Graph> _graph {nullptr};
-    std::string _outDir;
-    FileUtils::Path _logPath;
-    FileUtils::Path _perfPath;
 };
 
 TEST_F(Neo4jImporterTest, Simple) {
@@ -109,15 +86,13 @@ TEST_F(Neo4jImporterTest, Simple) {
 }
 
 TEST_F(Neo4jImporterTest, General) {
-    JobSystem jobSystem;
-    jobSystem.initialize();
     auto t0 = Clock::now();
     auto t1 = Clock::now();
 
     const std::string turingHome = std::getenv("TURING_HOME");
     const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
     t0 = Clock::now();
-    const bool res = Neo4jImporter::importJsonDir(jobSystem,
+    const bool res = Neo4jImporter::importJsonDir(*_jobSystem,
                                                   _graph.get(),
                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
@@ -180,19 +155,28 @@ TEST_F(Neo4jImporterTest, General) {
 
     const auto* meta = _graph->getMetadata();
     const auto& labels = meta->labels();
+    const auto& labelsets = meta->labelsets();
     const auto& edgeTypes = meta->edgeTypes();
     const auto& propTypes = meta->propTypes();
 
-    for (size_t i = 0; i < labels.getCount(); i++) {
-        ASSERT_EQ(labelsRef[i], labels.getName(i));
+    ASSERT_EQ(labels.getCount(), labelsRef.size());
+    ASSERT_EQ(labelsets.getCount(), 7);
+    ASSERT_EQ(edgeTypes.getCount(), edgeTypesRef.size());
+    ASSERT_EQ(propTypes.getCount(), propTypesRef.size());
+
+    for (const auto [i, ref] : labelsRef | rv::enumerate) {
+        const LabelID id = labels.get(std::string{ref});
+        ASSERT_TRUE(id.isValid());
     }
 
-    for (size_t i = 0; i < edgeTypes.getCount(); i++) {
-        ASSERT_EQ(edgeTypesRef[i], edgeTypes.getName(i));
+    for (const auto [i, ref] : edgeTypesRef | rv::enumerate) {
+        const EdgeTypeID id = edgeTypes.get(std::string{ref});
+        ASSERT_TRUE(id.isValid());
     }
 
-    for (size_t i = 0; i < propTypes.getCount(); i++) {
-        ASSERT_EQ(propTypesRef[i], propTypes.getName(i));
+    for (const auto [i, ref] : propTypesRef | rv::enumerate) {
+        const PropertyType pt = propTypes.get(std::string{ref});
+        ASSERT_TRUE(pt._id.isValid());
     }
 
     const auto view = _graph->view();
@@ -200,4 +184,10 @@ TEST_F(Neo4jImporterTest, General) {
     std::stringstream report;
     GraphReport::getReport(reader, report);
     std::cout << report.view() << std::endl;
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 50;
+    });
 }
