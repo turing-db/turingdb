@@ -3,12 +3,11 @@
 #include <range/v3/view/enumerate.hpp>
 
 #include "Graph.h"
+#include "GraphReader.h"
 #include "GraphView.h"
 #include "TuringTest.h"
-#include "GraphReader.h"
 #include "GraphReport.h"
 #include "DataPartBuilder.h"
-#include "EdgeView.h"
 #include "JobSystem.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
@@ -33,57 +32,6 @@ protected:
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<Graph> _graph {nullptr};
 };
-
-TEST_F(Neo4jImporterTest, Simple) {
-    {
-        auto builder1 = _graph->newPartWriter();
-        builder1->addNode(LabelSet::fromList({1})); // 0
-        builder1->addNode(LabelSet::fromList({0})); // 1
-        builder1->addNode(LabelSet::fromList({1})); // 2
-        builder1->addNode(LabelSet::fromList({2})); // 3
-        builder1->addEdge(0, 0, 1);
-        builder1->commit(*_jobSystem);
-
-        auto builder2 = _graph->newPartWriter();
-        builder2->addEdge(2, 1, 2);
-        EntityID id1 = builder2->addNode(LabelSet::fromList({0}));
-        builder2->addNodeProperty<types::String>(id1, 0, "test1");
-
-        builder2->addEdge(2, 0, 1);
-        EntityID id2 = builder2->addNode(LabelSet::fromList({0}));
-        builder2->addNodeProperty<types::String>(id2, 0, "test2");
-        builder2->addNodeProperty<types::String>(2, 0, "test3");
-        const EdgeRecord& edge = builder2->addEdge(4, 3, 4);
-        builder2->addEdgeProperty<types::String>(edge, 0, "Edge property test");
-        builder2->addNode(LabelSet::fromList({0}));
-        builder2->addNode(LabelSet::fromList({0}));
-        builder2->addNode(LabelSet::fromList({0}));
-        builder2->addNode(LabelSet::fromList({0}));
-        builder2->addNode(LabelSet::fromList({1}));
-        builder2->addNode(LabelSet::fromList({1}));
-        builder2->addNode(LabelSet::fromList({1}));
-        builder2->addEdge(0, 3, 4);
-        builder2->commit(*_jobSystem);
-    }
-
-    const auto view = _graph->view();
-    const auto reader = view.read();
-    std::cout << "All out edges: ";
-    for (const auto& edge : reader.scanOutEdges()) {
-        std::cout << edge._edgeID.getValue()
-                  << edge._nodeID.getValue()
-                  << edge._otherID.getValue()
-                  << std::endl;
-        auto view = reader.getEdgeView(edge._edgeID);
-        std::cout << "  Has " << view.properties().getCount() << " properties" << std::endl;
-    }
-    std::cout << std::endl;
-
-    auto it = reader.scanNodeProperties<types::String>(0).begin();
-    for (; it.isValid(); it.next()) {
-        std::cout << it.getCurrentNodeID().getValue() << ": " << it.get() << std::endl;
-    }
-}
 
 TEST_F(Neo4jImporterTest, General) {
     auto t0 = Clock::now();

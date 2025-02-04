@@ -1,1 +1,113 @@
-{"results":[{"columns":["nodeType","nodeLabels","propertyName","propertyTypes","mandatory"],"data":[{"row":[":`User`",["User"],"uuid",["Long","String"],true],"meta":[null,null,null,null,null,null]},{"row":[":`User`",["User"],"display_name",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Tag`",["Tag"],"name",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Tag`",["Tag"],"link",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Answer`",["Answer"],"uuid",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Answer`",["Answer"],"title",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Answer`",["Answer"],"link",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Answer`",["Answer"],"is_accepted",["Boolean"],true],"meta":[null,null,null,null,null]},{"row":[":`Answer`",["Answer"],"body_markdown",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Answer`",["Answer"],"score",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Comment`",["Comment"],"uuid",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Comment`",["Comment"],"link",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Comment`",["Comment"],"score",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"uuid",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"title",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"creation_date",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"accepted_answer_id",["Long"],false],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"link",["String"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"view_count",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"answer_count",["Long"],true],"meta":[null,null,null,null,null]},{"row":[":`Question`",["Question"],"body_markdown",["String"],true],"meta":[null,null,null,null,null]}]}],"errors":[]}
+{
+  "results": [
+    {
+      "columns": [
+        "nodeType",
+        "nodeLabels",
+        "propertyName",
+        "propertyTypes",
+        "mandatory"
+      ],
+      "data": [
+        {
+          "row": [":`User`", ["User"], "uuid", ["Long", "String"], true],
+          "meta": [null, null, null, null, null, null]
+        },
+        {
+          "row": [":`User`", ["User"], "display_name", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Tag`", ["Tag"], "name", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Tag`", ["Tag"], "link", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Answer`", ["Answer"], "uuid", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Answer`", ["Answer"], "title", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Answer`", ["Answer"], "link", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Answer`", ["Answer"], "is_accepted", ["Boolean"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Answer`", ["Answer"], "body_markdown", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Answer`", ["Answer"], "score", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Comment`", ["Comment"], "uuid", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Comment`", ["Comment"], "link", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Comment`", ["Comment"], "score", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Question`", ["Question"], "uuid", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Question`", ["Question"], "title", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Question`", ["Question"], "creation_date", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [
+            ":`Question`",
+            ["Question"],
+            "accepted_answer_id",
+            ["Long"],
+            false
+          ],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Question`", ["Question"], "link", ["String"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Question`", ["Question"], "view_count", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [":`Question`", ["Question"], "answer_count", ["Long"], true],
+          "meta": [null, null, null, null, null]
+        },
+        {
+          "row": [
+            ":`Question`",
+            ["Question"],
+            "body_markdown",
+            ["String"],
+            true
+          ],
+          "meta": [null, null, null, null, null]
+        }
+      ]
+    }
+  ],
+  "errors": []
+}
+
