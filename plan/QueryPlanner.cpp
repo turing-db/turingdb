@@ -5,7 +5,6 @@
 #include <range/v3/view/chunk.hpp>
 #include <range/v3/all.hpp>
 
-#include "PlannerContext.h"
 #include "LocalMemory.h"
 #include "Pipeline.h"
 #include "QueryCommand.h"
@@ -17,24 +16,25 @@
 #include "SelectProjection.h"
 #include "SelectField.h"
 
-#include "ColumnIDs.h"
-#include "ColumnMask.h"
-#include "Block.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnMask.h"
+#include "columns/Block.h"
 
 #include "Graph.h"
 #include "GraphMetadata.h"
-#include "GraphReader.h"
+#include "reader/GraphReader.h"
+
+#include "Pipeline.h"
 
 using namespace db;
 namespace rv = ranges::views;
 
-QueryPlanner::QueryPlanner(const PlannerContext* ctxt,
-                           const QueryCommand* query)
-    : _ctxt(ctxt),
-    _query(query),
+QueryPlanner::QueryPlanner(const GraphView& view, LocalMemory* mem)
+    : _view(view),
+    _mem(mem),
     _pipeline(std::make_unique<Pipeline>()),
     _output(std::make_unique<Block>()),
-    _transformData(std::make_unique<TransformData>(_ctxt->getMemoryManager()))
+    _transformData(std::make_unique<TransformData>(mem))
 {
 }
 
@@ -44,24 +44,24 @@ QueryPlanner::~QueryPlanner() {
     }
 }
 
-bool QueryPlanner::plan() {
-    const auto kind = _query->getKind();
+bool QueryPlanner::plan(const QueryCommand* query) {
+    const auto kind = query->getKind();
     
     switch (kind) {
         case QueryCommand::Kind::SELECT_COMMAND:
-            return planSelect(static_cast<const SelectCommand*>(_query));
+            return planSelect(static_cast<const SelectCommand*>(query));
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
-            return planCreateGraph (static_cast<const CreateGraphCommand*>(_query));
+            return planCreateGraph(static_cast<const CreateGraphCommand*>(query));
 
         case QueryCommand::Kind::LIST_GRAPH_COMMAND:
-            return planListGraph(static_cast<const ListGraphCommand*>(_query));
+            return planListGraph(static_cast<const ListGraphCommand*>(query));
 
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
-            return planLoadGraph(static_cast<const LoadGraphCommand*>(_query));
+            return planLoadGraph(static_cast<const LoadGraphCommand*>(query));
 
         default:
-            spdlog::error("Unsupported query of kind {}", (unsigned)_query->getKind());
+            spdlog::error("Unsupported query of kind {}", (unsigned)kind);
             return false;
     }
 }
@@ -90,7 +90,6 @@ bool QueryPlanner::planSelect(const SelectCommand* select) {
     planPath(pathElements);
     planTransformStep();
     planProjection(select);
-    planEncoder();
 
     // Add END step
     _pipeline->add<EndStep>();
@@ -128,8 +127,7 @@ void QueryPlanner::planPath(const std::vector<EntityPattern*>& path) {
 }
 
 void QueryPlanner::planScanNodes(const EntityPattern* entity) {
-    const auto mem = _ctxt->getMemoryManager();
-    const auto nodes = mem->alloc<ColumnIDs>();
+    const auto nodes = _mem->alloc<ColumnIDs>();
 
     if (const TypeConstraint* typeConstr = entity->getTypeConstraint()) {
         const LabelSet* labelSet = getLabelSet(typeConstr);
@@ -184,11 +182,9 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     const TypeConstraint* sourceTypeConstr = source->getTypeConstraint();
     const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
 
-    const auto mem = _ctxt->getMemoryManager();
-
     // Add target node IDs to writer
     EdgeWriteInfo edgeWriteInfo;
-    auto targets = mem->alloc<ColumnIDs>();
+    auto targets = _mem->alloc<ColumnIDs>();
     edgeWriteInfo._targetNodes = targets;
 
     const VarExpr* targetVar = target->getVar();
@@ -204,7 +200,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     if (sourceVar) {
         VarDecl* sourceDecl = sourceVar->getDecl();
         if (sourceDecl->isSelected()) {
-            const auto sources = mem->alloc<ColumnIDs>();
+            const auto sources = _mem->alloc<ColumnIDs>();
             edgeWriteInfo._sourceNodes = sources;
             _transformData->addColumn(sources, sourceDecl);
         }
@@ -215,7 +211,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     if (edgeVar) {
         VarDecl* edgeDecl = edgeVar->getDecl();
         if (edgeDecl->isSelected()) {
-            const auto edges = mem->alloc<ColumnIDs>();
+            const auto edges = _mem->alloc<ColumnIDs>();
             edgeWriteInfo._edges = edges;
             _transformData->addColumn(edges, edgeDecl);
         }
@@ -266,43 +262,23 @@ LabelSet* QueryPlanner::buildLabelSet(const LabelNames& labelNames) {
 }
 
 LabelID QueryPlanner::getLabel(const std::string& labelName) {
-    GraphMetadata& metadata = _ctxt->getGraphView().metadata();
+    GraphMetadata& metadata = _view.metadata();
     return metadata.labels().getOrCreate(labelName);
-}
-
-void QueryPlanner::planEncoder() {
-    switch (_encodingParams.getType()) {
-        case EncodingParams::EncodingType::JSON: {
-            _pipeline->add<JsonEncoderStep>(_encodingParams.getWriter(), _output.get());
-            return;
-        }
-
-        case EncodingParams::EncodingType::DEBUG_DUMP: {
-            _pipeline->add<DebugDumpStep>(_output.get(), _encodingParams.getStream());
-            return;
-        }
-
-        default:
-        return;
-    }
 }
 
 bool QueryPlanner::planCreateGraph(const CreateGraphCommand* createCmd) {
     _pipeline->add<StopStep>();
     _pipeline->add<CreateGraphStep>(createCmd->getName());
-    planEncoder();
     _pipeline->add<EndStep>();
     return true;
 }
 
 bool QueryPlanner::planListGraph(const ListGraphCommand* listCmd) {
-    const auto mem = _ctxt->getMemoryManager();
-    const auto graphNames = mem->alloc<ColumnVector<std::string_view>>();
+    const auto graphNames = _mem->alloc<ColumnVector<std::string_view>>();
 
     _pipeline->add<StopStep>();
     _pipeline->add<ListGraphStep>(graphNames);
     _output->addColumn(graphNames);
-    planEncoder();
     _pipeline->add<EndStep>();
 
     return true;
@@ -312,7 +288,7 @@ void QueryPlanner::getMatchingLabelSets(std::vector<LabelSetID>& labelSets,
                                         const LabelSet* targetLabelSet) {
     labelSets.clear();
 
-    const auto reader = _ctxt->getGraphView().read();
+    const auto reader = _view.read();
 
     auto it = reader.matchLabelSetIDs(targetLabelSet);
     for (; it.isValid(); ++it) {
@@ -322,9 +298,7 @@ void QueryPlanner::getMatchingLabelSets(std::vector<LabelSetID>& labelSets,
 
 void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
                                                   const EntityPattern* target) {
-    const auto mem = _ctxt->getMemoryManager();
- 
-    const auto indices = mem->alloc<ColumnVector<size_t>>();
+    const auto indices = _mem->alloc<ColumnVector<size_t>>();
 
     EdgeWriteInfo edgeWriteInfo;
     edgeWriteInfo._indices = indices;
@@ -336,14 +310,14 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     if (edgeVar) {
         VarDecl* edgeDecl = edgeVar->getDecl();
         if (edgeDecl->isSelected()) {
-            const auto edges = mem->alloc<ColumnIDs>();
+            const auto edges = _mem->alloc<ColumnIDs>();
             edgeWriteInfo._edges = edges;
             _transformData->addColumn(edges, edgeDecl);
         }
     }
 
     // We always need target node IDs
-    const auto targets = mem->alloc<ColumnIDs>();
+    const auto targets = _mem->alloc<ColumnIDs>();
     edgeWriteInfo._targetNodes = targets;
 
     // Add targets to the writeSet
@@ -362,9 +336,8 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
 void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
                                                       const EntityPattern* target) {
     const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
-    const auto mem = _ctxt->getMemoryManager();
-    const auto indices = mem->alloc<ColumnVector<size_t>>();
-    const auto targets = mem->alloc<ColumnIDs>();
+    const auto indices = _mem->alloc<ColumnVector<size_t>>();
+    const auto targets = _mem->alloc<ColumnIDs>();
 
     const LabelSet* targetLabelSet = getLabelSet(targetTypeConstr);
 
@@ -390,7 +363,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
     const bool mustWriteEdges = edgeDecl && edgeDecl->isSelected();
     if (mustWriteEdges) {
-        const auto edges = mem->alloc<ColumnIDs>();
+        const auto edges = _mem->alloc<ColumnIDs>();
         edgeWriteInfo._edges = edges;
         _transformData->addColumn(edges, edgeDecl);
     }
@@ -398,20 +371,20 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
     
     // Get labels of target nodes
-    const auto nodesLabelSetIDs = mem->alloc<ColumnVector<LabelSetID>>();
+    const auto nodesLabelSetIDs = _mem->alloc<ColumnVector<LabelSetID>>();
     _pipeline->add<GetLabelSetIDStep>(targets, nodesLabelSetIDs);
 
     // Create filter to filter target nodes based on target label set
-    const auto filterIndices = mem->alloc<ColumnVector<size_t>>();
+    const auto filterIndices = _mem->alloc<ColumnVector<size_t>>();
     auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
 
     // Build filter expression to compute filter for each LabelSetID
     ColumnMask* filterMask = nullptr;
     for (LabelSetID labelSetID : _tmpLabelSetIDs) {
-        const auto targetLabelSetID = mem->alloc<ColumnConst<LabelSetID>>();
+        const auto targetLabelSetID = _mem->alloc<ColumnConst<LabelSetID>>();
         targetLabelSetID->set(labelSetID);
 
-        const auto newMask = mem->alloc<ColumnMask>();
+        const auto newMask = _mem->alloc<ColumnMask>();
 
         filter.addExpression(FilterStep::Expression {
             ._op = ColumnOperator::OP_EQUAL,
@@ -435,7 +408,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     _transformData->createStep(filterIndices);
 
     // Apply filter to target node IDs
-    const auto filterOutNodes = mem->alloc<ColumnIDs>();
+    const auto filterOutNodes = _mem->alloc<ColumnIDs>();
     filter.addOperand(FilterStep::Operand {
         ._mask = filterMask,
         ._src = targets,
@@ -444,7 +417,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
 
     // Apply filter to edge IDs if necessary
     if (mustWriteEdges) {
-        const auto filterOutEdges = mem->alloc<ColumnIDs>();
+        const auto filterOutEdges = _mem->alloc<ColumnIDs>();
         filter.addOperand(FilterStep::Operand {
             ._mask = filterMask,
             ._src = edgeWriteInfo._edges,
@@ -498,7 +471,7 @@ void QueryPlanner::planProjection(const SelectCommand* select) {
 
 #define CASE_PLAN_VALUE_TYPE(Type)                                                \
     case ValueType::Type: {                                                       \
-        auto propValues = mem->alloc<ColumnOptVector<types::Type::Primitive>>();  \
+        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>();  \
         _pipeline->add<GetProperty##Type##Step>(columnIDs, propType, propValues); \
         _output->addColumn(propValues);                                           \
     }                                                                             \
@@ -506,8 +479,7 @@ void QueryPlanner::planProjection(const SelectCommand* select) {
     
 
 void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::string& memberName) {
-    const auto reader = _ctxt->getGraphView().read();
-    const auto mem = _ctxt->getMemoryManager();
+    const auto reader = _view.read();
 
     // Get property type information
     const PropertyType propType = reader.getPropertyType(memberName);

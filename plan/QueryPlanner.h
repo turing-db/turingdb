@@ -9,12 +9,11 @@
 #include "labels/LabelSet.h"
 #include "VectorHash.h"
 
-#include "QueryPlannerParams.h"
-
 namespace db {
 
-class PlannerContext;
 class QueryCommand;
+class GraphView;
+class LocalMemory;
 class SelectCommand;
 class Pipeline;
 class EntityPattern;
@@ -28,28 +27,22 @@ class Block;
 
 class QueryPlanner {
 public:
-    QueryPlanner(const PlannerContext* ctxt,
-                 const QueryCommand* query);
+    QueryPlanner(const GraphView& view, LocalMemory* mem);
     ~QueryPlanner();
 
-    bool plan();
+    bool plan(const QueryCommand* query);
 
     Pipeline* getPipeline() const { return _pipeline.get(); }
 
-    void setEncodingParams(const EncodingParams* params) {
-        _encodingParams = *params;
-    }
-
 private:
-    const PlannerContext* _ctxt {nullptr};
-    const QueryCommand* _query {nullptr};
+    const GraphView& _view;
+    LocalMemory* _mem {nullptr};
     std::unique_ptr<Pipeline> _pipeline;
 
     // Code generation utilities
     std::unique_ptr<Block> _output;
     ColumnIDs* _result {nullptr};
     std::unique_ptr<TransformData> _transformData;
-    EncodingParams _encodingParams;
 
     // Temporary containers
     std::vector<LabelSetID> _tmpLabelSetIDs;
@@ -80,7 +73,6 @@ private:
                                             const EntityPattern* target);
 
     void planTransformStep();
-    void planEncoder();
     void planPathUsingScanEdges(const std::vector<EntityPattern*>& path);
     void planScanEdges(const EntityPattern* source,
                        const EntityPattern* edge,

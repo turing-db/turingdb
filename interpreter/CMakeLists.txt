@@ -12,4 +12,5 @@ target_link_libraries(turing_db_interpreter_s PUBLIC
 target_link_libraries(turing_db_interpreter_s PRIVATE
     turing_db_query_AST_s
     turing_db_query_parser_s
+    turing_db_plan_s
     turing_db_system_s)

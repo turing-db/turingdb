@@ -14,8 +14,6 @@
 #include "operations/TransformStep.h"
 #include "operations/CountStep.h"
 #include "operations/LambdaStep.h"
-#include "operations/JsonEncoderStep.h"
-#include "operations/DebugDumpStep.h"
 #include "operations/StopStep.h"
 #include "operations/EndStep.h"
 #include "operations/FilterStep.h"
@@ -71,12 +69,6 @@ public:
                  CountStep::ColumnCount* count);
     PipelineStep(LambdaStep::Tag,
                  LambdaStep::StepFunc stepFunc);
-    PipelineStep(JsonEncoderStep::Tag,
-                 net::NetWriter* writer,
-                 const Block* block);
-    PipelineStep(DebugDumpStep::Tag,
-                 const Block* input,
-                 std::ostream& out);
     PipelineStep(CreateGraphStep::Tag,
                  const std::string& graphName);
     PipelineStep(ListGraphStep::Tag,
@@ -118,8 +110,6 @@ private:
                  TransformStep,
                  CountStep,
                  LambdaStep,
-                 JsonEncoderStep,
-                 DebugDumpStep,
                  StopStep,
                  EndStep,
                  CreateGraphStep,

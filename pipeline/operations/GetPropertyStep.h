@@ -2,12 +2,12 @@
 
 #include <memory>
 
-#include "ColumnIDs.h"
-#include "ColumnOptVector.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
+#include "types/SupportedType.h"
+#include "iterators/GetNodePropertiesIterator.h"
+#include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
-#include "SupportedType.h"
-#include "GetNodePropertiesIterator.h"
-#include "ChunkConfig.h"
 
 namespace db {
 

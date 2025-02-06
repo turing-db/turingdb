@@ -25,4 +25,5 @@ target_include_directories(turing_db_pipeline_s PUBLIC
 target_link_libraries(turing_db_pipeline_s PRIVATE 
     turing_db_storage_s
     turing_db_query_AST_s
-    turing_db_memory_s)
+    turing_db_memory_s
+    turing_db_system_s)

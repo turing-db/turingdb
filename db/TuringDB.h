@@ -5,7 +5,7 @@
 #include "SystemManager.h"
 #include "QueryStatus.h"
 #include "QueryCallback.h"
-#include "QueryInterpreter.h"
+
 namespace db {
 
 class LocalMemory;
@@ -27,7 +27,6 @@ public:
 
 private:
     SystemManager _systemManager;
-    QueryInterpreter _interp;
 };
 
 }

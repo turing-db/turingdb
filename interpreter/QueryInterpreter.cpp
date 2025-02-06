@@ -6,6 +6,7 @@
 #include "ASTContext.h"
 #include "QueryParser.h"
 #include "QueryAnalyzer.h"
+#include "QueryPlanner.h"
 
 #include "Time.h"
 
@@ -48,18 +49,13 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);
     }
 
-/*
     // Query plan
-    PlannerContext planCtxt(dbView, mem);
-    QueryPlanner planner(&planCtxt, cmd);
-    if (_encodingParams) {
-        planner.setEncodingParams(_encodingParams);
+    QueryPlanner planner(view, mem);
+    if (!planner.plan(cmd)) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR);
     }
 
-    if (!planner.plan()) {
-        return QueryStatus(QueryStatus::Status::QUERY_PLAN_ERROR);
-    }
-
+/*
     // Execute
     ExecutionContext execCtxt(sysMan, dbView);
     Executor executor(&execCtxt, planner.getPipeline());

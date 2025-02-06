@@ -90,22 +90,6 @@ PipelineStep::PipelineStep(CountStep::Tag,
 {
 }
 
-PipelineStep::PipelineStep(DebugDumpStep::Tag,
-                           const Block* input,
-                           std::ostream& out)
-    : _opcode(PipelineOpcode::DEBUG_DUMP),
-    _impl(std::in_place_type<DebugDumpStep>, input, out)
-{
-}
-
-PipelineStep::PipelineStep(JsonEncoderStep::Tag,
-                           net::NetWriter* writer,
-                           const Block* block)
-    : _opcode(PipelineOpcode::JSON_ENCODER),
-    _impl(std::in_place_type<JsonEncoderStep>, writer, block)
-{
-}
-
 PipelineStep::PipelineStep(StopStep::Tag)
     : _opcode(PipelineOpcode::STOP),
     _impl(std::in_place_type<StopStep>)

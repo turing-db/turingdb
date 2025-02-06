@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ExecutionContext.h"
-#include "ColumnIDs.h"
+#include "columns/ColumnIDs.h"
 
 namespace db {
 

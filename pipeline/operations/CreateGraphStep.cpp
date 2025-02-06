@@ -1,7 +1,7 @@
 #include "CreateGraphStep.h"
 
 #include "ExecutionContext.h"
-#include "system/SystemManager.h"
+#include "SystemManager.h"
 
 using namespace db;
 

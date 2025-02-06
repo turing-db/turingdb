@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ColumnConst.h"
-#include "PropertyType.h"
+#include "columns/ColumnConst.h"
+#include "types/PropertyType.h"
 
 namespace db {
 

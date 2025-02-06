@@ -1,7 +1,7 @@
 #include "GetLabelSetIDStep.h"
 
-#include "GraphView.h"
-#include "GraphReader.h"
+#include "views/GraphView.h"
+#include "reader/GraphReader.h"
 
 using namespace db;
 

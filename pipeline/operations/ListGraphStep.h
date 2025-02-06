@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-#include "ColumnVector.h"
+#include "columns/ColumnVector.h"
 
 namespace db {
 
