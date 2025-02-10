@@ -40,7 +40,9 @@ bool GMLDumper::dump() {
         return false;
     }
 
-    _gml << "graph [\n";
+    _gml << "graph [\n"
+         << "    multigraph 1\n"
+         << "    directed 1\n";
     for (const auto& [id, node] : _net->nodes()) {
         _gml << "    node [\n";
         _gml << "        id "
