@@ -4,13 +4,13 @@
 
 TEST(StringContainerTest, General) {
     StringContainer container;
-    container.alloc("Hello world");
-    container.alloc("");
-    container.alloc("Hello people");
-    container.alloc("Hello");
-    container.alloc("world");
-    container.alloc("Hello");
-    container.alloc("people");
+    ASSERT_TRUE(container.alloc("Hello world"));
+    ASSERT_TRUE(container.alloc(""));
+    ASSERT_TRUE(container.alloc("Hello people"));
+    ASSERT_TRUE(container.alloc("Hello"));
+    ASSERT_TRUE(container.alloc("world"));
+    ASSERT_TRUE(container.alloc("Hello"));
+    ASSERT_TRUE(container.alloc("people"));
 
     const std::string_view v1 = container.getView(0);
     const std::string_view v2 = container.getView(1);

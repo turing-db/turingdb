@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <filesystem>
 
 using namespace fs;
 
@@ -158,9 +159,20 @@ Result<void> Path::mkdir() const {
         return Error::result(ErrorType::ALREADY_EXISTS);
     }
 
-    if (::mkdir(_path.c_str(), 0700) == -1) {
+    if (::mkdir(_path.c_str(), 0700) < 0) {
         return Error::result(ErrorType::CANNOT_MKDIR, errno);
     }
 
     return {};
 }
+
+Result<void> Path::rm() const {
+    std::error_code err {};
+    std::filesystem::remove_all(_path, err);
+    if (err) {
+        return Error::result(ErrorType::CANNOT_REMOVE, err.value());
+    }
+
+    return {};
+}
+

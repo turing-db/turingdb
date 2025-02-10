@@ -140,6 +140,11 @@ execute_process(COMMAND git rev-parse HEAD
                 OUTPUT_VARIABLE HEAD_COMMIT_HASH
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Get timestamp of current HEAD commit
+execute_process(COMMAND git show --no-patch --format=%at
+                OUTPUT_VARIABLE HEAD_COMMIT_TIMESTAMP
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_subdirectory(app)
 add_subdirectory(app2)
 add_subdirectory(external)

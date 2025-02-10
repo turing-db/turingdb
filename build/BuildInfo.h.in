@@ -4,6 +4,7 @@
 #cmakedefine01 DEBUG_BUILD
 
 #cmakedefine HEAD_COMMIT_HASH ${HEAD_COMMIT_HASH}
+#cmakedefine HEAD_COMMIT_TIMESTAMP ${HEAD_COMMIT_TIMESTAMP}
 
 #define __my_xstr(X) __my_str(X)
 #define __my_str(X) #X

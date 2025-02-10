@@ -36,13 +36,25 @@ public:
         return Path(std::move(p));
     }
 
-    Path& operator/=(const std::string_view rhs) {
+    Path& operator/=(std::string_view rhs) {
         _path += "/";
         _path += rhs;
         return *this;
     }
 
-    [[nodiscard]] Result<void> mkdir() const;
+    Path& operator+=(std::string_view rhs) {
+        _path += rhs;
+        return *this;
+    }
+
+    Path operator+(std::string_view rhs) {
+        Path newPath = *this;
+        newPath += rhs;
+        return newPath;
+    }
+
+    Result<void> mkdir() const;
+    Result<void> rm() const;
 
 private:
     std::string _path;

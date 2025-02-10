@@ -9,12 +9,13 @@ namespace fs {
 
 class Path;
 
-enum class ErrorType {
+enum class ErrorType : uint8_t {
     UNKNOWN = 0,
     NOT_EXISTS,
     NOT_DIRECTORY,
     ALREADY_EXISTS,
     CANNOT_MKDIR,
+    CANNOT_REMOVE,
     OPEN_DIRECTORY,
     CLOSE_DIRECTORY,
     OPEN_FILE,
@@ -26,6 +27,7 @@ enum class ErrorType {
     CLEAR_FILE,
     CLOSE_FILE,
     SYNC_FILE,
+    COULD_NOT_SEEK,
 
     _SIZE,
 };
@@ -36,6 +38,7 @@ using ErrorTypeDescription = EnumToString<ErrorType>::Create<
     EnumStringPair<ErrorType::NOT_DIRECTORY, "Not a directory">,
     EnumStringPair<ErrorType::ALREADY_EXISTS, "Already exists">,
     EnumStringPair<ErrorType::CANNOT_MKDIR, "Could not make directory">,
+    EnumStringPair<ErrorType::CANNOT_REMOVE, "Could not remove">,
     EnumStringPair<ErrorType::OPEN_DIRECTORY, "Could not open directory">,
     EnumStringPair<ErrorType::CLOSE_DIRECTORY, "Could not close directory">,
     EnumStringPair<ErrorType::OPEN_FILE, "Could not open file">,
@@ -46,7 +49,8 @@ using ErrorTypeDescription = EnumToString<ErrorType>::Create<
     EnumStringPair<ErrorType::WRITE_PAGE, "Could not write page">,
     EnumStringPair<ErrorType::CLEAR_FILE, "Could not clear file">,
     EnumStringPair<ErrorType::CLOSE_FILE, "Could not close file">,
-    EnumStringPair<ErrorType::SYNC_FILE, "Could not sync file">>;
+    EnumStringPair<ErrorType::SYNC_FILE, "Could not sync file">,
+    EnumStringPair<ErrorType::COULD_NOT_SEEK, "Could not seek">>;
 
 class Error {
 public:

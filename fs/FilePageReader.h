@@ -5,16 +5,23 @@
 #include "AlignedBuffer.h"
 #include "Path.h"
 #include "FileResult.h"
+#include "PageSizeConfig.h"
 
 namespace fs {
 
 class FilePageReader {
 public:
-    static constexpr size_t PAGE_SIZE = 1024ul * 1024 * 8; // 8 MiB
+    static constexpr size_t PAGE_SIZE = DEFAULT_PAGE_SIZE;
     using InternalBuffer = AlignedBuffer<PAGE_SIZE>;
     using InternalBufferIterator = AlignedBufferIterator<PAGE_SIZE>;
 
     FilePageReader() = default;
+    FilePageReader(const FilePageReader&) = delete;
+    FilePageReader(FilePageReader&&) noexcept = default;
+    FilePageReader& operator=(const FilePageReader&) = delete;
+    FilePageReader& operator=(FilePageReader&&) noexcept = default;
+
+    ~FilePageReader() = default;
 
     [[nodiscard]] static Result<FilePageReader> open(const Path& path);
     [[nodiscard]] static Result<FilePageReader> openNoDirect(const Path& path);
@@ -30,9 +37,9 @@ public:
     [[nodiscard]] InternalBufferIterator end() const { return _buffer.end(); }
 
 private:
-    int _fd {-1};
     InternalBuffer _buffer;
     std::optional<Error> _error;
+    int _fd {-1};
     bool _reachedEnd = false;
 
     explicit FilePageReader(int fd)

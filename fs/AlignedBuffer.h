@@ -63,8 +63,19 @@ public:
 
     void write(const uint8_t* data, size_t size) {
         bioassert(avail() >= size);
-        std::memcpy(_buffer, data, size);
+        std::memcpy(_buffer + _size, data, size);
         _size += size;
+    }
+
+    void patch(const uint8_t* data, size_t size, size_t offset) {
+        bioassert(_size >= offset + size);
+        std::memcpy(_buffer + offset, data, size);
+    }
+
+    void reserveSpace(size_t byteCount) {
+        bioassert(avail() >= byteCount);
+        std::memset(_buffer + _size, 0, byteCount);
+        resize(_size + byteCount);
     }
 
     ~AlignedBuffer() noexcept {
@@ -72,10 +83,7 @@ public:
     }
 
     void resize(size_t size) {
-        if (size > Capacity) {
-            throw std::runtime_error("AlignedBuffer error: Exceeding buffer max capacity");
-        }
-
+        bioassert(size <= Capacity);
         _size = size;
     }
 
@@ -180,6 +188,10 @@ public:
 
     [[nodiscard]] AlignedBufferIterator end() const {
         return AlignedBufferIterator {*_buf, _buf->size()};
+    }
+
+    [[nodiscard]] size_t remainingBytes() const {
+        return std::distance(_data, _buf->data() + _buf->size());
     }
 
     void advance(size_t offset) {
