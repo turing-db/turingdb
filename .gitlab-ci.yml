@@ -8,6 +8,10 @@ build-job:
   tags:
     - docker
   stage: build
+  before_script:
+  - git remote prune origin  # Remove stale remote branches
+  - git fetch --prune --all  # Fetch fresh refs, removing old ones
+  - git branch -r            # List remote branches for verification
   script:
     - date
     - source /turing/setup.sh
