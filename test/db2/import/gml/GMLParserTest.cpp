@@ -155,6 +155,13 @@ TEST_F(GMLParserTest, Nodes) {
         "]",
         "GML Error at line 3: Unexpected end of file. Expected: ']'");
 
+    // Entity name not starting with alphabet or ]
+    EXPECT_ERROR(
+        "graph [\n"
+        "  9node [ id 0 ]\n"
+        "]",
+        "GML Error at line 2: Unexpected token '9'. Expected: 'alphabet or ]'");
+
     EXPECT_SUCCESS(
         "graph [\n"
         "  node [ id 0 ]\n"
@@ -296,12 +303,29 @@ TEST_F(GMLParserTest, GraphAttributes) {
         "]");
 
     EXPECT_SUCCESS(
+        "graph [\n"
+        "  attribute_1 \"value_1\"\n"
+        "  attribute_2 value_2\n"
+        "  node [ id 0 identifier 1]\n"
+        "]");
+
+    EXPECT_SUCCESS(
         "graph [attribute_1 value_1 node[id 1 ]]");
 
+    // Can't have attribute (entity) starting with a number
     EXPECT_ERROR(
         "graph [\n"
         "  1_attribute value_1\n"
         "  node [\n"
         "]",
-        "GML Error at line 2: Unexpected token '1'. Expected: 'alphabet or ]'"); // Changed error message
+        "GML Error at line 2: Unexpected token '1'. Expected: 'alphabet or ]'");
+
+    // Shouldn't have brackets on attribute value
+    EXPECT_ERROR(
+        "graph [\n"
+        "  attribute_1 value_1\n"
+        "  attribute_2 [value_2]\n"
+        "  node [ id 0 identifier 1]\n"
+        "]",
+        "GML Error at line 3: Unexpected token '['. Expected: 'alphabet or ]'");
 }
