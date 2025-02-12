@@ -3,6 +3,7 @@
 
 #include "BannerDisplay.h"
 #include "Graph.h"
+#include "GraphDumper.h"
 #include "FileUtils.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
@@ -274,6 +275,11 @@ int main(int argc, const char** argv) {
     float dur = duration<Seconds>(t0, Clock::now());
     logt::ElapsedTime(dur, "s");
 
+    const fs::Path path {toolInit.getOutputsDir() + "/bindump"};
+    if (auto res = GraphDumper::dump(*graph, path); !res) {
+        spdlog::error("Failed To Dump Graph: {}", res.error().fmtMessage());
+        return 1;
+    }
+
     return EXIT_SUCCESS;
 }
-
