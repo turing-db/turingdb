@@ -54,10 +54,10 @@ int main(int argc, const char** argv) {
 #ifdef TURING_DEV
     argParser.add_argument("-dev")
              .store_into(isDevMode);
-#endif
 
     argParser.add_argument("-build")
              .store_into(buildRequested);
+#endif
 
     toolInit.init(argc, argv);
 

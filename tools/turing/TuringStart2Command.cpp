@@ -43,10 +43,10 @@ void TuringStart2Command::setup() {
     _startCommand.add_argument("-dev")
         .implicit_value(true)
         .default_value(false);
-#endif
     _startCommand.add_argument("-build")
         .implicit_value(true)
         .default_value(false);
+#endif
 
     argParser.add_subparser(_startCommand);
 }
@@ -124,10 +124,10 @@ void TuringStart2Command::run() {
     if (isDevRequested()) {
         turingApp.addArg("-dev");
     }
-#endif
     if (isBuildRequested()) {
         turingApp.addArg("-build");
     }
+#endif
 
     turingApp.setWorkingDir(outDir);
     turingApp.setGenerateScript(true);
