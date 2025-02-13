@@ -79,6 +79,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::END] = GOTOPTR(StopStep);
 
         checkJumpTables();
+
+        return;
     }
 
     const auto& activateTbl = _activateTbl;

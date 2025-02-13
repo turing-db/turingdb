@@ -7,13 +7,16 @@
 #include "QueryParser.h"
 #include "QueryAnalyzer.h"
 #include "QueryPlanner.h"
+#include "ExecutionContext.h"
+#include "Executor.h"
 
 #include "Time.h"
 
 using namespace db;
 
 QueryInterpreter::QueryInterpreter(SystemManager* sysMan)
-    : _sysMan(sysMan)
+    : _sysMan(sysMan),
+    _executor(std::make_unique<Executor>())
 {
 }
 
@@ -55,14 +58,11 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
         return QueryStatus(QueryStatus::Status::PLAN_ERROR);
     }
 
-/*
     // Execute
-    ExecutionContext execCtxt(sysMan, dbView);
-    Executor executor(&execCtxt, planner.getPipeline());
-    if (!executor.run()) {
+    ExecutionContext execCtxt(_sysMan, view);
+    if (!_executor->run(&execCtxt, planner.getPipeline())) {
         return QueryStatus(QueryStatus::Status::EXEC_ERROR);
     }
-*/
 
     const auto end = Clock::now();
     

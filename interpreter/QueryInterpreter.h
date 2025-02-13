@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <memory>
 
 #include "QueryStatus.h"
 #include "QueryCallback.h"
@@ -9,6 +10,7 @@ namespace db {
 
 class SystemManager;
 class LocalMemory;
+class Executor;
 
 class QueryInterpreter {
 public:
@@ -22,6 +24,7 @@ public:
 
 private:
     SystemManager* _sysMan {nullptr};
+    std::unique_ptr<Executor> _executor;
 };
 
 }
