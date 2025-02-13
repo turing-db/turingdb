@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <spdlog/spdlog.h>
+#include <regex>
 
 #include "StringToNumber.h"
 #include "FileUtils.h"
@@ -59,6 +60,7 @@ bool ProcessUtils::searchProcess(const std::string& exe, std::vector<pid_t>& pid
 
     std::string procExe;
     std::error_code error;
+    std::regex brokenSymlinkRegex {" \\(deleted\\)"};
     for (const auto& procFile : procList) {
         procExe.clear();
 
@@ -74,9 +76,16 @@ bool ProcessUtils::searchProcess(const std::string& exe, std::vector<pid_t>& pid
         }
 
         const auto procExeFile = procFile/"exe";
-        const auto procExe = std::filesystem::canonical(procExeFile, error);
+        auto procExe = std::filesystem::canonical(procExeFile, error);
         if (error) {
-            continue;
+            // Error might be caused by broken symlink (updated binaries)
+            const std::string brokenSymlink = std::filesystem::read_symlink(procExeFile, error).string();
+
+            if (error) {
+                continue;
+            }
+
+            procExe = std::regex_replace(brokenSymlink, brokenSymlinkRegex, "");
         }
 
         if (isAbsolute) {
