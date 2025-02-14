@@ -249,7 +249,20 @@ int main(int argc, const char** argv) {
     auto graphIt = graphs.begin();
     auto dataIt = importData.begin();
 
+    spdlog::info("import data size is {}", importData.size());
+
     for (; dataIt != importData.end(); graphIt++, dataIt++) {
+
+        //Get The path we will dump our turingDB binaries to
+        size_t pos = dataIt->path.find_last_of('/');
+        std::string filePath;
+
+        if (pos == std::string::npos) {
+            filePath = {folderPath + dataIt->path};
+        } else {
+            filePath = {folderPath + dataIt->path.substr(pos)};
+        }
+
         switch (dataIt->type) {
             case ImportType::BIN: {
                 if (auto res = GraphLoader::load(&(*graphIt), fs::Path(dataIt->path)); !res) {
@@ -332,17 +345,8 @@ int main(int argc, const char** argv) {
             }
         }
 
-
-        const size_t pos = dataIt->path.find_last_of('/');
-        std::string filePath;
-
-        if (pos == std::string::npos) {
-            filePath = {folderPath + dataIt->path};
-        } else {
-            filePath = {folderPath + dataIt->path.substr(pos)};
-        }
-
-
+        spdlog::info("filePath is {} and folderPath is {}", filePath, folderPath);
+        spdlog::info("filePath is {} and folderPath is {}", filePath, folderPath);
         const fs::Path path {filePath};
         if (auto res = GraphDumper::dump((*graphIt), path); !res) {
             spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());
