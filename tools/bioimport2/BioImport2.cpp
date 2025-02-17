@@ -225,10 +225,13 @@ int main(int argc, const char** argv) {
     if (folderPath.empty()) {
         folderPath = toolInit.getOutputsDir() + "/bindump";
     }
-    const fs::Path binDumpPath {folderPath};
-    if (auto res = binDumpPath.mkdir(); !res) {
-        spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
-        return 1;
+
+    if(!cmpEnabled){
+        const fs::Path binDumpPath {folderPath};
+        if (auto res = binDumpPath.mkdir(); !res) {
+            spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
+            return 1;
+        }
     }
 
 
@@ -347,10 +350,12 @@ int main(int argc, const char** argv) {
 
         spdlog::info("filePath is {} and folderPath is {}", filePath, folderPath);
         spdlog::info("filePath is {} and folderPath is {}", filePath, folderPath);
-        const fs::Path path {filePath};
-        if (auto res = GraphDumper::dump((*graphIt), path); !res) {
-            spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());
-            return 1;
+        if(!cmpEnabled){
+            const fs::Path path {filePath};
+            if (auto res = GraphDumper::dump((*graphIt), path); !res) {
+                spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());
+                return 1;
+            }
         }
 
         if (cmpEnabled && graphIt != graphs.begin()) {
