@@ -43,6 +43,13 @@ bool TuringServer::start() {
     server->setWorkerCount(_config.getWorkerCount());
     server->setMaxConnections(_config.getMaxConnections());
 
+    const auto initRes = server->initialize();
+    if (initRes != net::FlowStatus::OK) {
+        spdlog::error("Failed to initialize server: {}", (uint32_t)initRes);
+        server->terminate();
+        return false;
+    }
+
     spdlog::info("Server listening on address: {}:{}",
                  server->getAddress(),
                  server->getPort());
