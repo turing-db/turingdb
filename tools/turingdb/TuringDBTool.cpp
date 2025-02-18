@@ -3,9 +3,11 @@
 
 #include "TuringDB.h"
 #include "LocalMemory.h"
+#include "TuringShell.h"
+#include "TuringServer.h"
+#include "DBServerConfig.h"
 
 #include "ToolInit.h"
-#include "TuringShell.h"
 
 using namespace db;
 
@@ -27,6 +29,9 @@ int main(int argc, const char** argv) {
         TuringShell shell(turingDB, &mem);
         shell.startLoop();
     } else {
+        DBServerConfig config;
+        TuringServer server(config, turingDB);
+        server.start();
     }
 
     return EXIT_SUCCESS;

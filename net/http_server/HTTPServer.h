@@ -21,6 +21,7 @@ public:
         CreateThreadContext _createThreadContext;
         CreateAbstractHTTPParserFunc _createHttpParser;
     };
+    
     explicit HTTPServer(Functions&&);
     ~HTTPServer();
 

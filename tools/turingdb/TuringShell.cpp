@@ -144,9 +144,9 @@ void TuringShell::processLine(std::string& line) {
     const auto res = _turingDB.query(line, _graphName, _mem);
     if (!res.isOk()) {
         if (res.hasErrorMessage()) {
-            spdlog::error("{}: {}", StatusString::value(res.getStatus()), res.getError());
+            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError());
         } else {
-            spdlog::error("{}", StatusString::value(res.getStatus()));
+            spdlog::error("{}", QueryStatusDescription::value(res.getStatus()));
         }
         return;
     }

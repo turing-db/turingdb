@@ -2,16 +2,18 @@
 
 namespace db {
 
+class DBServerConfig;
 class TuringDB;
 
 class TuringServer {
 public:
-    TuringServer(TuringDB& db);
+    TuringServer(const DBServerConfig& config, TuringDB& db);
     ~TuringServer();
 
     bool start();
     
 private:
+    const DBServerConfig& _config;
     TuringDB& _db;
 };
 
