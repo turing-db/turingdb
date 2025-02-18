@@ -8,6 +8,7 @@
 #include "columns/ColumnIDs.h"
 #include "labels/LabelSet.h"
 #include "VectorHash.h"
+#include "QueryCallback.h"
 
 namespace db {
 
@@ -27,7 +28,10 @@ class Block;
 
 class QueryPlanner {
 public:
-    QueryPlanner(const GraphView& view, LocalMemory* mem);
+    QueryPlanner(const GraphView& view,
+                 LocalMemory* mem,
+                 QueryCallback callback);
+
     ~QueryPlanner();
 
     bool plan(const QueryCommand* query);
@@ -37,6 +41,7 @@ public:
 private:
     const GraphView& _view;
     LocalMemory* _mem {nullptr};
+    QueryCallback _queryCallback;
     std::unique_ptr<Pipeline> _pipeline;
 
     // Code generation utilities
@@ -83,7 +88,8 @@ private:
     bool planLoadGraph(const LoadGraphCommand* loadCmd);
     void planProjection(const SelectCommand* select);
     void planPropertyProjection(ColumnIDs* columnIDs,
-      const std::string& memberName);
+                                const std::string& memberName);
+    void planOutputLambda();
 };
 
 }

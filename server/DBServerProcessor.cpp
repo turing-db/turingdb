@@ -21,6 +21,7 @@
 #include "HTTP.h"
 #include "HTTPResponseWriter.h"
 #include "TCPConnection.h"
+#include "JsonEncoder.h"
 
 using namespace db;
 
@@ -132,7 +133,10 @@ void DBServerProcessor::query() {
     payload.key("data");
     payload.arr();
 
-    const auto res = _db.query(httpInfo._payload, graphNameView, &mem);
+    const auto res = _db.query(httpInfo._payload, graphNameView, &mem,
+                               [&](const Block& block) {
+                                   JsonEncoder::writeBlock(payload, block);
+                               });
 
     payload.end();
 

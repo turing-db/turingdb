@@ -5,8 +5,7 @@
 
 #include "RWSpinLock.h"
 #include "GraphLoadStatus.h"
-
-namespace fs { class Path; }
+#include "Path.h"
 
 namespace db {
 
@@ -36,7 +35,7 @@ public:
 
     void setDefaultGraph(const std::string& name);
 
-    void setGraphsDir(const std::string& dir); 
+    void setGraphsDir(const fs::Path& dir); 
 
     bool loadGraph(const std::string& graphName);
 
@@ -44,7 +43,7 @@ public:
 
 private:
     mutable RWSpinLock _lock;
-    std::string _graphsDir;
+    fs::Path _graphsDir;
     Graph* _defaultGraph {nullptr};
     std::unordered_map<std::string, Graph*> _graphs;
     GraphLoadStatus _graphLoadStatus;

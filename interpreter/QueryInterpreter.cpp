@@ -53,7 +53,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Query plan
-    QueryPlanner planner(view, mem);
+    QueryPlanner planner(view, mem, callback);
     if (!planner.plan(cmd)) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR);
     }

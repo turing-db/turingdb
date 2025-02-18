@@ -151,6 +151,15 @@ public:
         _comma = true;
     }
 
+    template <typename T>
+    void value(const std::optional<T>& v) {
+        if (v) {
+            value(*v);
+        } else {
+            value("null");
+        }
+    }
+
     void finish() {
         for (auto it = _closingTokens.rbegin(); it != _closingTokens.rend(); it++) {
             write(*it);

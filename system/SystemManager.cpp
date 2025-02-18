@@ -2,19 +2,30 @@
 
 #include <shared_mutex>
 #include <mutex>
+#include <spdlog/spdlog.h>
 
 #include "Graph.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
-#include "Path.h"
 #include "FileUtils.h"
+#include "Panic.h"
 
 using namespace db;
 
 SystemManager::SystemManager()
 {
+    const char* home = std::getenv("HOME");
+    if (!home) {
+        panic("HOME environment variable not set");
+    }
+
+    _graphsDir = fs::Path(home)/"graphs_v2";
+    if (!_graphsDir.exists()) {
+        panic("graphs_v2 directory not found at {}", _graphsDir.get());
+    }
+
     _defaultGraph = createGraph("default");
 }
 
@@ -24,7 +35,7 @@ SystemManager::~SystemManager() {
     }
 }
 
-void SystemManager::setGraphsDir(const std::string& dir) {
+void SystemManager::setGraphsDir(const fs::Path& dir) {
     _graphsDir = dir;
 }
 
@@ -168,6 +179,7 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
 void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
     const auto list = fs::Path(_graphsDir).listDir();
     if (!list) {
+        spdlog::error("Failed to list available graphs in {}", _graphsDir.get());
         return;
     }
 

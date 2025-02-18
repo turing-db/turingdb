@@ -27,11 +27,13 @@
 #include "Pipeline.h"
 
 using namespace db;
+
 namespace rv = ranges::views;
 
-QueryPlanner::QueryPlanner(const GraphView& view, LocalMemory* mem)
+QueryPlanner::QueryPlanner(const GraphView& view, LocalMemory* mem, QueryCallback callback)
     : _view(view),
     _mem(mem),
+    _queryCallback(callback),
     _pipeline(std::make_unique<Pipeline>()),
     _output(std::make_unique<Block>()),
     _transformData(std::make_unique<TransformData>(mem))
@@ -90,6 +92,7 @@ bool QueryPlanner::planSelect(const SelectCommand* select) {
     planPath(pathElements);
     planTransformStep();
     planProjection(select);
+    planOutputLambda();
 
     // Add END step
     _pipeline->add<EndStep>();
@@ -501,4 +504,12 @@ void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::strin
 
 void QueryPlanner::planTransformStep() {
     _pipeline->add<TransformStep>(_transformData.get());
+}
+
+void QueryPlanner::planOutputLambda() {
+    _pipeline->add<LambdaStep>([&](LambdaStep* step, LambdaStep::Operation op) {
+        if (op == LambdaStep::Operation::EXECUTE) {
+            _queryCallback(*_output);
+        }
+    });
 }
