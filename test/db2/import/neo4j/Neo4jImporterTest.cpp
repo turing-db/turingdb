@@ -24,6 +24,7 @@ protected:
     }
 
     void terminate() override {
+            _jobSystem->terminate();
     }
 
     std::unique_ptr<JobSystem> _jobSystem;

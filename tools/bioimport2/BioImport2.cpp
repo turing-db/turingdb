@@ -270,6 +270,7 @@ int main(int argc, const char** argv) {
             case ImportType::BIN: {
                 if (auto res = GraphLoader::load(&(*graphIt), fs::Path(dataIt->path)); !res) {
                     spdlog::error("Failed To Load Graph: {}", res.error().fmtMessage());
+                    jobSystem.terminate();
                     return 1;
                 }
                 break;
@@ -277,6 +278,7 @@ int main(int argc, const char** argv) {
             case ImportType::GML: {
                 GMLImporter parser;
                 if (!parser.importFile(jobSystem, &(*graphIt), FileUtils::Path(dataIt->path))) {
+                    jobSystem.terminate();
                     return 1;
                 }
                 break;
@@ -292,6 +294,7 @@ int main(int argc, const char** argv) {
                                                    db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
+                    jobSystem.terminate();
                     return 1;
                 }
                 break;
@@ -308,6 +311,7 @@ int main(int argc, const char** argv) {
                                                    db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
+                    jobSystem.terminate();
                     return 1;
                 }
                 break;
@@ -328,6 +332,7 @@ int main(int argc, const char** argv) {
                                               db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                               db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                               args)) {
+                    jobSystem.terminate();
                     return 1;
                 }
                 break;
@@ -342,6 +347,7 @@ int main(int argc, const char** argv) {
                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   args)) {
+                    jobSystem.terminate();
                     return 1;
                 }
                 break;
@@ -354,6 +360,7 @@ int main(int argc, const char** argv) {
             const fs::Path path {filePath};
             if (auto res = GraphDumper::dump((*graphIt), path); !res) {
                 spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());
+                jobSystem.terminate();
                 return 1;
             }
         }
@@ -361,6 +368,7 @@ int main(int argc, const char** argv) {
         if (cmpEnabled && graphIt != graphs.begin()) {
             if (!GraphComparator::same(*graphIt, *(graphIt - 1))) {
                 spdlog::error("graph loaded from:{} is not the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
+                jobSystem.terminate();
                 return 1;
             }
             spdlog::info("graph loaded from:{} is the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
