@@ -256,16 +256,6 @@ int main(int argc, const char** argv) {
 
     for (; dataIt != importData.end(); graphIt++, dataIt++) {
 
-        //Get The path we will dump our turingDB binaries to
-        size_t pos = dataIt->path.find_last_of('/');
-        std::string filePath;
-
-        if (pos == std::string::npos) {
-            filePath = {folderPath + dataIt->path};
-        } else {
-            filePath = {folderPath + dataIt->path.substr(pos)};
-        }
-
         switch (dataIt->type) {
             case ImportType::BIN: {
                 if (auto res = GraphLoader::load(&(*graphIt), fs::Path(dataIt->path)); !res) {
@@ -287,7 +277,7 @@ int main(int argc, const char** argv) {
                 Neo4jImporter::ImportDumpFileArgs args;
                 args._workDir = toolInit.getOutputsDir();
                 args._writeFiles = true;
-                args._dumpFilePath = std::move(dataIt->path);
+                args._dumpFilePath = dataIt->path;
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
                                                    &(*graphIt),
@@ -304,7 +294,7 @@ int main(int argc, const char** argv) {
                 args._workDir = toolInit.getOutputsDir();
                 args._writeFiles = true;
                 args._writeFilesOnly = true;
-                args._dumpFilePath = std::move(dataIt->path);
+                args._dumpFilePath = dataIt->path;
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
                                                    &(*graphIt),
@@ -339,7 +329,7 @@ int main(int argc, const char** argv) {
             }
             case ImportType::JSON_NEO4J: {
                 Neo4jImporter::ImportJsonDirArgs args;
-                args._jsonDir = std::move(dataIt->path);
+                args._jsonDir = dataIt->path;
                 args._workDir = toolInit.getOutputsDir();
 
                 if (!Neo4jImporter::importJsonDir(jobSystem,
@@ -354,8 +344,16 @@ int main(int argc, const char** argv) {
             }
         }
 
-        spdlog::info("filePath is {} and folderPath is {}", filePath, folderPath);
-        spdlog::info("filePath is {} and folderPath is {}", filePath, folderPath);
+        //Get The path we will dump our turingDB binaries to
+        size_t pos = dataIt->path.find_last_of('/');
+        std::string filePath;
+
+        if (pos == std::string::npos) {
+            filePath = {folderPath + dataIt->path};
+        } else {
+            filePath = {folderPath + dataIt->path.substr(pos)};
+        }
+
         if(!cmpEnabled){
             const fs::Path path {filePath};
             if (auto res = GraphDumper::dump((*graphIt), path); !res) {
