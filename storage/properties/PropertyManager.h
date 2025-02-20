@@ -6,7 +6,7 @@
 #include "GraphMetadata.h"
 #include "EntityID.h"
 #include "indexers/LabelSetIndexer.h"
-#include "labels/LabelSetRange.h"
+#include "indexers/PropertyIndexer.h"
 #include "PropertyContainer.h"
 
 namespace db {

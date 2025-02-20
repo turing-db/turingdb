@@ -5,6 +5,7 @@
 #include "JobSystem.h"
 
 using namespace turing::test;
+using namespace db;
 
 class JobSystemTest : public TuringTest {
 protected:

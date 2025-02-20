@@ -10,6 +10,7 @@
 #include "writers/DataPartBuilder.h"
 #include "IDMapper.h"
 #include "Parser.h"
+#include "ControlCharacters.h"
 
 namespace db::json::neo4j {
 

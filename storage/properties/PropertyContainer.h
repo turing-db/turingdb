@@ -7,6 +7,7 @@
 
 #include "StringContainer.h"
 #include "types/PropertyType.h"
+#include "Panic.h"
 #include "BioAssert.h"
 
 namespace db {

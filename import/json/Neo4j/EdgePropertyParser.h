@@ -4,7 +4,7 @@
 
 #include "types/PropertyTypeMap.h"
 #include "GraphMetadata.h"
-#include "PropertyTypeMap.h"
+#include "types/PropertyTypeMap.h"
 
 namespace db::json::neo4j {
 

@@ -7,13 +7,7 @@
 
 namespace db {
 
-<<<<<<<< HEAD:import/gml/GMLGraphParser.h
 class GMLGraphSax {
-========
-class JobSystem;
-
-class GMLDatabaseSax {
->>>>>>>> 696d53928 (First minimal build of the DB before repo split):import/gml/GMLDatabaseParser.h
 public:
     explicit GMLGraphSax(Graph* graph)
         : _graph(graph)

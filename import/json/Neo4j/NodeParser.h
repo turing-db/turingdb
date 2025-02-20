@@ -9,6 +9,7 @@
 #include "labels/LabelMap.h"
 #include "types/PropertyTypeMap.h"
 #include "Parser.h"
+#include "ControlCharacters.h"
 
 namespace db::json::neo4j {
 
