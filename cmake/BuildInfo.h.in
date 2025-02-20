@@ -1,8 +1,10 @@
-#pragma once
+#ifndef _COMMON_BUILD_INFO_
+#define _COMMON_BUILD_INFO_
 
 #cmakedefine01 DEBUG_BUILD
 
 #cmakedefine HEAD_COMMIT_HASH ${HEAD_COMMIT_HASH}
+#cmakedefine HEAD_COMMIT_TIMESTAMP ${HEAD_COMMIT_TIMESTAMP}
 
 #define __my_xstr(X) __my_str(X)
 #define __my_str(X) #X
@@ -13,3 +15,6 @@
 #cmakedefine01 TIME_BOMB_ACTIVE
 
 #cmakedefine TIME_BOMB_DAYS ${TIME_BOMB_DAYS}
+
+#endif
+

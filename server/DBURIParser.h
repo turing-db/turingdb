@@ -95,6 +95,7 @@ private:
     static constexpr std::string_view STR_GET_NEIGHBORS = "/get_neighbors";
     static constexpr std::string_view STR_GET_NODES = "/get_nodes";
     static constexpr std::string_view STR_GET_NODE_EDGES = "/get_node_edges";
+    static constexpr std::string_view STR_GET_EDGES = "/get_edges";
     static constexpr std::string_view STR_EXPLORE_NODE_EDGES = "/explore_node_edges";
 
     static net::HTTP::Result<net::HTTP::EndpointIndex> getEndpointIndex(std::string_view path) {
@@ -115,6 +116,7 @@ private:
             {STR_GET_NEIGHBORS,       (size_t)Endpoint::GET_NEIGHBORS      },
             {STR_GET_NODES,           (size_t)Endpoint::GET_NODES          },
             {STR_GET_NODE_EDGES,      (size_t)Endpoint::GET_NODE_EDGES     },
+            {STR_GET_EDGES,           (size_t)Endpoint::GET_EDGES          },
             {STR_EXPLORE_NODE_EDGES,  (size_t)Endpoint::EXPLORE_NODE_EDGES },
         };
 

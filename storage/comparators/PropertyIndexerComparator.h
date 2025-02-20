@@ -2,7 +2,7 @@
 
 #include <range/v3/view/zip.hpp>
 
-#include "PropertyIndexer.h"
+#include "indexers/PropertyIndexer.h"
 
 namespace db {
 

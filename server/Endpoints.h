@@ -49,6 +49,7 @@ enum class Endpoint : int64_t {
     GET_NEIGHBORS,
     GET_NODES,
     GET_NODE_EDGES,
+    GET_EDGES,
     EXPLORE_NODE_EDGES,
 };
 

@@ -93,6 +93,9 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
         case Endpoint::GET_NODE_EDGES: {
             return get_node_edges();
         }
+        case Endpoint::GET_EDGES: {
+            return get_edges();
+        }
         case Endpoint::EXPLORE_NODE_EDGES: {
             return explore_node_edges();
         }
@@ -1145,3 +1148,64 @@ void DBServerProcessor::explore_node_edges() {
     executor.run();
 }
 
+void DBServerProcessor::get_edges() {
+    auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
+    LocalMemory& mem = _threadContext->getLocalMemory();
+    const auto& sysMan = _db.getSystemManager();
+    const auto& httpInfo = parser.getHttpInfo();
+    const std::string_view graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
+    const std::string_view reqBody = httpInfo._payload;
+
+    const auto header = _writer.startHeader(net::HTTP::Status::OK,
+                                            !_connection.isCloseRequired());
+
+    PayloadWriter payload(_writer.getWriter());
+    payload.obj();
+
+    const Graph* graph = graphNameView.empty()
+                           ? sysMan.getDefaultGraph()
+                           : sysMan.getGraph(std::string(graphNameView));
+
+    if (!graph) {
+        payload.key("error");
+        payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_NOT_FOUND));
+        return;
+    }
+
+    payload.setMetadata(graph->getMetadata());
+
+    const GraphView view = graph->view();
+
+    ColumnVector<EntityID>* edgeIDs = mem.alloc<ColumnVector<EntityID>>();
+
+    try {
+        const auto json = nlohmann::json::parse(reqBody);
+
+        const auto edgeIDsIt = json.find("edgeIDs");
+        if (edgeIDsIt == json.end()) {
+            payload.key("error");
+            payload.value(EndpointStatusDescription::value(EndpointStatus::MISSING_PARAM));
+            return;
+        }
+
+        const auto& vec = edgeIDsIt->get<std::vector<EntityID::Type>>();
+        edgeIDs->reserve(vec.size());
+        for (const EntityID::Type edgeID : vec) {
+            edgeIDs->push_back(edgeID);
+        }
+    } catch (const std::exception& e) {
+        payload.key("error");
+        payload.value(EndpointStatusDescription::value(EndpointStatus::COULD_NOT_PARSE_BODY));
+        return;
+    }
+
+    const auto reader = view.read();
+    payload.key("data");
+    payload.obj();
+
+    for (const auto edgeID : *edgeIDs) {
+        const EdgeView edge = reader.getEdgeView(edgeID);
+        payload.key(edgeID);
+        payload.value(edge);
+    }
+}

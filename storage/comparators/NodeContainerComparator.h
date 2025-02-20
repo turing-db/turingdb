@@ -1,7 +1,5 @@
 #pragma once
 
-#include <range/v3/view/zip.hpp>
-
 #include "NodeContainer.h"
 
 namespace db {
@@ -9,8 +7,6 @@ namespace db {
 class NodeContainerComparator {
 public:
     [[nodiscard]] static bool same(const NodeContainer& a, const NodeContainer& b) {
-        namespace rv = ranges::views;
-
         if (a.size() != b.size()) {
             return false;
         }
@@ -26,9 +22,14 @@ public:
             return false;
         }
 
-        for (const auto [itA, itB] : rv::zip(indexerA, indexerB)) {
-            const auto& [labelsetA, rangeA] = itA;
-            const auto& [labelsetB, rangeB] = itB;
+        for (const auto [labelsetA, rangeA] : indexerA) {
+            const auto itB = indexerB.find(labelsetA);
+
+            if (itB == indexerB.end()) {
+                return false;
+            }
+
+            const auto& [labelsetB, rangeB] = *itB;
 
             if (labelsetA != labelsetB) {
                 return false;

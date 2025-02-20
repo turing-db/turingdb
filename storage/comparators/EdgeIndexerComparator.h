@@ -3,7 +3,6 @@
 #include <range/v3/view/zip.hpp>
 
 #include "indexers/EdgeIndexer.h"
-#include "EdgeRecord.h"
 
 namespace db {
 
@@ -27,13 +26,13 @@ public:
             return false;
         }
 
-        for (const auto [itA, itB] : rv::zip(outIndexerA, outIndexerB)) {
-            const auto& [labelsetA, rangesA] = itA;
-            const auto& [labelsetB, rangesB] = itB;
-
-            if (labelsetA != labelsetB) {
+        for (const auto& [labelsetA, rangesA] : outIndexerA) {
+            const auto itB = outIndexerB.find(labelsetA);
+            if (itB == outIndexerB.end()) {
                 return false;
             }
+
+            const auto& [labelsetB, rangesB] = *itB;
 
             if (rangesA.size() != rangesB.size()) {
                 return false;
@@ -46,6 +45,10 @@ public:
 
                 if (rA.size() == 0) {
                     continue;
+                }
+
+                if (rA.back()._edgeID != rB.back()._edgeID) {
+                    return false;
                 }
 
                 if (rA.front()._edgeID != rB.front()._edgeID) {
@@ -61,13 +64,13 @@ public:
             return false;
         }
 
-        for (const auto [itA, itB] : rv::zip(inIndexerA, inIndexerB)) {
-            const auto& [labelsetA, rangesA] = itA;
-            const auto& [labelsetB, rangesB] = itB;
-
-            if (labelsetA != labelsetB) {
+        for (const auto& [labelsetA, rangesA] : inIndexerA) {
+            const auto itB = inIndexerB.find(labelsetA);
+            if (itB == inIndexerB.end()) {
                 return false;
             }
+
+            const auto& [labelsetB, rangesB] = *itB;
 
             if (rangesA.size() != rangesB.size()) {
                 return false;
@@ -80,6 +83,10 @@ public:
 
                 if (rA.size() == 0) {
                     continue;
+                }
+
+                if (rA.back()._edgeID != rB.back()._edgeID) {
+                    return false;
                 }
 
                 if (rA.front()._edgeID != rB.front()._edgeID) {

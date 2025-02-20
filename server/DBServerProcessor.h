@@ -53,6 +53,7 @@ private:
     void get_neighbors();
     void get_nodes();
     void get_node_edges();
+    void get_edges();
     void explore_node_edges();
 };
 
