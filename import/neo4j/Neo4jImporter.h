@@ -21,7 +21,6 @@ public:
         bool _writeFilesOnly = false;
         FileUtils::Path _workDir;
     };
-
     static bool importUrl(JobSystem& jobSystem,
                           Graph* graph,
                           std::size_t nodeCountPerQuery,
@@ -32,7 +31,6 @@ public:
         FileUtils::Path _jsonDir;
         FileUtils::Path _workDir;
     };
-
     static bool importJsonDir(JobSystem& jobSystem,
                               Graph* graph,
                               std::size_t nodeCountPerFile,
@@ -45,7 +43,6 @@ public:
         bool _writeFiles = true;
         bool _writeFilesOnly = false;
     };
-
     static bool importDumpFile(JobSystem& jobSystem,
                                Graph* graph,
                                std::size_t nodeCountPerQuery,

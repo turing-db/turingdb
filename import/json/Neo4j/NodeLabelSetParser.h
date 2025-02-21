@@ -4,9 +4,9 @@
 
 #include "GraphMetadata.h"
 #include "Parser.h"
-#include "LabelMap.h"
-#include "LabelSet.h"
-#include "LabelSetMap.h"
+#include "labels/LabelMap.h"
+#include "labels/LabelSet.h"
+#include "labels/LabelSetMap.h"
 
 namespace db::json::neo4j {
 

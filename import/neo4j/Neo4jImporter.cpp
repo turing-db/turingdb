@@ -20,7 +20,7 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
                               size_t edgeCountPerQuery,
                               const ImportUrlArgs& args) {
     JsonParser parser(graph);
-    Neo4JQueryManager manager;
+    QueryManager manager;
     FileUtils::Path jsonDir = args._workDir / "json";
     JobGroup jobs = jobSystem.newGroup();
 
@@ -55,10 +55,10 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
             });
     };
 
-    const auto submitQuery = [&](Neo4JQueryManager::Query& q) {
-        q._future = jobs.submit<Neo4JQueryManager::Response>(
+    const auto submitQuery = [&](QueryManager::Query& q) {
+        q._future = jobs.submit<QueryManager::Response>(
             [&](Promise* p) {
-                auto* promise = p->cast<Neo4JQueryManager::Response>();
+                auto* promise = p->cast<QueryManager::Response>();
 
                 if (!q._request->exec()) {
                     promise->set_value(std::nullopt);

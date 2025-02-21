@@ -4,15 +4,15 @@
 
 using namespace db;
 
-bool Neo4JQueryManager::isServerRunning() const {
+bool QueryManager::isServerRunning() const {
     std::string response;
     return Neo4JHttpRequest::execStatic(&response,
-                                       _url, _urlSuffix,
-                                       _username, _password,
-                                       _port, "GET", "");
+                                   _url, _urlSuffix,
+                                   _username, _password,
+                                   _port, "GET", "");
 }
 
-Neo4JQueryManager::Query Neo4JQueryManager::dbStatsQuery() const {
+QueryManager::Query QueryManager::dbStatsQuery() const {
     auto query = std::make_unique<Neo4JHttpRequest>();
     query->setUrl(_url);
     query->setUrlSuffix(_urlSuffix);
@@ -27,7 +27,7 @@ Neo4JQueryManager::Query Neo4JQueryManager::dbStatsQuery() const {
     return Query{std::move(query)};
 }
 
-Neo4JQueryManager::Query Neo4JQueryManager::nodeLabelsQuery() const {
+QueryManager::Query QueryManager::nodeLabelsQuery() const {
     auto query = std::make_unique<Neo4JHttpRequest>();
     query->setUrl(_url);
     query->setUrlSuffix(_urlSuffix);
@@ -41,7 +41,7 @@ Neo4JQueryManager::Query Neo4JQueryManager::nodeLabelsQuery() const {
 }
 
 QueryManager::Query QueryManager::nodeLabelSetsQuery() const {
-    auto query = std::make_unique<HttpRequest>();
+    auto query = std::make_unique<Neo4JHttpRequest>();
     query->setUrl(_url);
     query->setUrlSuffix(_urlSuffix);
     query->setUsername(_username);
@@ -55,7 +55,7 @@ QueryManager::Query QueryManager::nodeLabelSetsQuery() const {
     return Query {std::move(query)};
 }
 
-Neo4JQueryManager::Query Neo4JQueryManager::edgeTypesQuery() const {
+QueryManager::Query QueryManager::edgeTypesQuery() const {
     auto query = std::make_unique<Neo4JHttpRequest>();
     query->setUrl(_url);
     query->setUrlSuffix(_urlSuffix);
@@ -68,7 +68,7 @@ Neo4JQueryManager::Query Neo4JQueryManager::edgeTypesQuery() const {
     return Query{std::move(query)};
 }
 
-Neo4JQueryManager::Query Neo4JQueryManager::nodePropertiesQuery() const {
+QueryManager::Query QueryManager::nodePropertiesQuery() const {
     auto query = std::make_unique<Neo4JHttpRequest>();
     query->setUrl(_url);
     query->setUrlSuffix(_urlSuffix);
@@ -81,7 +81,7 @@ Neo4JQueryManager::Query Neo4JQueryManager::nodePropertiesQuery() const {
     return Query{std::move(query)};
 }
 
-Neo4JQueryManager::Query Neo4JQueryManager::edgePropertiesQuery() const {
+QueryManager::Query QueryManager::edgePropertiesQuery() const {
     auto query = std::make_unique<Neo4JHttpRequest>();
     query->setUrl(_url);
     query->setUrlSuffix(_urlSuffix);
@@ -94,8 +94,8 @@ Neo4JQueryManager::Query Neo4JQueryManager::edgePropertiesQuery() const {
     return Query{std::move(query)};
 }
 
-std::vector<Neo4JQueryManager::Query> Neo4JQueryManager::nodesQueries(size_t nodeCount,
-                                                                     size_t countPerQuery) const {
+std::vector<QueryManager::Query> QueryManager::nodesQueries(size_t nodeCount,
+                                                            size_t countPerQuery) const {
     std::vector<Query> queries;
     uint64_t requested = 0;
 
@@ -119,8 +119,8 @@ std::vector<Neo4JQueryManager::Query> Neo4JQueryManager::nodesQueries(size_t nod
     return queries;
 }
 
-std::vector<Neo4JQueryManager::Query> Neo4JQueryManager::edgesQueries(size_t edgeCount,
-                                                                     size_t countPerQuery) const {
+std::vector<QueryManager::Query> QueryManager::edgesQueries(size_t edgeCount,
+                                                            size_t countPerQuery) const {
     std::vector<Query> queries;
     uint64_t requested = 0;
 

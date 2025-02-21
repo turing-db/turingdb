@@ -1,20 +1,13 @@
 #pragma once
 
-#include <optional>
-#include <string>
-#include <vector>
-#include <mutex>
-#include <memory>
-
-#include "Future.h"
+#include "JobSystem.h"
 
 namespace db {
 
-class JobSystem;
 class Neo4JHttpRequest;
 struct DBStats;
 
-class Neo4JQueryManager {
+class QueryManager {
 public:
     using Response = std::optional<std::string>;
 

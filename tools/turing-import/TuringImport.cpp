@@ -3,14 +3,18 @@
 
 #include "BannerDisplay.h"
 #include "Graph.h"
+#include "GraphDumper.h"
 #include "FileUtils.h"
 #include "GMLImporter.h"
+#include "comparators/GraphComparator.h"
+#include "GraphLoader.h"
 #include "JobSystem.h"
 #include "LogUtils.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 
 #include "Time.h"
+#include "BioAssert.h"
 #include "ToolInit.h"
 
 using namespace db;
@@ -21,6 +25,7 @@ enum class ImportType {
     NEO4J_URL,
     JSON_NEO4J,
     GML,
+    BIN,
     // CSV,
 };
 
@@ -54,6 +59,10 @@ int main(int argc, const char** argv) {
     uint16_t nThreads = 0;
     std::vector<ImportData> importData;
 
+    std::string folderPath;
+
+    bool cmpEnabled = false;
+
     argParser.add_argument("-j")
         .help("Number of threads to use")
         .metavar("n")
@@ -71,6 +80,21 @@ int main(int argc, const char** argv) {
             }
             importData.emplace_back(ImportData {
                 .type = ImportType::GML,
+                .path = value,
+            });
+        });
+
+    argParser.add_argument("-db")
+        .help("Imports a turingDB binary")
+        .append()
+        .metavar("/path/to/bin")
+        .action([&](const std::string& value) {
+            if (!FileUtils::exists(value)) {
+                logt::FileNotFound(value);
+                exit(EXIT_FAILURE);
+            }
+            importData.emplace_back(ImportData {
+                .type = ImportType::BIN,
                 .path = value,
             });
         });
@@ -178,7 +202,37 @@ int main(int argc, const char** argv) {
             });
         });
 
+    argParser.add_argument("-db-path")
+        .help("Dump the GraphDB binary to a separate directory")
+        .metavar("/db/dump/path/")
+        .action([&](const std::string& value) {
+            if (!FileUtils::exists(value)) {
+                logt::FileNotFound(value);
+                exit(EXIT_FAILURE);
+            }
+            folderPath = value + "/bindump";
+        });
+
+    argParser.add_argument("-cmp")
+        .help("Compare Loaded Graphs")
+        .nargs(0)
+        .default_value(false)
+        .implicit_value(true)
+        .store_into(cmpEnabled);
+
     toolInit.init(argc, argv);
+
+    if (folderPath.empty()) {
+        folderPath = toolInit.getOutputsDir() + "/bindump";
+    }
+
+    if(!cmpEnabled){
+        const fs::Path binDumpPath {folderPath};
+        if (auto res = binDumpPath.mkdir(); !res) {
+            spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
+            return EXIT_FAILURE;
+        }
+    }
 
     const bool noPathsGiven = importData.empty();
     if (noPathsGiven) {
@@ -187,18 +241,32 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    auto graph = std::make_unique<Graph>();
+    std::vector<Graph> graphs(importData.size());
     JobSystem jobSystem(nThreads);
     auto t0 = Clock::now();
 
     jobSystem.initialize();
 
-    for (auto& data : importData) {
-        switch (data.type) {
+    auto graphIt = graphs.begin();
+    auto dataIt = importData.begin();
+
+    bioassert(graphs.size() == importData.size());
+    for (; dataIt != importData.end(); graphIt++, dataIt++) {
+
+        switch (dataIt->type) {
+            case ImportType::BIN: {
+                if (auto res = GraphLoader::load(&(*graphIt), fs::Path(dataIt->path)); !res) {
+                    spdlog::error("Failed To Load Graph: {}", res.error().fmtMessage());
+                    jobSystem.terminate();
+                    return EXIT_FAILURE;
+                }
+                break;
+            }
             case ImportType::GML: {
                 GMLImporter parser;
-                if (!parser.importFile(jobSystem, graph.get(), FileUtils::Path(data.path))) {
-                    return 1;
+                if (!parser.importFile(jobSystem, &(*graphIt), FileUtils::Path(dataIt->path))) {
+                    jobSystem.terminate();
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -206,14 +274,15 @@ int main(int argc, const char** argv) {
                 Neo4jImporter::ImportDumpFileArgs args;
                 args._workDir = toolInit.getOutputsDir();
                 args._writeFiles = true;
-                args._dumpFilePath = std::move(data.path);
+                args._dumpFilePath = dataIt->path;
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
-                                                   graph.get(),
+                                                   &(*graphIt),
                                                    db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
-                    return 1;
+                    jobSystem.terminate();
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -222,51 +291,82 @@ int main(int argc, const char** argv) {
                 args._workDir = toolInit.getOutputsDir();
                 args._writeFiles = true;
                 args._writeFilesOnly = true;
-                args._dumpFilePath = std::move(data.path);
+                args._dumpFilePath = dataIt->path;
 
                 if (!Neo4jImporter::importDumpFile(jobSystem,
-                                                   graph.get(),
+                                                   &(*graphIt),
                                                    db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
-                    return 1;
+                    jobSystem.terminate();
+                    return EXIT_FAILURE;
                 }
                 break;
             }
             case ImportType::NEO4J_URL: {
                 Neo4jImporter::ImportUrlArgs args;
-                args._url = std::move(data.url);
-                args._urlSuffix = std::move(data.urlSuffix);
-                args._username = std::move(data.username);
-                args._password = std::move(data.password);
-                args._port = data.port;
+                args._url = std::move(dataIt->url);
+                args._urlSuffix = std::move(dataIt->urlSuffix);
+                args._username = std::move(dataIt->username);
+                args._password = std::move(dataIt->password);
+                args._port = dataIt->port;
                 args._workDir = toolInit.getOutputsDir();
                 args._writeFilesOnly = false;
                 args._writeFiles = true;
 
                 if (!Neo4jImporter::importUrl(jobSystem,
-                                              graph.get(),
+                                              &(*graphIt),
                                               db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                               db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                               args)) {
-                    return 1;
+                    jobSystem.terminate();
+                    return EXIT_FAILURE;
                 }
                 break;
             }
             case ImportType::JSON_NEO4J: {
                 Neo4jImporter::ImportJsonDirArgs args;
-                args._jsonDir = std::move(data.path);
+                args._jsonDir = dataIt->path;
                 args._workDir = toolInit.getOutputsDir();
 
                 if (!Neo4jImporter::importJsonDir(jobSystem,
-                                                  graph.get(),
+                                                  &(*graphIt),
                                                   db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   args)) {
-                    return 1;
+                    jobSystem.terminate();
+                    return EXIT_FAILURE;
                 }
                 break;
             }
+        }
+
+        //Get The path we will dump our turingDB binaries to
+        const size_t pos = dataIt->path.find_last_of('/');
+        std::string filePath;
+
+        if (pos == std::string::npos) {
+            filePath = {folderPath + dataIt->path};
+        } else {
+            filePath = {folderPath + dataIt->path.substr(pos)};
+        }
+
+        if(!cmpEnabled){
+            const fs::Path path {filePath};
+            if (auto res = GraphDumper::dump((*graphIt), path); !res) {
+                spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());
+                jobSystem.terminate();
+                return EXIT_FAILURE;
+            }
+        }
+
+        if (cmpEnabled && graphIt != graphs.begin()) {
+            if (!GraphComparator::same(*graphIt, *(graphIt - 1))) {
+                spdlog::error("Graph loaded from:{} is not the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
+                jobSystem.terminate();
+                return EXIT_FAILURE;
+            }
+            spdlog::info("Graph loaded from:{} is the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
         }
     }
 
@@ -276,4 +376,3 @@ int main(int argc, const char** argv) {
 
     return EXIT_SUCCESS;
 }
-

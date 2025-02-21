@@ -37,6 +37,7 @@ public:
     void resetGraphView();
     GraphStats parseStats(const std::string& data);
     bool parseNodeLabels(const std::string& data);
+    bool parseNodeLabelSets(const std::string& data);
     bool parseNodeProperties(const std::string& data);
     bool parseEdgeTypes(const std::string& data);
     bool parseEdgeProperties(const std::string& data);
