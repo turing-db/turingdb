@@ -1,5 +1,6 @@
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
+
 #include "BannerDisplay.h"
 #include "Graph.h"
 #include "GraphDumper.h"
@@ -11,7 +12,9 @@
 #include "LogUtils.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
+
 #include "Time.h"
+#include "BioAssert.h"
 #include "ToolInit.h"
 
 using namespace db;
@@ -85,7 +88,7 @@ int main(int argc, const char** argv) {
     argParser.add_argument("-db")
         .help("Imports a turingDB binary")
         .append()
-        .metavar("db.gml")
+        .metavar("/path/to/bin")
         .action([&](const std::string& value) {
             if (!FileUtils::exists(value)) {
                 logt::FileNotFound(value);
@@ -202,7 +205,7 @@ int main(int argc, const char** argv) {
 
     argParser.add_argument("-db-path")
         .help("Dump the GraphDB binary to a separate directory")
-        .metavar("db.dump")
+        .metavar("/db/dump/path/")
         .action([&](const std::string& value) {
             if (!FileUtils::exists(value)) {
                 logt::FileNotFound(value);
@@ -220,8 +223,6 @@ int main(int argc, const char** argv) {
 
     toolInit.init(argc, argv);
 
-
-
     if (folderPath.empty()) {
         folderPath = toolInit.getOutputsDir() + "/bindump";
     }
@@ -230,10 +231,9 @@ int main(int argc, const char** argv) {
         const fs::Path binDumpPath {folderPath};
         if (auto res = binDumpPath.mkdir(); !res) {
             spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
-            return 1;
+            return EXIT_FAILURE;
         }
     }
-
 
     const bool noPathsGiven = importData.empty();
     if (noPathsGiven) {
@@ -243,7 +243,6 @@ int main(int argc, const char** argv) {
     }
 
     std::vector<Graph> graphs(importData.size());
-    auto graph = std::make_unique<Graph>();
     JobSystem jobSystem(nThreads);
     auto t0 = Clock::now();
 
@@ -252,8 +251,7 @@ int main(int argc, const char** argv) {
     auto graphIt = graphs.begin();
     auto dataIt = importData.begin();
 
-    spdlog::info("import data size is {}", importData.size());
-
+    bioassert(graphs.size() == importData.size());
     for (; dataIt != importData.end(); graphIt++, dataIt++) {
 
         switch (dataIt->type) {
@@ -261,7 +259,7 @@ int main(int argc, const char** argv) {
                 if (auto res = GraphLoader::load(&(*graphIt), fs::Path(dataIt->path)); !res) {
                     spdlog::error("Failed To Load Graph: {}", res.error().fmtMessage());
                     jobSystem.terminate();
-                    return 1;
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -269,7 +267,7 @@ int main(int argc, const char** argv) {
                 GMLImporter parser;
                 if (!parser.importFile(jobSystem, &(*graphIt), FileUtils::Path(dataIt->path))) {
                     jobSystem.terminate();
-                    return 1;
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -285,7 +283,7 @@ int main(int argc, const char** argv) {
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
                     jobSystem.terminate();
-                    return 1;
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -302,7 +300,7 @@ int main(int argc, const char** argv) {
                                                    db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                    args)) {
                     jobSystem.terminate();
-                    return 1;
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -323,7 +321,7 @@ int main(int argc, const char** argv) {
                                               db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                               args)) {
                     jobSystem.terminate();
-                    return 1;
+                    return EXIT_FAILURE;
                 }
                 break;
             }
@@ -338,14 +336,14 @@ int main(int argc, const char** argv) {
                                                   db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
                                                   args)) {
                     jobSystem.terminate();
-                    return 1;
+                    return EXIT_FAILURE;
                 }
                 break;
             }
         }
 
         //Get The path we will dump our turingDB binaries to
-        size_t pos = dataIt->path.find_last_of('/');
+        const size_t pos = dataIt->path.find_last_of('/');
         std::string filePath;
 
         if (pos == std::string::npos) {
@@ -359,17 +357,17 @@ int main(int argc, const char** argv) {
             if (auto res = GraphDumper::dump((*graphIt), path); !res) {
                 spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());
                 jobSystem.terminate();
-                return 1;
+                return EXIT_FAILURE;
             }
         }
 
         if (cmpEnabled && graphIt != graphs.begin()) {
             if (!GraphComparator::same(*graphIt, *(graphIt - 1))) {
-                spdlog::error("graph loaded from:{} is not the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
+                spdlog::error("Graph loaded from:{} is not the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
                 jobSystem.terminate();
-                return 1;
+                return EXIT_FAILURE;
             }
-            spdlog::info("graph loaded from:{} is the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
+            spdlog::info("Graph loaded from:{} is the same as the one loaded from: {}\n", dataIt->path, (dataIt - 1)->path);
         }
     }
 

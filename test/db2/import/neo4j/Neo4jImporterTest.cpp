@@ -3,10 +3,8 @@
 #include <range/v3/view/enumerate.hpp>
 
 #include "Graph.h"
-#include "GraphReader.h"
 #include "GraphView.h"
 #include "TuringTest.h"
-#include "GraphReport.h"
 #include "DataPartBuilder.h"
 #include "JobSystem.h"
 #include "Neo4j/Neo4JParserConfig.h"
@@ -24,7 +22,7 @@ protected:
     }
 
     void terminate() override {
-            _jobSystem->terminate();
+        _jobSystem->terminate();
     }
 
     std::unique_ptr<JobSystem> _jobSystem;
