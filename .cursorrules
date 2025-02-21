@@ -1,0 +1,8 @@
+We are developping TuringDB a high performance graph database engine in C++.
+Our priority is performance and good software quality.
+Use all known C++ programming good practices, to make code readable for humans, maintainable.
+We like to have the simplest and clearest solution that achieves our goals.
+
+The order of includes should be outside-inside: the system includes first, then external libraries includes, then includes for header files of the project, from the most general one outside of the current folder, to the most specific header files closest to the current file.
+
+We put the symbols & and * for references and pointers close to the type, such that for example MyType& and MyType*
