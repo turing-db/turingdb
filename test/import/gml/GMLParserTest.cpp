@@ -114,13 +114,13 @@ TEST_F(GMLParserTest, Empty) {
     EXPECT_SUCCESS("\n\n\r graph [] \n");
 
     EXPECT_ERROR("graphRANDOM [] dsqd\n",
-                 "GML Error at line 1: Unexpected token 'R'. Expected: '['");
+                 "GML Error at line 1: Unexpected token 'graphRANDOM'. Expected: 'graph'");
 
     EXPECT_ERROR("\n\n\r graph [] dsqd\n",
                  "GML Error at line 3: Unexpected token 'd'. Expected: 'end of file'");
 
     EXPECT_ERROR("\tdsqd [] \n",
-                 "GML Error at line 1: Unexpected token 'dsqd '. Expected: 'graph'");
+                 "GML Error at line 1: Unexpected token 'dsqd'. Expected: 'graph'");
 
     {
         GMLSax sax;
@@ -154,6 +154,13 @@ TEST_F(GMLParserTest, Nodes) {
         "  node [ id 0 \n"
         "]",
         "GML Error at line 3: Unexpected end of file. Expected: ']'");
+
+    // Entity name not starting with alphabet
+    EXPECT_ERROR(
+        "graph [\n"
+        "  9node [ id 0 ]\n"
+        "]",
+        "GML Error at line 2: Unexpected token '9'. Expected: 'alphabet'");
 
     EXPECT_SUCCESS(
         "graph [\n"
@@ -194,6 +201,11 @@ TEST_F(GMLParserTest, Nodes) {
     EXPECT_SUCCESS(
         "graph [\n"
         "  node [id 0 label \"quoted prop\"] \n"
+        "  node [id 1 label test]\n"
+        "]");
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  node [id 0 label \"quoted [with bracketsprop]\"] \n"
         "  node [id 1 label test]\n"
         "]");
     EXPECT_SUCCESS(
@@ -282,4 +294,45 @@ TEST_F(GMLParserTest, NestedProperties) {
         "]",
         "GML Error at line 6: Unexpected end of file. Expected: ']'");
 }
+TEST_F(GMLParserTest, GraphAttributes) {
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  attribute_1 value_1\n"
+        "  attribute_2 value_2\n"
+        "  node [ id 0 identifier 1]\n"
+        "]");
 
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  attribute_1 \"value_1\"\n"
+        "  attribute_2 value_2\n"
+        "  node [ id 0 identifier 1]\n"
+        "]");
+
+    EXPECT_SUCCESS(
+        "graph [attribute_1 value_1 node[id 1 ]]");
+
+    EXPECT_SUCCESS(
+        "graph [\n"
+        "  node_name_1 value_1\n"
+        "  node [ id 0 identifier 1]\n"
+        "]");
+
+
+    // Can't have attribute (entity) starting with a number
+    EXPECT_ERROR(
+        "graph [\n"
+        "  1_attribute value_1\n"
+        "  node [\n"
+        "]",
+        "GML Error at line 2: Unexpected token '1'. Expected: 'alphabet'");
+
+    // Shouldn't have brackets on attribute value
+    EXPECT_ERROR(
+        "graph [\n"
+        "  attribute_1 value_1\n"
+        "  attribute_2 [value_2]\n"
+        "  node [ id 0 identifier 1]\n"
+        "]",
+        "GML Error at line 3: Unexpected token '['. Expected: 'alphabet'");
+}
