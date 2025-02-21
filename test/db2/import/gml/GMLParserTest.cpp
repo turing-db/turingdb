@@ -133,6 +133,10 @@ TEST_F(GMLParserTest, Empty) {
     }
 }
 
+TEST_F(GMLParserTest, MultiGraph) {
+    EXPECT_ERROR("graph[] \ngraph[]", "GML Error at line 2: Multigraph parsing is not supported yet");
+}
+
 TEST_F(GMLParserTest, Nodes) {
     // Missing node ID + Missing closing bracket
     EXPECT_ERROR(
