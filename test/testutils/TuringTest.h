@@ -38,6 +38,18 @@ protected:
         LogSetup::setupLogFileBacked(_logPath.string());
         PerfStat::init(_perfPath);
 
+        {
+            const char* home = getenv("HOME");
+            if (home) {
+                if (FileUtils::exists(home)) {
+                    const auto graphsV2Dir = FileUtils::Path(home) / "graphs_v2";
+                    if (!FileUtils::exists(graphsV2Dir)) {
+                        FileUtils::createDirectory(graphsV2Dir);
+                    }
+                }
+            }
+        }
+
         initialize();
     }
 
