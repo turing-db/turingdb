@@ -63,3 +63,15 @@ void JobSystem::terminate() {
 JobGroup JobSystem::newGroup() {
     return JobGroup(this);
 }
+
+std::unique_ptr<JobSystem> JobSystem::create() {
+    auto jobSystem = std::unique_ptr<JobSystem>(new JobSystem());
+    jobSystem->initialize();
+    return jobSystem;
+}
+
+std::unique_ptr<JobSystem> JobSystem::create(size_t nthreads) {
+    auto jobSystem = std::unique_ptr<JobSystem>(new JobSystem(nthreads));
+    jobSystem->initialize();
+    return jobSystem;
+}

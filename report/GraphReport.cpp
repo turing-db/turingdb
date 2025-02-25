@@ -14,7 +14,7 @@ void GraphReport::getReport(const GraphReader& reader, std::stringstream& report
     const auto& edgeTypeMap = metadata.edgeTypes();
     const auto& propTypeMap = metadata.propTypes();
 
-    report << "Database has " << std::endl;
+    report << "Graph has " << std::endl;
     report << "  - " << reader.getDatapartCount() << " dataparts" << std::endl;
     report << "  - " << labelMap.getCount() << " labels" << std::endl;
     report << "  - " << labelsetMap.getCount() << " labelsets" << std::endl;

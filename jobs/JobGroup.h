@@ -11,6 +11,10 @@ public:
     {
     }
 
+    ~JobGroup() {
+        wait();
+    }
+
     void wait() {
         for (auto& future : _futures) {
             future->wait();

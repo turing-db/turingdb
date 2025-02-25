@@ -47,6 +47,7 @@ add_subdirectory(fs-page-reader)
 add_subdirectory(fs-page-writer)
 add_subdirectory(fs-reader-writer)
 add_subdirectory(graph-loader-dumper)
+add_subdirectory(simpledb)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)

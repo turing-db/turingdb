@@ -131,14 +131,13 @@ bool SystemManager::isGraphLoading(const std::string& graphName) const {
 
 bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
                                     const fs::Path& dbPath) {
-    Graph* graph = new Graph;
-    JobSystem jobsystem;
-    jobsystem.initialize();
+    Graph* graph = new Graph();
+    auto jobsystem = JobSystem::create();
 
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
 
-    if (!Neo4jImporter::importJsonDir(jobsystem,
+    if (!Neo4jImporter::importJsonDir(*jobsystem,
                                       graph,
                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
@@ -150,7 +149,7 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
 
     addGraph(graph, graphName);
     _graphLoadStatus.removeLoadingGraph(graphName);
-    jobsystem.terminate();
+    jobsystem->terminate();
     return true;
 }
 
@@ -158,13 +157,12 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
                               const fs::Path& dbPath) {
     // Load graph
     Graph* graph = new Graph();
-    JobSystem jobsystem;
-    jobsystem.initialize();
+    auto jobsystem = JobSystem::create();
 
     // load GMLs
     GMLImporter importer;
 
-    if (!importer.importFile(jobsystem, graph, FileUtils::Path {dbPath.c_str()})) {
+    if (!importer.importFile(*jobsystem, graph, FileUtils::Path {dbPath.c_str()})) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         delete graph;
         return false;
@@ -172,7 +170,7 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
 
     addGraph(graph, graphName);
     _graphLoadStatus.removeLoadingGraph(graphName);
-    jobsystem.terminate();
+    jobsystem->terminate();
     return true;
 }
 

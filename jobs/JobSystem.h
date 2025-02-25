@@ -1,6 +1,7 @@
 #pragma once
 
 #include <thread>
+#include <memory>
 
 #include "Job.h"
 #include "Future.h"
@@ -13,8 +14,8 @@ class JobGroup;
 
 class JobSystem {
 public:
-    JobSystem();
-    explicit JobSystem(size_t nThreads);
+    static std::unique_ptr<JobSystem> create();
+    static std::unique_ptr<JobSystem> create(size_t nthreads);
 
     JobSystem(const JobSystem&) = delete;
     JobSystem(JobSystem&&) = delete;
@@ -22,7 +23,6 @@ public:
     JobSystem& operator=(JobSystem&&) = delete;
     ~JobSystem();
 
-    void initialize();
 
     /* @brief submits a job to be executed
      *
@@ -79,6 +79,10 @@ private:
     std::vector<std::jthread> _workers;
     std::atomic<bool> _stopRequested {false};
     bool _terminated {false};
+
+    JobSystem();
+    explicit JobSystem(size_t nThreads);
+    void initialize();
 };
 
 }
