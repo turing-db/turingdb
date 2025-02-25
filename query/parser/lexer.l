@@ -18,6 +18,8 @@ using namespace db;
 
 "select"|"SELECT" { return YParser::make_SELECT(); }
 "from"|"FROM" { return YParser::make_FROM(); }
+"match"|"MATCH" { return YParser::make_MATCH(); }
+"return"|"RETURN" { return YParser::make_RETURN(); }
 "create"|"CREATE" { return YParser::make_CREATE(); }
 "list"|"LIST" { return YParser::make_LIST(); }
 "graph"|"GRAPH" { return YParser::make_GRAPH(); }

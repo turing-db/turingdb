@@ -81,6 +81,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 // Keywords
 %token SELECT
 %token FROM
+%token MATCH 
+%token RETURN
 %token CREATE
 %token LIST
 %token GRAPH
@@ -157,7 +159,7 @@ cmd: select_cmd { ctxt->setRoot($1); }
    | explain_cmd { ctxt->setRoot($1); }
    ;
 
-select_cmd: FROM from_target SELECT select_fields {
+select_cmd: MATCH from_target RETURN select_fields {
                                                        auto cmd = SelectCommand::create(ctxt); 
                                                        cmd->setProjection($4);
                                                        cmd->addFromTarget($2);
