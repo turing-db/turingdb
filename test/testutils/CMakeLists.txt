@@ -4,7 +4,7 @@ add_library(turing_test_utils_s
 target_link_libraries(turing_test_utils_s
     PUBLIC  GTest::gtest
             turing_db_log_s
-            turing_db_common_s
+            turing_common_s
             spdlog)
 
 target_include_directories(turing_test_utils_s

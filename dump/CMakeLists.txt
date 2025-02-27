@@ -13,4 +13,4 @@ target_include_directories(turing_db_dump_s PRIVATE ${BUILD_INFO_INCLUDE_DIR})
 target_link_libraries(turing_db_dump_s PUBLIC
     turing_db_io_s
     turing_db_storage_s
-    turing_db_common_s)
+    turing_common_s)
