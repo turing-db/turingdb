@@ -12,6 +12,8 @@ build-job:
   - git remote prune origin  # Remove stale remote branches
   - git fetch --prune --all  # Fetch fresh refs, removing old ones
   - git branch -r            # List remote branches for verification
+  - echo "HOST *" > ~/.ssh/config
+  - echo "StrictHostKeyChecking no" >> ~/.ssh/config
   script:
     - git submodule init && git submodule update
     - date
