@@ -16,6 +16,7 @@ build-job:
   - git fetch --prune --all  # Fetch fresh refs, removing old ones
   - git branch -r            # List remote branches for verification
   - mkdir -p $HOME/.ssh
+  - apt-get install openssh-client
   - echo "HOST *" > ~/.ssh/config
   - echo "StrictHostKeyChecking no" >> ~/.ssh/config
   script:
