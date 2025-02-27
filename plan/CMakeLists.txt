@@ -8,7 +8,7 @@ target_link_libraries(turing_db_plan_s PRIVATE
     turing_db_pipeline_s
     turing_db_memory_s
     turing_db_system_s
-    turing_db_common_s)
+    turing_common_s)
 
 target_link_libraries(turing_db_plan_s PUBLIC turing_db_base_s)
 

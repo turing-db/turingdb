@@ -7,6 +7,6 @@ set(fs_sources File.cpp
 
 add_library(turing_db_io_s STATIC ${fs_sources})
 
-target_link_libraries(turing_db_io_s PRIVATE turing_db_common_s)
+target_link_libraries(turing_db_io_s PRIVATE turing_common_s)
 
 target_include_directories(turing_db_io_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
