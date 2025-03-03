@@ -20,7 +20,7 @@ int main(int argc, const char** argv) {
     bool noServer = false;
     unsigned port = 0;
     bool nodemon = false;
-    argParser.add_argument("-noserver")
+    argParser.add_argument("-cli")
              .store_into(noServer);
     argParser.add_argument("-p")
              .store_into(port);
