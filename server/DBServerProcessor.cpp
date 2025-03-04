@@ -206,7 +206,7 @@ void DBServerProcessor::get_graph_status() {
     payload.value(graph != nullptr);
 
     payload.key("isLoading");
-    payload.value(graph != nullptr && sysMan.isGraphLoading(graphName));
+    payload.value(sysMan.isGraphLoading(graphName));
 
     if (graph != nullptr) {
         const auto reader = graph->read();
