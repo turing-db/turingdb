@@ -25,6 +25,8 @@ enum class DumpErrorType : uint8_t {
     CANNOT_MKDIR_GRAPH,
     CANNOT_MKDIR_DATAPART,
 
+    CANNOT_WRITE_GRAPH_TYPE,
+
     CANNOT_OPEN_GRAPH_INFO,
     CANNOT_OPEN_LABELS,
     CANNOT_OPEN_LABELSETS,
@@ -83,6 +85,7 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::NOT_DIRECTORY, "Not a directory">,
     EnumStringPair<DumpErrorType::CANNOT_MKDIR_GRAPH, "Cannot create graph directory">,
     EnumStringPair<DumpErrorType::CANNOT_MKDIR_DATAPART, "Cannot create datapart directory">,
+    EnumStringPair<DumpErrorType::CANNOT_WRITE_GRAPH_TYPE, "Cannot write graph type">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_GRAPH_INFO, "Cannot open graph info">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_LABELS, "Cannot open graph labels">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_LABELSETS, "Cannot open graph labelsets">,

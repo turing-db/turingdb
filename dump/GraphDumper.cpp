@@ -11,6 +11,8 @@
 #include "LabelSetMapDumper.h"
 #include "EdgeTypeMapDumper.h"
 #include "PropertyTypeMapDumper.h"
+#include "GraphFileType.h"
+#include "FileUtils.h"
 
 using namespace db;
 namespace rg = ranges;
@@ -24,6 +26,14 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
     // Create directory
     if (auto res = path.mkdir(); !res) {
         return DumpError::result(DumpErrorType::CANNOT_MKDIR_GRAPH, res.error());
+    }
+
+    // Dump graph type
+    {
+        const fs::Path graphTypePath = path / "type";
+        if (!FileUtils::writeFile(graphTypePath.get(), GraphFileTypeDescription::value(GraphFileType::BINARY))) {
+            return DumpError::result(DumpErrorType::CANNOT_WRITE_GRAPH_TYPE);
+        }
     }
 
     // Dumping graph info

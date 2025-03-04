@@ -111,7 +111,9 @@ bool SystemManager::loadGraph(const std::string& graphName) {
 
     const auto fileType = getGraphFileType(graphPath);
     if (!fileType) {
-        return false;
+        // If we can not determine the file type, assume it is a Neo4j JSON graph
+        // to be changed in the future
+        return loadNeo4jJsonDB(graphName, graphPath);
     }
 
     switch (*fileType) {
