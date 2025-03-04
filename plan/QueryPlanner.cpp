@@ -155,7 +155,9 @@ void QueryPlanner::planExpandEdge(const EntityPattern* edge, const EntityPattern
     const TypeConstraint* edgeTypeConstr = edge->getTypeConstraint();
     const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
     if (edgeTypeConstr && targetTypeConstr) {
+        planExpandEdgeWithEdgeAndTargetConstraint(edge, target);
     } else if (edgeTypeConstr) {
+        planExpandEdgeWithEdgeConstraint(edge, target);
     } else if (targetTypeConstr) {
         planExpandEdgeWithTargetConstraint(edge, target);
     } else {
@@ -334,6 +336,234 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
 
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
     _result = targets;
+}
+
+void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
+                                                    const EntityPattern* target) {
+    const TypeConstraint* edgeTypeConstr = edge->getTypeConstraint();
+
+    const auto indices = _mem->alloc<ColumnVector<size_t>>();
+    const auto targets = _mem->alloc<ColumnIDs>();
+
+    const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
+    if (typeConstrNames.size() != 1) {
+        panic("Unsupported edge type constraint with more than one type name");
+    }
+
+    const std::string& edgeTypeName = typeConstrNames.front()->getName();
+    
+    // Search edge type IDs
+    const auto& edgeTypeMap = _view.metadata().edgeTypes();
+    const auto edgeTypeID = edgeTypeMap.get(edgeTypeName);
+    if (!edgeTypeID.isValid()) {
+        _transformData->createStep(indices);
+        _transformData->addColumn(targets, nullptr);
+        _result = targets;
+        return;
+    }
+
+    // Get out edges step
+    EdgeWriteInfo edgeWriteInfo;
+    edgeWriteInfo._indices = indices;
+
+    _transformData->createStep(indices);
+
+    edgeWriteInfo._targetNodes = targets;
+
+    const VarExpr* edgeVar = edge->getVar();
+    VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isSelected();
+    if (mustWriteEdges) {
+        const auto edges = _mem->alloc<ColumnIDs>();
+        edgeWriteInfo._edges = edges;
+        _transformData->addColumn(edges, edgeDecl);
+    }
+    
+    _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
+
+    // Filter out edges that do not match the edge type ID
+    const auto edgeTypeIDs = _mem->alloc<ColumnConst<EdgeTypeID>>();
+    edgeTypeIDs->set(edgeTypeID);
+
+    const auto filterIndices = _mem->alloc<ColumnVector<size_t>>();
+    auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
+
+    const auto filterMask = _mem->alloc<ColumnMask>();
+    filter.addExpression(FilterStep::Expression {
+        ._op = ColumnOperator::OP_EQUAL,
+        ._mask = filterMask,
+        ._lhs = edgeWriteInfo._edges,
+        ._rhs = edgeTypeIDs
+    });
+
+    _transformData->createStep(filterIndices);
+
+    // Apply filter to target node IDs
+    const auto filterOutNodes = _mem->alloc<ColumnIDs>();
+    filter.addOperand(FilterStep::Operand {
+        ._mask = filterMask,
+        ._src = targets,
+        ._dest = filterOutNodes
+    });
+
+    if (mustWriteEdges) {
+        const auto filterOutEdges = _mem->alloc<ColumnIDs>();
+        filter.addOperand(FilterStep::Operand {
+            ._mask = filterMask,
+            ._src = edgeWriteInfo._edges,
+            ._dest = filterOutEdges
+        });
+        _transformData->addColumn(filterOutEdges, edgeDecl);
+    }
+
+    // Add targets to the writeSet
+    const VarExpr* targetVar = target->getVar();
+    VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isSelected();
+    if (mustWriteTargetNodes) {
+        _transformData->addColumn(filterOutNodes, targetDecl);
+    }
+
+    _result = filterOutNodes;
+}
+
+void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern* edge,
+                                                             const EntityPattern* target) {
+    const TypeConstraint* edgeTypeConstr = edge->getTypeConstraint();
+    const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
+
+    const auto indices = _mem->alloc<ColumnVector<size_t>>();
+    const auto targets = _mem->alloc<ColumnIDs>();
+
+    const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
+    if (typeConstrNames.size() != 1) {
+        panic("Unsupported edge type constraint with more than one type name");
+    }
+
+    const std::string& edgeTypeName = typeConstrNames.front()->getName();
+    
+    // Search edge type IDs
+    const auto& edgeTypeMap = _view.metadata().edgeTypes();
+    const auto edgeTypeID = edgeTypeMap.get(edgeTypeName);
+    if (!edgeTypeID.isValid()) {
+        _transformData->createStep(indices);
+        _transformData->addColumn(targets, nullptr);
+        _result = targets;
+        return;
+    }
+
+    // Search label set IDs
+    const LabelSet* targetLabelSet = getLabelSet(targetTypeConstr);
+    getMatchingLabelSets(_tmpLabelSetIDs, targetLabelSet);
+    if (_tmpLabelSetIDs.empty()) {
+        _transformData->createStep(indices);
+        _transformData->addColumn(targets, nullptr);
+        _result = targets;
+        return;
+    }
+
+    // Get out edges step
+    EdgeWriteInfo edgeWriteInfo;
+    edgeWriteInfo._indices = indices;
+
+    _transformData->createStep(indices);
+
+    edgeWriteInfo._targetNodes = targets;
+
+    const VarExpr* edgeVar = edge->getVar();
+    VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isSelected();
+    if (mustWriteEdges) {
+        const auto edges = _mem->alloc<ColumnIDs>();
+        edgeWriteInfo._edges = edges;
+        _transformData->addColumn(edges, edgeDecl);
+    }
+    
+    _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
+
+    // Get label set IDs of target nodes
+    const auto nodesLabelSetIDs = _mem->alloc<ColumnVector<LabelSetID>>();
+    _pipeline->add<GetLabelSetIDStep>(targets, nodesLabelSetIDs);
+
+    // Filter out edges that do not match the edge type ID
+    const auto edgeTypeIDs = _mem->alloc<ColumnConst<EdgeTypeID>>();
+    edgeTypeIDs->set(edgeTypeID);
+
+    const auto filterIndices = _mem->alloc<ColumnVector<size_t>>();
+    auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
+
+    ColumnMask* filterMaskEdges = _mem->alloc<ColumnMask>();
+    filter.addExpression(FilterStep::Expression {
+        ._op = ColumnOperator::OP_EQUAL,
+        ._mask = filterMaskEdges,
+        ._lhs = edgeWriteInfo._edges,
+        ._rhs = edgeTypeIDs
+    });
+
+    ColumnMask* filterMaskNodes = nullptr;
+    for (LabelSetID labelSetID : _tmpLabelSetIDs) {
+        const auto targetLabelSetID = _mem->alloc<ColumnConst<LabelSetID>>();
+        targetLabelSetID->set(labelSetID);
+
+        const auto newMask = _mem->alloc<ColumnMask>();
+
+        filter.addExpression(FilterStep::Expression {
+            ._op = ColumnOperator::OP_EQUAL,
+            ._mask = newMask,
+            ._lhs = nodesLabelSetIDs,
+            ._rhs = targetLabelSetID
+        });
+
+        if (filterMaskNodes) {
+            filter.addExpression(FilterStep::Expression {
+                ._op = ColumnOperator::OP_OR,
+                ._mask = newMask,
+                ._lhs = filterMaskNodes,
+                ._rhs = newMask
+            });
+        }
+
+        filterMaskNodes = newMask;
+    }
+
+    // Combine filter masks
+    const auto filterMask = _mem->alloc<ColumnMask>();
+    filter.addExpression(FilterStep::Expression {
+        ._op = ColumnOperator::OP_AND,
+        ._mask = filterMask,
+        ._lhs = filterMaskEdges,
+        ._rhs = filterMaskNodes
+    });
+
+    _transformData->createStep(filterIndices);
+
+    // Apply filter to target node IDs
+    const auto filterOutNodes = _mem->alloc<ColumnIDs>();
+    filter.addOperand(FilterStep::Operand {
+        ._mask = filterMask,
+        ._src = targets,
+        ._dest = filterOutNodes
+    });
+
+    if (mustWriteEdges) {
+        const auto filterOutEdges = _mem->alloc<ColumnIDs>();
+        filter.addOperand(FilterStep::Operand {
+            ._mask = filterMask,
+            ._src = edgeWriteInfo._edges,
+            ._dest = filterOutEdges
+        });
+        _transformData->addColumn(filterOutEdges, edgeDecl);
+    }
+
+    // Add targets to the writeSet
+    const VarExpr* targetVar = target->getVar();
+    VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isSelected();
+    if (mustWriteTargetNodes) {
+        _transformData->addColumn(filterOutNodes, targetDecl);
+    }
+
+    _result = filterOutNodes;
 }
 
 void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,

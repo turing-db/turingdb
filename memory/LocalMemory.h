@@ -30,6 +30,7 @@ public:
         MakeMemoryPool<ColumnVector<std::string_view>>::type,
         MakeMemoryPool<ColumnMask>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
+        MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
         MakeMemoryPool<ColumnVector<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::Double::Primitive>>::type,
@@ -59,6 +60,7 @@ public:
         _pools.get<ColumnVector<EntityID>>().clear();
         _pools.get<ColumnVector<PropertyType>>().clear();
         _pools.get<ColumnVector<size_t>>().clear();
+        _pools.get<ColumnConst<EdgeTypeID>>().clear();
     }
 
 private:

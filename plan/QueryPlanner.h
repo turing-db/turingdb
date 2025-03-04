@@ -76,6 +76,10 @@ private:
                                         const EntityPattern* target);
     void planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
                                             const EntityPattern* target);
+    void planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
+                                          const EntityPattern* target);
+    void planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern* edge,
+                                                   const EntityPattern* target);
 
     void planTransformStep();
     void planPathUsingScanEdges(const std::vector<EntityPattern*>& path);
