@@ -10,6 +10,7 @@
 #include "LogUtils.h"
 #include "Neo4jInstance.h"
 #include "Neo4JQueryManager.h"
+#include "GraphFileType.h"
 #include "TimerStat.h"
 
 using namespace db;
@@ -21,11 +22,22 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
                               const ImportUrlArgs& args) {
     JsonParser parser(graph);
     QueryManager manager;
-    FileUtils::Path jsonDir = args._workDir / "json";
+    const FileUtils::Path jsonDir = args._workDir / "json";
     JobGroup jobs = jobSystem.newGroup();
 
     if (args._writeFiles) {
-        FileUtils::createDirectory(jsonDir);
+        if (!FileUtils::createDirectory(jsonDir)) {
+            spdlog::error("Could not create json directory {}", jsonDir.string());
+            return false;
+        }
+
+        const FileUtils::Path graphTypePath = args._workDir / "type";
+        const auto typeTag = GraphFileTypeDescription::value(GraphFileType::NEO4J_JSON);
+
+        if (!FileUtils::writeFile(graphTypePath, typeTag.data())) {
+            spdlog::error("Could not write graph type file {}", graphTypePath.string());
+            return false;
+        }
     }
 
     manager.setUrl(args._url);
