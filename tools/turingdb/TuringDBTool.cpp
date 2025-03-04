@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <argparse.hpp>
+#include <spdlog/spdlog.h>
 
 #include "TuringDB.h"
 #include "LocalMemory.h"
@@ -20,20 +21,36 @@ int main(int argc, const char** argv) {
     bool noServer = false;
     unsigned port = 0;
     bool nodemon = false;
+    std::vector<std::string> graphsToLoad;
     argParser.add_argument("-cli")
              .store_into(noServer);
     argParser.add_argument("-p")
              .store_into(port);
     argParser.add_argument("-nodemon")
              .store_into(nodemon);
+    argParser.add_argument("-load")
+             .store_into(graphsToLoad);
 
     toolInit.init(argc, argv);
 
     TuringDB turingDB;
     LocalMemory mem;
 
+    for (const auto& graphName : graphsToLoad) {
+        const auto res = turingDB.query("load graph " + graphName, "", &mem);
+        if (!res.isOk()) {
+            spdlog::error("Failed to load graph {}", graphName);
+            return EXIT_FAILURE;
+        }
+    }
+
     if (noServer) {
         TuringShell shell(turingDB, &mem);
+
+        if (!graphsToLoad.empty()) {
+            shell.setGraphName(graphsToLoad.front());
+        }
+
         shell.startLoop();
     } else {
         DBServerConfig config;
