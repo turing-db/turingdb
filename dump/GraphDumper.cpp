@@ -31,7 +31,8 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
     // Dump graph type
     {
         const fs::Path graphTypePath = path / "type";
-        if (!FileUtils::writeFile(graphTypePath.get(), GraphFileTypeDescription::value(GraphFileType::BINARY))) {
+        const auto typeTag = GraphFileTypeDescription::value(GraphFileType::BINARY);
+        if (!FileUtils::writeFile(graphTypePath.get(), typeTag.data())) {
             return DumpError::result(DumpErrorType::CANNOT_WRITE_GRAPH_TYPE);
         }
     }
