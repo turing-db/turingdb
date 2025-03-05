@@ -95,7 +95,7 @@ private:
     void planPropertyProjection(ColumnIDs* columnIDs,
                                 const std::string& memberName);
     void planOutputLambda();
-    void planExplain(const ExplainCommand* explain);
+    bool planExplain(const ExplainCommand* explain);
 };
 
 }

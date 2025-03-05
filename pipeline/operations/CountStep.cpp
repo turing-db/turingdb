@@ -9,5 +9,5 @@ void CountStep::describe(std::string& descr) const {
     ss << "CountStep";
     ss << " input=" << std::hex << _input;
     ss << " count=" << std::hex << _count;
-    descr = ss.str();
+    descr.assign(ss.str());
 }

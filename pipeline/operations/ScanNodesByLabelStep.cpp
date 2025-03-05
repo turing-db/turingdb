@@ -18,5 +18,5 @@ void ScanNodesByLabelStep::describe(std::string& descr) const {
     ss << "ScanNodesByLabelStep";
     ss << " nodes=" << std::hex << _nodes;
     ss << " labelSet=" << std::hex << _labelSet;
-    descr = ss.str();
+    descr.assign(ss.str());
 }

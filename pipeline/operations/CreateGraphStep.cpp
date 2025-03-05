@@ -27,5 +27,5 @@ void CreateGraphStep::describe(std::string& descr) const {
     std::stringstream ss;
     ss << "CreateGraphStep";
     ss << " graphName=" << _graphName;
-    descr = ss.str();
+    descr.assign(ss.str());
 }

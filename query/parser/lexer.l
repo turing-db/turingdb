@@ -22,6 +22,7 @@ using namespace db;
 "list"|"LIST" { return YParser::make_LIST(); }
 "graph"|"GRAPH" { return YParser::make_GRAPH(); }
 "load"|"LOAD" { return YParser::make_LOAD(); }
+"explain"|"EXPLAIN" { return YParser::make_EXPLAIN(); }
 
 "or"|"OR" { return YParser::make_OR(); }
 "and"|"AND" { return YParser::make_AND(); }

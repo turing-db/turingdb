@@ -22,5 +22,5 @@ void GetOutEdgesStep::describe(std::string& descr) const {
     ss << " edges=" << std::hex << _edgeWriteInfo._edges;
     ss << " targetNodes=" << std::hex << _edgeWriteInfo._targetNodes;
     ss << " edgeTypes=" << std::hex << _edgeWriteInfo._edgeTypes;
-    descr = ss.str();
+    descr.assign(ss.str());
 }

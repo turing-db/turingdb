@@ -236,5 +236,5 @@ void FilterStep::describe(std::string& descr) const {
     }
     ss << "}";
 
-    descr = ss.str();
+    descr.assign(ss.str());
 }

@@ -16,5 +16,5 @@ void ScanNodesStep::describe(std::string& descr) const {
     std::stringstream ss;
     ss << "ScanNodesStep";
     ss << " nodes=" << std::hex << _nodes;
-    descr = ss.str();
+    descr.assign(ss.str());
 }

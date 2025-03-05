@@ -29,5 +29,5 @@ void ListGraphStep::describe(std::string& descr) const {
         ss << name << " ";
     }
     ss << "}";
-    descr = ss.str();
+    descr.assign(ss.str());
 }

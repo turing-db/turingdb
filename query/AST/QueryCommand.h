@@ -100,16 +100,16 @@ private:
 
 class ExplainCommand : public QueryCommand {
 public:
-    static ExplainCommand* create(ASTContext* ctxt, const QueryCommand* query);
+    static ExplainCommand* create(ASTContext* ctxt, QueryCommand* query);
 
     Kind getKind() const override { return Kind::EXPLAIN_COMMAND; }
 
-    const QueryCommand* getQuery() const { return _query; }
+    QueryCommand* getQuery() const { return _query; }
 
 private:
-    const QueryCommand* _query {nullptr};
+    QueryCommand* _query {nullptr};
 
-    ExplainCommand(const QueryCommand* query);
+    ExplainCommand(QueryCommand* query);
     ~ExplainCommand() override = default;
 };
 

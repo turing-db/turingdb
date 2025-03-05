@@ -21,5 +21,5 @@ void ScanOutEdgesByLabelStep::describe(std::string& descr) const {
     ss << " targetNodes=" << std::hex << _edgeWriteInfo._targetNodes;
     ss << " edgeTypes=" << std::hex << _edgeWriteInfo._edgeTypes;
     ss << " labelSet=" << std::hex << _labelSet;
-    descr = ss.str();
+    descr.assign(ss.str());
 }

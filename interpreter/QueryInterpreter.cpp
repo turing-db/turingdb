@@ -48,8 +48,8 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Analyze query
-    QueryAnalyzer analyzer(&astCtxt, cmd);
-    if (!analyzer.analyze()) {
+    QueryAnalyzer analyzer(&astCtxt);
+    if (!analyzer.analyze(cmd)) {
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);
     }
 

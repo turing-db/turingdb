@@ -28,23 +28,22 @@ void selectAllVariables(SelectCommand* cmd) {
 
 }
 
-QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt, QueryCommand* cmd)
-    : _ctxt(ctxt),
-    _cmd(cmd)
+QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt)
+    : _ctxt(ctxt)
 {
 }
 
 QueryAnalyzer::~QueryAnalyzer() {
 }
 
-bool QueryAnalyzer::analyze() {
-    switch (_cmd->getKind()) {
+bool QueryAnalyzer::analyze(QueryCommand* cmd) {
+    switch (cmd->getKind()) {
         case QueryCommand::Kind::SELECT_COMMAND:
-            return analyzeSelect(static_cast<SelectCommand*>(_cmd));
+            return analyzeSelect(static_cast<SelectCommand*>(cmd));
         break;
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
-            return analyzeCreateGraph(static_cast<CreateGraphCommand*>(_cmd));
+            return analyzeCreateGraph(static_cast<CreateGraphCommand*>(cmd));
         break;
 
         case QueryCommand::Kind::LIST_GRAPH_COMMAND:
@@ -52,7 +51,11 @@ bool QueryAnalyzer::analyze() {
         break;
 
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
-            return analyzeLoadGraph(static_cast<LoadGraphCommand*>(_cmd));
+            return analyzeLoadGraph(static_cast<LoadGraphCommand*>(cmd));
+        break;
+
+        case QueryCommand::Kind::EXPLAIN_COMMAND:
+            return analyzeExplain(static_cast<ExplainCommand*>(cmd));
         break;
 
         default:
@@ -60,6 +63,10 @@ bool QueryAnalyzer::analyze() {
     }
 
     return true;
+}
+
+bool QueryAnalyzer::analyzeExplain(ExplainCommand* cmd) {
+    return analyze(cmd->getQuery());
 }
 
 bool QueryAnalyzer::analyzeCreateGraph(CreateGraphCommand* cmd) {

@@ -193,7 +193,7 @@ void TransformStep::describe(std::string& descr) const {
     }
     ss << "}";
     ss << " transform=" << std::hex << &_transform;
-    descr = ss.str();
+    descr.assign(ss.str());
 }
 
 #define INSTANTIATE(Type) \
