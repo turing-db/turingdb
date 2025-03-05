@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 #include "columns/ColumnVector.h"
 #include "columns/ColumnOperator.h"
@@ -49,6 +50,8 @@ public:
     inline bool isFinished() const { return true; }
 
     void execute();
+
+    void describe(std::string& descr) const;
 
 private:
     ColumnVector<size_t>* _indices {nullptr};

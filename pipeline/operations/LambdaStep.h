@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <string>
 
 namespace db {
 
@@ -31,6 +32,8 @@ public:
     inline void execute() { _func(this, Operation::EXECUTE); }
 
     void setFinished(bool finished) { _finished = finished; }
+
+    void describe(std::string& descr) const;
 
 private:
     StepFunc _func;

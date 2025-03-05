@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "columns/ColumnConst.h"
 #include "types/PropertyType.h"
 
@@ -28,6 +30,8 @@ public:
         auto& countValue = _count->getRaw();
         countValue += _input->size();
     }
+
+    void describe(std::string& descr) const;
 
 private:
     const Column* _input {nullptr};

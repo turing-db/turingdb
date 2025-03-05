@@ -19,7 +19,8 @@ public:
         SELECT_COMMAND = 0,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
-        LOAD_GRAPH_COMMAND
+        LOAD_GRAPH_COMMAND,
+        EXPLAIN_COMMAND
     };
 
     virtual Kind getKind() const = 0;
@@ -95,6 +96,21 @@ private:
 
     LoadGraphCommand(const std::string& name);
     ~LoadGraphCommand() override = default;
+};
+
+class ExplainCommand : public QueryCommand {
+public:
+    static ExplainCommand* create(ASTContext* ctxt, const QueryCommand* query);
+
+    Kind getKind() const override { return Kind::EXPLAIN_COMMAND; }
+
+    const QueryCommand* getQuery() const { return _query; }
+
+private:
+    const QueryCommand* _query {nullptr};
+
+    ExplainCommand(const QueryCommand* query);
+    ~ExplainCommand() override = default;
 };
 
 }

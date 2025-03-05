@@ -136,3 +136,7 @@ GET_PROPERTY_STEP_IMPL(GET_PROPERTY_BOOL, Bool)
 
 PipelineStep::~PipelineStep() {
 }
+
+void PipelineStep::describe(std::string& descr) const {
+    std::visit([&](auto& step) { step.describe(descr); }, _impl);
+}

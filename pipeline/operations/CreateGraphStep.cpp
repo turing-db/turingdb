@@ -1,5 +1,7 @@
 #include "CreateGraphStep.h"
 
+#include <sstream>
+
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 
@@ -19,4 +21,11 @@ void CreateGraphStep::prepare(ExecutionContext* ctxt) {
 
 void CreateGraphStep::execute() {
     _sysMan->createGraph(_graphName);
+}
+
+void CreateGraphStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "CreateGraphStep";
+    ss << " graphName=" << _graphName;
+    descr = ss.str();
 }

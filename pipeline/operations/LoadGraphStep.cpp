@@ -1,5 +1,7 @@
 #include "LoadGraphStep.h"
 
+#include <sstream>
+
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 #include "PipelineException.h"
@@ -24,3 +26,9 @@ void LoadGraphStep::execute() {
     }
 } 
 
+void LoadGraphStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "LoadGraphStep";
+    ss << " graphName=" << _graphName;
+    descr = ss.str();
+}

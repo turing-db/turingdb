@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 #include "columns/ColumnIndices.h"
 #include "columns/Block.h"
@@ -26,6 +27,8 @@ public:
     inline bool isFinished() { return true; }
 
     void execute();
+
+    void describe(std::string& descr) const;
 
 private:
     TransformData* _transformData;

@@ -743,3 +743,23 @@ void QueryPlanner::planOutputLambda() {
         }
     });
 }
+
+void QueryPlanner::planExplain(const ExplainCommand* explain) {
+    // Plan query
+    plan(explain->getQuery());
+
+    auto pipeDescr = _mem->alloc<ColumnVector<types::String::Primitive>>();
+
+    std::string stepDescr;
+    for (const auto& step : _pipeline->steps()) {
+        step.describe(stepDescr);
+        pipeDescr->emplace_back(stepDescr);
+    }
+
+    // Clear pipeline and add explain result
+    _pipeline->clear();
+    _output->addColumn(pipeDescr);
+
+    planOutputLambda();
+    _pipeline->add<EndStep>();
+}

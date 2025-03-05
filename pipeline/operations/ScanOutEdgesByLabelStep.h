@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "iterators/ScanOutEdgesByLabelIterator.h"
 #include "EdgeWriteInfo.h"
@@ -38,6 +39,8 @@ public:
     inline void execute() {
         _it->fill(ChunkConfig::CHUNK_SIZE);
     }
+
+    void describe(std::string& descr) const;
 
 private:
     EdgeWriteInfo _edgeWriteInfo;

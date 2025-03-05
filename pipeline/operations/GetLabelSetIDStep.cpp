@@ -1,5 +1,7 @@
 #include "GetLabelSetIDStep.h"
 
+#include <sstream>
+
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 
@@ -25,4 +27,12 @@ void GetLabelSetIDStep::execute() {
     for (EntityID nodeID : nodeIDs) {
         labelsetIDs.emplace_back(reader.getNodeLabelSetID(nodeID));
     }
+}
+
+void GetLabelSetIDStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "GetLabelSetIDStep";
+    ss << " nodeIDs=" << std::hex << _nodeIDs;
+    ss << " labelsetIDs=" << std::hex << _labelsetIDs;
+    descr = ss.str();
 }

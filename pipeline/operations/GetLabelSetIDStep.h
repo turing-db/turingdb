@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "ExecutionContext.h"
 #include "columns/ColumnIDs.h"
 
@@ -23,6 +25,8 @@ public:
     inline bool isFinished() const { return true; }
 
     void execute();
+
+    void describe(std::string& descr) const;
 
 private:
     const ColumnIDs* _nodeIDs {nullptr};
