@@ -12,17 +12,17 @@ class CreateGraphCommand;
 class DeclContext;
 class EntityPattern;
 class LoadGraphCommand;
+class ExplainCommand;
 
 class QueryAnalyzer {
 public:
-    QueryAnalyzer(ASTContext* ctxt, QueryCommand* cmd);
+    QueryAnalyzer(ASTContext* ctxt);
     ~QueryAnalyzer();
 
-    bool analyze();
+    bool analyze(QueryCommand* cmd);
 
 private:
     ASTContext* _ctxt {nullptr};
-    QueryCommand* _cmd {nullptr};
     uint64_t _nextNewVarID {0};
 
     bool analyzeSelect(SelectCommand* cmd);
@@ -30,6 +30,7 @@ private:
     bool analyzeLoadGraph(LoadGraphCommand* cmd);
     bool analyzeEntityPattern(DeclContext* declContext,
                               EntityPattern* entity);
+    bool analyzeExplain(ExplainCommand* cmd);
     std::string createVarName();
 };
 

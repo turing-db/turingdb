@@ -95,6 +95,8 @@ public:
         std::visit([ctxt](auto& step) { step.prepare(ctxt); }, _impl);
     }
 
+    void describe(std::string& descr) const;
+
 private:
     PipelineOpcode _opcode;
 

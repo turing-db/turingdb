@@ -22,6 +22,8 @@ public:
 
     void execute();
 
+    void describe(std::string& descr) const;
+
 private:
     std::string _graphName;
     SystemManager* _sysMan {nullptr};

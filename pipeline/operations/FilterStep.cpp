@@ -1,5 +1,7 @@
 #include "FilterStep.h"
 
+#include <sstream>
+
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnOperators.h"
@@ -209,4 +211,30 @@ void FilterStep::execute() {
     for (const auto& operand : _operands) {
         apply(operand._mask, operand._src, operand._dest);
     }
+}
+
+void FilterStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "FilterStep";
+    ss << " indices=" << std::hex << _indices;
+    ss << " expressions={";
+
+    for (const auto& expr : _expressions) {
+        ss << "(" << ColumnOperatorDescription::value(expr._op) << ",";
+        ss << " mask=" << std::hex << expr._mask << ",";
+        ss << " lhs=" << std::hex << expr._lhs << ",";
+        ss << " rhs=" << std::hex << expr._rhs << ")";
+    }
+
+    ss << "}";
+
+    ss << " operands={";
+    for (const auto& operand : _operands) {
+        ss << "(mask=" << std::hex << operand._mask << ",";
+        ss << " src=" << std::hex << operand._src << ",";
+        ss << " dest=" << std::hex << operand._dest << ")";
+    }
+    ss << "}";
+
+    descr.assign(ss.str());
 }

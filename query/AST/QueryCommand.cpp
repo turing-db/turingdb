@@ -65,3 +65,16 @@ LoadGraphCommand* LoadGraphCommand::create(ASTContext* ctxt, const std::string& 
     cmd->registerCmd(ctxt);
     return cmd;
 }
+
+// ExplainCommand
+
+ExplainCommand::ExplainCommand(QueryCommand* query)
+    : _query(query)
+{
+}
+
+ExplainCommand* ExplainCommand::create(ASTContext* ctxt, QueryCommand* query) {
+    ExplainCommand* cmd = new ExplainCommand(query);
+    cmd->registerCmd(ctxt);
+    return cmd;
+}

@@ -201,6 +201,7 @@ void TuringShell::processLine(std::string& line) {
                     TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
                     TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
                     TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnVector<std::string>, i)
 
                     default: {
                         panic("can not print columns of kind {}", col->getKind());

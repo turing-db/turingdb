@@ -28,6 +28,7 @@ public:
         MakeMemoryPool<ColumnVector<PropertyType>>::type,
         MakeMemoryPool<ColumnVector<size_t>>::type,
         MakeMemoryPool<ColumnVector<std::string_view>>::type,
+        MakeMemoryPool<ColumnVector<std::string>>::type,
         MakeMemoryPool<ColumnMask>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
@@ -61,6 +62,8 @@ public:
         _pools.get<ColumnVector<PropertyType>>().clear();
         _pools.get<ColumnVector<size_t>>().clear();
         _pools.get<ColumnConst<EdgeTypeID>>().clear();
+        _pools.get<ColumnVector<std::string>>().clear();
+        _pools.get<ColumnVector<std::string_view>>().clear();
     }
 
 private:

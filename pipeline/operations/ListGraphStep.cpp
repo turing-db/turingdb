@@ -1,5 +1,7 @@
 #include "ListGraphStep.h"
 
+#include <sstream>
+
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 
@@ -19,3 +21,13 @@ void ListGraphStep::execute() {
     _sysMan->listGraphs(_graphNames->getRaw());
 }
 
+void ListGraphStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "ListGraphStep";
+    ss << " graphNames={";
+    for (const auto& name : *_graphNames) {
+        ss << name << " ";
+    }
+    ss << "}";
+    descr.assign(ss.str());
+}

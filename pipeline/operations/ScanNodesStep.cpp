@@ -1,5 +1,7 @@
 #include "ScanNodesStep.h"
 
+#include <sstream>
+
 using namespace db;
 
 ScanNodesStep::ScanNodesStep(ColumnIDs* nodes)
@@ -8,4 +10,11 @@ ScanNodesStep::ScanNodesStep(ColumnIDs* nodes)
 }
 
 ScanNodesStep::~ScanNodesStep() {
+}
+
+void ScanNodesStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "ScanNodesStep";
+    ss << " nodes=" << std::hex << _nodes;
+    descr.assign(ss.str());
 }

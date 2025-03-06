@@ -1,5 +1,6 @@
 #include "TransformStep.h"
 
+#include <sstream>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/reverse.hpp>
 
@@ -167,6 +168,32 @@ void TransformStep::execute() {
         }
     }
 
+}
+
+void TransformStep::describe(std::string& descr) const {
+    std::stringstream ss;
+    ss << "TransformStep";
+    ss << " output={";
+    for (const auto& col : _transformData->_output.columns()) {
+        ss << std::hex << col << " ";
+    }
+    ss << "}";
+    ss << " indices={";
+    for (const auto& indices : _transformData->_indices) {
+        ss << std::hex << indices << " ";
+    }
+    ss << "}";
+    ss << " colInfo={";
+    for (const auto& cols : _transformData->_colInfo) {
+        ss << "{";
+        for (const auto& col : cols) {
+            ss << std::hex << col << " ";
+        }
+        ss << "}";
+    }
+    ss << "}";
+    ss << " transform=" << std::hex << &_transform;
+    descr.assign(ss.str());
 }
 
 #define INSTANTIATE(Type) \

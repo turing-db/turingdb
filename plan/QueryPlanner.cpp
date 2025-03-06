@@ -62,6 +62,9 @@ bool QueryPlanner::plan(const QueryCommand* query) {
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
             return planLoadGraph(static_cast<const LoadGraphCommand*>(query));
 
+        case QueryCommand::Kind::EXPLAIN_COMMAND:
+            return planExplain(static_cast<const ExplainCommand*>(query));
+
         default:
             spdlog::error("Unsupported query of kind {}", (unsigned)kind);
             return false;
@@ -742,4 +745,28 @@ void QueryPlanner::planOutputLambda() {
             _queryCallback(*_output);
         }
     });
+}
+
+bool QueryPlanner::planExplain(const ExplainCommand* explain) {
+    // Plan query
+    plan(explain->getQuery());
+
+    auto pipeDescr = _mem->alloc<ColumnVector<std::string>>();
+
+    std::string stepDescr;
+    for (const auto& step : _pipeline->steps()) {
+        step.describe(stepDescr);
+        pipeDescr->emplace_back(stepDescr);
+    }
+
+    // Clear pipeline and add explain result
+    _pipeline->clear();
+    _output->clear();
+    _output->addColumn(pipeDescr);
+
+    _pipeline->add<StopStep>();
+    planOutputLambda();
+    _pipeline->add<EndStep>();
+
+    return true;
 }

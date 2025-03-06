@@ -23,6 +23,7 @@ class TransformData;
 class CreateGraphCommand;
 class ListGraphCommand;
 class LoadGraphCommand;
+class ExplainCommand;
 class VarDecl;
 class Block;
 
@@ -94,6 +95,7 @@ private:
     void planPropertyProjection(ColumnIDs* columnIDs,
                                 const std::string& memberName);
     void planOutputLambda();
+    bool planExplain(const ExplainCommand* explain);
 };
 
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <string>
 
 #include "columns/ColumnVector.h"
 
@@ -22,6 +23,8 @@ public:
     inline bool isFinished() const { return true; }
 
     void execute();
+
+    void describe(std::string& descr) const;
 
 private:
     ColumnVector<std::string_view>* _graphNames {nullptr};

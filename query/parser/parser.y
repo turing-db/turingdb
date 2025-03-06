@@ -85,6 +85,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token LIST
 %token GRAPH
 %token LOAD
+%token EXPLAIN
 
 // Operators
 %token PLUS
@@ -127,6 +128,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> load_graph_cmd
 
+%type<db::QueryCommand*> explain_cmd
+
 %type<db::Expr*> expr
 %type<db::Expr*> or_expr
 %type<db::Expr*> and_expr
@@ -151,6 +154,7 @@ cmd: select_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
+   | explain_cmd { ctxt->setRoot($1); }
    ;
 
 select_cmd: SELECT select_fields FROM from_target {
@@ -282,6 +286,12 @@ list_graph_cmd: LIST GRAPH { $$ = ListGraphCommand::create(ctxt); }
 // LOAD GRAPH
 load_graph_cmd: LOAD GRAPH ID { $$ = LoadGraphCommand::create(ctxt, $3); }
            ;
+
+// EXPLAIN
+explain_cmd: EXPLAIN cmd {
+                            auto explain = ExplainCommand::create(ctxt, ctxt->getRoot());
+                            $$ = explain;
+                         }
 
 // Expressions
 expr: or_expr { $$ = nullptr; }

@@ -1,4 +1,5 @@
 set(pipeline_sources
+        operations/CountStep.cpp
         operations/TransformStep.cpp
         operations/GetOutEdgesStep.cpp
         operations/ScanEdgesStep.cpp
@@ -11,7 +12,8 @@ set(pipeline_sources
         operations/ListGraphStep.cpp
         operations/GetLabelSetIDStep.cpp
         operations/LoadGraphStep.cpp
-
+        operations/LambdaStep.cpp
+        
         PipelineStep.cpp
         Pipeline.cpp
         PipelineException.cpp

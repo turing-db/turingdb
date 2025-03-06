@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnIDs.h"
@@ -34,6 +35,8 @@ public:
     inline void execute() {
         _it->fill(ChunkConfig::CHUNK_SIZE);
     }
+
+    void describe(std::string& descr) const;
 
 private:
     ColumnIDs* _nodes {nullptr};

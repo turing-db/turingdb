@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace db {
 
 class ExecutionContext;
@@ -9,6 +11,10 @@ public:
     struct Tag {};
 
     void prepare(ExecutionContext* ctxt) {}
+
+    void describe(std::string& descr) const {
+        descr = "StopStep";
+    }
 };
 
 }

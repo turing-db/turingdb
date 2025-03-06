@@ -12,6 +12,8 @@ public:
     Pipeline();
     ~Pipeline();
 
+    void clear() { _steps.clear(); }
+
     std::span<PipelineStep> steps() { return _steps; }
 
     template <typename StepT, typename... ArgsT>

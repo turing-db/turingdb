@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <sstream>
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
@@ -44,6 +46,15 @@ public:
 
     void execute() {
         _it->fill(ChunkConfig::CHUNK_SIZE);
+    }
+
+    void describe(std::string& descr) const {
+        std::stringstream ss;
+        ss << "GetPropertyStep";
+        ss << " entityIDs=" << std::hex << _entityIDs;
+        ss << " propertyType=" << _propertyType._id;
+        ss << " propValues=" << std::hex << _propValues;
+        descr = ss.str();
     }
 
 private:
