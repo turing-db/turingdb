@@ -86,31 +86,20 @@ void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell
 
     shell.setGraphName(graphName);
 }
-
-void quietCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
-    shell.setQuiet(true);
+void quietCommand(const TuringShell::Command::Words &args, TuringShell &shell) {
+  shell.setQuiet(true);
 }
 
-size_t getBlockRowCount(const Block& block) {
-    size_t rowCount = 0;
-    for (const Column* column : block.columns()) {
-        rowCount = std::max(rowCount, column->size());
-    }
-    return rowCount;
-}
+} // namespace
 
-}
-
-TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
-    : _turingDB(turingDB),
-      _mem(mem)
-{
-    _localCommands.emplace("q", Command{quitCommand});
-    _localCommands.emplace("quit", Command{quitCommand});
-    _localCommands.emplace("exit", Command{quitCommand});
-    _localCommands.emplace("help", Command{helpCommand});
-    _localCommands.emplace("cd", Command{changeDBCommand});
-    _localCommands.emplace("quiet", Command{quietCommand});
+TuringShell::TuringShell(TuringDB &turingDB, LocalMemory *mem)
+    : _turingDB(turingDB), _mem(mem) {
+  _localCommands.emplace("q", Command{quitCommand});
+  _localCommands.emplace("quit", Command{quitCommand});
+  _localCommands.emplace("exit", Command{quitCommand});
+  _localCommands.emplace("help", Command{helpCommand});
+  _localCommands.emplace("cd", Command{changeDBCommand});
+  _localCommands.emplace("quiet", Command{quietCommand});
 }
 
 TuringShell::~TuringShell() {
@@ -183,34 +172,34 @@ void TuringShell::processLine(std::string& line) {
     // Execute query
     tabulate::Table table;
 
-    auto queryCallback = [&table](const Block& block) {
-        const size_t rowCount = getBlockRowCount(block);
+    auto queryCallback = [&table](const Block &block) {
+      const size_t rowCount = block.getBlockRowCount();
 
-        for (size_t i = 0; i < rowCount; ++i) {
-            tabulate::RowStream rs;
-            for (const Column* col : block.columns()) {
-                switch (col->getKind()) {
-                    TABULATE_COL_CASE(ColumnVector<EntityID>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<std::string>, i)
+      for (size_t i = 0; i < rowCount; ++i) {
+        tabulate::RowStream rs;
+        for (const Column *col : block.columns()) {
+          switch (col->getKind()) {
+            TABULATE_COL_CASE(ColumnVector<EntityID>, i)
+            TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
+            TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
+            TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
+            TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
+            TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
+            TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
+            TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
+            TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
+            TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
+            TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
+            TABULATE_COL_CASE(ColumnVector<std::string>, i)
 
-                    default: {
-                        panic("can not print columns of kind {}", col->getKind());
-                    }
-                }
-            }
-
-            table.add_row(std::move(rs));
+          default: {
+            panic("can not print columns of kind {}", col->getKind());
+          }
+          }
         }
+
+        table.add_row(std::move(rs));
+      }
     };
 
     const auto res = _quiet ? _turingDB.query(line, _graphName, _mem) :

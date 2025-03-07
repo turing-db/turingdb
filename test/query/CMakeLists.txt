@@ -6,10 +6,14 @@ function(add_db_query_gtest exe_name cpp_file)
                 turing_db_system_s
                 turing_db_memory_s
                 turing_db_interpreter_s
-                gtest_main)
+                turing_db_examples_s
+                turing_db_s
+                gtest_main
+                tabulate)
     gtest_discover_tests(${exe_name}
         DISCOVERY_TIMEOUT 10
         DISCOVER_MODE PRE_TEST)
 endfunction()
 
 add_db_query_gtest(test_query_parser QueryParserTest.cpp)
+add_db_query_gtest(test_query QueryTest.cpp)

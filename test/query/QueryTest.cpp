@@ -1,100 +1,258 @@
 #include <gtest/gtest.h>
+#include <tabulate/table.hpp>
 
-#include "ASTContext.h"
-#include "QueryParser.h"
-#include "SystemManager.h"
 #include "LocalMemory.h"
 #include "QueryInterpreter.h"
+#include "SimpleGraph.h"
+#include "TuringDB.h"
+#include "columns/Block.h"
+#include "spdlog/spdlog.h"
 
+#define COL_2_VEC_CASE(Type, i)                                                \
+  case Type::staticKind(): {                                                   \
+    const Type &src = *static_cast<const Type *>(col);                         \
+    queryResult[i].push_back(src[i]);                                          \
+  } break;
 
 using namespace db;
 
-class QueryParserTest : public ::testing::Test {
-    void SetUp() override {
-        SystemManager sysManager;
-        LocalMemory mem;
-        QueryInterpreter interp(&sysManager);
-    }
+class QueryTest : public ::testing::Test {
+  void SetUp() override {
+    SimpleGraph::createSimpleGraph(_db);
+    _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager());
+  }
 
-    void TearDown() override {
-    }
+  void TearDown() override {}
+
+  TuringDB _db;
+
+public:
+  LocalMemory _mem;
+  std::unique_ptr<QueryInterpreter> _interp{nullptr};
 };
 
-TEST_F(QueryParserTest, selectPath1) {
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
+TEST_F(QueryTest, NodeMatching) {
+  const std::string query1 = "MATCH n return n";
+  const std::string query2 = "MATCH n--m return n,m";
+  const std::string query3 = "MATCH n--m--q--r return n,m,q,r";
 
-    const std::string query1 = "MATCH (g:gene)-[e:edge]-(p:protein) RETURN p";
-    const std::string query2 = "MATCH (g:gene)--(p:protein) RETURN p";
-    const std::string query3 = "MATCH (:gene)-[:edge]-(:protein) RETURN p";
+  _interp->execute(query1, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
 
-    const std::string query4 = "MATCH (:gene)--(:protein) RETURN p";
-    const std::string query5 = "MATCH (:gene)-[e]-(:protein) RETURN p";
-    const std::string query6 = "MATCH (g)-[e]-(p) RETURN p";
-    const std::string query7 = "MATCH g-[e]-p RETURN p";
-    const std::string query8 = "MATCH (:gene)-[:edge]-(:protein) RETURN *";
-    const std::string query9 = "MATCH :gene-[:edge]-:protein RETURN *";
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0)},  {EntityID(1)}, {EntityID(2)},  {EntityID(3)},
+        {EntityID(4)},  {EntityID(5)}, {EntityID(6)},  {EntityID(7)},
+        {EntityID(8)},  {EntityID(9)}, {EntityID(10)}, {EntityID(11)},
+        {EntityID(12)},
+    };
 
-    const std::string query10 = "MATCH (n)--(p:protein) RETURN p";
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query1 in the NodeMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
 
-    const std::string query11 = "MATCH (a)--(b) RETURN a, b";
-    const std::string query12 = "MATCH (a)--(b)--(c) RETURN a, b, c";
-    const std::string query13 = "MATCH (a)--(b)--(c)--(d) RETURN a, b, c, d";
+  _interp->execute(query2, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
 
-    ASSERT_TRUE(parser.parse(query1));
-    ASSERT_TRUE(parser.parse(query2));
-    ASSERT_TRUE(parser.parse(query3));
-    ASSERT_TRUE(parser.parse(query4));
-    ASSERT_TRUE(parser.parse(query5));
-    ASSERT_TRUE(parser.parse(query6));
-    ASSERT_TRUE(parser.parse(query7));
-    ASSERT_TRUE(parser.parse(query8));
-    ASSERT_TRUE(parser.parse(query9));
-    ASSERT_TRUE(parser.parse(query10));
-    ASSERT_TRUE(parser.parse(query11));
-    ASSERT_TRUE(parser.parse(query12));
-    ASSERT_TRUE(parser.parse(query13));
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0), EntityID(1)},  {EntityID(0), EntityID(6)},
+        {EntityID(0), EntityID(11)}, {EntityID(0), EntityID(12)},
+        {EntityID(1), EntityID(0)},  {EntityID(1), EntityID(7)},
+        {EntityID(1), EntityID(8)},  {EntityID(2), EntityID(10)},
+        {EntityID(2), EntityID(11)}, {EntityID(3), EntityID(7)},
+        {EntityID(3), EntityID(9)},  {EntityID(4), EntityID(8)}};
+
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query2 in the NodeMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
+
+  _interp->execute(query3, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
+
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0), EntityID(1), EntityID(0), EntityID(1)},
+        {EntityID(0), EntityID(1), EntityID(0), EntityID(6)},
+        {EntityID(0), EntityID(1), EntityID(0), EntityID(11)},
+        {EntityID(0), EntityID(1), EntityID(0), EntityID(12)},
+        {EntityID(1), EntityID(0), EntityID(1), EntityID(0)},
+        {EntityID(1), EntityID(0), EntityID(1), EntityID(7)},
+        {EntityID(1), EntityID(0), EntityID(1), EntityID(8)}};
+
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query3 in the NodeMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
 }
 
-TEST_F(QueryParserTest, selectSingle1) {
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
+TEST_F(QueryTest, EdgeMatching) {
+  const std::string query1 = "MATCH n-[e]-m return e";
+  const std::string query2 = "MATCH n-[e]-m-[e1]-q-[e2]-r return e2,e1";
 
-    const auto query1 = "MATCH (g:gene) RETURN g ";
-    const auto query2 = "MATCH (g:gene) RETURN * ";
-    const auto query3 = "MATCH (:gene) RETURN * ";
-    const auto query4 = "MATCH :gene RETURN * ";
+  _interp->execute(query1, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0)}, {EntityID(1)}, {EntityID(2)},  {EntityID(3)},
+        {EntityID(4)}, {EntityID(5)}, {EntityID(6)},  {EntityID(7)},
+        {EntityID(8)}, {EntityID(9)}, {EntityID(10)}, {EntityID(11)}};
 
-    const auto query5 = "MATCH n RETURN n ";
-    const auto query6 = "MATCH (n) RETURN n ";
-    const auto query7 = "MATCH (n) RETURN * ";
-    const auto query8 = "MATCH (my_node) RETURN my_node";
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query1 in the EdgeMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
 
-    ASSERT_TRUE(parser.parse(query1));
-    ASSERT_TRUE(parser.parse(query2));
-    ASSERT_TRUE(parser.parse(query3));
-    ASSERT_TRUE(parser.parse(query4));
-    ASSERT_TRUE(parser.parse(query5));
-    ASSERT_TRUE(parser.parse(query6));
-    ASSERT_TRUE(parser.parse(query7));
-    ASSERT_TRUE(parser.parse(query8));
+  _interp->execute(query2, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0), EntityID(4)}, {EntityID(1), EntityID(4)},
+        {EntityID(2), EntityID(4)}, {EntityID(3), EntityID(4)},
+        {EntityID(4), EntityID(0)}, {EntityID(5), EntityID(0)},
+        {EntityID(6), EntityID(0)}};
+
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query2 in the EdgeMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
 }
 
-TEST_F(QueryParserTest, selectProperties) {
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
+TEST_F(QueryTest, LabelMatching) {
+  const std::string query1 = "MATCH n return n";
+  const std::string query2 = "MATCH n:Interests return n";
+  const std::string query3 = "MATCH n:Person--m:Person return n";
+  const std::string query4 = "MATCH :Person return *";
 
-    const auto query1 = "MATCH n:{location = 'cytosol'} RETURN n";
-    const auto query2 = "MATCH n:{magic = 42} RETURN n";
-    const auto query3 = "MATCH n:{magic = -42} RETURN n";
-    const auto query4 = "MATCH n:{corr >= 0.75} RETURN n";
-    const auto query5 = "MATCH n:{rate < 1250.752} RETURN n";
-    const auto query6 = "MATCH n:{corr < -0.752} RETURN n";
+  _interp->execute(query1, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0)}, {EntityID(1)}, {EntityID(2)},
+        {EntityID(3)}, {EntityID(4)}, {EntityID(5)}};
 
-    ASSERT_TRUE(parser.parse(query1));
-    ASSERT_TRUE(parser.parse(query2));
-    ASSERT_TRUE(parser.parse(query3));
-    ASSERT_TRUE(parser.parse(query4));
-    ASSERT_TRUE(parser.parse(query5));
-    ASSERT_TRUE(parser.parse(query6));
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    for (auto rows : queryResult) {
+      for (auto cols : rows) {
+        spdlog::info("qr {}", cols.getValue());
+      }
+    }
+
+    for (auto rows : targetResult) {
+      for (auto cols : rows) {
+        spdlog::info("tr {}", cols.getValue());
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query1 in the LabelMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
+
+  _interp->execute(query2, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {};
+
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query2 in the LabelMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
+
+  _interp->execute(query3, "", &_mem, [](const Block &block) {
+    const size_t rowCount = block.getBlockRowCount();
+    std::vector<std::vector<EntityID>> queryResult(rowCount);
+    const std::vector<std::vector<EntityID>> targetResult = {
+        {EntityID(0)},
+        {EntityID(1)},
+    };
+
+    for (size_t i = 0; i < rowCount; ++i) {
+      for (const Column *col : block.columns()) {
+        const ColumnVector<EntityID> &src =
+            *static_cast<const ColumnVector<EntityID> *>(col);
+        queryResult[i].push_back(src[i]);
+      }
+    }
+    for (auto rows : queryResult) {
+      for (auto cols : rows) {
+        spdlog::info("qr {}", cols.getValue());
+      }
+    }
+
+    for (auto rows : targetResult) {
+      for (auto cols : rows) {
+        spdlog::info("tr {}", cols.getValue());
+      }
+    }
+    const auto res = queryResult == targetResult;
+    if (!res) {
+      spdlog::error("We have failed to run query3 in the LabelMatching Test");
+    }
+    ASSERT_TRUE(res);
+  });
 }
