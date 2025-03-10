@@ -2,7 +2,7 @@
 
 #include "DeclContext.h"
 #include "Expr.h"
-#include "FromTarget.h"
+#include "MatchTarget.h"
 #include "PathPattern.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
@@ -14,7 +14,7 @@ using namespace db;
 namespace {
 
 void returnAllVariables(ReturnCommand* cmd) {
-    for (const FromTarget* target : cmd->fromTargets()) {
+    for (const MatchTarget* target : cmd->matchTargets()) {
         const PathPattern* pattern = target->getPattern();
         for (EntityPattern* entityPattern : pattern->elements()) {
             if (VarExpr* var = entityPattern->getVar()) {
@@ -90,9 +90,9 @@ bool QueryAnalyzer::analyzeReturn(ReturnCommand* cmd) {
         return false;
     }
 
-    // From targets
+    // match targets
     DeclContext* declContext = cmd->getDeclContext();
-    for (const FromTarget* target : cmd->fromTargets()) {
+    for (const MatchTarget* target : cmd->matchTargets()) {
         const PathPattern* pattern = target->getPattern();
         for (EntityPattern* entityPattern : pattern->elements()) {
             if (!analyzeEntityPattern(declContext, entityPattern)) {

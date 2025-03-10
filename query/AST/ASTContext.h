@@ -6,7 +6,7 @@ namespace db {
 
 class QueryCommand;
 class ReturnField;
-class FromTarget;
+class MatchTarget;
 class PathPattern;
 class EntityPattern;
 class TypeConstraint;
@@ -19,7 +19,7 @@ class ASTContext {
 public:
     friend QueryCommand;
     friend ReturnField;
-    friend FromTarget;
+    friend MatchTarget;
     friend PathPattern;
     friend EntityPattern;
     friend TypeConstraint;
@@ -48,7 +48,7 @@ private:
     QueryCommand* _root {nullptr};
     std::vector<QueryCommand*> _cmds;
     std::vector<ReturnField*> _returnFields;
-    std::vector<FromTarget*> _fromTargets;
+    std::vector<MatchTarget*> _matchTargets;
     std::vector<PathPattern*> _pathPatterns;
     std::vector<EntityPattern*> _entityPatterns;
     std::vector<TypeConstraint*> _typeConstraints;
@@ -59,7 +59,7 @@ private:
 
     void addCmd(QueryCommand* cmd);
     void addReturnField(ReturnField* field);
-    void addFromTarget(FromTarget* target);
+    void addMatchTarget(MatchTarget* target);
     void addPathPattern(PathPattern* pattern);
     void addEntityPattern(EntityPattern* pattern);
     void addTypeConstraint(TypeConstraint* constr);

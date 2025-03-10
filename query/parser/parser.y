@@ -18,7 +18,7 @@ class YScanner;
 class ASTContext;
 class QueryCommand;
 class ReturnField;
-class FromTarget;
+class MatchTarget;
 class PathPattern;
 class EntityPattern;
 class TypeConstraint;
@@ -40,7 +40,7 @@ class ReturnProjection;
 #include "ASTContext.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
-#include "FromTarget.h"
+#include "MatchTarget.h"
 #include "PathPattern.h"
 #include "Expr.h"
 #include "TypeConstraint.h"
@@ -109,10 +109,10 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::QueryCommand*> query_unit
 %type<db::QueryCommand*> cmd
 
-%type<db::QueryCommand*> select_cmd
-%type<db::ReturnProjection*> select_fields
-%type<db::ReturnField*> select_field
-%type<db::FromTarget*> from_target
+%type<db::QueryCommand*> return_cmd
+%type<db::ReturnProjection*> return_fields
+%type<db::ReturnField*> return_field
+%type<db::MatchTarget*> match_target
 %type<db::PathPattern*> path_pattern
 %type<db::EntityPattern*> node_pattern
 %type<db::EntityPattern*> edge_pattern
@@ -149,22 +149,22 @@ query_unit: cmd { $$ = $1; }
           | error { ctxt->setError(true); }
           ;
           
-cmd: select_cmd { ctxt->setRoot($1); }
+cmd: return_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
    | explain_cmd { ctxt->setRoot($1); }
    ;
 
-select_cmd: MATCH from_target RETURN select_fields {
+return_cmd: MATCH match_target RETURN return_fields {
                                                        auto cmd = ReturnCommand::create(ctxt); 
                                                        cmd->setProjection($4);
-                                                       cmd->addFromTarget($2);
+                                                       cmd->addMatchTarget($2);
                                                        $$ = cmd;
                                                   }
           ;
 
-select_field: STAR {
+return_field: STAR {
                         auto field = ReturnField::create(ctxt);
                         field->setAll(true);
                         $$ = field;
@@ -182,19 +182,19 @@ select_field: STAR {
                            }
              ;
 
-select_fields: select_fields COMMA select_field {
+return_fields: return_fields COMMA return_field {
                                                     $1->addField($3);
                                                     $$ = $1;
                                                 }
-             | select_field {
+             | return_field {
                                 auto proj = ReturnProjection::create(ctxt);
                                 proj->addField($1);
                                 $$ = proj;
                             }
              ;
 
-from_target: path_pattern {
-                              auto target = FromTarget::create(ctxt, $1);
+match_target: path_pattern {
+                              auto target = MatchTarget::create(ctxt, $1);
                               $$ = target;
                           }
            ;

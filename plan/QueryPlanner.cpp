@@ -6,7 +6,7 @@
 #include <range/v3/all.hpp>
 
 #include "Expr.h"
-#include "FromTarget.h"
+#include "MatchTarget.h"
 #include "LocalMemory.h"
 #include "PathPattern.h"
 #include "Pipeline.h"
@@ -23,8 +23,6 @@
 #include "Graph.h"
 #include "GraphMetadata.h"
 #include "reader/GraphReader.h"
-
-#include "Pipeline.h"
 
 using namespace db;
 
@@ -72,14 +70,14 @@ bool QueryPlanner::plan(const QueryCommand* query) {
 }
 
 bool QueryPlanner::planReturn(const ReturnCommand* returnCmd) {
-    const auto& fromTargets = returnCmd->fromTargets();
-    if (fromTargets.size() != 1) {
+    const auto& matchTargets = returnCmd->matchTargets();
+    if (matchTargets.size() != 1) {
         spdlog::error("Unsupported RETURN queries with more than one target");
         return false;
     }
 
-    const FromTarget* fromTarget = fromTargets.front();
-    const PathPattern* path = fromTarget->getPattern();
+    const MatchTarget* matchTarget = matchTargets.front();
+    const PathPattern* path = matchTarget->getPattern();
     const auto& pathElements = path->elements();
     const auto pathSize = pathElements.size();
 
@@ -693,7 +691,7 @@ void QueryPlanner::planProjection(const ReturnCommand* returnCmd) {
 
     for (const ReturnField* field : projection->returnFields()) {
         if (field->isAll()) {
-            for (const FromTarget* target : returnCmd->fromTargets()) {
+            for (const MatchTarget* target : returnCmd->matchTargets()) {
                 const PathPattern* pattern = target->getPattern();
                 for (EntityPattern* entityPattern : pattern->elements()) {
                     if (VarExpr* var = entityPattern->getVar()) {

@@ -24,8 +24,8 @@ ReturnCommand* ReturnCommand::create(ASTContext* ctxt) {
     return returnCmd;
 }
 
-void ReturnCommand::addFromTarget(FromTarget* fromTarget) {
-    _fromTargets.push_back(fromTarget);
+void ReturnCommand::addMatchTarget(MatchTarget* matchTarget) {
+    _matchTargets.push_back(matchTarget);
 }
 
 // CreateGraphCommand

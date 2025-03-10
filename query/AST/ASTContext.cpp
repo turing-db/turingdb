@@ -2,7 +2,7 @@
 
 #include "Expr.h"
 #include "ExprConstraint.h"
-#include "FromTarget.h"
+#include "MatchTarget.h"
 #include "PathPattern.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
@@ -25,7 +25,7 @@ ASTContext::~ASTContext() {
         delete field;
     }
 
-    for (FromTarget* target : _fromTargets) {
+    for (MatchTarget* target : _matchTargets) {
         delete target;
     }
 
@@ -66,8 +66,8 @@ void ASTContext::addReturnField(ReturnField* field) {
     _returnFields.push_back(field);
 }
 
-void ASTContext::addFromTarget(FromTarget* target) {
-    _fromTargets.push_back(target);
+void ASTContext::addMatchTarget(MatchTarget* target) {
+    _matchTargets.push_back(target);
 }
 
 void ASTContext::addPathPattern(PathPattern* pattern) {

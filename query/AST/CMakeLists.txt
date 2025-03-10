@@ -4,7 +4,7 @@ set(AST_sources
         DeclContext.cpp 
         Expr.cpp 
         ExprConstraint.cpp 
-        FromTarget.cpp 
+        MatchTarget.cpp
         PathPattern.cpp 
         QueryCommand.cpp 
         ReturnField.cpp 

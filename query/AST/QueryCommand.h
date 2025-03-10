@@ -9,7 +9,7 @@ namespace db {
 class ASTContext;
 class DeclContext;
 class ReturnProjection;
-class FromTarget;
+class MatchTarget;
 
 class QueryCommand {
 public:
@@ -33,7 +33,7 @@ protected:
 
 class ReturnCommand : public QueryCommand {
 public:
-    using FromTargets = std::vector<FromTarget*>;
+    using MatchTargets = std::vector<MatchTarget*>;
 
     static ReturnCommand* create(ASTContext* ctxt);
 
@@ -42,15 +42,15 @@ public:
     Kind getKind() const override { return Kind::RETURN_COMMAND; }
 
     ReturnProjection* getProjection() const { return _proj; }
-    const FromTargets& fromTargets() const { return _fromTargets; }
+    const MatchTargets& matchTargets() const { return _matchTargets; }
 
     void setProjection(ReturnProjection* proj) { _proj = proj; }
-    void addFromTarget(FromTarget* fromTarget);
+    void addMatchTarget(MatchTarget* matchTarget);
 
 private:
     std::unique_ptr<DeclContext> _declContext;
     ReturnProjection* _proj {nullptr};
-    FromTargets _fromTargets;
+    MatchTargets _matchTargets;
 
     ReturnCommand();
     ~ReturnCommand() override;
