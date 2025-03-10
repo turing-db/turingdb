@@ -3,6 +3,7 @@
 #include "GraphMetadata.h"
 #include "SystemManager.h"
 #include "Graph.h"
+#include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "ASTContext.h"
 #include "QueryParser.h"
@@ -39,7 +40,8 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Open transaction
-    const GraphView view = graph->view();
+    const Transaction transaction = graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
 
     // Parsing query
     ASTContext astCtxt;

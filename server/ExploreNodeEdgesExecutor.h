@@ -3,9 +3,8 @@
 #include <cstddef>
 #include <unordered_set>
 
+#include "PayloadWriter.h"
 #include "reader/GraphReader.h"
-#include "views/GraphView.h"
-#include "views/NodeView.h"
 #include "EntityID.h"
 
 #define CASE_RUN_FILTER(filters_set)               \
@@ -23,9 +22,9 @@ public:
         std::string _query;
     };
 
-    ExploreNodeEdgesExecutor(const GraphView& view, PayloadWriter& w)
+    ExploreNodeEdgesExecutor(const GraphReader& reader, PayloadWriter& w)
         : _w(w),
-          _reader(view.read()),
+          _reader(reader),
           _propTypes(_reader.getMetadata().propTypes()),
           _labelsets(_reader.getMetadata().labelsets()),
           _nodeID(1)

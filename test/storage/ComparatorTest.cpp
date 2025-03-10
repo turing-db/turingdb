@@ -5,6 +5,7 @@
 #include "Graph.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
 #include "comparators/DataPartComparator.h"
 #include "JobSystem.h"
@@ -43,7 +44,8 @@ protected:
         auto has = edgetypes.getOrCreate("HasObject");
         auto knows = edgetypes.getOrCreate("Knows");
 
-        auto commitBuilder = graph->prepareCommit();
+        const auto tx = graph->openWriteTransaction();
+        auto commitBuilder = tx.prepareCommit();
         auto& builder = commitBuilder->newBuilder();
         auto p1 = builder.addNode(LabelSet::fromList({person}));
         auto p2 = builder.addNode(LabelSet::fromList({person, officer}));
@@ -89,7 +91,8 @@ protected:
         auto has = edgetypes.getOrCreate("HasObject");
         auto knows = edgetypes.getOrCreate("Knows");
 
-        auto commitBuilder = graph->prepareCommit();
+        const auto tx = graph->openWriteTransaction();
+        auto commitBuilder = tx.prepareCommit();
         auto& builder = commitBuilder->newBuilder();
         auto p1 = builder.addNode(LabelSet::fromList({person}));
         auto p2 = builder.addNode(LabelSet::fromList({person, officer}));
@@ -130,8 +133,11 @@ TEST_F(ComparatorTest, Equal) {
     auto db1 = createDB1();
     auto db2 = createDB1();
 
-    GraphReader reader1 = db1->read();
-    GraphReader reader2 = db2->read();
+
+    const Transaction transaction1 = db1->openTransaction();
+    const Transaction transaction2 = db2->openTransaction();
+    GraphReader reader1 = transaction1.readGraph();
+    GraphReader reader2 = transaction2.readGraph();
 
     auto parts1 = reader1.dataparts();
     auto parts2 = reader2.dataparts();
@@ -146,8 +152,10 @@ TEST_F(ComparatorTest, NotEqual) {
     auto db1 = createDB1();
     auto db2 = createDB2();
 
-    GraphReader reader1 = db1->read();
-    GraphReader reader2 = db2->read();
+    const Transaction transaction1 = db1->openTransaction();
+    const Transaction transaction2 = db2->openTransaction();
+    GraphReader reader1 = transaction1.readGraph();
+    GraphReader reader2 = transaction2.readGraph();
 
     auto parts1 = reader1.dataparts();
     auto parts2 = reader2.dataparts();

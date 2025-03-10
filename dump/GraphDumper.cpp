@@ -13,8 +13,10 @@
 #include "PropertyTypeMapDumper.h"
 #include "GraphFileType.h"
 #include "FileUtils.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
+
 namespace rg = ranges;
 namespace rv = rg::views;
 
@@ -27,6 +29,8 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
     if (auto res = path.mkdir(); !res) {
         return DumpError::result(DumpErrorType::CANNOT_MKDIR_GRAPH, res.error());
     }
+
+    const Transaction transaction = graph.openTransaction();
 
     // Dump graph type
     {
@@ -119,7 +123,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
         }
     }
 
-    GraphReader reader = graph.read();
+    GraphReader reader = transaction.readGraph();
     for (const auto& [i, part] : reader.dataparts() | rv::enumerate) {
         const fs::Path partPath = path / "datapart-" + std::to_string(i);
 

@@ -2,7 +2,6 @@
 
 #include "GraphMetadata.h"
 #include "views/GraphView.h"
-#include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Commit.h"
@@ -28,24 +27,12 @@ Graph::Graph(const std::string& name)
 Graph::~Graph() {
 }
 
-GraphView Graph::view(CommitHash hash) {
-    return _versionController->view(hash);
+Transaction Graph::openTransaction(CommitHash hash) const {
+    return _versionController->openTransaction(hash);
 }
 
-GraphView Graph::view(CommitHash hash) const {
-    return _versionController->view(hash);
-}
-
-GraphReader Graph::read() {
-    return GraphReader(view());
-}
-
-GraphReader Graph::read() const {
-    return GraphReader(view());
-}
-
-std::unique_ptr<CommitBuilder> Graph::prepareCommit() const {
-    return view().prepareCommit();
+WriteTransaction Graph::openWriteTransaction(CommitHash hash) const {
+    return _versionController->openWriteTransaction(hash);
 }
 
 void Graph::commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem) {

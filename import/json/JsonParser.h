@@ -1,6 +1,6 @@
 #pragma once
 
-#include "views/GraphView.h"
+#include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
 
 namespace db {
@@ -49,7 +49,7 @@ public:
 
 private:
     Graph* _graph {nullptr};
-    GraphView _view;
+    WriteTransaction _transaction;
     std::unique_ptr<CommitBuilder> _commitBuilder;
     GraphMetadata* _graphMetadata {nullptr};
     std::unique_ptr<IDMapper> _nodeIDMapper;

@@ -7,18 +7,17 @@
 #include "DataPart.h"
 #include "EntityID.h"
 #include "versioning/CommitHash.h"
+#include "versioning/Transaction.h"
 
 namespace db {
 
 class GraphInfoLoader;
-class GraphView;
 class ConcurrentWriter;
 class DataPartBuilder;
 class PartIterator;
 class GraphMetadata;
 class CommitBuilder;
 class VersionController;
-class GraphReader;
 class GraphLoader;
 
 class Graph {
@@ -42,12 +41,9 @@ public:
 
     const std::string& getName() const { return _graphName; }
 
-    [[nodiscard]] GraphView view(CommitHash hash = CommitHash::head());
-    [[nodiscard]] GraphView view(CommitHash hash = CommitHash::head()) const;
-    [[nodiscard]] GraphReader read();
-    [[nodiscard]] GraphReader read() const;
+    [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
+    [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;
 
-    [[nodiscard]] std::unique_ptr<CommitBuilder> prepareCommit() const;
     void commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
 
     [[nodiscard]] const GraphMetadata* getMetadata() const { return _metadata.get(); }

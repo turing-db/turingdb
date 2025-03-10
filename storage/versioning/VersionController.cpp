@@ -1,8 +1,6 @@
 #include "VersionController.h"
 
-#include "Commit.h"
 #include "Graph.h"
-#include "views/GraphView.h"
 
 using namespace db;
 
@@ -21,19 +19,34 @@ void VersionController::initialize(Graph* graph) {
     _head.store(ptr);
 }
 
-GraphView VersionController::view(CommitHash hash) {
+Transaction VersionController::openTransaction(CommitHash hash) const {
     if (hash == CommitHash::head()) {
-        return _head.load()->view();
+        return _head.load()->openTransaction();
     }
 
     std::scoped_lock lock {_mutex};
 
     auto it = _commits.find(hash);
     if (it == _commits.end()) {
-        return GraphView {}; // Invalid hash
+        return Transaction {}; // Invalid hash
     }
 
-    return it->second->view();
+    return it->second->openTransaction();
+}
+
+WriteTransaction VersionController::openWriteTransaction(CommitHash hash) const {
+    if (hash == CommitHash::head()) {
+        return _head.load()->openWriteTransaction();
+    }
+
+    std::scoped_lock lock {_mutex};
+
+    auto it = _commits.find(hash);
+    if (it == _commits.end()) {
+        return WriteTransaction {}; // Invalid hash
+    }
+
+    return it->second->openWriteTransaction();
 }
 
 void VersionController::commit(std::unique_ptr<Commit> commit) {

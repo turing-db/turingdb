@@ -46,6 +46,7 @@ set(storage_sources
         versioning/CommitHash.cpp
         versioning/Commit.cpp
         versioning/CommitBuilder.cpp
+        versioning/Transaction.cpp
 
         comparators/DataPartComparator.cpp
         comparators/GraphComparator.cpp)

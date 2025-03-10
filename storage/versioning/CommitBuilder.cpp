@@ -67,7 +67,8 @@ std::unique_ptr<Commit> CommitBuilder::build(Graph& graph, JobSystem& jobsystem)
     commit->_data = std::make_shared<CommitData>();
     commit->_data->_hash = commit->_hash;
     commit->_data->_graphMetadata = graph.getMetadata();
-    commit->_data->_dataparts = _view.data()._dataparts;
+    commit->_data->_dataparts.resize(_previousDataparts.size());
+    std::copy(_previousDataparts.begin(), _previousDataparts.end(), commit->_data->_dataparts.begin());
 
     size_t i = 0;
     for (const auto& builder : _builders) {

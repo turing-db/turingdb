@@ -17,7 +17,9 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
     auto& system = db.getSystemManager();
 
     Graph* graph = system.getDefaultGraph();
-    auto commitBuilder = graph->prepareCommit();
+
+    const WriteTransaction tx = graph->openWriteTransaction();
+    auto commitBuilder = tx.prepareCommit();
     auto& builder = commitBuilder->newBuilder();
     auto* metadata = graph->getMetadata();
     auto& labels = metadata->labels();

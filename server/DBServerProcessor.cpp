@@ -6,6 +6,7 @@
 #include "Graph.h"
 #include "GraphMetadata.h"
 #include "reader/GraphReader.h"
+#include "versioning/Transaction.h"
 #include "views/EdgeView.h"
 #include "QueryInterpreter.h"
 #include "SystemManager.h"
@@ -29,8 +30,7 @@ DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
     : _writer(&connection.getWriter()),
       _db(db),
-      _connection(connection)
-{
+      _connection(connection) {
 }
 
 DBServerProcessor::~DBServerProcessor() {
@@ -209,7 +209,8 @@ void DBServerProcessor::get_graph_status() {
     payload.value(sysMan.isGraphLoading(graphName));
 
     if (graph != nullptr) {
-        const auto reader = graph->read();
+        const auto transaction = graph->openTransaction();
+        const auto reader = transaction.readGraph();
         payload.key("nodeCount");
         payload.value(reader.getNodeCount());
         payload.key("edgeCount");
@@ -342,7 +343,8 @@ void DBServerProcessor::list_labels() {
     payload.key("data");
     payload.obj();
 
-    const GraphReader reader = graph->read();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
     const auto& labelMap = graph->getMetadata()->labels();
     const size_t labelCount = labelMap.getCount();
     std::vector<LabelID> remainingLabels;
@@ -420,7 +422,8 @@ void DBServerProcessor::list_property_types() {
         return;
     }
 
-    const auto reader = graph->read();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
 
     // Else only show the node's property types
     const size_t propTypeCount = propTypes.getCount();
@@ -481,7 +484,8 @@ void DBServerProcessor::list_edge_types() {
         return;
     }
 
-    const auto reader = graph->read();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
 
     // Else only show the edges' property types
     const size_t edgeTypeCount = edgeTypes.getCount();
@@ -511,14 +515,15 @@ void DBServerProcessor::list_nodes() {
         return;
     }
 
-    const GraphView view = graph->view();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
     const GraphMetadata* metadata = graph->getMetadata();
     const LabelMap& labels = metadata->labels();
     const PropertyTypeMap& propTypes = metadata->propTypes();
 
     payload.setMetadata(metadata);
 
-    ListNodesExecutor executor(view, payload);
+    ListNodesExecutor executor(reader, payload);
 
     try {
         const auto json = nlohmann::json::parse(httpInfo._payload);
@@ -606,11 +611,12 @@ void DBServerProcessor::get_node_properties() {
         return;
     }
 
-    const GraphView view = graph->view();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
 
     ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
     std::vector<std::string> properties;
-    const auto& propTypes = view.metadata().propTypes();
+    const auto& propTypes = reader.getMetadata().propTypes();
 
     try {
         const auto json = nlohmann::json::parse(reqBody);
@@ -652,7 +658,6 @@ void DBServerProcessor::get_node_properties() {
     payload.key("data");
     payload.obj();
 
-    const auto reader = view.read();
     for (const auto& propName : properties) {
         const auto ptype = propTypes.get(propName);
         if (!ptype._id.isValid()) {
@@ -718,7 +723,8 @@ void DBServerProcessor::get_neighbors() {
         return;
     }
 
-    const GraphView view = graph->view();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
 
     ColumnVector<EntityID>* allNodeIDs = mem.alloc<ColumnVector<EntityID>>();
     ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
@@ -754,7 +760,6 @@ void DBServerProcessor::get_neighbors() {
     payload.key("data");
     payload.obj();
 
-    const auto reader = view.read();
     nodeIDs->resize(1); // One node at a time
 
     for (auto nodeID : *allNodeIDs) {
@@ -840,7 +845,8 @@ void DBServerProcessor::get_nodes() {
 
     payload.setMetadata(graph->getMetadata());
 
-    const GraphView view = graph->view();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
 
     ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
 
@@ -866,7 +872,6 @@ void DBServerProcessor::get_nodes() {
         return;
     }
 
-    const auto reader = view.read();
     payload.key("data");
     payload.obj();
 
@@ -900,7 +905,8 @@ void DBServerProcessor::get_node_edges() {
         return;
     }
 
-    const GraphView view = graph->view();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
     const GraphMetadata* metadata = graph->getMetadata();
 
     payload.setMetadata(metadata);
@@ -972,7 +978,6 @@ void DBServerProcessor::get_node_edges() {
 
     std::unordered_map<EdgeTypeID, size_t> outCounts;
     std::unordered_map<EdgeTypeID, size_t> inCounts;
-    const auto reader = view.read();
     payload.key("data");
     payload.obj();
 
@@ -1092,7 +1097,8 @@ void DBServerProcessor::explore_node_edges() {
         return;
     }
 
-    const GraphView view = graph->view();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
     const GraphMetadata* metadata = graph->getMetadata();
     const LabelMap& labels = metadata->labels();
     const EdgeTypeMap& edgeTypes = metadata->edgeTypes();
@@ -1100,7 +1106,7 @@ void DBServerProcessor::explore_node_edges() {
 
     payload.setMetadata(metadata);
 
-    ExploreNodeEdgesExecutor executor {view, payload};
+    ExploreNodeEdgesExecutor executor {reader, payload};
 
     try {
         const auto json = nlohmann::json::parse(httpInfo._payload);
@@ -1249,8 +1255,6 @@ void DBServerProcessor::get_edges() {
 
     payload.setMetadata(graph->getMetadata());
 
-    const GraphView view = graph->view();
-
     ColumnVector<EntityID>* edgeIDs = mem.alloc<ColumnVector<EntityID>>();
 
     try {
@@ -1274,7 +1278,8 @@ void DBServerProcessor::get_edges() {
         return;
     }
 
-    const auto reader = view.read();
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
     payload.key("data");
     payload.obj();
 

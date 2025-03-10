@@ -3,6 +3,8 @@
 #include <memory>
 
 #include "versioning/CommitHash.h"
+#include "versioning/Transaction.h"
+#include "versioning/CommitData.h"
 
 namespace db {
 
@@ -10,7 +12,6 @@ class DataPart;
 class CommitData;
 class VersionController;
 class CommitBuilder;
-class GraphView;
 class Graph;
 
 class Commit {
@@ -27,7 +28,14 @@ public:
         return _data != nullptr;
     }
 
-    [[nodiscard]] GraphView view() const;
+    [[nodiscard]] Transaction openTransaction() const {
+        return {*_graph, _data};
+    }
+
+    [[nodiscard]] WriteTransaction openWriteTransaction() const {
+        return {*_graph, _data};
+    }
+
     [[nodiscard]] CommitHash hash() const { return _hash; }
 
 private:

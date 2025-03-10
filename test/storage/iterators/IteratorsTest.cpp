@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "Graph.h"
+#include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "GraphMetadata.h"
@@ -42,7 +43,8 @@ protected:
         _graph = new Graph();
 
         /* FIRST BUFFER */
-        auto commitBuilder1 = _graph->prepareCommit();
+        const auto tx1 = _graph->openWriteTransaction();
+        auto commitBuilder1 = tx1.prepareCommit();
         auto& builder1 = commitBuilder1->newBuilder();
         PropertyTypeID uint64ID = 0;
         PropertyTypeID stringID = 1;
@@ -91,7 +93,8 @@ protected:
         }
 
         /* SECOND BUFFER (Concurrent to the first one) */
-        auto commitBuilder2 = _graph->prepareCommit();
+        const auto tx2 = _graph->openWriteTransaction();
+        auto commitBuilder2 = tx2.prepareCommit();
         auto& builder2 = commitBuilder2->newBuilder();
 
         {
@@ -143,13 +146,15 @@ protected:
         _graph->commit(std::move(commitBuilder2), *_jobSystem);
 
         /* THIRD BUFFER (Empty) */
-        auto commitBuilder3 = _graph->prepareCommit();
+        const auto tx3 = _graph->openWriteTransaction();
+        auto commitBuilder3 = tx3.prepareCommit();
         [[maybe_unused]] auto& builder3 = commitBuilder3->newBuilder();
         _graph->commit(std::move(commitBuilder3), *_jobSystem);
         spdlog::info("Pushing 3");
 
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
-        auto commitBuilder4 = _graph->prepareCommit();
+        const auto tx4 = _graph->openWriteTransaction();
+        auto commitBuilder4 = tx4.prepareCommit();
         auto& builder4 = commitBuilder4->newBuilder();
 
         {
@@ -227,7 +232,8 @@ protected:
         builder4.addNodeProperty<types::String>(
             2, stringID, "TmpID2 patch");
 
-        const EdgeRecord* edgeToPatch = _graph->view().read().getEdge(2);
+        const auto readTransaction = _graph->openTransaction();
+        const EdgeRecord* edgeToPatch = readTransaction.viewGraph().read().getEdge(2);
         builder4.addEdgeProperty<types::String>(
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
@@ -248,8 +254,8 @@ protected:
 };
 
 TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::vector<TestEdgeRecord> compareSet {
         {0, 0, 1},
         {1, 0, 2},
@@ -276,8 +282,8 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodesIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     auto it = compareSet.begin();
@@ -292,8 +298,8 @@ TEST_F(IteratorsTest, ScanNodesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::vector<EntityID> compareSet {2, 4, 3, 8, 6, 7};
 
     auto it = compareSet.begin();
@@ -310,8 +316,8 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
@@ -324,7 +330,7 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 
         ColumnIDs nodeIDs;
         for (const EntityID nodeID : reader.scanNodesByLabel(&labelset)) {
-            nodeIDs = ColumnVector{nodeID};
+            nodeIDs = ColumnVector {nodeID};
             for (const EdgeRecord& edge : reader.getOutEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
             }
@@ -349,8 +355,8 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
@@ -363,7 +369,7 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 
         ColumnIDs nodeIDs;
         for (const EntityID nodeID : reader.scanNodesByLabel(&labelset)) {
-            nodeIDs = ColumnVector{nodeID};
+            nodeIDs = ColumnVector {nodeID};
             for (const EdgeRecord& edge : reader.getInEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
             }
@@ -388,8 +394,8 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetEdgesIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     ColumnIDs inputNodeIDs = {1, 2, 3, 8};
     std::vector<TestEdgeRecord> compareSet {
         {2, 3, 4},
@@ -432,8 +438,8 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
 
     {
         std::vector<uint64_t> compareSet {0, 1, 2, 1, 0, 6, 7, 8, 5};
@@ -471,8 +477,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
 
     {
         std::vector<uint64_t> compareSet {0, 1, 2, 0, 1, 8, 5, 6, 7};
@@ -510,8 +516,8 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     const auto labelset = LabelSet::fromList({1});
 
     {
@@ -547,8 +553,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     ColumnIDs inputNodeIDs = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     {
@@ -598,8 +604,8 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
 }
 
 TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     ColumnIDs inputNodeIDs = {1, 3, 8};
 
     {

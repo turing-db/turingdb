@@ -13,6 +13,7 @@
 #include "GraphReport.h"
 
 #include "ToolInit.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 
@@ -30,9 +31,10 @@ int main(int argc, const char** argv) {
     const Graph* defaultGraph = db.getSystemManager().getDefaultGraph();
 
     spdlog::info("Graph created");
+    const Transaction tx = defaultGraph->openTransaction();
     {
         std::stringstream sstream;
-        GraphReport::getReport(defaultGraph->read(), sstream);
+        GraphReport::getReport(tx.readGraph(), sstream);
         std::cout << sstream.str() << '\n';
     }
 
@@ -44,7 +46,7 @@ int main(int argc, const char** argv) {
     }
 
     const PropertyType name = defaultGraph->getMetadata()->propTypes().get("name");
-    const auto reader = defaultGraph->read();
+    const auto reader = tx.readGraph();
     spdlog::info("Nodes:");
     for (auto name : reader.scanNodeProperties<types::String>(name._id)) {
         spdlog::info(" - {}", name);

@@ -16,7 +16,8 @@ using namespace db;
 
 static std::unique_ptr<Graph> createSimpleGraph() {
     auto graph = std::make_unique<Graph>();
-    auto commitBuilder= graph->prepareCommit();
+    const auto tx = graph->openWriteTransaction();
+    auto commitBuilder = tx.prepareCommit();
     auto& builder = commitBuilder->newBuilder();
     auto* metadata = graph->getMetadata();
     auto& labels = metadata->labels();

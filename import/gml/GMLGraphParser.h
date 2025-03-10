@@ -22,7 +22,8 @@ public:
         _labelsetID = _graph->getMetadata()->labelsets().create(labelset);
 
         _edgeTypeID = _graph->getMetadata()->edgeTypes().create("GMLEdge");
-        _commitBuilder = _graph->prepareCommit();
+        const auto tx = _graph->openWriteTransaction();
+        _commitBuilder = tx.prepareCommit();
         _builder = &_commitBuilder->newBuilder();
         return true;
     }

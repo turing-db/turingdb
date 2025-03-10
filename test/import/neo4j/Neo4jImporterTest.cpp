@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "Graph.h"
+#include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
@@ -56,7 +57,8 @@ protected:
 
 TEST_F(Neo4jImporterTest, Simple) {
     {
-        auto commitBuilder = _graph->prepareCommit();
+        const auto tx = _graph->openWriteTransaction();
+        auto commitBuilder = tx.prepareCommit();
         auto& builder1 = commitBuilder->newBuilder();
         builder1.addNode(LabelSet::fromList({1})); // 0
         builder1.addNode(LabelSet::fromList({0})); // 1
@@ -73,7 +75,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         EntityID id2 = builder2.addNode(LabelSet::fromList({0}));
         builder2.addNodeProperty<types::String>(id2, 0, "test2");
         builder2.addNodeProperty<types::String>(2, 0, "test3");
-        const EdgeRecord& edge= builder2.addEdge(4, 3, 4);
+        const EdgeRecord& edge = builder2.addEdge(4, 3, 4);
         builder2.addEdgeProperty<types::String>(edge, 0, "Edge property test");
         builder2.addNode(LabelSet::fromList({0}));
         builder2.addNode(LabelSet::fromList({0}));
@@ -86,8 +88,8 @@ TEST_F(Neo4jImporterTest, Simple) {
         _graph->commit(std::move(commitBuilder), *_jobSystem);
     }
 
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::cout << "All out edges: ";
     for (const auto& edge : reader.scanOutEdges()) {
         std::cout << edge._edgeID.getValue()
@@ -127,8 +129,8 @@ TEST_F(Neo4jImporterTest, General) {
     ASSERT_TRUE(res);
     std::cout << "Parsing: " << duration<Microseconds>(t0, t1) << " us" << std::endl;
 
-    const auto view = _graph->view();
-    const auto reader = view.read();
+    const Transaction transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
     std::stringstream report;
     GraphReport::getReport(reader, report);
     std::cout << report.view() << std::endl;

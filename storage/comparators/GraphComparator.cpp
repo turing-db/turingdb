@@ -4,6 +4,7 @@
 #include "reader/GraphReader.h"
 #include "DataPartComparator.h"
 #include "GraphMetadataComparator.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 
@@ -28,8 +29,10 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
         return false;
     }
 
-    const GraphReader readerA = a.read();
-    const GraphReader readerB = b.read();
+    const Transaction txA = a.openTransaction();
+    const Transaction txB = b.openTransaction();
+    const GraphReader readerA = txA.readGraph();
+    const GraphReader readerB = txB.readGraph();
     const DataPartSpan partsA = readerA.dataparts();
     const DataPartSpan partsB = readerB.dataparts();
 

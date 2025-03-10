@@ -92,8 +92,8 @@ public:
         std::string _query;
     };
 
-    ListNodesExecutor(const GraphView& view, PayloadWriter& w)
-        : _reader(view.read()),
+    ListNodesExecutor(const GraphReader& reader, PayloadWriter& w)
+        : _reader(reader),
           _propTypes(_reader.getMetadata().propTypes()),
           _writer(w)
     {
