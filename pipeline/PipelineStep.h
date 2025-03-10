@@ -19,7 +19,6 @@
 #include "operations/CreateGraphStep.h"
 #include "operations/ListGraphStep.h"
 #include "operations/GetLabelSetIDStep.h"
-#include "operations/GetEdgeTypeIDStep.h"
 #include "operations/LoadGraphStep.h"
 #include "operations/GetPropertyStep.h"
 
@@ -60,9 +59,6 @@ public:
     PipelineStep(GetLabelSetIDStep::Tag,
                  const ColumnIDs* nodeIDs,
                  ColumnVector<LabelSetID>* labelsetIDs);
-    PipelineStep(GetEdgeTypeIDStep::Tag,
-                 const ColumnIDs* edgeIDs,
-                 ColumnVector<EdgeTypeID>* edgeTypeIDs);
     PipelineStep(FilterStep::Tag,
                  ColumnVector<size_t>* indices);
     PipelineStep(TransformStep::Tag,
@@ -111,7 +107,6 @@ private:
                  ScanOutEdgesByLabelStep,
                  GetOutEdgesStep,
                  GetLabelSetIDStep,
-                 GetEdgeTypeIDStep,
                  FilterStep,
                  TransformStep,
                  CountStep,

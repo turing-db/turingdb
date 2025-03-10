@@ -346,6 +346,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
     const auto indices = _mem->alloc<ColumnVector<size_t>>();
     const auto targets = _mem->alloc<ColumnIDs>();
     const auto edges = _mem->alloc<ColumnIDs>();
+    const auto edgeTypeIDs = _mem->alloc<ColumnVector<EdgeTypeID>>();
 
     const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
     if (typeConstrNames.size() != 1) {
@@ -372,6 +373,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
 
     edgeWriteInfo._targetNodes = targets;
     edgeWriteInfo._edges = edges;
+    edgeWriteInfo._edgeTypes = edgeTypeIDs;
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
@@ -381,9 +383,6 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
     }
 
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
-
-    const auto edgeTypeIDs = _mem->alloc<ColumnVector<EdgeTypeID>>();
-    _pipeline->add<GetEdgeTypeIDStep>(edges, edgeTypeIDs);
 
     // Filter out edges that do not match the edge type ID
     const auto filterEdgeTypeID = _mem->alloc<ColumnConst<EdgeTypeID>>();
@@ -439,6 +438,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     const auto indices = _mem->alloc<ColumnVector<size_t>>();
     const auto targets = _mem->alloc<ColumnIDs>();
     const auto edges = _mem->alloc<ColumnIDs>();
+    const auto edgeTypeIDs= _mem->alloc<ColumnVector<EdgeTypeID>>();
 
     const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
     if (typeConstrNames.size() != 1) {
@@ -475,6 +475,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
 
     edgeWriteInfo._targetNodes = targets;
     edgeWriteInfo._edges = edges;
+    edgeWriteInfo._edgeTypes = edgeTypeIDs;
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
@@ -489,9 +490,6 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     const auto nodesLabelSetIDs = _mem->alloc<ColumnVector<LabelSetID>>();
     _pipeline->add<GetLabelSetIDStep>(targets, nodesLabelSetIDs);
 
-    // Get Edge Type IDs of target nodes
-    const auto edgeTypeIDs= _mem->alloc<ColumnVector<EdgeTypeID>>();
-    _pipeline->add<GetEdgeTypeIDStep>(edges, edgeTypeIDs);
 
     // Filter out edges that do not match the edge type ID
     const auto filterEdgeTypeID = _mem->alloc<ColumnConst<EdgeTypeID>>();

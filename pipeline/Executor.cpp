@@ -36,7 +36,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_OUT_EDGES_BY_LABEL] = ACTIVATE_PTR(ScanOutEdgesByLabelStep);
         _activateTbl[(uint64_t)PipelineOpcode::GET_OUT_EDGES] = ACTIVATE_PTR(GetOutEdgesStep);
         _activateTbl[(uint64_t)PipelineOpcode::GET_LABELSETID_STEP] = ACTIVATE_PTR(GetLabelSetIDStep);
-        _activateTbl[(uint64_t)PipelineOpcode::GET_EDGETYPEID_STEP] = ACTIVATE_PTR(GetEdgeTypeIDStep);
         _activateTbl[(uint64_t)PipelineOpcode::FILTER] = ACTIVATE_PTR(FilterStep);
         _activateTbl[(uint64_t)PipelineOpcode::TRANSFORM] = ACTIVATE_PTR(TransformStep);
         _activateTbl[(uint64_t)PipelineOpcode::COUNT] = ACTIVATE_PTR(CountStep);
@@ -60,7 +59,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_OUT_EDGES_BY_LABEL] = RETURN_PTR(ScanOutEdgesByLabelStep);
         _returnTbl[(uint64_t)PipelineOpcode::GET_OUT_EDGES] = RETURN_PTR(GetOutEdgesStep);
         _returnTbl[(uint64_t)PipelineOpcode::GET_LABELSETID_STEP] = RETURN_PTR(GetLabelSetIDStep);
-        _returnTbl[(uint64_t)PipelineOpcode::GET_EDGETYPEID_STEP] = RETURN_PTR(GetEdgeTypeIDStep);
         _returnTbl[(uint64_t)PipelineOpcode::FILTER] = RETURN_PTR(FilterStep);
         _returnTbl[(uint64_t)PipelineOpcode::TRANSFORM] = RETURN_PTR(TransformStep);
         _returnTbl[(uint64_t)PipelineOpcode::COUNT] = RETURN_PTR(CountStep);
@@ -124,7 +122,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(ScanOutEdgesByLabelStep)
     ACTIVATE_STEP(GetOutEdgesStep)
     ACTIVATE_STEP(GetLabelSetIDStep)
-    ACTIVATE_STEP(GetEdgeTypeIDStep)
     ACTIVATE_STEP(FilterStep)
     ACTIVATE_STEP(TransformStep)
     ACTIVATE_STEP(CountStep)
@@ -147,7 +144,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(ScanOutEdgesByLabelStep)
     RETURN_STEP(GetOutEdgesStep)
     RETURN_STEP(GetLabelSetIDStep)
-    RETURN_STEP(GetEdgeTypeIDStep)
     RETURN_STEP(FilterStep)
     RETURN_STEP(TransformStep)
     RETURN_STEP(CountStep)

@@ -122,14 +122,6 @@ PipelineStep::PipelineStep(GetLabelSetIDStep::Tag,
 {
 }
 
-PipelineStep::PipelineStep(GetEdgeTypeIDStep::Tag,
-                           const ColumnIDs* edgeIDs,
-                           ColumnVector<EdgeTypeID>* edgeTypeIDs)
-    : _opcode(PipelineOpcode::GET_EDGETYPEID_STEP),
-    _impl(std::in_place_type<GetEdgeTypeIDStep>, edgeIDs, edgeTypeIDs)
-{
-}
-
 PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
     : _opcode(PipelineOpcode::LOAD_GRAPH),
     _impl(std::in_place_type<LoadGraphStep>, graphName)
