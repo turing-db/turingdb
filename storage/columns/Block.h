@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "columns/Column.h"
+
 namespace db {
 
 class Column;
@@ -28,11 +30,13 @@ public:
 
     void clear();
 
-    void addColumn(Column* col);
-    void append(const Block& other);
-    
-private:
+    void addColumn(Column *col);
+    void append(const Block &other);
+
+    size_t getBlockRowCount() const;
+
+  private:
     Columns _columns;
 };
 
-}
+} // namespace db

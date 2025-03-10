@@ -27,6 +27,15 @@ void Block::addColumn(Column* col) {
     _columns.push_back(col);
 }
 
-void Block::append(const Block& other) {
-    std::copy(other._columns.begin(), other._columns.end(), std::back_inserter(_columns));
+void Block::append(const Block &other) {
+    std::copy(other._columns.begin(), other._columns.end(),
+              std::back_inserter(_columns));
+}
+
+size_t Block::getBlockRowCount() const {
+    size_t rowCount = 0;
+    for (const Column *column : _columns) {
+        rowCount = std::max(rowCount, column->size());
+    }
+    return rowCount;
 }
