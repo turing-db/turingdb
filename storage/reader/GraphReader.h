@@ -34,7 +34,7 @@ public:
     [[nodiscard]] size_t getNodeCount() const;
     [[nodiscard]] size_t getEdgeCount() const;
     [[nodiscard]] const GraphView& getView() const { return _view; }
-    [[nodiscard]] DataPartSpan dataparts() const { return _view._dataparts; }
+    [[nodiscard]] DataPartSpan dataparts() const { return _view.dataparts(); }
     [[nodiscard]] const EdgeRecord* getEdge(EntityID edgeID) const;
     [[nodiscard]] LabelSetID getNodeLabelSetID(EntityID nodeID) const;
     [[nodiscard]] size_t getNodeCountMatchingLabelset(const LabelSet& labelset) const;

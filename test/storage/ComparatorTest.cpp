@@ -4,6 +4,7 @@
 
 #include "Graph.h"
 #include "reader/GraphReader.h"
+#include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "comparators/DataPartComparator.h"
 #include "JobSystem.h"
@@ -42,28 +43,29 @@ protected:
         auto has = edgetypes.getOrCreate("HasObject");
         auto knows = edgetypes.getOrCreate("Knows");
 
-        auto change = graph->newPartWriter();
-        auto p1 = change->addNode(LabelSet::fromList({person}));
-        auto p2 = change->addNode(LabelSet::fromList({person, officer}));
-        auto o1 = change->addNode(LabelSet::fromList({object}));
-        auto o2 = change->addNode(LabelSet::fromList({object}));
-        change->addNodeProperty<types::String>(p1, name._id, "John");
-        change->addNodeProperty<types::String>(p2, name._id, "Jane");
-        change->addNodeProperty<types::UInt64>(p1, age._id, 32);
-        change->addNodeProperty<types::UInt64>(p2, age._id, 41);
-        change->addNodeProperty<types::String>(o1, desc._id, "Badge");
-        change->addNodeProperty<types::String>(o2, desc._id, "Uniform");
+        auto commitBuilder = graph->prepareCommit();
+        auto& builder = commitBuilder->newBuilder();
+        auto p1 = builder.addNode(LabelSet::fromList({person}));
+        auto p2 = builder.addNode(LabelSet::fromList({person, officer}));
+        auto o1 = builder.addNode(LabelSet::fromList({object}));
+        auto o2 = builder.addNode(LabelSet::fromList({object}));
+        builder.addNodeProperty<types::String>(p1, name._id, "John");
+        builder.addNodeProperty<types::String>(p2, name._id, "Jane");
+        builder.addNodeProperty<types::UInt64>(p1, age._id, 32);
+        builder.addNodeProperty<types::UInt64>(p2, age._id, 41);
+        builder.addNodeProperty<types::String>(o1, desc._id, "Badge");
+        builder.addNodeProperty<types::String>(o2, desc._id, "Uniform");
 
-        auto h2 = change->addEdge(has, p2, o1);   // Jane has badge
-        auto h3 = change->addEdge(has, p2, o2);   // Jane has uniform
-        auto k1 = change->addEdge(knows, p1, p2); // John knows Jane
-        auto k2 = change->addEdge(knows, p2, p1); // Jane knows John
-        change->addEdgeProperty<types::UInt64>(h2, since._id, 6);
-        change->addEdgeProperty<types::UInt64>(h3, since._id, 6);
-        change->addEdgeProperty<types::UInt64>(k1, since._id, 3);
-        change->addEdgeProperty<types::UInt64>(k2, since._id, 3);
+        auto h2 = builder.addEdge(has, p2, o1);   // Jane has badge
+        auto h3 = builder.addEdge(has, p2, o2);   // Jane has uniform
+        auto k1 = builder.addEdge(knows, p1, p2); // John knows Jane
+        auto k2 = builder.addEdge(knows, p2, p1); // Jane knows John
+        builder.addEdgeProperty<types::UInt64>(h2, since._id, 6);
+        builder.addEdgeProperty<types::UInt64>(h3, since._id, 6);
+        builder.addEdgeProperty<types::UInt64>(k1, since._id, 3);
+        builder.addEdgeProperty<types::UInt64>(k2, since._id, 3);
 
-        change->commit(*_jobSystem);
+        graph->commit(std::move(commitBuilder), *_jobSystem);
 
         return graph;
     }
@@ -87,34 +89,35 @@ protected:
         auto has = edgetypes.getOrCreate("HasObject");
         auto knows = edgetypes.getOrCreate("Knows");
 
-        auto change = graph->newPartWriter();
-        auto p1 = change->addNode(LabelSet::fromList({person}));
-        auto p2 = change->addNode(LabelSet::fromList({person, officer}));
-        auto o1 = change->addNode(LabelSet::fromList({object}));
-        auto o2 = change->addNode(LabelSet::fromList({object}));
-        auto o3 = change->addNode(LabelSet::fromList({object}));
-        change->addNodeProperty<types::String>(p1, name._id, "John");
-        change->addNodeProperty<types::String>(p2, name._id, "Jane");
-        change->addNodeProperty<types::UInt64>(p1, age._id, 32);
-        change->addNodeProperty<types::UInt64>(p2, age._id, 41);
-        change->addNodeProperty<types::String>(o1, desc._id, "Badge");
-        change->addNodeProperty<types::String>(o2, desc._id, "Uniform");
-        change->addNodeProperty<types::String>(o3, desc._id, "Car");
+        auto commitBuilder = graph->prepareCommit();
+        auto& builder = commitBuilder->newBuilder();
+        auto p1 = builder.addNode(LabelSet::fromList({person}));
+        auto p2 = builder.addNode(LabelSet::fromList({person, officer}));
+        auto o1 = builder.addNode(LabelSet::fromList({object}));
+        auto o2 = builder.addNode(LabelSet::fromList({object}));
+        auto o3 = builder.addNode(LabelSet::fromList({object}));
+        builder.addNodeProperty<types::String>(p1, name._id, "John");
+        builder.addNodeProperty<types::String>(p2, name._id, "Jane");
+        builder.addNodeProperty<types::UInt64>(p1, age._id, 32);
+        builder.addNodeProperty<types::UInt64>(p2, age._id, 41);
+        builder.addNodeProperty<types::String>(o1, desc._id, "Badge");
+        builder.addNodeProperty<types::String>(o2, desc._id, "Uniform");
+        builder.addNodeProperty<types::String>(o3, desc._id, "Car");
 
-        auto h1 = change->addEdge(has, p1, o3);   // John has car
-        auto h2 = change->addEdge(has, p2, o1);   // Jane has badge
-        auto h3 = change->addEdge(has, p2, o2);   // Jane has uniform
-        auto h4 = change->addEdge(has, p2, o3);   // Jane has car
-        auto k1 = change->addEdge(knows, p1, p2); // John knows Jane
-        auto k2 = change->addEdge(knows, p2, p1); // Jane knows John
-        change->addEdgeProperty<types::UInt64>(h1, since._id, 4);
-        change->addEdgeProperty<types::UInt64>(h2, since._id, 6);
-        change->addEdgeProperty<types::UInt64>(h3, since._id, 6);
-        change->addEdgeProperty<types::UInt64>(h4, since._id, 2);
-        change->addEdgeProperty<types::UInt64>(k1, since._id, 3);
-        change->addEdgeProperty<types::UInt64>(k2, since._id, 3);
+        auto h1 = builder.addEdge(has, p1, o3);   // John has car
+        auto h2 = builder.addEdge(has, p2, o1);   // Jane has badge
+        auto h3 = builder.addEdge(has, p2, o2);   // Jane has uniform
+        auto h4 = builder.addEdge(has, p2, o3);   // Jane has car
+        auto k1 = builder.addEdge(knows, p1, p2); // John knows Jane
+        auto k2 = builder.addEdge(knows, p2, p1); // Jane knows John
+        builder.addEdgeProperty<types::UInt64>(h1, since._id, 4);
+        builder.addEdgeProperty<types::UInt64>(h2, since._id, 6);
+        builder.addEdgeProperty<types::UInt64>(h3, since._id, 6);
+        builder.addEdgeProperty<types::UInt64>(h4, since._id, 2);
+        builder.addEdgeProperty<types::UInt64>(k1, since._id, 3);
+        builder.addEdgeProperty<types::UInt64>(k2, since._id, 3);
 
-        change->commit(*_jobSystem);
+        graph->commit(std::move(commitBuilder), *_jobSystem);
 
         return graph;
     }

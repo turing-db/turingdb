@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Graph.h"
 #include "views/GraphView.h"
 #include "PartIterator.h"
 

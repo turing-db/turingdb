@@ -6,6 +6,7 @@
 
 #include "DataPart.h"
 #include "EntityID.h"
+#include "versioning/CommitHash.h"
 
 namespace db {
 
@@ -15,7 +16,8 @@ class ConcurrentWriter;
 class DataPartBuilder;
 class PartIterator;
 class GraphMetadata;
-class DataPartManager;
+class CommitBuilder;
+class VersionController;
 class GraphReader;
 class GraphLoader;
 
@@ -29,8 +31,9 @@ public:
     };
 
     Graph();
-    explicit Graph(const std::string& name);
     ~Graph();
+
+    explicit Graph(const std::string& name);
 
     Graph(const Graph&) = delete;
     Graph(Graph&&) = delete;
@@ -39,12 +42,13 @@ public:
 
     const std::string& getName() const { return _graphName; }
 
-    [[nodiscard]] GraphView view();
-    [[nodiscard]] GraphView view() const;
+    [[nodiscard]] GraphView view(CommitHash hash = CommitHash::head());
+    [[nodiscard]] GraphView view(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] GraphReader read();
     [[nodiscard]] GraphReader read() const;
-    [[nodiscard]] std::unique_ptr<DataPartBuilder> newPartWriter();
-    [[nodiscard]] std::unique_ptr<ConcurrentWriter> newConcurrentPartWriter();
+
+    [[nodiscard]] std::unique_ptr<CommitBuilder> prepareCommit() const;
+    void commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
 
     [[nodiscard]] const GraphMetadata* getMetadata() const { return _metadata.get(); }
     [[nodiscard]] GraphMetadata* getMetadata() { return _metadata.get(); }
@@ -56,6 +60,7 @@ private:
     friend PartIterator;
     friend DataPartBuilder;
     friend ConcurrentWriter;
+    friend CommitBuilder;
     friend GraphLoader;
 
     std::string _graphName;
@@ -66,7 +71,7 @@ private:
 
     mutable std::shared_mutex _mainLock;
 
-    std::unique_ptr<DataPartManager> _parts;
+    std::unique_ptr<VersionController> _versionController;
 
     EntityIDs allocIDs();
     EntityIDs allocIDRange(size_t nodeCount, size_t edgeCount);

@@ -4,6 +4,7 @@
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "GraphMetadata.h"
+#include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -41,193 +42,197 @@ protected:
         _graph = new Graph();
 
         /* FIRST BUFFER */
-        std::unique_ptr<DataPartBuilder> builder1 = _graph->newPartWriter();
+        auto commitBuilder1 = _graph->prepareCommit();
+        auto& builder1 = commitBuilder1->newBuilder();
         PropertyTypeID uint64ID = 0;
         PropertyTypeID stringID = 1;
 
         {
             // Node 0
-            const EntityID tmpID = builder1->addNode(LabelSet::fromList({0}));
-            builder1->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder1.addNode(LabelSet::fromList({0}));
+            builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder1->addNodeProperty<types::String>(
+            builder1.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Node 1
-            const EntityID tmpID = builder1->addNode(LabelSet::fromList({0}));
-            builder1->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder1.addNode(LabelSet::fromList({0}));
+            builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder1->addNodeProperty<types::String>(
+            builder1.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Node 2
-            const EntityID tmpID = builder1->addNode(LabelSet::fromList({1}));
-            builder1->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder1.addNode(LabelSet::fromList({1}));
+            builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // Edge 001
-            const EdgeRecord& edge = builder1->addEdge(_edgeTypeID, 0, 1);
-            builder1->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder1.addEdge(_edgeTypeID, 0, 1);
+            builder1.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder1->addEdgeProperty<types::String>(
+            builder1.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         {
             // Edge 102
-            const EdgeRecord& edge = builder1->addEdge(_edgeTypeID, 0, 2);
-            builder1->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder1.addEdge(_edgeTypeID, 0, 2);
+            builder1.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder1->addEdgeProperty<types::String>(
+            builder1.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         /* SECOND BUFFER (Concurrent to the first one) */
-        std::unique_ptr<DataPartBuilder> builder2 = _graph->newPartWriter();
+        auto commitBuilder2 = _graph->prepareCommit();
+        auto& builder2 = commitBuilder2->newBuilder();
 
         {
             // Node 4
-            const EntityID tmpID = builder2->addNode(LabelSet::fromList({0, 1}));
-            builder2->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder2.addNode(LabelSet::fromList({0, 1}));
+            builder2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder2->addNodeProperty<types::String>(
+            builder2.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Node 3
-            const EntityID tmpID = builder2->addNode(LabelSet::fromList({1}));
-            builder2->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder2.addNode(LabelSet::fromList({1}));
+            builder2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
 
         {
             // Edge 343
-            const EdgeRecord& edge = builder2->addEdge(_edgeTypeID, 0, 1);
-            builder2->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder2.addEdge(_edgeTypeID, 0, 1);
+            builder2.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder2->addEdgeProperty<types::String>(
+            builder2.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         {
             // Edge 443
-            const EdgeRecord& edge = builder2->addEdge(_edgeTypeID, 0, 1);
-            builder2->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder2.addEdge(_edgeTypeID, 0, 1);
+            builder2.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder2->addEdgeProperty<types::String>(
+            builder2.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         {
             // Edge 234
-            const EdgeRecord& edge = builder2->addEdge(_edgeTypeID, 1, 0);
-            builder2->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder2.addEdge(_edgeTypeID, 1, 0);
+            builder2.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
         }
 
         // PUSH DATAPARTS
         spdlog::info("Pushing 1");
-        builder1->commit(*_jobSystem);
+        _graph->commit(std::move(commitBuilder1), *_jobSystem);
 
         spdlog::info("Pushing 2");
-        builder2->commit(*_jobSystem);
+        _graph->commit(std::move(commitBuilder2), *_jobSystem);
 
         /* THIRD BUFFER (Empty) */
-        std::unique_ptr<DataPartBuilder> builder3 = _graph->newPartWriter();
+        auto commitBuilder3 = _graph->prepareCommit();
+        [[maybe_unused]] auto& builder3 = commitBuilder3->newBuilder();
+        _graph->commit(std::move(commitBuilder3), *_jobSystem);
         spdlog::info("Pushing 3");
-        builder3->commit(*_jobSystem);
 
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
-        std::unique_ptr<DataPartBuilder> builder4 = _graph->newPartWriter();
+        auto commitBuilder4 = _graph->prepareCommit();
+        auto& builder4 = commitBuilder4->newBuilder();
 
         {
             // Node 8
-            const EntityID tmpID = builder4->addNode(LabelSet::fromList({0, 1}));
-            builder4->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder4.addNode(LabelSet::fromList({0, 1}));
+            builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder4->addNodeProperty<types::String>(
+            builder4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Node 5
-            const EntityID tmpID = builder4->addNode(LabelSet::fromList({0}));
-            builder4->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder4.addNode(LabelSet::fromList({0}));
+            builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder4->addNodeProperty<types::String>(
+            builder4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Node 6
-            const EntityID tmpID = builder4->addNode(LabelSet::fromList({1}));
-            builder4->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder4.addNode(LabelSet::fromList({1}));
+            builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder4->addNodeProperty<types::String>(
+            builder4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Node 7
-            const EntityID tmpID = builder4->addNode(LabelSet::fromList({1}));
-            builder4->addNodeProperty<types::UInt64>(
+            const EntityID tmpID = builder4.addNode(LabelSet::fromList({1}));
+            builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
-            builder4->addNodeProperty<types::String>(
+            builder4.addNodeProperty<types::String>(
                 tmpID, stringID, "TmpID" + std::to_string(tmpID));
         }
 
         {
             // Edge 654
-            const EdgeRecord& edge = builder4->addEdge(_edgeTypeID, 6, 4);
-            builder4->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder4.addEdge(_edgeTypeID, 6, 4);
+            builder4.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder4->addEdgeProperty<types::String>(
+            builder4.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         {
             // Edge 757
-            const EdgeRecord& edge = builder4->addEdge(_edgeTypeID, 6, 8);
-            builder4->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder4.addEdge(_edgeTypeID, 6, 8);
+            builder4.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder4->addEdgeProperty<types::String>(
+            builder4.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         {
             // Edge 867
-            const EdgeRecord& edge = builder4->addEdge(_edgeTypeID, 7, 8);
-            builder4->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder4.addEdge(_edgeTypeID, 7, 8);
+            builder4.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder4->addEdgeProperty<types::String>(
+            builder4.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
         {
             // Edge 528
-            const EdgeRecord& edge = builder4->addEdge(_edgeTypeID, 2, 5);
-            builder4->addEdgeProperty<types::UInt64>(
+            const EdgeRecord& edge = builder4.addEdge(_edgeTypeID, 2, 5);
+            builder4.addEdgeProperty<types::UInt64>(
                 edge, uint64ID, edge._edgeID.getValue());
-            builder4->addEdgeProperty<types::String>(
+            builder4.addEdgeProperty<types::String>(
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
-        builder4->addNodeProperty<types::String>(
+        builder4.addNodeProperty<types::String>(
             2, stringID, "TmpID2 patch");
 
         const EdgeRecord* edgeToPatch = _graph->view().read().getEdge(2);
-        builder4->addEdgeProperty<types::String>(
+        builder4.addEdgeProperty<types::String>(
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         spdlog::info("Pushing 4");
-        builder4->commit(*_jobSystem);
+        _graph->commit(std::move(commitBuilder4), *_jobSystem);
     }
 
     void TearDown() override {

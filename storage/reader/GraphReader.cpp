@@ -1,5 +1,6 @@
 #include "GraphReader.h"
 
+#include "DataPart.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
@@ -11,7 +12,7 @@ using namespace db;
 
 size_t GraphReader::getNodeCount() const {
     size_t count = 0;
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         count += part->nodes().getAll()._count;
     }
     return count;
@@ -19,14 +20,14 @@ size_t GraphReader::getNodeCount() const {
 
 size_t GraphReader::getEdgeCount() const {
     size_t count = 0;
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         count += part->edges().getOuts().size();
     }
     return count;
 }
 
 LabelSetID GraphReader::getNodeLabelSetID(EntityID nodeID) const {
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         if (part->hasNode(nodeID)) {
             return part->nodes().getNodeLabelSet(nodeID);
         }
@@ -44,7 +45,7 @@ const LabelSet* GraphReader::getNodeLabelSet(EntityID nodeID) const {
 }
 
 const EdgeRecord* GraphReader::getEdge(EntityID edgeID) const {
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         if (part->hasEdge(edgeID)) {
             return &part->edges().get(edgeID);
         }
@@ -57,7 +58,7 @@ size_t GraphReader::getNodeCountMatchingLabelset(const LabelSet& labelset) const
 
     auto it = matchLabelSetIDs(&labelset);
     for (; it.isValid(); it.next()) {
-        for (const auto& part : _view._dataparts) {
+        for (const auto& part : _view.dataparts()) {
             const auto& nodes = part->nodes();
             const LabelSetID id = it.get();
             if (!nodes.hasLabelSet(id)) {
@@ -72,12 +73,12 @@ size_t GraphReader::getNodeCountMatchingLabelset(const LabelSet& labelset) const
 }
 
 size_t GraphReader::getDatapartCount() const {
-    return _view._dataparts.size();
+    return _view.dataparts().size();
 }
 
 size_t GraphReader::getNodePropertyCount(PropertyTypeID ptID) const {
     size_t count = 0;
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         const auto& props = part->nodeProperties();
         if (props.hasPropertyType(ptID)) {
             count += props.count(ptID);
@@ -88,7 +89,7 @@ size_t GraphReader::getNodePropertyCount(PropertyTypeID ptID) const {
 
 size_t GraphReader::getNodePropertyCount(size_t datapartIndex,
                                       PropertyTypeID ptID) const {
-    const auto& props = _view._dataparts[datapartIndex]->nodeProperties();
+    const auto& props = _view.dataparts()[datapartIndex]->nodeProperties();
     if (props.hasPropertyType(ptID)) {
         return props.count(ptID);
     }
@@ -99,7 +100,7 @@ EntityID GraphReader::getFinalNodeID(EntityID tmpID) const {
     // TODO Update with a new Unique-Internal ID System.
     // This implementation does not work if multiple nodes
     // have the same temporary ID
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         const auto& map = part->_tmpToFinalNodeIDs;
         auto it = map.find(tmpID);
         if (it != map.end()) {
@@ -226,7 +227,7 @@ EdgeView GraphReader::getEdgeView(EntityID id) const {
 }
 
 EdgeTypeID GraphReader::getEdgeTypeID(EntityID edgeID) const {
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         const auto* edge = part->edges().tryGet(edgeID);
         if (edge) {
             return edge->_edgeTypeID;
@@ -240,7 +241,7 @@ MatchLabelSetIterator GraphReader::matchLabelSetIDs(const LabelSet* labelSet) co
 }
 
 bool GraphReader::nodeHasProperty(PropertyTypeID ptID, EntityID nodeID) const {
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         if (part->nodeProperties().has(ptID, nodeID)) {
             return true;
         }
@@ -251,7 +252,7 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, EntityID nodeID) const {
 
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, EntityID nodeID) const {
-    for (const auto& part : _view._dataparts) {
+    for (const auto& part : _view.dataparts()) {
         const auto* p = part->nodeProperties().tryGet<T>(ptID, nodeID);
         if (p) {
             return p;

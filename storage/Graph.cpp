@@ -1,37 +1,39 @@
 #include "Graph.h"
 
 #include "GraphMetadata.h"
-#include "DataPartManager.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
-#include "writers/ConcurrentWriter.h"
 #include "writers/DataPartBuilder.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/Commit.h"
+#include "versioning/VersionController.h"
 
 using namespace db;
 
 Graph::Graph()
     : _graphName("default"),
       _metadata(new GraphMetadata()),
-      _parts(std::make_unique<DataPartManager>())
-{
+      _versionController(new VersionController) {
+    _versionController->initialize(this);
 }
 
 Graph::Graph(const std::string& name)
     : _graphName(name),
       _metadata(new GraphMetadata()),
-      _parts(std::make_unique<DataPartManager>())
+      _versionController(new VersionController)
 {
+    _versionController->initialize(this);
 }
 
 Graph::~Graph() {
 }
 
-GraphView Graph::view() {
-    return GraphView(_parts->getView(), *_metadata);
+GraphView Graph::view(CommitHash hash) {
+    return _versionController->view(hash);
 }
 
-GraphView Graph::view() const {
-    return GraphView(_parts->getView(), *_metadata);
+GraphView Graph::view(CommitHash hash) const {
+    return _versionController->view(hash);
 }
 
 GraphReader Graph::read() {
@@ -42,14 +44,12 @@ GraphReader Graph::read() const {
     return GraphReader(view());
 }
 
-std::unique_ptr<DataPartBuilder> Graph::newPartWriter() {
-    const auto [firstNodeID, firstEdgeID] = getNextFreeIDs();
-    return std::make_unique<DataPartBuilder>(firstNodeID, firstEdgeID, this);
+std::unique_ptr<CommitBuilder> Graph::prepareCommit() const {
+    return view().prepareCommit();
 }
 
-std::unique_ptr<ConcurrentWriter> Graph::newConcurrentPartWriter() {
-    const auto [firstNodeID, firstEdgeID] = getNextFreeIDs();
-    return std::make_unique<ConcurrentWriter>(firstNodeID, firstEdgeID, this);
+void Graph::commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem) {
+    _versionController->commit(commitBuilder->build(*this, jobSystem));
 }
 
 Graph::EntityIDs Graph::getNextFreeIDs() const {

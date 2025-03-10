@@ -317,11 +317,11 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
     if (!args._writeFilesOnly) {
         {
             TimerStat t {"Build and push DataPart for nodes"};
-            parser.pushDataParts(*graph, jobSystem);
+            parser.commit(*graph, jobSystem);
         }
     }
 
-    parser.resetGraphView();
+    parser.newCommit();
 
     // Query and parse edges (and write json files)
     auto edgeQueries = manager.edgesQueries(stats.edgeCount, edgeCountPerQuery);
@@ -400,7 +400,7 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
 
     if (!args._writeFilesOnly) {
         TimerStat t {"Build and push DataPart for edges"};
-        parser.pushDataParts(*graph, jobSystem);
+        parser.commit(*graph, jobSystem);
     }
 
     return true;
@@ -593,10 +593,10 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
     jobs.wait();
     {
         TimerStat t {"Build and push DataPart for nodes"};
-        parser.pushDataParts(*graph, jobSystem);
+        parser.commit(*graph, jobSystem);
     }
 
-    parser.resetGraphView();
+    parser.newCommit();
 
     // Query and parse edges
     const size_t edgeSteps = stats.edgeCount / edgeCountPerFile
@@ -646,7 +646,7 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
 
     {
         TimerStat t {"Build and push DataPart for edges"};
-        parser.pushDataParts(*graph, jobSystem);
+        parser.commit(*graph, jobSystem);
     }
 
     return true;

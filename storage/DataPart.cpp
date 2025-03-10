@@ -9,6 +9,7 @@
 #include "EdgeContainer.h"
 #include "GraphMetadata.h"
 #include "indexers/EdgeIndexer.h"
+#include "spdlog/spdlog.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
@@ -44,6 +45,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     const EntityID firstTmpNodeID = builder.firstNodeID();
     const EntityID firstTmpEdgeID = builder.firstEdgeID();
 
+    spdlog::info("** Loading datapart with {} nodes and {} edges", builder.nodeCount(), builder.edgeCount());
     // Storing unknown node labelsets
     for (auto& [nodeID, labelset] : patchNodeLabelSets) {
         labelset = reader.getNodeLabelSetID(nodeID);
@@ -61,6 +63,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
                  return id1 < id2;
              });
 
+    spdlog::info("- Loading NodeContainer");
     _nodes = NodeContainer::create(_firstNodeID,
                                    metadata,
                                    coreNodeLabelSets);
@@ -87,6 +90,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         _nodeProperties->addIndexer(ptID);
     }
 
+    spdlog::info("- Loading node properties");
     for (const auto& [ptID, props] : *_nodeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
@@ -121,8 +125,10 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         });
     }
 
+    spdlog::info("- Waiting...");
     jobs.wait();
 
+    spdlog::info("- Loading Edge container");
     // EdgeContainer
     _edges = EdgeContainer::create(_firstNodeID,
                                    _firstEdgeID,
@@ -136,6 +142,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     const auto& tmpToFinalEdgeIDs = _edges->getTmpToFinalEdgeIDs();
 
+    spdlog::info("- Loading edge properties");
     for (const auto& [ptID, props] : *_edgeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
@@ -176,6 +183,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         });
     }
 
+    spdlog::info("- Loading edge indexer");
     // Edge indexer
     _edgeIndexer = EdgeIndexer::create(*_edges, *_nodes,
                                        builder.patchNodeEdgeDataCount(),
@@ -185,6 +193,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
                                        builder.getInPatchEdgeCount(),
                                        metadata);
 
+    spdlog::info("- Waiting...");
     jobs.wait();
 
     _initialized = true;

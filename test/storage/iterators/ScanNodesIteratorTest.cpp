@@ -6,6 +6,7 @@
 #include "columns/ColumnIDs.h"
 #include "iterators/ScanNodesIterator.h"
 #include "views/GraphView.h"
+#include "versioning/CommitBuilder.h"
 #include "reader/GraphReader.h"
 #include "GraphMetadata.h"
 #include "writers/DataPartBuilder.h"
@@ -46,8 +47,9 @@ TEST_F(ScanNodesIteratorTest, emptyDB) {
 
 TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     auto graph = std::make_unique<Graph>();
-    auto builder = graph->newPartWriter();
-    builder->commit(*_jobSystem);
+    auto commitBuilder = graph->prepareCommit();
+    [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
+    graph->commit(std::move(commitBuilder), *_jobSystem);
 
     const auto view = graph->view();
     const auto reader = view.read();
@@ -62,9 +64,10 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
 TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
     auto graph = std::make_unique<Graph>();
 
+    auto commitBuilder = graph->prepareCommit();
     for (auto i = 0; i < 3; i++) {
-        auto builder = graph->newPartWriter();
-        builder->commit(*_jobSystem);
+        [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
+        graph->commit(std::move(commitBuilder), *_jobSystem);
     }
 
     const auto view = graph->view();
@@ -85,13 +88,14 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
-        auto builder = graph->newPartWriter();
+        auto commitBuilder = graph->prepareCommit();
+        auto& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
-            builder->addNode(labelsetID);
+            builder.addNode(labelsetID);
         }
 
-        ASSERT_EQ(builder->nodeCount(), ChunkConfig::CHUNK_SIZE);
-        builder->commit(*_jobSystem);
+        ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
+        graph->commit(std::move(commitBuilder), *_jobSystem);
     }
 
     const auto view = graph->view();
@@ -130,14 +134,15 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     LabelSet labelset = LabelSet::fromList({0});
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
+    auto commitBuilder = graph->prepareCommit();
     for (auto i = 0; i < 8; i++) {
-        auto builder = graph->newPartWriter();
+        auto& builder = commitBuilder->newBuilder();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
-            builder->addNode(labelsetID);
+            builder.addNode(labelsetID);
         }
 
-        ASSERT_EQ(builder->nodeCount(), ChunkConfig::CHUNK_SIZE);
-        builder->commit(*_jobSystem);
+        ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
+        graph->commit(std::move(commitBuilder), *_jobSystem);
     }
 
     const auto view = graph->view();
@@ -182,11 +187,12 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
-        auto builder = graph->newPartWriter();
+        auto commitBuilder = graph->prepareCommit();
+        auto& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < nodeCount; i++) {
-            builder->addNode(labelsetID);
+            builder.addNode(labelsetID);
         }
-        builder->commit(*_jobSystem);
+        graph->commit(std::move(commitBuilder), *_jobSystem);
     }
 
     const auto view = graph->view();

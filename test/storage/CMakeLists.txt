@@ -19,7 +19,7 @@ add_storage_tests(test_storage_labelmap LabelMapTest.cpp)
 add_storage_tests(test_storage_nodecontainer NodeContainerTest.cpp)
 add_storage_tests(test_storage_edgecontainer EdgeContainerTest.cpp)
 add_storage_tests(test_storage_edgeindexer EdgeIndexerTest.cpp)
-add_storage_tests(test_storage_concurrent_writer ConcurrentWriterTest.cpp)
+#add_storage_tests(test_storage_concurrent_writer ConcurrentWriterTest.cpp)
 add_storage_tests(test_storage_comparator ComparatorTest.cpp)
 
 add_storage_tests(test_storage_iterator iterators/IteratorsTest.cpp)

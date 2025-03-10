@@ -38,8 +38,8 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
         return QueryStatus(QueryStatus::Status::GRAPH_NOT_FOUND);
     }
 
-    // Get view of the graph for the query
-    [[maybe_unused]] const GraphView view = graph->view();
+    // Open transaction
+    const GraphView view = graph->view();
 
     // Parsing query
     ASTContext astCtxt;

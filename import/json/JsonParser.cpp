@@ -4,6 +4,7 @@
 
 #include "Graph.h"
 #include "writers/DataPartBuilder.h"
+#include "versioning/CommitBuilder.h"
 #include "IDMapper.h"
 #include "Neo4j/EdgeParser.h"
 #include "Neo4j/EdgePropertyParser.h"
@@ -21,16 +22,17 @@ namespace db {
 JsonParser::JsonParser(Graph* graph)
     : _graph(graph),
       _view(graph->view()),
-      _writer(graph->newConcurrentPartWriter()),
+      _commitBuilder(graph->prepareCommit()),
       _graphMetadata(graph->getMetadata()),
-      _nodeIDMapper(new IDMapper)
-{
+      _nodeIDMapper(new IDMapper) {
 }
 
 JsonParser::~JsonParser() = default;
 
-void JsonParser::resetGraphView() {
+void JsonParser::newCommit() {
     _view = _graph->view();
+    _commitBuilder = _graph->prepareCommit();
+    _graphMetadata = _graph->getMetadata();
 }
 
 GraphStats JsonParser::parseStats(const std::string& data) {
@@ -104,12 +106,12 @@ bool JsonParser::parseEdges(const std::string& data, DataPartBuilder& buf) {
 }
 
 DataPartBuilder& JsonParser::newDataBuffer(size_t nodeCount, size_t edgeCount) {
-    return _writer->newBuilder(nodeCount, edgeCount);
+    return _commitBuilder->newBuilder(nodeCount, edgeCount);
 }
 
-void JsonParser::pushDataParts(Graph& graph, JobSystem& jobSystem) {    
-    TimerStat timer("Pushing dataparts");
-    _writer->commitAll(jobSystem);
+void JsonParser::commit(Graph& graph, JobSystem& jobSystem) {
+    TimerStat timer("Committing dataparts");
+    _graph->commit(std::move(_commitBuilder), jobSystem);
 }
 
 }

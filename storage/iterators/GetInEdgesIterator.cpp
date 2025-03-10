@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "indexers/EdgeIndexer.h"
+#include "DataPart.h"
 #include "IteratorUtils.h"
 
 namespace db {

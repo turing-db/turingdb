@@ -1,7 +1,6 @@
 #include "GraphLoader.h"
 
 #include "DataPartLoader.h"
-#include "DataPartManager.h"
 #include "GraphInfoLoader.h"
 #include "GraphMetadataLoader.h"
 #include "Graph.h"
@@ -50,46 +49,46 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
         return DumpError::result(DumpErrorType::CANNOT_LIST_DATAPARTS, files.error());
     }
 
-    static constexpr std::string_view DATAPART_FOLDER_PREFIX = "datapart-";
+    // static constexpr std::string_view DATAPART_FOLDER_PREFIX = "datapart-";
 
-    size_t nodeCount = 0;
-    size_t edgeCount = 0;
+    // size_t nodeCount = 0;
+    // size_t edgeCount = 0;
 
-    std::map<uint64_t, std::unique_ptr<DataPart>> dataparts;
-    for (auto& child : files.value()) {
-        const auto& childStr = child.get();
+    // std::map<uint64_t, std::unique_ptr<DataPart>> dataparts;
+    // for (auto& child : files.value()) {
+    //     const auto& childStr = child.get();
 
-        if (childStr.find(DATAPART_FOLDER_PREFIX) == std::string::npos) {
-            // Not a datapart folder
-            continue;
-        }
+    //     if (childStr.find(DATAPART_FOLDER_PREFIX) == std::string::npos) {
+    //         // Not a datapart folder
+    //         continue;
+    //     }
 
-        const auto partIndex = GraphDumpHelper::getIntegerSuffix(
-            childStr,
-            DATAPART_FOLDER_PREFIX.size());
+    //     const auto partIndex = GraphDumpHelper::getIntegerSuffix(
+    //         childStr,
+    //         DATAPART_FOLDER_PREFIX.size());
 
-        if (!partIndex) {
-            return partIndex.get_unexpected();
-        }
+    //     if (!partIndex) {
+    //         return partIndex.get_unexpected();
+    //     }
 
-        child = path / child.get();
+    //     child = path / child.get();
 
-        auto res = DataPartLoader::load(child, *graph->getMetadata());
+    //     auto res = DataPartLoader::load(child, *graph->getMetadata());
 
-        if (!res) {
-            return res.get_unexpected();
-        }
+    //     if (!res) {
+    //         return res.get_unexpected();
+    //     }
 
-        nodeCount += (*res)->getNodeCount();
-        edgeCount += (*res)->getEdgeCount();
-        dataparts.emplace(partIndex.value(), std::move(res.value()));
-    }
+    //     nodeCount += (*res)->getNodeCount();
+    //     edgeCount += (*res)->getEdgeCount();
+    //     dataparts.emplace(partIndex.value(), std::move(res.value()));
+    // }
 
-    for (auto& [partIndex, part] : dataparts) {
-        graph->_parts->store(std::move(part));
-    }
+    // for (auto& [partIndex, part] : dataparts) {
+    //     graph->_parts->store(std::move(part));
+    // }
 
-    graph->allocIDRange(nodeCount, edgeCount);
+    // graph->allocIDRange(nodeCount, edgeCount);
 
     return {};
 }
