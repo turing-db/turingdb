@@ -1,14 +1,14 @@
 #include "ASTContext.h"
 
-#include "QueryCommand.h"
-#include "SelectField.h"
+#include "Expr.h"
+#include "ExprConstraint.h"
 #include "FromTarget.h"
 #include "PathPattern.h"
-#include "Expr.h"
+#include "QueryCommand.h"
+#include "ReturnField.h"
+#include "ReturnProjection.h"
 #include "TypeConstraint.h"
-#include "ExprConstraint.h"
 #include "VarDecl.h"
-#include "SelectProjection.h"
 
 using namespace db;
 
@@ -21,7 +21,7 @@ ASTContext::~ASTContext() {
         delete cmd;
     }
 
-    for (SelectField* field : _selectFields) {
+    for (ReturnField* field : _returnFields) {
         delete field;
     }
 
@@ -53,7 +53,7 @@ ASTContext::~ASTContext() {
         delete decl;
     }
 
-    for (SelectProjection* proj : _selectProjections) {
+    for (ReturnProjection* proj : _returnProjections) {
         delete proj;
     }
 }
@@ -62,8 +62,8 @@ void ASTContext::addCmd(QueryCommand* cmd) {
     _cmds.push_back(cmd);
 }
 
-void ASTContext::addSelectField(SelectField* field) {
-    _selectFields.push_back(field);
+void ASTContext::addReturnField(ReturnField* field) {
+    _returnFields.push_back(field);
 }
 
 void ASTContext::addFromTarget(FromTarget* target) {
@@ -94,6 +94,6 @@ void ASTContext::addVarDecl(VarDecl* decl) {
     _varDecls.push_back(decl);
 }
 
-void ASTContext::addSelectProjection(SelectProjection* proj) {
-    _selectProjections.push_back(proj);
+void ASTContext::addReturnProjection(ReturnProjection* proj) {
+    _returnProjections.push_back(proj);
 }

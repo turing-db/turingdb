@@ -7,11 +7,11 @@ namespace db {
 class ASTContext;
 class VarDecl;
 
-class SelectField {
+class ReturnField {
 public:
     friend ASTContext;
 
-    static SelectField* create(ASTContext* ctxt);
+    static ReturnField* create(ASTContext* ctxt);
 
     void setAll(bool isAll) { _isAll = isAll; }
     bool isAll() const { return _isAll; }
@@ -31,8 +31,8 @@ private:
     std::string _memberName;
     VarDecl* _decl {nullptr};
 
-    SelectField();
-    ~SelectField();
+    ReturnField();
+    ~ReturnField();
 };
 
 }

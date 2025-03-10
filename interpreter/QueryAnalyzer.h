@@ -7,7 +7,7 @@ namespace db {
 
 class ASTContext;
 class QueryCommand;
-class SelectCommand;
+class ReturnCommand;
 class CreateGraphCommand;
 class DeclContext;
 class EntityPattern;
@@ -25,11 +25,10 @@ private:
     ASTContext* _ctxt {nullptr};
     uint64_t _nextNewVarID {0};
 
-    bool analyzeSelect(SelectCommand* cmd);
+    bool analyzeReturn(ReturnCommand* cmd);
     bool analyzeCreateGraph(CreateGraphCommand* cmd);
     bool analyzeLoadGraph(LoadGraphCommand* cmd);
-    bool analyzeEntityPattern(DeclContext* declContext,
-                              EntityPattern* entity);
+    bool analyzeEntityPattern(DeclContext* declContext, EntityPattern* entity);
     bool analyzeExplain(ExplainCommand* cmd);
     std::string createVarName();
 };

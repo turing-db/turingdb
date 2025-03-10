@@ -17,7 +17,7 @@ namespace db {
 class YScanner;
 class ASTContext;
 class QueryCommand;
-class SelectField;
+class ReturnField;
 class FromTarget;
 class PathPattern;
 class EntityPattern;
@@ -26,7 +26,7 @@ class ExprConstraint;
 class VarExpr;
 class VarList;
 class Expr;
-class SelectProjection;
+class ReturnProjection;
 }
 
 }
@@ -39,13 +39,13 @@ class SelectProjection;
 
 #include "ASTContext.h"
 #include "QueryCommand.h"
-#include "SelectField.h"
+#include "ReturnField.h"
 #include "FromTarget.h"
 #include "PathPattern.h"
 #include "Expr.h"
 #include "TypeConstraint.h"
 #include "ExprConstraint.h"
-#include "SelectProjection.h"
+#include "ReturnProjection.h"
 
 using namespace db;
 
@@ -110,8 +110,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::QueryCommand*> cmd
 
 %type<db::QueryCommand*> select_cmd
-%type<db::SelectProjection*> select_fields
-%type<db::SelectField*> select_field
+%type<db::ReturnProjection*> select_fields
+%type<db::ReturnField*> select_field
 %type<db::FromTarget*> from_target
 %type<db::PathPattern*> path_pattern
 %type<db::EntityPattern*> node_pattern
@@ -157,7 +157,7 @@ cmd: select_cmd { ctxt->setRoot($1); }
    ;
 
 select_cmd: MATCH from_target RETURN select_fields {
-                                                       auto cmd = SelectCommand::create(ctxt); 
+                                                       auto cmd = ReturnCommand::create(ctxt); 
                                                        cmd->setProjection($4);
                                                        cmd->addFromTarget($2);
                                                        $$ = cmd;
@@ -165,17 +165,17 @@ select_cmd: MATCH from_target RETURN select_fields {
           ;
 
 select_field: STAR {
-                        auto field = SelectField::create(ctxt);
+                        auto field = ReturnField::create(ctxt);
                         field->setAll(true);
                         $$ = field;
                     }
              | ID { 
-                    auto field = SelectField::create(ctxt);
+                    auto field = ReturnField::create(ctxt);
                     field->setName($1);
                     $$ = field;
                   }
              | ID POINT ID {
-                                auto field = SelectField::create(ctxt);
+                                auto field = ReturnField::create(ctxt);
                                 field->setName($1);
                                 field->setMemberName($3);
                                 $$ = field;
@@ -187,7 +187,7 @@ select_fields: select_fields COMMA select_field {
                                                     $$ = $1;
                                                 }
              | select_field {
-                                auto proj = SelectProjection::create(ctxt);
+                                auto proj = ReturnProjection::create(ctxt);
                                 proj->addField($1);
                                 $$ = proj;
                             }

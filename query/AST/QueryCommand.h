@@ -8,7 +8,7 @@ namespace db {
 
 class ASTContext;
 class DeclContext;
-class SelectProjection;
+class ReturnProjection;
 class FromTarget;
 
 class QueryCommand {
@@ -16,7 +16,7 @@ public:
     friend ASTContext;
 
     enum class Kind {
-        SELECT_COMMAND = 0,
+        RETURN_COMMAND = 0,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
         LOAD_GRAPH_COMMAND,
@@ -31,29 +31,29 @@ protected:
     void registerCmd(ASTContext* ctxt);
 };
 
-class SelectCommand : public QueryCommand {
+class ReturnCommand : public QueryCommand {
 public:
     using FromTargets = std::vector<FromTarget*>;
 
-    static SelectCommand* create(ASTContext* ctxt);
+    static ReturnCommand* create(ASTContext* ctxt);
 
     DeclContext* getDeclContext() const { return _declContext.get(); }
 
-    Kind getKind() const override { return Kind::SELECT_COMMAND; }
+    Kind getKind() const override { return Kind::RETURN_COMMAND; }
 
-    SelectProjection* getProjection() const { return _proj; }
+    ReturnProjection* getProjection() const { return _proj; }
     const FromTargets& fromTargets() const { return _fromTargets; }
 
-    void setProjection(SelectProjection* proj) { _proj = proj; }
+    void setProjection(ReturnProjection* proj) { _proj = proj; }
     void addFromTarget(FromTarget* fromTarget);
 
 private:
     std::unique_ptr<DeclContext> _declContext;
-    SelectProjection* _proj {nullptr};
+    ReturnProjection* _proj {nullptr};
     FromTargets _fromTargets;
 
-    SelectCommand();
-    ~SelectCommand() override;
+    ReturnCommand();
+    ~ReturnCommand() override;
 };
 
 class CreateGraphCommand : public QueryCommand {

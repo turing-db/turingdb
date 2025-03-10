@@ -18,9 +18,9 @@ public:
 
     const std::string& getName() const { return _name; }
 
-    bool isSelected() const { return _selected; }
-    
-    void setSelected(bool selected) { _selected = selected; }
+    bool isReturned() const { return _returned; }
+
+    void setReturned(bool returned) { _returned = returned; }
 
     void setColumn(Column* column) { _column = column; }
 
@@ -28,11 +28,10 @@ public:
 
 private:
     std::string _name;
-    bool _selected {false};
+    bool _returned {false};
     Column* _column {nullptr};
-    
+
     VarDecl(const std::string& name);
     ~VarDecl();
 };
-
 }

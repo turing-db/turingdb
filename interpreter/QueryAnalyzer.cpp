@@ -1,36 +1,35 @@
 #include "QueryAnalyzer.h"
 
-#include "QueryCommand.h"
-#include "SelectField.h"
-#include "PathPattern.h"
-#include "FromTarget.h"
-#include "VarDecl.h"
-#include "Expr.h"
 #include "DeclContext.h"
-#include "SelectProjection.h"
+#include "Expr.h"
+#include "FromTarget.h"
+#include "PathPattern.h"
+#include "QueryCommand.h"
+#include "ReturnField.h"
+#include "ReturnProjection.h"
+#include "VarDecl.h"
 
 using namespace db;
 
 namespace {
 
-void selectAllVariables(SelectCommand* cmd) {
+void returnAllVariables(ReturnCommand* cmd) {
     for (const FromTarget* target : cmd->fromTargets()) {
         const PathPattern* pattern = target->getPattern();
         for (EntityPattern* entityPattern : pattern->elements()) {
             if (VarExpr* var = entityPattern->getVar()) {
                 if (VarDecl* decl = var->getDecl()) {
-                    decl->setSelected(true);
+                    decl->setReturned(true);
                 }
             }
         }
     }
 }
 
-}
+} // namespace
 
 QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt)
-    : _ctxt(ctxt)
-{
+    : _ctxt(ctxt) {
 }
 
 QueryAnalyzer::~QueryAnalyzer() {
@@ -38,28 +37,28 @@ QueryAnalyzer::~QueryAnalyzer() {
 
 bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     switch (cmd->getKind()) {
-        case QueryCommand::Kind::SELECT_COMMAND:
-            return analyzeSelect(static_cast<SelectCommand*>(cmd));
-        break;
+        case QueryCommand::Kind::RETURN_COMMAND:
+            return analyzeReturn(static_cast<ReturnCommand*>(cmd));
+            break;
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             return analyzeCreateGraph(static_cast<CreateGraphCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::LIST_GRAPH_COMMAND:
             return true;
-        break;
+            break;
 
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
             return analyzeLoadGraph(static_cast<LoadGraphCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::EXPLAIN_COMMAND:
             return analyzeExplain(static_cast<ExplainCommand*>(cmd));
-        break;
+            break;
 
         default:
-        return false;
+            return false;
     }
 
     return true;
@@ -85,8 +84,8 @@ bool QueryAnalyzer::analyzeCreateGraph(CreateGraphCommand* cmd) {
     return true;
 }
 
-bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
-    SelectProjection* proj = cmd->getProjection();
+bool QueryAnalyzer::analyzeReturn(ReturnCommand* cmd) {
+    ReturnProjection* proj = cmd->getProjection();
     if (!proj) {
         return false;
     }
@@ -102,12 +101,12 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
         }
     }
 
-    // Select fields
-    const auto& selectFields = proj->selectFields();
-    bool selectAll = false;
-    for (SelectField* field : selectFields) {
+    // Return fields
+    const auto& returnFields = proj->returnFields();
+    bool returnAll = false;
+    for (ReturnField* field : returnFields) {
         if (field->isAll()) {
-            selectAll = true;
+            returnAll = true;
             continue;
         } else {
             const auto& name = field->getName();
@@ -117,16 +116,16 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
                 return false;
             }
 
-            decl->setSelected(true);
+            decl->setReturned(true);
             field->setDecl(decl);
         }
     }
 
     // At this point: a declaration has been created for each variable
-    // in each pattern and select fields are connected to the var decl
+    // in each pattern and return fields are connected to the var decl
 
-    if (selectAll) {
-        selectAllVariables(cmd);
+    if (returnAll) {
+        returnAllVariables(cmd);
     }
 
     return true;

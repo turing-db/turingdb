@@ -9,23 +9,22 @@ void QueryCommand::registerCmd(ASTContext* ctxt) {
     ctxt->addCmd(this);
 }
 
-// SelectCommand
+// ReturnCommand
 
-SelectCommand::SelectCommand()
-    : _declContext(std::make_unique<DeclContext>())
-{
+ReturnCommand::ReturnCommand()
+    : _declContext(std::make_unique<DeclContext>()) {
 }
 
-SelectCommand::~SelectCommand() {
+ReturnCommand::~ReturnCommand() {
 }
 
-SelectCommand* SelectCommand::create(ASTContext* ctxt) {
-    SelectCommand* selectCmd = new SelectCommand();
-    selectCmd->registerCmd(ctxt);
-    return selectCmd;
+ReturnCommand* ReturnCommand::create(ASTContext* ctxt) {
+    ReturnCommand* returnCmd = new ReturnCommand();
+    returnCmd->registerCmd(ctxt);
+    return returnCmd;
 }
 
-void SelectCommand::addFromTarget(FromTarget* fromTarget) {
+void ReturnCommand::addFromTarget(FromTarget* fromTarget) {
     _fromTargets.push_back(fromTarget);
 }
 

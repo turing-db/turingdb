@@ -5,20 +5,20 @@
 #include <range/v3/view/chunk.hpp>
 #include <range/v3/all.hpp>
 
+#include "Expr.h"
+#include "FromTarget.h"
 #include "LocalMemory.h"
+#include "PathPattern.h"
 #include "Pipeline.h"
 #include "QueryCommand.h"
-#include "FromTarget.h"
-#include "PathPattern.h"
+#include "ReturnField.h"
+#include "ReturnProjection.h"
 #include "TypeConstraint.h"
-#include "Expr.h"
 #include "VarDecl.h"
-#include "SelectProjection.h"
-#include "SelectField.h"
 
+#include "columns/Block.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
-#include "columns/Block.h"
 
 #include "Graph.h"
 #include "GraphMetadata.h"
@@ -48,10 +48,10 @@ QueryPlanner::~QueryPlanner() {
 
 bool QueryPlanner::plan(const QueryCommand* query) {
     const auto kind = query->getKind();
-    
+
     switch (kind) {
-        case QueryCommand::Kind::SELECT_COMMAND:
-            return planSelect(static_cast<const SelectCommand*>(query));
+        case QueryCommand::Kind::RETURN_COMMAND:
+            return planReturn(static_cast<const ReturnCommand*>(query));
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             return planCreateGraph(static_cast<const CreateGraphCommand*>(query));
@@ -71,10 +71,10 @@ bool QueryPlanner::plan(const QueryCommand* query) {
     }
 }
 
-bool QueryPlanner::planSelect(const SelectCommand* select) {
-    const auto& fromTargets = select->fromTargets();
+bool QueryPlanner::planReturn(const ReturnCommand* returnCmd) {
+    const auto& fromTargets = returnCmd->fromTargets();
     if (fromTargets.size() != 1) {
-        spdlog::error("Unsupported SELECT queries with more than one target");
+        spdlog::error("Unsupported RETURN queries with more than one target");
         return false;
     }
 
@@ -94,7 +94,7 @@ bool QueryPlanner::planSelect(const SelectCommand* select) {
 
     planPath(pathElements);
     planTransformStep();
-    planProjection(select);
+    planProjection(returnCmd);
     planOutputLambda();
 
     // Add END step
@@ -146,7 +146,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
     const VarExpr* nodeVar = entity->getVar();
     if (nodeVar) {
         VarDecl* nodeDecl = nodeVar->getDecl();
-        if (nodeDecl->isSelected()) {
+        if (nodeDecl->isReturned()) {
             _transformData->addColumn(nodes, nodeDecl);
         }
     }
@@ -198,27 +198,27 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     const VarExpr* targetVar = target->getVar();
     if (targetVar) {
         VarDecl* targetDecl = targetVar->getDecl();
-        if (targetDecl->isSelected()) {
+        if (targetDecl->isReturned()) {
             _transformData->addColumn(targets, targetDecl);
         }
     }
 
-    // Generate sourceIDs only if the source is selected by projection
+    // Generate sourceIDs only if the source is returned by projection
     const VarExpr* sourceVar = source->getVar();
     if (sourceVar) {
         VarDecl* sourceDecl = sourceVar->getDecl();
-        if (sourceDecl->isSelected()) {
+        if (sourceDecl->isReturned()) {
             const auto sources = _mem->alloc<ColumnIDs>();
             edgeWriteInfo._sourceNodes = sources;
             _transformData->addColumn(sources, sourceDecl);
         }
     }
 
-    // Generate edgeIDs only if the edge is selected by projection
+    // Generate edgeIDs only if the edge is returned by projection
     const VarExpr* edgeVar = edge->getVar();
     if (edgeVar) {
         VarDecl* edgeDecl = edgeVar->getDecl();
-        if (edgeDecl->isSelected()) {
+        if (edgeDecl->isReturned()) {
             const auto edges = _mem->alloc<ColumnIDs>();
             edgeWriteInfo._edges = edges;
             _transformData->addColumn(edges, edgeDecl);
@@ -234,7 +234,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
         const LabelSet* labelSet = getLabelSet(sourceTypeConstr);
         _pipeline->add<ScanOutEdgesByLabelStep>(edgeWriteInfo, labelSet);
     }
-    
+
     _result = targets;
 }
 
@@ -313,11 +313,11 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
 
     _transformData->createStep(indices);
 
-    // Generate edgeIDs only if the edge is selected by projection
+    // Generate edgeIDs only if the edge is returned by projection
     const VarExpr* edgeVar = edge->getVar();
     if (edgeVar) {
         VarDecl* edgeDecl = edgeVar->getDecl();
-        if (edgeDecl->isSelected()) {
+        if (edgeDecl->isReturned()) {
             const auto edges = _mem->alloc<ColumnIDs>();
             edgeWriteInfo._edges = edges;
             _transformData->addColumn(edges, edgeDecl);
@@ -332,7 +332,7 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     const VarExpr* targetVar = target->getVar();
     if (targetVar) {
         VarDecl* targetDecl = targetVar->getDecl();
-        if (targetDecl->isSelected()) {
+        if (targetDecl->isReturned()) {
             _transformData->addColumn(targets, targetDecl);
         }
     }
@@ -377,14 +377,14 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isSelected();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
     if (mustWriteEdges) {
         _transformData->addColumn(edges, edgeDecl);
     }
-    
+
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
 
-    const auto edgeTypeIDs= _mem->alloc<ColumnVector<EdgeTypeID>>();
+    const auto edgeTypeIDs = _mem->alloc<ColumnVector<EdgeTypeID>>();
     _pipeline->add<GetEdgeTypeIDStep>(edges, edgeTypeIDs);
 
     // Filter out edges that do not match the edge type ID
@@ -425,7 +425,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
     // Add targets to the writeSet
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isSelected();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
     if (mustWriteTargetNodes) {
         _transformData->addColumn(filterOutNodes, targetDecl);
     }
@@ -480,11 +480,11 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isSelected();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
     if (mustWriteEdges) {
         _transformData->addColumn(edges, edgeDecl);
     }
-    
+
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
 
     // Get label set IDs of target nodes
@@ -568,7 +568,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     // Add targets to the writeSet
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isSelected();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
     if (mustWriteTargetNodes) {
         _transformData->addColumn(filterOutNodes, targetDecl);
     }
@@ -604,7 +604,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isSelected();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
     if (mustWriteEdges) {
         const auto edges = _mem->alloc<ColumnIDs>();
         edgeWriteInfo._edges = edges;
@@ -612,7 +612,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     }
 
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
-    
+
     // Get labels of target nodes
     const auto nodesLabelSetIDs = _mem->alloc<ColumnVector<LabelSetID>>();
     _pipeline->add<GetLabelSetIDStep>(targets, nodesLabelSetIDs);
@@ -673,7 +673,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     // Add targets to the writeSet
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isSelected();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
     if (mustWriteTargetNodes) {
         _transformData->addColumn(filterOutNodes, targetDecl);
     }
@@ -686,14 +686,14 @@ bool QueryPlanner::planLoadGraph(const LoadGraphCommand* loadCmd) {
     _pipeline->add<LoadGraphStep>(loadCmd->getName());
     _pipeline->add<EndStep>();
     return true;
-}                                                                       \
+}
 
-void QueryPlanner::planProjection(const SelectCommand* select) {
-    const auto& projection = select->getProjection();
+void QueryPlanner::planProjection(const ReturnCommand* returnCmd) {
+    const auto& projection = returnCmd->getProjection();
 
-    for (const SelectField* field : projection->selectFields()) {
+    for (const ReturnField* field : projection->returnFields()) {
         if (field->isAll()) {
-            for (const FromTarget* target : select->fromTargets()) {
+            for (const FromTarget* target : returnCmd->fromTargets()) {
                 const PathPattern* pattern = target->getPattern();
                 for (EntityPattern* entityPattern : pattern->elements()) {
                     if (VarExpr* var = entityPattern->getVar()) {
@@ -727,12 +727,11 @@ void QueryPlanner::planProjection(const SelectCommand* select) {
 
 #define CASE_PLAN_VALUE_TYPE(Type)                                                \
     case ValueType::Type: {                                                       \
-        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>();  \
+        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>(); \
         _pipeline->add<GetProperty##Type##Step>(columnIDs, propType, propValues); \
         _output->addColumn(propValues);                                           \
-    }                                                                             \
-    break;                                                                        \
-    
+    } break;
+
 
 void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::string& memberName) {
     const auto reader = _view.read();

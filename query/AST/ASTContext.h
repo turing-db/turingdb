@@ -5,7 +5,7 @@
 namespace db {
 
 class QueryCommand;
-class SelectField;
+class ReturnField;
 class FromTarget;
 class PathPattern;
 class EntityPattern;
@@ -13,12 +13,12 @@ class TypeConstraint;
 class ExprConstraint;
 class Expr;
 class VarDecl;
-class SelectProjection;
+class ReturnProjection;
 
 class ASTContext {
 public:
     friend QueryCommand;
-    friend SelectField;
+    friend ReturnField;
     friend FromTarget;
     friend PathPattern;
     friend EntityPattern;
@@ -26,7 +26,7 @@ public:
     friend ExprConstraint;
     friend Expr;
     friend VarDecl;
-    friend SelectProjection;
+    friend ReturnProjection;
 
     ASTContext();
     ASTContext(ASTContext&& other) = delete;
@@ -36,7 +36,7 @@ public:
 
     ~ASTContext();
 
-    QueryCommand* getRoot() const { return _root; } 
+    QueryCommand* getRoot() const { return _root; }
 
     void setRoot(QueryCommand* cmd) { _root = cmd; }
 
@@ -47,7 +47,7 @@ private:
     bool _isError {false};
     QueryCommand* _root {nullptr};
     std::vector<QueryCommand*> _cmds;
-    std::vector<SelectField*> _selectFields;
+    std::vector<ReturnField*> _returnFields;
     std::vector<FromTarget*> _fromTargets;
     std::vector<PathPattern*> _pathPatterns;
     std::vector<EntityPattern*> _entityPatterns;
@@ -55,10 +55,10 @@ private:
     std::vector<ExprConstraint*> _exprConstraints;
     std::vector<Expr*> _expr;
     std::vector<VarDecl*> _varDecls;
-    std::vector<SelectProjection*> _selectProjections;
+    std::vector<ReturnProjection*> _returnProjections;
 
     void addCmd(QueryCommand* cmd);
-    void addSelectField(SelectField* field);
+    void addReturnField(ReturnField* field);
     void addFromTarget(FromTarget* target);
     void addPathPattern(PathPattern* pattern);
     void addEntityPattern(EntityPattern* pattern);
@@ -66,7 +66,7 @@ private:
     void addExprConstraint(ExprConstraint* constr);
     void addExpr(Expr* expr);
     void addVarDecl(VarDecl* decl);
-    void addSelectProjection(SelectProjection* proj);
+    void addReturnProjection(ReturnProjection* proj);
 };
 
-} 
+} // namespace db
