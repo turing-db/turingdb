@@ -1,25 +1,25 @@
 #include "QueryAnalyzer.h"
 
-#include "QueryCommand.h"
-#include "SelectField.h"
-#include "PathPattern.h"
-#include "FromTarget.h"
-#include "VarDecl.h"
-#include "Expr.h"
 #include "DeclContext.h"
-#include "SelectProjection.h"
+#include "Expr.h"
+#include "MatchTarget.h"
+#include "PathPattern.h"
+#include "QueryCommand.h"
+#include "ReturnField.h"
+#include "ReturnProjection.h"
+#include "VarDecl.h"
 
 using namespace db;
 
 namespace {
 
-void selectAllVariables(SelectCommand* cmd) {
-    for (const FromTarget* target : cmd->fromTargets()) {
+void returnAllVariables(MatchCommand* cmd) {
+    for (const MatchTarget* target : cmd->matchTargets()) {
         const PathPattern* pattern = target->getPattern();
         for (EntityPattern* entityPattern : pattern->elements()) {
             if (VarExpr* var = entityPattern->getVar()) {
                 if (VarDecl* decl = var->getDecl()) {
-                    decl->setSelected(true);
+                    decl->setReturned(true);
                 }
             }
         }
@@ -29,7 +29,7 @@ void selectAllVariables(SelectCommand* cmd) {
 }
 
 QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt)
-    : _ctxt(ctxt)
+    : _ctxt(ctxt) 
 {
 }
 
@@ -38,8 +38,8 @@ QueryAnalyzer::~QueryAnalyzer() {
 
 bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     switch (cmd->getKind()) {
-        case QueryCommand::Kind::SELECT_COMMAND:
-            return analyzeSelect(static_cast<SelectCommand*>(cmd));
+        case QueryCommand::Kind::MATCH_COMMAND:
+            return analyzeMatch(static_cast<MatchCommand*>(cmd));
         break;
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
@@ -85,15 +85,15 @@ bool QueryAnalyzer::analyzeCreateGraph(CreateGraphCommand* cmd) {
     return true;
 }
 
-bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
-    SelectProjection* proj = cmd->getProjection();
+bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
+    ReturnProjection* proj = cmd->getProjection();
     if (!proj) {
         return false;
     }
 
-    // From targets
+    // match targets
     DeclContext* declContext = cmd->getDeclContext();
-    for (const FromTarget* target : cmd->fromTargets()) {
+    for (const MatchTarget* target : cmd->matchTargets()) {
         const PathPattern* pattern = target->getPattern();
         for (EntityPattern* entityPattern : pattern->elements()) {
             if (!analyzeEntityPattern(declContext, entityPattern)) {
@@ -102,12 +102,12 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
         }
     }
 
-    // Select fields
-    const auto& selectFields = proj->selectFields();
-    bool selectAll = false;
-    for (SelectField* field : selectFields) {
+    // Return fields
+    const auto& returnFields = proj->returnFields();
+    bool returnAll = false;
+    for (ReturnField* field : returnFields) {
         if (field->isAll()) {
-            selectAll = true;
+            returnAll = true;
             continue;
         } else {
             const auto& name = field->getName();
@@ -117,16 +117,16 @@ bool QueryAnalyzer::analyzeSelect(SelectCommand* cmd) {
                 return false;
             }
 
-            decl->setSelected(true);
+            decl->setReturned(true);
             field->setDecl(decl);
         }
     }
 
     // At this point: a declaration has been created for each variable
-    // in each pattern and select fields are connected to the var decl
+    // in each pattern and return fields are connected to the var decl
 
-    if (selectAll) {
-        selectAllVariables(cmd);
+    if (returnAll) {
+        returnAllVariables(cmd);
     }
 
     return true;

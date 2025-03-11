@@ -97,6 +97,7 @@ void TransformData::addColumn(const T* col, VarDecl* varDecl) {
 void TransformData::createStep(const ColumnIndices* indices) {
     _indices.push_back(indices);
     _colInfo.emplace_back();
+    ++_step;
 }
 
 // TransformStep

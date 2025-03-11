@@ -1,15 +1,14 @@
 #include "ASTContext.h"
 
-#include "QueryCommand.h"
-#include "SelectField.h"
-#include "FromTarget.h"
-#include "PathPattern.h"
 #include "Expr.h"
-#include "TypeConstraint.h"
 #include "ExprConstraint.h"
-#include "NameConstraint.h"
+#include "MatchTarget.h"
+#include "PathPattern.h"
+#include "QueryCommand.h"
+#include "ReturnField.h"
+#include "ReturnProjection.h"
+#include "TypeConstraint.h"
 #include "VarDecl.h"
-#include "SelectProjection.h"
 
 using namespace db;
 
@@ -22,11 +21,11 @@ ASTContext::~ASTContext() {
         delete cmd;
     }
 
-    for (SelectField* field : _selectFields) {
+    for (ReturnField* field : _returnFields) {
         delete field;
     }
 
-    for (FromTarget* target : _fromTargets) {
+    for (MatchTarget* target : _matchTargets) {
         delete target;
     }
 
@@ -42,10 +41,6 @@ ASTContext::~ASTContext() {
         delete constr;
     }
 
-    for (NameConstraint* constr : _nameConstraints) {
-        delete constr;
-    }
-
     for (ExprConstraint* constr : _exprConstraints) {
         delete constr;
     }
@@ -58,7 +53,7 @@ ASTContext::~ASTContext() {
         delete decl;
     }
 
-    for (SelectProjection* proj : _selectProjections) {
+    for (ReturnProjection* proj : _returnProjections) {
         delete proj;
     }
 }
@@ -67,12 +62,12 @@ void ASTContext::addCmd(QueryCommand* cmd) {
     _cmds.push_back(cmd);
 }
 
-void ASTContext::addSelectField(SelectField* field) {
-    _selectFields.push_back(field);
+void ASTContext::addReturnField(ReturnField* field) {
+    _returnFields.push_back(field);
 }
 
-void ASTContext::addFromTarget(FromTarget* target) {
-    _fromTargets.push_back(target);
+void ASTContext::addMatchTarget(MatchTarget* target) {
+    _matchTargets.push_back(target);
 }
 
 void ASTContext::addPathPattern(PathPattern* pattern) {
@@ -91,10 +86,6 @@ void ASTContext::addTypeConstraint(TypeConstraint* constr) {
     _typeConstraints.push_back(constr);
 }
 
-void ASTContext::addNameConstraint(NameConstraint* constr) {
-    _nameConstraints.push_back(constr);
-}
-
 void ASTContext::addExprConstraint(ExprConstraint* constr) {
     _exprConstraints.push_back(constr);
 }
@@ -103,6 +94,6 @@ void ASTContext::addVarDecl(VarDecl* decl) {
     _varDecls.push_back(decl);
 }
 
-void ASTContext::addSelectProjection(SelectProjection* proj) {
-    _selectProjections.push_back(proj);
+void ASTContext::addReturnProjection(ReturnProjection* proj) {
+    _returnProjections.push_back(proj);
 }

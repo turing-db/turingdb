@@ -7,7 +7,6 @@ namespace db {
 class ASTContext;
 class VarExpr;
 class TypeConstraint;
-class NameConstraint;
 class ExprConstraint;
 
 class EntityPattern {
@@ -17,25 +16,21 @@ public:
     static EntityPattern* create(ASTContext* ctxt,
                                  VarExpr* var,
                                  TypeConstraint* typeConstr,
-                                 NameConstraint* nameConstr,
                                  ExprConstraint* exprConstr);
 
     void setVar(VarExpr* var) { _var = var; }
 
     VarExpr* getVar() const { return _var; }
     TypeConstraint* getTypeConstraint() const { return _typeConstr; }
-    NameConstraint* getNameConstraint() const { return _nameConstr; }
     ExprConstraint* getExprConstraint() const { return _exprConstr; }
 
 private:
     VarExpr* _var {nullptr};
     TypeConstraint* _typeConstr {nullptr};
-    NameConstraint* _nameConstr {nullptr};
     ExprConstraint* _exprConstr {nullptr};
 
     EntityPattern(VarExpr* var,
                   TypeConstraint* typeConstr,
-                  NameConstraint* nameConstr,
                   ExprConstraint* exprConstr);
     ~EntityPattern();
 };

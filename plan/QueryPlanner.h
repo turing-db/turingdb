@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "QueryCommand.h"
 #include "columns/ColumnIDs.h"
 #include "labels/LabelSet.h"
 #include "VectorHash.h"
@@ -15,7 +16,7 @@ namespace db {
 class QueryCommand;
 class GraphView;
 class LocalMemory;
-class SelectCommand;
+class ReturnCommand;
 class Pipeline;
 class EntityPattern;
 class TypeConstraint;
@@ -68,11 +69,10 @@ private:
                               const LabelSet* targetLabelSet);
 
     // Planning functions
-    bool planSelect(const SelectCommand* select);
+    bool planMatch(const MatchCommand* matchCmd);
     void planPath(const std::vector<EntityPattern*>& path);
     void planScanNodes(const EntityPattern* entity);
-    void planExpandEdge(const EntityPattern* edge,
-                        const EntityPattern* target);
+    void planExpandEdge(const EntityPattern* edge, const EntityPattern* target);
     void planExpandEdgeWithNoConstraint(const EntityPattern* edge,
                                         const EntityPattern* target);
     void planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
@@ -87,15 +87,14 @@ private:
     void planScanEdges(const EntityPattern* source,
                        const EntityPattern* edge,
                        const EntityPattern* target);
-    
+
     bool planCreateGraph(const CreateGraphCommand* createCmd);
     bool planListGraph(const ListGraphCommand* listCmd);
     bool planLoadGraph(const LoadGraphCommand* loadCmd);
-    void planProjection(const SelectCommand* select);
+    void planProjection(const MatchCommand* matchCmd);
     void planPropertyProjection(ColumnIDs* columnIDs,
                                 const std::string& memberName);
     void planOutputLambda();
     bool planExplain(const ExplainCommand* explain);
 };
-
 }

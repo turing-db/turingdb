@@ -9,24 +9,24 @@ void QueryCommand::registerCmd(ASTContext* ctxt) {
     ctxt->addCmd(this);
 }
 
-// SelectCommand
+// ReturnCommand
 
-SelectCommand::SelectCommand()
-    : _declContext(std::make_unique<DeclContext>())
+MatchCommand::MatchCommand()
+    : _declContext(std::make_unique<DeclContext>()) 
 {
 }
 
-SelectCommand::~SelectCommand() {
+MatchCommand::~MatchCommand() {
 }
 
-SelectCommand* SelectCommand::create(ASTContext* ctxt) {
-    SelectCommand* selectCmd = new SelectCommand();
-    selectCmd->registerCmd(ctxt);
-    return selectCmd;
+MatchCommand* MatchCommand::create(ASTContext* ctxt) {
+    MatchCommand* matchCmd = new MatchCommand();
+    matchCmd->registerCmd(ctxt);
+    return matchCmd;
 }
 
-void SelectCommand::addFromTarget(FromTarget* fromTarget) {
-    _fromTargets.push_back(fromTarget);
+void MatchCommand::addMatchTarget(MatchTarget* matchTarget) {
+    _matchTargets.push_back(matchTarget);
 }
 
 // CreateGraphCommand

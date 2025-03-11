@@ -8,15 +8,15 @@ namespace db {
 
 class ASTContext;
 class DeclContext;
-class SelectProjection;
-class FromTarget;
+class ReturnProjection;
+class MatchTarget;
 
 class QueryCommand {
 public:
     friend ASTContext;
 
     enum class Kind {
-        SELECT_COMMAND = 0,
+        MATCH_COMMAND = 0,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
         LOAD_GRAPH_COMMAND,
@@ -31,29 +31,29 @@ protected:
     void registerCmd(ASTContext* ctxt);
 };
 
-class SelectCommand : public QueryCommand {
+class MatchCommand : public QueryCommand {
 public:
-    using FromTargets = std::vector<FromTarget*>;
+    using MatchTargets = std::vector<MatchTarget*>;
 
-    static SelectCommand* create(ASTContext* ctxt);
+    static MatchCommand* create(ASTContext* ctxt);
 
     DeclContext* getDeclContext() const { return _declContext.get(); }
 
-    Kind getKind() const override { return Kind::SELECT_COMMAND; }
+    Kind getKind() const override { return Kind::MATCH_COMMAND; }
 
-    SelectProjection* getProjection() const { return _proj; }
-    const FromTargets& fromTargets() const { return _fromTargets; }
+    ReturnProjection* getProjection() const { return _proj; }
+    const MatchTargets& matchTargets() const { return _matchTargets; }
 
-    void setProjection(SelectProjection* proj) { _proj = proj; }
-    void addFromTarget(FromTarget* fromTarget);
+    void setProjection(ReturnProjection* proj) { _proj = proj; }
+    void addMatchTarget(MatchTarget* matchTarget);
 
 private:
     std::unique_ptr<DeclContext> _declContext;
-    SelectProjection* _proj {nullptr};
-    FromTargets _fromTargets;
+    ReturnProjection* _proj {nullptr};
+    MatchTargets _matchTargets;
 
-    SelectCommand();
-    ~SelectCommand() override;
+    MatchCommand();
+    ~MatchCommand() override;
 };
 
 class CreateGraphCommand : public QueryCommand {

@@ -13,26 +13,26 @@ class QueryParserTest : public ::testing::Test {
     }
 };
 
-TEST_F(QueryParserTest, selectPath1) {
+TEST_F(QueryParserTest, matchPath1) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const std::string query1 = "SELECT p FROM (g:gene)-e:edge-(p:protein)";
-    const std::string query2 = "SELECT p FROM (g:gene)--(p:protein)";
-    const std::string query3 = "SELECT p FROM (gene)-edge-(protein)";
+    const std::string query1 = "MATCH (g:gene)-[e:edge]-(p:protein) RETURN p";
+    const std::string query2 = "MATCH (g:gene)--(p:protein) RETURN p";
+    const std::string query3 = "MATCH (:gene)-[:edge]-(:protein) RETURN p";
 
-    const std::string query4 = "SELECT p FROM (gene)--(protein)";
-    const std::string query5 = "SELECT p FROM (gene)-e:-(protein)";
-    const std::string query6 = "SELECT p FROM (g:)-e:-(p:)";
-    const std::string query7 = "SELECT p FROM g:-e:-p:";
-    const std::string query8 = "SELECT * FROM (gene)-edge-(protein)";
-    const std::string query9 = "SELECT * FROM gene-edge-protein";
+    const std::string query4 = "MATCH (:gene)--(:protein) RETURN p";
+    const std::string query5 = "MATCH (:gene)-[e]-(:protein) RETURN p";
+    const std::string query6 = "MATCH (g)-[e]-(p) RETURN p";
+    const std::string query7 = "MATCH g-[e]-p RETURN p";
+    const std::string query8 = "MATCH (:gene)-[:edge]-(:protein) RETURN *";
+    const std::string query9 = "MATCH :gene-[:edge]-:protein RETURN *";
 
-    const std::string query10 = "SELECT p FROM (n:)--(p:protein)";
+    const std::string query10 = "MATCH (n)--(p:protein) RETURN p";
 
-    const std::string query11 = "SELECT a, b FROM (a:)--(b:)";
-    const std::string query12 = "SELECT a, b, c FROM (a:)--(b:)--(c:)";
-    const std::string query13 = "SELECT a, b, c, d FROM (a:)--(b:)--(c:)--(d:)";
+    const std::string query11 = "MATCH (a)--(b) RETURN a, b";
+    const std::string query12 = "MATCH (a)--(b)--(c) RETURN a, b, c";
+    const std::string query13 = "MATCH (a)--(b)--(c)--(d) RETURN a, b, c, d";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
@@ -49,45 +49,20 @@ TEST_F(QueryParserTest, selectPath1) {
     ASSERT_TRUE(parser.parse(query13));
 }
 
-TEST_F(QueryParserTest, selectSingle1) {
+TEST_F(QueryParserTest, matchSingle1) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const auto query1 = "SELECT g FROM (g:gene)";
-    const auto query2 = "SELECT * FROM (g:gene)";
-    const auto query3 = "SELECT * FROM (gene)";
-    const auto query4 = "SELECT * FROM gene";
+    const auto query1 = "MATCH (g:gene) RETURN g ";
+    const auto query2 = "MATCH (g:gene) RETURN * ";
+    const auto query3 = "MATCH (:gene) RETURN * ";
+    const auto query4 = "MATCH :gene RETURN * ";
 
-    const auto query5 = "SELECT n FROM n:";
-    const auto query6 = "SELECT n FROM (n:)";
-    const auto query7 = "SELECT * FROM (n:)";
-    const auto query8 = "SELECT my_node FROM (my_node:)";
-
-    ASSERT_TRUE(parser.parse(query1));
-    ASSERT_TRUE(parser.parse(query2));
-    ASSERT_TRUE(parser.parse(query3));
-    ASSERT_TRUE(parser.parse(query4));
-    ASSERT_TRUE(parser.parse(query5));
-    ASSERT_TRUE(parser.parse(query6));
-    ASSERT_TRUE(parser.parse(query7));
-    ASSERT_TRUE(parser.parse(query8));
-}
-
-TEST_F(QueryParserTest, selectName) {
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
-    const auto query1 = "SELECT p FROM (p:protein[APOE4])";
-    const auto query2 = "SELECT p FROM p:protein[APOE4]";
-    const auto query3 = "SELECT * FROM protein[APOE4]";
-    const auto query4 = "SELECT * FROM protein[\"The name of my node\"]";
-    const auto query5 = "SELECT * FROM protein['The name of my node']";
-    const auto query6 = "SELECT * FROM protein['APOE4 [cytosol]']";
-
-    const auto query7 = "SELECT p FROM p:['APOE4 [cytosol]']";
-    const auto query8 = "SELECT * FROM p:['APOE4 [cytosol]']";
-
-    const auto query9 = "SELECT n1, n2 FROM (p:protein[APOE4])--(n1:)--(n2:)";
+    const auto query5 = "MATCH n RETURN n ";
+    const auto query6 = "MATCH (n) RETURN n ";
+    const auto query7 = "MATCH (n) RETURN * ";
+    const auto query8 = "MATCH n RETURN * ";
+    const auto query9 = "MATCH (my_node) RETURN my_node";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
@@ -100,17 +75,16 @@ TEST_F(QueryParserTest, selectName) {
     ASSERT_TRUE(parser.parse(query9));
 }
 
-TEST_F(QueryParserTest, selectProperties) {
+TEST_F(QueryParserTest, matchProperties) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const auto query1 = "SELECT p FROM p:protein[APOE4]{location = 'cytosol'}";
-    const auto query2 = "SELECT n FROM n:{location = 'cytosol'}";
-    const auto query3 = "SELECT n FROM n:{magic = 42}";
-    const auto query4 = "SELECT n FROM n:{magic = -42}";
-    const auto query5 = "SELECT n FROM n:{corr >= 0.75}";
-    const auto query6 = "SELECT n FROM n:{rate < 1250.752}";
-    const auto query7 = "SELECT n FROM n:{corr < -0.752}";
+    const auto query1 = "MATCH n:{location = 'cytosol'} RETURN n";
+    const auto query2 = "MATCH n:{magic = 42} RETURN n";
+    const auto query3 = "MATCH n:{magic = -42} RETURN n";
+    const auto query4 = "MATCH n:{corr >= 0.75} RETURN n";
+    const auto query5 = "MATCH n:{rate < 1250.752} RETURN n";
+    const auto query6 = "MATCH n:{corr < -0.752} RETURN n";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
@@ -118,5 +92,4 @@ TEST_F(QueryParserTest, selectProperties) {
     ASSERT_TRUE(parser.parse(query4));
     ASSERT_TRUE(parser.parse(query5));
     ASSERT_TRUE(parser.parse(query6));
-    ASSERT_TRUE(parser.parse(query7));
 }

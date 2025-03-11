@@ -4,14 +4,13 @@ set(AST_sources
         DeclContext.cpp 
         Expr.cpp 
         ExprConstraint.cpp 
-        FromTarget.cpp 
+        MatchTarget.cpp
         PathPattern.cpp 
-        NameConstraint.cpp
         QueryCommand.cpp 
-        SelectField.cpp 
+        ReturnField.cpp 
         TypeConstraint.cpp 
         VarDecl.cpp
-        SelectProjection.cpp)
+        ReturnProjection.cpp)
 
 add_library(turing_db_query_AST_s STATIC ${AST_sources})
 
