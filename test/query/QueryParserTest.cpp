@@ -61,7 +61,8 @@ TEST_F(QueryParserTest, matchSingle1) {
     const auto query5 = "MATCH n RETURN n ";
     const auto query6 = "MATCH (n) RETURN n ";
     const auto query7 = "MATCH (n) RETURN * ";
-    const auto query8 = "MATCH (my_node) RETURN my_node";
+    const auto query8 = "MATCH n RETURN * ";
+    const auto query9 = "MATCH (my_node) RETURN my_node";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
@@ -71,6 +72,7 @@ TEST_F(QueryParserTest, matchSingle1) {
     ASSERT_TRUE(parser.parse(query6));
     ASSERT_TRUE(parser.parse(query7));
     ASSERT_TRUE(parser.parse(query8));
+    ASSERT_TRUE(parser.parse(query9));
 }
 
 TEST_F(QueryParserTest, matchProperties) {

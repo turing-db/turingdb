@@ -28,4 +28,5 @@ enum class PipelineOpcode : uint64_t {
     END,
     MAX
 };
+
 }
