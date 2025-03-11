@@ -13,7 +13,7 @@ class GraphMetadata;
 
 class DataPartLoader {
 public:
-    [[nodiscard]] static DumpResult<std::unique_ptr<DataPart>> load(const fs::Path&,
+    [[nodiscard]] static DumpResult<std::shared_ptr<DataPart>> load(const fs::Path&,
                                                                     const GraphMetadata&);
 
 private:

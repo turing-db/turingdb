@@ -4,16 +4,16 @@
 
 #include "Graph.h"
 #include "GraphMetadata.h"
-#include "reader/GraphReader.h"
 #include "GraphInfoDumper.h"
 #include "LabelMapDumper.h"
-#include "DataPartDumper.h"
+#include "CommitDumper.h"
 #include "LabelSetMapDumper.h"
 #include "EdgeTypeMapDumper.h"
 #include "PropertyTypeMapDumper.h"
 #include "GraphFileType.h"
 #include "FileUtils.h"
 #include "versioning/Transaction.h"
+#include "versioning/VersionController.h"
 
 using namespace db;
 
@@ -30,7 +30,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
         return DumpError::result(DumpErrorType::CANNOT_MKDIR_GRAPH, res.error());
     }
 
-    const Transaction transaction = graph.openTransaction();
+    graph._versionController->lock();
 
     // Dump graph type
     {
@@ -123,14 +123,17 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
         }
     }
 
-    GraphReader reader = transaction.readGraph();
-    for (const auto& [i, part] : reader.dataparts() | rv::enumerate) {
-        const fs::Path partPath = path / "datapart-" + std::to_string(i);
+    // Dumping commits
+    for (const auto& [i, commit] : graph._versionController->_commits | rv::enumerate) {
+        const std::string fileName = fmt::format("commit-{}-{}", i, commit->hash().get());
+        const fs::Path commitPath = path / fileName;
 
-        if (auto res = DataPartDumper::dump(*part, partPath); !res) {
+        if (auto res = CommitDumper::dump(*commit, commitPath); !res) {
             return res;
         }
     }
+
+    graph._versionController->unlock();
 
     return {};
 }

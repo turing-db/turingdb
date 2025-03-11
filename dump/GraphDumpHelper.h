@@ -54,6 +54,43 @@ public:
 
         return integer;
     }
+
+    static DumpResult<std::pair<uint64_t, uint64_t>> getCommitSuffix(std::string_view str, size_t prefixSize) {
+        const std::string_view offsetStr = str.substr(prefixSize);
+
+        if (offsetStr.empty()) {
+            return DumpError::result(DumpErrorType::UNKNOWN);
+        }
+        // File name has the form commit-<offset>-<hash>
+
+        // Parsing offset
+        uint64_t offset {0};
+        const auto offsetRes = std::from_chars(offsetStr.begin(), offsetStr.end(), offset);
+        const size_t offsetSize = std::distance(offsetStr.data(), offsetRes.ptr);
+
+        const bool offsetFailure = (offsetRes.ec == std::errc::result_out_of_range)
+                                || (offsetRes.ec == std::errc::invalid_argument);
+
+        if (offsetFailure) {
+            return DumpError::result(DumpErrorType::UNKNOWN);
+        }
+
+        // Parsing hash
+        uint64_t hash {0};
+        const std::string_view hashStr = str.substr(prefixSize + offsetSize + 1);
+        const auto hashRes = std::from_chars(hashStr.begin(), hashStr.end(), hash);
+        const size_t hashSize = std::distance(hashStr.data(), hashRes.ptr);
+
+        const bool hashFailure = (hashRes.ec == std::errc::result_out_of_range)
+                              || (hashRes.ec == std::errc::invalid_argument)
+                              || (hashSize != hashStr.size());
+
+        if (hashFailure) {
+            return DumpError::result(DumpErrorType::UNKNOWN);
+        }
+
+        return {std::make_pair(offset, hash)};
+    }
 };
 
 }

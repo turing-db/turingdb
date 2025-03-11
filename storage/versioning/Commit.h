@@ -12,6 +12,8 @@ class DataPart;
 class CommitData;
 class VersionController;
 class CommitBuilder;
+class CommitLoader;
+class GraphLoader;
 class Graph;
 
 class Commit {
@@ -36,14 +38,17 @@ public:
         return {*_graph, _data};
     }
 
-    [[nodiscard]] CommitHash hash() const { return _hash; }
+    [[nodiscard]] CommitHash hash() const { return _data->hash(); }
+
+    [[nodiscard]] const CommitData& data() const { return *_data; }
 
 private:
     friend CommitBuilder;
+    friend CommitLoader;
+    friend GraphLoader;
     friend VersionController;
 
     Graph* _graph {nullptr};
-    CommitHash _hash = CommitHash::create();
     std::shared_ptr<CommitData> _data;
 };
 

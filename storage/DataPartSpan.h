@@ -7,7 +7,7 @@ namespace db {
 
 class DataPart;
 
-using DataPartSpan = std::span<const std::shared_ptr<DataPart>>;
+using DataPartSpan = std::span<const std::shared_ptr<const DataPart>>;
 using DataPartIterator = DataPartSpan::iterator;
 
 }

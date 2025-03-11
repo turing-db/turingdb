@@ -18,7 +18,7 @@ public:
     PartIterator& operator=(PartIterator&&) = default;
     ~PartIterator() = default;
 
-    inline DataPart* get() const { return _it->get(); }
+    inline const DataPart* get() const { return _it->get(); }
     inline DataPartIterator getIterator() const { return _it; }
     inline DataPartIterator getEndIterator() const { return _itEnd; }
 

@@ -2,6 +2,7 @@
 set(dump_sources GraphLoader.cpp
                  GraphDumper.cpp
                  DataPartLoader.cpp
+                 CommitDumper.cpp
                  DataPartDumper.cpp
                  DumpResult.cpp)
 

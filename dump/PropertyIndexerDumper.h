@@ -25,6 +25,7 @@ public:
         auto* buffer = &_writer.buffer();
         for (const auto& [ptID, ptIndexer] : indexer) {
             const size_t stride = Constants::getPropTypeIndexerStride(ptIndexer);
+            // FIXME: Some property indexer don't fit on a single page
 
             if (stride > Constants::PAGE_AVAIL) {
                 return DumpError::result(DumpErrorType::COULD_NOT_WRITE_PROP_INDEXER);

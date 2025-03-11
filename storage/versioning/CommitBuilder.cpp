@@ -22,14 +22,14 @@ std::unique_ptr<CommitBuilder> CommitBuilder::prepare(Graph& graph, const GraphV
     ptr->_commit = std::make_unique<Commit>();
     ptr->_commit->_graph = ptr->_graph;
     ptr->_commit->_data = std::make_shared<CommitData>();
-    ptr->_commit->_data->_hash = ptr->_commit->_hash;
+    ptr->_commit->_data->_hash = ptr->_commit->hash();
     ptr->_commit->_data->_graphMetadata = graph.getMetadata();
 
     const DataPartSpan previousDataparts = reader.dataparts();
-    ptr->_commit->_data->_dataparts.resize(previousDataparts.size());
+    ptr->_commit->_data->_history._allDataparts.resize(previousDataparts.size());
     std::copy(previousDataparts.begin(),
               previousDataparts.end(),
-              ptr->_commit->_data->_dataparts.begin());
+              ptr->_commit->_data->_history._allDataparts.begin());
 
     return std::unique_ptr<CommitBuilder> {ptr};
 }
@@ -71,12 +71,12 @@ void CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
         // TODO Use the jobsystem here
         part->load(view, jobsystem, *builder);
-        _commit->_data->_dataparts.emplace_back(part);
+        _commit->_data->_history._allDataparts.emplace_back(part);
+        _commit->_data->_history._commitDataparts.emplace_back(part);
     }
 
     _builders.clear();
 }
-
 
 std::unique_ptr<Commit> CommitBuilder::build(JobSystem& jobsystem) {
     buildAllPending(jobsystem);

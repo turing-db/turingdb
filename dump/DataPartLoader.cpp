@@ -15,13 +15,13 @@
 
 using namespace db;
 
-DumpResult<std::unique_ptr<DataPart>> DataPartLoader::load(const fs::Path& path,
+DumpResult<std::shared_ptr<DataPart>> DataPartLoader::load(const fs::Path& path,
                                                            const GraphMetadata& metadata) {
     if (!path.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
     }
 
-    auto part = std::make_unique<DataPart>(0, 0);
+    auto part = std::make_shared<DataPart>(0, 0);
 
     // Loading info
     {
@@ -256,5 +256,5 @@ DumpResult<std::unique_ptr<DataPart>> DataPartLoader::load(const fs::Path& path,
 
     part->_initialized = true;
 
-    return std::move(part);
+    return part;
 }

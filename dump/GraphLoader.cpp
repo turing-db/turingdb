@@ -1,9 +1,11 @@
 #include "GraphLoader.h"
 
-#include "DataPartLoader.h"
+#include "CommitLoader.h"
 #include "GraphInfoLoader.h"
 #include "GraphMetadataLoader.h"
 #include "Graph.h"
+#include "versioning/Commit.h"
+#include "versioning/VersionController.h"
 
 using namespace db;
 
@@ -49,46 +51,61 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
         return DumpError::result(DumpErrorType::CANNOT_LIST_DATAPARTS, files.error());
     }
 
-    // static constexpr std::string_view DATAPART_FOLDER_PREFIX = "datapart-";
+    auto versionController = std::make_unique<VersionController>();
 
-    // size_t nodeCount = 0;
-    // size_t edgeCount = 0;
+    static constexpr std::string_view COMMIT_FOLDER_PREFIX = "commit-";
 
-    // std::map<uint64_t, std::unique_ptr<DataPart>> dataparts;
-    // for (auto& child : files.value()) {
-    //     const auto& childStr = child.get();
+    graph->_versionController = std::make_unique<VersionController>();
 
-    //     if (childStr.find(DATAPART_FOLDER_PREFIX) == std::string::npos) {
-    //         // Not a datapart folder
-    //         continue;
-    //     }
+    std::map<uint64_t, std::unique_ptr<Commit>> commits;
+    for (auto& child : files.value()) {
+        const auto& childStr = child.get();
 
-    //     const auto partIndex = GraphDumpHelper::getIntegerSuffix(
-    //         childStr,
-    //         DATAPART_FOLDER_PREFIX.size());
+        if (childStr.find(COMMIT_FOLDER_PREFIX) == std::string::npos) {
+            // Not a commit folder
+            continue;
+        }
 
-    //     if (!partIndex) {
-    //         return partIndex.get_unexpected();
-    //     }
+        const auto suffixRes = GraphDumpHelper::getCommitSuffix(
+            childStr,
+            COMMIT_FOLDER_PREFIX.size());
 
-    //     child = path / child.get();
+        if (!suffixRes) {
+            return suffixRes.get_unexpected();
+        }
 
-    //     auto res = DataPartLoader::load(child, *graph->getMetadata());
+        child = path / child.get();
 
-    //     if (!res) {
-    //         return res.get_unexpected();
-    //     }
+        const auto [offset, hash] = suffixRes.value();
 
-    //     nodeCount += (*res)->getNodeCount();
-    //     edgeCount += (*res)->getEdgeCount();
-    //     dataparts.emplace(partIndex.value(), std::move(res.value()));
-    // }
+        auto res = CommitLoader::load(child, *graph, CommitHash {hash});
 
-    // for (auto& [partIndex, part] : dataparts) {
-    //     graph->_parts->store(std::move(part));
-    // }
+        if (!res) {
+            return suffixRes.get_unexpected();
+        }
 
-    // graph->allocIDRange(nodeCount, edgeCount);
+        commits.emplace(offset, std::move(res.value()));
+    }
+
+    graph->_versionController->_head.store(commits.at(commits.size() - 1).get());
+
+    for (auto& [commitIndex, commit] : commits) {
+        if (commitIndex != 0) {
+            const auto prevDataparts = commits.at(commitIndex - 1)->_data->allDataparts();
+            for (const auto& part : prevDataparts) {
+                commit->_data->_history._allDataparts.emplace_back(part);
+            }
+        }
+
+        for (const auto& part : commit->_data->_history._commitDataparts) {
+            commit->_data->_history._allDataparts.emplace_back(part);
+        }
+    }
+
+    for (auto& [commitIndex, commit] : commits) {
+        graph->_versionController->_commits.emplace_back(std::move(commit));
+    }
+
 
     return {};
 }

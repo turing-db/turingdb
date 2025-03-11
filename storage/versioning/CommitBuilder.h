@@ -29,6 +29,8 @@ public:
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
     [[nodiscard]] DataPartBuilder& newBuilder();
+
+    [[nodiscard]] std::unique_ptr<Commit> build(JobSystem& jobsystem);
     void buildAllPending(JobSystem& jobsystem);
 
 private:
@@ -48,8 +50,6 @@ private:
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
     explicit CommitBuilder(Graph& graph);
-
-    [[nodiscard]] std::unique_ptr<Commit> build(JobSystem& jobsystem);
 };
 
 }

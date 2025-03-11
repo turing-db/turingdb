@@ -42,6 +42,7 @@ set(storage_sources
         writers/DataPartBuilder.cpp
         #writers/ConcurrentWriter.cpp
 
+        versioning/CommitResult.cpp
         versioning/VersionController.cpp
         versioning/CommitHash.cpp
         versioning/Commit.cpp

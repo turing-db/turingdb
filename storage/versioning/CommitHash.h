@@ -73,7 +73,6 @@ struct std::hash<db::CommitHash> {
 
 namespace std {
 
-template <typename T>
 inline string to_string(db::CommitHash h) {
     return to_string(h.get());
 }

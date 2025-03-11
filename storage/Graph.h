@@ -7,6 +7,7 @@
 #include "DataPart.h"
 #include "EntityID.h"
 #include "versioning/CommitHash.h"
+#include "versioning/CommitResult.h"
 #include "versioning/Transaction.h"
 
 namespace db {
@@ -17,8 +18,11 @@ class DataPartBuilder;
 class PartIterator;
 class GraphMetadata;
 class CommitBuilder;
+class CommitLoader;
 class VersionController;
 class GraphLoader;
+class Commit;
+class GraphDumper;
 
 class Graph {
 public:
@@ -44,7 +48,13 @@ public:
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;
 
-    bool commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
+    CommitResult<void> rebase(Commit& commit);
+
+    CommitResult<void> commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
+    CommitResult<void> commit(std::unique_ptr<Commit> commit, JobSystem& jobSystem);
+
+    CommitResult<void> rebaseAndCommit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
+    CommitResult<void> rebaseAndCommit(std::unique_ptr<Commit> commit, JobSystem& jobSystem);
 
     [[nodiscard]] const GraphMetadata* getMetadata() const { return _metadata.get(); }
     [[nodiscard]] GraphMetadata* getMetadata() { return _metadata.get(); }
@@ -55,7 +65,9 @@ private:
     friend GraphInfoLoader;
     friend PartIterator;
     friend DataPartBuilder;
+    friend GraphDumper;
     friend ConcurrentWriter;
+    friend CommitLoader;
     friend CommitBuilder;
     friend GraphLoader;
 
@@ -64,8 +76,6 @@ private:
 
     mutable std::shared_mutex _entityIDsMutex;
     EntityIDs _nextFreeIDs;
-
-    mutable std::shared_mutex _mainLock;
 
     std::unique_ptr<VersionController> _versionController;
 

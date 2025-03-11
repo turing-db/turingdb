@@ -23,7 +23,8 @@ public:
 
     [[nodiscard]] GraphReader read() const;
     [[nodiscard]] CommitHash commitHash() const { return _data->hash(); }
-    [[nodiscard]] DataPartSpan dataparts() const { return _data->dataparts(); }
+    [[nodiscard]] DataPartSpan dataparts() const { return _data->allDataparts(); }
+    [[nodiscard]] DataPartSpan commitDataparts() const { return _data->commitDataparts(); }
     [[nodiscard]] GraphMetadata& metadata() const { return _data->metadata(); }
 
 private:

@@ -51,7 +51,11 @@ TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     const auto tx = graph->openWriteTransaction();
     auto commitBuilder = tx.prepareCommit();
     [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-    ASSERT_TRUE(graph->commit(std::move(commitBuilder), *_jobSystem));
+    const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+    if (!res) {
+        spdlog::info(res.error().fmtMessage());
+    }
+    ASSERT_TRUE(res);
 
     const Transaction transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -70,7 +74,11 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
     for (auto i = 0; i < 3; i++) {
         auto commitBuilder = tx.prepareCommit();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-        ASSERT_TRUE(graph->commit(std::move(commitBuilder), *_jobSystem));
+        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        if (!res) {
+            spdlog::info(res.error().fmtMessage());
+        }
+        ASSERT_TRUE(res);
     }
 
     const Transaction transaction = graph->openTransaction();
@@ -99,7 +107,11 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        graph->commit(std::move(commitBuilder), *_jobSystem);
+        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        if (!res) {
+            spdlog::info(res.error().fmtMessage());
+        }
+        ASSERT_TRUE(res);
     }
 
     const Transaction transaction = graph->openTransaction();
@@ -147,7 +159,11 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        ASSERT_TRUE(graph->commit(std::move(commitBuilder), *_jobSystem));
+        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        if (!res) {
+            spdlog::info(res.error().fmtMessage());
+        }
+        ASSERT_TRUE(res);
     }
 
     const Transaction transaction = graph->openTransaction();
@@ -198,7 +214,11 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
         for (size_t i = 0; i < nodeCount; i++) {
             builder.addNode(labelsetID);
         }
-        graph->commit(std::move(commitBuilder), *_jobSystem);
+        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        if (!res) {
+            spdlog::info(res.error().fmtMessage());
+        }
+        ASSERT_TRUE(res);
     }
 
     const Transaction transaction = graph->openTransaction();

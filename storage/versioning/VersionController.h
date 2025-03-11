@@ -5,6 +5,7 @@
 #include <mutex>
 #include <atomic>
 
+#include "versioning/CommitResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/Transaction.h"
@@ -12,9 +13,14 @@
 namespace db {
 
 class Graph;
+class GraphLoader;
+class GraphDumper;
 
 class VersionController {
 public:
+    using CommitVector = std::vector<std::unique_ptr<Commit>>;
+    using CommitMap = std::unordered_map<CommitHash, size_t>;
+
     VersionController();
     ~VersionController();
 
@@ -24,16 +30,24 @@ public:
     VersionController& operator=(VersionController&&) = delete;
 
     void initialize(Graph*);
-    bool commit(std::unique_ptr<Commit> commit);
+    CommitResult<void> rebase(Commit& commit);
+    CommitResult<void> commit(std::unique_ptr<Commit> commit);
 
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;
 
 private:
+    friend GraphLoader;
+    friend GraphDumper;
+
     std::atomic<Commit*> _head {nullptr};
 
     mutable std::mutex _mutex;
-    std::unordered_map<CommitHash, std::unique_ptr<Commit>> _commits;
+    CommitVector _commits;
+    CommitMap _offsets;
+
+    void lock();
+    void unlock();
 };
 
 }
