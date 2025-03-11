@@ -349,9 +349,6 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
     const auto edgeTypeIDs = _mem->alloc<ColumnVector<EdgeTypeID>>();
 
     const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
-    if (typeConstrNames.size() != 1) {
-        panic("Unsupported edge type constraint with more than one type name");
-    }
 
     const std::string& edgeTypeName = typeConstrNames.front()->getName();
     
@@ -441,9 +438,6 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     const auto edgeTypeIDs= _mem->alloc<ColumnVector<EdgeTypeID>>();
 
     const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
-    if (typeConstrNames.size() != 1) {
-        panic("Unsupported edge type constraint with more than one type name");
-    }
 
     const std::string& edgeTypeName = typeConstrNames.front()->getName();
     

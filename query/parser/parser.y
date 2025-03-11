@@ -117,6 +117,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::EntityPattern*> node_pattern
 %type<db::EntityPattern*> edge_pattern
 %type<db::EntityPattern*> entity_pattern
+%type<db::EntityPattern*> edge_entity_pattern
 %type<db::TypeConstraint*> type_constraint
 %type<db::ExprConstraint*> expr_constraint
 %type<db::VarExpr*> entity_var
@@ -224,8 +225,38 @@ node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
             | entity_pattern { $$ = $1; }
             ;
 
-edge_pattern: OSBRACK entity_pattern CSBRACK { $$ = $2; }
+edge_pattern: OSBRACK edge_entity_pattern CSBRACK { $$ = $2; }
             ;
+
+edge_entity_pattern: entity_var COLON ID expr_constraint
+              {
+                  auto constr = TypeConstraint::create(ctxt);
+                  constr->addType(VarExpr::create(ctxt, $3));
+                  $$ = EntityPattern::create(ctxt, $1, constr, $4);
+              }
+              | entity_var COLON ID
+              { 
+                  auto constr = TypeConstraint::create(ctxt);
+                  constr->addType(VarExpr::create(ctxt, $3));
+                  $$ = EntityPattern::create(ctxt, $1, constr, nullptr);
+              }
+              | entity_var COLON expr_constraint
+              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
+              | entity_var 
+              { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
+              | COLON ID expr_constraint
+              { 
+                  auto constr = TypeConstraint::create(ctxt);
+                  constr->addType(VarExpr::create(ctxt, $2));
+                  $$ = EntityPattern::create(ctxt, nullptr, constr, $3); 
+              }
+              | COLON ID
+              { 
+                  auto constr = TypeConstraint::create(ctxt);
+                  constr->addType(VarExpr::create(ctxt, $2));
+                  $$ = EntityPattern::create(ctxt, nullptr, constr, nullptr); 
+              }
+              ;
 
 entity_pattern: entity_var COLON type_constraint expr_constraint
               {
