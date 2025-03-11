@@ -32,12 +32,6 @@ public:
         Graph& graph,
         const GraphView& view);
 
-    [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(
-        Graph& graph,
-        const GraphView& view,
-        EntityID firstNodeID,
-        EntityID firstEdgeID);
-
     EntityID addNode(const LabelSetID& labelset);
     EntityID addNode(const LabelSet& labelset);
 

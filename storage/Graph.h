@@ -44,7 +44,7 @@ public:
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;
 
-    void commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
+    bool commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem);
 
     [[nodiscard]] const GraphMetadata* getMetadata() const { return _metadata.get(); }
     [[nodiscard]] GraphMetadata* getMetadata() { return _metadata.get(); }

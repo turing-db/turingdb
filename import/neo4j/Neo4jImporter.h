@@ -11,21 +11,19 @@ class Graph;
 
 class Neo4jImporter {
 public:
-    struct ImportUrlArgs {
+    struct UrlToJsonDirArgs {
         std::string _url = "localhost";
         std::string _urlSuffix = "/db/data/transaction/commit";
         std::string _username = "neo4j";
         std::string _password = "turing";
         uint64_t _port = 7474;
-        bool _writeFiles = true;
-        bool _writeFilesOnly = false;
         FileUtils::Path _workDir;
     };
-    static bool importUrl(JobSystem& jobSystem,
+    static bool fromUrlToJsonDir(JobSystem& jobSystem,
                           Graph* graph,
                           std::size_t nodeCountPerQuery,
                           std::size_t edgeCountPerQuery,
-                          const ImportUrlArgs& args);
+                          const UrlToJsonDirArgs& args);
 
     struct ImportJsonDirArgs {
         FileUtils::Path _jsonDir;
@@ -37,17 +35,15 @@ public:
                               std::size_t edgeCountPerFile,
                               const ImportJsonDirArgs& args);
 
-    struct ImportDumpFileArgs {
+    struct DumpFileToJsonDirArgs {
         FileUtils::Path _workDir;
         FileUtils::Path _dumpFilePath;
-        bool _writeFiles = true;
-        bool _writeFilesOnly = false;
     };
-    static bool importDumpFile(JobSystem& jobSystem,
+    static bool fromDumpFileToJsonDir(JobSystem& jobSystem,
                                Graph* graph,
                                std::size_t nodeCountPerQuery,
                                std::size_t edgeCountPerQuery,
-                               const ImportDumpFileArgs& args);
+                               const DumpFileToJsonDirArgs& args);
 };
 
 }

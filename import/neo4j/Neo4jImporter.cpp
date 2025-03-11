@@ -15,29 +15,40 @@
 
 using namespace db;
 
-bool Neo4jImporter::importUrl(JobSystem& jobSystem,
-                              Graph* graph,
-                              size_t nodeCountPerQuery,
-                              size_t edgeCountPerQuery,
-                              const ImportUrlArgs& args) {
+std::string formatSize(size_t size) {
+    std::array units = {" B", "kB", "MB", "GB"};
+    double convertedSize = static_cast<double>(size);
+    int unitIndex = 0;
+
+    while (convertedSize >= 1024.0 && unitIndex < 3) {
+        convertedSize /= 1024.0;
+        ++unitIndex;
+    }
+
+    return fmt::format("{:>3.0f}{}", convertedSize, units[unitIndex]);
+}
+
+bool Neo4jImporter::fromUrlToJsonDir(JobSystem& jobSystem,
+                                     Graph* graph,
+                                     size_t nodeCountPerQuery,
+                                     size_t edgeCountPerQuery,
+                                     const UrlToJsonDirArgs& args) {
     JsonParser parser(graph);
     QueryManager manager;
     const FileUtils::Path jsonDir = args._workDir / "json";
     JobGroup jobs = jobSystem.newGroup();
 
-    if (args._writeFiles) {
-        if (!FileUtils::createDirectory(jsonDir)) {
-            spdlog::error("Could not create json directory {}", jsonDir.string());
-            return false;
-        }
+    if (!FileUtils::createDirectory(jsonDir)) {
+        spdlog::error("Could not create json directory {}", jsonDir.string());
+        return false;
+    }
 
-        const FileUtils::Path graphTypePath = args._workDir / "type";
-        const auto typeTag = GraphFileTypeDescription::value(GraphFileType::NEO4J_JSON);
+    const FileUtils::Path graphTypePath = jsonDir / "type";
+    const auto typeTag = GraphFileTypeDescription::value(GraphFileType::NEO4J_JSON);
 
-        if (!FileUtils::writeFile(graphTypePath, typeTag.data())) {
-            spdlog::error("Could not write graph type file {}", graphTypePath.string());
-            return false;
-        }
+    if (!FileUtils::writeFile(graphTypePath, typeTag.data())) {
+        spdlog::error("Could not write graph type file {}", graphTypePath.string());
+        return false;
     }
 
     manager.setUrl(args._url);
@@ -52,16 +63,20 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
         return false;
     }
 
-    const auto writeJsonFile = [&](auto& future,
-                                   FileUtils::Path jsonPath,
-                                   std::string& content) {
+    std::atomic<bool> success = true;
+
+    const auto writeJsonFile = [&](FileUtils::Path jsonPath, QueryManager::Query& query) {
         jobs.submit<void>(
-            [&args, &future, jsonPath = std::move(jsonPath), &content](Promise*) {
-                spdlog::info("Writing json file: {}", jsonPath.filename().c_str());
-                FileUtils::writeFile(jsonPath, content);
-                if (!args._writeFilesOnly) {
-                    future.wait();
+            [jsonPath = std::move(jsonPath), &query, &success](Promise*) {
+                if (!query.waitAnswer()) {
+                    success.store(false);
+                    return;
                 }
+
+                auto& content = query._response;
+                spdlog::info("Writing json file: {:>20} {} ",
+                             jsonPath.filename().c_str(), formatSize(content.size()));
+                FileUtils::writeFile(jsonPath, content);
                 content.clear();
                 content.shrink_to_fit();
             });
@@ -73,6 +88,7 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
                 auto* promise = p->cast<QueryManager::Response>();
 
                 if (!q._request->exec()) {
+                    success.store(false);
                     promise->set_value(std::nullopt);
                     return;
                 }
@@ -87,13 +103,6 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
     QueryManager::Query nodePropertiesQuery = manager.nodePropertiesQuery();
     QueryManager::Query edgePropertiesQuery = manager.edgePropertiesQuery();
 
-    SharedFuture<std::optional<GraphStats>> statsResult;
-    SharedFuture<bool> nodeLabelsResult;
-    SharedFuture<bool> nodeLabelSetsResult;
-    SharedFuture<bool> edgeTypeResult;
-    SharedFuture<bool> nodePropertiesResult;
-    SharedFuture<bool> edgePropertiesResult;
-
     // Submitting meta data HTTP queries
     submitQuery(statsQuery);
     submitQuery(nodeLabelsQuery);
@@ -102,305 +111,67 @@ bool Neo4jImporter::importUrl(JobSystem& jobSystem,
     submitQuery(nodePropertiesQuery);
     submitQuery(edgePropertiesQuery);
 
-    // Parsing stats to get the node and edge count
     if (!statsQuery.waitAnswer()) {
         spdlog::error("Could not retrieve database info");
-        jobs.wait();
         return false;
     }
 
-    statsResult = jobs.submit<std::optional<GraphStats>>(
-        [&](Promise* p) {
-            auto* promise = p->cast<std::optional<GraphStats>>();
-            auto stats = parser.parseStats(statsQuery._response);
-            spdlog::info("Retrieving database info");
-            promise->set_value(stats);
-            spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
-        });
+    const auto stats = parser.parseStats(statsQuery._response);
+    spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
 
-    // Parsing node labels
-    if (!nodeLabelsQuery.waitAnswer()) {
-        spdlog::error("Could not retrieve node labels");
-        jobs.wait();
+    // Write node metadata json files
+    writeJsonFile(jsonDir / "stats.json", statsQuery);
+    writeJsonFile(jsonDir / "nodeLabels.json", nodeLabelsQuery);
+    writeJsonFile(jsonDir / "labelSets.json", nodeLabelSetsQuery);
+    writeJsonFile(jsonDir / "edgeTypes.json", edgeTypesQuery);
+    writeJsonFile(jsonDir / "nodeProperties.json", nodePropertiesQuery);
+    writeJsonFile(jsonDir / "edgeProperties.json", edgePropertiesQuery);
+
+    jobs.wait();
+
+    if (!success.load()) {
+        spdlog::error("Could not retrieve metadata");
         return false;
     }
 
-    if (!args._writeFilesOnly) {
-        nodeLabelsResult = jobs.submit<bool>(
-            [&](Promise* p) {
-                auto* promise = p->cast<bool>();
-                spdlog::info("Retrieving node labels");
-                promise->set_value(parser.parseNodeLabels(nodeLabelsQuery._response));
-            });
-    }
-
-    // Parsing node label sets
-    if (!nodeLabelSetsQuery.waitAnswer()) {
-        spdlog::error("Could not retrieve node label sets");
-        jobs.wait();
-        return false;
-    }
-
-    if (!args._writeFilesOnly) {
-        nodeLabelSetsResult = jobs.submit<bool>(
-            [&](Promise* p) {
-                auto* promise = p->cast<bool>();
-                spdlog::info("Retrieving node label set");
-                promise->set_value(parser.parseNodeLabelSets(nodeLabelsQuery._response));
-            });
-    }
-
-    // Parsing node properties
-    if (!nodePropertiesQuery.waitAnswer()) {
-        spdlog::error("Could not retrieve node properties");
-        jobs.wait();
-        return false;
-    }
-
-    if (!args._writeFilesOnly) {
-        nodePropertiesResult = jobs.submit<bool>(
-            [&](Promise* p) {
-                auto* promise = p->cast<bool>();
-                spdlog::info("Retrieving node properties");
-                promise->set_value(parser.parseNodeProperties(nodePropertiesQuery._response));
-            });
-    }
-
-    // While the node meta data are being parsed, write the json files
-    if (args._writeFiles) {
-        writeJsonFile(statsResult, jsonDir / "stats.json", statsQuery._response);
-        writeJsonFile(nodeLabelsResult, jsonDir / "nodeLabels.json", nodeLabelsQuery._response);
-        writeJsonFile(nodeLabelSetsResult, jsonDir / "labelSets.json", nodeLabelSetsQuery._response);
-        writeJsonFile(nodePropertiesResult, jsonDir / "nodeProperties.json", nodePropertiesQuery._response);
-    }
-
-    // Retrieve node and edge count
-    statsResult.wait();
-    auto statsOptional = statsResult.get();
-    if (!statsOptional.has_value()) {
-        spdlog::error("Could not retrieve stats");
-        jobs.wait();
-        return false;
-    }
-    const auto& stats = statsOptional.value();
-
-    // Wait for node properties and labels to be known before parsing nodes
-    if (!args._writeFilesOnly) {
-        nodeLabelsResult.wait();
-        if (!nodeLabelsResult.get()) {
-            spdlog::error("Could not retrieve node labels");
-            jobs.wait();
-            return false;
-        }
-
-        nodePropertiesResult.wait();
-        if (!nodePropertiesResult.get()) {
-            spdlog::error("Could not retrieve node properties");
-            jobs.wait();
-            return false;
-        }
-    }
-
-    // Query and parse nodes (and write json files)
+    // Query nodes and write json files
     auto nodeQueries = manager.nodesQueries(stats.nodeCount, nodeCountPerQuery);
-    std::vector<SharedFuture<bool>> nodeResults(nodeQueries.size());
-    size_t i = 0;
-    for (auto& q : nodeQueries) {
-        // Submit the query
-        submitQuery(q);
 
-        // Create the buffer that will hold the node info
-        DataPartBuilder* buf = nullptr;
-        if (!args._writeFilesOnly) {
-            buf = &parser.newDataBuffer(nodeCountPerQuery, 0);
-        }
-
-        // This job waits for the query to end before starting the parsing
-        nodeResults[i] = jobs.submit<bool>(
-            [&, buf, i](Promise* p) {
-                auto* promise = p->cast<bool>();
-
-                if (!q.waitAnswer()) {
-                    promise->set_value(false);
-                    return;
-                }
-
-                const size_t rawUpperRange = nodeCountPerQuery * (i + 1);
-                const size_t overflow = (rawUpperRange % stats.nodeCount)
-                                      * (rawUpperRange / stats.nodeCount);
-                const size_t upperRange = rawUpperRange - overflow;
-                spdlog::info("Retrieving node range [{}-{}] / {}",
-                             i * nodeCountPerQuery,
-                             upperRange,
-                             stats.nodeCount);
-                if (!args._writeFilesOnly) {
-                    promise->set_value(parser.parseNodes(q._response, *buf));
-                }
-            });
-
-        if (args._writeFiles) {
-            // This job wait for the query to end before writing the json file
-            jobs.submit<void>(
-                [&, i](Promise*) {
-                    if (!q.waitAnswer()) {
-                        return;
-                    }
-
-                    std::string fileName = "nodes_" + std::to_string(i + 1) + ".json";
-                    FileUtils::Path jsonPath = jsonDir / fileName;
-
-                    spdlog::info("Writing json file: {}", jsonPath.filename().string());
-                    FileUtils::writeFile(jsonPath, q._response);
-                    if (!args._writeFilesOnly) {
-                        nodeResults[i].wait();
-                    }
-                    q._response.clear();
-                    q._response.shrink_to_fit();
-                });
-        }
-
-        i++;
+    for (auto& nodeQuery : nodeQueries) {
+        submitQuery(nodeQuery);
     }
 
-    // Parsing edge types
-    if (!edgeTypesQuery.waitAnswer()) {
-        spdlog::error("Could not retrieve edge types");
-        jobs.wait();
-        return false;
+    for (size_t i = 0; i < nodeQueries.size(); i++) {
+        auto& nodeQuery = nodeQueries[i];
+        std::string fileName = "nodes_" + std::to_string(i + 1) + ".json";
+        writeJsonFile(jsonDir / fileName, nodeQuery);
     }
 
-    if (!args._writeFilesOnly) {
-        edgeTypeResult = jobs.submit<bool>(
-            [&](Promise* p) {
-                auto* promise = p->cast<bool>();
-                spdlog::info("Retrieving edge types");
-                promise->set_value(parser.parseEdgeTypes(edgeTypesQuery._response));
-            });
-    }
-
-    // Parsing edge properties
-    if (!edgePropertiesQuery.waitAnswer()) {
-        spdlog::error("Could not retrieve edge properties");
-        jobs.wait();
-        return false;
-    }
-
-    if (!args._writeFilesOnly) {
-        edgePropertiesResult = jobs.submit<bool>(
-            [&](Promise* p) {
-                auto* promise = p->cast<bool>();
-                spdlog::info("Retrieving edge properties");
-                promise->set_value(parser.parseEdgeProperties(edgePropertiesQuery._response));
-            });
-    }
-
-    // While the edge meta data are being parsed, write the json files
-    if (args._writeFiles) {
-        writeJsonFile(edgeTypeResult, jsonDir / "edgeTypes.json", edgeTypesQuery._response);
-        writeJsonFile(edgePropertiesResult, jsonDir / "edgeProperties.json", edgePropertiesQuery._response);
-    }
-
-    // Wait for the end of the node results before parsing the edges
-    if (!args._writeFilesOnly) {
-        for (auto& nodeResult : nodeResults) {
-            nodeResult.wait();
-            if (!nodeResult.get()) {
-                spdlog::error("Could not retrieve nodes");
-                jobs.wait();
-                return false;
-            }
-        }
-    }
-
-    jobs.wait();
-
-    if (!args._writeFilesOnly) {
-        {
-            TimerStat t {"Build and push DataPart for nodes"};
-            parser.commit(*graph, jobSystem);
-        }
-    }
-
-    parser.newCommit();
-
-    // Query and parse edges (and write json files)
+    // Query edges and write json files
     auto edgeQueries = manager.edgesQueries(stats.edgeCount, edgeCountPerQuery);
-    std::vector<SharedFuture<bool>> edgeResults(edgeQueries.size());
-    i = 0;
-    for (auto& q : edgeQueries) {
-        // Submit the query
-        submitQuery(q);
 
-        // Create the buffer that will hold the edge info
-        DataPartBuilder* buf = nullptr;
-        if (!args._writeFilesOnly) {
-            buf = &parser.newDataBuffer(0, edgeCountPerQuery);
-        }
-
-        // This job waits for the query to end before starting the parsing
-        edgeResults[i] = jobs.submit<bool>(
-            [&, buf, i](Promise* p) {
-                auto* promise = p->cast<bool>();
-                if (!q.waitAnswer()) {
-                    promise->set_value(false);
-                    return;
-                }
-                const size_t rawUpperRange = edgeCountPerQuery * (i + 1);
-                const size_t overflow = (rawUpperRange % stats.edgeCount)
-                                      * (rawUpperRange / stats.edgeCount);
-                const size_t upperRange = rawUpperRange - overflow;
-                spdlog::info("Retrieving edge range [{}-{}] / {}",
-                             i * edgeCountPerQuery,
-                             upperRange,
-                             stats.edgeCount);
-                if (!args._writeFilesOnly) {
-                    promise->set_value(parser.parseEdges(q._response, *buf));
-                }
-            });
-
-        if (args._writeFiles) {
-            // This job wait for the query to end before writing the json file
-            jobs.submit<void>(
-                [&, i](Promise*) {
-                    if (!q.waitAnswer()) {
-                        return;
-                    }
-
-                    std::string fileName = "edges_" + std::to_string(i + 1) + ".json";
-                    FileUtils::Path jsonPath = jsonDir / fileName;
-
-                    spdlog::info("Writing json file: {}", jsonPath.filename().c_str());
-                    FileUtils::writeFile(jsonPath, q._response);
-                    if (!args._writeFilesOnly) {
-                        edgeResults[i].wait();
-                    }
-                    q._response.clear();
-                    q._response.shrink_to_fit();
-                });
-        }
-
-        i++;
-    }
-
-    // Wait for the end before pushing the datapart
-    // (json files are still being written in the bg)
-
-    if (!args._writeFilesOnly) {
-        for (auto& edgeResult : edgeResults) {
-            edgeResult.wait();
-            if (!edgeResult.get()) {
-                spdlog::error("Could not retrieve edges");
-                jobs.wait();
-                return false;
-            }
-        }
+    for (auto& edgeQuery : edgeQueries) {
+        submitQuery(edgeQuery);
     }
 
     jobs.wait();
 
-    if (!args._writeFilesOnly) {
-        TimerStat t {"Build and push DataPart for edges"};
-        parser.commit(*graph, jobSystem);
+    if (!success.load()) {
+        spdlog::error("Could not retrieve nodes");
+        return false;
+    }
+
+    for (size_t i = 0; i < edgeQueries.size(); i++) {
+        auto& edgeQuery = edgeQueries[i];
+        std::string fileName = "edges_" + std::to_string(i + 1) + ".json";
+        writeJsonFile(jsonDir / fileName, edgeQuery);
+    }
+
+    jobs.wait();
+
+    if (!success.load()) {
+        spdlog::error("Could not retrieve edges");
+        return false;
     }
 
     return true;
@@ -419,138 +190,92 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
     const FileUtils::Path edgeTypesPath = args._jsonDir / "edgeTypes.json";
     const FileUtils::Path nodePropertiesPath = args._jsonDir / "nodeProperties.json";
     const FileUtils::Path edgePropertiesPath = args._jsonDir / "edgeProperties.json";
+
     JobGroup jobs = jobSystem.newGroup();
+    GraphStats stats;
 
-    auto statsRes = jobs.submit<std::optional<GraphStats>>(
-        [&](Promise* p) {
-            auto* promise = p->cast<std::optional<GraphStats>>();
-            std::string data;
+    {
+        // Stats
+        std::string statsData;
+        if (!FileUtils::readContent(statsPath, statsData)) {
+            spdlog::error("Could not read stats file");
+            return false;
+        }
+        spdlog::info("Parsing database info");
+        stats = parser.parseStats(statsData);
 
-            if (!FileUtils::readContent(statsPath, data)) {
-                promise->set_value(std::nullopt);
-                return;
-            }
-            spdlog::info("Retrieving database info");
-            auto stats = parser.parseStats(data);
-            promise->set_value(stats);
-        });
+        spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
 
-    auto nodeLabelsRes = jobs.submit<bool>(
-        [&](Promise* p) {
-            auto* promise = p->cast<bool>();
-            std::string data;
+        // Node Labels
+        std::string nodeLabelsData;
+        if (!FileUtils::readContent(nodeLabelsPath, nodeLabelsData)) {
+            spdlog::error("Could not read node labels file");
+            return false;
+        }
+        spdlog::info("Parsing node labels");
+        if (!parser.parseNodeLabels(nodeLabelsData)) {
+            spdlog::error("Could not parse node labels");
+            return false;
+        }
 
-            if (!FileUtils::readContent(nodeLabelsPath, data)) {
-                promise->set_value(false);
-                return;
-            }
+        // Node Labelsets
+        std::string nodeLabelSetsData;
+        if (!FileUtils::readContent(nodeLabelSetsPath, nodeLabelSetsData)) {
+            spdlog::error("Could not read node label sets file");
+            return false;
+        }
+        spdlog::info("Parsing node label sets");
+        if (!parser.parseNodeLabelSets(nodeLabelSetsData)) {
+            spdlog::error("Could not parse node label sets");
+            return false;
+        }
 
-            spdlog::info("Retrieving node labels");
-            promise->set_value(parser.parseNodeLabels(data));
-        });
+        // Node Properties
+        std::string nodePropertiesData;
+        if (!FileUtils::readContent(nodePropertiesPath, nodePropertiesData)) {
+            spdlog::error("Could not read node properties file");
+            return false;
+        }
+        spdlog::info("Parsing node properties");
+        if (!parser.parseNodeProperties(nodePropertiesData)) {
+            spdlog::error("Could not parse node properties");
+            return false;
+        }
 
-    auto edgeTypesRes = jobs.submit<bool>(
-        [&](Promise* p) {
-            auto* promise = p->cast<bool>();
-            std::string data;
+        // Edge types
+        std::string edgeTypesData;
+        if (!FileUtils::readContent(edgeTypesPath, edgeTypesData)) {
+            spdlog::error("Could not read edge types file");
+            return false;
+        }
+        spdlog::info("Parsing edge types");
+        if (!parser.parseEdgeTypes(edgeTypesData)) {
+            spdlog::error("Could not parse edge types");
+            return false;
+        }
 
-            if (!FileUtils::readContent(edgeTypesPath, data)) {
-                promise->set_value(false);
-                return;
-            }
-
-            spdlog::info("Retrieving edge types");
-            promise->set_value(parser.parseEdgeTypes(data));
-        });
-
-    auto rawStats = statsRes.get();
-    if (!rawStats.has_value()) {
-        spdlog::error("Could not retrieve database info");
-        jobs.wait();
-        return false;
-    }
-    auto stats = rawStats.value();
-    spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
-
-    if (!nodeLabelsRes.get()) {
-        spdlog::error("Could not retrieve node labels");
-        jobs.wait();
-        return false;
-    }
-
-    if (!edgeTypesRes.get()) {
-        spdlog::error("Could not retrieve edge types");
-        jobs.wait();
-        return false;
-    }
-
-    auto nodeLabelSetsRes = jobs.submit<bool>(
-        [&](Promise* p) {
-            auto* promise = p->cast<bool>();
-            std::string data;
-
-            if (!FileUtils::readContent(nodeLabelSetsPath, data)) {
-                promise->set_value(false);
-                return;
-            }
-
-            spdlog::info("Retrieving node label sets");
-            promise->set_value(parser.parseNodeLabelSets(data));
-        });
-
-
-    auto nodePropertiesRes = jobs.submit<bool>(
-        [&](Promise* p) {
-            auto* promise = p->cast<bool>();
-            std::string data;
-
-            if (!FileUtils::readContent(nodePropertiesPath, data)) {
-                promise->set_value(false);
-                return;
-            }
-
-            spdlog::info("Retrieving node properties");
-            promise->set_value(parser.parseNodeProperties(data));
-        });
-
-    nodePropertiesRes.wait();
-
-    auto edgePropertiesRes = jobs.submit<bool>(
-        [&](Promise* p) {
-            auto* promise = p->cast<bool>();
-            std::string data;
-
-            if (!FileUtils::readContent(edgePropertiesPath, data)) {
-                promise->set_value(false);
-                return;
-            }
-
-            spdlog::info("Retrieving edge properties");
-            promise->set_value(parser.parseEdgeProperties(data));
-        });
-
-    if (!nodePropertiesRes.get()) {
-        spdlog::error("Could not retrieve node properties");
-        jobs.wait();
-        return false;
+        // Edge properties
+        std::string edgePropertiesData;
+        if (!FileUtils::readContent(edgePropertiesPath, edgePropertiesData)) {
+            spdlog::error("Could not read edge properties file");
+            return false;
+        }
+        if (!parser.parseEdgeProperties(edgePropertiesData)) {
+            spdlog::error("Could not parse edge properties");
+            return false;
+        }
     }
 
-    // We need to parse the label sets before we parse every node
-    if (!nodeLabelSetsRes.get()) {
-        spdlog::error("Could not retrieve node label sets");
-        jobs.wait();
-        return false;
-    }
 
     // Query and parse nodes
     const size_t nodeSteps = stats.nodeCount / nodeCountPerFile
                            + (size_t)((stats.nodeCount % nodeCountPerFile) != 0);
+
     std::vector<SharedFuture<bool>> nodeResults(nodeSteps);
 
-    const size_t nodeCountRemainder = stats.nodeCount % nodeCountPerFile;
     for (size_t i = 0; i < nodeSteps; i++) {
         // Create the buffer that will hold the node info
-        DataPartBuilder& buf = parser.newDataBuffer(nodeCountPerFile, 0);
+        DataPartBuilder& buf = parser.newDataBuffer();
 
         nodeResults[i] = jobs.submit<bool>(
             [&, i](Promise* p) {
@@ -563,24 +288,20 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
                     return;
                 }
 
-                const bool isLastFile = (i == nodeSteps - 1);
-                const size_t currentCount = isLastFile
-                                         ? (nodeCountRemainder == 0 ? nodeCountPerFile : nodeCountRemainder)
-                                         : nodeCountPerFile;
-                spdlog::info("Retrieving node range [{}-{}] / {}",
-                             i * nodeCountPerFile,
-                             currentCount + nodeCountPerFile * i,
-                             stats.nodeCount);
+                const size_t remainder = (stats.nodeCount % nodeCountPerFile);
+                const bool isLast = (i == nodeSteps - 1);
+                const size_t currentCount = isLast
+                                              ? (remainder == 0 ? nodeCountPerFile : remainder)
+                                              : nodeCountPerFile;
+                const size_t upperRange = i * nodeCountPerFile + currentCount;
+
+                spdlog::info("Retrieving node range [{:>9}-{:<9}]",
+                             i * nodeCountPerFile, upperRange);
                 promise->set_value(parser.parseNodes(data, buf));
             });
     }
 
-    if (!edgePropertiesRes.get()) {
-        spdlog::error("Could not retrieve edge properties");
-        jobs.wait();
-        return false;
-    }
-
+    // Wait for the end before pushing the datapart
     for (auto& nodeResult : nodeResults) {
         nodeResult.wait();
         if (!nodeResult.get()) {
@@ -590,23 +311,20 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
         }
     }
 
-    jobs.wait();
     {
         TimerStat t {"Build and push DataPart for nodes"};
-        parser.commit(*graph, jobSystem);
+        parser.buildPending(jobSystem);
     }
-
-    parser.newCommit();
 
     // Query and parse edges
     const size_t edgeSteps = stats.edgeCount / edgeCountPerFile
                            + (size_t)((stats.edgeCount % edgeCountPerFile) != 0);
-    const size_t edgeCountRemainder = stats.edgeCount % edgeCountPerFile;
+
     std::vector<SharedFuture<bool>> edgeResults(edgeSteps);
 
     for (size_t i = 0; i < edgeSteps; i++) {
         // Create the buffer that will hold the edge info
-        DataPartBuilder& buf = parser.newDataBuffer(0, edgeCountPerFile);
+        DataPartBuilder& buf = parser.newDataBuffer();
 
         edgeResults[i] = jobs.submit<bool>(
             [&, i](Promise* p) {
@@ -619,20 +337,19 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
                     return;
                 }
 
-                const bool isLastFile = (i == nodeSteps - 1);
-                const size_t currentCount = isLastFile
-                                         ? (edgeCountRemainder == 0 ? edgeCountPerFile : edgeCountRemainder)
-                                         : edgeCountPerFile;
-                spdlog::info("Retrieving edge range [{}-{}] / {}",
-                             i * edgeCountPerFile,
-                             currentCount + edgeCountPerFile * i,
-                             stats.edgeCount);
+                const size_t remainder = (stats.edgeCount % edgeCountPerFile);
+                const bool isLast = (i == edgeSteps - 1);
+                const size_t currentCount = isLast
+                                              ? (remainder == 0 ? edgeCountPerFile : remainder)
+                                              : edgeCountPerFile;
+                const size_t upperRange = i * edgeCountPerFile + currentCount;
+                spdlog::info("Retrieving edge range [{:>9}-{:<9}]",
+                             i * edgeCountPerFile, upperRange);
                 promise->set_value(parser.parseEdges(data, buf));
             });
     }
 
     // Wait for the end before pushing the datapart
-    // (json files are still being written in the bg)
     for (auto& edgeResult : edgeResults) {
         edgeResult.wait();
         if (!edgeResult.get()) {
@@ -642,8 +359,6 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
         }
     }
 
-    jobs.wait();
-
     {
         TimerStat t {"Build and push DataPart for edges"};
         parser.commit(*graph, jobSystem);
@@ -652,11 +367,11 @@ bool Neo4jImporter::importJsonDir(JobSystem& jobSystem,
     return true;
 }
 
-bool Neo4jImporter::importDumpFile(JobSystem& jobSystem,
-                                   Graph* graph,
-                                   std::size_t nodeCountPerQuery,
-                                   std::size_t edgeCountPerQuery,
-                                   const ImportDumpFileArgs& args) {
+bool Neo4jImporter::fromDumpFileToJsonDir(JobSystem& jobSystem,
+                                          Graph* graph,
+                                          std::size_t nodeCountPerQuery,
+                                          std::size_t edgeCountPerQuery,
+                                          const DumpFileToJsonDirArgs& args) {
     Neo4jInstance instance(args._workDir);
 
     if (Neo4jInstance::isRunning()) {
@@ -676,19 +391,14 @@ bool Neo4jImporter::importDumpFile(JobSystem& jobSystem,
         }
     }
 
-    ImportUrlArgs urlArgs {
+    UrlToJsonDirArgs urlArgs {
         ._url = "localhost",
         ._urlSuffix = "/db/data/transaction/commit",
         ._username = "neo4j",
         ._password = "turing",
         ._port = 7474,
-        ._writeFiles = args._writeFiles,
-        ._writeFilesOnly = args._writeFilesOnly,
         ._workDir = args._workDir,
     };
 
-    const bool res = Neo4jImporter::importUrl(jobSystem, graph, nodeCountPerQuery, edgeCountPerQuery, urlArgs);
-
-    instance.destroy();
-    return res;
+    return Neo4jImporter::fromUrlToJsonDir(jobSystem, graph, nodeCountPerQuery, edgeCountPerQuery, urlArgs);
 }

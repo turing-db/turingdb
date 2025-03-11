@@ -15,21 +15,14 @@ DataPartBuilder::~DataPartBuilder() = default;
 std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(Graph& graph,
                                                           const GraphView& view) {
     const auto reader = view.read();
-    return DataPartBuilder::prepare(graph, view, reader.getNodeCount(), reader.getEdgeCount());
-}
-
-std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(Graph& graph,
-                                                          const GraphView& view,
-                                                          EntityID firstNodeID,
-                                                          EntityID firstEdgeID) {
     auto* ptr = new DataPartBuilder();
 
     ptr->_view = view;
     ptr->_graph = &graph;
-    ptr->_firstNodeID = firstNodeID;
-    ptr->_firstEdgeID = firstEdgeID;
-    ptr->_nextNodeID = firstNodeID;
-    ptr->_nextEdgeID = firstEdgeID;
+    ptr->_firstNodeID = reader.getNodeCount();
+    ptr->_firstEdgeID = reader.getEdgeCount();
+    ptr->_nextNodeID = ptr->_firstNodeID;
+    ptr->_nextEdgeID = ptr->_firstEdgeID;
     ptr->_nodeProperties = std::make_unique<PropertyManager>(graph.getMetadata());
     ptr->_edgeProperties = std::make_unique<PropertyManager>(graph.getMetadata());
 
@@ -56,6 +49,7 @@ void DataPartBuilder::addNodeProperty(EntityID nodeID,
     if (!_nodeProperties->hasPropertyType(ptID)) {
         _nodeProperties->registerPropertyType<T>(ptID);
     }
+
     if (nodeID < _firstNodeID) {
         _patchNodeLabelSets.emplace(nodeID, LabelSetID {});
     }

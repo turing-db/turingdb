@@ -12,7 +12,8 @@ using namespace db;
 Graph::Graph()
     : _graphName("default"),
       _metadata(new GraphMetadata()),
-      _versionController(new VersionController) {
+      _versionController(new VersionController)
+{
     _versionController->initialize(this);
 }
 
@@ -35,8 +36,12 @@ WriteTransaction Graph::openWriteTransaction(CommitHash hash) const {
     return _versionController->openWriteTransaction(hash);
 }
 
-void Graph::commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem) {
-    _versionController->commit(commitBuilder->build(*this, jobSystem));
+bool Graph::commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem) {
+    if (!commitBuilder) {
+        return false;
+    }
+
+    return _versionController->commit(commitBuilder->build(jobSystem));
 }
 
 Graph::EntityIDs Graph::getNextFreeIDs() const {

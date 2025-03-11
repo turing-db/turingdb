@@ -19,7 +19,9 @@ Neo4jInstance::Neo4jInstance(const FileUtils::Path& baseDir)
 {
 }
 
-Neo4jInstance::~Neo4jInstance() = default;
+Neo4jInstance::~Neo4jInstance() {
+    destroy();
+}
 
 bool Neo4jInstance::setup() {
     // Check that neo4j archive exists in installation

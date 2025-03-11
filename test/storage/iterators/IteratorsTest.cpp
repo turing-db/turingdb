@@ -140,16 +140,16 @@ protected:
 
         // PUSH DATAPARTS
         spdlog::info("Pushing 1");
-        _graph->commit(std::move(commitBuilder1), *_jobSystem);
+        ASSERT_TRUE(_graph->commit(std::move(commitBuilder1), *_jobSystem));
 
         spdlog::info("Pushing 2");
-        _graph->commit(std::move(commitBuilder2), *_jobSystem);
+        ASSERT_TRUE(_graph->commit(std::move(commitBuilder2), *_jobSystem));
 
         /* THIRD BUFFER (Empty) */
         const auto tx3 = _graph->openWriteTransaction();
         auto commitBuilder3 = tx3.prepareCommit();
         [[maybe_unused]] auto& builder3 = commitBuilder3->newBuilder();
-        _graph->commit(std::move(commitBuilder3), *_jobSystem);
+        ASSERT_TRUE(_graph->commit(std::move(commitBuilder3), *_jobSystem));
         spdlog::info("Pushing 3");
 
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
@@ -238,7 +238,7 @@ protected:
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         spdlog::info("Pushing 4");
-        _graph->commit(std::move(commitBuilder4), *_jobSystem);
+        ASSERT_TRUE(_graph->commit(std::move(commitBuilder4), *_jobSystem));
     }
 
     void TearDown() override {

@@ -2,7 +2,6 @@
 
 #include "reader/GraphReader.h"
 #include "Graph.h"
-#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "writers/DataPartBuilder.h"
 
@@ -15,81 +14,79 @@ CommitBuilder::~CommitBuilder() = default;
 std::unique_ptr<CommitBuilder> CommitBuilder::prepare(Graph& graph, const GraphView& view) {
     const auto reader = view.read();
 
-    auto* ptr = new CommitBuilder {graph, view};
+    auto* ptr = new CommitBuilder {graph};
 
     ptr->_firstNodeID = reader.getNodeCount();
     ptr->_firstEdgeID = reader.getNodeCount();
-    ptr->_previousDataparts = reader.dataparts();
+
+    ptr->_commit = std::make_unique<Commit>();
+    ptr->_commit->_graph = ptr->_graph;
+    ptr->_commit->_data = std::make_shared<CommitData>();
+    ptr->_commit->_data->_hash = ptr->_commit->_hash;
+    ptr->_commit->_data->_graphMetadata = graph.getMetadata();
+
+    const DataPartSpan previousDataparts = reader.dataparts();
+    ptr->_commit->_data->_dataparts.resize(previousDataparts.size());
+    std::copy(previousDataparts.begin(),
+              previousDataparts.end(),
+              ptr->_commit->_data->_dataparts.begin());
 
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
+GraphView CommitBuilder::viewGraph() const {
+    return GraphView {*_graph, *_commit->_data};
+}
+
+GraphReader CommitBuilder::readGraph() const {
+    return viewGraph().read();
+}
 
 DataPartBuilder& CommitBuilder::newBuilder() {
     std::scoped_lock lock {_mutex};
-    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_graph,
-                                                                    _view,
-                                                                    _nextNodeID,
-                                                                    _nextEdgeID));
+    GraphView view {*_graph, *_commit->_data};
+    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_graph, view));
 
     return *builder;
 }
 
-DataPartBuilder& CommitBuilder::newBuilder(size_t nodeCount, size_t edgeCount) {
-    std::scoped_lock lock {_mutex};
-    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_graph,
-                                                                    _view,
-                                                                    _nextNodeID,
-                                                                    _nextEdgeID));
-    _nextNodeID += nodeCount;
-    _nextEdgeID += edgeCount;
-
-    return *builder;
-}
-
-std::unique_ptr<Commit> CommitBuilder::build(Graph& graph, JobSystem& jobsystem) {
-    spdlog::info("** Building commit");
+void CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     std::scoped_lock lock {_mutex};
     size_t nodeCount = 0;
     size_t edgeCount = 0;
 
-    spdlog::info("- Builders:");
     for (const auto& builder : _builders) {
-        spdlog::info("    * {} nodes, {} edges", builder->nodeCount(), builder->edgeCount());
         nodeCount += builder->nodeCount();
         edgeCount += builder->edgeCount();
     }
 
-    auto [firstNodeID, firstEdgeID] = graph.allocIDRange(nodeCount, edgeCount);
+    auto [firstNodeID, firstEdgeID] = _graph->allocIDRange(nodeCount, edgeCount);
+    GraphView view {*_graph, *_commit->_data};
 
-    auto commit = std::make_unique<Commit>();
-    commit->_graph = &graph;
-    commit->_data = std::make_shared<CommitData>();
-    commit->_data->_hash = commit->_hash;
-    commit->_data->_graphMetadata = graph.getMetadata();
-    commit->_data->_dataparts.resize(_previousDataparts.size());
-    std::copy(_previousDataparts.begin(), _previousDataparts.end(), commit->_data->_dataparts.begin());
-
-    size_t i = 0;
     for (const auto& builder : _builders) {
-        spdlog::info("- Building datapart of builder {}", i + 1);
         auto part = std::make_shared<DataPart>(firstNodeID, firstEdgeID);
 
         firstNodeID += builder->nodeCount();
-        firstEdgeID += builder->nodeCount();
+        firstEdgeID += builder->edgeCount();
 
-        part->load(_view, jobsystem, *builder);
-        commit->_data->_dataparts.emplace_back(part);
-        i++;
+        // TODO Use the jobsystem here
+        part->load(view, jobsystem, *builder);
+        _commit->_data->_dataparts.emplace_back(part);
     }
-    spdlog::info("- Done building commit");
 
-    return commit;
+    _builders.clear();
 }
 
-CommitBuilder::CommitBuilder(Graph& graph, const GraphView& view)
+
+std::unique_ptr<Commit> CommitBuilder::build(JobSystem& jobsystem) {
+    buildAllPending(jobsystem);
+
+    return std::move(_commit);
+}
+
+CommitBuilder::CommitBuilder(Graph& graph)
     : _graph(&graph),
-      _versionController(graph._versionController.get()),
-      _view(view) {
+      _versionController(graph._versionController.get())
+{
 }
 

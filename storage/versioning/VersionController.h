@@ -24,7 +24,7 @@ public:
     VersionController& operator=(VersionController&&) = delete;
 
     void initialize(Graph*);
-    void commit(std::unique_ptr<Commit> commit);
+    bool commit(std::unique_ptr<Commit> commit);
 
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;

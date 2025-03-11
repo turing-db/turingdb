@@ -24,15 +24,14 @@ JsonParser::JsonParser(Graph* graph)
       _transaction(graph->openWriteTransaction()),
       _commitBuilder(_transaction.prepareCommit()),
       _graphMetadata(graph->getMetadata()),
-      _nodeIDMapper(new IDMapper) {
+      _nodeIDMapper(new IDMapper)
+{
 }
 
 JsonParser::~JsonParser() = default;
 
-void JsonParser::newCommit() {
-    _transaction = _graph->openWriteTransaction();
-    _commitBuilder = _transaction.prepareCommit();
-    _graphMetadata = _graph->getMetadata();
+void JsonParser::buildPending(JobSystem& jobsystem) {
+    _commitBuilder->buildAllPending(jobsystem);
 }
 
 GraphStats JsonParser::parseStats(const std::string& data) {
@@ -99,14 +98,17 @@ bool JsonParser::parseNodes(const std::string& data, DataPartBuilder& buf) {
 }
 
 bool JsonParser::parseEdges(const std::string& data, DataPartBuilder& buf) {
-    auto parser = json::neo4j::EdgeParser(_graphMetadata, &buf, _nodeIDMapper.get(), _transaction.readGraph());
+    auto parser = json::neo4j::EdgeParser(_graphMetadata,
+                                          &buf,
+                                          _nodeIDMapper.get(),
+                                          _commitBuilder->readGraph());
     return nlohmann::json::sax_parse(data, &parser,
                                      nlohmann::json::input_format_t::json,
                                      true, true);
 }
 
-DataPartBuilder& JsonParser::newDataBuffer(size_t nodeCount, size_t edgeCount) {
-    return _commitBuilder->newBuilder(nodeCount, edgeCount);
+DataPartBuilder& JsonParser::newDataBuffer() {
+    return _commitBuilder->newBuilder();
 }
 
 void JsonParser::commit(Graph& graph, JobSystem& jobSystem) {

@@ -49,10 +49,30 @@ WriteTransaction VersionController::openWriteTransaction(CommitHash hash) const 
     return it->second->openWriteTransaction();
 }
 
-void VersionController::commit(std::unique_ptr<Commit> commit) {
+bool VersionController::commit(std::unique_ptr<Commit> commit) {
     std::scoped_lock lock {_mutex};
 
     auto* ptr = commit.get();
+
+    /* New commits might have been commited while the current commit was being prepared.
+     * In this case, the current commit would have an outdated history.
+     * This snippet ensures that the history includes all missing dataparts.
+     * */
+    size_t j = 0;
+    auto& commitDataparts = commit->_data->_dataparts;
+    const auto& headDataparts = _head.load()->_data->_dataparts;
+    for (size_t i = 0; i < headDataparts.size(); ++i) {
+        if (commitDataparts[j].get() != headDataparts[i].get()) {
+            commitDataparts.insert(commitDataparts.begin() + j, headDataparts[i]);
+        }
+        j++;
+    }
+
+    if (_commits.contains(commit->hash())) { 
+        return false;
+    }
+
     _commits.emplace(commit->hash(), std::move(commit));
     _head.store(ptr);
+    return true;
 }

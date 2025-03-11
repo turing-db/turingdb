@@ -18,7 +18,8 @@ public:
     constexpr CommitHash& operator=(CommitHash&&) noexcept = default;
 
     constexpr explicit CommitHash(uint64_t v)
-        : _value(v) {
+        : _value(v)
+    {
     }
 
     constexpr CommitHash& operator=(uint64_t v) {

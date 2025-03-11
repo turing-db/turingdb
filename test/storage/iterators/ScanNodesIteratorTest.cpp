@@ -33,7 +33,7 @@ protected:
     FileUtils::Path _logPath;
 };
 
-TEST_F(ScanNodesIteratorTest, emptyDB) {
+TEST_F(ScanNodesIteratorTest, emptyGraph) {
     auto graph = std::make_unique<Graph>();
     const Transaction transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -46,12 +46,12 @@ TEST_F(ScanNodesIteratorTest, emptyDB) {
     ASSERT_TRUE(colNodes.empty());
 }
 
-TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
+TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     auto graph = std::make_unique<Graph>();
     const auto tx = graph->openWriteTransaction();
     auto commitBuilder = tx.prepareCommit();
     [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-    graph->commit(std::move(commitBuilder), *_jobSystem);
+    ASSERT_TRUE(graph->commit(std::move(commitBuilder), *_jobSystem));
 
     const Transaction transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -63,14 +63,14 @@ TEST_F(ScanNodesIteratorTest, oneEmptyPart) {
     ASSERT_TRUE(colNodes.empty());
 }
 
-TEST_F(ScanNodesIteratorTest, threeEmptyParts) {
+TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
     auto graph = std::make_unique<Graph>();
 
     const auto tx = graph->openWriteTransaction();
-    auto commitBuilder = tx.prepareCommit();
     for (auto i = 0; i < 3; i++) {
+        auto commitBuilder = tx.prepareCommit();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-        graph->commit(std::move(commitBuilder), *_jobSystem);
+        ASSERT_TRUE(graph->commit(std::move(commitBuilder), *_jobSystem));
     }
 
     const Transaction transaction = graph->openTransaction();
@@ -139,15 +139,15 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     const auto tx = graph->openWriteTransaction();
-    auto commitBuilder = tx.prepareCommit();
     for (auto i = 0; i < 8; i++) {
+        auto commitBuilder = tx.prepareCommit();
         auto& builder = commitBuilder->newBuilder();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
             builder.addNode(labelsetID);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        graph->commit(std::move(commitBuilder), *_jobSystem);
+        ASSERT_TRUE(graph->commit(std::move(commitBuilder), *_jobSystem));
     }
 
     const Transaction transaction = graph->openTransaction();

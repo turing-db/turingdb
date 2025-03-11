@@ -26,8 +26,10 @@ public:
 
     [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(Graph& graph, const GraphView& view);
 
+    [[nodiscard]] GraphView viewGraph() const;
+    [[nodiscard]] GraphReader readGraph() const;
     [[nodiscard]] DataPartBuilder& newBuilder();
-    [[nodiscard]] DataPartBuilder& newBuilder(size_t nodeCount, size_t edgeCount);
+    void buildAllPending(JobSystem& jobsystem);
 
 private:
     friend Graph;
@@ -36,19 +38,18 @@ private:
 
     Graph* _graph {nullptr}; // TODO Remove
     VersionController* _versionController {nullptr};
-    GraphView _view;
 
     EntityID _firstNodeID;
     EntityID _firstEdgeID;
     EntityID _nextNodeID;
     EntityID _nextEdgeID;
 
-    DataPartSpan _previousDataparts;
+    std::unique_ptr<Commit> _commit;
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-    explicit CommitBuilder(Graph& graph, const GraphView& view);
+    explicit CommitBuilder(Graph& graph);
 
-    [[nodiscard]] std::unique_ptr<Commit> build(Graph& graph, JobSystem& jobsystem);
+    [[nodiscard]] std::unique_ptr<Commit> build(JobSystem& jobsystem);
 };
 
 }

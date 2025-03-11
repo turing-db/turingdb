@@ -34,7 +34,7 @@ public:
     JsonParser& operator=(JsonParser&&) = delete;
     ~JsonParser();
 
-    void newCommit();
+    void buildPending(JobSystem& jobSystem);
     GraphStats parseStats(const std::string& data);
     bool parseNodeLabels(const std::string& data);
     bool parseNodeLabelSets(const std::string& data);
@@ -44,7 +44,7 @@ public:
     bool parseNodes(const std::string& data, DataPartBuilder&);
     bool parseEdges(const std::string& data, DataPartBuilder&);
 
-    DataPartBuilder& newDataBuffer(size_t nodeCount, size_t edgeCount);
+    DataPartBuilder& newDataBuffer();
     void commit(Graph& graph, JobSystem& jobSystem);
 
 private:
