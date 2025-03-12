@@ -23,6 +23,7 @@
 #include "Graph.h"
 #include "GraphMetadata.h"
 #include "reader/GraphReader.h"
+#include "PlannerException.h"
 
 using namespace db;
 
@@ -729,7 +730,8 @@ void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::strin
     // Get property type information
     const PropertyType propType = reader.getPropertyType(memberName);
     if (!propType.isValid()) {
-        panic("Property type not found for property member {}", memberName);
+        throw PlannerException("Property type not found for property member \""
+                               + memberName + "\"");
     }
 
     switch (propType._valueType) {
@@ -739,7 +741,8 @@ void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::strin
         CASE_PLAN_VALUE_TYPE(String)
         CASE_PLAN_VALUE_TYPE(Bool)
         default: {
-            panic("Unsupported property type for property member {}", memberName);
+            throw PlannerException("Unsupported property type for property member \""
+                                   + memberName + "\"");
         }
     }
 }

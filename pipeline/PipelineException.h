@@ -1,19 +1,15 @@
 #pragma once
 
 #include <string>
-#include <exception>
+
+#include "TuringException.h"
 
 namespace db {
 
-class PipelineException : public std::exception {
+class PipelineException : public TuringException {
 public:
-    explicit PipelineException(const std::string& msg);
+    explicit PipelineException(std::string&& msg);
     ~PipelineException() noexcept override;
-
-    const char* what() const noexcept override;
-
-private:
-    std::string _msg;
 };
 
 } 

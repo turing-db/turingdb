@@ -2,14 +2,10 @@
 
 using namespace db;
 
-PipelineException::PipelineException(const std::string& msg)
-    : _msg(msg)
+PipelineException::PipelineException(std::string&& msg)
+    : TuringException(std::move(msg))
 {
 }
 
 PipelineException::~PipelineException() noexcept {
 }
-
-const char* PipelineException::what() const noexcept {
-    return _msg.c_str();
-} 

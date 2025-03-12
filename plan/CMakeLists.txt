@@ -1,5 +1,7 @@
 
-set(plan_sources QueryPlanner.cpp)
+set(plan_sources
+    PlannerException.cpp
+    QueryPlanner.cpp)
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
 target_link_libraries(turing_db_plan_s PRIVATE
