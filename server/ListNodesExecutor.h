@@ -171,7 +171,7 @@ public:
                     auto strIt = std::search(lower.begin(), lower.end(), query);
 
                     if (strIt != lower.end()) {
-                        nextChunk.push_back(propIt.getCurrentNodeID());
+                        nextChunk.push_back(propIt.getCurrentEntityID());
                     }
                 }
                 std::swap(currentChunk, nextChunk);

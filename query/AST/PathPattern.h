@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "DeclKind.h"
+
 namespace db {
 
 class ASTContext;
@@ -18,6 +20,9 @@ public:
                                  TypeConstraint* typeConstr,
                                  ExprConstraint* exprConstr);
 
+    void setKind(DeclKind kind) { _kind = kind; }
+    DeclKind getKind() const { return _kind; }
+
     void setVar(VarExpr* var) { _var = var; }
 
     VarExpr* getVar() const { return _var; }
@@ -25,6 +30,7 @@ public:
     ExprConstraint* getExprConstraint() const { return _exprConstr; }
 
 private:
+    DeclKind _kind {DeclKind::UNKNOWN};
     VarExpr* _var {nullptr};
     TypeConstraint* _typeConstr {nullptr};
     ExprConstraint* _exprConstr {nullptr};

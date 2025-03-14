@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "DeclKind.h"
+
 namespace db {
 
 class ASTContext;
@@ -14,7 +16,10 @@ public:
 
     static VarDecl* create(ASTContext* astCtxt,
                            DeclContext* declContext,
-                           const std::string& name);
+                           const std::string& name,
+                           DeclKind kind);
+
+    DeclKind getKind() const { return _kind; }
 
     const std::string& getName() const { return _name; }
 
@@ -27,11 +32,12 @@ public:
     Column* getColumn() const { return _column; }
 
 private:
+    DeclKind _kind {DeclKind::UNKNOWN};
     std::string _name;
     bool _returned {false};
     Column* _column {nullptr};
 
-    VarDecl(const std::string& name);
+    VarDecl(DeclKind kind, const std::string& name);
     ~VarDecl();
 };
 }

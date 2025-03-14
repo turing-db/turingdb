@@ -665,7 +665,7 @@ void DBServerProcessor::get_node_properties() {
         const auto treat = [&]<SupportedType TypeT> {
             const auto range = reader.getNodeProperties<TypeT>(ptype._id, nodeIDs);
             for (auto it = range.begin(); it.isValid(); it.next()) {
-                payload.key(it.getCurrentNodeID());
+                payload.key(it.getCurrentEntityID());
                 payload.value(it.get());
             }
         };

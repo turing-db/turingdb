@@ -1,17 +1,17 @@
 #include "PipelineStep.h"
 
-#define GET_PROPERTY_STEP_IMPL(Opcode, Type)                                     \
-    PipelineStep::PipelineStep(GetPropertyStep<types::Type>::Tag,                \
-                            const ColumnIDs* entityIDs,                          \
-                            PropertyType propertyType,                           \
-                            ColumnOptVector<types::Type::Primitive>* propValues) \
-        : _opcode(PipelineOpcode::Opcode),                                       \
-        _impl(std::in_place_type<GetPropertyStep<types::Type>>,                  \
-              entityIDs,                                                         \
-              propertyType,                                                      \
-              propValues)                                                        \
-    {                                                                            \
-    }                                                                            \
+#define GET_PROPERTY_STEP_IMPL(NodeOrEdge, Opcode, Type)                            \
+    PipelineStep::PipelineStep(Get##NodeOrEdge##Property##Type##Step::Tag,          \
+                               const ColumnIDs* entityIDs,                          \
+                               PropertyType propertyType,                           \
+                               ColumnOptVector<types::Type::Primitive>* propValues) \
+        : _opcode(PipelineOpcode::Opcode),                                          \
+        _impl(std::in_place_type<Get##NodeOrEdge##Property##Type##Step>,            \
+              entityIDs,                                                            \
+              propertyType,                                                         \
+              propValues)                                                           \
+    {                                                                               \
+    }                                                                               \
 
 
 using namespace db;
@@ -128,11 +128,17 @@ PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
 {
 }
 
-GET_PROPERTY_STEP_IMPL(GET_PROPERTY_INT64, Int64)
-GET_PROPERTY_STEP_IMPL(GET_PROPERTY_UINT64, UInt64)
-GET_PROPERTY_STEP_IMPL(GET_PROPERTY_DOUBLE, Double)
-GET_PROPERTY_STEP_IMPL(GET_PROPERTY_STRING, String)
-GET_PROPERTY_STEP_IMPL(GET_PROPERTY_BOOL, Bool)
+GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_INT64, Int64)
+GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_UINT64, UInt64)
+GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_DOUBLE, Double)
+GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_STRING, String)
+GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_BOOL, Bool)
+
+GET_PROPERTY_STEP_IMPL(Edge, GET_EDGE_PROPERTY_INT64, Int64)
+GET_PROPERTY_STEP_IMPL(Edge, GET_EDGE_PROPERTY_UINT64, UInt64)
+GET_PROPERTY_STEP_IMPL(Edge, GET_EDGE_PROPERTY_DOUBLE, Double)
+GET_PROPERTY_STEP_IMPL(Edge, GET_EDGE_PROPERTY_STRING, String)
+GET_PROPERTY_STEP_IMPL(Edge, GET_EDGE_PROPERTY_BOOL, Bool)
 
 PipelineStep::~PipelineStep() {
 }

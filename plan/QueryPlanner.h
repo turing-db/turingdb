@@ -93,6 +93,7 @@ private:
     bool planLoadGraph(const LoadGraphCommand* loadCmd);
     void planProjection(const MatchCommand* matchCmd);
     void planPropertyProjection(ColumnIDs* columnIDs,
+                                const VarDecl* parentDecl,
                                 const std::string& memberName);
     void planOutputLambda();
     bool planExplain(const ExplainCommand* explain);

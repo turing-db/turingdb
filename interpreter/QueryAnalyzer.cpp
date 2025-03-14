@@ -1,5 +1,7 @@
 #include "QueryAnalyzer.h"
 
+#include <range/v3/view.hpp>
+
 #include "DeclContext.h"
 #include "Expr.h"
 #include "MatchTarget.h"
@@ -10,6 +12,7 @@
 #include "VarDecl.h"
 
 using namespace db;
+namespace rv = ranges::views;
 
 namespace {
 
@@ -95,9 +98,35 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
     DeclContext* declContext = cmd->getDeclContext();
     for (const MatchTarget* target : cmd->matchTargets()) {
         const PathPattern* pattern = target->getPattern();
-        for (EntityPattern* entityPattern : pattern->elements()) {
+        const auto& elements = pattern->elements();
+
+        if (elements.size() == 1) {
+            EntityPattern* entityPattern = elements[0];
+            entityPattern->setKind(DeclKind::NODE_DECL);
             if (!analyzeEntityPattern(declContext, entityPattern)) {
                 return false;
+            }
+        } else {
+            for (auto triple : elements | rv::chunk(3)) {
+                EntityPattern* node = triple[0];
+                EntityPattern* edge = triple[1];
+                EntityPattern* target = triple[2];
+
+                node->setKind(DeclKind::NODE_DECL);
+                edge->setKind(DeclKind::EDGE_DECL);
+                target->setKind(DeclKind::NODE_DECL);
+
+                if (!analyzeEntityPattern(declContext, node)) {
+                    return false;
+                }
+
+                if (!analyzeEntityPattern(declContext, edge)) {
+                    return false;
+                }
+
+                if (!analyzeEntityPattern(declContext, target)) {
+                    return false;
+                }
             }
         }
     }
@@ -141,7 +170,7 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
     }
 
     // Create the variable declaration in the scope of the command
-    VarDecl* decl = VarDecl::create(_ctxt, declContext, var->getName());
+    VarDecl* decl = VarDecl::create(_ctxt, declContext, var->getName(), entity->getKind());
     if (!decl) {
         return false;
     }

@@ -702,7 +702,8 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
         }
 
         // Skip variables for which no columnIDs have been generated
-        ColumnIDs* columnIDs = field->getDecl()->getColumn()->cast<ColumnIDs>();
+        const VarDecl* decl = field->getDecl();
+        ColumnIDs* columnIDs = decl->getColumn()->cast<ColumnIDs>();
         if (!columnIDs) {
             continue;
         }
@@ -711,20 +712,35 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
         if (memberName.empty()) {
             _output->addColumn(columnIDs);
         } else {
-            planPropertyProjection(columnIDs, memberName);
+            planPropertyProjection(columnIDs, decl, memberName);
         }
     }
 }
 
-#define CASE_PLAN_VALUE_TYPE(Type)                                                \
-    case ValueType::Type: {                                                       \
-        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>(); \
-        _pipeline->add<GetProperty##Type##Step>(columnIDs, propType, propValues); \
-        _output->addColumn(propValues);                                           \
-    } break;
+#define CASE_PLAN_VALUE_TYPE(Type)                                                 \
+    case ValueType::Type: {                                                        \
+        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>();  \
+        if (declKind == DeclKind::NODE_DECL) {                                     \
+            spdlog::info("Plan node property projection for type {}", #Type);       \
+            using StepType = GetNodeProperty##Type##Step;                          \
+            _pipeline->add<StepType>(columnIDs,                                    \
+                                     propType,                                     \
+                                     propValues);                                  \
+        } else if (declKind == DeclKind::EDGE_DECL) {                              \
+            spdlog::info("Plan edge property projection for type {}", #Type);       \
+            using StepType = GetEdgeProperty##Type##Step;                          \
+            _pipeline->add<StepType>(columnIDs,                                    \
+                                     propType,                                     \
+                                     propValues);                                  \
+        } else {                                                                   \
+            throw PlannerException("Unsupported declaration kind for variable \""  \
+                                   + parentDecl->getName() + "\"");                \
+        }                                                                          \
+        _output->addColumn(propValues);                                            \
+    } break;                                                                       \
 
 
-void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::string& memberName) {
+void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const VarDecl* parentDecl, const std::string& memberName) {
     const auto reader = _view.read();
 
     // Get property type information
@@ -733,6 +749,8 @@ void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const std::strin
         throw PlannerException("Property type not found for property member \""
                                + memberName + "\"");
     }
+
+    const DeclKind declKind = parentDecl->getKind();
 
     switch (propType._valueType) {
         CASE_PLAN_VALUE_TYPE(Int64)

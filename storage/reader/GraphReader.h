@@ -4,7 +4,7 @@
 
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetNodeViewsIterator.h"
-#include "iterators/GetNodePropertiesIterator.h"
+#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanEdgePropertiesIterator.h"

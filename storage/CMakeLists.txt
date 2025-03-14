@@ -18,7 +18,7 @@ set(storage_sources
         reader/GraphReader.cpp
 
         iterators/GetInEdgesIterator.cpp
-        iterators/GetNodePropertiesIterator.cpp
+        iterators/GetPropertiesIterator.cpp
         iterators/GetOutEdgesIterator.cpp
         iterators/GetNodeViewsIterator.cpp
         iterators/PartIterator.cpp

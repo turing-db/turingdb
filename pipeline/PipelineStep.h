@@ -25,7 +25,11 @@
 #include "FastGet.h"
 
 #define GET_PROPERTY_STEP(TYPE)                                        \
-    PipelineStep(GetProperty##TYPE##Step::Tag,                         \
+    PipelineStep(GetNodeProperty##TYPE##Step::Tag,                     \
+                 const ColumnIDs* entityIDs,                           \
+                 PropertyType propertyType,                            \
+                 ColumnOptVector<types::TYPE::Primitive>* propValues); \
+    PipelineStep(GetEdgeProperty##TYPE##Step::Tag,                     \
                  const ColumnIDs* entityIDs,                           \
                  PropertyType propertyType,                            \
                  ColumnOptVector<types::TYPE::Primitive>* propValues); \
@@ -116,11 +120,16 @@ private:
                  CreateGraphStep,
                  ListGraphStep,
                  LoadGraphStep,
-                 GetPropertyInt64Step,
-                 GetPropertyUInt64Step,
-                 GetPropertyDoubleStep,
-                 GetPropertyStringStep,
-                 GetPropertyBoolStep> _impl;
+                 GetNodePropertyInt64Step,
+                 GetNodePropertyUInt64Step,
+                 GetNodePropertyDoubleStep,
+                 GetNodePropertyStringStep,
+                 GetNodePropertyBoolStep,
+                 GetEdgePropertyInt64Step,
+                 GetEdgePropertyUInt64Step,
+                 GetEdgePropertyDoubleStep,
+                 GetEdgePropertyStringStep,
+                 GetEdgePropertyBoolStep> _impl;
 };
 
 }
