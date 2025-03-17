@@ -115,7 +115,7 @@ TEST_F(QueryTest, NodeMatching) {
 
 TEST_F(QueryTest, EdgeMatching) {
     const std::string query1 = "MATCH n-[e]-m return e";
-    const std::string query2 = "MATCH n-[e]-m-[e1]-q-[e2]-r return e2,e1";
+    const std::string query2 = "MATCH n-[e]-m-[e1]-q-[e2]-r return e2, e1";
 
     const auto res1 = _interp->execute(query1, "", &_mem, [](const Block &block) {
         const size_t rowCount = block.getBlockRowCount();
@@ -296,6 +296,37 @@ TEST_F(QueryTest, NodePropertyProjection) {
         const std::vector<std::vector<std::optional<types::String::Primitive>>> targetResult = {
             {{"Remy"}}, {{"Adam"}}, {{"Luc"}}, {{"Suhas"}}, {{"Maxime"}}, {{"Martina"}},
             {{"Ghosts"}}, {{"Bio"}}, {{"Cooking"}}, {{"Paddle"}}, {{"Animals"}}, {{"Computers"} }, {{"Eighties"}}
+        };
+
+        for (size_t i = 0; i < rowCount; ++i) {
+            for (const Column *col : block.columns()) {
+                const auto& src =
+                    *static_cast<const ColumnOptVector<types::String::Primitive>*>(col);
+                queryResult[i].push_back(src[i]);
+            }
+        }
+
+        ASSERT_EQ(queryResult, targetResult);
+    });
+    ASSERT_TRUE(res1);
+
+    const auto res2 = _interp->execute(query2, "", &_mem, [](const Block &block) {});
+    ASSERT_FALSE(res2.isOk());
+    ASSERT_EQ(res2.getStatus(), QueryStatus::Status::PLAN_ERROR);
+}
+
+TEST_F(QueryTest, EdgePropertyProjection) {
+    const std::string query1 = "MATCH n-[e]-m RETURN e.name";
+    const std::string query2 = "MATCH n-[e]-m RETURN e.doesnotexist";
+
+    const auto res1 = _interp->execute(query1, "", &_mem, [](const Block &block) {
+        const size_t rowCount = block.getBlockRowCount();
+
+        std::vector<std::vector<std::optional<types::String::Primitive>>> queryResult(rowCount);
+        const std::vector<std::vector<std::optional<types::String::Primitive>>> targetResult = {
+            {{"Remy -> Adam"}}, {{"Remy -> Ghosts"}}, {{"Remy -> Computers"}}, {{"Remy -> Eighties"}},
+            {{"Adam -> Remy"}}, {{"Adam -> Bio"}}, {{"Adam -> Cooking"}}, {{"Luc -> Animals"}},
+            {{"Luc -> Computers"}}, {{"Maxime -> Bio"}}, {{"Maxime -> Paddle"}}, {{"Martina -> Cooking"}}
         };
 
         for (size_t i = 0; i < rowCount; ++i) {
