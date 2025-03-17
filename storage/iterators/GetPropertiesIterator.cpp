@@ -5,10 +5,10 @@
 
 using namespace db;
 
-template <typename IteratorTag, SupportedType T>
-GetPropertiesIterator<IteratorTag, T>::GetPropertiesIterator(const GraphView& view,
-                                                            PropertyTypeID propTypeID,
-                                                            const ColumnIDs* inputEntityIDs)
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+GetPropertiesIterator<IteratorClass, T>::GetPropertiesIterator(const GraphView& view,
+                                                               PropertyTypeID propTypeID,
+                                                               const ColumnIDs* inputEntityIDs)
     : Iterator(view),
       _propTypeID(propTypeID),
       _inputEntityIDs(inputEntityIDs)
@@ -37,8 +37,8 @@ GetPropertiesIterator<IteratorTag, T>::GetPropertiesIterator(const GraphView& vi
     }
 }
 
-template <typename IteratorTag, SupportedType T>
-void GetPropertiesIterator<IteratorTag, T>::next() {
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesIterator<IteratorClass, T>::next() {
     // Remmember that we loop on input node IDs for each DataPart,
     // so that we gather the info on a given node from all DataParts
 
@@ -74,7 +74,7 @@ void GetPropertiesIterator<IteratorTag, T>::next() {
         // From here, _partIt and _nodeIt are both valid
         const DataPart* part = _partIt.get();
 
-        const PropertyManager& properties = (std::is_same_v<IteratorTag, GetNodePropertiesIteratorTag>)
+        const PropertyManager& properties = (IteratorClass == PropertyIteratorClass::NODE)
             ? part->nodeProperties()
             : part->edgeProperties();
 
@@ -88,23 +88,23 @@ void GetPropertiesIterator<IteratorTag, T>::next() {
 
 namespace db {
 
-template class GetPropertiesIterator<GetNodePropertiesIteratorTag, types::Int64>;
-template class GetPropertiesIterator<GetNodePropertiesIteratorTag, types::UInt64>;
-template class GetPropertiesIterator<GetNodePropertiesIteratorTag, types::Double>;
-template class GetPropertiesIterator<GetNodePropertiesIteratorTag, types::String>;
-template class GetPropertiesIterator<GetNodePropertiesIteratorTag, types::Bool>;
-template class GetPropertiesIterator<GetEdgePropertiesIteratorTag, types::Int64>;
-template class GetPropertiesIterator<GetEdgePropertiesIteratorTag, types::UInt64>;
-template class GetPropertiesIterator<GetEdgePropertiesIteratorTag, types::Double>;
-template class GetPropertiesIterator<GetEdgePropertiesIteratorTag, types::String>;
-template class GetPropertiesIterator<GetEdgePropertiesIteratorTag, types::Bool>;
+template class GetPropertiesIterator<PropertyIteratorClass::NODE, types::Int64>;
+template class GetPropertiesIterator<PropertyIteratorClass::NODE, types::UInt64>;
+template class GetPropertiesIterator<PropertyIteratorClass::NODE, types::Double>;
+template class GetPropertiesIterator<PropertyIteratorClass::NODE, types::String>;
+template class GetPropertiesIterator<PropertyIteratorClass::NODE, types::Bool>;
+template class GetPropertiesIterator<PropertyIteratorClass::EDGE, types::Int64>;
+template class GetPropertiesIterator<PropertyIteratorClass::EDGE, types::UInt64>;
+template class GetPropertiesIterator<PropertyIteratorClass::EDGE, types::Double>;
+template class GetPropertiesIterator<PropertyIteratorClass::EDGE, types::String>;
+template class GetPropertiesIterator<PropertyIteratorClass::EDGE, types::Bool>;
 
 }
 
-template <typename IteratorTag, SupportedType T>
-GetPropertiesIteratorWithNull<IteratorTag, T>::GetPropertiesIteratorWithNull(const GraphView& view,
-                                                                            PropertyTypeID propTypeID,
-                                                                            const ColumnIDs* inputEntityIDs)
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+GetPropertiesIteratorWithNull<IteratorClass, T>::GetPropertiesIteratorWithNull(const GraphView& view,
+                                                                               PropertyTypeID propTypeID,
+                                                                               const ColumnIDs* inputEntityIDs)
     : Iterator(view),
       _propTypeID(propTypeID),
       _inputEntityIDs(inputEntityIDs)
@@ -112,8 +112,8 @@ GetPropertiesIteratorWithNull<IteratorTag, T>::GetPropertiesIteratorWithNull(con
     init();
 }
 
-template <typename IteratorTag, SupportedType T>
-void GetPropertiesIteratorWithNull<IteratorTag, T>::init() {
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesIteratorWithNull<IteratorClass, T>::init() {
     if (_inputEntityIDs->empty()) {
         return;
     }
@@ -121,7 +121,7 @@ void GetPropertiesIteratorWithNull<IteratorTag, T>::init() {
     _entityIt = _inputEntityIDs->cbegin();
     for (; _partIt.isValid(); _partIt.next()) {
         const DataPart* part = _partIt.get();
-        const PropertyManager& properties = (std::is_same_v<IteratorTag, GetNodePropertiesIteratorTag>)
+        const PropertyManager& properties = (IteratorClass == PropertyIteratorClass::NODE)
             ? part->nodeProperties()
             : part->edgeProperties();
 
@@ -134,15 +134,15 @@ void GetPropertiesIteratorWithNull<IteratorTag, T>::init() {
     }
 }
 
-template <typename IteratorTag, SupportedType T>
-void GetPropertiesIteratorWithNull<IteratorTag, T>::reset() {
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesIteratorWithNull<IteratorClass, T>::reset() {
     Iterator::reset();
     _entityIt = _inputEntityIDs->cbegin();
     init();
 }
 
-template <typename IteratorTag, SupportedType T>
-void GetPropertiesIteratorWithNull<IteratorTag, T>::next() {
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesIteratorWithNull<IteratorClass, T>::next() {
     // Reset the _prop pointer
     _prop = nullptr;
 
@@ -154,7 +154,7 @@ void GetPropertiesIteratorWithNull<IteratorTag, T>::next() {
     Iterator::reset();
     for (; _partIt.isValid(); _partIt.next()) {
         const DataPart* part = _partIt.get();
-        const PropertyManager& properties = (std::is_same_v<IteratorTag, GetNodePropertiesIteratorTag>)
+        const PropertyManager& properties = (IteratorClass == PropertyIteratorClass::NODE)
             ? part->nodeProperties()
             : part->edgeProperties();
 
@@ -169,29 +169,29 @@ void GetPropertiesIteratorWithNull<IteratorTag, T>::next() {
 
 namespace db {
 
-template class GetPropertiesIteratorWithNull<GetNodePropertiesIteratorTag, types::Int64>;
-template class GetPropertiesIteratorWithNull<GetNodePropertiesIteratorTag, types::UInt64>;
-template class GetPropertiesIteratorWithNull<GetNodePropertiesIteratorTag, types::Double>;
-template class GetPropertiesIteratorWithNull<GetNodePropertiesIteratorTag, types::String>;
-template class GetPropertiesIteratorWithNull<GetNodePropertiesIteratorTag, types::Bool>;
-template class GetPropertiesIteratorWithNull<GetEdgePropertiesIteratorTag, types::Int64>;
-template class GetPropertiesIteratorWithNull<GetEdgePropertiesIteratorTag, types::UInt64>;
-template class GetPropertiesIteratorWithNull<GetEdgePropertiesIteratorTag, types::Double>;
-template class GetPropertiesIteratorWithNull<GetEdgePropertiesIteratorTag, types::String>;
-template class GetPropertiesIteratorWithNull<GetEdgePropertiesIteratorTag, types::Bool>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, types::Int64>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, types::UInt64>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, types::Double>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, types::String>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, types::Bool>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::Int64>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::UInt64>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::Double>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::String>;
+template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::Bool>;
 
 }
 
-template <typename IteratorTag, SupportedType T>
-GetPropertiesWithNullChunkWriter<IteratorTag, T>::GetPropertiesWithNullChunkWriter(const GraphView& view,
-                                                                                   PropertyTypeID propTypeID,
-                                                                                   const ColumnIDs* inputEntityIDs)
-    : GetPropertiesIteratorWithNull<IteratorTag, T>(view, propTypeID, inputEntityIDs)
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+GetPropertiesWithNullChunkWriter<IteratorClass, T>::GetPropertiesWithNullChunkWriter(const GraphView& view,
+                                                                                     PropertyTypeID propTypeID,
+                                                                                     const ColumnIDs* inputEntityIDs)
+    : GetPropertiesIteratorWithNull<IteratorClass, T>(view, propTypeID, inputEntityIDs)
 {
 }
 
-template <typename IteratorTag, SupportedType T>
-void GetPropertiesWithNullChunkWriter<IteratorTag, T>::fill(size_t maxCount) {
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesWithNullChunkWriter<IteratorClass, T>::fill(size_t maxCount) {
     auto& output = *_output;
     const size_t availableSize = std::distance(this->_entityIt, this->_inputEntityIDs->end());
     const size_t rangeSize = std::min(maxCount, availableSize);
@@ -211,15 +211,15 @@ void GetPropertiesWithNullChunkWriter<IteratorTag, T>::fill(size_t maxCount) {
 
 namespace db {
 
-template class GetPropertiesWithNullChunkWriter<GetNodePropertiesIteratorTag, types::Int64>;
-template class GetPropertiesWithNullChunkWriter<GetNodePropertiesIteratorTag, types::UInt64>;
-template class GetPropertiesWithNullChunkWriter<GetNodePropertiesIteratorTag, types::Double>;
-template class GetPropertiesWithNullChunkWriter<GetNodePropertiesIteratorTag, types::String>;
-template class GetPropertiesWithNullChunkWriter<GetNodePropertiesIteratorTag, types::Bool>;
-template class GetPropertiesWithNullChunkWriter<GetEdgePropertiesIteratorTag, types::Int64>;
-template class GetPropertiesWithNullChunkWriter<GetEdgePropertiesIteratorTag, types::UInt64>;
-template class GetPropertiesWithNullChunkWriter<GetEdgePropertiesIteratorTag, types::Double>;
-template class GetPropertiesWithNullChunkWriter<GetEdgePropertiesIteratorTag, types::String>;
-template class GetPropertiesWithNullChunkWriter<GetEdgePropertiesIteratorTag, types::Bool>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, types::Int64>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, types::UInt64>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, types::Double>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, types::String>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, types::Bool>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, types::Int64>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, types::UInt64>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, types::Double>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, types::String>;
+template class GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, types::Bool>;
 
 }

@@ -9,10 +9,12 @@
 
 namespace db {
 
-struct GetNodePropertiesIteratorTag {};
-struct GetEdgePropertiesIteratorTag {};
+enum class PropertyIteratorClass {
+    NODE,
+    EDGE
+};
 
-template <typename IteratorTag, SupportedType T>
+template <PropertyIteratorClass IteratorClass, SupportedType T>
 class GetPropertiesIterator : public Iterator {
 public:
     GetPropertiesIterator(const GraphView& view,
@@ -29,7 +31,7 @@ public:
         return *_entityIt;
     }
 
-    GetPropertiesIterator<IteratorTag, T>& operator++() {
+    GetPropertiesIterator<IteratorClass, T>& operator++() {
         next();
         return *this;
     }
@@ -45,17 +47,17 @@ private:
     ColumnIDs::ConstIterator _entityIt;
 };
 
-template <typename IteratorTag, SupportedType T>
+template <PropertyIteratorClass IteratorClass, SupportedType T>
 struct GetPropertiesRange {
     GraphView _view;
     PropertyTypeID _propTypeID {0};
     const ColumnIDs* _inputEntityIDs {nullptr};
 
-    GetPropertiesIterator<IteratorTag, T> begin() const { return {_view, _propTypeID, _inputEntityIDs}; }
+    GetPropertiesIterator<IteratorClass, T> begin() const { return {_view, _propTypeID, _inputEntityIDs}; }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }
 };
 
-template <typename IteratorTag, SupportedType T>
+template <PropertyIteratorClass IteratorClass, SupportedType T>
 class GetPropertiesIteratorWithNull : public Iterator {
 public:
     GetPropertiesIteratorWithNull(const GraphView& view,
@@ -78,7 +80,7 @@ public:
         return *_entityIt;
     }
 
-    GetPropertiesIteratorWithNull<IteratorTag, T>& operator++() {
+    GetPropertiesIteratorWithNull<IteratorClass, T>& operator++() {
         next();
         return *this;
     }
@@ -96,8 +98,8 @@ protected:
     void init();
 };
 
-template <typename IteratorTag, SupportedType T>
-class GetPropertiesWithNullChunkWriter : public GetPropertiesIteratorWithNull<IteratorTag, T> {
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+class GetPropertiesWithNullChunkWriter : public GetPropertiesIteratorWithNull<IteratorClass, T> {
 public:
     GetPropertiesWithNullChunkWriter(const GraphView& view,
                                      PropertyTypeID propTypeID,
@@ -112,21 +114,21 @@ private:
 };
 
 template <SupportedType T>
-using GetNodePropertiesIterator = GetPropertiesIterator<GetNodePropertiesIteratorTag, T>;
+using GetNodePropertiesIterator = GetPropertiesIterator<PropertyIteratorClass::NODE, T>;
 template <SupportedType T>
-using GetNodePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<GetNodePropertiesIteratorTag, T>;
+using GetNodePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, T>;
 template <SupportedType T>
-using GetNodePropertiesRange = GetPropertiesRange<GetNodePropertiesIteratorTag, T>;
+using GetNodePropertiesRange = GetPropertiesRange<PropertyIteratorClass::NODE, T>;
 template <SupportedType T>
-using GetNodePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<GetNodePropertiesIteratorTag, T>;
+using GetNodePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, T>;
 
 template <SupportedType T>
-using GetEdgePropertiesIterator = GetPropertiesIterator<GetEdgePropertiesIteratorTag, T>;
+using GetEdgePropertiesIterator = GetPropertiesIterator<PropertyIteratorClass::EDGE, T>;
 template <SupportedType T>
-using GetEdgePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<GetEdgePropertiesIteratorTag, T>;
+using GetEdgePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, T>;
 template <SupportedType T>
-using GetEdgePropertiesRange = GetPropertiesRange<GetEdgePropertiesIteratorTag, T>;
+using GetEdgePropertiesRange = GetPropertiesRange<PropertyIteratorClass::EDGE, T>;
 template <SupportedType T>
-using GetEdgePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<GetEdgePropertiesIteratorTag, T>;
+using GetEdgePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, T>;
 
 }
