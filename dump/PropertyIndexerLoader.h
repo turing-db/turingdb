@@ -68,12 +68,10 @@ public:
 
                     auto& info = ptIndexer[lsetID];
 
-                    info._binarySearched = it.get<bool>();
-                    info._ranges.resize(it.get<uint64_t>());
+                    info.resize(it.get<uint64_t>());
 
-                    for (auto& range : info._ranges) {
-                        range._firstID = it.get<EntityID::Type>();
-                        range._firstPos = it.get<uint64_t>();
+                    for (auto& range : info) {
+                        range._offset = it.get<uint64_t>();
                         range._count = it.get<uint64_t>();
                     }
                 }

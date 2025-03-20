@@ -47,12 +47,10 @@ public:
 
             for (const auto& [lsetID, info] : ptIndexer) {
                 _writer.writeToCurrentPage(lsetID.getValue());
-                _writer.writeToCurrentPage(info._binarySearched);
-                _writer.writeToCurrentPage((uint64_t)info._ranges.size());
+                _writer.writeToCurrentPage((uint64_t)info.size());
 
-                for (const auto& range : info._ranges) {
-                    _writer.writeToCurrentPage(range._firstID.getValue());
-                    _writer.writeToCurrentPage((uint64_t)range._firstPos);
+                for (const auto& range : info) {
+                    _writer.writeToCurrentPage((uint64_t)range._offset);
                     _writer.writeToCurrentPage((uint64_t)range._count);
                 }
             }

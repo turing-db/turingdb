@@ -34,16 +34,8 @@ public:
 
                 const auto& infoB = infoItB->second;
 
-                if (infoA._binarySearched != infoB._binarySearched) {
-                    return false;
-                }
-
-                for (const auto& [rA, rB] : rv::zip(infoA._ranges, infoB._ranges)) {
-                    if (rA._firstID != rB._firstID) {
-                        return false;
-                    }
-
-                    if (rA._firstPos != rB._firstPos) {
+                for (const auto& [rA, rB] : rv::zip(infoA, infoB)) {
+                    if (rA._offset != rB._offset) {
                         return false;
                     }
 

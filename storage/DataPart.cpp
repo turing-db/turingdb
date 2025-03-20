@@ -72,9 +72,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     }
 
     // Converting temp to final source/target IDs
-    [[maybe_unused]] size_t i = 0;
     for (auto& out : outEdges) {
-        i++;
         if (out._nodeID >= firstTmpNodeID) {
             out._nodeID = _tmpToFinalNodeIDs.at(out._nodeID);
         }
@@ -100,13 +98,25 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
             props->sort();
 
             auto& indexer = _nodeProperties->getIndexer(ptID);
+            LabelSetID prevLabelset;
+
             for (const auto& [offset, id] : props->ids() | rv::enumerate) {
                 const LabelSetID& labelset = id >= _firstNodeID
                                                ? _nodes->getNodeLabelSet(id)
                                                : patchNodeLabelSets.at(id);
 
                 auto& info = indexer[labelset];
-                _nodeProperties->createEntity(info, id, offset);
+
+                if (labelset != prevLabelset) {
+                    info.emplace_back(PropertyRange {
+                        ._offset = offset,
+                        ._count = 0,
+                    });
+                    prevLabelset = labelset;
+                }
+
+                auto& range = info.back();
+                range._count++;
             }
         });
     }
@@ -136,21 +146,32 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
             props->sort();
 
+            LabelSetID prevLabelset;
             auto& indexer = _edgeProperties->addIndexer(ptID);
             for (const auto& [offset, edgeID] : props->ids() | rv::enumerate) {
+                LabelSetID labelset;
                 if (edgeID >= _firstEdgeID) {
                     const EdgeRecord& edge = _edges->get(edgeID);
-                    const LabelSetID& labelset = edge._nodeID >= _firstNodeID
-                                                   ? _nodes->getNodeLabelSet(edge._nodeID)
-                                                   : patchNodeLabelSets.at(edge._nodeID);
-                    auto& info = indexer[labelset];
-                    _edgeProperties->createEntity(info, edgeID, offset);
+                    labelset = edge._nodeID >= _firstNodeID
+                                 ? _nodes->getNodeLabelSet(edge._nodeID)
+                                 : patchNodeLabelSets.at(edge._nodeID);
                 } else {
                     const EdgeRecord* edge = patchedEdges.at(edgeID);
-                    const LabelSetID& labelset = patchNodeLabelSets.at(edge->_nodeID);
-                    auto& info = indexer[labelset];
-                    _edgeProperties->createEntity(info, edgeID, offset);
+                    labelset = patchNodeLabelSets.at(edge->_nodeID);
                 }
+
+                auto& info = indexer[labelset];
+
+                if (labelset != prevLabelset) {
+                    info.emplace_back(PropertyRange {
+                        ._offset = offset,
+                        ._count = 0,
+                    });
+                    prevLabelset = labelset;
+                }
+
+                auto& range = info.back();
+                range._count++;
             }
         });
     }
