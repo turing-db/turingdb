@@ -4,7 +4,6 @@
 
 #include "ChunkWriter.h"
 #include "columns/ColumnVector.h"
-#include "labels/LabelSetRange.h"
 #include "iterators/PartIterator.h"
 #include "properties/PropertyManager.h"
 #include "types/PropertyType.h"
@@ -33,7 +32,7 @@ public:
     }
 
     EntityID getCurrentNodeID() const {
-        return _currentID;
+        return *_currentIDIt;
     }
 
     ScanNodePropertiesByLabelIterator<T>& operator++() {
@@ -48,12 +47,12 @@ public:
 protected:
     PropertyTypeID _propTypeID;
     const LabelSet* _labelset {nullptr};
-    using LabelSetIterator = LabelSetIndexer<LabelSetInfo>::MatchIterator;
+    using LabelSetIterator = LabelSetPropertyIndexer::MatchIterator;
     LabelSetIterator _labelsetIt;
-    std::vector<LabelSetRange>::const_iterator _rangeIt;
+    std::vector<PropertyRange>::const_iterator _rangeIt;
     std::span<const typename T::Primitive> _props {};
     std::span<const typename T::Primitive>::iterator _propIt {};
-    EntityID _currentID;
+    std::span<const EntityID>::iterator _currentIDIt;
 
     bool nextDatapart();
     void newPropertySpan();

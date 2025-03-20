@@ -3,16 +3,17 @@
 #include <unordered_map>
 
 #include "EntityID.h"
-#include "labels/LabelSetRange.h"
 #include "LabelSetIndexer.h"
 
 namespace db {
 
-struct LabelSetInfo {
-    std::vector<LabelSetRange> _ranges;
-    bool _binarySearched = false;
+struct PropertyRange {
+    size_t _offset {0};
+    size_t _count {0};
 };
 
-using PropertyIndexer = std::unordered_map<PropertyTypeID, LabelSetIndexer<LabelSetInfo>>;
+using LabelSetPropertyIndexer = LabelSetIndexer<std::vector<PropertyRange>>;
+
+using PropertyIndexer = std::unordered_map<PropertyTypeID, LabelSetPropertyIndexer>;
 
 }

@@ -26,17 +26,17 @@ ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
             _labelsetIt = indexer.matchIterate(labelset);
 
             for (; _labelsetIt.isValid(); _labelsetIt.next()) {
-                const auto& ranges = _labelsetIt.getValue()._ranges;
+                const auto& ranges = _labelsetIt.getValue();
                 _rangeIt = ranges.begin();
 
                 for (; _rangeIt != ranges.end(); _rangeIt++) {
                     const auto& range = *_rangeIt;
 
-                    _props = props.getSpan(range._firstPos, range._count);
+                    _props = props.getSpan(range._offset, range._count);
                     _propIt = _props.begin();
+                    _currentIDIt = std::span {props.ids()}.begin();
 
                     if (!_props.empty()) {
-                        _currentID = range._firstID;
                         return;
                     }
                 }
@@ -51,7 +51,7 @@ ScanNodePropertiesByLabelIterator<T>::~ScanNodePropertiesByLabelIterator() = def
 template <SupportedType T>
 void ScanNodePropertiesByLabelIterator<T>::next() {
     _propIt++;
-    _currentID++;
+    _currentIDIt++;
     nextValid();
 }
 
@@ -59,7 +59,7 @@ template <SupportedType T>
 void ScanNodePropertiesByLabelIterator<T>::nextValid() {
     while (_propIt == _props.end()) {
         _rangeIt++;
-        while (_rangeIt == _labelsetIt.getValue()._ranges.end()) {
+        while (_rangeIt == _labelsetIt.getValue().end()) {
             _labelsetIt++;
 
             while (!_labelsetIt.isValid()) {
@@ -78,16 +78,16 @@ void ScanNodePropertiesByLabelIterator<T>::nextValid() {
                 }
             }
 
-            _rangeIt = _labelsetIt.getValue()._ranges.begin();
+            _rangeIt = _labelsetIt.getValue().begin();
         }
 
         const DataPart* part = _partIt.get();
         const PropertyManager& nodeProperties = part->nodeProperties();
         const TypedPropertyContainer<T>& props = nodeProperties.getContainer<T>(_propTypeID);
         const auto& range = *_rangeIt;
-        _props = props.getSpan(range._firstPos, range._count);
+        _props = props.getSpan(range._offset, range._count);
         _propIt = _props.begin();
-        _currentID = range._firstID;
+        _currentIDIt = std::span {props.ids()}.begin();
     }
 }
 
@@ -99,8 +99,7 @@ ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(
     const GraphView& view,
     PropertyTypeID propTypeID,
     const LabelSet* labelset)
-    : ScanNodePropertiesByLabelIterator<T>(view, propTypeID, labelset)
-{
+    : ScanNodePropertiesByLabelIterator<T>(view, propTypeID, labelset) {
 }
 
 static constexpr size_t NColumns = 2;
@@ -151,10 +150,10 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
                     (*this->_properties)[i] = *this->_propIt;
                 }
                 if constexpr (conditions[1]) {
-                    (*this->_nodeIDs)[i] = this->_currentID;
+                    (*this->_nodeIDs)[i] = *this->_currentIDIt;
                 }
                 ++this->_propIt;
-                ++this->_currentID++;
+                ++this->_currentIDIt++;
             }
             this->nextValid();
         }

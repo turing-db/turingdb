@@ -5,7 +5,6 @@
 
 #include "GraphMetadata.h"
 #include "EntityID.h"
-#include "indexers/LabelSetIndexer.h"
 #include "indexers/PropertyIndexer.h"
 #include "PropertyContainer.h"
 
@@ -25,10 +24,6 @@ public:
 
     explicit PropertyManager(const GraphMetadata* graphMetadata);
     ~PropertyManager();
-
-    void createEntity(LabelSetInfo& info,
-                      EntityID entityID,
-                      size_t offset);
 
     template <SupportedType T>
     void registerPropertyType(PropertyTypeID ptID) {
@@ -133,19 +128,19 @@ public:
         return _map.at(ptID)->ids();
     }
 
-    LabelSetIndexer<LabelSetInfo>& addIndexer(PropertyTypeID ptID) {
+    LabelSetPropertyIndexer& addIndexer(PropertyTypeID ptID) {
         return _indexers.emplace(ptID, &_graphMetadata->labelsets()).first->second;
     }
 
-    LabelSetIndexer<LabelSetInfo>& getIndexer(PropertyTypeID ptID) {
+    LabelSetPropertyIndexer& getIndexer(PropertyTypeID ptID) {
         return _indexers.at(ptID);
     }
 
-    const LabelSetIndexer<LabelSetInfo>& getIndexer(PropertyTypeID ptID) const {
+    const LabelSetPropertyIndexer& getIndexer(PropertyTypeID ptID) const {
         return _indexers.at(ptID);
     }
 
-    const LabelSetIndexer<LabelSetInfo>* tryGetIndexer(PropertyTypeID ptID) const;
+    const LabelSetPropertyIndexer* tryGetIndexer(PropertyTypeID ptID) const;
 
 private:
     friend DataPartLoader;

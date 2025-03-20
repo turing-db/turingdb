@@ -31,19 +31,8 @@ void GraphReport::getReport(const GraphReader& reader, std::stringstream& report
                 report << "# " << ptName << " id=" << ptID.getValue() << " Count="
                        << nodeProperties.count(ptID);
                 const auto& indexer = *indexerPtr;
-                size_t i = 0;
-                size_t binarySearched = 0;
-                for (const auto& [labelset, infos] : indexer) {
-                    if (infos._binarySearched) {
-                        binarySearched++;
-                    } else {
-                        i++;
-                    }
-                }
-                report << "  [" << i << "]";
-                if (binarySearched != 0) {
-                    report << " (BS=" << binarySearched << ")";
-                }
+
+                report << "  [" << indexer.size() << "]";
                 report << std::endl;
             }
         }
