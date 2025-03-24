@@ -54,6 +54,8 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
 
     // Property types
     const PropertyType name = proptypes.getOrCreate("name", types::String::_valueType);
+    const PropertyType dob = proptypes.getOrCreate("dob", types::String::_valueType);
+    const PropertyType isFrench = proptypes.getOrCreate("isFrench", types::Bool::_valueType);
 
     // Edges
     const EdgeRecord e01 = builder->addEdge(knowsWellID, remy, adam);
@@ -70,6 +72,8 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
     const EdgeRecord e12 = builder->addEdge(interestedInID, martina, cooking);
 
     // Node Properties
+
+    // name:
     builder->addNodeProperty<types::String>(remy, name._id, "Remy");
     builder->addNodeProperty<types::String>(adam, name._id, "Adam");
     builder->addNodeProperty<types::String>(luc, name._id, "Luc");
@@ -83,6 +87,21 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
     builder->addNodeProperty<types::String>(animals, name._id, "Animals");
     builder->addNodeProperty<types::String>(computers, name._id, "Computers");
     builder->addNodeProperty<types::String>(eighties, name._id, "Eighties");
+
+    // dob:
+    builder->addNodeProperty<types::String>(remy, dob._id, "18/01");
+    builder->addNodeProperty<types::String>(adam, dob._id, "18/08");
+    builder->addNodeProperty<types::String>(luc, dob._id, "28/05");
+    builder->addNodeProperty<types::String>(maxime, dob._id, "24/07");
+    builder->addNodeProperty<types::String>(suhas, dob._id, "12/09");
+
+    // isFrench
+    builder->addNodeProperty<types::Bool>(remy, isFrench._id, true);
+    builder->addNodeProperty<types::Bool>(adam, isFrench._id, true);
+    builder->addNodeProperty<types::Bool>(luc, isFrench._id, true);
+    builder->addNodeProperty<types::Bool>(maxime, isFrench._id, true);
+    builder->addNodeProperty<types::Bool>(martina, isFrench._id, true);
+    builder->addNodeProperty<types::Bool>(suhas, isFrench._id, false);
 
     // Edge Properties
     builder->addEdgeProperty<types::String>(e01, name._id, "Remy -> Adam");
