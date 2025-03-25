@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <atomic>
+#include <ArcManager.h>
 
 #include "versioning/CommitResult.h"
 #include "versioning/Commit.h"
@@ -36,6 +37,10 @@ public:
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;
 
+    WeakArc<CommitData> createCommitData() {
+        return _dataManager->create();
+    }
+
 private:
     friend GraphLoader;
     friend GraphDumper;
@@ -45,6 +50,7 @@ private:
     mutable std::mutex _mutex;
     CommitVector _commits;
     CommitMap _offsets;
+    std::unique_ptr<ArcManager<CommitData>> _dataManager;
 
     void lock();
     void unlock();

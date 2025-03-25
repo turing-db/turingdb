@@ -11,6 +11,7 @@
 #include "DumpResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
+#include "versioning/VersionController.h"
 
 namespace db {
 
@@ -29,9 +30,11 @@ public:
 
         static constexpr std::string_view DATAPART_FOLDER_PREFIX = "datapart-";
 
+        auto& versionController = graph._versionController;
+
         auto commit = std::make_unique<Commit>();
         commit->_graph = &graph;
-        commit->_data = std::make_shared<CommitData>();
+        commit->_data = versionController->createCommitData();
         commit->_data->_hash = hash;
 
         std::map<uint64_t, std::shared_ptr<const DataPart>> dataparts;

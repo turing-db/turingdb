@@ -3,6 +3,7 @@
 #include "reader/GraphReader.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
+#include "versioning/VersionController.h"
 #include "writers/DataPartBuilder.h"
 
 using namespace db;
@@ -21,7 +22,7 @@ std::unique_ptr<CommitBuilder> CommitBuilder::prepare(Graph& graph, const GraphV
 
     ptr->_commit = std::make_unique<Commit>();
     ptr->_commit->_graph = ptr->_graph;
-    ptr->_commit->_data = std::make_shared<CommitData>();
+    ptr->_commit->_data = ptr->_versionController->createCommitData();
     ptr->_commit->_data->_hash = ptr->_commit->hash();
     ptr->_commit->_data->_graphMetadata = graph.getMetadata();
 
@@ -86,7 +87,6 @@ std::unique_ptr<Commit> CommitBuilder::build(JobSystem& jobsystem) {
 
 CommitBuilder::CommitBuilder(Graph& graph)
     : _graph(&graph),
-      _versionController(graph._versionController.get())
-{
+      _versionController(graph._versionController.get()) {
 }
 

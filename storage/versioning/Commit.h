@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "ArcManager.h"
 #include "versioning/CommitHash.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitData.h"
@@ -49,7 +50,7 @@ private:
     friend VersionController;
 
     Graph* _graph {nullptr};
-    std::shared_ptr<CommitData> _data;
+    WeakArc<CommitData> _data;
 };
 
 }

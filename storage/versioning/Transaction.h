@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "ArcManager.h"
 #include "CommitData.h"
 
 namespace db {
@@ -16,7 +17,7 @@ public:
     Transaction() = default;
     ~Transaction() = default;
 
-    Transaction(const Graph& graph, const std::shared_ptr<const CommitData>& data)
+    Transaction(const Graph& graph, const WeakArc<const CommitData>& data)
         : _graph(&graph),
           _data(data)
     {
@@ -34,7 +35,7 @@ public:
 
 private:
     const Graph* _graph {nullptr};
-    std::shared_ptr<const CommitData> _data;
+    WeakArc<const CommitData> _data;
 };
 
 class WriteTransaction {
@@ -42,7 +43,7 @@ public:
     WriteTransaction() = default;
     ~WriteTransaction() = default;
 
-    WriteTransaction(Graph& graph, const std::shared_ptr<const CommitData>& data)
+    WriteTransaction(Graph& graph, const WeakArc<const CommitData>& data)
         : _graph(&graph),
           _data(data)
     {
@@ -62,7 +63,7 @@ public:
 
 private:
     Graph* _graph {nullptr};
-    std::shared_ptr<const CommitData> _data;
+    WeakArc<const CommitData> _data;
 };
 
 }

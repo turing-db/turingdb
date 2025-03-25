@@ -1,7 +1,6 @@
 #include "VersionController.h"
 
 #include "Graph.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -10,9 +9,11 @@ VersionController::VersionController() = default;
 VersionController::~VersionController() = default;
 
 void VersionController::initialize(Graph* graph) {
+    _dataManager = std::make_unique<ArcManager<CommitData>>();
+
     auto commit = std::make_unique<Commit>();
     commit->_graph = graph;
-    commit->_data = std::make_shared<CommitData>();
+    commit->_data = _dataManager->create();
     commit->_data->_graphMetadata = graph->getMetadata();
 
     auto* ptr = commit.get();
