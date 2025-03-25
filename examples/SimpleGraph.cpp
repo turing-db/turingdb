@@ -56,6 +56,7 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
     const PropertyType name = proptypes.getOrCreate("name", types::String::_valueType);
     const PropertyType dob = proptypes.getOrCreate("dob", types::String::_valueType);
     const PropertyType isFrench = proptypes.getOrCreate("isFrench", types::Bool::_valueType);
+    const PropertyType hasPhD= proptypes.getOrCreate("hasPhD", types::Bool::_valueType);
 
     // Edges
     const EdgeRecord e01 = builder->addEdge(knowsWellID, remy, adam);
@@ -100,8 +101,16 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
     builder->addNodeProperty<types::Bool>(adam, isFrench._id, true);
     builder->addNodeProperty<types::Bool>(luc, isFrench._id, true);
     builder->addNodeProperty<types::Bool>(maxime, isFrench._id, true);
-    builder->addNodeProperty<types::Bool>(martina, isFrench._id, true);
+    builder->addNodeProperty<types::Bool>(martina, isFrench._id, false);
     builder->addNodeProperty<types::Bool>(suhas, isFrench._id, false);
+
+    // hasPhD
+    builder->addNodeProperty<types::Bool>(remy, hasPhD._id, true);
+    builder->addNodeProperty<types::Bool>(adam, hasPhD._id, true);
+    builder->addNodeProperty<types::Bool>(luc, hasPhD._id, true);
+    builder->addNodeProperty<types::Bool>(maxime, hasPhD._id, false);
+    builder->addNodeProperty<types::Bool>(martina, hasPhD._id, true);
+    builder->addNodeProperty<types::Bool>(suhas, hasPhD._id, false);
 
     // Edge Properties
     builder->addEdgeProperty<types::String>(e01, name._id, "Remy -> Adam");
