@@ -1,8 +1,8 @@
 #pragma once
 
-#include <memory>
 #include <vector>
 
+#include "ArcManager.h"
 #include "DataPartSpan.h"
 
 namespace db {
@@ -24,8 +24,8 @@ private:
     friend GraphLoader;
     friend VersionController;
 
-    std::vector<std::shared_ptr<const DataPart>> _allDataparts;
-    std::vector<std::shared_ptr<const DataPart>> _commitDataparts;
+    std::vector<WeakArc<const DataPart>> _allDataparts;
+    std::vector<WeakArc<const DataPart>> _commitDataparts;
 };
 
 }

@@ -327,6 +327,18 @@ public:
         return arc.getWeak();
     }
 
+    /** @brief Takes ownership of an object.
+     *
+     * The object will be deleted when the last reference is released.
+     * */
+    [[nodiscard]] WeakArc<T> takeOwnership(T* ptr) {
+        std::scoped_lock guard {_mutex};
+
+        auto& arc = _arcs.emplace_back(ptr);
+
+        return arc.getWeak();
+    }
+
     /** @brief Cleans up all objects referenced only by the manager.
      * */
     size_t cleanUp() {

@@ -1,13 +1,14 @@
 #pragma once
 
-#include <memory>
 #include <span>
+
+#include "ArcManager.h"
 
 namespace db {
 
 class DataPart;
 
-using DataPartSpan = std::span<const std::shared_ptr<const DataPart>>;
+using DataPartSpan = std::span<const WeakArc<const DataPart>>;
 using DataPartIterator = DataPartSpan::iterator;
 
 }

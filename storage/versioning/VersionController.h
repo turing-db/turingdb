@@ -6,6 +6,7 @@
 #include <atomic>
 #include <ArcManager.h>
 
+#include "EntityID.h"
 #include "versioning/CommitResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
@@ -41,6 +42,10 @@ public:
         return _dataManager->create();
     }
 
+    WeakArc<DataPart> createDataPart(EntityID firstNodeID, EntityID firstEdgeID) {
+        return _partManager->create(firstNodeID, firstEdgeID);
+    }
+
 private:
     friend GraphLoader;
     friend GraphDumper;
@@ -51,6 +56,7 @@ private:
     CommitVector _commits;
     CommitMap _offsets;
     std::unique_ptr<ArcManager<CommitData>> _dataManager;
+    std::unique_ptr<ArcManager<DataPart>> _partManager;
 
     void lock();
     void unlock();

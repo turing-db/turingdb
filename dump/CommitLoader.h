@@ -35,9 +35,10 @@ public:
         auto commit = std::make_unique<Commit>();
         commit->_graph = &graph;
         commit->_data = versionController->createCommitData();
+        commit->_data->_graphMetadata = graph.getMetadata();
         commit->_data->_hash = hash;
 
-        std::map<uint64_t, std::shared_ptr<const DataPart>> dataparts;
+        std::map<uint64_t, WeakArc<const DataPart>> dataparts;
         for (auto& child : files.value()) {
             const auto& childStr = child.get();
 
@@ -56,13 +57,13 @@ public:
 
             child = path / child.get();
 
-            auto res = DataPartLoader::load(child, *graph.getMetadata());
+            auto res = DataPartLoader::load(child, *graph.getMetadata(), *versionController);
 
             if (!res) {
                 return res.get_unexpected();
             }
 
-            const auto& part = res.value();
+            WeakArc<const DataPart> part = res.value();
             dataparts.emplace(partIndex.value(), part);
             graph.allocIDRange(part->getNodeCount(), part->getEdgeCount());
         }

@@ -10,6 +10,7 @@ VersionController::~VersionController() = default;
 
 void VersionController::initialize(Graph* graph) {
     _dataManager = std::make_unique<ArcManager<CommitData>>();
+    _partManager = std::make_unique<ArcManager<DataPart>>();
 
     auto commit = std::make_unique<Commit>();
     commit->_graph = graph;

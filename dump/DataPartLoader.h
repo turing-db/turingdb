@@ -1,20 +1,21 @@
 #pragma once
 
-#include <memory>
-
 #include "Path.h"
 #include "DumpResult.h"
+#include "ArcManager.h"
 
 namespace db {
 
 class DataPart;
 class PropertyManager;
 class GraphMetadata;
+class VersionController;
 
 class DataPartLoader {
 public:
-    [[nodiscard]] static DumpResult<std::shared_ptr<DataPart>> load(const fs::Path&,
-                                                                    const GraphMetadata&);
+    [[nodiscard]] static DumpResult<WeakArc<const DataPart>> load(const fs::Path& path,
+                                                                  const GraphMetadata& metadata,
+                                                                  VersionController& versionController);
 
 private:
     static constexpr std::string_view NODE_PROPS_PREFIX = "node-props-";

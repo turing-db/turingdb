@@ -66,7 +66,7 @@ void CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     GraphView view {*_graph, *_commit->_data};
 
     for (const auto& builder : _builders) {
-        auto part = std::make_shared<DataPart>(firstNodeID, firstEdgeID);
+        auto part = _versionController->createDataPart(firstNodeID, firstEdgeID);
 
         firstNodeID += builder->nodeCount();
         firstEdgeID += builder->edgeCount();

@@ -55,6 +55,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
 
     graph->_versionController = std::make_unique<VersionController>();
     graph->_versionController->_dataManager = std::make_unique<ArcManager<CommitData>>();
+    graph->_versionController->_partManager = std::make_unique<ArcManager<DataPart>>();
 
     std::map<uint64_t, std::unique_ptr<Commit>> commits;
     for (auto& child : files.value()) {
