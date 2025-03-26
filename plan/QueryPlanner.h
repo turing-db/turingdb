@@ -79,6 +79,7 @@ private:
     void planPath(const std::vector<EntityPattern*>& path);
     void planScanNodes(const EntityPattern* entity);
     void planScanNodesWithPropertyConstraints(ColumnIDs* const& outputNodes, const ExprConstraint* exprConstraint);
+    void planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const& outputNodes, const LabelSet* labelSet, const ExprConstraint* exprConstraint);
     void planExpandEdge(const EntityPattern* edge, const EntityPattern* target);
     void planExpandEdgeWithNoConstraint(const EntityPattern* edge,
                                         const EntityPattern* target);

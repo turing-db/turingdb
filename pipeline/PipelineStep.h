@@ -7,6 +7,7 @@
 #include "operations/ScanNodesStep.h"
 #include "operations/ScanNodesByLabelStep.h"
 #include "operations/ScanNodesByPropertyStep.h"
+#include "operations/ScanNodesByPropertyAndLabelStep.h"
 #include "operations/ScanEdgesStep.h"
 #include "operations/ScanInEdgesByLabelStep.h"
 #include "operations/ScanOutEdgesByLabelStep.h"
@@ -38,6 +39,11 @@
     PipelineStep(ScanNodesByProperty##TYPE##Step::Tag,                 \
                  ColumnIDs* nodeIDs,                                   \
                  PropertyType propertyType,                            \
+                 ColumnVector<types::TYPE::Primitive>* propValues);    \
+    PipelineStep(ScanNodesByPropertyAndLabel##TYPE##Step::Tag,         \
+                 ColumnIDs* nodeIDs,                                   \
+                 PropertyType propertyType,                            \
+                 const LabelSet* labelSet,                             \
                  ColumnVector<types::TYPE::Primitive>* propValues);    \
     PipelineStep(GetFilteredNodeProperty##TYPE##Step::Tag,             \
                  const ColumnIDs* entityIDs,                           \
@@ -145,6 +151,11 @@ private:
                  ScanNodesByPropertyDoubleStep,
                  ScanNodesByPropertyStringStep,
                  ScanNodesByPropertyBoolStep,
+                 ScanNodesByPropertyAndLabelInt64Step,
+                 ScanNodesByPropertyAndLabelUInt64Step,
+                 ScanNodesByPropertyAndLabelDoubleStep,
+                 ScanNodesByPropertyAndLabelStringStep,
+                 ScanNodesByPropertyAndLabelBoolStep,
                  GetNodePropertyInt64Step,
                  GetNodePropertyUInt64Step,
                  GetNodePropertyDoubleStep,

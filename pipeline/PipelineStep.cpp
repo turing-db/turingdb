@@ -26,6 +26,21 @@
     {                                                                            \
     }                                                                            \
 
+#define SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(Opcode, Type)                        \
+    PipelineStep::PipelineStep(ScanNodesByPropertyAndLabel##Type##Step::Tag,     \
+                               ColumnIDs* nodeIDs,                               \
+                               PropertyType propertyType,                        \
+                               const LabelSet* labelSet,                         \
+                               ColumnVector<types::Type::Primitive>* propValues) \
+        : _opcode(PipelineOpcode::Opcode),                                       \
+          _impl(std::in_place_type<ScanNodesByPropertyAndLabel##Type##Step>,     \
+                nodeIDs,                                                         \
+                propertyType,                                                    \
+                labelSet,                                                        \
+                propValues)                                                      \
+    {                                                                            \
+    }                                                                            \
+
 #define GET_FILTERED_PROPERTY_STEP_IMPL(NodeOrEdge, Opcode, Type)                  \
     PipelineStep::PipelineStep(GetFiltered##NodeOrEdge##Property##Type##Step::Tag, \
                                const ColumnIDs* entityIDs,                         \
@@ -166,6 +181,12 @@ SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_UINT64, UInt64)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_DOUBLE, Double)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_STRING, String)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_BOOL, Bool)
+
+SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(SCAN_NODE_PROPERTY_AND_LABEL_INT64, Int64)
+SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(SCAN_NODE_PROPERTY_AND_LABEL_UINT64, UInt64)
+SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(SCAN_NODE_PROPERTY_AND_LABEL_DOUBLE, Double)
+SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(SCAN_NODE_PROPERTY_AND_LABEL_STRING, String)
+SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(SCAN_NODE_PROPERTY_AND_LABEL_BOOL, Bool)
 
 GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_INT64, Int64)
 GET_PROPERTY_STEP_IMPL(Node, GET_NODE_PROPERTY_UINT64, UInt64)

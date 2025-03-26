@@ -48,6 +48,11 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(ScanNodesByPropertyDoubleStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING] = ACTIVATE_PTR(ScanNodesByPropertyStringStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_BOOL] = ACTIVATE_PTR(ScanNodesByPropertyBoolStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_INT64] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_UINT64] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelUInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_DOUBLE] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelDoubleStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_STRING] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelStringStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_BOOL] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelBoolStep);
         _activateTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_INT64] = ACTIVATE_PTR(GetNodePropertyInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_UINT64] = ACTIVATE_PTR(GetNodePropertyUInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(GetNodePropertyDoubleStep);
@@ -91,6 +96,11 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = RETURN_PTR(ScanNodesByPropertyDoubleStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING] = RETURN_PTR(ScanNodesByPropertyStringStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_BOOL] = RETURN_PTR(ScanNodesByPropertyBoolStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_INT64] = RETURN_PTR(ScanNodesByPropertyAndLabelInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_UINT64] = RETURN_PTR(ScanNodesByPropertyAndLabelUInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_DOUBLE] = RETURN_PTR(ScanNodesByPropertyAndLabelDoubleStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_STRING] = RETURN_PTR(ScanNodesByPropertyAndLabelStringStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_BOOL] = RETURN_PTR(ScanNodesByPropertyAndLabelBoolStep);
         _returnTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_INT64] = RETURN_PTR(GetNodePropertyInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_UINT64] = RETURN_PTR(GetNodePropertyUInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_DOUBLE] = RETURN_PTR(GetNodePropertyDoubleStep);
@@ -174,6 +184,11 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(ScanNodesByPropertyDoubleStep)
     ACTIVATE_STEP(ScanNodesByPropertyStringStep)
     ACTIVATE_STEP(ScanNodesByPropertyBoolStep)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelInt64Step)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelUInt64Step)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelDoubleStep)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelStringStep)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelBoolStep)
     ACTIVATE_STEP(GetNodePropertyInt64Step)
     ACTIVATE_STEP(GetNodePropertyUInt64Step)
     ACTIVATE_STEP(GetNodePropertyDoubleStep)
@@ -216,6 +231,11 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(ScanNodesByPropertyDoubleStep)
     RETURN_STEP(ScanNodesByPropertyStringStep)
     RETURN_STEP(ScanNodesByPropertyBoolStep)
+    RETURN_STEP(ScanNodesByPropertyAndLabelInt64Step)
+    RETURN_STEP(ScanNodesByPropertyAndLabelUInt64Step)
+    RETURN_STEP(ScanNodesByPropertyAndLabelDoubleStep)
+    RETURN_STEP(ScanNodesByPropertyAndLabelStringStep)
+    RETURN_STEP(ScanNodesByPropertyAndLabelBoolStep)
     RETURN_STEP(GetNodePropertyInt64Step)
     RETURN_STEP(GetNodePropertyUInt64Step)
     RETURN_STEP(GetNodePropertyDoubleStep)

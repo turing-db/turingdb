@@ -5,6 +5,7 @@ set(pipeline_sources
         operations/ScanEdgesStep.cpp
         operations/ScanNodesByLabelStep.cpp
         operations/ScanNodesByPropertyStep.cpp
+        operations/ScanNodesByPropertyAndLabelStep.cpp
         operations/ScanNodesStep.cpp
         operations/FilterStep.cpp
         operations/ScanOutEdgesByLabelStep.cpp
