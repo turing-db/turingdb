@@ -49,7 +49,7 @@ void SimpleGraph::createSimpleGraph(TuringDB& db) {
     const EntityID cooking = builder->addNode(getLabelSet({"Interest"}));
     const EntityID paddle = builder->addNode(getLabelSet({"Interest"}));
     const EntityID animals = builder->addNode(getLabelSet({"Interest"}));
-    const EntityID computers = builder->addNode(getLabelSet({"Interest, SoftwareEngineering"}));
+    const EntityID computers = builder->addNode(getLabelSet({"Interest", "SoftwareEngineering"}));
     const EntityID eighties = builder->addNode(getLabelSet({"Interest"}));
 
     // Property types
