@@ -9,6 +9,8 @@ namespace db {
 
 class CommitHash {
 public:
+    using ValueType = uint64_t;
+
     constexpr CommitHash() = default;
     constexpr ~CommitHash() = default;
 
@@ -17,18 +19,18 @@ public:
     constexpr CommitHash& operator=(const CommitHash&) = default;
     constexpr CommitHash& operator=(CommitHash&&) noexcept = default;
 
-    constexpr explicit CommitHash(uint64_t v)
+    constexpr explicit CommitHash(ValueType v)
         : _value(v)
     {
     }
 
-    constexpr CommitHash& operator=(uint64_t v) {
+    constexpr CommitHash& operator=(ValueType v) {
         _value = v;
         return *this;
     }
 
-    [[nodiscard]] constexpr uint64_t get() const { return _value; }
-    [[nodiscard]] constexpr explicit operator uint64_t() const { return _value; }
+    [[nodiscard]] constexpr ValueType get() const { return _value; }
+    [[nodiscard]] constexpr explicit operator ValueType() const { return _value; }
 
     [[nodiscard]] static CommitHash create();
 
@@ -59,7 +61,7 @@ public:
     }
 
 private:
-    uint64_t _value = std::numeric_limits<uint64_t>::max();
+    ValueType _value = std::numeric_limits<ValueType>::max();
 };
 
 }

@@ -24,6 +24,7 @@ public:
 
     [[nodiscard]] bool isValid() const;
     [[nodiscard]] bool hasData() const;
+    [[nodiscard]] bool isHead() const;
     [[nodiscard]] CommitHash hash() const;
     [[nodiscard]] DataPartSpan dataparts() const;
 

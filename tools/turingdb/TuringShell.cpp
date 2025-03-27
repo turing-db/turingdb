@@ -6,6 +6,7 @@
 #include <spdlog/spdlog.h>
 #include <termcolor/termcolor.hpp>
 
+#include "Graph.h"
 #include "TuringDB.h"
 #include "columns/Block.h"
 #include "columns/Column.h"
@@ -22,9 +23,9 @@ const char* whiteChars = " \n\r\t";
 // Remove whitespace in front of a string
 inline void trim(std::string& str) {
     str.erase(str.begin(), std::find_if(str.begin(), str.end(),
-    [](char ch) {
-        return !isspace(ch);
-    }));
+                                        [](char ch) {
+                                            return !isspace(ch);
+                                        }));
 }
 
 inline std::string_view getFirstWord(const std::string& str) {
@@ -52,7 +53,7 @@ void extractWords(std::vector<std::string>& words, const std::string& line) {
             newPos = line.size();
         }
 
-        words.emplace_back(std::string(line.c_str()+pos, newPos-pos));
+        words.emplace_back(std::string(line.c_str() + pos, newPos - pos));
         pos = newPos;
     }
 }
@@ -69,42 +70,89 @@ void quitCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
 void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
     std::string graphName;
     argparse::ArgumentParser argParser("cd",
-                               "",
-                              argparse::default_arguments::help,
-             false);
+                                       "",
+                                       argparse::default_arguments::help,
+                                       false);
     argParser.add_description("Print Turing Shell help");
     argParser.add_argument("graph")
-             .nargs(1)
-             .metavar("graph_name")
-             .store_into(graphName);
-    argParser.parse_args(args);
+        .nargs(1)
+        .metavar("graph_name")
+        .store_into(graphName);
+
+    try {
+        argParser.parse_args(args);
+    } catch (const std::exception& e) {
+        spdlog::error("Error parsing arguments: {}", e.what());
+        return;
+    }
 
     if (graphName.empty()) {
         spdlog::error("Graph name can not be empty");
         return;
     }
 
-    shell.setGraphName(graphName);
-}
-void quietCommand(const TuringShell::Command::Words &args, TuringShell &shell) {
-  shell.setQuiet(true);
+    if (!shell.setGraphName(graphName)) {
+        spdlog::error("Graph {} does not exist", graphName);
+        return;
+    }
 }
 
-void unquietCommand(const TuringShell::Command::Words &args, TuringShell &shell) {
-  shell.setQuiet(false);
+void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+    std::string hashStr = "head";
+
+    argparse::ArgumentParser argParser("checkout", "", argparse::default_arguments::help, false);
+    argParser.add_description("Checkout specific commit of current graph");
+    argParser.add_argument("hash")
+        .nargs(1)
+        .metavar("hash")
+        .default_value("head")
+        .store_into(hashStr);
+
+    try {
+        argParser.parse_args(args);
+    } catch (const std::exception& e) {
+        spdlog::error("Error parsing arguments: {}", e.what());
+        return;
+    }
+
+    CommitHash::ValueType hashValue = CommitHash::head().get();
+    if (hashStr != "head") {
+        const char* begin = hashStr.data();
+        const char* end = hashStr.data() + hashStr.size();
+        const auto res = std::from_chars(begin, end, hashValue, 16);
+
+        if (res.ec == std::errc::result_out_of_range || res.ec == std::errc::invalid_argument || res.ptr != end) {
+            spdlog::error("Commit {} is invalid", hashStr);
+            return;
+        }
+    }
+
+    if (!shell.setCommitHash(CommitHash {hashValue})) {
+        spdlog::error("Commit {} is not part of the graph's history", hashStr);
+    }
+}
+
+void quietCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+    shell.setQuiet(true);
+}
+
+void unquietCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+    shell.setQuiet(false);
 }
 
 } // namespace
 
-TuringShell::TuringShell(TuringDB &turingDB, LocalMemory *mem)
-    : _turingDB(turingDB), _mem(mem) {
-  _localCommands.emplace("q", Command{quitCommand});
-  _localCommands.emplace("quit", Command{quitCommand});
-  _localCommands.emplace("exit", Command{quitCommand});
-  _localCommands.emplace("help", Command{helpCommand});
-  _localCommands.emplace("cd", Command{changeDBCommand});
-  _localCommands.emplace("quiet", Command{quietCommand});
-  _localCommands.emplace("unquiet", Command{unquietCommand});
+TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
+    : _turingDB(turingDB),
+      _mem(mem) {
+    _localCommands.emplace("q", Command {quitCommand});
+    _localCommands.emplace("quit", Command {quitCommand});
+    _localCommands.emplace("exit", Command {quitCommand});
+    _localCommands.emplace("help", Command {helpCommand});
+    _localCommands.emplace("cd", Command {changeDBCommand});
+    _localCommands.emplace("checkout", Command {checkoutCommand});
+    _localCommands.emplace("quiet", Command {quietCommand});
+    _localCommands.emplace("unquiet", Command {unquietCommand});
 }
 
 TuringShell::~TuringShell() {
@@ -129,13 +177,10 @@ void TuringShell::startLoop() {
 
 std::string TuringShell::composePrompt() {
     const std::string basePrompt = "turing";
-    const char* separator = ":";
 
-    std::string prompt = basePrompt;
-    prompt += separator;
-    prompt += _graphName;
-    prompt += "> ";
-    return prompt;
+    return _hash == CommitHash::head() 
+        ? fmt::format("{}:{}> ", basePrompt, _graphName)
+        : fmt::format("{}:{}@{:x}> ", basePrompt, _graphName, _hash.get());
 }
 
 template <typename T>
@@ -156,8 +201,7 @@ void tabulateWrite(tabulate::RowStream& rs, const std::optional<T>& value) {
     case Type::staticKind(): {                            \
         const Type& src = *static_cast<const Type*>(col); \
         tabulateWrite(rs, src[i]);                        \
-    }                                                     \
-    break;                                                \
+    } break;
 
 
 void TuringShell::processLine(std::string& line) {
@@ -177,12 +221,12 @@ void TuringShell::processLine(std::string& line) {
     // Execute query
     tabulate::Table table;
 
-    auto queryCallback = [&table](const Block &block) {
+    auto queryCallback = [&table](const Block& block) {
         const size_t rowCount = block.getBlockRowCount();
 
         for (size_t i = 0; i < rowCount; ++i) {
             tabulate::RowStream rs;
-            for (const Column *col : block.columns()) {
+            for (const Column* col : block.columns()) {
                 switch (col->getKind()) {
                     TABULATE_COL_CASE(ColumnVector<EntityID>, i)
                     TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
@@ -207,8 +251,7 @@ void TuringShell::processLine(std::string& line) {
         }
     };
 
-    const auto res = _quiet ? _turingDB.query(line, _graphName, _mem) :
-                              _turingDB.query(line, _graphName, _mem, queryCallback);
+    const auto res = _quiet ? _turingDB.query(line, _graphName, _mem, [](const Block&) {}, _hash) : _turingDB.query(line, _graphName, _mem, queryCallback, _hash);
 
     if (!res.isOk()) {
         if (res.hasErrorMessage()) {
@@ -224,6 +267,31 @@ void TuringShell::processLine(std::string& line) {
     if (!_quiet) {
         std::cout << table << "\n";
     }
+}
+
+bool TuringShell::setGraphName(const std::string& graphName) {
+    if (_turingDB.getSystemManager().getGraph(graphName) == nullptr) {
+        return false;
+    }
+
+    _hash = CommitHash::head();
+    _graphName = graphName;
+    return true;
+}
+
+bool TuringShell::setCommitHash(CommitHash hash) {
+    const auto* graph = _turingDB.getSystemManager().getGraph(_graphName);
+    if (graph == nullptr) {
+        return false;
+    }
+
+    Transaction transaction = graph->openTransaction(hash);
+    if (!transaction.isValid()) {
+        return false;
+    }
+
+    _hash = hash;
+    return true;
 }
 
 void TuringShell::printHelp() const {

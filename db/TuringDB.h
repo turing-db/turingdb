@@ -5,6 +5,7 @@
 #include "SystemManager.h"
 #include "QueryStatus.h"
 #include "QueryCallback.h"
+#include "versioning/CommitHash.h"
 
 namespace db {
 
@@ -23,11 +24,13 @@ public:
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
-                      QueryCallback callback);
+                      QueryCallback callback,
+                      CommitHash hash = CommitHash::head());
 
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
-                      LocalMemory* mem);
+                      LocalMemory* mem,
+                      CommitHash hash = CommitHash::head());
 
 private:
     SystemManager _systemManager;

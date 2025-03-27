@@ -17,7 +17,11 @@ void HistoryStep::execute() {
     _log->clear();
     for (const auto& commit : _view->commits()) {
         auto& str = _log->emplace_back();
-        str += fmt::format("Commit: {:x}\n", commit.hash().get());
+        str += fmt::format("Commit: {:x}", commit.hash().get());
+        if (commit.isHead()) {
+            str += " (HEAD)";
+        }
+        str += "\n";
 
         size_t i = 0;
         for (const auto& part : commit.dataparts()) {

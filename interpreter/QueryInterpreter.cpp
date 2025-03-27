@@ -30,7 +30,8 @@ QueryInterpreter::~QueryInterpreter() {
 QueryStatus QueryInterpreter::execute(std::string_view query,
                                       std::string_view graphName,
                                       LocalMemory* mem,
-                                      QueryCallback callback) {
+                                      QueryCallback callback,
+                                      CommitHash hash) {
     const auto start = Clock::now();
 
     Graph* graph = graphName.empty() ? _sysMan->getDefaultGraph() 
@@ -40,7 +41,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Open transaction
-    const Transaction transaction = graph->openTransaction();
+    const Transaction transaction = graph->openTransaction(hash);
     const GraphView view = transaction.viewGraph();
 
     // Parsing query

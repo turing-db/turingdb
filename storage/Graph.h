@@ -55,8 +55,8 @@ public:
 
     [[nodiscard]] const GraphMetadata* getMetadata() const { return _metadata.get(); }
     [[nodiscard]] GraphMetadata* getMetadata() { return _metadata.get(); }
-
     [[nodiscard]] EntityIDs getNextFreeIDs() const;
+    [[nodiscard]] CommitHash getHeadHash() const;
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
     [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name);

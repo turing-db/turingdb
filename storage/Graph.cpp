@@ -71,6 +71,10 @@ Graph::EntityIDs Graph::getNextFreeIDs() const {
     return _nextFreeIDs;
 }
 
+CommitHash Graph::getHeadHash() const {
+    return _versionController->getHeadHash();
+}
+
 Graph::EntityIDs Graph::allocIDs() {
     std::unique_lock lock(_entityIDsMutex);
     const auto ids = _nextFreeIDs;

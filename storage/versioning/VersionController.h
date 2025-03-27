@@ -37,6 +37,7 @@ public:
 
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] WriteTransaction openWriteTransaction(CommitHash hash = CommitHash::head()) const;
+    [[nodiscard]] CommitHash getHeadHash() const;
 
     WeakArc<CommitData> createCommitData(CommitHash hash) {
         return _dataManager->create(hash);

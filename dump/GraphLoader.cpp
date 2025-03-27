@@ -92,8 +92,6 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
         return DumpError::result(DumpErrorType::NO_COMMITS);
     }
 
-    graph->_versionController->_head.store(commits.at(commits.size() - 1).get());
-
     for (auto& [commitIndex, commit] : commits) {
         auto& history = commit->history();
 
@@ -110,7 +108,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
     }
 
     for (auto& [commitIndex, commit] : commits) {
-        graph->_versionController->_commits.emplace_back(std::move(commit));
+        graph->_versionController->commit(std::move(commit));
     }
 
 

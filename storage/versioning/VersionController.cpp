@@ -2,6 +2,7 @@
 
 #include "Graph.h"
 #include "CommitView.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -34,6 +35,11 @@ Transaction VersionController::openTransaction(CommitHash hash) const {
 
     auto it = _offsets.find(hash);
     if (it == _offsets.end()) {
+        spdlog::error("Commit {} does not exist", hash.get());
+        spdlog::error("Available commits:");
+        for (const auto& [hash, offset] : _offsets) {
+            spdlog::error(" - {}", hash.get());
+        }
         return Transaction {}; // Invalid hash
     }
 
@@ -53,6 +59,17 @@ WriteTransaction VersionController::openWriteTransaction(CommitHash hash) const 
     }
 
     return _commits[it->second]->openWriteTransaction();
+}
+
+CommitHash VersionController::getHeadHash() const {
+    std::scoped_lock lock {_mutex};
+    const auto* head = _head.load();
+
+    if (!head) {
+        return CommitHash::head();
+    }
+
+    return head->_hash;
 }
 
 CommitResult<void> VersionController::rebase(Commit& commit) {
@@ -95,11 +112,13 @@ CommitResult<void> VersionController::commit(std::unique_ptr<Commit> commit) {
     }
 
     const std::span commitDataparts = commit->_data->_history.allDataparts();
-    const std::span headDataparts = _head.load()->_data->_history.allDataparts();
+    if (_head.load()) {
+        const std::span headDataparts = _head.load()->_data->_history.allDataparts();
 
-    for (size_t i = 0; i < headDataparts.size(); i++) {
-        if (commitDataparts[i].get() != headDataparts[i].get()) {
-            return CommitError::result(CommitErrorType::COMMIT_NEEDS_REBASE);
+        for (size_t i = 0; i < headDataparts.size(); i++) {
+            if (commitDataparts[i].get() != headDataparts[i].get()) {
+                return CommitError::result(CommitErrorType::COMMIT_NEEDS_REBASE);
+            }
         }
     }
 

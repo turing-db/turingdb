@@ -11,6 +11,10 @@ bool CommitView::hasData() const {
     return _commit->hasData();
 }
 
+bool CommitView::isHead() const {
+    return _commit->isHead();
+}
+
 CommitHash CommitView::hash() const {
     return _commit->hash();
 }

@@ -43,6 +43,7 @@ public:
     [[nodiscard]] bool hasData() const { return _data != nullptr; }
     [[nodiscard]] const CommitHistory& history() const { return _data->history(); }
     [[nodiscard]] CommitHistory& history() { return _data->history(); }
+    [[nodiscard]] bool isHead() const;
 
 private:
     friend CommitBuilder;
