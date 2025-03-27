@@ -90,13 +90,7 @@ public:
         }
 
         if (_nesting == 6) {
-            const PropertyType neo4jIDType = _propTypeMap->getOrCreate("Neo4j ID", ValueType::UInt64);
-            const PropertyType turingID = _propTypeMap->getOrCreate("Turing ID", ValueType::UInt64);
-            const PropertyType partIndexID = _propTypeMap->getOrCreate("partIndex ", ValueType::UInt64);
             _currentNodeID = _buf->addNode(_labelset);
-            _buf->addNodeProperty<types::UInt64>(_currentNodeID, neo4jIDType._id, val);
-            _buf->addNodeProperty<types::UInt64>(_currentNodeID, turingID._id, _currentNodeID.getValue());
-            _buf->addNodeProperty<types::UInt64>(_currentNodeID, partIndexID._id, _buf->getPartIndex());
             _nodeIDMapper->registerID(val, _buf->getPartIndex(), _currentNodeID);
             return true;
         }

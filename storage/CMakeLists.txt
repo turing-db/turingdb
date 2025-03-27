@@ -39,6 +39,7 @@ set(storage_sources
         properties/PropertyManager.cpp
 
         writers/DataPartBuilder.cpp
+        writers/GraphWriter.cpp
 
         versioning/CommitResult.cpp
         versioning/VersionController.cpp
