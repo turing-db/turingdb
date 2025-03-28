@@ -115,9 +115,11 @@ void QueryPlanner::planPath(const std::vector<EntityPattern*>& path) {
         const TypeConstraint* edgeTypeConstr = edge->getTypeConstraint();
         const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
         const ExprConstraint* sourceExprConstr = source->getExprConstraint();
+        const ExprConstraint* targetExprConstr = target->getExprConstraint();
         const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
 
-        if (!edgeTypeConstr && (!sourceTypeConstr || !targetTypeConstr) && !(sourceExprConstr || edgeExprConstr)) {
+        if (!(edgeTypeConstr || edgeExprConstr) && (!sourceTypeConstr || !targetTypeConstr)
+            && !(sourceExprConstr || targetExprConstr)) {
             return planPathUsingScanEdges(path);
         }
     }
