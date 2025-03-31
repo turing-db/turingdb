@@ -647,7 +647,7 @@ void QueryPlanner::planExpressionConstraintFilters(const ExprConstraint* edgeExp
         }
         generateEdgePropertyFilterMasks(filterMasks.back(),
                                         std::span<const BinExpr* const>(expressions),
-                                        targetNodes);
+                                        edges);
     }
 
     if (targetExprConstr) {
