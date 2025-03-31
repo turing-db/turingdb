@@ -322,10 +322,6 @@ prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
                             }
                      ;
 
-expr_constraint: OBRACK expr CBRACK { $$ = ExprConstraint::create(ctxt); }
-               ;
-
-
 // CREATE GRAPH
 create_graph_cmd: CREATE GRAPH ID { $$ = CreateGraphCommand::create(ctxt, $3); }
              ;
