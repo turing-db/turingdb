@@ -22,4 +22,6 @@ target_include_directories(turing_db_query_parser_s PUBLIC ${CMAKE_CURRENT_SOURC
 target_include_directories(turing_db_query_parser_s PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(turing_db_query_parser_s PRIVATE
     turing_db_query_AST_s
-    turing_common_s)
+    turing_common_s
+    turing_db_storage_s
+)

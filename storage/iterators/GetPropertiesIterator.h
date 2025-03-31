@@ -21,6 +21,9 @@ public:
                           PropertyTypeID propTypeID,
                           const ColumnIDs* inputEntityIDs);
 
+    void init();
+    void reset();
+
     void next() override;
 
     const T::Primitive& get() const {
@@ -43,8 +46,10 @@ public:
 private:
     PropertyTypeID _propTypeID;
     const T::Primitive* _prop {nullptr};
-    const ColumnIDs* _inputEntityIDs {nullptr};
+
+protected:
     ColumnIDs::ConstIterator _entityIt;
+    const ColumnIDs* _inputEntityIDs {nullptr};
 };
 
 template <PropertyIteratorClass IteratorClass, SupportedType T>
@@ -99,6 +104,24 @@ protected:
 };
 
 template <PropertyIteratorClass IteratorClass, SupportedType T>
+class GetPropertiesChunkWriter : public GetPropertiesIterator<IteratorClass, T> {
+public:
+    GetPropertiesChunkWriter(const GraphView& view,
+                             PropertyTypeID propTypeID,
+                             const ColumnIDs* inputEntityIDs);
+
+    void fill(size_t maxCount);
+
+    void setOutput(ColumnVector<typename T::Primitive>* output) { _output = output; }
+    void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
+
+private:
+    ColumnVector<size_t>* _indices {nullptr};
+    ColumnIDs* _entityIDs {nullptr};
+    ColumnVector<typename T::Primitive>* _output {nullptr};
+};
+
+template <PropertyIteratorClass IteratorClass, SupportedType T>
 class GetPropertiesWithNullChunkWriter : public GetPropertiesIteratorWithNull<IteratorClass, T> {
 public:
     GetPropertiesWithNullChunkWriter(const GraphView& view,
@@ -120,6 +143,8 @@ using GetNodePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<Property
 template <SupportedType T>
 using GetNodePropertiesRange = GetPropertiesRange<PropertyIteratorClass::NODE, T>;
 template <SupportedType T>
+using GetNodePropertiesChunkWriter = GetPropertiesChunkWriter<PropertyIteratorClass::NODE, T>;
+template <SupportedType T>
 using GetNodePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, T>;
 
 template <SupportedType T>
@@ -128,6 +153,8 @@ template <SupportedType T>
 using GetEdgePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, T>;
 template <SupportedType T>
 using GetEdgePropertiesRange = GetPropertiesRange<PropertyIteratorClass::EDGE, T>;
+template <SupportedType T>
+using GetEdgePropertiesChunkWriter = GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, T>;
 template <SupportedType T>
 using GetEdgePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, T>;
 

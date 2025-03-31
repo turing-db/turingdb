@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnOperator.h"
 
@@ -31,8 +32,9 @@ public:
         const Column* _src {nullptr};
         Column* _dest {nullptr};
     };
-    
+
     FilterStep(ColumnVector<size_t>* indices);
+    FilterStep();
     FilterStep(FilterStep&&) = default;
     ~FilterStep();
 
@@ -59,6 +61,7 @@ private:
     std::vector<Operand> _operands;
 
     void compute();
+    void generateIndices();
 };
 
 }

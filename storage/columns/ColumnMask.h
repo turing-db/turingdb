@@ -24,7 +24,7 @@ public:
         }
         operator bool() const { return _value; }
 
-        bool _value;
+        bool _value {false};
     };
 
     using ValueType = Bool_t;

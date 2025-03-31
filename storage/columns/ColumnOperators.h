@@ -33,36 +33,6 @@ public:
     }
 
     /**
-     * @brief Fills a mask corresponding to 'lhs == rhs' and the corresponding indices
-     *
-     * @param mask The mask to fill
-     * @param indices Stores the index of all the 'true' values of the mask
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
-     */
-    template <typename T, typename U>
-    static void equal(ColumnMask& mask,
-                      ColumnVector<size_t>& indices,
-                      const ColumnVector<T>& lhs,
-                      const ColumnVector<U>& rhs) {
-        msgbioassert(lhs.size() == rhs.size(),
-                     "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        indices.clear();
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto* rhsd = rhs.data();
-        const auto size = lhs.size();
-        for (size_t i = 0; i < size; i++) {
-            const bool v = lhsd[i] == rhsd[i];
-            maskd[i]._value = v;
-            if (v) {
-                indices.push_back(i);
-            }
-        }
-    }
-
-    /**
      * @brief Fills a mask corresponding to 'lhs == rhs'
      *
      * @param mask The mask to fill
@@ -80,34 +50,6 @@ public:
         const auto size = lhs.size();
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i] == rhsd;
-        }
-    }
-
-    /**
-     * @brief Fills a mask corresponding to 'lhs == rhs' and the corresponding indices
-     *
-     * @param mask The mask to fill
-     * @param indices Stores the index of all the 'true' values of the mask
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
-     */
-    template <typename T, typename U>
-    static void equal(ColumnMask& mask,
-                      ColumnVector<size_t>& indices,
-                      const ColumnVector<T>& lhs,
-                      const ColumnConst<U>& rhs) {
-        mask.resize(lhs.size());
-        indices.clear();
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto& rhsd = rhs.getRaw();
-        const auto size = lhs.size();
-        for (size_t i = 0; i < size; i++) {
-            const bool v = lhsd[i] == rhsd;
-            maskd[i]._value = v;
-            if (v) {
-                indices.push_back(i);
-            }
         }
     }
 
@@ -133,34 +75,6 @@ public:
     }
 
     /**
-     * @brief Fills a mask corresponding to 'lhs == rhs' and the corresponding indices
-     *
-     * @param mask The mask to fill
-     * @param indices Stores the index of all the 'true' values of the mask
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
-     */
-    template <typename T, typename U>
-    static void equal(ColumnMask& mask,
-                      ColumnVector<size_t>& indices,
-                      const ColumnConst<T>& lhs,
-                      const ColumnVector<U>& rhs) {
-        mask.resize(rhs.size());
-        indices.clear();
-        auto* maskd = mask.data();
-        const auto& lhsd = lhs.getRaw();
-        const auto* rhsd = rhs.data();
-        const auto size = rhs.size();
-        for (size_t i = 0; i < size; i++) {
-            const bool v = lhsd == rhsd[i];
-            maskd[i]._value = v;
-            if (v) {
-                indices.push_back(i);
-            }
-        }
-    }
-
-    /**
      * @brief Fills a mask corresponding to 'lhs == rhs'
      *
      * @param mask The mask to fill
@@ -173,28 +87,6 @@ public:
                       const ColumnConst<U>& rhs) {
         mask.resize(1);
         mask[0] = lhs.getRaw() == rhs.getRaw();
-    }
-
-    /**
-     * @brief Fills a mask corresponding to 'lhs == rhs' and the corresponding indices
-     *
-     * @param mask The mask to fill
-     * @param indices Stores the index of all the 'true' values of the mask
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
-     */
-    template <typename T, typename U>
-    static void equal(ColumnMask& mask,
-                      ColumnVector<size_t>& indices,
-                      const ColumnConst<T>& lhs,
-                      const ColumnConst<U>& rhs) {
-        mask.resize(1);
-        indices.clear();
-        const bool v = lhs.getRaw() == rhs.getRaw();
-        mask[0] = v;
-        if (v) {
-            indices.push_back(0);
-        }
     }
 
     /**
@@ -220,35 +112,6 @@ public:
     }
 
     /**
-     * @brief Fills a mask corresponding to 'lhs && rhs' and the corresponding indices
-     *
-     * @param mask The mask to fill
-     * @param indices Stores the index of all the 'true' values of the mask
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
-     */
-    static void andOp(ColumnMask& mask,
-                       ColumnVector<size_t>& indices,
-                       const ColumnMask& lhs,
-                       const ColumnMask& rhs) {
-        msgbioassert(lhs.size() == rhs.size(),
-                     "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        indices.clear();
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto* rhsd = rhs.data();
-        const auto size = rhs.size();
-        for (size_t i = 0; i < size; i++) {
-            const bool v = lhsd[i]._value && rhsd[i]._value;
-            maskd[i]._value = v;
-            if (v) {
-                indices.push_back(i);
-            }
-        }
-    }
-
-    /**
      * @brief Fills a mask corresponding to 'lhs || rhs'
      *
      * @param mask The mask to fill
@@ -270,32 +133,31 @@ public:
         }
     }
 
-    /**
-     * @brief Fills a mask corresponding to 'lhs || rhs' and the corresponding indices
-     *
-     * @param mask The mask to fill
-     * @param indices Stores the index of all the 'true' values of the mask
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
-     */
-    static void orOp(ColumnMask& mask,
-                      ColumnVector<size_t>& indices,
-                      const ColumnMask& lhs,
-                      const ColumnMask& rhs) {
+    static void projectOp(ColumnMask& mask,
+                          const ColumnVector<size_t>& lhs,
+                          const ColumnMask& rhs) {
         msgbioassert(lhs.size() == rhs.size(),
                      "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        indices.clear();
         auto* maskd = mask.data();
         const auto* lhsd = lhs.data();
         const auto* rhsd = rhs.data();
+        const auto size = lhs.size();
+        for (size_t i = 0; i < size; i++) {
+            maskd[lhsd[i]]._value = rhsd[i];
+        }
+    }
+
+    static void projectOp(ColumnMask& mask,
+                          const ColumnMask& lhs,
+                          const ColumnVector<size_t>& rhs) {
+        msgbioassert(rhs.size() == lhs.size(),
+                     "Columns must have matching dimensions");
+        auto* maskd = mask.data();
+        const auto* rhsd = rhs.data();
+        const auto* lhsd = lhs.data();
         const auto size = rhs.size();
         for (size_t i = 0; i < size; i++) {
-            const bool v = lhsd[i]._value || rhsd[i]._value;
-            maskd[i]._value = v;
-            if (v) {
-                indices.push_back(i);
-            }
+            maskd[rhsd[i]]._value = lhsd[i];
         }
     }
 

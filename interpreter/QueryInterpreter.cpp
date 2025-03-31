@@ -1,5 +1,6 @@
 #include "QueryInterpreter.h"
 
+#include "GraphMetadata.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "views/GraphView.h"
@@ -49,7 +50,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Analyze query
-    QueryAnalyzer analyzer(&astCtxt);
+    QueryAnalyzer analyzer(&astCtxt, view.metadata().propTypes());
     if (!analyzer.analyze(cmd)) {
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);
     }

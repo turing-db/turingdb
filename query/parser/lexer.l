@@ -51,6 +51,8 @@ using namespace db;
 "[" { return YParser::make_OSBRACK(); }
 "]" { return YParser::make_CSBRACK(); }
 
+(True|False|TRUE|FALSE|true|false) { return YParser::make_BOOLEAN_CONSTANT(yytext); }
+
 [a-zA-Z]+[a-zA-Z0-9_]* { return YParser::make_ID(std::string(yytext)); }
 
 -?[0-9]+ { return YParser::make_INT_CONSTANT(yytext); }

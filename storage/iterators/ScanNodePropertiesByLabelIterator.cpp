@@ -16,6 +16,14 @@ ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
       _propTypeID(propTypeID),
       _labelset(labelset)
 {
+    init();
+}
+
+template <SupportedType T>
+ScanNodePropertiesByLabelIterator<T>::~ScanNodePropertiesByLabelIterator() = default;
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelIterator<T>::init() {
     for (; _partIt.isValid(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const PropertyManager& nodeProperties = part->nodeProperties();
@@ -23,7 +31,7 @@ ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
         if (nodeProperties.hasPropertyType(_propTypeID)) {
             const auto& indexer = nodeProperties.getIndexer(_propTypeID);
             const TypedPropertyContainer<T>& props = nodeProperties.getContainer<T>(_propTypeID);
-            _labelsetIt = indexer.matchIterate(labelset);
+            _labelsetIt = indexer.matchIterate(_labelset);
 
             for (; _labelsetIt.isValid(); _labelsetIt.next()) {
                 const auto& ranges = _labelsetIt.getValue();
@@ -34,7 +42,7 @@ ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
 
                     _props = props.getSpan(range._offset, range._count);
                     _propIt = _props.begin();
-                    _currentIDIt = std::span {props.ids()}.begin();
+                    _currentIDIt = std::span {props.ids()}.begin() + range._offset;
 
                     if (!_props.empty()) {
                         return;
@@ -46,13 +54,16 @@ ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
 }
 
 template <SupportedType T>
-ScanNodePropertiesByLabelIterator<T>::~ScanNodePropertiesByLabelIterator() = default;
-
-template <SupportedType T>
 void ScanNodePropertiesByLabelIterator<T>::next() {
     _propIt++;
     _currentIDIt++;
     nextValid();
+}
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelIterator<T>::reset() {
+    Iterator::reset();
+    init();
 }
 
 template <SupportedType T>
@@ -87,7 +98,7 @@ void ScanNodePropertiesByLabelIterator<T>::nextValid() {
         const auto& range = *_rangeIt;
         _props = props.getSpan(range._offset, range._count);
         _propIt = _props.begin();
-        _currentIDIt = std::span {props.ids()}.begin();
+        _currentIDIt = std::span {props.ids()}.begin() + range._offset;
     }
 }
 

@@ -2,6 +2,7 @@
 
 #include <range/v3/view.hpp>
 
+#include "types/PropertyTypeMap.h"
 #include "DeclContext.h"
 #include "Expr.h"
 #include "MatchTarget.h"
@@ -11,6 +12,8 @@
 #include "ReturnProjection.h"
 #include "VarDecl.h"
 #include "BioAssert.h"
+
+#include "spdlog/spdlog.h"
 
 using namespace db;
 namespace rv = ranges::views;
@@ -32,14 +35,14 @@ void returnAllVariables(MatchCommand* cmd) {
 
 }
 
-QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt)
-    : _ctxt(ctxt) 
+QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt, const PropertyTypeMap& propTypeMap)
+    : _ctxt(ctxt),
+    _propTypeMap(propTypeMap)
 {
 }
 
 QueryAnalyzer::~QueryAnalyzer() {
 }
-
 bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     switch (cmd->getKind()) {
         case QueryCommand::Kind::MATCH_COMMAND:
@@ -169,6 +172,33 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
     VarDecl* decl = VarDecl::create(_ctxt, declContext, var->getName(), entity->getKind());
     if (!decl) {
         return false;
+    }
+
+    if (auto* exprConstraint = entity->getExprConstraint()) {
+        for (auto* binExpr : exprConstraint->getExpressions()) {
+            const VarExpr* lexpr = static_cast<VarExpr*>(binExpr->getLeftExpr());
+            const std::string& varName = lexpr->getName();
+
+            const ExprConst* rexpr = static_cast<ExprConst*>(binExpr->getRightExpr());
+            switch (binExpr->getOpType()) {
+                case BinExpr::OP_EQUAL:
+                {
+                    if (_propTypeMap.get(varName)._valueType != rexpr->getType()) {
+                        std::string errorMsg = "Type Error for variable " + varName;
+                        if (_propTypeMap.get(varName)._valueType == db::ValueType::Invalid) {
+                            errorMsg += ": Property not found";
+                        }
+
+                        spdlog::error(errorMsg);
+                        return false;
+                    }
+                    break;
+                }
+                default:
+                    spdlog::error("Optype not supported");
+                    return false;
+            }
+        }
     }
 
     var->setDecl(decl);

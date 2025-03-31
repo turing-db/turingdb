@@ -6,6 +6,8 @@
 
 #include "operations/ScanNodesStep.h"
 #include "operations/ScanNodesByLabelStep.h"
+#include "operations/ScanNodesByPropertyStep.h"
+#include "operations/ScanNodesByPropertyAndLabelStep.h"
 #include "operations/ScanEdgesStep.h"
 #include "operations/ScanInEdgesByLabelStep.h"
 #include "operations/ScanOutEdgesByLabelStep.h"
@@ -21,10 +23,11 @@
 #include "operations/GetLabelSetIDStep.h"
 #include "operations/LoadGraphStep.h"
 #include "operations/GetPropertyStep.h"
+#include "operations/GetFilteredPropertyStep.h"
 
 #include "FastGet.h"
 
-#define GET_PROPERTY_STEP(TYPE)                                        \
+#define PROPERTY_STEPS(TYPE)                                           \
     PipelineStep(GetNodeProperty##TYPE##Step::Tag,                     \
                  const ColumnIDs* entityIDs,                           \
                  PropertyType propertyType,                            \
@@ -33,7 +36,27 @@
                  const ColumnIDs* entityIDs,                           \
                  PropertyType propertyType,                            \
                  ColumnOptVector<types::TYPE::Primitive>* propValues); \
-
+    PipelineStep(ScanNodesByProperty##TYPE##Step::Tag,                 \
+                 ColumnIDs* nodeIDs,                                   \
+                 PropertyType propertyType,                            \
+                 ColumnVector<types::TYPE::Primitive>* propValues);    \
+    PipelineStep(ScanNodesByPropertyAndLabel##TYPE##Step::Tag,         \
+                 ColumnIDs* nodeIDs,                                   \
+                 PropertyType propertyType,                            \
+                 const LabelSet* labelSet,                             \
+                 ColumnVector<types::TYPE::Primitive>* propValues);    \
+    PipelineStep(GetFilteredNodeProperty##TYPE##Step::Tag,             \
+                 const ColumnIDs* entityIDs,                           \
+                 PropertyType propertyType,                            \
+                 ColumnVector<types::TYPE::Primitive>* propValues,     \
+                 ColumnVector<size_t>* indices,                        \
+                 ColumnMask* projectedMask);                           \
+    PipelineStep(GetFilteredEdgeProperty##TYPE##Step::Tag,             \
+                 const ColumnIDs* entityIDs,                           \
+                 PropertyType propertyType,                            \
+                 ColumnVector<types::TYPE::Primitive>* propValues,     \
+                 ColumnVector<size_t>* indices,                        \
+                 ColumnMask* projectedMask);
 
 namespace net {
     class NetWriter;
@@ -65,6 +88,7 @@ public:
                  ColumnVector<LabelSetID>* labelsetIDs);
     PipelineStep(FilterStep::Tag,
                  ColumnVector<size_t>* indices);
+    PipelineStep(FilterStep::Tag);
     PipelineStep(TransformStep::Tag,
                  TransformData* transformData);
     PipelineStep(CountStep::Tag,
@@ -80,11 +104,11 @@ public:
     PipelineStep(EndStep::Tag);
     PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
 
-    GET_PROPERTY_STEP(Int64)
-    GET_PROPERTY_STEP(UInt64)
-    GET_PROPERTY_STEP(Double)
-    GET_PROPERTY_STEP(String)
-    GET_PROPERTY_STEP(Bool)
+    PROPERTY_STEPS(Int64)
+    PROPERTY_STEPS(UInt64)
+    PROPERTY_STEPS(Double)
+    PROPERTY_STEPS(String)
+    PROPERTY_STEPS(Bool)
 
     PipelineStep(PipelineStep&& other) = default;
 
@@ -120,6 +144,16 @@ private:
                  CreateGraphStep,
                  ListGraphStep,
                  LoadGraphStep,
+                 ScanNodesByPropertyInt64Step,
+                 ScanNodesByPropertyUInt64Step,
+                 ScanNodesByPropertyDoubleStep,
+                 ScanNodesByPropertyStringStep,
+                 ScanNodesByPropertyBoolStep,
+                 ScanNodesByPropertyAndLabelInt64Step,
+                 ScanNodesByPropertyAndLabelUInt64Step,
+                 ScanNodesByPropertyAndLabelDoubleStep,
+                 ScanNodesByPropertyAndLabelStringStep,
+                 ScanNodesByPropertyAndLabelBoolStep,
                  GetNodePropertyInt64Step,
                  GetNodePropertyUInt64Step,
                  GetNodePropertyDoubleStep,
@@ -129,7 +163,17 @@ private:
                  GetEdgePropertyUInt64Step,
                  GetEdgePropertyDoubleStep,
                  GetEdgePropertyStringStep,
-                 GetEdgePropertyBoolStep> _impl;
+                 GetEdgePropertyBoolStep,
+                 GetFilteredNodePropertyInt64Step,
+                 GetFilteredNodePropertyUInt64Step,
+                 GetFilteredNodePropertyDoubleStep,
+                 GetFilteredNodePropertyStringStep,
+                 GetFilteredNodePropertyBoolStep,
+                 GetFilteredEdgePropertyInt64Step,
+                 GetFilteredEdgePropertyUInt64Step,
+                 GetFilteredEdgePropertyDoubleStep,
+                 GetFilteredEdgePropertyStringStep,
+                 GetFilteredEdgePropertyBoolStep> _impl;
 };
 
 }

@@ -4,16 +4,19 @@
 
 using namespace db;
 
-ExprConstraint::ExprConstraint(Expr* expr)
-    : _expr(expr)
+ExprConstraint::ExprConstraint()
 {
 }
 
 ExprConstraint::~ExprConstraint() {
 }
 
-ExprConstraint* ExprConstraint::create(ASTContext* ctxt, Expr* expr) {
-    ExprConstraint* constr = new ExprConstraint(expr);
+ExprConstraint* ExprConstraint::create(ASTContext* ctxt) {
+    ExprConstraint* constr = new ExprConstraint();
     ctxt->addExprConstraint(constr);
     return constr;
+}
+
+void ExprConstraint::addExpr(BinExpr* expr){
+    _expressions.push_back(expr);
 }

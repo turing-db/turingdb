@@ -32,6 +32,12 @@ public:
         MakeMemoryPool<ColumnMask>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
+        MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<types::UInt64::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<types::Double::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<types::String::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::Double::Primitive>>::type,
@@ -41,8 +47,7 @@ public:
         MakeMemoryPool<ColumnOptVector<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::String::Primitive>>::type,
-        MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type
-    >;
+        MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type>;
 
     LocalMemory(const LocalMemory&) = delete;
     LocalMemory(LocalMemory&&) = delete;

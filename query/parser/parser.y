@@ -24,6 +24,8 @@ class EntityPattern;
 class TypeConstraint;
 class ExprConstraint;
 class VarExpr;
+class BinExpr;
+class ExprConst;
 class VarList;
 class Expr;
 class ReturnProjection;
@@ -105,6 +107,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token <std::string> STRING_CONSTANT
 %token <std::string> INT_CONSTANT
 %token <std::string> DECIMAL_CONSTANT
+%token <std::string> BOOLEAN_CONSTANT
 
 %type<db::QueryCommand*> query_unit
 %type<db::QueryCommand*> cmd
@@ -119,7 +122,9 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::EntityPattern*> entity_pattern
 %type<db::EntityPattern*> edge_entity_pattern
 %type<db::TypeConstraint*> type_constraint
-%type<db::ExprConstraint*> expr_constraint
+%type<db::BinExpr*> prop_equals_expr
+%type<db::ExprConstraint*> prop_expr_constraint
+%type<db::ExprConst*> prop_expr_constant
 %type<db::VarExpr*> entity_var
 
 %type<db::QueryCommand*> create_graph_cmd
@@ -129,18 +134,6 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::QueryCommand*> load_graph_cmd
 
 %type<db::QueryCommand*> explain_cmd
-
-%type<db::Expr*> expr
-%type<db::Expr*> or_expr
-%type<db::Expr*> and_expr
-%type<db::Expr*> equal_expr
-%type<db::Expr*> greater_expr
-%type<db::Expr*> lower_expr
-%type<db::Expr*> add_expr
-%type<db::Expr*> mult_expr
-%type<db::Expr*> like_expr
-%type<db::Expr*> unary_expr
-%type<db::Expr*> simple_expr
 
 %start query_unit
 
@@ -228,48 +221,40 @@ node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
 edge_pattern: OSBRACK edge_entity_pattern CSBRACK { $$ = $2; }
             ;
 
-edge_entity_pattern: entity_var COLON ID expr_constraint
+edge_entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
-                  auto constr = TypeConstraint::create(ctxt);
-                  constr->addType(VarExpr::create(ctxt, $3));
-                  $$ = EntityPattern::create(ctxt, $1, constr, $4);
+                  $$ = EntityPattern::create(ctxt, $1, $3, $5);
               }
-              | entity_var COLON ID
+              | entity_var COLON type_constraint
               { 
-                  auto constr = TypeConstraint::create(ctxt);
-                  constr->addType(VarExpr::create(ctxt, $3));
-                  $$ = EntityPattern::create(ctxt, $1, constr, nullptr);
+                  $$ = EntityPattern::create(ctxt, $1, $3, nullptr);
               }
-              | entity_var COLON expr_constraint
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
+              | entity_var COLON OBRACK prop_expr_constraint CBRACK
+              { $$ = EntityPattern::create(ctxt, $1, nullptr, $4); }
               | entity_var 
               { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
-              | COLON ID expr_constraint
+              | COLON type_constraint OBRACK prop_expr_constraint CBRACK
               { 
-                  auto constr = TypeConstraint::create(ctxt);
-                  constr->addType(VarExpr::create(ctxt, $2));
-                  $$ = EntityPattern::create(ctxt, nullptr, constr, $3); 
+                  $$ = EntityPattern::create(ctxt, nullptr, $2, $4); 
               }
-              | COLON ID
+              | COLON type_constraint
               { 
-                  auto constr = TypeConstraint::create(ctxt);
-                  constr->addType(VarExpr::create(ctxt, $2));
-                  $$ = EntityPattern::create(ctxt, nullptr, constr, nullptr); 
+                  $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr); 
               }
               ;
 
-entity_pattern: entity_var COLON type_constraint expr_constraint
+entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
-                  $$ = EntityPattern::create(ctxt, $1, $3, $4);
+                  $$ = EntityPattern::create(ctxt, $1, $3, $5);
               }
               | entity_var COLON type_constraint
               { $$ = EntityPattern::create(ctxt, $1, $3, nullptr); }
-              | entity_var COLON expr_constraint
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
+              | entity_var COLON OBRACK prop_expr_constraint CBRACK
+              { $$ = EntityPattern::create(ctxt, $1, nullptr, $4); }
               | entity_var 
               { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
-              | COLON type_constraint expr_constraint
-              { $$ = EntityPattern::create(ctxt, nullptr, $2, $3); }
+              | COLON type_constraint OBRACK prop_expr_constraint CBRACK
+              { $$ = EntityPattern::create(ctxt, nullptr, $2, $4); }
               | COLON type_constraint
               { $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr); }
               ;
@@ -288,8 +273,41 @@ type_constraint: type_constraint COMMA ID {
                                           }
                ;
 
-expr_constraint: OBRACK expr CBRACK { $$ = ExprConstraint::create(ctxt, $2); }
-               ;
+prop_expr_constraint : prop_expr_constraint COMMA prop_equals_expr { 
+                                                            $1->addExpr($3);
+                                                            $$ = $1; 
+                                                        }
+         | prop_equals_expr                             {
+                                                            auto ExprConstraint = ExprConstraint::create(ctxt);
+                                                            ExprConstraint->addExpr($1);
+                                                            $$ = ExprConstraint;
+                                                        }
+         ;
+
+prop_equals_expr: ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
+          | ID NOT_EQUAL prop_expr_constant { $$ = nullptr; }
+          | ID COLON prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
+          ;
+
+prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
+                     | DECIMAL_CONSTANT { $$ =  DoubleExprConst::create(ctxt, std::stod($1));}
+                     | INT_CONSTANT     { 
+                                if($1[0] == '-'){
+                                    $$ = UInt64ExprConst::create(ctxt, static_cast<uint64_t>(std::stoul($1))); 
+                                }
+                                else{
+                                    $$ = Int64ExprConst::create(ctxt, std::stoi($1)); 
+                                }
+                              }
+                     | BOOLEAN_CONSTANT { 
+                                if($1[0] == 't' || $1[0] == 'T'){
+                                    $$ = BoolExprConst::create(ctxt, true); 
+                                }
+                                else{
+                                    $$ = BoolExprConst::create(ctxt, false); 
+                                }
+                            }
+                     ;
 
 // CREATE GRAPH
 create_graph_cmd: CREATE GRAPH ID { $$ = CreateGraphCommand::create(ctxt, $3); }
@@ -308,56 +326,6 @@ explain_cmd: EXPLAIN cmd {
                             auto explain = ExplainCommand::create(ctxt, ctxt->getRoot());
                             $$ = explain;
                          }
-
-// Expressions
-expr: or_expr { $$ = nullptr; }
-    ;
-
-or_expr: and_expr OR or_expr { $$ = nullptr; }
-       | and_expr            { $$ = $1; }
-
-and_expr: equal_expr AND and_expr { $$ = nullptr; }
-        | equal_expr              { $$ = $1; }
-        ;
-
-equal_expr: greater_expr EQUAL equal_expr     { $$ = nullptr; }
-          | greater_expr NOT_EQUAL equal_expr { $$ = nullptr; }
-          | greater_expr                      { $$ = $1; }
-          ;
-
-greater_expr: lower_expr GREATER greater_expr       { $$ = nullptr; }
-            | lower_expr GREATER_EQUAL greater_expr { $$ = nullptr; } 
-            | lower_expr                            { $$ = $1; }
-            ;
-
-lower_expr: add_expr LOWER lower_expr       { $$ = nullptr; }
-          | add_expr LOWER_EQUAL lower_expr { $$ = nullptr; }
-          | add_expr                        { $$ = $1; }
-          ;
-
-add_expr: mult_expr PLUS add_expr { $$ = nullptr; }
-        | mult_expr               { $$ = $1; }
-        ;
-
-mult_expr: like_expr STAR mult_expr { $$ = nullptr; }
-         | like_expr                { $$ = $1; }
-         ;
-
-like_expr: ID LIKE STRING_CONSTANT { $$ = nullptr; }
-         | unary_expr              { $$ = $1; }
-         ;
-
-unary_expr: NOT simple_expr { $$ = nullptr; }
-          | simple_expr     { $$ = $1; }
-          ;
-
-simple_expr: OPAR expr CPAR   { $$ = $2; }
-           | ID               { $$ = nullptr; }
-           | STRING_CONSTANT  { $$ = nullptr; }
-           | INT_CONSTANT     { $$ = nullptr; }
-           | DECIMAL_CONSTANT { $$ = nullptr; }
-           ;
-
 %%
 
 void db::YParser::error(const std::string& message) {

@@ -25,7 +25,9 @@ public:
 
     ~ScanNodePropertiesByLabelIterator() override;
 
+    void init();
     void next() override;
+    void reset();
 
     const T::Primitive& get() const {
         return *_propIt;

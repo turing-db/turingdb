@@ -13,6 +13,11 @@ GetPropertiesIterator<IteratorClass, T>::GetPropertiesIterator(const GraphView& 
       _propTypeID(propTypeID),
       _inputEntityIDs(inputEntityIDs)
 {
+    init();
+}
+
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesIterator<IteratorClass, T>::init() {
     // The initialization algorithm is the following:
     //   - For each part
     //   - If part has the requested property type
@@ -21,13 +26,15 @@ GetPropertiesIterator<IteratorClass, T>::GetPropertiesIterator(const GraphView& 
 
     for (; _partIt.isValid(); _partIt.next()) {
         const DataPart* part = _partIt.get();
-        const PropertyManager& properties = part->nodeProperties();
+        const PropertyManager& properties = (IteratorClass == PropertyIteratorClass::NODE)
+                                              ? part->nodeProperties()
+                                              : part->edgeProperties();
 
         if (properties.hasPropertyType(_propTypeID)) {
             _entityIt = _inputEntityIDs->cbegin();
 
             for (; _entityIt != _inputEntityIDs->cend(); _entityIt++) {
-                _prop = properties.tryGet<T>(propTypeID, *_entityIt);
+                _prop = properties.tryGet<T>(_propTypeID, *_entityIt);
 
                 if (_prop) {
                     return;
@@ -35,6 +42,12 @@ GetPropertiesIterator<IteratorClass, T>::GetPropertiesIterator(const GraphView& 
             }
         }
     }
+}
+
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesIterator<IteratorClass, T>::reset() {
+    Iterator::reset();
+    init();
 }
 
 template <PropertyIteratorClass IteratorClass, SupportedType T>
@@ -179,6 +192,48 @@ template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types:
 template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::Double>;
 template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::String>;
 template class GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, types::Bool>;
+
+}
+
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+GetPropertiesChunkWriter<IteratorClass,T>::GetPropertiesChunkWriter(const GraphView& view,
+                                                                            PropertyTypeID propTypeID,
+                                                                            const ColumnIDs* inputEntityIDs)
+    : GetPropertiesIterator<IteratorClass, T>(view, propTypeID, inputEntityIDs)
+{
+}
+
+template <PropertyIteratorClass IteratorClass, SupportedType T>
+void GetPropertiesChunkWriter<IteratorClass, T>::fill(size_t maxCount) {
+    _indices->clear();
+    _output->clear();
+
+    _output->reserve(this->_inputEntityIDs->size());
+    _indices->reserve(this->_inputEntityIDs->size());
+
+    while (this->isValid()) {
+        const auto& currentProp = this->get();
+        size_t currIndex = std::distance(this->_inputEntityIDs->cbegin(), this->_entityIt);
+
+        _output->push_back(currentProp);
+        _indices->push_back(currIndex);
+
+        this->next();
+    }
+}
+
+namespace db {
+
+template class GetPropertiesChunkWriter<PropertyIteratorClass::NODE, types::Int64>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::NODE, types::UInt64>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::NODE, types::Double>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::NODE, types::String>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::NODE, types::Bool>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, types::Int64>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, types::UInt64>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, types::Double>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, types::String>;
+template class GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, types::Bool>;
 
 }
 

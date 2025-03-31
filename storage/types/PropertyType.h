@@ -11,12 +11,12 @@
 namespace db {
 
 enum class ValueType : uint8_t {
-    Int64 = 0,
+    Invalid = 0,
+    Int64,
     UInt64,
     Double,
     String,
     Bool,
-    Invalid,
 
     _SIZE,
 };

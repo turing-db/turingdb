@@ -43,6 +43,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_GRAPH] = ACTIVATE_PTR(CreateGraphStep);
         _activateTbl[(uint64_t)PipelineOpcode::LIST_GRAPH] = ACTIVATE_PTR(ListGraphStep);
         _activateTbl[(uint64_t)PipelineOpcode::LOAD_GRAPH] = ACTIVATE_PTR(LoadGraphStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_INT64] = ACTIVATE_PTR(ScanNodesByPropertyInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_UINT64] = ACTIVATE_PTR(ScanNodesByPropertyUInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(ScanNodesByPropertyDoubleStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING] = ACTIVATE_PTR(ScanNodesByPropertyStringStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_BOOL] = ACTIVATE_PTR(ScanNodesByPropertyBoolStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_INT64] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_UINT64] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelUInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_DOUBLE] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelDoubleStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_STRING] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelStringStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_BOOL] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelBoolStep);
         _activateTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_INT64] = ACTIVATE_PTR(GetNodePropertyInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_UINT64] = ACTIVATE_PTR(GetNodePropertyUInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(GetNodePropertyDoubleStep);
@@ -53,6 +63,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::GET_EDGE_PROPERTY_DOUBLE] = ACTIVATE_PTR(GetEdgePropertyDoubleStep);
         _activateTbl[(uint64_t)PipelineOpcode::GET_EDGE_PROPERTY_STRING] = ACTIVATE_PTR(GetEdgePropertyStringStep);
         _activateTbl[(uint64_t)PipelineOpcode::GET_EDGE_PROPERTY_BOOL] = ACTIVATE_PTR(GetEdgePropertyBoolStep);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_INT64] = ACTIVATE_PTR(GetFilteredNodePropertyInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_UINT64] = ACTIVATE_PTR(GetFilteredNodePropertyUInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(GetFilteredNodePropertyDoubleStep);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_STRING] = ACTIVATE_PTR(GetFilteredNodePropertyStringStep);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_BOOL] = ACTIVATE_PTR(GetFilteredNodePropertyBoolStep);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_INT64] = ACTIVATE_PTR(GetFilteredEdgePropertyInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_UINT64] = ACTIVATE_PTR(GetFilteredEdgePropertyUInt64Step);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_DOUBLE] = ACTIVATE_PTR(GetFilteredEdgePropertyDoubleStep);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_STRING] = ACTIVATE_PTR(GetFilteredEdgePropertyStringStep);
+        _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_BOOL] = ACTIVATE_PTR(GetFilteredEdgePropertyBoolStep);
         _activateTbl[(uint64_t)PipelineOpcode::END] = ACTIVATE_END_PTR();
 
         // RETURN jump table
@@ -71,6 +91,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_GRAPH] = RETURN_PTR(CreateGraphStep);
         _returnTbl[(uint64_t)PipelineOpcode::LIST_GRAPH] = RETURN_PTR(ListGraphStep);
         _returnTbl[(uint64_t)PipelineOpcode::LOAD_GRAPH] = RETURN_PTR(LoadGraphStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_INT64] = RETURN_PTR(ScanNodesByPropertyInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_UINT64] = RETURN_PTR(ScanNodesByPropertyUInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = RETURN_PTR(ScanNodesByPropertyDoubleStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING] = RETURN_PTR(ScanNodesByPropertyStringStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_BOOL] = RETURN_PTR(ScanNodesByPropertyBoolStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_INT64] = RETURN_PTR(ScanNodesByPropertyAndLabelInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_UINT64] = RETURN_PTR(ScanNodesByPropertyAndLabelUInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_DOUBLE] = RETURN_PTR(ScanNodesByPropertyAndLabelDoubleStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_STRING] = RETURN_PTR(ScanNodesByPropertyAndLabelStringStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_BOOL] = RETURN_PTR(ScanNodesByPropertyAndLabelBoolStep);
         _returnTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_INT64] = RETURN_PTR(GetNodePropertyInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_UINT64] = RETURN_PTR(GetNodePropertyUInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::GET_NODE_PROPERTY_DOUBLE] = RETURN_PTR(GetNodePropertyDoubleStep);
@@ -81,6 +111,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::GET_EDGE_PROPERTY_DOUBLE] = RETURN_PTR(GetEdgePropertyDoubleStep);
         _returnTbl[(uint64_t)PipelineOpcode::GET_EDGE_PROPERTY_STRING] = RETURN_PTR(GetEdgePropertyStringStep);
         _returnTbl[(uint64_t)PipelineOpcode::GET_EDGE_PROPERTY_BOOL] = RETURN_PTR(GetEdgePropertyBoolStep);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_INT64] = RETURN_PTR(GetFilteredNodePropertyInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_UINT64] = RETURN_PTR(GetFilteredNodePropertyUInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_DOUBLE] = RETURN_PTR(GetFilteredNodePropertyDoubleStep);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_STRING] = RETURN_PTR(GetFilteredNodePropertyStringStep);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_NODE_PROPERTY_BOOL] = RETURN_PTR(GetFilteredNodePropertyBoolStep);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_INT64] = RETURN_PTR(GetFilteredEdgePropertyInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_UINT64] = RETURN_PTR(GetFilteredEdgePropertyUInt64Step);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_DOUBLE] = RETURN_PTR(GetFilteredEdgePropertyDoubleStep);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_STRING] = RETURN_PTR(GetFilteredEdgePropertyStringStep);
+        _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_BOOL] = RETURN_PTR(GetFilteredEdgePropertyBoolStep);
         _returnTbl[(uint64_t)PipelineOpcode::END] = GOTOPTR(StopStep);
 
         checkJumpTables();
@@ -139,6 +179,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(CreateGraphStep)
     ACTIVATE_STEP(ListGraphStep)
     ACTIVATE_STEP(LoadGraphStep)
+    ACTIVATE_STEP(ScanNodesByPropertyInt64Step)
+    ACTIVATE_STEP(ScanNodesByPropertyUInt64Step)
+    ACTIVATE_STEP(ScanNodesByPropertyDoubleStep)
+    ACTIVATE_STEP(ScanNodesByPropertyStringStep)
+    ACTIVATE_STEP(ScanNodesByPropertyBoolStep)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelInt64Step)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelUInt64Step)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelDoubleStep)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelStringStep)
+    ACTIVATE_STEP(ScanNodesByPropertyAndLabelBoolStep)
     ACTIVATE_STEP(GetNodePropertyInt64Step)
     ACTIVATE_STEP(GetNodePropertyUInt64Step)
     ACTIVATE_STEP(GetNodePropertyDoubleStep)
@@ -149,6 +199,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(GetEdgePropertyDoubleStep)
     ACTIVATE_STEP(GetEdgePropertyStringStep)
     ACTIVATE_STEP(GetEdgePropertyBoolStep)
+    ACTIVATE_STEP(GetFilteredNodePropertyInt64Step)
+    ACTIVATE_STEP(GetFilteredNodePropertyUInt64Step)
+    ACTIVATE_STEP(GetFilteredNodePropertyDoubleStep)
+    ACTIVATE_STEP(GetFilteredNodePropertyStringStep)
+    ACTIVATE_STEP(GetFilteredNodePropertyBoolStep)
+    ACTIVATE_STEP(GetFilteredEdgePropertyInt64Step)
+    ACTIVATE_STEP(GetFilteredEdgePropertyUInt64Step)
+    ACTIVATE_STEP(GetFilteredEdgePropertyDoubleStep)
+    ACTIVATE_STEP(GetFilteredEdgePropertyStringStep)
+    ACTIVATE_STEP(GetFilteredEdgePropertyBoolStep)
     ACTIVATE_END()
 
     // RETURN actions
@@ -166,6 +226,16 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(CreateGraphStep)
     RETURN_STEP(ListGraphStep)
     RETURN_STEP(LoadGraphStep)
+    RETURN_STEP(ScanNodesByPropertyInt64Step)
+    RETURN_STEP(ScanNodesByPropertyUInt64Step)
+    RETURN_STEP(ScanNodesByPropertyDoubleStep)
+    RETURN_STEP(ScanNodesByPropertyStringStep)
+    RETURN_STEP(ScanNodesByPropertyBoolStep)
+    RETURN_STEP(ScanNodesByPropertyAndLabelInt64Step)
+    RETURN_STEP(ScanNodesByPropertyAndLabelUInt64Step)
+    RETURN_STEP(ScanNodesByPropertyAndLabelDoubleStep)
+    RETURN_STEP(ScanNodesByPropertyAndLabelStringStep)
+    RETURN_STEP(ScanNodesByPropertyAndLabelBoolStep)
     RETURN_STEP(GetNodePropertyInt64Step)
     RETURN_STEP(GetNodePropertyUInt64Step)
     RETURN_STEP(GetNodePropertyDoubleStep)
@@ -176,9 +246,19 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(GetEdgePropertyDoubleStep)
     RETURN_STEP(GetEdgePropertyStringStep)
     RETURN_STEP(GetEdgePropertyBoolStep)
+    RETURN_STEP(GetFilteredNodePropertyInt64Step)
+    RETURN_STEP(GetFilteredNodePropertyUInt64Step)
+    RETURN_STEP(GetFilteredNodePropertyDoubleStep)
+    RETURN_STEP(GetFilteredNodePropertyStringStep)
+    RETURN_STEP(GetFilteredNodePropertyBoolStep)
+    RETURN_STEP(GetFilteredEdgePropertyInt64Step)
+    RETURN_STEP(GetFilteredEdgePropertyUInt64Step)
+    RETURN_STEP(GetFilteredEdgePropertyDoubleStep)
+    RETURN_STEP(GetFilteredEdgePropertyStringStep)
+    RETURN_STEP(GetFilteredEdgePropertyBoolStep)
 
-    // Exit execution
-    ExecutorExit:
+// Exit execution
+ExecutorExit:
     pipeStep++;
 }
 

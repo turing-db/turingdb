@@ -11,6 +11,11 @@ ScanNodePropertiesIterator<T>::ScanNodePropertiesIterator(const GraphView& view,
     : Iterator(view),
       _propTypeID(propTypeID)
 {
+    init();
+}
+
+template <SupportedType T>
+void ScanNodePropertiesIterator<T>::init() {
     for (; _partIt.isValid(); _partIt.next()) {
         const PropertyManager& properties = _partIt.get()->nodeProperties();
         if (properties.hasPropertyType(_propTypeID)) {
@@ -24,6 +29,12 @@ ScanNodePropertiesIterator<T>::ScanNodePropertiesIterator(const GraphView& view,
 
 template <SupportedType T>
 ScanNodePropertiesIterator<T>::~ScanNodePropertiesIterator() = default;
+
+template <SupportedType T>
+void ScanNodePropertiesIterator<T>::reset() {
+    Iterator::reset();
+    init();
+}
 
 template <SupportedType T>
 void ScanNodePropertiesIterator<T>::next() {

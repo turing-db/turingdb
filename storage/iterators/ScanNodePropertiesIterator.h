@@ -21,6 +21,8 @@ public:
     ScanNodePropertiesIterator(const GraphView& view, PropertyTypeID propTypeID);
     ~ScanNodePropertiesIterator() override;
 
+    void reset();
+
     void next() override;
 
     const T::Primitive& get() const;
@@ -57,6 +59,7 @@ protected:
     void nextValid();
     bool nextDatapart();
     void newPropertySpan();
+    void init();
 };
 
 template <SupportedType T>

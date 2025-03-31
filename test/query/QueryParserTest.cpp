@@ -82,14 +82,8 @@ TEST_F(QueryParserTest, matchProperties) {
     const auto query1 = "MATCH n:{location = 'cytosol'} RETURN n";
     const auto query2 = "MATCH n:{magic = 42} RETURN n";
     const auto query3 = "MATCH n:{magic = -42} RETURN n";
-    const auto query4 = "MATCH n:{corr >= 0.75} RETURN n";
-    const auto query5 = "MATCH n:{rate < 1250.752} RETURN n";
-    const auto query6 = "MATCH n:{corr < -0.752} RETURN n";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
     ASSERT_TRUE(parser.parse(query3));
-    ASSERT_TRUE(parser.parse(query4));
-    ASSERT_TRUE(parser.parse(query5));
-    ASSERT_TRUE(parser.parse(query6));
 }
