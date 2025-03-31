@@ -184,7 +184,12 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
                 {
                     case BinExpr::OP_EQUAL:
                         if (_propTypeMap.get(varName)._valueType != rexpr->getType()) {
-                            spdlog::error("Type Error for variable: {}", varName);
+                            std::string errorMsg = "Type Error for variable " + varName;
+                            if (_propTypeMap.get(varName)._valueType == db::ValueType::Invalid) {
+                                errorMsg += ": Property not found";
+                            }
+
+                            spdlog::error(errorMsg);
                             return false;
                         }
                         break;
