@@ -71,18 +71,23 @@ private:
 
     // Property Functions
     void generateNodePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
-                                         std::span<BinExpr* const> expressions,
+                                         std::span<const BinExpr*> expressions,
                                          const ColumnIDs* entities);
     void generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
-                                         std::span<BinExpr* const> expressions,
+                                         std::span<const BinExpr*> expressions,
                                          const ColumnIDs* entities);
 
     // Planning functions
     bool planMatch(const MatchCommand* matchCmd);
     void planPath(const std::vector<EntityPattern*>& path);
+
     void planScanNodes(const EntityPattern* entity);
-    void planScanNodesWithPropertyConstraints(ColumnIDs* const& outputNodes, const ExprConstraint* exprConstraint);
-    void planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const& outputNodes, const LabelSet* labelSet, const ExprConstraint* exprConstraint);
+    void planScanNodesWithPropertyConstraints(ColumnIDs* const& outputNodes,
+                                              const ExprConstraint* exprConstraint);
+    void planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const& outputNodes,
+                                                      const LabelSet* labelSet,
+                                                      const ExprConstraint* exprConstraint);
+
     void planExpandEdge(const EntityPattern* edge, const EntityPattern* target);
     void planExpandEdgeWithNoConstraint(const EntityPattern* edge,
                                         const EntityPattern* target);
@@ -92,9 +97,15 @@ private:
                                           const EntityPattern* target);
     void planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern* edge,
                                                    const EntityPattern* target);
-    void planExpressionConstraintFilters(const ExprConstraint* edgeExprConstr, const ExprConstraint* targetExprConstr,
-                                         const ColumnIDs* edges, const ColumnIDs* targetNodes, VarDecl* edgeDecl, VarDecl* targetDecl,
-                                         bool mustWriteEdges, bool mustWriteTargetNodes);
+
+    void planExpressionConstraintFilters(const ExprConstraint* edgeExprConstr,
+                                         const ExprConstraint* targetExprConstr,
+                                         const ColumnIDs* edges,
+                                         const ColumnIDs* targetNodes,
+                                         VarDecl* edgeDecl,
+                                         VarDecl* targetDecl,
+                                         bool mustWriteEdges,
+                                         bool mustWriteTargetNodes);
 
     void planTransformStep();
     void planPathUsingScanEdges(const std::vector<EntityPattern*>& path);

@@ -13,7 +13,8 @@ class VarDecl;
 class Expr {
 public:
     friend ASTContext;
-enum Kind {
+
+    enum Kind {
         EK_VAR_EXPR,
         EK_CONST_EXPR,
         EK_BIN_EXPR
@@ -54,12 +55,12 @@ public:
 
 protected: 
     db::ValueType _type {db::ValueType::Invalid};
+
     ExprConst(db::ValueType t):
         _type(t)
     {
-    };
+    }
     virtual ~ExprConst();
-
 };
 
 class BoolExprConst : public ExprConst {

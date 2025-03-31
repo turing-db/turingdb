@@ -83,6 +83,7 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op, Lhs::staticKi
             *static_cast<const Rhs*>(expr._rhs)); \
         break;                                    \
     }
+
 #define PROJECT_CASE(Lhs, Rhs)                    \
     case OpCase<OP_PROJECT, Lhs, Rhs>: {          \
         ColumnOperators::projectOp(               \
@@ -152,7 +153,6 @@ void FilterStep::compute() {
 void FilterStep::generateIndices() {
     auto maskd = _expressions.back()._mask->data();
     auto size = _expressions.back()._mask->size();
-
 
     _indices->clear();
     _indices->reserve(size);

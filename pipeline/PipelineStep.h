@@ -58,8 +58,6 @@
                  ColumnVector<size_t>* indices,                        \
                  ColumnMask* projectedMask);
 
-
-
 namespace net {
     class NetWriter;
 }

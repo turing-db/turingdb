@@ -109,18 +109,21 @@ PipelineStep::PipelineStep(ScanNodesByLabelStep::Tag,
 PipelineStep::PipelineStep(FilterStep::Tag,
                            ColumnVector<size_t>* indices)
     : _opcode(PipelineOpcode::FILTER),
-      _impl(std::in_place_type<FilterStep>, indices) {
+      _impl(std::in_place_type<FilterStep>, indices)
+{
 }
 
 PipelineStep::PipelineStep(FilterStep::Tag)
     : _opcode(PipelineOpcode::FILTER),
-      _impl(std::in_place_type<FilterStep>) {
+      _impl(std::in_place_type<FilterStep>)
+{
 }
 
 PipelineStep::PipelineStep(TransformStep::Tag,
                            TransformData* transformData)
     : _opcode(PipelineOpcode::TRANSFORM),
-      _impl(std::in_place_type<TransformStep>, transformData) {
+      _impl(std::in_place_type<TransformStep>, transformData)
+{
 }
 
 PipelineStep::PipelineStep(LambdaStep::Tag,

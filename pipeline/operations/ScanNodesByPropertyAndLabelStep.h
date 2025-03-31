@@ -47,7 +47,7 @@ private:
     ColumnIDs* _nodes {nullptr};
     ColumnVector<typename T::Primitive>* _propValues {nullptr};
     const PropertyType _propType;
-    const LabelSet* _labelSet;
+    const LabelSet* _labelSet {nullptr};
     std::unique_ptr<ScanNodePropertiesByLabelChunkWriter<T>> _it;
 };
 

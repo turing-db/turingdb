@@ -171,7 +171,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
         using valType = types::Type::Primitive;                                                \
                                                                                                \
         auto propValues = _mem->alloc<ColumnVector<valType>>();                                \
-        valType constVal = static_cast<Type##ExprConst*>(rightExpr)->getVal();                 \
+        const valType constVal = static_cast<Type##ExprConst*>(rightExpr)->getVal();           \
         const auto filterConstVal = _mem->alloc<ColumnConst<valType>>();                       \
         filterConstVal->set(constVal);                                                         \
                                                                                                \
@@ -381,7 +381,7 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const
     }
 
 void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
-                                                   std::span<BinExpr* const> expressions,
+                                                   const std::span<const BinExpr*> expressions,
                                                    const ColumnIDs* entities) {
     const auto reader = _view.read();
 
@@ -408,7 +408,7 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
 }
 
 void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
-                                                   std::span<BinExpr* const> expressions,
+                                                   const std::span<const BinExpr*> expressions,
                                                    const ColumnIDs* entities) {
     const auto reader = _view.read();
 
