@@ -996,7 +996,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
 
     // Build filter expression to compute filter for each LabelSetID
-    ColumnMask* filterMask = nullptr;
+    ColumnMask* filterMask {nullptr};
     for (LabelSetID labelSetID : _tmpLabelSetIDs) {
         const auto targetLabelSetID = _mem->alloc<ColumnConst<LabelSetID>>();
         targetLabelSetID->set(labelSetID);
@@ -1032,11 +1032,14 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
         ._dest = filterOutNodes});
 
     // Apply filter to edge IDs if necessary
-    const auto filterOutEdges = _mem->alloc<ColumnIDs>();
-    filter.addOperand(FilterStep::Operand {
-        ._mask = filterMask,
-        ._src = edgeWriteInfo._edges,
-        ._dest = filterOutEdges});
+    ColumnIDs* outputEdges {nullptr};
+    if (mustWriteEdges || edgeExprConstr) {
+        outputEdges = _mem->alloc<ColumnIDs>();
+        filter.addOperand(FilterStep::Operand {
+            ._mask = filterMask,
+            ._src = edgeWriteInfo._edges,
+            ._dest = outputEdges});
+    }
 
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
     const VarExpr* targetVar = target->getVar();
@@ -1044,12 +1047,12 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
 
     if (edgeExprConstr || targetExprConstr) {
-        planExpressionConstraintFilters(edgeExprConstr, targetExprConstr, filterOutEdges, filterOutNodes,
+        planExpressionConstraintFilters(edgeExprConstr, targetExprConstr, outputEdges, filterOutNodes,
                                         edgeDecl, targetDecl, mustWriteEdges, mustWriteTargetNodes);
     } else {
         // Generate edgeIDs only if the edge is returned by projection
         if (mustWriteEdges) {
-            _transformData->addColumn(filterOutEdges, edgeDecl);
+            _transformData->addColumn(outputEdges, edgeDecl);
         }
 
         if (mustWriteTargetNodes) {

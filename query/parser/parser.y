@@ -126,6 +126,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::BinExpr*> prop_equals_expr
 %type<db::ExprConstraint*> prop_expr_constraint
 %type<db::ExprConst*> prop_expr_constant
+%type<std::string> prop_ID
 %type<db::VarExpr*> entity_var
 
 %type<db::QueryCommand*> create_graph_cmd
@@ -184,7 +185,7 @@ return_field: STAR {
                     field->setName($1);
                     $$ = field;
                   }
-             | ID POINT ID {
+             | ID POINT prop_ID {
                                 auto field = ReturnField::create(ctxt);
                                 field->setName($1);
                                 field->setMemberName($3);
@@ -300,9 +301,9 @@ prop_expr_constraint : prop_expr_constraint COMMA prop_equals_expr {
                                                         }
          ;
 
-prop_equals_expr: ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
-          | ID NOT_EQUAL prop_expr_constant { $$ = nullptr; }
-          | ID COLON prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
+prop_equals_expr: prop_ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
+          | prop_ID NOT_EQUAL prop_expr_constant { $$ = nullptr; }
+          | prop_ID COLON prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
           ;
 
 prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
@@ -324,6 +325,9 @@ prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
                                 }
                             }
                      ;
+
+prop_ID: ID
+       | STRING_CONSTANT
 
 // CREATE GRAPH
 create_graph_cmd: CREATE GRAPH ID { $$ = CreateGraphCommand::create(ctxt, $3); }
