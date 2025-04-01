@@ -22,9 +22,9 @@ public:
 
     void prepare(ExecutionContext* ctxt) {
         _it = std::make_unique<ScanInEdgesByLabelChunkWriter>(ctxt->getGraphView(), _labelSet);
-        _it->setSrcIDs(_edgeWriteInfo._sourceNodes);
+        _it->setSrcIDs(_edgeWriteInfo._targetNodes);
         _it->setEdgeIDs(_edgeWriteInfo._edges);
-        _it->setTgtIDs(_edgeWriteInfo._targetNodes);
+        _it->setTgtIDs(_edgeWriteInfo._sourceNodes);
         _it->setEdgeTypes(_edgeWriteInfo._edgeTypes);
     }
 
