@@ -953,7 +953,6 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
     const auto indices = _mem->alloc<ColumnVector<size_t>>();
     const auto targets = _mem->alloc<ColumnIDs>();
-    ColumnIDs* outputEdges {nullptr};
 
     const LabelSet* targetLabelSet = getLabelSet(targetTypeConstr);
 
@@ -983,7 +982,6 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     if (mustWriteEdges || edgeExprConstr) {
         const auto edges = _mem->alloc<ColumnIDs>();
         edgeWriteInfo._edges = edges;
-        outputEdges = edges;
         _transformData->addColumn(edges, edgeDecl);
     }
 
@@ -998,7 +996,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
 
     // Build filter expression to compute filter for each LabelSetID
-    ColumnMask* filterMask = nullptr;
+    ColumnMask* filterMask {nullptr};
     for (LabelSetID labelSetID : _tmpLabelSetIDs) {
         const auto targetLabelSetID = _mem->alloc<ColumnConst<LabelSetID>>();
         targetLabelSetID->set(labelSetID);
@@ -1034,13 +1032,13 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
         ._dest = filterOutNodes});
 
     // Apply filter to edge IDs if necessary
+    ColumnIDs* outputEdges {nullptr};
     if (mustWriteEdges || edgeExprConstr) {
-        const auto filterOutEdges = _mem->alloc<ColumnIDs>();
+        outputEdges = _mem->alloc<ColumnIDs>();
         filter.addOperand(FilterStep::Operand {
             ._mask = filterMask,
             ._src = edgeWriteInfo._edges,
-            ._dest = filterOutEdges});
-        outputEdges = filterOutEdges;
+            ._dest = outputEdges});
     }
 
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
