@@ -3,6 +3,7 @@
 #include "SystemManager.h"
 #include "Graph.h"
 #include "EntityID.h"
+#include "reader/GraphReader.h"
 #include "types/PropertyType.h"
 #include "writers/GraphWriter.h"
 
@@ -10,6 +11,20 @@ using namespace db;
 
 void SimpleGraph::createSimpleGraph(Graph* graph) {
     GraphWriter writer {graph};
+
+    const auto findNodeID = [&](std::string_view nodeName) {
+        const auto transaction = graph->openTransaction();
+        const auto reader = transaction.readGraph();
+
+        auto it = reader.scanNodeProperties<types::String>(0).begin();
+        for (; it.isValid(); it.next()) {
+            if (it.get() == nodeName) {
+                return it.getCurrentNodeID();
+            }
+        }
+
+        throw std::runtime_error(fmt::format("Node not found: {}", nodeName));
+    };
 
     const auto remy = writer.addNode({"Person", "SoftwareEngineering", "Founder"});
     writer.addNodeProperty<types::String>(remy, "name", "Remy");
@@ -85,7 +100,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     const auto paddle = writer.addNode({"Interest"});
     writer.addNodeProperty<types::String>(paddle, "name", "Paddle");
 
-    const auto maximeBio = writer.addEdge("INTERESTED_IN", maxime, bio);
+    const auto maximeBio = writer.addEdge("INTERESTED_IN", maxime, findNodeID("Bio"));
     writer.addEdgeProperty<types::String>(maximeBio, "name", "Maxime -> Bio");
 
     const auto maximePaddle = writer.addEdge("INTERESTED_IN", maxime, paddle);
@@ -108,7 +123,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addEdgeProperty<types::String>(lucAnimals, "name", "Luc -> Animals");
     writer.addEdgeProperty<types::Int64>(lucAnimals, "duration", 20);
 
-    const auto lucComputers = writer.addEdge("INTERESTED_IN", luc, computers);
+    const auto lucComputers = writer.addEdge("INTERESTED_IN", luc, findNodeID("Computers"));
     writer.addEdgeProperty<types::String>(lucComputers, "name", "Luc -> Computers");
     writer.addEdgeProperty<types::Int64>(lucComputers, "duration", 15);
 
@@ -119,7 +134,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(martina, "isFrench", false);
     writer.addNodeProperty<types::Bool>(martina, "hasPhD", true);
 
-    const auto martinaCooking = writer.addEdge("INTERESTED_IN", martina, cooking);
+    const auto martinaCooking = writer.addEdge("INTERESTED_IN", martina, findNodeID("Cooking"));
     writer.addEdgeProperty<types::String>(martinaCooking, "name", "Martina -> Cooking");
     writer.addEdgeProperty<types::Int64>(martinaCooking, "duration", 10);
 
