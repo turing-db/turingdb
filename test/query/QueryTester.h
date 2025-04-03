@@ -16,7 +16,7 @@ namespace db {
         EXPECT_EQ(col->getKind(), expectedCol->getKind());            \
         const auto* c = static_cast<const Type*>(col);                \
         const auto* ec = static_cast<const Type*>(expectedCol.get()); \
-        EXPECT_EQ(c->at(i), ec->at(i));                               \
+        EXPECT_TRUE(c->getRaw() == ec->getRaw());                     \
     } break;
 
 class QueryTester {
@@ -101,5 +101,4 @@ private:
     std::vector<std::unique_ptr<Column>> _expectedColumns;
     bool _expectError = false;
 };
-
 }
