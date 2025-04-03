@@ -65,47 +65,46 @@ TEST_F(QueryTest, EdgeMatching) {
         .execute();
 
 
-    // FIXME: This query is missing edge "Luc -> Animals"
-    // tester.query("MATCH n:Person-[e]-m:Interest RETURN n, n.name, e.name, m.name, m")
-    //     .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Remy",
-    //         "Remy",
-    //         "Remy",
-    //         "Adam",
-    //         "Adam",
-    //         "Maxime",
-    //         "Maxime",
-    //         "Luc",
-    //         "Luc",
-    //         "Martina",
-    //     })
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Remy -> Ghosts",
-    //         "Remy -> Computers",
-    //         "Remy -> Eighties",
-    //         "Adam -> Bio",
-    //         "Adam -> Cooking",
-    //         "Maxime -> Bio",
-    //         "Maxime -> Paddle",
-    //         "Luc -> Computers",
-    //         "Luc -> Animals",
-    //         "Martina -> Cooking",
-    //     })
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Ghosts",
-    //         "Computers",
-    //         "Eighties",
-    //         "Bio",
-    //         "Cooking",
-    //         "Bio",
-    //         "Paddle",
-    //         "Computers",
-    //         "Animals",
-    //         "Cooking",
-    //     })
-    //     .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 9, 2, 5})
-    //     .execute();
+    tester.query("MATCH n:Person-[e]-m:Interest RETURN n, n.name, e.name, m.name, m")
+        .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+        .expectOptVector<types::String::Primitive>({
+            "Remy",
+            "Remy",
+            "Remy",
+            "Adam",
+            "Adam",
+            "Maxime",
+            "Maxime",
+            "Luc",
+            "Luc",
+            "Martina",
+        })
+        .expectOptVector<types::String::Primitive>({
+            "Remy -> Ghosts",
+            "Remy -> Computers",
+            "Remy -> Eighties",
+            "Adam -> Bio",
+            "Adam -> Cooking",
+            "Maxime -> Bio",
+            "Maxime -> Paddle",
+            "Luc -> Animals",
+            "Luc -> Computers",
+            "Martina -> Cooking",
+        })
+        .expectOptVector<types::String::Primitive>({
+            "Ghosts",
+            "Computers",
+            "Eighties",
+            "Bio",
+            "Cooking",
+            "Bio",
+            "Paddle",
+            "Animals",
+            "Computers",
+            "Cooking",
+        })
+        .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+        .execute();
 }
 
 TEST_F(QueryTest, MatchWildcard) {
@@ -183,12 +182,9 @@ TEST_F(QueryTest, MatchEdgeType) {
         })
         .execute();
 
-    // TODO: Fix this test, it should return 3 empty columns OR generate an error
-    // tester.query("MATCH n-[e:DOES_NOT_EXIST]-m RETURN n, e, m")
-    //     .expectVector<EntityID>({})
-    //     .expectVector<EntityID>({})
-    //     .expectVector<EntityID>({})
-    //     .execute();
+    tester.query("MATCH n-[e:DOES_NOT_EXIST]-m RETURN n, e, m")
+        .expectVector<EntityID>({})
+        .execute();
 }
 
 TEST_F(QueryTest, NodePropertyProjection) {
@@ -264,97 +260,81 @@ TEST_F(QueryTest, EdgePropertyProjection) {
         })
         .execute();
 
-    // FIXME This segfaults
-    // tester.query("MATCH n:Person--m:Interest RETURN n, n.name, m, m.name")
-    //     .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Remy",
-    //         "Remy",
-    //         "Remy",
-    //         "Adam",
-    //         "Adam",
-    //         "Maxime",
-    //         "Maxime",
-    //         "Luc",
-    //         "Luc",
-    //         "Martina",
-    //     })
-    //     .expectVector<EntityID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Remy -> Ghosts",
-    //         "Remy -> Computers",
-    //         "Remy -> Eighties",
-    //         "Adam -> Bio",
-    //         "Adam -> Cooking",
-    //         "Maxime -> Bio",
-    //         "Maxime -> Paddle",
-    //         "Luc -> Animals",
-    //         "Luc -> Computers",
-    //         "Martina -> Cooking",
-    //     })
-    //     .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Ghosts",
-    //         "Computers",
-    //         "Eighties",
-    //         "Bio",
-    //         "Cooking",
-    //         "Bio",
-    //         "Paddle",
-    //         "Animals",
-    //         "Computers",
-    //         "Cooking",
-    //     })
-    //     .execute();
+    tester.query("MATCH n:Person--m:Interest RETURN n, n.name, m, m.name")
+        .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+        .expectOptVector<types::String::Primitive>({
+            "Remy",
+            "Remy",
+            "Remy",
+            "Adam",
+            "Adam",
+            "Maxime",
+            "Maxime",
+            "Luc",
+            "Luc",
+            "Martina",
+        })
+        .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+        .expectOptVector<types::String::Primitive>({
+            "Ghosts",
+            "Computers",
+            "Eighties",
+            "Bio",
+            "Cooking",
+            "Bio",
+            "Paddle",
+            "Animals", "Computers",
+            "Cooking",
+        })
+        .execute();
 
     tester.query("MATCH n-[e]-m RETURN e.doesnotexist")
         .expectError();
 
-    // FIXME: This query is missing edge "Luc -> Animals"
-    // tester.query("MATCH n-[e:INTERESTED_IN]-m RETURN n, n.name, e, e.name, m, m.name")
-    //     .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Remy",
-    //         "Remy",
-    //         "Remy",
-    //         "Adam",
-    //         "Adam",
-    //         "Maxime",
-    //         "Maxime",
-    //         "Luc",
-    //         "Luc",
-    //         "Martina",
-    //     })
-    //     .expectVector<EntityID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Remy -> Ghosts",
-    //         "Remy -> Computers",
-    //         "Remy -> Eighties",
-    //         "Adam -> Bio",
-    //         "Adam -> Cooking",
-    //         "Maxime -> Bio",
-    //         "Maxime -> Paddle",
-    //         "Luc -> Animals",
-    //         "Luc -> Computers",
-    //         "Martina -> Cooking",
-    //     })
-    //     .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
-    //     .expectOptVector<types::String::Primitive>({
-    //         "Ghosts",
-    //         "Computers",
-    //         "Eighties",
-    //         "Bio",
-    //         "Cooking",
-    //         "Bio",
-    //         "Paddle",
-    //         "Animals",
-    //         "Computers",
-    //         "Cooking",
-    //     })
-    //     .execute();
+     tester.query("MATCH n-[e:INTERESTED_IN]-m RETURN n, n.name, e, e.name, m, m.name")
+         .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+         .expectOptVector<types::String::Primitive>({
+             "Remy",
+             "Remy",
+             "Remy",
+             "Adam",
+             "Adam",
+             "Maxime",
+             "Maxime",
+             "Luc",
+             "Luc",
+             "Martina",
+         })
+         .expectVector<EntityID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
+         .expectOptVector<types::String::Primitive>({
+             "Remy -> Ghosts",
+             "Remy -> Computers",
+             "Remy -> Eighties",
+             "Adam -> Bio",
+             "Adam -> Cooking",
+             "Maxime -> Bio",
+             "Maxime -> Paddle",
+             "Luc -> Animals",
+             "Luc -> Computers",
+             "Martina -> Cooking",
+         })
+         .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+         .expectOptVector<types::String::Primitive>({
+             "Ghosts",
+             "Computers",
+             "Eighties",
+             "Bio",
+             "Cooking",
+             "Bio",
+             "Paddle",
+             "Animals",
+             "Computers",
+             "Cooking",
+         })
+         .execute();
 
-    // tester.query("MATCH n-[e]-m RETURN e.doesnotexist")
-    //     .expectError();
+    tester.query("MATCH n-[e]-m RETURN e.doesnotexist")
+        .expectError();
 }
 
 TEST_F(QueryTest, PropertyConstraints) {
