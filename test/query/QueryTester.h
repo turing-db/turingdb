@@ -61,10 +61,10 @@ public:
             return;
         }
 
+        fmt::print("Testing query: {}\n", _query);
         const auto res = _interp.execute(_query, "", &_mem, [this](const Block& block) {
             const size_t colCount = block.columns().size();
 
-            fmt::print("Testing query: {}\n", _query);
             EXPECT_EQ(_expectedColumns.size(), block.columns().size());
 
             for (size_t i = 0; i < colCount; i++) {
