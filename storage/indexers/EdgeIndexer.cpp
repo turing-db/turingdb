@@ -2,7 +2,6 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "GraphMetadata.h"
 #include "EdgeContainer.h"
 #include "EdgeRecord.h"
 #include "NodeContainer.h"
@@ -12,24 +11,20 @@ namespace rv = ranges::views;
 
 using namespace db;
 
-EdgeIndexer::EdgeIndexer(const GraphMetadata& metadata, const EdgeContainer& edges)
+EdgeIndexer::EdgeIndexer(const EdgeContainer& edges)
     : _firstNodeID(edges._firstNodeID),
       _firstEdgeID(edges._firstEdgeID),
-      _edges(&edges),
-      _outLabelSetSpans(&metadata.labelsets()),
-      _inLabelSetSpans(&metadata.labelsets())
+      _edges(&edges)
 {
 }
 
 std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
                                                  const NodeContainer& nodeContainer,
                                                  size_t patchNodeCount,
-                                                 const std::map<EntityID, LabelSetID>& patchNodeLabelSets,
-                                                 LabelSetID maxLabelSetID,
+                                                 const std::map<EntityID, LabelSetHandle>& patchNodeLabelSets,
                                                  size_t patchOutEdgeCount,
-                                                 size_t patchInEdgeCount,
-                                                 const GraphMetadata& metadata) {
-    auto* ptr = new EdgeIndexer(metadata, edges);
+                                                 size_t patchInEdgeCount) {
+    auto* ptr = new EdgeIndexer(edges);
     std::unique_ptr<EdgeIndexer> indexer(ptr);
 
     indexer->_nodes.resize(patchNodeCount + nodeContainer.size());
@@ -49,7 +44,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
     // Patch out edges
     {
         EntityID currentNodeID;
-        LabelSetID currentLabelSet;
+        LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
@@ -64,7 +59,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
                     it = patchNodeOffsets.emplace(nodeID, patchNodeOffsets.size()).first;
                 }
 
-                const LabelSetID newLabelSet = patchNodeLabelSets.at(nodeID);
+                const LabelSetHandle& newLabelSet = patchNodeLabelSets.at(nodeID);
                 if (newLabelSet != currentLabelSet) {
                     if (rangeCount != 0) {
                         auto& spans = indexer->_outLabelSetSpans[currentLabelSet];
@@ -92,7 +87,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
     // Core out edges
     {
         EntityID currentNodeID;
-        LabelSetID currentLabelSet = 0;
+        LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
@@ -102,10 +97,8 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
             if (currentNodeID != nodeID) {
                 currentNodeID = nodeID;
 
-                const LabelSetID prev = currentLabelSet;
-                while (currentLabelSet != nodeContainer.getNodeLabelSet(nodeID)) {
-                    currentLabelSet++;
-                }
+                const LabelSetHandle prev = currentLabelSet;
+                currentLabelSet = nodeContainer.getNodeLabelSet(nodeID);
 
                 if (prev != currentLabelSet) {
                     if (rangeCount != 0) {
@@ -134,7 +127,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
     // Patch in edges
     {
         EntityID currentNodeID;
-        LabelSetID currentLabelSet;
+        LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
@@ -149,7 +142,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
                     it = patchNodeOffsets.emplace(nodeID, patchNodeOffsets.size()).first;
                 }
 
-                const LabelSetID newLabelSet = patchNodeLabelSets.at(nodeID);
+                const LabelSetHandle& newLabelSet = patchNodeLabelSets.at(nodeID);
                 if (newLabelSet != currentLabelSet) {
                     if (rangeCount != 0) {
                         auto& spans = indexer->_inLabelSetSpans[currentLabelSet];
@@ -177,7 +170,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
     // Core in edges
     {
         EntityID currentNodeID;
-        LabelSetID currentLabelSet = 0;
+        LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
@@ -187,10 +180,8 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
             if (currentNodeID != nodeID) {
                 currentNodeID = nodeID;
 
-                const LabelSetID prev = currentLabelSet;
-                while (currentLabelSet != nodeContainer.getNodeLabelSet(nodeID)) {
-                    currentLabelSet++;
-                }
+                LabelSetHandle prev = currentLabelSet;
+                currentLabelSet = nodeContainer.getNodeLabelSet(nodeID);
 
                 if (prev != currentLabelSet) {
                     if (rangeCount != 0) {

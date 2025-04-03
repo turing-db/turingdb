@@ -1,11 +1,12 @@
 #pragma once
 
 #include "EntityID.h"
+#include "labels/LabelSetHandle.h"
 
 namespace db {
 
 struct NodeRecord {
-    LabelSetID _labelsetID;
+    LabelSetHandle _labelset;
 };
 
 }

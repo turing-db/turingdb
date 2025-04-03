@@ -14,7 +14,7 @@ namespace db {
 class ScanInEdgesByLabelIterator : public Iterator {
 public:
     ScanInEdgesByLabelIterator() = default;
-    ScanInEdgesByLabelIterator(const GraphView& view, const LabelSet* labelset);
+    ScanInEdgesByLabelIterator(const GraphView& view, const LabelSetHandle& labelset);
     ~ScanInEdgesByLabelIterator() override;
 
     void reset() {
@@ -38,7 +38,7 @@ public:
     }
 
 protected:
-    const LabelSet* _labelset {nullptr};
+    LabelSetHandle _labelset;
     using EdgeSpan = std::span<const EdgeRecord>;
     using EdgeSpans = std::vector<EdgeSpan>;
     using LabelSetIterator = LabelSetIndexer<EdgeSpans>::MatchIterator;
@@ -56,7 +56,7 @@ protected:
 class ScanInEdgesByLabelChunkWriter : public ScanInEdgesByLabelIterator {
 public:
     ScanInEdgesByLabelChunkWriter();
-    ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSet* labelset);
+    ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset);
 
     void fill(size_t maxCount);
 
@@ -74,7 +74,7 @@ private:
 
 struct ScanInEdgesByLabelRange {
     GraphView _view;
-    const LabelSet* _labelset {nullptr};
+    LabelSetHandle _labelset;
 
     ScanInEdgesByLabelIterator begin() const { return {_view, _labelset}; }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }

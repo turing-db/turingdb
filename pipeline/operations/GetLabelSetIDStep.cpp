@@ -25,7 +25,7 @@ void GetLabelSetIDStep::execute() {
     labelsetIDs.clear();
     labelsetIDs.reserve(nodeIDs.size());
     for (EntityID nodeID : nodeIDs) {
-        labelsetIDs.emplace_back(reader.getNodeLabelSetID(nodeID));
+        labelsetIDs.emplace_back(reader.getNodeLabelSet(nodeID).getID());
     }
 }
 

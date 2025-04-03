@@ -10,7 +10,7 @@ namespace db {
 class MatchLabelSetIterator : public Iterator {
 public:
     MatchLabelSetIterator() = default;
-    MatchLabelSetIterator(const GraphView& view, const LabelSet* labelSet);
+    MatchLabelSetIterator(const GraphView& view, const LabelSetHandle& labelSet);
     ~MatchLabelSetIterator() override;
 
     bool isValid() const override {
@@ -19,8 +19,8 @@ public:
 
     void next() override;
 
-    LabelSetID get() const {
-        return _labelSetIt.getID();
+    const LabelSetHandle& get() const {
+        return _labelSetIt.getKey();
     }
 
     MatchLabelSetIterator& operator++() {
@@ -28,12 +28,12 @@ public:
         return *this;
     }
 
-    LabelSetID operator*() const { return get(); }
+    const LabelSetHandle& operator*() const { return get(); }
 
 private:
     using LabelSetIterator = LabelSetIndexer<NodeRange>::MatchIterator;
 
-    const LabelSet* _targetLabelSet {nullptr};
+    LabelSetHandle _targetLabelSet;
     LabelSetIterator _labelSetIt;
 };
 

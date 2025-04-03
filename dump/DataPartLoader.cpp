@@ -58,7 +58,7 @@ DumpResult<WeakArc<const DataPart>> DataPartLoader::load(const fs::Path& path,
 
         part->_nodes = std::move(res.value());
     } else {
-        auto* ptr = new NodeContainer(part->_firstNodeID, 0, metadata);
+        auto* ptr = new NodeContainer(part->_firstNodeID, 0);
         part->_nodes = std::unique_ptr<NodeContainer> {ptr};
     }
 

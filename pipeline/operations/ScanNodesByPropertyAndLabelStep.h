@@ -18,7 +18,7 @@ public:
 
     ScanNodesByPropertyAndLabel(ColumnIDs* nodes,
                                 PropertyType propType,
-                                const LabelSet* labelSet,
+                                const LabelSetHandle& labelSet,
                                 ColumnVector<typename T::Primitive>* propValues);
     ScanNodesByPropertyAndLabel(ScanNodesByPropertyAndLabel&& other) = default;
     ~ScanNodesByPropertyAndLabel();
@@ -47,7 +47,7 @@ private:
     ColumnIDs* _nodes {nullptr};
     ColumnVector<typename T::Primitive>* _propValues {nullptr};
     const PropertyType _propType;
-    const LabelSet* _labelSet {nullptr};
+    LabelSetHandle _labelSet;
     std::unique_ptr<ScanNodePropertiesByLabelChunkWriter<T>> _it;
 };
 

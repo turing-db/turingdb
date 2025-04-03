@@ -50,9 +50,7 @@ EntityID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {
         labelset.set(id);
     }
 
-    const LabelSetID labelsetID = metadata.labelsets().getOrCreate(labelset);
-
-    return _dataPartBuilder->addNode(labelsetID);
+    return _dataPartBuilder->addNode(labelset);
 }
 
 EntityID GraphWriter::addNode(std::initializer_list<LabelID> labels) {
@@ -60,18 +58,12 @@ EntityID GraphWriter::addNode(std::initializer_list<LabelID> labels) {
         return {};
     }
 
-    auto reader = _tx.readGraph();
-
-    auto& metadata = reader.getMetadata();
-
     LabelSet labelset;
     for (auto label : labels) {
         labelset.set(label);
     }
 
-    const LabelSetID labelsetID = metadata.labelsets().getOrCreate(labelset);
-
-    return _dataPartBuilder->addNode(labelsetID);
+    return _dataPartBuilder->addNode(labelset);
 }
 
 EntityID GraphWriter::addNode(const LabelSet& labelset) {
@@ -79,20 +71,15 @@ EntityID GraphWriter::addNode(const LabelSet& labelset) {
         return {};
     }
 
-    auto reader = _tx.readGraph();
-    auto& metadata = reader.getMetadata();
-
-    const LabelSetID labelsetID = metadata.labelsets().getOrCreate(labelset);
-
-    return _dataPartBuilder->addNode(labelsetID);
+    return _dataPartBuilder->addNode(labelset);
 }
 
-EntityID GraphWriter::addNode(LabelSetID labelsetID) {
+EntityID GraphWriter::addNode(const LabelSetHandle& labelset) {
     if (!_dataPartBuilder) {
         return {};
     }
 
-    return _dataPartBuilder->addNode(labelsetID);
+    return _dataPartBuilder->addNode(labelset);
 }
 
 EdgeRecord GraphWriter::addEdge(std::string_view edgeType, EntityID src, EntityID tgt) {

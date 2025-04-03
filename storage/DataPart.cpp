@@ -7,7 +7,6 @@
 
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
-#include "GraphMetadata.h"
 #include "indexers/EdgeIndexer.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
@@ -23,8 +22,7 @@ namespace rg = ranges;
 DataPart::DataPart(EntityID firstNodeID,
                    EntityID firstEdgeID)
     : _firstNodeID(firstNodeID),
-      _firstEdgeID(firstEdgeID)
-{
+      _firstEdgeID(firstEdgeID) {
 }
 
 DataPart::~DataPart() = default;
@@ -32,11 +30,10 @@ DataPart::~DataPart() = default;
 bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder& builder) {
     JobGroup jobs = jobSystem.newGroup();
     const auto reader = view.read();
-    const auto& metadata = view.metadata();
 
-    std::vector<LabelSetID>& coreNodeLabelSets = builder.coreNodeLabelSets();
+    std::vector<LabelSetHandle>& coreNodeLabelSets = builder.coreNodeLabelSets();
     std::vector<EdgeRecord>& outEdges = builder.edges();
-    std::map<EntityID, LabelSetID>& patchNodeLabelSets = builder.patchNodeLabelSets();
+    std::map<EntityID, LabelSetHandle>& patchNodeLabelSets = builder.patchNodeLabelSets();
     std::unordered_map<EntityID, const EdgeRecord*>& patchedEdges = builder.patchedEdges();
     std::unique_ptr<PropertyManager>& nodeProperties = builder.nodeProperties();
     std::unique_ptr<PropertyManager>& edgeProperties = builder.edgeProperties();
@@ -46,7 +43,10 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     // Storing unknown node labelsets
     for (auto& [nodeID, labelset] : patchNodeLabelSets) {
-        labelset = reader.getNodeLabelSetID(nodeID);
+        labelset = reader.getNodeLabelSet(nodeID);
+        if (!labelset.isValid() || !labelset.isStored()) {
+            return false;
+        }
     }
 
     // Storing temp node IDs to keep track of the sorting mechanism
@@ -56,14 +56,12 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     // Sorting based on the labelset
     rg::sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
              [](const auto& data1, const auto& data2) {
-                 const LabelSetID& id1 = std::get<0>(data1);
-                 const LabelSetID& id2 = std::get<0>(data2);
-                 return id1 < id2;
+                 const LabelSetHandle& lset1 = std::get<0>(data1);
+                 const LabelSetHandle& lset2 = std::get<0>(data2);
+                 return lset1 < lset2;
              });
 
-    _nodes = NodeContainer::create(_firstNodeID,
-                                   metadata,
-                                   coreNodeLabelSets);
+    _nodes = NodeContainer::create(_firstNodeID, coreNodeLabelSets);
 
     // nodeID Mapping
     for (const auto& [i, tmpID] : tmpNodeIDs | rv::enumerate) {
@@ -98,12 +96,12 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
             props->sort();
 
             auto& indexer = _nodeProperties->getIndexer(ptID);
-            LabelSetID prevLabelset;
+            LabelSetHandle prevLabelset;
 
             for (const auto& [offset, id] : props->ids() | rv::enumerate) {
-                const LabelSetID& labelset = id >= _firstNodeID
-                                               ? _nodes->getNodeLabelSet(id)
-                                               : patchNodeLabelSets.at(id);
+                LabelSetHandle labelset = id >= _firstNodeID
+                                         ? _nodes->getNodeLabelSet(id)
+                                         : patchNodeLabelSets.at(id);
 
                 auto& info = indexer[labelset];
 
@@ -146,10 +144,10 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
             props->sort();
 
-            LabelSetID prevLabelset;
+            LabelSetHandle prevLabelset;
             auto& indexer = _edgeProperties->addIndexer(ptID);
             for (const auto& [offset, edgeID] : props->ids() | rv::enumerate) {
-                LabelSetID labelset;
+                LabelSetHandle labelset;
                 if (edgeID >= _firstEdgeID) {
                     const EdgeRecord& edge = _edges->get(edgeID);
                     labelset = edge._nodeID >= _firstNodeID
@@ -180,10 +178,8 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     _edgeIndexer = EdgeIndexer::create(*_edges, *_nodes,
                                        builder.patchNodeEdgeDataCount(),
                                        patchNodeLabelSets,
-                                       metadata.labelsets().getCount(),
-                                       builder.getOutPatchEdgeCount(),
                                        builder.getInPatchEdgeCount(),
-                                       metadata);
+                                       builder.getOutPatchEdgeCount());
 
     jobs.wait();
 
@@ -195,7 +191,7 @@ EntityID DataPart::getFirstNodeID() const {
     return _nodes->getFirstNodeID();
 }
 
-EntityID DataPart::getFirstNodeID(const LabelSetID& labelset) const {
+EntityID DataPart::getFirstNodeID(const LabelSetHandle& labelset) const {
     return _nodes->getFirstNodeID(labelset);
 }
 

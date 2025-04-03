@@ -11,7 +11,7 @@ template <SupportedType T>
 ScanNodePropertiesByLabelIterator<T>::ScanNodePropertiesByLabelIterator(
     const GraphView& view,
     PropertyTypeID propTypeID,
-    const LabelSet* labelset)
+    const LabelSetHandle& labelset)
     : Iterator(view),
       _propTypeID(propTypeID),
       _labelset(labelset)
@@ -109,8 +109,9 @@ template <SupportedType T>
 ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(
     const GraphView& view,
     PropertyTypeID propTypeID,
-    const LabelSet* labelset)
-    : ScanNodePropertiesByLabelIterator<T>(view, propTypeID, labelset) {
+    const LabelSetHandle& labelset)
+    : ScanNodePropertiesByLabelIterator<T>(view, propTypeID, labelset)
+{
 }
 
 static constexpr size_t NColumns = 2;

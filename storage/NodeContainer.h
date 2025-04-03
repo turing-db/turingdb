@@ -24,16 +24,16 @@ public:
     ~NodeContainer();
 
     EntityID getFirstNodeID() const { return _firstID; }
-    EntityID getFirstNodeID(const LabelSetID& labelset) const;
+    EntityID getFirstNodeID(const LabelSetHandle& labelset) const;
 
     size_t size() const { return _nodeCount; }
 
-    LabelSetID getNodeLabelSet(EntityID nodeID) const {
+    LabelSetHandle getNodeLabelSet(EntityID nodeID) const {
         if (!hasEntity(nodeID)) {
-            return LabelSetID{};
+            return LabelSetHandle {};
         }
         
-        return _nodes[getOffset(nodeID)]._labelsetID;
+        return _nodes[getOffset(nodeID)]._labelset;
     }
 
     EntityID getID(size_t offset) const {
@@ -56,11 +56,11 @@ public:
 
     const LabelSetIndexer<NodeRange>& getLabelSetIndexer() const { return _ranges; }
 
-    NodeRange getRange(LabelSetID labelsetID) const {
-        msgbioassert(_ranges.contains(labelsetID),
+    NodeRange getRange(const LabelSetHandle& labelset) const {
+        msgbioassert(_ranges.contains(labelset),
                      "Datapart does not have any "
                      "node with the requested labelset");
-        return _ranges.at(labelsetID);
+        return _ranges.at(labelset);
     }
 
     NodeRange getAll() const {
@@ -71,13 +71,12 @@ public:
         return _nodes;
     }
 
-    bool hasLabelSet(LabelSetID labelsetID) const {
-        return _ranges.contains(labelsetID);
+    bool hasLabelSet(const LabelSetHandle& labelset) const {
+        return _ranges.contains(labelset);
     }
 
     static std::unique_ptr<NodeContainer> create(EntityID firstID,
-                                                 const GraphMetadata& metadata,
-                                                 const std::vector<LabelSetID>& nodeLabelSets);
+                                                 const std::vector<LabelSetHandle>& nodeLabelSets);
 
 private:
     friend NodeContainerLoader;
@@ -90,8 +89,7 @@ private:
     NodeRecords _nodes;
 
     NodeContainer(EntityID firstID,
-                  size_t nodeCount,
-                  const GraphMetadata& metadata);
+                  size_t nodeCount);
 };
 
 }

@@ -364,7 +364,7 @@ void DBServerProcessor::list_labels() {
         curLabelset = labelset;
         curLabelset.set(remainingLabels[i]);
 
-        payload.value(reader.getNodeCountMatchingLabelset(curLabelset));
+        payload.value(reader.getNodeCountMatchingLabelset(LabelSetHandle {curLabelset}));
     }
 }
 

@@ -272,7 +272,8 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
     for (const EdgeRecord& v : reader.scanOutEdges()) {
         ASSERT_EQ(it->_nodeID.getValue(), v._nodeID.getValue());
         ASSERT_EQ(it->_otherID.getValue(), v._otherID.getValue());
-        spdlog::info("Node: {} has labelset {}", it->_nodeID, reader.getNodeLabelSetID(it->_nodeID));
+        spdlog::info("Node: {} has labelset {}",
+                     it->_nodeID, reader.getNodeLabelSet(it->_nodeID).getID().getValue());
         count++;
         it++;
     }
@@ -305,7 +306,7 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
     size_t count = 0;
     const auto labelset = LabelSet::fromList({1});
 
-    for (const EntityID id : reader.scanNodesByLabel(&labelset)) {
+    for (const EntityID id : reader.scanNodesByLabel(LabelSetHandle {labelset})) {
         ASSERT_EQ(it->getValue(), id.getValue());
         ASSERT_EQ(it->getValue(), id.getValue());
         count++;
@@ -325,17 +326,20 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 
     // For each existing labelset compare scanOutEdgesByLabel to scanNodesByLabel -> getOutEdges
     for (LabelSetID lid = 0; lid != labelsetCount - 1; ++lid) {
-        const LabelSet labelset = labelsets.getValue(lid);
+        const auto labelset = labelsets.getValue(lid);
+        if (!labelset) {
+            continue;
+        }
 
         ColumnIDs nodeIDs;
-        for (const EntityID nodeID : reader.scanNodesByLabel(&labelset)) {
+        for (const EntityID nodeID : reader.scanNodesByLabel(labelset.value())) {
             nodeIDs = ColumnVector {nodeID};
             for (const EdgeRecord& edge : reader.getOutEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
             }
         }
 
-        for (const EdgeRecord& edge : reader.scanOutEdgesByLabel(&labelset)) {
+        for (const EdgeRecord& edge : reader.scanOutEdgesByLabel(labelset.value())) {
             byScanEdgesRecords.emplace(edge._edgeID, &edge);
         }
     }
@@ -364,17 +368,20 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 
     // For each existing labelset compare scanInEdgesByLabel to scanNodesByLabel -> getInEdges
     for (LabelSetID lid = 0; lid != labelsetCount - 1; ++lid) {
-        const LabelSet labelset = labelsets.getValue(lid);
+        const auto labelset = labelsets.getValue(lid);
+        if (!labelset) {
+            continue;
+        }
 
         ColumnIDs nodeIDs;
-        for (const EntityID nodeID : reader.scanNodesByLabel(&labelset)) {
+        for (const EntityID nodeID : reader.scanNodesByLabel(labelset.value())) {
             nodeIDs = ColumnVector {nodeID};
             for (const EdgeRecord& edge : reader.getInEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
             }
         }
 
-        for (const EdgeRecord& edge : reader.scanInEdgesByLabel(&labelset)) {
+        for (const EdgeRecord& edge : reader.scanInEdgesByLabel(labelset.value())) {
             byScanEdgesRecords.emplace(edge._edgeID, &edge);
         }
     }
@@ -518,12 +525,13 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
     const Transaction transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const auto labelset = LabelSet::fromList({1});
+    const LabelSetHandle ref {labelset};
 
     {
         std::vector<uint64_t> compareSet {2, 1, 0, 7, 8, 5};
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const uint64_t v : reader.scanNodePropertiesByLabel<types::UInt64>(0, &labelset)) {
+        for (const uint64_t v : reader.scanNodePropertiesByLabel<types::UInt64>(0, ref)) {
             ASSERT_EQ(*it, v);
             count++;
             it++;
@@ -542,7 +550,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (std::string_view v : reader.scanNodePropertiesByLabel<types::String>(1, &labelset)) {
+        for (std::string_view v : reader.scanNodePropertiesByLabel<types::String>(1, ref)) {
             ASSERT_EQ(*it, v);
             count++;
             it++;

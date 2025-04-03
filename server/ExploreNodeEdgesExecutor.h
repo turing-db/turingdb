@@ -143,9 +143,11 @@ private:
     template <uint64_t FiltersT>
     bool matchesLabels(EntityID nodeID) {
         if constexpr ((FiltersT & (uint64_t)Filters::Labels) != 0) {
-            const LabelSetID labelsetID = _reader.getNodeLabelSetID(nodeID);
-            const LabelSet& labelset = _labelsets.getValue(labelsetID);
-            return labelset.hasAtLeastLabels(_labelset);
+            const auto labelset = _reader.getNodeLabelSet(nodeID);
+            if (!labelset.isValid()) {
+                return false;
+            }
+            return labelset.hasAtLeastLabels(LabelSetHandle {_labelset});
         }
         return true;
     }

@@ -44,8 +44,8 @@ public:
             _writer.writeToCurrentPage(ptID.getValue());
             _writer.writeToCurrentPage(ptIndexer.size());
 
-            for (const auto& [lsetID, info] : ptIndexer) {
-                _writer.writeToCurrentPage(lsetID.getValue());
+            for (const auto& [lset, info] : ptIndexer) {
+                _writer.writeToCurrentPage(lset.getID().getValue());
                 _writer.writeToCurrentPage((uint64_t)info.size());
 
                 for (const auto& range : info) {

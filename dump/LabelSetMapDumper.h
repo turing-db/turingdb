@@ -61,7 +61,7 @@ public:
             // Page data
             for (size_t j = 0; j < countInPage; j++) {
                 const auto& labelset = labelsets.getValue(offset);
-                const auto* integers = labelset.data();
+                const auto* integers = labelset->data();
                 for (size_t k = 0; k < LabelSet::IntegerCount; k++) {
                     _writer.writeToCurrentPage(integers[k]);
                 }

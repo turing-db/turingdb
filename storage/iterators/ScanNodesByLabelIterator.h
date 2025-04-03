@@ -6,13 +6,14 @@
 #include "NodeRange.h"
 #include "columns/ColumnIDs.h"
 #include "indexers/LabelSetIndexer.h"
+#include "labels/LabelSetHandle.h"
 
 namespace db {
 
 class ScanNodesByLabelIterator : public Iterator {
 public:
     ScanNodesByLabelIterator() = default;
-    ScanNodesByLabelIterator(const GraphView& view, const LabelSet* labelset);
+    ScanNodesByLabelIterator(const GraphView& view, const LabelSetHandle& labelset);
     ~ScanNodesByLabelIterator() override;
 
     void reset() {
@@ -36,7 +37,7 @@ public:
     }
 
 protected:
-    const LabelSet* _labelset {nullptr};
+    LabelSetHandle _labelset;
     using LabelSetIterator = LabelSetIndexer<NodeRange>::MatchIterator;
     LabelSetIterator _labelsetIt;
     NodeRange _range;
@@ -49,7 +50,7 @@ protected:
 class ScanNodesByLabelChunkWriter : public ScanNodesByLabelIterator {
 public:
     ScanNodesByLabelChunkWriter();
-    ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSet* labelset);
+    ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset);
 
     void fill(size_t maxCount);
 
@@ -61,7 +62,7 @@ private:
 
 struct ScanNodesByLabelRange {
     GraphView _view;
-    const LabelSet* _labelset {nullptr};
+    LabelSetHandle _labelset;
 
     ScanNodesByLabelIterator begin() const { return ScanNodesByLabelIterator(_view, _labelset); }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }

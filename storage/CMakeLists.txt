@@ -10,6 +10,7 @@ set(storage_sources
         types/PropertyTypeMap.cpp
 
         labels/LabelMap.cpp
+        labels/LabelSetMap.cpp
 
         views/GraphView.cpp
         views/NodeEdgeView.cpp

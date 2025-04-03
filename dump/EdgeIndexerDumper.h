@@ -73,7 +73,7 @@ public:
             _writer.nextPage();
             _writer.reserveSpace(Constants::LABELSET_INDEXER_PAGE_HEADER_STRIDE);
 
-            for (const auto& [labelsetID, spans] : outLabelsetIndexer) {
+            for (const auto& [labelset, spans] : outLabelsetIndexer) {
                 const uint64_t count = spans.size();
                 const size_t stride = Constants::BASE_LABELSET_INDEXER_STRIDE
                                     + count * Constants::EDGE_SPAN_STRIDE;
@@ -96,7 +96,7 @@ public:
                 }
 
                 _writer.writeToCurrentPage(count); // Number of spans in indexer
-                _writer.writeToCurrentPage(labelsetID.getValue());
+                _writer.writeToCurrentPage(labelset.getID().getValue());
 
                 for (const auto& span : spans) {
                     const uint64_t count = span.size();
@@ -120,7 +120,7 @@ public:
             _writer.nextPage();
             _writer.reserveSpace(Constants::LABELSET_INDEXER_PAGE_HEADER_STRIDE);
 
-            for (const auto& [labelsetID, spans] : inLabelsetIndexer) {
+            for (const auto& [labelset, spans] : inLabelsetIndexer) {
                 const uint64_t count = spans.size();
                 const size_t stride = Constants::BASE_LABELSET_INDEXER_STRIDE
                                     + count * Constants::EDGE_SPAN_STRIDE;
@@ -143,7 +143,7 @@ public:
                 }
 
                 _writer.writeToCurrentPage(count); // Number of spans in indexer
-                _writer.writeToCurrentPage(labelsetID.getValue());
+                _writer.writeToCurrentPage(labelset.getID().getValue());
 
                 for (const auto& span : spans) {
                     const uint64_t count = span.size();

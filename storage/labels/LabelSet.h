@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bit>
+#include <span>
 
 #include "EntityID.h"
 
@@ -28,8 +29,7 @@ public:
     TemplateLabelSet() = default;
     TemplateLabelSet(const TemplateLabelSet&) = default;
     TemplateLabelSet(TemplateLabelSet&& other) noexcept
-        : _integers(other._integers)
-    {
+        : _integers(other._integers) {
     }
 
     TemplateLabelSet& operator=(const TemplateLabelSet&) = default;
@@ -55,6 +55,12 @@ public:
             const auto [integerOffset, bitShift] = computeBitShift(id);
             labelset._integers[integerOffset] |= bitShift;
         }
+        return labelset;
+    }
+
+    static TemplateLabelSet fromIntegers(std::span<const IntegerType, IntegerCount>) {
+        TemplateLabelSet labelset;
+        labelset._integers = labelset._integers;
         return labelset;
     }
 
@@ -149,7 +155,19 @@ public:
         return _integers.data();
     }
 
+    std::span<const TType, IntegerCount> integers() const {
+        return _integers;
+    }
+
     bool empty() const { return size() == 0; }
+
+    static size_t hashIntegers(std::span<const TType, IntegerCount> integers) {
+        size_t seed = TCount;
+        for (auto x : integers) {
+            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
 
 private:
     friend std::hash<TemplateLabelSet>;
@@ -158,6 +176,10 @@ private:
 
 using LabelSet = TemplateLabelSet<uint64_t, 4>;
 
+
+template <typename T>
+concept LabelSetClass = std::same_as<T, TemplateLabelSet<typename T::IntegerType, T::IntegerCount>>;
+
 }
 
 namespace std {
@@ -165,11 +187,7 @@ namespace std {
 template <std::integral TType, size_t TCount>
 struct hash<db::TemplateLabelSet<TType, TCount>> {
     size_t operator()(const db::TemplateLabelSet<TType, TCount>& set) const {
-        size_t seed = TCount;
-        for (auto x : set._integers) {
-            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        return seed;
+        return db::TemplateLabelSet<TType, TCount>::hashIntegers(set.integers());
     }
 };
 

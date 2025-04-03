@@ -207,15 +207,13 @@ private:
     void write(const NodeView& n) {
         bioassert(_metadata);
         const auto& propTypes = _metadata->propTypes();
-        const auto& labelsets = _metadata->labelsets();
         const auto& labels = _metadata->labels();
 
         std::vector<LabelID> labelIDs;
 
         const auto& edges = n.edges();
         const auto& props = n.properties();
-        const LabelSet& labelset = labelsets.getValue(n.labelset());
-        labelset.decompose(labelIDs);
+        n.labelset().decompose(labelIDs);
 
         this->obj();
 

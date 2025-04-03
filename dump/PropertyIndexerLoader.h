@@ -58,23 +58,24 @@ public:
             const size_t countInPage = it.get<uint64_t>();
 
             for (size_t j = 0; j < countInPage; j++) {
-                const auto ptID = it.get<PropertyTypeID::Type>();
-                const auto lsetCount = it.get<uint64_t>();
+                //const auto ptID = it.get<PropertyTypeID::Type>();
+                //const auto lsetCount = it.get<uint64_t>();
 
-                auto& ptIndexer = indexer.emplace(ptID, &metadata.labelsets()).first->second;
+                //auto& ptIndexer = indexer.emplace(ptID, &metadata.labelsets()).first->second;
 
-                for (size_t k = 0; k < lsetCount; k++) {
-                    const auto lsetID = it.get<LabelSetID::Type>();
+                // TODO fix, we need to retrieve the lset from the id
+                // for (size_t k = 0; k < lsetCount; k++) {
+                //     const auto lsetID = it.get<LabelSetID::Type>();
 
-                    auto& info = ptIndexer[lsetID];
+                //     auto& info = ptIndexer[lsetID];
 
-                    info.resize(it.get<uint64_t>());
+                //     info.resize(it.get<uint64_t>());
 
-                    for (auto& range : info) {
-                        range._offset = it.get<uint64_t>();
-                        range._count = it.get<uint64_t>();
-                    }
-                }
+                //     for (auto& range : info) {
+                //         range._offset = it.get<uint64_t>();
+                //         range._count = it.get<uint64_t>();
+                //     }
+                // }
             }
         }
 

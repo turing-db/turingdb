@@ -9,7 +9,6 @@
 #include "views/GraphView.h"
 #include "versioning/CommitBuilder.h"
 #include "reader/GraphReader.h"
-#include "GraphMetadata.h"
 #include "writers/DataPartBuilder.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
@@ -94,16 +93,14 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
 TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     auto graph = Graph::create();
 
-    auto& labelsets = graph->getMetadata()->labelsets();
     LabelSet labelset = LabelSet::fromList({0});
-    LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
         const auto tx = graph->openWriteTransaction();
         auto commitBuilder = tx.prepareCommit();
         auto& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
-            builder.addNode(labelsetID);
+            builder.addNode(labelset);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
@@ -146,16 +143,14 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto graph = Graph::create();
 
-    auto& labelsets = graph->getMetadata()->labelsets();
     LabelSet labelset = LabelSet::fromList({0});
-    LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     const auto tx = graph->openWriteTransaction();
     for (auto i = 0; i < 8; i++) {
         auto commitBuilder = tx.prepareCommit();
         auto& builder = commitBuilder->newBuilder();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
-            builder.addNode(labelsetID);
+            builder.addNode(labelset);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
@@ -203,16 +198,14 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
 
     auto graph = Graph::create();
 
-    auto& labelsets = graph->getMetadata()->labelsets();
     LabelSet labelset = LabelSet::fromList({0});
-    LabelSetID labelsetID = labelsets.getOrCreate(labelset);
 
     {
         const auto tx = graph->openWriteTransaction();
         auto commitBuilder = tx.prepareCommit();
         auto& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < nodeCount; i++) {
-            builder.addNode(labelsetID);
+            builder.addNode(labelset);
         }
         const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
         if (!res) {

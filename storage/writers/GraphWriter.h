@@ -4,7 +4,7 @@
 
 #include "EdgeRecord.h"
 #include "EntityID.h"
-#include "labels/LabelSet.h"
+#include "labels/LabelSetHandle.h"
 #include "types/SupportedType.h"
 #include "versioning/Transaction.h"
 
@@ -29,7 +29,7 @@ public:
     EntityID addNode(std::initializer_list<std::string_view> labels);
     EntityID addNode(std::initializer_list<LabelID> labels);
     EntityID addNode(const LabelSet& labelset);
-    EntityID addNode(LabelSetID labelsetID);
+    EntityID addNode(const LabelSetHandle& labelset);
 
     EdgeRecord addEdge(std::string_view edgeType, EntityID src, EntityID tgt);
     EdgeRecord addEdge(EdgeTypeID edgeType, EntityID src, EntityID tgt);

@@ -30,7 +30,7 @@
     PipelineStep::PipelineStep(ScanNodesByPropertyAndLabel##Type##Step::Tag,     \
                                ColumnIDs* nodeIDs,                               \
                                PropertyType propertyType,                        \
-                               const LabelSet* labelSet,                         \
+                               const LabelSetHandle& labelSet,                         \
                                ColumnVector<types::Type::Primitive>* propValues) \
         : _opcode(PipelineOpcode::Opcode),                                       \
           _impl(std::in_place_type<ScanNodesByPropertyAndLabel##Type##Step>,     \
@@ -76,7 +76,7 @@ PipelineStep::PipelineStep(ScanEdgesStep::Tag,
 
 PipelineStep::PipelineStep(ScanInEdgesByLabelStep::Tag,
                            const EdgeWriteInfo& edgeWriteInfo,
-                           const LabelSet* labelSet)
+                           const LabelSetHandle& labelSet)
     : _opcode(PipelineOpcode::SCAN_IN_EDGES_BY_LABEL),
     _impl(std::in_place_type<ScanInEdgesByLabelStep>, edgeWriteInfo, labelSet)
 {
@@ -84,7 +84,7 @@ PipelineStep::PipelineStep(ScanInEdgesByLabelStep::Tag,
 
 PipelineStep::PipelineStep(ScanOutEdgesByLabelStep::Tag,
                            const EdgeWriteInfo& edgeWriteInfo,
-                           const LabelSet* labelSet)
+                           const LabelSetHandle& labelSet)
     : _opcode(PipelineOpcode::SCAN_OUT_EDGES_BY_LABEL),
     _impl(std::in_place_type<ScanOutEdgesByLabelStep>, edgeWriteInfo, labelSet)
 {
@@ -100,7 +100,7 @@ PipelineStep::PipelineStep(GetOutEdgesStep::Tag,
 
 PipelineStep::PipelineStep(ScanNodesByLabelStep::Tag,
                            ColumnIDs* nodes,
-                           const LabelSet* labelSet)
+                           const LabelSetHandle& labelSet)
     : _opcode(PipelineOpcode::SCAN_NODES_BY_LABEL),
     _impl(std::in_place_type<ScanNodesByLabelStep>, nodes, labelSet)
 {

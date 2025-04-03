@@ -6,7 +6,6 @@
 #include "indexers/EdgeIndexer.h"
 #include "views/EdgeView.h"
 #include "properties/PropertyManager.h"
-#include "labels/LabelSet.h"
 
 using namespace db;
 
@@ -26,22 +25,13 @@ size_t GraphReader::getEdgeCount() const {
     return count;
 }
 
-LabelSetID GraphReader::getNodeLabelSetID(EntityID nodeID) const {
+LabelSetHandle GraphReader::getNodeLabelSet(EntityID nodeID) const {
     for (const auto& part : _view.dataparts()) {
         if (part->hasNode(nodeID)) {
             return part->nodes().getNodeLabelSet(nodeID);
         }
     }
-    return LabelSetID {};
-}
-
-const LabelSet* GraphReader::getNodeLabelSet(EntityID nodeID) const {
-    const LabelSetID labelSetID = getNodeLabelSetID(nodeID);
-    if (!labelSetID.isValid()) {
-        return nullptr;
-    }
-
-    return &_view.metadata().labelsets().getValue(labelSetID);
+    return LabelSetHandle {};
 }
 
 const EdgeRecord* GraphReader::getEdge(EntityID edgeID) const {
@@ -53,19 +43,19 @@ const EdgeRecord* GraphReader::getEdge(EntityID edgeID) const {
     return nullptr;
 }
 
-size_t GraphReader::getNodeCountMatchingLabelset(const LabelSet& labelset) const {
+size_t GraphReader::getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const {
     size_t count = 0;
 
-    auto it = matchLabelSetIDs(&labelset);
+    auto it = matchLabelSets(labelset);
     for (; it.isValid(); it.next()) {
         for (const auto& part : _view.dataparts()) {
             const auto& nodes = part->nodes();
-            const LabelSetID id = it.get();
-            if (!nodes.hasLabelSet(id)) {
+            const LabelSetHandle& current = it.get();
+            if (!nodes.hasLabelSet(current)) {
                 continue;
             }
 
-            count += part->nodes().getRange(id)._count;
+            count += part->nodes().getRange(current)._count;
         }
     }
 
@@ -138,15 +128,15 @@ ScanNodesRange GraphReader::scanNodes() const {
     return {_view};
 }
 
-ScanNodesByLabelRange GraphReader::scanNodesByLabel(const LabelSet* labelset) const {
+ScanNodesByLabelRange GraphReader::scanNodesByLabel(const LabelSetHandle& labelset) const {
     return {_view, labelset};
 }
 
-ScanOutEdgesByLabelRange GraphReader::scanOutEdgesByLabel(const LabelSet* labelset) const {
+ScanOutEdgesByLabelRange GraphReader::scanOutEdgesByLabel(const LabelSetHandle& labelset) const {
     return {_view, labelset};
 }
 
-ScanInEdgesByLabelRange GraphReader::scanInEdgesByLabel(const LabelSet* labelset) const {
+ScanInEdgesByLabelRange GraphReader::scanInEdgesByLabel(const LabelSetHandle& labelset) const {
     return {_view, labelset};
 }
 
@@ -157,16 +147,16 @@ GetNodeViewsRange GraphReader::getNodeViews(const ColumnIDs* inputNodeIDs) const
 NodeView GraphReader::getNodeView(EntityID id) const {
     NodeView view;
     PartIterator partIt(_view);
-    LabelSetID labelsetID;
+    LabelSetHandle labelset;
 
     // Find definition of the node
     for (; partIt.isValid(); partIt.next()) {
         const auto* part = partIt.get();
         const NodeContainer& nodes = part->nodes();
 
-        labelsetID = nodes.getNodeLabelSet(id);
-        if (labelsetID.isValid()) {
-            view._labelset = labelsetID;
+        labelset = nodes.getNodeLabelSet(id);
+        if (labelset.isValid()) {
+            view._labelset = labelset;
             view._nodeID = id;
             break;
         }
@@ -184,7 +174,7 @@ NodeView GraphReader::getNodeView(EntityID id) const {
         const EdgeIndexer& edgeIndexer = part->edgeIndexer();
         const PropertyManager& nodeProperties = part->nodeProperties();
 
-        nodeProperties.fillEntityPropertyView(id, labelsetID, view._props);
+        nodeProperties.fillEntityPropertyView(id, labelset, view._props);
         edgeIndexer.fillEntityEdgeView(id, view._edges);
     }
 
@@ -194,7 +184,7 @@ NodeView GraphReader::getNodeView(EntityID id) const {
 EdgeView GraphReader::getEdgeView(EntityID id) const {
     EdgeView view;
     PartIterator partIt(_view);
-    LabelSetID labelsetID;
+    LabelSetHandle labelset;
     const EdgeRecord* edge {nullptr};
 
     // Find definition of the edge
@@ -204,7 +194,7 @@ EdgeView GraphReader::getEdgeView(EntityID id) const {
         edge = edges.tryGet(id);
 
         if (edge) {
-            labelsetID = getNodeLabelSetID(edge->_nodeID);
+            labelset = getNodeLabelSet(edge->_nodeID);
             view._edgeID = edge->_edgeID;
             view._srcID = edge->_nodeID;
             view._tgtID = edge->_otherID;
@@ -222,7 +212,7 @@ EdgeView GraphReader::getEdgeView(EntityID id) const {
         const auto* part = partIt.get();
         const PropertyManager& edgeProperties = part->edgeProperties();
 
-        edgeProperties.fillEntityPropertyView(id, labelsetID, view._props);
+        edgeProperties.fillEntityPropertyView(id, labelset, view._props);
     }
 
     return view;
@@ -238,7 +228,7 @@ EdgeTypeID GraphReader::getEdgeTypeID(EntityID edgeID) const {
     return {};
 }
 
-MatchLabelSetIterator GraphReader::matchLabelSetIDs(const LabelSet* labelSet) const {
+MatchLabelSetIterator GraphReader::matchLabelSets(const LabelSetHandle& labelSet) const {
     return MatchLabelSetIterator(_view, labelSet);
 }
 

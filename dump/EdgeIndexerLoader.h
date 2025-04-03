@@ -51,7 +51,7 @@ public:
         const uint64_t inSpansPageCount = it.get<uint64_t>();
         const uint64_t nodeCount = coreNodeCount + patchNodeCount;
 
-        EdgeIndexer* indexer = new EdgeIndexer {metadata, edges};
+        EdgeIndexer* indexer = new EdgeIndexer {edges};
         indexer->_firstNodeID = firstNodeID;
         indexer->_firstEdgeID = firstEdgeID;
         indexer->_nodes.resize(nodeCount);
@@ -133,19 +133,20 @@ public:
 
             for (size_t j = 0; j < indexerCountInPage; j++) {
                 const uint64_t spanCount = it.get<uint64_t>();
-                const LabelSetID labelsetID = it.get<LabelSetID::Type>();
+                //const LabelSetID labelsetID = it.get<LabelSetID::Type>();
 
                 if (it.remainingBytes() < spanCount * Constants::EDGE_SPAN_STRIDE) {
                     return DumpError::result(DumpErrorType::COULD_NOT_READ_EDGE_INDEXER);
                 }
 
-                auto& spans = indexer->_outLabelSetSpans[labelsetID];
+                // TODO Fix, we need to get the labelset from the labelsetmap
+                //auto& spans = indexer->_outLabelSetSpans[labelsetID];
 
-                for (size_t k = 0; k < spanCount; k++) {
-                    const uint64_t offset = it.get<uint64_t>();
-                    const uint64_t count = it.get<uint64_t>();
-                    spans.emplace_back(outs.data() + offset, count);
-                }
+                //for (size_t k = 0; k < spanCount; k++) {
+                //    const uint64_t offset = it.get<uint64_t>();
+                //    const uint64_t count = it.get<uint64_t>();
+                //    spans.emplace_back(outs.data() + offset, count);
+                //}
             }
         }
 
@@ -170,19 +171,20 @@ public:
 
             for (size_t j = 0; j < indexerCountInPage; j++) {
                 const uint64_t spanCount = it.get<uint64_t>();
-                const LabelSetID labelsetID = it.get<LabelSetID::Type>();
+                //const LabelSetID labelsetID = it.get<LabelSetID::Type>();
 
                 if (it.remainingBytes() < spanCount * Constants::EDGE_SPAN_STRIDE) {
                     return DumpError::result(DumpErrorType::COULD_NOT_READ_EDGE_INDEXER);
                 }
 
-                auto& spans = indexer->_inLabelSetSpans[labelsetID];
+                // TODO Fix, we need to get the labelset from the labelsetmap
+                //auto& spans = indexer->_inLabelSetSpans[labelsetID];
 
-                for (size_t k = 0; k < spanCount; k++) {
-                    const uint64_t offset = it.get<uint64_t>();
-                    const uint64_t count = it.get<uint64_t>();
-                    spans.emplace_back(ins.data() + offset, count);
-                }
+                //for (size_t k = 0; k < spanCount; k++) {
+                //    const uint64_t offset = it.get<uint64_t>();
+                //    const uint64_t count = it.get<uint64_t>();
+                //    spans.emplace_back(ins.data() + offset, count);
+                //}
             }
         }
 

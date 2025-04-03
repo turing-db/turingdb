@@ -45,9 +45,9 @@ public:
         const uint64_t recordPageCount = it.get<uint64_t>();
         const uint64_t rangePageCount = it.get<uint64_t>();
 
-        NodeContainer* container = new NodeContainer {firstID, nodeCount, metadata};
+        NodeContainer* container = new NodeContainer {firstID, nodeCount};
 
-        auto& ranges = container->_ranges;
+        //auto& ranges = container->_ranges;
         auto& nodes = container->_nodes;
         nodes.resize(nodeCount);
 
@@ -66,18 +66,19 @@ public:
                 return DumpError::result(DumpErrorType::COULD_NOT_READ_NODES);
             }
 
-            const size_t countInPage = it.get<uint64_t>();
+            //const size_t countInPage = it.get<uint64_t>();
 
-            for (size_t j = 0; j < countInPage; j++) {
-                const auto lsetID = it.get<LabelSetID::Type>();
-                auto& r = ranges[lsetID];
-                r._first = it.get<EntityID::Type>();
-                r._count = it.get<uint64_t>();
-            }
+            // TODO fix, we need to retrieve the labelset from the ID
+            //for (size_t j = 0; j < countInPage; j++) {
+            //    const auto lsetID = it.get<LabelSetID::Type>();
+            //    auto& r = ranges[lsetID];
+            //    r._first = it.get<EntityID::Type>();
+            //    r._count = it.get<uint64_t>();
+            //}
         }
 
         // loading node records
-        size_t recordOffset = 0;
+        //size_t recordOffset = 0;
         for (size_t i = 0; i < recordPageCount; i++) {
             _reader.nextPage();
 
@@ -92,15 +93,16 @@ public:
                 return DumpError::result(DumpErrorType::COULD_NOT_READ_NODES);
             }
 
-            const size_t countInPage = it.get<uint64_t>();
+            //const size_t countInPage = it.get<uint64_t>();
 
             // Copy content of page into node records vector
-            for (size_t j = 0; j < countInPage; j++) {
-                nodes[j + recordOffset]._labelsetID = it.get<LabelSetID::Type>();
+            // TODO  fix, we need to retrieve the labelset from the ID
+            //for (size_t j = 0; j < countInPage; j++) {
+            //    nodes[j + recordOffset]._labelsetID = it.get<LabelSetID::Type>();
 
-            }
+            //}
 
-            recordOffset += countInPage;
+            //recordOffset += countInPage;
         }
 
         return {std::unique_ptr<NodeContainer> {container}};

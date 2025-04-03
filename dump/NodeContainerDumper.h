@@ -55,8 +55,8 @@ public:
 
                 // Data
                 for (size_t j = 0; j < countInPage; j++) {
-                    const auto& [lsetID, range] = *it;
-                    _writer.writeToCurrentPage(lsetID.getValue());
+                    const auto& [lset, range] = *it;
+                    _writer.writeToCurrentPage(lset.getID().getValue());
                     _writer.writeToCurrentPage(range._first.getValue());
                     _writer.writeToCurrentPage((uint64_t)range._count);
                     ++it;
@@ -87,7 +87,7 @@ public:
 
                 // Data
                 for (const auto& record : nodeSpan) {
-                    _writer.writeToCurrentPage(record._labelsetID.getValue());
+                    _writer.writeToCurrentPage(record._labelset.getID().getValue());
                 }
             }
         }

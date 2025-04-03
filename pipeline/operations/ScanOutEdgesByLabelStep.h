@@ -14,7 +14,7 @@ class ScanOutEdgesByLabelStep {
 public:
     struct Tag {};
 
-    ScanOutEdgesByLabelStep(const EdgeWriteInfo& edgeWriteInfo, const LabelSet* labelSet);
+    ScanOutEdgesByLabelStep(const EdgeWriteInfo& edgeWriteInfo, const LabelSetHandle& labelSet);
 
     ScanOutEdgesByLabelStep(ScanOutEdgesByLabelStep&& other) = default;
 
@@ -44,7 +44,7 @@ public:
 
 private:
     EdgeWriteInfo _edgeWriteInfo;
-    const LabelSet* _labelSet;
+    LabelSetHandle _labelSet;
     std::unique_ptr<ScanOutEdgesByLabelChunkWriter> _it;
 };
 

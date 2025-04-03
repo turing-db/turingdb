@@ -102,7 +102,7 @@ public:
     }
 
     void fillEntityPropertyView(EntityID entityID,
-                                LabelSetID labelsetID,
+                                const LabelSetHandle& labelset,
                                 EntityPropertyView& view) const;
 
     PropertyContainerMap::iterator begin() { return _map.begin(); }
@@ -129,7 +129,7 @@ public:
     }
 
     LabelSetPropertyIndexer& addIndexer(PropertyTypeID ptID) {
-        return _indexers.emplace(ptID, &_graphMetadata->labelsets()).first->second;
+        return _indexers.emplace(ptID, LabelSetPropertyIndexer {}).first->second;
     }
 
     LabelSetPropertyIndexer& getIndexer(PropertyTypeID ptID) {

@@ -76,7 +76,7 @@ public:
                 for (size_t k = 0; k < LabelSet::IntegerCount; k++) {
                     labelsetData[k] = it.get<LabelSet::IntegerType>();
                 }
-                labelsets.create(labelset);
+                labelsets.getOrCreate(labelset);
             }
         }
 

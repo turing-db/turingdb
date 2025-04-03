@@ -31,15 +31,21 @@ std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(Graph& graph,
     return std::unique_ptr<DataPartBuilder> {ptr};
 }
 
-EntityID DataPartBuilder::addNode(const LabelSetID& labelset) {
-    _coreNodeLabelSets.emplace_back(labelset);
+EntityID DataPartBuilder::addNode(const LabelSetHandle& labelset) {
+    if (!labelset.isStored()) {
+        const LabelSet toBeStored = LabelSet::fromIntegers(labelset.integers());
+        LabelSetHandle stored = _graph->getMetadata()->labelsets().getOrCreate(toBeStored);
+        _coreNodeLabelSets.emplace_back(stored);
+    } else {
+        _coreNodeLabelSets.emplace_back(labelset);
+    }
 
     return _nextNodeID++;
 }
 
 EntityID DataPartBuilder::addNode(const LabelSet& labelset) {
-    const LabelSetID id = _graph->getMetadata()->labelsets().getOrCreate(labelset);
-    _coreNodeLabelSets.emplace_back(id);
+    LabelSetHandle ref = _graph->getMetadata()->labelsets().getOrCreate(labelset);
+    _coreNodeLabelSets.emplace_back(ref);
 
     return _nextNodeID++;
 }
@@ -53,7 +59,7 @@ void DataPartBuilder::addNodeProperty(EntityID nodeID,
     }
 
     if (nodeID < _firstNodeID) {
-        _patchNodeLabelSets.emplace(nodeID, LabelSetID {});
+        _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
     }
     _nodeProperties->add<T>(ptID, nodeID, std::move(value));
 }
@@ -67,7 +73,7 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
     }
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, &edge);
-        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetID {});
+        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
     }
     _edgeProperties->add<T>(ptID, edge._edgeID, std::move(value));
 }
@@ -82,13 +88,13 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, EntityID srcID, En
 
     if (edge._nodeID < _firstNodeID) {
         _nodeHasPatchEdges.emplace(edge._nodeID);
-        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetID {});
+        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
         _outPatchEdgeCount += 1;
     }
 
     if (edge._otherID < _firstNodeID) {
         _nodeHasPatchEdges.emplace(edge._otherID);
-        _patchNodeLabelSets.emplace(edge._otherID, LabelSetID {});
+        _patchNodeLabelSets.emplace(edge._otherID, LabelSetHandle {});
         _inPatchEdgeCount += 1;
     }
 

@@ -20,7 +20,7 @@ public:
 
         const LabelID labelID = _graph->getMetadata()->labels().create("GMLNode");
         const LabelSet labelset = LabelSet::fromList({labelID});
-        _labelsetID = _graph->getMetadata()->labelsets().create(labelset);
+        _labelset = _graph->getMetadata()->labelsets().getOrCreate(labelset);
 
         _edgeTypeID = _graph->getMetadata()->edgeTypes().create("GMLEdge");
         const auto tx = _graph->openWriteTransaction();
@@ -157,7 +157,7 @@ public:
     }
 
     bool onNodeBegin() {
-        _currentNodeID = _builder->addNode(_labelsetID);
+        _currentNodeID = _builder->addNode(_labelset);
         return true;
     }
 
@@ -178,7 +178,7 @@ private:
 
     std::unique_ptr<CommitBuilder> _commitBuilder;
     DataPartBuilder* _builder {nullptr};
-    LabelSetID _labelsetID;
+    LabelSetHandle _labelset;
     EntityID _currentNodeID;
     EntityID _edgeSourceID;
     EntityID _edgeTargetID;

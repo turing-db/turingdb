@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "EntityID.h"
+#include "labels/LabelSetHandle.h"
 
 namespace db {
 
@@ -31,7 +32,7 @@ public:
     bool load(const GraphView&, JobSystem&, DataPartBuilder&);
 
     EntityID getFirstNodeID() const;
-    EntityID getFirstNodeID(const LabelSetID& labelset) const;
+    EntityID getFirstNodeID(const LabelSetHandle& labelset) const;
     EntityID getFirstEdgeID() const;
     size_t getNodeCount() const;
     size_t getEdgeCount() const;

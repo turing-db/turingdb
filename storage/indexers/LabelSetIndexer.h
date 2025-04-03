@@ -3,36 +3,32 @@
 #include <map>
 
 #include "EntityID.h"
-#include "labels/LabelSetMap.h"
+#include "labels/LabelSetHandle.h"
 
 namespace db {
 
 template <typename T>
 class LabelSetIndexer {
 public:
-    using InternalContainer = std::map<LabelSetID, T>;
+    using InternalContainer = std::map<LabelSetHandle, T>;
 
     class MatchIterator {
     public:
         MatchIterator() = default;
-        MatchIterator(const LabelSetMap* map,
-                      const InternalContainer* container,
-                      const LabelSet* compare)
-            : _map(map),
-              _container(container),
+        MatchIterator(const InternalContainer* container,
+                      const LabelSetHandle& compare)
+            : _container(container),
               _compare(compare),
               _it(container->begin())
         {
             for (; _it != _container->end(); _it++) {
-                const LabelSet& current = _map->getValue(_it->first);
-
-                if (current.hasAtLeastLabels(*compare)) {
+                if (_it->first.hasAtLeastLabels(compare)) {
                     return;
                 }
             }
         }
 
-        LabelSetID getID() const {
+        const LabelSetHandle& getKey() const {
             return _it->first;
         }
 
@@ -63,51 +59,48 @@ public:
                     return;
                 }
 
-                const LabelSet& current = _map->getValue(_it->first);
-                if (current.hasAtLeastLabels(*_compare)) {
+                if (_it->first.hasAtLeastLabels(_compare)) {
                     return;
                 }
             }
         }
 
     private:
-        const LabelSetMap* _map {nullptr};
         const InternalContainer* _container {nullptr};
-        const LabelSet* _compare {nullptr};
+        LabelSetHandle _compare;
         InternalContainer::const_iterator _it {};
     };
 
-    explicit LabelSetIndexer(const LabelSetMap* labelsetMap)
-        : _labelsetMap(labelsetMap)
+    explicit LabelSetIndexer()
     {
     }
 
-    InternalContainer::const_iterator find(LabelSetID labelsetID) const {
-        return _container.find(labelsetID);
+    InternalContainer::const_iterator find(const LabelSetHandle& labelset) const {
+        return _container.find(labelset);
     }
 
-    const T& at(LabelSetID id) const {
-        return _container.at(id);
+    const T& at(const LabelSetHandle& labelset) const {
+        return _container.at(labelset);
     }
 
-    bool contains(LabelSetID id) const {
-        return _container.contains(id);
+    bool contains(const LabelSetHandle& labelset) const {
+        return _container.contains(labelset);
     }
 
     size_t size() const {
         return _container.size();
     }
 
-    T& operator[](LabelSetID id) {
-        return _container[id];
+    T& operator[](const LabelSetHandle& labelset) {
+        return _container[labelset];
     }
 
     const InternalContainer& getContainer() const {
         return _container;
     }
 
-    MatchIterator matchIterate(const LabelSet* matchingLabelSet) const {
-        return MatchIterator(_labelsetMap, &_container, matchingLabelSet);
+    MatchIterator matchIterate(const LabelSetHandle& matchingLabelSet) const {
+        return MatchIterator(&_container, matchingLabelSet);
     }
 
     InternalContainer::const_iterator begin() const { return _container.begin(); }
@@ -115,7 +108,6 @@ public:
 
 private:
     InternalContainer _container;
-    const LabelSetMap* _labelsetMap = nullptr;
 };
 
 }

@@ -4,7 +4,7 @@
 
 using namespace db;
 
-ScanOutEdgesByLabelStep::ScanOutEdgesByLabelStep(const EdgeWriteInfo& edgeWriteInfo, const LabelSet* labelSet)
+ScanOutEdgesByLabelStep::ScanOutEdgesByLabelStep(const EdgeWriteInfo& edgeWriteInfo, const LabelSetHandle& labelSet)
     : _edgeWriteInfo(edgeWriteInfo),
     _labelSet(labelSet)
 {
@@ -21,6 +21,6 @@ void ScanOutEdgesByLabelStep::describe(std::string& descr) const {
     ss << " edges=" << std::hex << _edgeWriteInfo._edges;
     ss << " targetNodes=" << std::hex << _edgeWriteInfo._targetNodes;
     ss << " edgeTypes=" << std::hex << _edgeWriteInfo._edgeTypes;
-    ss << " labelSet=" << std::hex << _labelSet;
+    ss << " labelSet=" << std::hex << _labelSet.getID();
     descr.assign(ss.str());
 }

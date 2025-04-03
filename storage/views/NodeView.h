@@ -2,6 +2,7 @@
 
 #include "NodeEdgeView.h"
 #include "EntityPropertyView.h"
+#include "labels/LabelSetHandle.h"
 
 namespace db {
 
@@ -20,7 +21,7 @@ public:
     EntityID nodeID() const { return _nodeID; }
     const EntityPropertyView& properties() const { return _props; }
     const NodeEdgeView& edges() const { return _edges; }
-    LabelSetID labelset() const { return _labelset; }
+    const LabelSetHandle& labelset() const { return _labelset; }
 
     bool isValid() const { return _nodeID.isValid(); }
 
@@ -28,7 +29,7 @@ private:
     friend GraphReader;
 
     EntityID _nodeID;
-    LabelSetID _labelset;
+    LabelSetHandle _labelset;
     EntityPropertyView _props;
     NodeEdgeView _edges;
 };

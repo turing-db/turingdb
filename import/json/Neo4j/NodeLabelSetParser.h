@@ -71,7 +71,7 @@ public:
     bool end_array() override {
         _nesting--;
         if(_parsingLabelSets){
-            _labelSetMap->tryCreate(std::move(_labelSet));
+            _labelSetMap->getOrCreate(_labelSet);
         }
         _parsingLabelSets = false;
         return true;

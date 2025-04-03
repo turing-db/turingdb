@@ -8,7 +8,7 @@
 namespace db {
 
 ScanNodesByLabelIterator::ScanNodesByLabelIterator(const GraphView& view,
-                                                   const LabelSet* labelset)
+                                                   const LabelSetHandle& labelset)
     : Iterator(view),
       _labelset(labelset)
 {
@@ -26,7 +26,7 @@ void ScanNodesByLabelIterator::init() {
         _labelsetIt = labelsetIndexer.matchIterate(_labelset);
 
         for (; _labelsetIt.isValid(); _labelsetIt.next()) {
-            _range = nodes.getRange(_labelsetIt.getID());
+            _range = nodes.getRange(_labelsetIt.getKey());
             _rangeIt = _range.begin();
 
             if (_rangeIt.isValid()) {
@@ -60,7 +60,7 @@ void ScanNodesByLabelIterator::nextValid() {
         const DataPart* part = _partIt.get();
         const NodeContainer& nodes = part->nodes();
 
-        _range = nodes.getRange(_labelsetIt.getID());
+        _range = nodes.getRange(_labelsetIt.getKey());
         _rangeIt = _range.begin();
 
         if (!_rangeIt.isValid()) {
@@ -71,7 +71,7 @@ void ScanNodesByLabelIterator::nextValid() {
 
 ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter() = default;
 
-ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSet* labelset)
+ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
     : ScanNodesByLabelIterator(view, labelset)
 {
 }

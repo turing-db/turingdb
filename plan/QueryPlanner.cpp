@@ -41,9 +41,6 @@ QueryPlanner::QueryPlanner(const GraphView& view, LocalMemory* mem, QueryCallbac
 }
 
 QueryPlanner::~QueryPlanner() {
-    for (LabelSet* labelSet : _labelSets) {
-        delete labelSet;
-    }
 }
 
 bool QueryPlanner::plan(const QueryCommand* query) {
@@ -146,13 +143,13 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
     const ExprConstraint* exprConstr = entity->getExprConstraint();
 
     if (exprConstr && typeConstr) {
-        const LabelSet* labelSet = getLabelSet(typeConstr);
+        const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
         planScanNodesWithPropertyAndLabelConstraints(nodes, labelSet, exprConstr);
     } else if (exprConstr) {
         planScanNodesWithPropertyConstraints(nodes, exprConstr);
     } else if (typeConstr) {
-        const LabelSet* labelSet = getLabelSet(typeConstr);
-        _pipeline->add<ScanNodesByLabelStep>(nodes, labelSet);
+        const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
+        _pipeline->add<ScanNodesByLabelStep>(nodes, LabelSetHandle {*labelSet});
     } else {
         _pipeline->add<ScanNodesStep>(nodes);
     }
@@ -249,7 +246,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
                                                                                                      \
         _pipeline->add<StepType>(scannedNodes,                                                       \
                                  propType,                                                           \
-                                 labelSet,                                                           \
+                                 LabelSetHandle {*labelSet},                                            \
                                  propValues);                                                        \
                                                                                                      \
         if (expressions.size() > 1) {                                                                \
@@ -515,17 +512,17 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     if (!sourceTypeConstr && !targetTypeConstr) {
         _pipeline->add<ScanEdgesStep>(edgeWriteInfo);
     } else if (!sourceTypeConstr) {
-        const LabelSet* labelSet = getLabelSet(targetTypeConstr);
-        _pipeline->add<ScanInEdgesByLabelStep>(edgeWriteInfo, labelSet);
+        const LabelSet* labelSet = getOrCreateLabelSet(targetTypeConstr);
+        _pipeline->add<ScanInEdgesByLabelStep>(edgeWriteInfo, LabelSetHandle {*labelSet});
     } else {
-        const LabelSet* labelSet = getLabelSet(sourceTypeConstr);
-        _pipeline->add<ScanOutEdgesByLabelStep>(edgeWriteInfo, labelSet);
+        const LabelSet* labelSet = getOrCreateLabelSet(sourceTypeConstr);
+        _pipeline->add<ScanOutEdgesByLabelStep>(edgeWriteInfo, LabelSetHandle {*labelSet});
     }
 
     _result = targets;
 }
 
-LabelSet* QueryPlanner::getLabelSet(const TypeConstraint* typeConstr) {
+const LabelSet* QueryPlanner::getOrCreateLabelSet(const TypeConstraint* typeConstr) {
     LabelNames labelStrings;
 
     // Collect strings of all label names in typeConstr
@@ -538,27 +535,28 @@ LabelSet* QueryPlanner::getLabelSet(const TypeConstraint* typeConstr) {
         return labelSetCacheIt->second;
     }
     
-    LabelSet* labelSet = buildLabelSet(labelStrings);
+    const LabelSet* labelSet = buildLabelSet(labelStrings);
     _labelSetCache[labelStrings] = labelSet;
 
     return labelSet;
 }
 
-LabelSet* QueryPlanner::buildLabelSet(const LabelNames& labelNames) {
-    LabelSet* labelSet = new LabelSet();
+const LabelSet* QueryPlanner::buildLabelSet(const LabelNames& labelNames) {
+    auto labelSet = std::make_unique<LabelSet>();
     for (const std::string* labelName : labelNames) {
         const LabelID labelID = getLabel(*labelName);
         labelSet->set(labelID);
     }
 
-    _labelSets.push_back(labelSet);
+    auto* ptr = labelSet.get();
+    _labelSets.push_back(std::move(labelSet));
 
-    return labelSet;
+    return ptr;
 }
 
 LabelID QueryPlanner::getLabel(const std::string& labelName) {
     GraphMetadata& metadata = _view.metadata();
-    return metadata.labels().getOrCreate(labelName);
+    return metadata.labels().getOrCreate(labelName);// FIXME do not use getOrCreate here
 }
 
 bool QueryPlanner::planCreateGraph(const CreateGraphCommand* createCmd) {
@@ -585,9 +583,9 @@ void QueryPlanner::getMatchingLabelSets(std::vector<LabelSetID>& labelSets,
 
     const auto reader = _view.read();
 
-    auto it = reader.matchLabelSetIDs(targetLabelSet);
+    auto it = reader.matchLabelSets(LabelSetHandle {*targetLabelSet});
     for (; it.isValid(); ++it) {
-        labelSets.emplace_back(*it);
+        labelSets.emplace_back(it.get().getID());
     }
 }
 
@@ -819,7 +817,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     }
 
     // Search label set IDs
-    const LabelSet* targetLabelSet = getLabelSet(targetTypeConstr);
+    const LabelSet* targetLabelSet = getOrCreateLabelSet(targetTypeConstr);
     getMatchingLabelSets(_tmpLabelSetIDs, targetLabelSet);
     if (_tmpLabelSetIDs.empty()) {
         _result = targets;
@@ -941,7 +939,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
 
     _transformData->createStep(indices);
 
-    const LabelSet* targetLabelSet = getLabelSet(targetTypeConstr);
+    const LabelSet* targetLabelSet = getOrCreateLabelSet(targetTypeConstr);
 
     getMatchingLabelSets(_tmpLabelSetIDs, targetLabelSet);
 

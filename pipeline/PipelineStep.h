@@ -44,7 +44,7 @@
     PipelineStep(ScanNodesByPropertyAndLabel##TYPE##Step::Tag,         \
                  ColumnIDs* nodeIDs,                                   \
                  PropertyType propertyType,                            \
-                 const LabelSet* labelSet,                             \
+                 const LabelSetHandle& labelSet,                       \
                  ColumnVector<types::TYPE::Primitive>* propValues);    \
     PipelineStep(GetFilteredNodeProperty##TYPE##Step::Tag,             \
                  const ColumnIDs* entityIDs,                           \
@@ -72,15 +72,15 @@ public:
     PipelineStep(ScanNodesStep::Tag, ColumnIDs* nodes);
     PipelineStep(ScanNodesByLabelStep::Tag,
                  ColumnIDs* nodes,
-                 const LabelSet* labelSet);
+                 const LabelSetHandle& labelSet);
     PipelineStep(ScanEdgesStep::Tag,
                  const EdgeWriteInfo& edgeWriteInfo);
     PipelineStep(ScanInEdgesByLabelStep::Tag,
                  const EdgeWriteInfo& edgeWriteInfo,
-                 const LabelSet* labelSet);
+                 const LabelSetHandle& labelSet);
     PipelineStep(ScanOutEdgesByLabelStep::Tag,
                  const EdgeWriteInfo& edgeWriteInfo,
-                 const LabelSet* labelSet);
+                 const LabelSetHandle& labelSet);
     PipelineStep(GetOutEdgesStep::Tag,
                  const ColumnIDs* inputNodeIDs,
                  const EdgeWriteInfo& edgeWriteInfo);

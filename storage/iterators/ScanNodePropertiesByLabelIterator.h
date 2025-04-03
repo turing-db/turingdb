@@ -21,7 +21,7 @@ public:
 
     ScanNodePropertiesByLabelIterator(const GraphView& view,
                                       PropertyTypeID propTypeID,
-                                      const LabelSet* labelset);
+                                      const LabelSetHandle& labelset);
 
     ~ScanNodePropertiesByLabelIterator() override;
 
@@ -48,7 +48,7 @@ public:
 
 protected:
     PropertyTypeID _propTypeID;
-    const LabelSet* _labelset {nullptr};
+    LabelSetHandle _labelset;
     using LabelSetIterator = LabelSetPropertyIndexer::MatchIterator;
     LabelSetIterator _labelsetIt;
     std::vector<PropertyRange>::const_iterator _rangeIt;
@@ -70,7 +70,7 @@ public:
     ScanNodePropertiesByLabelChunkWriter();
     ScanNodePropertiesByLabelChunkWriter(const GraphView& view,
                                          PropertyTypeID propTypeID,
-                                         const LabelSet* labelset);
+                                         const LabelSetHandle& labelset);
 
     void fill(size_t maxCount);
 
@@ -90,7 +90,7 @@ template <SupportedType T>
 struct ScanNodePropertiesByLabelRange {
     GraphView _view;
     PropertyTypeID _propTypeID {0};
-    const LabelSet* _labelset {nullptr};
+    LabelSetHandle _labelset;
 
     ScanNodePropertiesByLabelIterator<T> begin() const { return {_view, _propTypeID, _labelset}; }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }

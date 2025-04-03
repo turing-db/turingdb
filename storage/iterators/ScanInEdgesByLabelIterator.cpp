@@ -9,7 +9,7 @@
 namespace db {
 
 ScanInEdgesByLabelIterator::ScanInEdgesByLabelIterator(const GraphView& view,
-                                                       const LabelSet* labelset)
+                                                       const LabelSetHandle& labelset)
     : Iterator(view),
       _labelset(labelset)
 {
@@ -73,7 +73,7 @@ void ScanInEdgesByLabelIterator::nextValid() {
 
 ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter() = default;
 
-ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSet* labelset)
+ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
     : ScanInEdgesByLabelIterator(view, labelset)
 {
 }

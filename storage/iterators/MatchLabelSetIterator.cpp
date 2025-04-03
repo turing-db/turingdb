@@ -5,7 +5,7 @@
 
 using namespace db;
 
-MatchLabelSetIterator::MatchLabelSetIterator(const GraphView& view, const LabelSet* labelSet)
+MatchLabelSetIterator::MatchLabelSetIterator(const GraphView& view, const LabelSetHandle& labelSet)
     : Iterator(view), 
     _targetLabelSet(labelSet)
 {

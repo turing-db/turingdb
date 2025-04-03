@@ -11,6 +11,7 @@
 #include "labels/LabelSet.h"
 #include "VectorHash.h"
 #include "QueryCallback.h"
+#include "labels/LabelSetHandle.h"
 
 namespace db {
 
@@ -58,13 +59,13 @@ private:
     // LabelSets
     using LabelNamePtr = const std::string*;
     using LabelNames = std::vector<LabelNamePtr>;
-    std::vector<LabelSet*> _labelSets;
+    std::vector<std::unique_ptr<LabelSet>> _labelSets;
     std::unordered_map<LabelNames,
-                       LabelSet*,
+                       const LabelSet*,
                        VectorHash<LabelNamePtr>,
                        VectorHash<LabelNamePtr>::Equal> _labelSetCache;
-    LabelSet* getLabelSet(const TypeConstraint* typeConstr);
-    LabelSet* buildLabelSet(const LabelNames& labelNames);
+    const LabelSet* getOrCreateLabelSet(const TypeConstraint* typeConstr);
+    const LabelSet* buildLabelSet(const LabelNames& labelNames);
     LabelID getLabel(const std::string& labelName);
     void getMatchingLabelSets(std::vector<LabelSetID>& labelSets,
                               const LabelSet* targetLabelSet);
