@@ -3,7 +3,7 @@
 #include "Graph.h"
 #include "reader/GraphReader.h"
 #include "DataPartComparator.h"
-#include "GraphMetadataComparator.h"
+#include "CommitMetadataComparator.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -14,12 +14,17 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
         return false;
     }
 
-    if (!GraphMetadataComparator::same(*a.getMetadata(), *b.getMetadata())) {
-        return false;
-    }
-
     const Graph::EntityIDs idsA = a.getNextFreeIDs();
     const Graph::EntityIDs idsB = b.getNextFreeIDs();
+
+    const Transaction txA = a.openTransaction();
+    const Transaction txB = b.openTransaction();
+    const GraphReader readerA = txA.readGraph();
+    const GraphReader readerB = txB.readGraph();
+
+    if (!CommitMetadataComparator::same(readerA.getMetadata(), readerB.getMetadata())) {
+        return false;
+    }
 
     if (idsA._node != idsB._node) {
         return false;
@@ -29,10 +34,6 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
         return false;
     }
 
-    const Transaction txA = a.openTransaction();
-    const Transaction txB = b.openTransaction();
-    const GraphReader readerA = txA.readGraph();
-    const GraphReader readerB = txB.readGraph();
     const DataPartSpan partsA = readerA.dataparts();
     const DataPartSpan partsB = readerB.dataparts();
 

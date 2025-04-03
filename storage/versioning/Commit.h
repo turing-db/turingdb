@@ -30,7 +30,7 @@ public:
     }
 
     [[nodiscard]] Transaction openTransaction() const {
-        return {*_graph, _data};
+        return {_data};
     }
 
     [[nodiscard]] WriteTransaction openWriteTransaction() const {

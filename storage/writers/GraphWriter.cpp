@@ -4,7 +4,7 @@
 #include "JobSystem.h"
 #include "versioning/CommitBuilder.h"
 #include "DataPartBuilder.h"
-#include "reader/GraphReader.h"
+#include "writers/MetadataBuilder.h"
 
 using namespace db;
 
@@ -39,14 +39,11 @@ EntityID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {
         return {};
     }
 
-    auto reader = _tx.readGraph();
-
-    auto& metadata = reader.getMetadata();
-    auto& labelMap = metadata.labels();
+    auto& metadata = _commitBuilder->metadata();
 
     LabelSet labelset;
     for (auto label : labels) {
-        const LabelID id = labelMap.getOrCreate(std::string {label});
+        const LabelID id = metadata.getOrCreateLabel(std::string {label});
         labelset.set(id);
     }
 
@@ -87,10 +84,9 @@ EdgeRecord GraphWriter::addEdge(std::string_view edgeType, EntityID src, EntityI
         return {};
     }
 
-    auto reader = _tx.readGraph();
-    auto& metadata = reader.getMetadata();
+    auto& metadata = _commitBuilder->metadata();
 
-    const EdgeTypeID edgeTypeID = metadata.edgeTypes().getOrCreate(std::string {edgeType});
+    const EdgeTypeID edgeTypeID = metadata.getOrCreateEdgeType(std::string {edgeType});
 
     return _dataPartBuilder->addEdge(edgeTypeID, src, tgt);
 }
@@ -109,9 +105,8 @@ void GraphWriter::addNodeProperty(EntityID nodeID, std::string_view propertyType
         return;
     }
 
-    auto reader = _tx.readGraph();
-    auto& metadata = reader.getMetadata();
-    const PropertyType propertyType = metadata.propTypes().getOrCreate(std::string {propertyTypeName}, T::_valueType);
+    auto& metadata = _commitBuilder->metadata();
+    const PropertyType propertyType = metadata.getOrCreatePropertyType(std::string {propertyTypeName}, T::_valueType);
 
     _dataPartBuilder->addNodeProperty<T>(nodeID, propertyType._id, std::move(value));
 }
@@ -131,9 +126,8 @@ void GraphWriter::addEdgeProperty(const EdgeRecord& edge, std::string_view prope
         return;
     }
 
-    auto reader = _tx.readGraph();
-    auto& metadata = reader.getMetadata();
-    const PropertyType propertyType = metadata.propTypes().getOrCreate(std::string {propertyTypeName}, T::_valueType);
+    auto& metadata = _commitBuilder->metadata();
+    const PropertyType propertyType = metadata.getOrCreatePropertyType(std::string {propertyTypeName}, T::_valueType);
 
     _dataPartBuilder->addEdgeProperty<T>(edge, propertyType._id, std::move(value));
 }

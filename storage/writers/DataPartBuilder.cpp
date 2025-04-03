@@ -3,16 +3,17 @@
 #include <range/v3/view/enumerate.hpp>
 
 #include "Graph.h"
-#include "GraphMetadata.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "properties/PropertyManager.h"
+#include "writers/MetadataBuilder.h"
 
 using namespace db;
 
 DataPartBuilder::~DataPartBuilder() = default;
 
-std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(Graph& graph,
+std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metadata,
+                                                          Graph& graph,
                                                           const GraphView& view,
                                                           size_t partIndex) {
     const auto reader = view.read();
@@ -20,12 +21,13 @@ std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(Graph& graph,
 
     ptr->_view = view;
     ptr->_graph = &graph;
+    ptr->_metadata = &metadata;
     ptr->_firstNodeID = reader.getNodeCount();
     ptr->_firstEdgeID = reader.getEdgeCount();
     ptr->_nextNodeID = ptr->_firstNodeID;
     ptr->_nextEdgeID = ptr->_firstEdgeID;
-    ptr->_nodeProperties = std::make_unique<PropertyManager>(graph.getMetadata());
-    ptr->_edgeProperties = std::make_unique<PropertyManager>(graph.getMetadata());
+    ptr->_nodeProperties = std::make_unique<PropertyManager>();
+    ptr->_edgeProperties = std::make_unique<PropertyManager>();
     ptr->_partIndex = partIndex;
 
     return std::unique_ptr<DataPartBuilder> {ptr};
@@ -34,7 +36,7 @@ std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(Graph& graph,
 EntityID DataPartBuilder::addNode(const LabelSetHandle& labelset) {
     if (!labelset.isStored()) {
         const LabelSet toBeStored = LabelSet::fromIntegers(labelset.integers());
-        LabelSetHandle stored = _graph->getMetadata()->labelsets().getOrCreate(toBeStored);
+        LabelSetHandle stored = _metadata->getOrCreateLabelSet(toBeStored);
         _coreNodeLabelSets.emplace_back(stored);
     } else {
         _coreNodeLabelSets.emplace_back(labelset);
@@ -44,7 +46,7 @@ EntityID DataPartBuilder::addNode(const LabelSetHandle& labelset) {
 }
 
 EntityID DataPartBuilder::addNode(const LabelSet& labelset) {
-    LabelSetHandle ref = _graph->getMetadata()->labelsets().getOrCreate(labelset);
+    LabelSetHandle ref = _metadata->getOrCreateLabelSet(labelset);
     _coreNodeLabelSets.emplace_back(ref);
 
     return _nextNodeID++;

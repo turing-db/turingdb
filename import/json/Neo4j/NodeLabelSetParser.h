@@ -2,11 +2,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "GraphMetadata.h"
+#include "writers/MetadataBuilder.h"
 #include "Parser.h"
-#include "labels/LabelMap.h"
 #include "labels/LabelSet.h"
-#include "labels/LabelSetMap.h"
 
 namespace db::json::neo4j {
 
@@ -14,9 +12,8 @@ using json = nlohmann::json;
 
 class NodeLabelSetParser: public json::json_sax_t, public Parser {
 public:
-    explicit NodeLabelSetParser(GraphMetadata *graphMetadata)
-        : _labelSetMap(&graphMetadata->labelsets()),
-          _labelMap(&graphMetadata->labels())
+    explicit NodeLabelSetParser(MetadataBuilder* metadata)
+        : _metadata(metadata)
     {
     }
 
@@ -42,7 +39,7 @@ public:
 
     bool string(string_t& val) override {
         if (_parsingLabelSets) {
-            const LabelID labelId = _labelMap->get(val);
+            const LabelID labelId = _metadata->getOrCreateLabel(val);
             _labelSet.set(labelId);
         }
 
@@ -71,7 +68,7 @@ public:
     bool end_array() override {
         _nesting--;
         if(_parsingLabelSets){
-            _labelSetMap->getOrCreate(_labelSet);
+            _metadata->getOrCreateLabelSet(_labelSet);
         }
         _parsingLabelSets = false;
         return true;
@@ -91,8 +88,7 @@ public:
 
 private:
     size_t _nesting {0};
-    LabelSetMap* _labelSetMap {nullptr};
-    LabelMap* _labelMap {nullptr};
+    MetadataBuilder* _metadata {nullptr};
     LabelSet _labelSet;
     bool _parsingLabelSets {false};
 

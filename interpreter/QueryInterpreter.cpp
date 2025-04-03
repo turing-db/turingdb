@@ -1,6 +1,5 @@
 #include "QueryInterpreter.h"
 
-#include "GraphMetadata.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "versioning/Transaction.h"

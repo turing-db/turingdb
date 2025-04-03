@@ -2,8 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "GraphMetadata.h"
-#include "types/PropertyTypeMap.h"
+#include "writers/MetadataBuilder.h"
 
 namespace db::json::neo4j {
 
@@ -11,8 +10,8 @@ using json = nlohmann::json;
 
 class NodePropertyParser : public json::json_sax_t {
 public:
-    explicit NodePropertyParser(GraphMetadata* graphMetadata)
-        : _propTypeMap(&graphMetadata->propTypes())
+    explicit NodePropertyParser(MetadataBuilder* metadata)
+        : _metadata(metadata)
     {
     }
 
@@ -64,23 +63,23 @@ public:
 
         if (_nesting == 7) {
             if (val == "Integer" || val == "Long") {
-                _propTypeMap->tryCreate(_currentPropName + " (Int64)", ValueType::Int64);
-                _propTypeMap->tryCreate(_currentPropName + " (UInt64)", ValueType::UInt64);
+                _metadata->getOrCreatePropertyType(_currentPropName + " (Int64)", ValueType::Int64);
+                _metadata->getOrCreatePropertyType(_currentPropName + " (UInt64)", ValueType::UInt64);
                 return true;
             }
 
             if (val == "Double") {
-                _propTypeMap->tryCreate(_currentPropName + " (Double)", ValueType::Double);
+                _metadata->getOrCreatePropertyType(_currentPropName + " (Double)", ValueType::Double);
                 return true;
             }
 
             if (val == "Boolean") {
-                _propTypeMap->tryCreate(_currentPropName + " (Bool)", ValueType::Bool);
+                _metadata->getOrCreatePropertyType(_currentPropName + " (Bool)", ValueType::Bool);
                 return true;
             }
 
             if (val == "String" || val == "Date") {
-                _propTypeMap->tryCreate(_currentPropName + " (String)", ValueType::String);
+                _metadata->getOrCreatePropertyType(_currentPropName + " (Sxtring)", ValueType::String);
                 return true;
             }
 
@@ -140,7 +139,7 @@ public:
     }
 
 private:
-    PropertyTypeMap* _propTypeMap = nullptr;
+    MetadataBuilder* _metadata {nullptr};
     std::string _currentPropName;
     size_t _nesting {0};
     size_t _keyOffset {0};

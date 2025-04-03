@@ -6,8 +6,7 @@
 
 using namespace db;
 
-PropertyManager::PropertyManager(const GraphMetadata* graphMetadata)
-    : _graphMetadata(graphMetadata)
+PropertyManager::PropertyManager()
 {
 }
 

@@ -300,11 +300,10 @@ public:
         write(fmt::format("\"in_edge_count\":{},", edges.getInEdgeCount()));
         write(fmt::format("\"out_edge_count\":{},", edges.getOutEdgeCount()));
         write("\"properties\":{");
-        std::string propertiesStr;
 
         size_t count = 0;
         for (const auto& [ptID, value] : props) {
-            std::visit([&](const auto& v) { writeKeyValue(propTypes.getName(ptID), *v); }, value);
+            std::visit([&](const auto& v) { writeKeyValue(propTypes.getName(ptID).value(), *v); }, value);
             ++count;
 
             if (count != props.getCount()) {
@@ -344,7 +343,7 @@ public:
         writeHeader(status).flush();
     }
 
-    void writeQueryError(QueryStatus status) {
+    void writeQueryError(const QueryStatus& status) {
         msgbioassert(!status.isOk(), "QueryStatus is OK but trying to return an error");
         write(QueryStatusDescription::value(status.getStatus()));
     }

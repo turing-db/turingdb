@@ -104,11 +104,7 @@ EntityID GraphReader::getFinalNodeID(size_t partIndex, EntityID tmpID) const {
 }
 
 
-const GraphMetadata& GraphReader::getMetadata() const {
-    return _view.metadata();
-}
-
-GraphMetadata& GraphReader::getMetadata() {
+const CommitMetadata& GraphReader::getMetadata() const {
     return _view.metadata();
 }
 
@@ -252,11 +248,6 @@ const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, EntityI
     }
 
     return nullptr;
-}
-
-PropertyType GraphReader::getPropertyType(const std::string& name) const {
-    const auto& propTypes = _view.metadata().propTypes();
-    return propTypes.get(name);
 }
 
 

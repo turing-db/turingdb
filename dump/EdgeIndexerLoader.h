@@ -3,7 +3,6 @@
 #include <memory>
 
 #include "EdgeContainer.h"
-#include "GraphMetadata.h"
 #include "indexers/EdgeIndexer.h"
 #include "FilePageReader.h"
 #include "DumpConfig.h"
@@ -21,7 +20,7 @@ public:
     {
     }
 
-    [[nodiscard]] DumpResult<std::unique_ptr<EdgeIndexer>> load(const GraphMetadata& metadata, const EdgeContainer& edges) {
+    [[nodiscard]] DumpResult<std::unique_ptr<EdgeIndexer>> load(const EdgeContainer& edges) {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

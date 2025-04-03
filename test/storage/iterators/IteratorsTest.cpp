@@ -4,7 +4,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
-#include "GraphMetadata.h"
+#include "versioning/CommitMetadata.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "FileUtils.h"
@@ -306,7 +306,7 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
     size_t count = 0;
     const auto labelset = LabelSet::fromList({1});
 
-    for (const EntityID id : reader.scanNodesByLabel(LabelSetHandle {labelset})) {
+    for (const EntityID id : reader.scanNodesByLabel(labelset.handle())) {
         ASSERT_EQ(it->getValue(), id.getValue());
         ASSERT_EQ(it->getValue(), id.getValue());
         count++;
@@ -321,25 +321,17 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
-    const auto& labelsets = _graph->getMetadata()->labelsets();
-    const size_t labelsetCount = labelsets.getCount();
-
     // For each existing labelset compare scanOutEdgesByLabel to scanNodesByLabel -> getOutEdges
-    for (LabelSetID lid = 0; lid != labelsetCount - 1; ++lid) {
-        const auto labelset = labelsets.getValue(lid);
-        if (!labelset) {
-            continue;
-        }
-
+    for (const auto& [lsetID, labelset] : reader.getMetadata().labelsets()) {
         ColumnIDs nodeIDs;
-        for (const EntityID nodeID : reader.scanNodesByLabel(labelset.value())) {
+        for (const EntityID nodeID : reader.scanNodesByLabel(labelset->handle())) {
             nodeIDs = ColumnVector {nodeID};
             for (const EdgeRecord& edge : reader.getOutEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
             }
         }
 
-        for (const EdgeRecord& edge : reader.scanOutEdgesByLabel(labelset.value())) {
+        for (const EdgeRecord& edge : reader.scanOutEdgesByLabel(labelset->handle())) {
             byScanEdgesRecords.emplace(edge._edgeID, &edge);
         }
     }
@@ -363,7 +355,7 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
     std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
     std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
 
-    const auto& labelsets = _graph->getMetadata()->labelsets();
+    const auto& labelsets = reader.getMetadata().labelsets();
     const size_t labelsetCount = labelsets.getCount();
 
     // For each existing labelset compare scanInEdgesByLabel to scanNodesByLabel -> getInEdges

@@ -34,9 +34,8 @@ public:
         uint64_t pageCount = 1;
 
         auto* buffer = &_writer.buffer();
-        for (size_t i = 0; i < edgeTypeCount; i++) {
-            const auto& name = edgeTypes.getName(i);
-            const uint64_t strsize = name.size();
+        for (const auto& [i, name] : edgeTypes) {
+            const uint64_t strsize = name->size();
             const size_t stride = EDGE_TYPE_BASE_STRIDE + strsize;
 
             if (buffer->avail() < stride) {
@@ -52,7 +51,7 @@ public:
 
             countInPage++;
             _writer.writeToCurrentPage(strsize);
-            _writer.writeToCurrentPage(name);
+            _writer.writeToCurrentPage(*name);
         }
 
         buffer->patch(reinterpret_cast<const uint8_t*>(&countInPage), sizeof(uint64_t), 0);

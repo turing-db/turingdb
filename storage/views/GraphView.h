@@ -8,14 +8,12 @@ namespace db {
 class GraphReader;
 class Graph;
 
-class GraphMetadata;
 class GraphView {
 public:
     GraphView() = default;
 
-    explicit GraphView(const Graph& graph, const CommitData& data)
-        : _graph(&graph),
-          _data(&data)
+    explicit GraphView(const CommitData& data)
+        : _data(&data)
     {
     }
 
@@ -25,11 +23,10 @@ public:
     [[nodiscard]] std::span<const CommitView> commits() const { return _data->commits(); }
     [[nodiscard]] DataPartSpan dataparts() const { return _data->allDataparts(); }
     [[nodiscard]] DataPartSpan commitDataparts() const { return _data->commitDataparts(); }
-    [[nodiscard]] GraphMetadata& metadata() const { return _data->metadata(); }
+    [[nodiscard]] const CommitMetadata& metadata() const { return _data->metadata(); }
 
 private:
     friend GraphReader;
-    const Graph* _graph {nullptr};
     const CommitData* _data {nullptr};
 };
 

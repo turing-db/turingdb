@@ -1,6 +1,5 @@
 #pragma once
 
-#include "GraphMetadata.h"
 #include "indexers/PropertyIndexer.h"
 #include "FilePageReader.h"
 #include "DumpConfig.h"
@@ -18,7 +17,7 @@ public:
     {
     }
 
-    [[nodiscard]] DumpResult<void> load(const GraphMetadata& metadata, PropertyIndexer& indexer) {
+    [[nodiscard]] DumpResult<void> load(PropertyIndexer& indexer) {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

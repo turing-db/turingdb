@@ -3,7 +3,6 @@
 #include <range/v3/view/enumerate.hpp>
 
 #include "Graph.h"
-#include "GraphMetadata.h"
 #include "GraphInfoDumper.h"
 #include "LabelMapDumper.h"
 #include "CommitDumper.h"
@@ -57,81 +56,81 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
         }
     }
 
-    const auto& metadata = graph.getMetadata();
+    // const auto& metadata = graph.getMetadata();
 
-    // Dumping labels
-    {
-        const fs::Path labelsPath = path / "labels";
+    // // Dumping labels
+    // {
+    //     const fs::Path labelsPath = path / "labels";
 
-        auto writer = fs::FilePageWriter::open(labelsPath);
-        if (!writer) {
-            return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, writer.error());
-        }
+    //     auto writer = fs::FilePageWriter::open(labelsPath);
+    //     if (!writer) {
+    //         return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, writer.error());
+    //     }
 
-        LabelMapDumper dumper {writer.value()};
+    //     LabelMapDumper dumper {writer.value()};
 
-        if (auto res = dumper.dump(metadata->labels()); !res) {
-            return res;
-        }
-    }
+    //     if (auto res = dumper.dump(metadata->labels()); !res) {
+    //         return res;
+    //     }
+    // }
 
-    // Dumping edge types
-    {
-        const fs::Path edgetypesPath = path / "edge-types";
+    // // Dumping edge types
+    // {
+    //     const fs::Path edgetypesPath = path / "edge-types";
 
-        auto writer = fs::FilePageWriter::open(edgetypesPath);
-        if (!writer) {
-            return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, writer.error());
-        }
+    //     auto writer = fs::FilePageWriter::open(edgetypesPath);
+    //     if (!writer) {
+    //         return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, writer.error());
+    //     }
 
-        EdgeTypeMapDumper dumper {writer.value()};
+    //     EdgeTypeMapDumper dumper {writer.value()};
 
-        if (auto res = dumper.dump(metadata->edgeTypes()); !res) {
-            return res;
-        }
-    }
+    //     if (auto res = dumper.dump(metadata->edgeTypes()); !res) {
+    //         return res;
+    //     }
+    // }
 
-    // Dumping property types
-    {
-        const fs::Path proptypesPath = path / "property-types";
+    // // Dumping property types
+    // {
+    //     const fs::Path proptypesPath = path / "property-types";
 
-        auto writer = fs::FilePageWriter::open(proptypesPath);
-        if (!writer) {
-            return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, writer.error());
-        }
+    //     auto writer = fs::FilePageWriter::open(proptypesPath);
+    //     if (!writer) {
+    //         return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, writer.error());
+    //     }
 
-        PropertyTypeMapDumper dumper {writer.value()};
+    //     PropertyTypeMapDumper dumper {writer.value()};
 
-        if (auto res = dumper.dump(metadata->propTypes()); !res) {
-            return res;
-        }
-    }
+    //     if (auto res = dumper.dump(metadata->propTypes()); !res) {
+    //         return res;
+    //     }
+    // }
 
-    // Dumping labelsets
-    {
-        const fs::Path labelsetsPath = path / "labelsets";
+    // // Dumping labelsets
+    // {
+    //     const fs::Path labelsetsPath = path / "labelsets";
 
-        auto writer = fs::FilePageWriter::open(labelsetsPath);
-        if (!writer) {
-            return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, writer.error());
-        }
+    //     auto writer = fs::FilePageWriter::open(labelsetsPath);
+    //     if (!writer) {
+    //         return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, writer.error());
+    //     }
 
-        LabelSetMapDumper dumper {writer.value()};
+    //     LabelSetMapDumper dumper {writer.value()};
 
-        if (auto res = dumper.dump(metadata->labelsets()); !res) {
-            return res;
-        }
-    }
+    //     if (auto res = dumper.dump(metadata->labelsets()); !res) {
+    //         return res;
+    //     }
+    // }
 
-    // Dumping commits
-    for (const auto& [i, commit] : graph._versionController->_commits | rv::enumerate) {
-        const std::string fileName = fmt::format("commit-{}-{}", i, commit->hash().get());
-        const fs::Path commitPath = path / fileName;
+    // // Dumping commits
+    // for (const auto& [i, commit] : graph._versionController->_commits | rv::enumerate) {
+    //     const std::string fileName = fmt::format("commit-{}-{}", i, commit->hash().get());
+    //     const fs::Path commitPath = path / fileName;
 
-        if (auto res = CommitDumper::dump(*commit, commitPath); !res) {
-            return res;
-        }
-    }
+    //     if (auto res = CommitDumper::dump(*commit, commitPath); !res) {
+    //         return res;
+    //     }
+    // }
 
     graph._versionController->unlock();
 

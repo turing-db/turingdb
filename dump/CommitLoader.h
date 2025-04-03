@@ -17,7 +17,6 @@ namespace db {
 
 class Commit;
 class PropertyManager;
-class GraphMetadata;
 
 class CommitLoader {
 public:
@@ -35,7 +34,6 @@ public:
         auto commit = std::make_unique<Commit>();
         commit->_graph = &graph;
         commit->_data = versionController->createCommitData(hash);
-        commit->_data->_graphMetadata = graph.getMetadata();
         commit->_data->_hash = hash;
 
         std::map<uint64_t, WeakArc<const DataPart>> dataparts;
@@ -57,7 +55,7 @@ public:
 
             child = path / child.get();
 
-            auto res = DataPartLoader::load(child, *graph.getMetadata(), *versionController);
+            auto res = DataPartLoader::load(child, *versionController);
 
             if (!res) {
                 return res.get_unexpected();

@@ -41,6 +41,7 @@ set(storage_sources
 
         writers/DataPartBuilder.cpp
         writers/GraphWriter.cpp
+        writers/MetadataBuilder.cpp
 
         versioning/CommitResult.cpp
         versioning/VersionController.cpp

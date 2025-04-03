@@ -9,6 +9,7 @@
 #include "writers/DataPartBuilder.h"
 #include "comparators/DataPartComparator.h"
 #include "JobSystem.h"
+#include "writers/GraphWriter.h"
 
 using namespace turing::test;
 using namespace db;
@@ -27,100 +28,65 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB1() {
         auto graph = Graph::create();
+        GraphWriter writer {graph.get()};
 
-        auto* metadata = graph->getMetadata();
-        auto& labels = metadata->labels();
-        auto person = labels.getOrCreate("Person");
-        auto officer = labels.getOrCreate("Officer");
-        auto object = labels.getOrCreate("Object");
+        auto p1 = writer.addNode({"Person"});
+        auto p2 = writer.addNode({ "Person", "Officer" });
+        auto o1 = writer.addNode({"Object"});
+        auto o2 = writer.addNode({"Object"});
+        writer.addNodeProperty<types::String>(p1, "Name", "John");
+        writer.addNodeProperty<types::String>(p2, "Name", "Jane");
+        writer.addNodeProperty<types::UInt64>(p1, "Age", 32);
+        writer.addNodeProperty<types::UInt64>(p2, "Age", 41);
+        writer.addNodeProperty<types::String>(o1, "Description", "Badge");
+        writer.addNodeProperty<types::String>(o2, "Description", "Uniform");
 
-        auto& proptypes = metadata->propTypes();
-        auto name = proptypes.getOrCreate("Name", ValueType::String);
-        auto desc = proptypes.getOrCreate("Description", ValueType::String);
-        auto age = proptypes.getOrCreate("Age", ValueType::UInt64);
-        auto since = proptypes.getOrCreate("Since", ValueType::UInt64);
+        auto h2 = writer.addEdge("HasObject", p2, o1);   // Jane has badge
+        auto h3 = writer.addEdge("HasObject", p2, o2);   // Jane has uniform
+        auto k1 = writer.addEdge("Knows", p1, p2); // John knows Jane
+        auto k2 = writer.addEdge("Knows", p2, p1); // Jane knows John
+        writer.addEdgeProperty<types::UInt64>(h2, "Since", 6);
+        writer.addEdgeProperty<types::UInt64>(h3, "Since", 6);
+        writer.addEdgeProperty<types::UInt64>(k1, "Since", 3);
+        writer.addEdgeProperty<types::UInt64>(k2, "Since", 3);
 
-        auto& edgetypes = metadata->edgeTypes();
-        auto has = edgetypes.getOrCreate("HasObject");
-        auto knows = edgetypes.getOrCreate("Knows");
-
-        const auto tx = graph->openWriteTransaction();
-        auto commitBuilder = tx.prepareCommit();
-        auto& builder = commitBuilder->newBuilder();
-        auto p1 = builder.addNode(LabelSet::fromList({person}));
-        auto p2 = builder.addNode(LabelSet::fromList({person, officer}));
-        auto o1 = builder.addNode(LabelSet::fromList({object}));
-        auto o2 = builder.addNode(LabelSet::fromList({object}));
-        builder.addNodeProperty<types::String>(p1, name._id, "John");
-        builder.addNodeProperty<types::String>(p2, name._id, "Jane");
-        builder.addNodeProperty<types::UInt64>(p1, age._id, 32);
-        builder.addNodeProperty<types::UInt64>(p2, age._id, 41);
-        builder.addNodeProperty<types::String>(o1, desc._id, "Badge");
-        builder.addNodeProperty<types::String>(o2, desc._id, "Uniform");
-
-        auto h2 = builder.addEdge(has, p2, o1);   // Jane has badge
-        auto h3 = builder.addEdge(has, p2, o2);   // Jane has uniform
-        auto k1 = builder.addEdge(knows, p1, p2); // John knows Jane
-        auto k2 = builder.addEdge(knows, p2, p1); // Jane knows John
-        builder.addEdgeProperty<types::UInt64>(h2, since._id, 6);
-        builder.addEdgeProperty<types::UInt64>(h3, since._id, 6);
-        builder.addEdgeProperty<types::UInt64>(k1, since._id, 3);
-        builder.addEdgeProperty<types::UInt64>(k2, since._id, 3);
-
-        graph->commit(std::move(commitBuilder), *_jobSystem);
+        writer.commit();
 
         return graph;
     }
 
     [[nodiscard]] std::unique_ptr<Graph> createDB2() {
         auto graph = Graph::create();
+        GraphWriter writer {graph.get()};
 
-        auto* metadata = graph->getMetadata();
-        auto& labels = metadata->labels();
-        auto person = labels.getOrCreate("Person");
-        auto officer = labels.getOrCreate("Officer");
-        auto object = labels.getOrCreate("Object");
+        auto p1 = writer.addNode({"Person"});
+        auto p2 = writer.addNode({ "Person", "Officer" });
+        auto o1 = writer.addNode({"Object"});
+        auto o2 = writer.addNode({"Object"});
+        auto o3 = writer.addNode({"Object"});
+        writer.addNodeProperty<types::String>(p1, "Name", "John");
+        writer.addNodeProperty<types::String>(p2, "Name", "Jane");
+        writer.addNodeProperty<types::UInt64>(p1, "Age", 32);
+        writer.addNodeProperty<types::UInt64>(p2, "Age", 41);
+        writer.addNodeProperty<types::String>(o1, "Description", "Badge");
+        writer.addNodeProperty<types::String>(o2, "Description", "Uniform");
+        writer.addNodeProperty<types::String>(o3, "Description", "Car");
 
-        auto& proptypes = metadata->propTypes();
-        auto name = proptypes.getOrCreate("Name", ValueType::String);
-        auto desc = proptypes.getOrCreate("Description", ValueType::String);
-        auto age = proptypes.getOrCreate("Age", ValueType::UInt64);
-        auto since = proptypes.getOrCreate("Since", ValueType::UInt64);
+        auto h1 = writer.addEdge("HasObject", p1, o3);   // John has car
+        auto h2 = writer.addEdge("HasObject", p2, o1);   // Jane has badge
+        auto h3 = writer.addEdge("HasObject", p2, o2);   // Jane has uniform
+        auto h4 = writer.addEdge("HasObject", p2, o3);   // Jane has car
+        auto k1 = writer.addEdge("Knows", p1, p2); // John knows Jane
+        auto k2 = writer.addEdge("Knows", p2, p1); // Jane knows John
 
-        auto& edgetypes = metadata->edgeTypes();
-        auto has = edgetypes.getOrCreate("HasObject");
-        auto knows = edgetypes.getOrCreate("Knows");
+        writer.addEdgeProperty<types::UInt64>(h1, "Since", 4);
+        writer.addEdgeProperty<types::UInt64>(h2, "Since", 6);
+        writer.addEdgeProperty<types::UInt64>(h3, "Since", 6);
+        writer.addEdgeProperty<types::UInt64>(h4, "Since", 2);
+        writer.addEdgeProperty<types::UInt64>(k1, "Since", 3);
+        writer.addEdgeProperty<types::UInt64>(k2, "Since", 3);
 
-        const auto tx = graph->openWriteTransaction();
-        auto commitBuilder = tx.prepareCommit();
-        auto& builder = commitBuilder->newBuilder();
-        auto p1 = builder.addNode(LabelSet::fromList({person}));
-        auto p2 = builder.addNode(LabelSet::fromList({person, officer}));
-        auto o1 = builder.addNode(LabelSet::fromList({object}));
-        auto o2 = builder.addNode(LabelSet::fromList({object}));
-        auto o3 = builder.addNode(LabelSet::fromList({object}));
-        builder.addNodeProperty<types::String>(p1, name._id, "John");
-        builder.addNodeProperty<types::String>(p2, name._id, "Jane");
-        builder.addNodeProperty<types::UInt64>(p1, age._id, 32);
-        builder.addNodeProperty<types::UInt64>(p2, age._id, 41);
-        builder.addNodeProperty<types::String>(o1, desc._id, "Badge");
-        builder.addNodeProperty<types::String>(o2, desc._id, "Uniform");
-        builder.addNodeProperty<types::String>(o3, desc._id, "Car");
-
-        auto h1 = builder.addEdge(has, p1, o3);   // John has car
-        auto h2 = builder.addEdge(has, p2, o1);   // Jane has badge
-        auto h3 = builder.addEdge(has, p2, o2);   // Jane has uniform
-        auto h4 = builder.addEdge(has, p2, o3);   // Jane has car
-        auto k1 = builder.addEdge(knows, p1, p2); // John knows Jane
-        auto k2 = builder.addEdge(knows, p2, p1); // Jane knows John
-        builder.addEdgeProperty<types::UInt64>(h1, since._id, 4);
-        builder.addEdgeProperty<types::UInt64>(h2, since._id, 6);
-        builder.addEdgeProperty<types::UInt64>(h3, since._id, 6);
-        builder.addEdgeProperty<types::UInt64>(h4, since._id, 2);
-        builder.addEdgeProperty<types::UInt64>(k1, since._id, 3);
-        builder.addEdgeProperty<types::UInt64>(k2, since._id, 3);
-
-        graph->commit(std::move(commitBuilder), *_jobSystem);
+        writer.commit();
 
         return graph;
     }

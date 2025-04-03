@@ -2,8 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "GraphMetadata.h"
-#include "types/EdgeTypeMap.h"
+#include "writers/MetadataBuilder.h"
 #include "Parser.h"
 
 namespace db::json::neo4j {
@@ -12,8 +11,8 @@ using json = nlohmann::json;
 
 class EdgeTypeParser : public json::json_sax_t, public Parser {
 public:
-    explicit EdgeTypeParser(GraphMetadata* graphMetadata)
-        : _edgeTypeMap(&graphMetadata->edgeTypes())
+    explicit EdgeTypeParser(MetadataBuilder* metadata)
+        : _metadata(metadata)
     {
     }
 
@@ -39,7 +38,7 @@ public:
 
     bool string(string_t& val) override {
         if (_nesting == 6) {
-            _edgeTypeMap->create(std::move(val));
+            _metadata->getOrCreateEdgeType(val);
         }
 
         return true;
@@ -79,6 +78,7 @@ public:
 
 private:
     size_t _nesting = 0;
-    EdgeTypeMap* _edgeTypeMap = nullptr;
+    MetadataBuilder* _metadata {nullptr};
 };
+
 }

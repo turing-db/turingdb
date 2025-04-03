@@ -21,8 +21,6 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
 
-#include "Graph.h"
-#include "GraphMetadata.h"
 #include "reader/GraphReader.h"
 #include "PlannerException.h"
 
@@ -32,12 +30,11 @@ namespace rv = ranges::views;
 
 QueryPlanner::QueryPlanner(const GraphView& view, LocalMemory* mem, QueryCallback callback)
     : _view(view),
-    _mem(mem),
-    _queryCallback(callback),
-    _pipeline(std::make_unique<Pipeline>()),
-    _output(std::make_unique<Block>()),
-    _transformData(std::make_unique<TransformData>(mem))
-{
+      _mem(mem),
+      _queryCallback(callback),
+      _pipeline(std::make_unique<Pipeline>()),
+      _output(std::make_unique<Block>()),
+      _transformData(std::make_unique<TransformData>(mem)) {
 }
 
 QueryPlanner::~QueryPlanner() {
@@ -149,7 +146,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
         planScanNodesWithPropertyConstraints(nodes, exprConstr);
     } else if (typeConstr) {
         const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
-        _pipeline->add<ScanNodesByLabelStep>(nodes, LabelSetHandle {*labelSet});
+        _pipeline->add<ScanNodesByLabelStep>(nodes, labelSet->handle());
     } else {
         _pipeline->add<ScanNodesStep>(nodes);
     }
@@ -246,7 +243,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
                                                                                                      \
         _pipeline->add<StepType>(scannedNodes,                                                       \
                                  propType,                                                           \
-                                 LabelSetHandle {*labelSet},                                            \
+                                 LabelSetHandle {*labelSet},                                         \
                                  propValues);                                                        \
                                                                                                      \
         if (expressions.size() > 1) {                                                                \
@@ -310,7 +307,13 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnIDs* const& output
     ExprConst* rightExpr = static_cast<ExprConst*>(expressions[0]->getRightExpr());
     const std::string& varExprName = leftExpr->getName();
 
-    const PropertyType propType = reader.getPropertyType(varExprName);
+    const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
+    if (!propTypeRes) {
+        throw PlannerException("Property type does not exist");
+    }
+
+    const PropertyType propType = propTypeRes.value();
+
     const auto filterMask = _mem->alloc<ColumnMask>();
 
     switch (propType._valueType) {
@@ -335,7 +338,12 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const
     ExprConst* rightExpr = static_cast<ExprConst*>(expressions[0]->getRightExpr());
     const std::string& varExprName = leftExpr->getName();
 
-    const PropertyType propType = reader.getPropertyType(varExprName);
+    const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
+    if (!propTypeRes) {
+        throw PlannerException("Property type does not exist");
+    }
+
+    const PropertyType propType = propTypeRes.value();
     const auto filterMask = _mem->alloc<ColumnMask>();
 
     switch (propType._valueType) {
@@ -396,7 +404,12 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
         ExprConst* rightExpr = static_cast<ExprConst*>(expressions[i]->getRightExpr());
 
         const std::string& varExprName = leftExpr->getName();
-        const PropertyType propType = reader.getPropertyType(varExprName);
+        const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
+        if (!propTypeRes) {
+            throw PlannerException("Property type does not exist");
+        }
+
+        const PropertyType propType = propTypeRes.value();
 
         switch (propType._valueType) {
             CASE_GET_FILTERED_PROPERTY_VALUE_TYPE(Node, Int64)
@@ -423,7 +436,12 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
         ExprConst* rightExpr = static_cast<ExprConst*>(expressions[i]->getRightExpr());
 
         const std::string& varExprName = leftExpr->getName();
-        const PropertyType propType = reader.getPropertyType(varExprName);
+        const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
+        if (!propTypeRes) {
+            throw PlannerException("Property type does not exist");
+        }
+
+        const PropertyType propType = propTypeRes.value();
 
         switch (propType._valueType) {
             CASE_GET_FILTERED_PROPERTY_VALUE_TYPE(Edge, Int64)
@@ -534,7 +552,7 @@ const LabelSet* QueryPlanner::getOrCreateLabelSet(const TypeConstraint* typeCons
     if (labelSetCacheIt != _labelSetCache.end()) {
         return labelSetCacheIt->second;
     }
-    
+
     const LabelSet* labelSet = buildLabelSet(labelStrings);
     _labelSetCache[labelStrings] = labelSet;
 
@@ -545,6 +563,11 @@ const LabelSet* QueryPlanner::buildLabelSet(const LabelNames& labelNames) {
     auto labelSet = std::make_unique<LabelSet>();
     for (const std::string* labelName : labelNames) {
         const LabelID labelID = getLabel(*labelName);
+
+        if (!labelID.isValid()) {
+            throw PlannerException("Unsupported node label: " + *labelName);
+        }
+
         labelSet->set(labelID);
     }
 
@@ -555,8 +578,12 @@ const LabelSet* QueryPlanner::buildLabelSet(const LabelNames& labelNames) {
 }
 
 LabelID QueryPlanner::getLabel(const std::string& labelName) {
-    GraphMetadata& metadata = _view.metadata();
-    return metadata.labels().getOrCreate(labelName);// FIXME do not use getOrCreate here
+    auto res = _view.metadata().labels().get(labelName);
+    if (!res) {
+        return LabelID {};
+    }
+
+    return res.value();
 }
 
 bool QueryPlanner::planCreateGraph(const CreateGraphCommand* createCmd) {
@@ -720,7 +747,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
     // Search edge type IDs
     const auto& edgeTypeMap = _view.metadata().edgeTypes();
     const auto edgeTypeID = edgeTypeMap.get(edgeTypeName);
-    if (!edgeTypeID.isValid()) {
+    if (!edgeTypeID) {
         _result = targets;
         return;
     }
@@ -736,7 +763,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
 
     // Filter out edges that do not match the edge type ID
     const auto filterEdgeTypeID = _mem->alloc<ColumnConst<EdgeTypeID>>();
-    filterEdgeTypeID->set(edgeTypeID);
+    filterEdgeTypeID->set(edgeTypeID.value());
 
     const auto filterIndices = _mem->alloc<ColumnVector<size_t>>();
     auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
@@ -746,8 +773,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
         ._op = ColumnOperator::OP_EQUAL,
         ._mask = filterMask,
         ._lhs = edgeTypeIDs,
-        ._rhs = filterEdgeTypeID
-    });
+        ._rhs = filterEdgeTypeID});
 
     _transformData->createStep(filterIndices);
 
@@ -802,8 +828,6 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     const auto edges = _mem->alloc<ColumnIDs>();
     const auto edgeTypeIDs = _mem->alloc<ColumnVector<EdgeTypeID>>();
 
-    _transformData->createStep(indices);
-
     const auto& typeConstrNames = edgeTypeConstr->getTypeNames();
 
     const std::string& edgeTypeName = typeConstrNames.front()->getName();
@@ -811,7 +835,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     // Search edge type IDs
     const auto& edgeTypeMap = _view.metadata().edgeTypes();
     const auto edgeTypeID = edgeTypeMap.get(edgeTypeName);
-    if (!edgeTypeID.isValid()) {
+    if (!edgeTypeID) {
         _result = targets;
         return;
     }
@@ -839,7 +863,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
 
     // Filter out edges that do not match the edge type ID
     const auto filterEdgeTypeID = _mem->alloc<ColumnConst<EdgeTypeID>>();
-    filterEdgeTypeID->set(edgeTypeID);
+    filterEdgeTypeID->set(edgeTypeID.value());
 
     const auto filterIndices = _mem->alloc<ColumnVector<size_t>>();
     auto& filter = _pipeline->add<FilterStep>(filterIndices).get<FilterStep>();
@@ -849,8 +873,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
         ._op = ColumnOperator::OP_EQUAL,
         ._mask = filterMaskEdges,
         ._lhs = edgeTypeIDs,
-        ._rhs = filterEdgeTypeID
-    });
+        ._rhs = filterEdgeTypeID});
 
     ColumnMask* filterMaskNodes = nullptr;
     for (LabelSetID labelSetID : _tmpLabelSetIDs) {
@@ -863,16 +886,14 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
             ._op = ColumnOperator::OP_EQUAL,
             ._mask = newMask,
             ._lhs = nodesLabelSetIDs,
-            ._rhs = targetLabelSetID
-        });
+            ._rhs = targetLabelSetID});
 
         if (filterMaskNodes) {
             filter.addExpression(FilterStep::Expression {
                 ._op = ColumnOperator::OP_OR,
                 ._mask = newMask,
                 ._lhs = filterMaskNodes,
-                ._rhs = newMask
-            });
+                ._rhs = newMask});
         }
 
         filterMaskNodes = newMask;
@@ -884,8 +905,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
         ._op = ColumnOperator::OP_AND,
         ._mask = filterMask,
         ._lhs = filterMaskEdges,
-        ._rhs = filterMaskNodes
-    });
+        ._rhs = filterMaskNodes});
 
     _transformData->createStep(filterIndices);
 
@@ -986,16 +1006,14 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
             ._op = ColumnOperator::OP_EQUAL,
             ._mask = newMask,
             ._lhs = nodesLabelSetIDs,
-            ._rhs = targetLabelSetID
-        });
+            ._rhs = targetLabelSetID});
 
         if (filterMask) {
             filter.addExpression(FilterStep::Expression {
                 ._op = ColumnOperator::OP_OR,
                 ._mask = newMask,
                 ._lhs = filterMask,
-                ._rhs = newMask
-            });
+                ._rhs = newMask});
         }
 
         filterMask = newMask;
@@ -1087,40 +1105,40 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
     }
 }
 
-#define CASE_PLAN_VALUE_TYPE(Type)                                                 \
-    case ValueType::Type: {                                                        \
-        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>();  \
-        if (declKind == DeclKind::NODE_DECL) {                                     \
-            using StepType = GetNodeProperty##Type##Step;                          \
-            _pipeline->add<StepType>(columnIDs,                                    \
-                                     propType,                                     \
-                                     propValues);                                  \
-        } else if (declKind == DeclKind::EDGE_DECL) {                              \
-            using StepType = GetEdgeProperty##Type##Step;                          \
-            _pipeline->add<StepType>(columnIDs,                                    \
-                                     propType,                                     \
-                                     propValues);                                  \
-        } else {                                                                   \
-            throw PlannerException("Unsupported declaration kind for variable \""  \
-                                   + parentDecl->getName() + "\"");                \
-        }                                                                          \
-        _output->addColumn(propValues);                                            \
-    } break;                                                                       \
+#define CASE_PLAN_VALUE_TYPE(Type)                                                \
+    case ValueType::Type: {                                                       \
+        auto propValues = _mem->alloc<ColumnOptVector<types::Type::Primitive>>(); \
+        if (declKind == DeclKind::NODE_DECL) {                                    \
+            using StepType = GetNodeProperty##Type##Step;                         \
+            _pipeline->add<StepType>(columnIDs,                                   \
+                                     propType,                                    \
+                                     propValues);                                 \
+        } else if (declKind == DeclKind::EDGE_DECL) {                             \
+            using StepType = GetEdgeProperty##Type##Step;                         \
+            _pipeline->add<StepType>(columnIDs,                                   \
+                                     propType,                                    \
+                                     propValues);                                 \
+        } else {                                                                  \
+            throw PlannerException("Unsupported declaration kind for variable \"" \
+                                   + parentDecl->getName() + "\"");               \
+        }                                                                         \
+        _output->addColumn(propValues);                                           \
+    } break;
 
 
 void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const VarDecl* parentDecl, const std::string& memberName) {
-    const auto reader = _view.read();
-
     // Get property type information
-    const PropertyType propType = reader.getPropertyType(memberName);
-    if (!propType.isValid()) {
+    const auto propTypeRes = _view.metadata().propTypes().get(memberName);
+    if (!propTypeRes) {
         throw PlannerException("Property type not found for property member \""
                                + memberName + "\"");
     }
 
+    const auto propType = propTypeRes.value();
+
     const DeclKind declKind = parentDecl->getKind();
 
-    switch (propType._valueType) {
+    switch (propTypeRes.value()._valueType) {
         CASE_PLAN_VALUE_TYPE(Int64)
         CASE_PLAN_VALUE_TYPE(UInt64)
         CASE_PLAN_VALUE_TYPE(Double)

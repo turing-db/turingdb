@@ -1,6 +1,5 @@
 #include "Graph.h"
 
-#include "GraphMetadata.h"
 #include "views/GraphView.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/CommitBuilder.h"
@@ -114,14 +113,12 @@ std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name) {
 
 Graph::Graph()
     : _graphName("default"),
-      _metadata(new GraphMetadata()),
       _versionController(new VersionController)
 {
 }
 
 Graph::Graph(const std::string& name)
     : _graphName(name),
-      _metadata(new GraphMetadata()),
       _versionController(new VersionController)
 {
 }

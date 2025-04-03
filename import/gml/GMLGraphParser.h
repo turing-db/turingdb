@@ -5,6 +5,7 @@
 #include "ControlCharacters.h"
 #include "Graph.h"
 #include "versioning/CommitBuilder.h"
+#include "writers/MetadataBuilder.h"
 
 namespace db {
 
@@ -16,16 +17,15 @@ public:
     }
 
     bool prepare() {
-        _propTypes = &_graph->getMetadata()->propTypes();
-
-        const LabelID labelID = _graph->getMetadata()->labels().create("GMLNode");
-        const LabelSet labelset = LabelSet::fromList({labelID});
-        _labelset = _graph->getMetadata()->labelsets().getOrCreate(labelset);
-
-        _edgeTypeID = _graph->getMetadata()->edgeTypes().create("GMLEdge");
         const auto tx = _graph->openWriteTransaction();
         _commitBuilder = tx.prepareCommit();
         _builder = &_commitBuilder->newBuilder();
+        _metadata = &_commitBuilder->metadata();
+
+        const LabelID labelID = _metadata->getOrCreateLabel("GMLNode");
+        _labelset = _metadata->getOrCreateLabelSet(LabelSet::fromList({labelID}));
+        _edgeTypeID = _metadata->getOrCreateEdgeType("GMLEdge");
+
         return true;
     }
 
@@ -37,7 +37,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (String)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::String);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
 
         std::string escaped;
         ControlCharactersEscaper::escape(v, escaped);
@@ -50,7 +50,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (UInt64)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::UInt64);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::UInt64);
 
         _builder->addNodeProperty<types::UInt64>(_currentNodeID, propType._id, v);
         return true;
@@ -60,7 +60,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (Int64)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::Int64);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
 
         _builder->addNodeProperty<types::Int64>(_currentNodeID, propType._id, v);
         return true;
@@ -70,7 +70,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (Double)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::Double);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
 
         // TODO Handle error, if the property was already added
         _builder->addNodeProperty<types::Double>(_currentNodeID, propType._id, v);
@@ -90,7 +90,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (String)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::String);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
 
         std::string escaped;
         ControlCharactersEscaper::escape(v, escaped);
@@ -104,7 +104,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (UInt64)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::UInt64);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::UInt64);
 
         _builder->addEdgeProperty<types::UInt64>(*_currentEdge, propType._id, v);
         return true;
@@ -114,7 +114,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (Int64)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::Int64);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
 
         _builder->addEdgeProperty<types::Int64>(*_currentEdge, propType._id, v);
         return true;
@@ -124,7 +124,7 @@ public:
         _currentPropName = k;
         _currentPropName += " (Double)";
 
-        const auto propType = _propTypes->getOrCreate(_currentPropName, ValueType::Double);
+        const auto propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
 
         _builder->addEdgeProperty<types::Double>(*_currentEdge, propType._id, v);
         return true;
@@ -174,9 +174,8 @@ public:
 
 private:
     Graph* _graph {nullptr};
-    PropertyTypeMap* _propTypes {nullptr};
-
     std::unique_ptr<CommitBuilder> _commitBuilder;
+    MetadataBuilder* _metadata {nullptr};
     DataPartBuilder* _builder {nullptr};
     LabelSetHandle _labelset;
     EntityID _currentNodeID;

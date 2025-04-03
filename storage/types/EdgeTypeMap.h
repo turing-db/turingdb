@@ -1,41 +1,45 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 
 #include "EntityID.h"
-#include "RWSpinLock.h"
 
 namespace db {
 
 class EdgeTypeMap {
 public:
-    using NameMap = std::unordered_map<std::string, EdgeTypeID>;
-    using IDMap = std::unordered_map<EdgeTypeID, std::string_view>;
+    struct Pair {
+        EdgeTypeID _id;
+        std::unique_ptr<std::string> _name;
+    };
+
+    using Container = std::vector<Pair>;
+    using NameMap = std::unordered_map<std::string_view, size_t>;
+    using IDMap = std::unordered_map<EdgeTypeID, size_t>;
 
     EdgeTypeMap();
     ~EdgeTypeMap();
 
-    EdgeTypeMap(const EdgeTypeMap&) = delete;
-    EdgeTypeMap(EdgeTypeMap&&) = delete;
-    EdgeTypeMap& operator=(const EdgeTypeMap&) = delete;
-    EdgeTypeMap& operator=(EdgeTypeMap&&) = delete;
+    EdgeTypeMap(const EdgeTypeMap&) = default;
+    EdgeTypeMap(EdgeTypeMap&&) noexcept = default;
+    EdgeTypeMap& operator=(const EdgeTypeMap&) = default;
+    EdgeTypeMap& operator=(EdgeTypeMap&&) noexcept = default;
 
-    [[nodiscard]] EdgeTypeID get(const std::string& name) const;
-    [[nodiscard]] std::string_view getName(EdgeTypeID id) const;
+    [[nodiscard]] std::optional<EdgeTypeID> get(const std::string& name) const;
+    [[nodiscard]] std::optional<std::string_view> getName(EdgeTypeID id) const;
     [[nodiscard]] size_t getCount() const;
 
-    EdgeTypeID getOrCreate(const std::string& name);
-    bool tryCreate(std::string&& name);
-    EdgeTypeID create(std::string name);
+    [[nodiscard]] Container::const_iterator begin() const { return _container.begin(); }
+    [[nodiscard]] Container::const_iterator end() const { return _container.end(); }
+
+    EdgeTypeID getOrCreate(const std::string& edgeTypeName);
 
 private:
-    mutable RWSpinLock _lock;
+    Container _container;
     NameMap _nameMap;
     IDMap _idMap;
-
-    bool unsafeExists(const std::string& name) const;
-    EdgeTypeID unsafeCreate(std::string name);
 };
 
 }

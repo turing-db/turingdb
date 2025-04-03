@@ -51,7 +51,6 @@ private:
     Graph* _graph {nullptr};
     WriteTransaction _transaction;
     std::unique_ptr<CommitBuilder> _commitBuilder;
-    GraphMetadata* _graphMetadata {nullptr};
     std::unique_ptr<IDMapper> _nodeIDMapper;
 };
 

@@ -29,6 +29,7 @@ public:
     ~DataPartBuilder();
 
     [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(
+        MetadataBuilder& metadata,
         Graph& graph,
         const GraphView& view,
         size_t partIndex);
@@ -67,6 +68,7 @@ private:
     EntityID _nextEdgeID {0};
     Graph* _graph {nullptr};
     GraphView _view;
+    MetadataBuilder* _metadata {nullptr};
     size_t _outPatchEdgeCount {0};
     size_t _inPatchEdgeCount {0};
     size_t _partIndex {0};

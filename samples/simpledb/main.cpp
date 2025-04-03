@@ -46,7 +46,7 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    const PropertyType name = defaultGraph->getMetadata()->propTypes().get("name");
+    const PropertyType name = tx.viewGraph().metadata().propTypes().get("name").value();
     const auto reader = tx.readGraph();
     spdlog::info("Nodes:");
     for (auto name : reader.scanNodeProperties<types::String>(name._id)) {

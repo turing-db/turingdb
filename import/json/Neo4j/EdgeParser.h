@@ -11,6 +11,7 @@
 #include "IDMapper.h"
 #include "Parser.h"
 #include "ControlCharacters.h"
+#include "writers/MetadataBuilder.h"
 
 namespace db::json::neo4j {
 
@@ -18,16 +19,14 @@ using json = nlohmann::json;
 
 class EdgeParser : public json::json_sax_t, public Parser {
 public:
-    EdgeParser(GraphMetadata* graphMetadata,
+    EdgeParser(MetadataBuilder* metadata,
                DataPartBuilder* buf,
                IDMapper* nodeIDMapper,
                const GraphReader& reader)
-        : _propTypeMap(&graphMetadata->propTypes()),
-          _edgeTypeMap(&graphMetadata->edgeTypes()),
-          _buf(buf),
+        : _buf(buf),
+          _metadata(metadata),
           _nodeIDMapper(nodeIDMapper),
-          _reader(reader)
-    {
+          _reader(reader) {
     }
 
     bool null() override {
@@ -41,7 +40,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (Bool)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Bool);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -61,7 +60,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (Int64)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -81,7 +80,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (UInt64)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::UInt64);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -123,7 +122,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (Double)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -143,7 +142,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (String)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -158,7 +157,7 @@ public:
         if (_nesting == 6) {
             if (!_parsedEdgeType) {
                 _parsedEdgeType = true;
-                _edgeTypeID = _edgeTypeMap->get(val);
+                _edgeTypeID = _metadata->getOrCreateEdgeType(val);
                 return true;
             }
         }
@@ -218,9 +217,8 @@ public:
     }
 
 private:
-    PropertyTypeMap* _propTypeMap = nullptr;
-    EdgeTypeMap* _edgeTypeMap;
-    DataPartBuilder* _buf;
+    DataPartBuilder* _buf {nullptr};
+    MetadataBuilder* _metadata {nullptr};
     const IDMapper* _nodeIDMapper;
     GraphReader _reader;
     size_t _nesting = 0;

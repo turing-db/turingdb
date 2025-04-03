@@ -5,36 +5,36 @@
 #include "LabelSet.h"
 
 namespace db {
-template <LabelSetClass LabelSetT>
+template <std::integral TType, size_t TCount>
 class TemplateLabelSetHandle;
 
 }
 
 namespace std {
-template <db::LabelSetClass LabelSetT>
-string to_string(const LabelSetT& set);
+template <std::integral TType, size_t TCount>
+string to_string(const db::TemplateLabelSetHandle<TType, TCount>& set);
 }
 
 namespace db {
 
-template <LabelSetClass LabelSetT>
+template <std::integral TType, size_t TCount>
 class TemplateLabelSetHandle {
 public:
-    using BaseType = LabelSetT;
-    using IntegerType = typename LabelSetT::IntegerType;
-    static constexpr size_t IntegerSize = LabelSetT::IntegerSize;
-    static constexpr size_t IntegerCount = LabelSetT::IntegerCount;
-    static constexpr size_t BitCount = LabelSetT::BitCount;
+    using BaseType = TemplateLabelSet<TType, TCount>;
+    using IntegerType = typename BaseType::IntegerType;
+    static constexpr size_t IntegerSize = BaseType::IntegerSize;
+    static constexpr size_t IntegerCount = BaseType::IntegerCount;
+    static constexpr size_t BitCount = BaseType::BitCount;
 
     TemplateLabelSetHandle() = default;
 
-    TemplateLabelSetHandle(LabelSetID id, const LabelSetT& base)
+    TemplateLabelSetHandle(LabelSetID id, const BaseType& base)
         : _id(id),
-          _integers {base.integers()} {
+          _labelset {&base} {
     }
 
-    explicit TemplateLabelSetHandle(const LabelSetT& base)
-        : _integers {base.integers()} {
+    explicit TemplateLabelSetHandle(const BaseType& base)
+        : _labelset {&base} {
     }
 
     TemplateLabelSetHandle(const TemplateLabelSetHandle&) = default;
@@ -48,10 +48,11 @@ public:
 
     LabelSetID getID() const { return _id; };
 
-    bool operator==(const LabelSetT& other) const {
+    bool operator==(const BaseType& other) const {
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
+            if (integers[i] != otherIntegers[i]) {
                 return false;
             }
         }
@@ -59,19 +60,25 @@ public:
     };
 
     bool operator==(const TemplateLabelSetHandle& other) const {
+        if (!other._labelset || !_labelset) {
+            return false;
+        }
+
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
+            if (integers[i] != otherIntegers[i]) {
                 return false;
             }
         }
         return true;
     };
 
-    bool operator!=(const LabelSetT& other) const {
+    bool operator!=(const BaseType& other) const {
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
+            if (integers[i] != otherIntegers[i]) {
                 return true;
             }
         }
@@ -79,9 +86,15 @@ public:
     };
 
     bool operator!=(const TemplateLabelSetHandle& other) const {
+        if (!other._labelset || !_labelset) {
+            return true;
+        }
+
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
+
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
+            if (integers[i] != otherIntegers[i]) {
                 return true;
             }
         }
@@ -89,40 +102,52 @@ public:
     };
 
     bool operator>(const TemplateLabelSetHandle& other) const {
+        if (!other._labelset || !_labelset) {
+            return true;
+        }
+
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
-                return _integers[i] > otherIntegers[i];
+            if (integers[i] != otherIntegers[i]) {
+                return integers[i] > otherIntegers[i];
             }
         }
         return false;
     }
 
-    bool operator>(const LabelSetT& other) const {
+    bool operator>(const BaseType& other) const {
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
-                return _integers[i] > otherIntegers[i];
+            if (integers[i] != otherIntegers[i]) {
+                return integers[i] > otherIntegers[i];
             }
         }
         return false;
     }
 
     bool operator<(const TemplateLabelSetHandle& other) const {
+        if (!other._labelset || !_labelset) {
+            return false;
+        }
+
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
-                return _integers[i] < otherIntegers[i];
+            if (integers[i] != otherIntegers[i]) {
+                return integers[i] < otherIntegers[i];
             }
         }
         return false;
     }
 
-    bool operator<(const LabelSetT& other) const {
+    bool operator<(const BaseType& other) const {
         const std::span otherIntegers = other.integers();
+        const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if (_integers[i] != otherIntegers[i]) {
-                return _integers[i] < otherIntegers[i];
+            if (integers[i] != otherIntegers[i]) {
+                return integers[i] < otherIntegers[i];
             }
         }
         return false;
@@ -132,7 +157,7 @@ public:
         return !(*this > other);
     }
 
-    bool operator<=(const LabelSetT& other) const {
+    bool operator<=(const BaseType& other) const {
         return !(*this > other);
     }
 
@@ -140,18 +165,21 @@ public:
         return !(*this < other);
     }
 
-    bool operator>=(const LabelSetT& other) const {
+    bool operator>=(const BaseType& other) const {
         return !(*this < other);
     }
 
     bool hasLabel(LabelID id) const {
+        const auto* integers = _labelset->data();
         const auto [integerOffset, compare] = computeBitShift(id);
-        return (_integers[integerOffset] & compare) == compare;
+        return (integers[integerOffset] & compare) == compare;
     }
 
     bool hasAtLeastLabels(const TemplateLabelSetHandle& query) const {
+        const auto* integers = _labelset->data();
+        const auto* queryIntegers = query.data();
         for (size_t i = 0; i < IntegerCount; i++) {
-            if ((_integers[i] & query._integers[i]) != query._integers[i]) {
+            if ((integers[i] & queryIntegers[i]) != queryIntegers[i]) {
                 return false;
             }
         }
@@ -168,7 +196,7 @@ public:
 
     size_t size() const {
         size_t count = 0;
-        for (auto i : _integers) {
+        for (auto i : _labelset->integers()) {
             count += std::popcount(i);
         }
         return count;
@@ -182,45 +210,45 @@ public:
     }
 
     const IntegerType* data() const {
-        return _integers.data();
+        return _labelset->data();
     }
 
     IntegerType* data() {
-        return _integers.data();
+        return _labelset->data();
     }
 
     std::span<const IntegerType, IntegerCount> integers() const {
-        return _integers;
+        return _labelset->integers();
     }
 
     bool empty() const { return size() == 0; }
-    bool isValid() const { return _integers.size() == IntegerCount; }
+    bool isValid() const { return _labelset != nullptr; }
     bool isStored() const { return _id.isValid(); }
 
     struct Hash {
         using is_transparent = void; // Enable overload resolution during hashing
 
-        std::size_t operator()(const LabelSetT& labelset) const {
-            return LabelSetT::hashIntegers(labelset.integers());
+        std::size_t operator()(const BaseType& labelset) const {
+            return BaseType::hashIntegers(labelset.integers());
         }
 
         std::size_t operator()(const TemplateLabelSetHandle& labelset) const {
-            return LabelSetT::hashIntegers(labelset.integers());
+            return BaseType::hashIntegers(labelset.integers());
         }
     };
 
     struct Equal {
         using is_transparent = void; // Enable overload resolution during comparison
 
-        bool operator()(const LabelSetT& lhs, const LabelSetT& rhs) const {
+        bool operator()(const BaseType& lhs, const BaseType& rhs) const {
             return lhs == rhs;
         }
 
-        bool operator()(const LabelSetT& lhs, const TemplateLabelSetHandle& rhs) const {
+        bool operator()(const BaseType& lhs, const TemplateLabelSetHandle& rhs) const {
             return lhs == rhs;
         }
 
-        bool operator()(const TemplateLabelSetHandle& lhs, const LabelSetT& rhs) const {
+        bool operator()(const TemplateLabelSetHandle& lhs, const BaseType& rhs) const {
             return lhs == rhs;
         }
 
@@ -231,22 +259,21 @@ public:
 
 private:
     friend std::hash<TemplateLabelSetHandle>;
-    LabelSetID _id;
 
-    static inline constexpr std::array<IntegerType, IntegerCount> _emptyArray {};
-    std::span<const IntegerType, IntegerCount> _integers = _emptyArray;
+    LabelSetID _id;
+    const BaseType* _labelset {nullptr};
 };
 
-using LabelSetHandle = TemplateLabelSetHandle<LabelSet>;
+using LabelSetHandle = TemplateLabelSetHandle<LabelSet::IntegerType, LabelSet::IntegerCount>;
 
 }
 
 namespace std {
 
-template <db::LabelSetClass LabelSetT>
-struct hash<db::TemplateLabelSetHandle<LabelSetT>> {
-    size_t operator()(const db::TemplateLabelSetHandle<LabelSetT>& set) const {
-        return LabelSetT::hashIntegers(set.integers());
+template <std::integral TType, size_t TCount>
+struct hash<db::TemplateLabelSetHandle<TType, TCount>> {
+    size_t operator()(const db::TemplateLabelSetHandle<TType, TCount>& set) const {
+        return db::TemplateLabelSet<TType, TCount>::hashIntegers(set.integers());
     }
 };
 

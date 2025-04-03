@@ -5,7 +5,6 @@
 #include "FilePageReader.h"
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
-#include "GraphMetadata.h"
 #include "EdgeContainer.h"
 #include "EdgeContainerDumpConstants.h"
 
@@ -20,7 +19,7 @@ public:
     {
     }
 
-    [[nodiscard]] DumpResult<std::unique_ptr<EdgeContainer>> load(const GraphMetadata& metadata) {
+    [[nodiscard]] DumpResult<std::unique_ptr<EdgeContainer>> load() {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

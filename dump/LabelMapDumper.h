@@ -28,9 +28,8 @@ public:
         uint64_t pageCount = 1;
 
         auto* buffer = &_writer.buffer();
-        for (size_t i = 0; i < labelCount; i++) {
-            const auto& name = labels.getName(i);
-            const uint64_t strsize = name.size();
+        for (const auto& [i, name]: labels) {
+            const uint64_t strsize = name->size();
             const size_t stride = LABEL_BASE_STRIDE + strsize;
 
             if (buffer->avail() < stride) {
@@ -46,7 +45,7 @@ public:
             }
 
             _writer.writeToCurrentPage(strsize);
-            _writer.writeToCurrentPage(name);
+            _writer.writeToCurrentPage(*name);
             countInPage++;
         }
 

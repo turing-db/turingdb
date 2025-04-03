@@ -2,7 +2,7 @@
 
 #include <range/v3/view/zip.hpp>
 
-#include "GraphMetadata.h"
+#include "versioning/CommitMetadata.h"
 #include "LabelMapComparator.h"
 #include "LabelSetMapComparator.h"
 #include "PropertyTypeMapComparator.h"
@@ -10,9 +10,9 @@
 
 namespace db {
 
-class GraphMetadataComparator {
+class CommitMetadataComparator {
 public:
-    [[nodiscard]] static bool same(const GraphMetadata& a, const GraphMetadata& b) {
+    [[nodiscard]] static bool same(const CommitMetadata& a, const CommitMetadata& b) {
         if (!LabelMapComparator::same(a.labels(), b.labels())) {
             return false;
         }

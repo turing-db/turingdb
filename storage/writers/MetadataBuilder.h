@@ -4,12 +4,8 @@
 
 #include "EntityID.h"
 #include "RWSpinLock.h"
-#include "labels/LabelSet.h"
+#include "labels/LabelSetHandle.h"
 #include "types/PropertyType.h"
-#include "labels/LabelMap.h"
-#include "labels/LabelSetMap.h"
-#include "types/EdgeTypeMap.h"
-#include "types/PropertyTypeMap.h"
 
 
 namespace db {
@@ -19,26 +15,22 @@ class CommitMetadata;
 class MetadataBuilder {
 public:
     // Labels
-    [[nodiscard]] const LabelMap& labels() const;
     LabelID getOrCreateLabel(const std::string& labelName);
 
     // Labelsets
-    [[nodiscard]] const LabelSetMap& labelsets() const;
-    LabelSetID getOrCreateLabelSet(const LabelSet& labelset);
+    LabelSetHandle getOrCreateLabelSet(const LabelSet& labelset);
 
     // EdgeTypes
-    [[nodiscard]] const EdgeTypeMap& edgeTypes() const;
     EdgeTypeID getOrCreateEdgeType(const std::string& edgeTypeName);
 
     // PropertyTypes
-    [[nodiscard]] const PropertyTypeMap& propTypes() const;
     PropertyType getOrCreatePropertyType(const std::string& propTypeName, ValueType valueType);
 
-    [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const CommitMetadata& prevMetadata);
+    [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const CommitMetadata& prevMetadata, CommitMetadata* metadata);
 
 private:
     mutable RWSpinLock _spinLock;
-    std::unique_ptr<CommitMetadata> _metadata;
+    CommitMetadata* _metadata {nullptr};
 
     MetadataBuilder() = default;
 };

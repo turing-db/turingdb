@@ -29,8 +29,7 @@ public:
         return _view.isValid();
     }
 
-    [[nodiscard]] const GraphMetadata& getMetadata() const;
-    [[nodiscard]] GraphMetadata& getMetadata();
+    [[nodiscard]] const CommitMetadata& getMetadata() const;
     [[nodiscard]] size_t getNodeCount() const;
     [[nodiscard]] size_t getEdgeCount() const;
     [[nodiscard]] const GraphView& getView() const { return _view; }
@@ -59,8 +58,6 @@ public:
 
     template <SupportedType T>
     [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, EntityID nodeID) const;
-
-    [[nodiscard]] PropertyType getPropertyType(const std::string& name) const;
 
     template <SupportedType T>
     [[nodiscard]] ScanNodePropertiesRange<T> scanNodeProperties(PropertyTypeID ptID) const {

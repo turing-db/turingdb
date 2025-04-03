@@ -8,6 +8,9 @@
 namespace db {
 template <std::integral TType, size_t TCount>
 class TemplateLabelSet;
+
+template <std::integral TType, size_t TCount>
+class TemplateLabelSetHandle;
 }
 
 namespace std {
@@ -21,6 +24,7 @@ template <std::integral TType, size_t TCount>
 class TemplateLabelSet {
 public:
     using IntegerType = TType;
+    using Handle = TemplateLabelSetHandle<TType, TCount>;
 
     static constexpr size_t IntegerSize = sizeof(TType) * 8;
     static constexpr size_t IntegerCount = TCount;
@@ -58,9 +62,11 @@ public:
         return labelset;
     }
 
-    static TemplateLabelSet fromIntegers(std::span<const IntegerType, IntegerCount>) {
+    static TemplateLabelSet fromIntegers(std::span<const IntegerType, IntegerCount> integers) {
         TemplateLabelSet labelset;
-        labelset._integers = labelset._integers;
+        for (size_t i = 0; i < IntegerCount; i++) {
+            labelset._integers[i] = integers[i];
+        }
         return labelset;
     }
 
@@ -169,16 +175,15 @@ public:
         return seed;
     }
 
+    Handle handle() const {
+        return Handle {*this};
+    }
 private:
     friend std::hash<TemplateLabelSet>;
     std::array<TType, TCount> _integers {};
 };
 
 using LabelSet = TemplateLabelSet<uint64_t, 4>;
-
-
-template <typename T>
-concept LabelSetClass = std::same_as<T, TemplateLabelSet<typename T::IntegerType, T::IntegerCount>>;
 
 }
 

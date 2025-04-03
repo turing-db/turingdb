@@ -1,50 +1,45 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 
-#include "EntityID.h"
-#include "PropertyType.h"
-#include "RWSpinLock.h"
+#include "types/PropertyType.h"
 
 namespace db {
 
-class GraphReport;
-
 class PropertyTypeMap {
 public:
-    using OffsetMap = std::unordered_map<std::string, size_t>;
-    using IDMap = std::unordered_map<PropertyTypeID, std::string_view>;
-    using PropertyTypes = std::vector<PropertyType>;
+    struct Pair {
+        PropertyType _pt;
+        std::unique_ptr<std::string> _name;
+    };
+
+    using Container = std::vector<Pair>;
+    using NameMap = std::unordered_map<std::string_view, size_t>;
+    using IDMap = std::unordered_map<PropertyTypeID, size_t>;
 
     PropertyTypeMap();
     ~PropertyTypeMap();
 
-    PropertyTypeMap(const PropertyTypeMap&) = delete;
-    PropertyTypeMap(PropertyTypeMap&&) = delete;
-    PropertyTypeMap& operator=(const PropertyTypeMap&) = delete;
-    PropertyTypeMap& operator=(PropertyTypeMap&&) = delete;
+    PropertyTypeMap(const PropertyTypeMap&) = default;
+    PropertyTypeMap(PropertyTypeMap&&) noexcept = default;
+    PropertyTypeMap& operator=(const PropertyTypeMap&) = default;
+    PropertyTypeMap& operator=(PropertyTypeMap&&) noexcept = default;
 
-    [[nodiscard]] PropertyType get(const std::string& name) const;
-    [[nodiscard]] PropertyType get(PropertyTypeID id) const;
-    [[nodiscard]] std::string_view getName(PropertyTypeID id) const;
+    [[nodiscard]] std::optional<PropertyType> get(const std::string& name) const;
+    [[nodiscard]] std::optional<std::string_view> getName(PropertyTypeID ptID) const;
     [[nodiscard]] size_t getCount() const;
 
-    PropertyType getOrCreate(const std::string& name, ValueType value);
-    bool tryCreate(std::string&& name, ValueType valueType);
-    PropertyType create(std::string name, ValueType valueType);
+    [[nodiscard]] Container::const_iterator begin() const { return _container.begin(); }
+    [[nodiscard]] Container::const_iterator end() const { return _container.end(); }
+
+    PropertyType getOrCreate(const std::string& labelName, ValueType valueType);
 
 private:
-    friend GraphReport;
-
-    mutable RWSpinLock _lock;
-    uint64_t _nextFreeID {0};
-    OffsetMap _offsetMap;
+    Container _container;
+    NameMap _nameMap;
     IDMap _idMap;
-    PropertyTypes _propTypes;
-
-    PropertyType unsafeCreate(std::string name, ValueType valueType);
-    [[nodiscard]] bool unsafeExists(const std::string& name) const;
 };
 
 }

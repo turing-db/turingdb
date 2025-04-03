@@ -9,7 +9,6 @@
 
 namespace db {
 
-class GraphMetadata;
 class NodeContainerLoader;
 class DataPartLoader;
 

@@ -23,7 +23,6 @@ JsonParser::JsonParser(Graph* graph)
     : _graph(graph),
       _transaction(graph->openWriteTransaction()),
       _commitBuilder(_transaction.prepareCommit()),
-      _graphMetadata(graph->getMetadata()),
       _nodeIDMapper(new IDMapper)
 {
 }
@@ -46,7 +45,7 @@ GraphStats JsonParser::parseStats(const std::string& data) {
 }
 
 bool JsonParser::parseNodeLabels(const std::string& data) {
-    auto parser = json::neo4j::NodeLabelParser(_graphMetadata);
+    auto parser = json::neo4j::NodeLabelParser(&_commitBuilder->metadata());
     return nlohmann::json::sax_parse(data,
                                      &parser,
                                      nlohmann::json::input_format_t::json,
@@ -55,7 +54,7 @@ bool JsonParser::parseNodeLabels(const std::string& data) {
 }
 
 bool JsonParser::parseNodeLabelSets(const std::string& data) {
-    auto parser = json::neo4j::NodeLabelSetParser(_graphMetadata);
+    auto parser = json::neo4j::NodeLabelSetParser(&_commitBuilder->metadata());
     return nlohmann::json::sax_parse(data,
                                      &parser,
                                      nlohmann::json::input_format_t::json,
@@ -64,7 +63,7 @@ bool JsonParser::parseNodeLabelSets(const std::string& data) {
 }
 
 bool JsonParser::parseEdgeTypes(const std::string& data) {
-    auto parser = json::neo4j::EdgeTypeParser(_graphMetadata);
+    auto parser = json::neo4j::EdgeTypeParser(&_commitBuilder->metadata());
     return nlohmann::json::sax_parse(data,
                                      &parser,
                                      nlohmann::json::input_format_t::json,
@@ -73,7 +72,7 @@ bool JsonParser::parseEdgeTypes(const std::string& data) {
 }
 
 bool JsonParser::parseNodeProperties(const std::string& data) {
-    auto parser = json::neo4j::NodePropertyParser(_graphMetadata);
+    auto parser = json::neo4j::NodePropertyParser(&_commitBuilder->metadata());
     return nlohmann::json::sax_parse(data,
                                      &parser,
                                      nlohmann::json::input_format_t::json,
@@ -82,7 +81,7 @@ bool JsonParser::parseNodeProperties(const std::string& data) {
 }
 
 bool JsonParser::parseEdgeProperties(const std::string& data) {
-    auto parser = json::neo4j::EdgePropertyParser(_graphMetadata);
+    auto parser = json::neo4j::EdgePropertyParser(&_commitBuilder->metadata());
     return nlohmann::json::sax_parse(data,
                                      &parser,
                                      nlohmann::json::input_format_t::json,
@@ -91,14 +90,14 @@ bool JsonParser::parseEdgeProperties(const std::string& data) {
 }
 
 bool JsonParser::parseNodes(const std::string& data, DataPartBuilder& buf) {
-    auto parser = json::neo4j::NodeParser(_graphMetadata, &buf, _nodeIDMapper.get());
+    auto parser = json::neo4j::NodeParser(&_commitBuilder->metadata(), &buf, _nodeIDMapper.get());
     return nlohmann::json::sax_parse(data, &parser,
                                      nlohmann::json::input_format_t::json,
                                      true, true);
 }
 
 bool JsonParser::parseEdges(const std::string& data, DataPartBuilder& buf) {
-    auto parser = json::neo4j::EdgeParser(_graphMetadata,
+    auto parser = json::neo4j::EdgeParser(&_commitBuilder->metadata(),
                                           &buf,
                                           _nodeIDMapper.get(),
                                           _commitBuilder->readGraph());

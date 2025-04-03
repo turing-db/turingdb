@@ -3,11 +3,10 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include "GraphMetadata.h"
+#include "writers/MetadataBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "IDMapper.h"
-#include "labels/LabelMap.h"
-#include "types/PropertyTypeMap.h"
+#include "labels/LabelSet.h"
 #include "Parser.h"
 #include "ControlCharacters.h"
 
@@ -17,12 +16,11 @@ using json = nlohmann::json;
 
 class NodeParser : public json::json_sax_t, public Parser {
 public:
-    NodeParser(GraphMetadata* graphMetadata,
+    NodeParser(MetadataBuilder* metadata,
                DataPartBuilder* buf,
                IDMapper* nodeIDMapper)
-        : _propTypeMap(&graphMetadata->propTypes()),
-          _labelMap(&graphMetadata->labels()),
-          _buf(buf),
+        : _buf(buf),
+          _metadata(metadata),
           _nodeIDMapper(nodeIDMapper)
     {
     }
@@ -38,7 +36,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (Bool)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Bool);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -58,7 +56,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (Int64)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -79,7 +77,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (UInt64)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::UInt64);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -105,7 +103,7 @@ public:
 
         if (_nesting == 7) {
             _currentPropName += " (Double)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -124,14 +122,14 @@ public:
         }
 
         if (_parsingLabels) {
-            const LabelID id = _labelMap->get(val);
+            const LabelID id = _metadata->getOrCreateLabel(val);
             _labelset.set(id);
             return true;
         }
 
         if (_nesting == 7) {
             _currentPropName += " (String)";
-            const PropertyType propType = _propTypeMap->get(_currentPropName);
+            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
@@ -209,9 +207,8 @@ public:
     }
 
 private:
-    PropertyTypeMap* _propTypeMap = nullptr;
-    LabelMap* _labelMap = nullptr;
-    DataPartBuilder* _buf;
+    DataPartBuilder* _buf {nullptr};
+    MetadataBuilder* _metadata {nullptr};
     IDMapper* _nodeIDMapper;
     LabelSet _labelset;
     size_t _nesting = 0;

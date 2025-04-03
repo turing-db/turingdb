@@ -28,10 +28,8 @@ public:
         uint64_t pageCount = 1;
 
         auto* buffer = &_writer.buffer();
-        for (size_t i = 0; i < propTypeCount; i++) {
-            const PropertyType pt = propTypes.get(i);
-            const auto& name = propTypes.getName(i);
-            const uint64_t strsize = name.size();
+        for (const auto& [pt, name] : propTypes) {
+            const uint64_t strsize = name->size();
             const size_t stride = PROPERTY_TYPE_BASE_STRIDE + strsize;
 
             if (buffer->avail() < stride) {
@@ -48,7 +46,7 @@ public:
 
             _writer.writeToCurrentPage(pt._valueType);
             _writer.writeToCurrentPage(strsize);
-            _writer.writeToCurrentPage(name);
+            _writer.writeToCurrentPage(*name);
             countInPage++;
         }
 

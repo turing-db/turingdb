@@ -5,7 +5,6 @@
 
 #include "EntityID.h"
 #include "LabelSetHandle.h"
-#include "RWSpinLock.h"
 
 namespace db {
 
@@ -23,10 +22,10 @@ public:
     LabelSetMap();
     ~LabelSetMap();
 
-    LabelSetMap(const LabelSetMap&) = delete;
-    LabelSetMap(LabelSetMap&&) noexcept = delete;
-    LabelSetMap& operator=(const LabelSetMap&) = delete;
-    LabelSetMap& operator=(LabelSetMap&&) noexcept = delete;
+    LabelSetMap(const LabelSetMap&);
+    LabelSetMap(LabelSetMap&&) noexcept = default;
+    LabelSetMap& operator=(const LabelSetMap&);
+    LabelSetMap& operator=(LabelSetMap&&) noexcept = default;
 
     [[nodiscard]] std::optional<LabelSetID> get(const LabelSet& labelset) const;
     [[nodiscard]] std::optional<LabelSetID> get(const LabelSetHandle& labelsetRef) const;
@@ -39,8 +38,6 @@ public:
     LabelSetHandle getOrCreate(const LabelSet& labelset);
 
 private:
-    mutable RWSpinLock _lock;
-
     Container _container;
     ValueMap _valueMap;
     IDMap _idMap;

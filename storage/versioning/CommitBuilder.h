@@ -10,6 +10,7 @@
 namespace db {
 
 class DataPartBuilder;
+class MetadataBuilder;
 class Graph;
 class JobSystem;
 class Commit;
@@ -29,6 +30,7 @@ public:
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
     [[nodiscard]] DataPartBuilder& newBuilder();
+    [[nodiscard]] MetadataBuilder& metadata() { return *_metadata; }
 
     [[nodiscard]] std::unique_ptr<Commit> build(JobSystem& jobsystem);
     void buildAllPending(JobSystem& jobsystem);
@@ -38,8 +40,8 @@ private:
 
     mutable std::mutex _mutex;
 
-    Graph* _graph {nullptr}; // TODO Remove
-    VersionController* _versionController {nullptr};
+    Graph* _graph {nullptr};
+    GraphView _view;
 
     EntityID _firstNodeID;
     EntityID _firstEdgeID;
@@ -47,11 +49,12 @@ private:
     EntityID _nextEdgeID;
 
     std::unique_ptr<Commit> _commit;
+    std::unique_ptr<MetadataBuilder> _metadata;
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-    explicit CommitBuilder(Graph& graph);
+    explicit CommitBuilder(Graph& , const GraphView&);
 
-    std::unique_ptr<Commit> prepareCommit(const GraphView& view);
+    void initialize();
 };
 
 }

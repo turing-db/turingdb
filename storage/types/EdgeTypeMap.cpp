@@ -1,8 +1,4 @@
 #include "EdgeTypeMap.h"
-#include "BioAssert.h"
-
-#include <mutex>
-#include <shared_mutex>
 
 using namespace db;
 
@@ -10,66 +6,39 @@ EdgeTypeMap::EdgeTypeMap() = default;
 
 EdgeTypeMap::~EdgeTypeMap() = default;
 
-EdgeTypeID EdgeTypeMap::get(const std::string& name) const {
-    std::shared_lock guard(_lock);
+std::optional<EdgeTypeID> EdgeTypeMap::get(const std::string& name) const {
     auto it = _nameMap.find(name);
     if (it == _nameMap.end()) {
-        return EdgeTypeID {};
+        return std::nullopt;
     }
-    return it->second;
+
+    return _container[it->second]._id;
 }
 
-std::string_view EdgeTypeMap::getName(EdgeTypeID id) const {
-    std::shared_lock guard(_lock);
+std::optional<std::string_view> EdgeTypeMap::getName(EdgeTypeID id) const {
     auto it = _idMap.find(id);
-    msgbioassert(it != _idMap.end(),
-                 "Edge type does not exist");
-    return it->second;
+    if (it == _idMap.end()) {
+        return std::nullopt;
+    }
+
+    return *_container[it->second]._name;
 }
 
 size_t EdgeTypeMap::getCount() const {
-    std::shared_lock guard(_lock);
     return _nameMap.size();
 }
 
 EdgeTypeID EdgeTypeMap::getOrCreate(const std::string& name) {
-    std::unique_lock guard(_lock);
-
-    if (!unsafeExists(name)) {
-        return unsafeCreate(name);
+    auto it = _nameMap.find(name);
+    if (it != _nameMap.end()) {
+        return _container[it->second]._id;
     }
 
-    return _nameMap.at(name);
-}
+    const size_t count = _nameMap.size();
+    const EdgeTypeID nextID {static_cast<EdgeTypeID::Type>(count)};
+    auto& pair = _container.emplace_back(nextID, std::make_unique<std::string>(name));
+    _nameMap.emplace(std::string_view {*pair._name}, count);
+    _idMap.emplace(nextID, count);
 
-bool EdgeTypeMap::tryCreate(std::string&& name) {
-    std::unique_lock guard(_lock);
-    if (!unsafeExists(name)) {
-        unsafeCreate(std::move(name));
-        return true;
-    }
-
-    return false;
-}
-
-EdgeTypeID EdgeTypeMap::create(std::string name) {
-    std::unique_lock guard(_lock);
-    return unsafeCreate(std::move(name));
-}
-
-EdgeTypeID EdgeTypeMap::unsafeCreate(std::string name) {
-    msgbioassert(_nameMap.size() < std::numeric_limits<EdgeTypeID::Type>::max(),
-                 "Too many edge types registered");
-
-    const auto count = static_cast<EdgeTypeID::Type>(_nameMap.size());
-    const EdgeTypeID nextID {count};
-    auto it = _nameMap.emplace(std::move(name), nextID);
-    _idMap.emplace(nextID, it.first->first);
     return nextID;
 }
-
-bool EdgeTypeMap::unsafeExists(const std::string& name) const {
-    return _nameMap.find(name) != _nameMap.end();
-}
-
-

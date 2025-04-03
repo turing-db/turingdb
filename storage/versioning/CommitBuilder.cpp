@@ -6,6 +6,8 @@
 #include "versioning/VersionController.h"
 #include "versioning/CommitView.h"
 #include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+#include "versioning/CommitMetadata.h"
 
 using namespace db;
 
@@ -14,20 +16,13 @@ CommitBuilder::CommitBuilder() = default;
 CommitBuilder::~CommitBuilder() = default;
 
 std::unique_ptr<CommitBuilder> CommitBuilder::prepare(Graph& graph, const GraphView& view) {
-    const auto reader = view.read();
-
-    auto* ptr = new CommitBuilder {graph};
-
-    ptr->_firstNodeID = reader.getNodeCount();
-    ptr->_firstEdgeID = reader.getNodeCount();
-
-    ptr->_commit = ptr->prepareCommit(view);
-
+    auto* ptr = new CommitBuilder {graph, view};
+    ptr->initialize();
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
 GraphView CommitBuilder::viewGraph() const {
-    return GraphView {*_graph, *_commit->_data};
+    return GraphView {*_commit->_data};
 }
 
 GraphReader CommitBuilder::readGraph() const {
@@ -36,9 +31,9 @@ GraphReader CommitBuilder::readGraph() const {
 
 DataPartBuilder& CommitBuilder::newBuilder() {
     std::scoped_lock lock {_mutex};
-    GraphView view {*_graph, *_commit->_data};
+    GraphView view {*_commit->_data};
     const size_t partIndex = view.dataparts().size() + _builders.size();
-    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_graph, view, partIndex));
+    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadata, *_graph, view, partIndex));
 
     return *builder;
 }
@@ -54,10 +49,10 @@ void CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     }
 
     auto [firstNodeID, firstEdgeID] = _graph->allocIDRange(nodeCount, edgeCount);
-    GraphView view {*_graph, *_commit->_data};
+    GraphView view {*_commit->_data};
 
     for (const auto& builder : _builders) {
-        auto part = _versionController->createDataPart(firstNodeID, firstEdgeID);
+        auto part = _graph->_versionController->createDataPart(firstNodeID, firstEdgeID);
 
         firstNodeID += builder->nodeCount();
         firstEdgeID += builder->edgeCount();
@@ -77,29 +72,31 @@ std::unique_ptr<Commit> CommitBuilder::build(JobSystem& jobsystem) {
     return std::move(_commit);
 }
 
-CommitBuilder::CommitBuilder(Graph& graph)
+CommitBuilder::CommitBuilder(Graph& graph, const GraphView& view)
     : _graph(&graph),
-      _versionController(graph._versionController.get())
+      _view(view)
 {
 }
 
-std::unique_ptr<Commit> CommitBuilder::prepareCommit(const GraphView& view) {
-    auto reader = view.read();
+void CommitBuilder::initialize() {
+    auto reader = _view.read();
+    _firstNodeID = reader.getNodeCount();
+    _firstEdgeID = reader.getNodeCount();
 
-    auto commit = std::make_unique<Commit>();
-    commit->_graph = _graph;
-    commit->_data = _versionController->createCommitData(commit->hash());
-    commit->_data->_hash = commit->hash();
-    commit->_data->_graphMetadata = _graph->getMetadata();
 
-    auto& history = commit->history();
+    _commit = std::make_unique<Commit>();
+    _commit->_graph = _graph;
+    _commit->_data = _graph->_versionController->createCommitData(_commit->hash());
+    _commit->_data->_hash = _commit->hash();
+
+    _metadata = MetadataBuilder::create(_view.metadata(), &_commit->_data->_metadata);
+
+    auto& history = _commit->history();
 
     const DataPartSpan previousDataparts = reader.dataparts();
     const std::span<const CommitView> previousCommits = reader.commits();
 
     history.pushPreviousDataparts(previousDataparts);
     history.pushPreviousCommits(previousCommits);
-    history.pushCommit(CommitView {commit.get()});
-
-    return commit;
+    history.pushCommit(CommitView {_commit.get()});
 }

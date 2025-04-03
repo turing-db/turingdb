@@ -2,7 +2,6 @@
 
 #include "CommitLoader.h"
 #include "GraphInfoLoader.h"
-#include "GraphMetadataLoader.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
@@ -37,14 +36,14 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
         }
     }
 
-    // Loading metadata
-    auto metadata = GraphMetadataLoader::load(path);
+    // // Loading metadata
+    // auto metadata = GraphMetadataLoader::load(path);
 
-    if (!metadata) {
-        return metadata.get_unexpected();
-    }
+    // if (!metadata) {
+    //     return metadata.get_unexpected();
+    // }
 
-    graph->_metadata = std::move(metadata.value());
+    // graph->_metadata = std::move(metadata.value());
 
     // Listing files in the folder
     auto files = path.listDir();

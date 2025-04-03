@@ -8,13 +8,11 @@ namespace db {
 
 class DataPart;
 class PropertyManager;
-class GraphMetadata;
 class VersionController;
 
 class DataPartLoader {
 public:
     [[nodiscard]] static DumpResult<WeakArc<const DataPart>> load(const fs::Path& path,
-                                                                  const GraphMetadata& metadata,
                                                                   VersionController& versionController);
 
 private:

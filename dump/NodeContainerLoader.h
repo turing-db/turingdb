@@ -19,7 +19,7 @@ public:
     {
     }
 
-    [[nodiscard]] DumpResult<std::unique_ptr<NodeContainer>> load(const GraphMetadata& metadata) {
+    [[nodiscard]] DumpResult<std::unique_ptr<NodeContainer>> load() {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

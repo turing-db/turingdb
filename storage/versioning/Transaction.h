@@ -17,9 +17,8 @@ public:
     Transaction() = default;
     ~Transaction() = default;
 
-    Transaction(const Graph& graph, const WeakArc<const CommitData>& data)
-        : _graph(&graph),
-          _data(data)
+    Transaction(const WeakArc<const CommitData>& data)
+        : _data(data)
     {
     }
 
@@ -34,7 +33,6 @@ public:
     [[nodiscard]] GraphReader readGraph() const;
 
 private:
-    const Graph* _graph {nullptr};
     WeakArc<const CommitData> _data;
 };
 

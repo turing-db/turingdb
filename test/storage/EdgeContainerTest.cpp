@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 
-#include "GraphMetadata.h"
 #include "EdgeContainer.h"
 #include "EntityID.h"
 
@@ -14,8 +13,6 @@ protected:
 
     void TearDown() override {
     }
-
-    GraphMetadata _metadata;
 };
 
 TEST_F(EdgeContainerTest, General) {

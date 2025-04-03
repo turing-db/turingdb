@@ -2,13 +2,13 @@
 
 #include "reader/GraphReader.h"
 #include "DataPart.h"
-#include "GraphMetadata.h"
+#include "versioning/CommitMetadata.h"
 #include "properties/PropertyManager.h"
 
 namespace db {
 
 void GraphReport::getReport(const GraphReader& reader, std::stringstream& report) {
-    const GraphMetadata& metadata = reader.getMetadata();
+    const CommitMetadata& metadata = reader.getMetadata();
     const auto& labelMap = metadata.labels();
     const auto& labelsetMap = metadata.labelsets();
     const auto& edgeTypeMap = metadata.edgeTypes();
@@ -24,12 +24,12 @@ void GraphReport::getReport(const GraphReader& reader, std::stringstream& report
 
     for (const auto& part : reader.dataparts()) {
         const PropertyManager& nodeProperties = part->nodeProperties();
-        for (const auto& [ptID, ptName] : propTypeMap._idMap) {
-            const auto* indexerPtr = nodeProperties.tryGetIndexer(ptID);
+        for (const auto& [pt, ptName] : propTypeMap) {
+            const auto* indexerPtr = nodeProperties.tryGetIndexer(pt._id);
 
             if (indexerPtr) {
-                report << "# " << ptName << " id=" << ptID.getValue() << " Count="
-                       << nodeProperties.count(ptID);
+                report << "# " << ptName << " id=" << pt._id.getValue() << " Count="
+                       << nodeProperties.count(pt._id);
                 const auto& indexer = *indexerPtr;
 
                 report << "  [" << indexer.size() << "]";

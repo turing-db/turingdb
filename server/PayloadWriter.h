@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "EntityID.h"
-#include "GraphMetadata.h"
+#include "versioning/CommitMetadata.h"
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
 #include "types/PropertyType.h"
@@ -48,7 +48,7 @@ enum class EdgeDir : uint8_t {
 
 class PayloadWriter {
 public:
-    explicit PayloadWriter(net::NetWriter* writer, const GraphMetadata* metadata = nullptr)
+    explicit PayloadWriter(net::NetWriter* writer, const CommitMetadata* metadata = nullptr)
         : _writer(writer),
           _metadata(metadata)
     {
@@ -63,7 +63,7 @@ public:
         finish();
     }
 
-    void setMetadata(const GraphMetadata* metadata) {
+    void setMetadata(const CommitMetadata* metadata) {
         _metadata = metadata;
     }
 
@@ -171,7 +171,7 @@ public:
 
 private:
     net::NetWriter* _writer {nullptr};
-    const GraphMetadata* _metadata {nullptr};
+    const CommitMetadata* _metadata {nullptr};
     std::vector<char> _closingTokens;
     bool _comma = false;
 
@@ -246,7 +246,7 @@ private:
             for (const auto& [ptID, variant] : props) {
                 std::visit(
                     [&](const auto& v) {
-                        this->key(propTypes.getName(ptID));
+                        this->key(propTypes.getName(ptID).value());
                         this->value(*v);
                     },
                     variant);

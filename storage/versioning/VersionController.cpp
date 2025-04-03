@@ -17,7 +17,6 @@ void VersionController::createFirstCommit(Graph* graph) {
     auto commit = std::make_unique<Commit>();
     commit->_graph = graph;
     commit->_data = _dataManager->create(commit->hash());
-    commit->_data->_graphMetadata = graph->getMetadata();
 
     auto* ptr = commit.get();
     _offsets.emplace(commit->hash(), _commits.size());

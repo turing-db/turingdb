@@ -4,6 +4,38 @@ using namespace db;
 
 LabelSetMap::LabelSetMap() = default;
 
+LabelSetMap::LabelSetMap(const LabelSetMap& other) {
+    for (const auto& pair : other._container) {
+        const LabelSetID id = pair._id;
+        const auto& labelset = pair._value;
+        const size_t count = _container.size();
+        _container.emplace_back(id, std::make_unique<LabelSet>(*labelset));
+        _valueMap.emplace(LabelSetHandle {id, *pair._value}, count);
+        _idMap.emplace(id, count);
+    }
+}
+
+LabelSetMap& LabelSetMap::operator=(const LabelSetMap& other) {
+    if (this == &other) {
+        return *this;
+    }
+
+    _valueMap.clear();
+    _idMap.clear();
+    _container.clear();
+
+    for (const auto& pair : other._container) {
+        const LabelSetID id = pair._id;
+        const auto& labelset = pair._value;
+        const size_t count = _container.size();
+        _container.emplace_back(id, std::make_unique<LabelSet>(*labelset));
+        _valueMap.emplace(LabelSetHandle {id, *pair._value}, count);
+        _idMap.emplace(id, count);
+    }
+
+    return *this;
+}
+
 LabelSetMap::~LabelSetMap() = default;
 
 std::optional<LabelSetID> LabelSetMap::get(const LabelSet& labelset) const {

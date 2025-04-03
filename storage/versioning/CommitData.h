@@ -2,6 +2,7 @@
 
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistory.h"
+#include "versioning/CommitMetadata.h"
 
 namespace db {
 
@@ -9,7 +10,6 @@ class DataPart;
 class CommitBuilder;
 class CommitLoader;
 class GraphLoader;
-class GraphMetadata;
 class VersionController;
 
 class CommitData {
@@ -28,7 +28,7 @@ public:
 
     [[nodiscard]] DataPartSpan allDataparts() const { return _history.allDataparts(); }
     [[nodiscard]] DataPartSpan commitDataparts() const { return _history.commitDataparts(); }
-    [[nodiscard]] GraphMetadata& metadata() const { return *_graphMetadata; }
+    [[nodiscard]] const CommitMetadata& metadata() const { return _metadata; }
     [[nodiscard]] std::span<const CommitView> commits() const { return _history.commits(); }
     [[nodiscard]] const CommitHistory& history() const { return _history; }
     [[nodiscard]] CommitHistory& history() { return _history; }
@@ -41,7 +41,7 @@ private:
 
     CommitHash _hash;
     CommitHistory _history;
-    GraphMetadata* _graphMetadata {nullptr};
+    CommitMetadata _metadata;
 };
 
 }

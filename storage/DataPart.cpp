@@ -178,8 +178,8 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     _edgeIndexer = EdgeIndexer::create(*_edges, *_nodes,
                                        builder.patchNodeEdgeDataCount(),
                                        patchNodeLabelSets,
-                                       builder.getInPatchEdgeCount(),
-                                       builder.getOutPatchEdgeCount());
+                                       builder.getOutPatchEdgeCount(),
+                                       builder.getInPatchEdgeCount());
 
     jobs.wait();
 
