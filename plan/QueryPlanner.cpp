@@ -1082,7 +1082,7 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
                         if (VarDecl* decl = var->getDecl()) {
                             ColumnIDs* columnIDs = decl->getColumn()->cast<ColumnIDs>();
                             if (!columnIDs) {
-                                continue;
+                                columnIDs = _mem->alloc<ColumnIDs>();
                             }
                             _output->addColumn(columnIDs);
                         }
@@ -1096,7 +1096,7 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
         const VarDecl* decl = field->getDecl();
         ColumnIDs* columnIDs = decl->getColumn()->cast<ColumnIDs>();
         if (!columnIDs) {
-            continue;
+            columnIDs = _mem->alloc<ColumnIDs>();
         }
 
         const auto& memberName = field->getMemberName();

@@ -182,11 +182,11 @@ TEST_F(QueryTest, MatchEdgeType) {
         })
         .execute();
 
-    // tester.query("MATCH n-[e:DOES_NOT_EXIST]-m RETURN n, e, m")
-    //     .expectVector<EntityID>({})
-    //     .expectVector<EntityID>({})
-    //     .expectVector<EntityID>({})
-    //     .execute();
+    tester.query("MATCH n-[e:DOES_NOT_EXIST]-m RETURN n, e, m")
+        .expectVector<EntityID>({})
+        .expectVector<EntityID>({})
+        .expectVector<EntityID>({})
+        .execute();
 }
 
 TEST_F(QueryTest, NodePropertyProjection) {
