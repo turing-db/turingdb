@@ -67,8 +67,6 @@ using namespace db;
                            return YParser::make_STRING_CONSTANT(std::string(yytext+1, yyleng-2));
                      } 
 
-.           { return YParser::make_UNKNOWN_TOKEN(); }
-
 \`[^\"]*\` {
                            if (yyleng <= 2) {
                                return YParser::make_BACKTICK_STRING_CONSTANT("");
