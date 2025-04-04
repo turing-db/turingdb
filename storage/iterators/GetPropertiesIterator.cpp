@@ -10,8 +10,9 @@ GetPropertiesIterator<IteratorClass, T>::GetPropertiesIterator(const GraphView& 
                                                                PropertyTypeID propTypeID,
                                                                const ColumnIDs* inputEntityIDs)
     : Iterator(view),
-      _propTypeID(propTypeID),
-      _inputEntityIDs(inputEntityIDs)
+    _propTypeID(propTypeID),
+    _inputEntityIDs(inputEntityIDs)
+      
 {
     init();
 }
@@ -72,7 +73,9 @@ void GetPropertiesIterator<IteratorClass, T>::next() {
             }
 
             const DataPart* part = _partIt.get();
-            const PropertyManager& properties = part->nodeProperties();
+            const PropertyManager& properties = (IteratorClass == PropertyIteratorClass::NODE)
+                                              ? part->nodeProperties()
+                                              : part->edgeProperties();
 
             if (!properties.hasPropertyType(_propTypeID)) {
                 // Part does not have this property type, -> Next part

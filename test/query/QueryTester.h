@@ -16,7 +16,7 @@ namespace db {
         EXPECT_EQ(col->getKind(), expectedCol->getKind());            \
         const auto* c = static_cast<const Type*>(col);                \
         const auto* ec = static_cast<const Type*>(expectedCol.get()); \
-        EXPECT_EQ(c->at(i), ec->at(i));                               \
+        EXPECT_TRUE(c->getRaw() == ec->getRaw());                     \
     } break;
 
 class QueryTester {
@@ -61,34 +61,31 @@ public:
             return;
         }
 
+        fmt::print("Testing query: {}\n", _query);
         const auto res = _interp.execute(_query, "", &_mem, [this](const Block& block) {
-            const size_t rowCount = block.getBlockRowCount();
             const size_t colCount = block.columns().size();
 
-            fmt::print("Testing query: {}\n", _query);
             EXPECT_EQ(_expectedColumns.size(), block.columns().size());
 
-            for (size_t i = 0; i < rowCount; ++i) {
-                for (size_t j = 0; j < colCount; j++) {
-                    const Column* col = block.columns()[j];
-                    const auto& expectedCol = _expectedColumns[j];
-                    switch (col->getKind()) {
-                        COL_CASE(ColumnVector<EntityID>)
-                        COL_CASE(ColumnVector<types::UInt64::Primitive>)
-                        COL_CASE(ColumnVector<types::Int64::Primitive>)
-                        COL_CASE(ColumnVector<types::Double::Primitive>)
-                        COL_CASE(ColumnVector<types::String::Primitive>)
-                        COL_CASE(ColumnVector<types::Bool::Primitive>)
-                        COL_CASE(ColumnOptVector<types::UInt64::Primitive>)
-                        COL_CASE(ColumnOptVector<types::Int64::Primitive>)
-                        COL_CASE(ColumnOptVector<types::Double::Primitive>)
-                        COL_CASE(ColumnOptVector<types::String::Primitive>)
-                        COL_CASE(ColumnOptVector<types::Bool::Primitive>)
-                        COL_CASE(ColumnVector<std::string>)
+            for (size_t i = 0; i < colCount; i++) {
+                const Column* col = block.columns()[i];
+                const auto& expectedCol = _expectedColumns[i];
+                switch (col->getKind()) {
+                    COL_CASE(ColumnVector<EntityID>)
+                    COL_CASE(ColumnVector<types::UInt64::Primitive>)
+                    COL_CASE(ColumnVector<types::Int64::Primitive>)
+                    COL_CASE(ColumnVector<types::Double::Primitive>)
+                    COL_CASE(ColumnVector<types::String::Primitive>)
+                    COL_CASE(ColumnVector<types::Bool::Primitive>)
+                    COL_CASE(ColumnOptVector<types::UInt64::Primitive>)
+                    COL_CASE(ColumnOptVector<types::Int64::Primitive>)
+                    COL_CASE(ColumnOptVector<types::Double::Primitive>)
+                    COL_CASE(ColumnOptVector<types::String::Primitive>)
+                    COL_CASE(ColumnOptVector<types::Bool::Primitive>)
+                    COL_CASE(ColumnVector<std::string>)
 
-                        default: {
-                            panic("can not check result for column of kind {}", col->getKind());
-                        }
+                    default: {
+                        panic("can not check result for column of kind {}", col->getKind());
                     }
                 }
             }
@@ -104,5 +101,4 @@ private:
     std::vector<std::unique_ptr<Column>> _expectedColumns;
     bool _expectError = false;
 };
-
 }

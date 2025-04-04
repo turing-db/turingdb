@@ -16,4 +16,5 @@ function(add_db_query_gtest exe_name cpp_file)
 endfunction()
 
 add_db_query_gtest(test_query_parser QueryParserTest.cpp)
+add_db_query_gtest(MultiDatapartQueryTest MultiDatapartQueryTest.cpp)
 add_db_query_gtest(test_query QueryTest.cpp)
