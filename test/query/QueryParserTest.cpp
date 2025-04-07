@@ -79,26 +79,28 @@ TEST_F(QueryParserTest, matchProperties) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const auto query1 = "MATCH n:{location = 'cytosol'} RETURN n";
-    const auto query2 = "MATCH n:{magic = 42} RETURN n";
-    const auto query3 = "MATCH n:{magic = -42} RETURN n";
-    const auto query4 = "MATCH n:{\"location {})(\" = -41} RETURN n";
-    const auto query5 = "MATCH n:{`location {})(` = -41} RETURN n";
+    const auto query1 = "MATCH n{location = 'cytosol'} RETURN n";
+    const auto query2 = "MATCH n{magic = 42} RETURN n";
+    const auto query3 = "MATCH n{magic = -42} RETURN n";
+    const auto query4 = "MATCH n{\"location {})(\" = -41} RETURN n";
+    const auto query5 = "MATCH n{`location {})(` = -41} RETURN n";
+    const auto query6 = "MATCH n:Protein{`location {})(` = -41} RETURN n";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
     ASSERT_TRUE(parser.parse(query3));
     ASSERT_TRUE(parser.parse(query4));
     ASSERT_TRUE(parser.parse(query5));
+    ASSERT_TRUE(parser.parse(query6));
 }
 
 TEST_F(QueryParserTest, returnProperties) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const auto query1 = "MATCH n:{location = 'cytosol'} RETURN n.name";
-    const auto query2 = "MATCH n:{magic = 42} RETURN n.\"name (String)\"";
-    const auto query3 = "MATCH n:{magic = 42} RETURN n.`name (String)`";
+    const auto query1 = "MATCH n{location = 'cytosol'} RETURN n.name";
+    const auto query2 = "MATCH n{magic = 42} RETURN n.\"name (String)\"";
+    const auto query3 = "MATCH n{magic = 42} RETURN n.`name (String)`";
 
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));

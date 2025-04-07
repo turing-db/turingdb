@@ -235,8 +235,8 @@ edge_entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constrain
               { 
                   $$ = EntityPattern::create(ctxt, $1, $3, nullptr);
               }
-              | entity_var COLON OBRACK prop_expr_constraint CBRACK
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, $4); }
+              | entity_var OBRACK prop_expr_constraint CBRACK
+              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
               | entity_var 
               { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
               | COLON type_constraint OBRACK prop_expr_constraint CBRACK
@@ -255,8 +255,8 @@ entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBR
               }
               | entity_var COLON type_constraint
               { $$ = EntityPattern::create(ctxt, $1, $3, nullptr); }
-              | entity_var COLON OBRACK prop_expr_constraint CBRACK
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, $4); }
+              | entity_var OBRACK prop_expr_constraint CBRACK
+              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
               | entity_var 
               { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
               | COLON type_constraint OBRACK prop_expr_constraint CBRACK

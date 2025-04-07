@@ -342,11 +342,11 @@ TEST_F(QueryTest, EdgePropertyProjection) {
 TEST_F(QueryTest, PropertyConstraints) {
     QueryTester tester {_mem, *_interp};
 
-    tester.query("MATCH n:{hasPhD:true} RETURN n.name")
+    tester.query("MATCH n{hasPhD:true} RETURN n.name")
         .expectOptVector<types::String::Primitive>({"Remy", "Adam", "Luc", "Martina"})
         .execute();
 
-    tester.query("MATCH n:{hasPhD:true, isFrench: false} RETURN n.name")
+    tester.query("MATCH n{hasPhD:true, isFrench: false} RETURN n.name")
         .expectOptVector<types::String::Primitive>({"Martina"})
         .execute();
 
@@ -358,22 +358,22 @@ TEST_F(QueryTest, PropertyConstraints) {
         .expectOptVector<types::String::Primitive>({"Suhas"})
         .execute();
 
-    tester.query("MATCH n-[e:{proficiency:\"expert\"}]-m RETURN n.name,m.name")
+    tester.query("MATCH n-[e{proficiency:\"expert\"}]-m RETURN n.name,m.name")
         .expectOptVector<types::String::Primitive>({"Remy", "Remy", "Ghosts", "Maxime"})
         .expectOptVector<types::String::Primitive>({"Ghosts", "Computers", "Remy", "Paddle"})
         .execute();
 
-    tester.query("MATCH n-[e:{proficiency:\"expert\", duration:20}]-m RETURN n.name,m.name")
+    tester.query("MATCH n-[e{proficiency:\"expert\", duration:20}]-m RETURN n.name,m.name")
         .expectOptVector<types::String::Primitive>({"Remy"})
         .expectOptVector<types::String::Primitive>({"Ghosts"})
         .execute();
 
-    tester.query("MATCH n-[e:{proficiency:\"expert\"}]-m:{isReal:true} RETURN n.name,m.name")
+    tester.query("MATCH n-[e{proficiency:\"expert\"}]-m{isReal:true} RETURN n.name,m.name")
         .expectOptVector<types::String::Primitive>({"Remy", "Remy"})
         .expectOptVector<types::String::Primitive>({"Ghosts", "Computers"})
         .execute();
 
-    tester.query("MATCH n-[e:{proficiency:\"expert\"}]-m:SoftwareEngineering{isReal:true} RETURN n.name,m.name")
+    tester.query("MATCH n-[e{proficiency:\"expert\"}]-m:SoftwareEngineering{isReal:true} RETURN n.name,m.name")
         .expectOptVector<types::String::Primitive>({"Remy"})
         .expectOptVector<types::String::Primitive>({"Computers"})
         .execute();
