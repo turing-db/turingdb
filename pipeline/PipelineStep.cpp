@@ -188,6 +188,15 @@ PipelineStep::PipelineStep(ChangeStep::Tag,
 {
 }
 
+PipelineStep::PipelineStep(CallPropertyStep::Tag,
+             ColumnVector<PropertyTypeID>* id,
+             ColumnVector<std::string>* name,
+             ColumnVector<std::string>* type)
+    :_opcode(PipelineOpcode::CALL_PROPERTIES),
+    _impl(std::in_place_type<CallPropertyStep>, id, name, type)
+{
+}
+
 PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
     : _opcode(PipelineOpcode::LOAD_GRAPH),
     _impl(std::in_place_type<LoadGraphStep>, graphName)

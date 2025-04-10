@@ -91,6 +91,7 @@ void QueryAnalyzer::analyze(QueryCommand* cmd) {
         case QueryCommand::Kind::HISTORY_COMMAND:
         case QueryCommand::Kind::CHANGE_COMMAND:
         case QueryCommand::Kind::COMMIT_COMMAND:
+        case QueryCommand::Kind::CALL_COMMAND:
             return;
         break;
 
@@ -98,7 +99,6 @@ void QueryAnalyzer::analyze(QueryCommand* cmd) {
             return;
         break;
     }
-    return;
 }
 
 void QueryAnalyzer::analyzeExplain(ExplainCommand* cmd) {

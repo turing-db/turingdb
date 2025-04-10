@@ -30,6 +30,7 @@
 #include "operations/CreateNodeStep.h"
 #include "operations/CreateEdgeStep.h"
 #include "operations/CommitStep.h"
+#include "operations/CallPropertyStep.h"
 
 #include "FastGet.h"
 
@@ -119,6 +120,10 @@ public:
                  const EntityPattern*,
                  const EntityPattern*);
     PipelineStep(CommitStep::Tag);
+    PipelineStep(CallPropertyStep::Tag,
+                 ColumnVector<PropertyTypeID>* id,
+                 ColumnVector<std::string>* name,
+                 ColumnVector<std::string>* type);
 
     PROPERTY_STEPS(Int64)
     PROPERTY_STEPS(UInt64)
@@ -194,7 +199,8 @@ private:
                  ChangeStep,
                  CreateNodeStep,
                  CreateEdgeStep,
-                 CommitStep>
+                 CommitStep,
+                 CallPropertyStep>
         _impl;
 };
 

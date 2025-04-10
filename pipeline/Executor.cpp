@@ -80,6 +80,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_NODE] = ACTIVATE_PTR(CreateNodeStep);
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_EDGE] = ACTIVATE_PTR(CreateEdgeStep);
         _activateTbl[(uint64_t)PipelineOpcode::COMMIT] = ACTIVATE_PTR(CommitStep);
+        _activateTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = ACTIVATE_PTR(CallPropertyStep);
         _activateTbl[(uint64_t)PipelineOpcode::END] = ACTIVATE_END_PTR();
 
         // RETURN jump table
@@ -133,6 +134,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_NODE] = RETURN_PTR(CreateNodeStep);
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_EDGE] = RETURN_PTR(CreateEdgeStep);
         _returnTbl[(uint64_t)PipelineOpcode::COMMIT] = RETURN_PTR(CommitStep);
+        _returnTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = RETURN_PTR(CallPropertyStep);
         _returnTbl[(uint64_t)PipelineOpcode::END] = GOTOPTR(StopStep);
 
         checkJumpTables();
@@ -226,6 +228,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(CreateNodeStep)
     ACTIVATE_STEP(CreateEdgeStep)
     ACTIVATE_STEP(CommitStep)
+    ACTIVATE_STEP(CallPropertyStep)
     ACTIVATE_END()
 
     // RETURN actions
@@ -278,6 +281,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(CreateNodeStep)
     RETURN_STEP(CreateEdgeStep)
     RETURN_STEP(CommitStep)
+    RETURN_STEP(CallPropertyStep)
 
 // Exit execution
 ExecutorExit:

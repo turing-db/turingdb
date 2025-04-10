@@ -20,9 +20,10 @@ public:
                           || std::is_same_v<T, NodeID>
                           || std::is_same_v<T, EdgeID>
                           || std::is_same_v<T, EdgeTypeID>
+                          || std::is_same_v<T, PropertyTypeID>
                           || std::is_same_v<T, LabelSetID>) {
                 dumpImpl(val.getValue());
-            } else if constexpr (requires {T::_value; } ) {
+            } else if constexpr (requires { T::_value; }) {
                 dumpImpl(val._value);
             } else if constexpr (std::is_same_v<T, PropertyType>) {
                 dumpImpl(val._id.getValue());

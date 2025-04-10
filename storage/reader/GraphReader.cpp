@@ -238,6 +238,19 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
 }
 
 
+void GraphReader::getGraphProperties(ColumnVector<PropertyTypeID>* ids, ColumnVector<std::string>* name, ColumnVector<std::string>* type) const {
+    const PropertyTypeMap& propTypeMap = getMetadata().propTypes();
+    const std::unordered_map<std::string, size_t>& offsetMap = propTypeMap._offsetMap;
+
+    for (const auto& entry : offsetMap) {
+        name->emplace_back(entry.first);
+        const auto propType = propTypeMap.get(entry.first);
+        ids->emplace_back(propType._id);
+        type->emplace_back(PropertyValueTypeDescription::value(propType._valueType));
+    };
+}
+
+
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {

@@ -17,5 +17,4 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_AND, "AND">,
     EnumStringPair<ColumnOperator::OP_OR, "OR">,
     EnumStringPair<ColumnOperator::OP_PROJECT, "PROJECT">>;
-
 }

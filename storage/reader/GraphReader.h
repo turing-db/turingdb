@@ -57,6 +57,8 @@ public:
     [[nodiscard]] MatchLabelSetIterator matchLabelSets(const LabelSetHandle& labelSet) const;
     [[nodiscard]] bool nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const;
 
+    void getGraphProperties(ColumnVector<PropertyTypeID>* ids, ColumnVector<std::string>* name, ColumnVector<std::string>* type) const;
+
     template <SupportedType T>
     [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const;
 
