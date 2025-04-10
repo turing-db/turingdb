@@ -30,6 +30,7 @@ public:
         MakeMemoryPool<ColumnVector<NodeID>>::type,
         MakeMemoryPool<ColumnVector<EdgeID>>::type,
         MakeMemoryPool<ColumnVector<LabelSetID>>::type,
+        MakeMemoryPool<ColumnVector<PropertyTypeID>>::type,
         MakeMemoryPool<ColumnVector<PropertyType>>::type,
         MakeMemoryPool<ColumnVector<size_t>>::type,
         MakeMemoryPool<ColumnVector<std::string_view>>::type,

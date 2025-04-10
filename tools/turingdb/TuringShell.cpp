@@ -325,6 +325,7 @@ void TuringShell::processLine(std::string& line) {
                     TABULATE_COL_CASE(ColumnVector<EntityID>, i)
                     TABULATE_COL_CASE(ColumnVector<NodeID>, i)
                     TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
+                    TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
                     TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
                     TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
                     TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)

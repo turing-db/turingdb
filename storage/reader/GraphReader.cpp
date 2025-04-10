@@ -250,7 +250,6 @@ void GraphReader::getGraphProperties(ColumnVector<PropertyTypeID>* ids, ColumnVe
     };
 }
 
-
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
