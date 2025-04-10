@@ -26,7 +26,8 @@ public:
         LOAD_GRAPH_COMMAND,
         EXPLAIN_COMMAND,
         HISTORY_COMMAND,
-        CHANGE_COMMAND
+        CHANGE_COMMAND,
+        CALL_COMMAND,
     };
 
     virtual Kind getKind() const = 0;
@@ -154,6 +155,27 @@ public:
 private:
     HistoryCommand();
     ~HistoryCommand() override = default;
+};
+
+class CallCommand : public QueryCommand {
+public:
+    enum class Type {
+        LABEL = 0,
+        LABELSET,
+        PROPERTIES
+    };
+
+    static CallCommand* create(ASTContext* ctx, Type);
+
+    Kind getKind() const override { return Kind::CALL_COMMAND; }
+    Type getType() const { return _type; }
+
+private:
+    Type _type;
+
+    CallCommand() = delete;
+    CallCommand(Type type);
+    //~CallCommand() override = default;
 };
 
 }

@@ -133,3 +133,15 @@ ChangeCommand* ChangeCommand::create(ASTContext* ctxt, ChangeOpType type) {
     return cmd;
 }
 
+// CallCommand
+
+CallCommand::CallCommand(Type type)
+    :_type(type)
+{
+}
+
+CallCommand* CallCommand::create(ASTContext* ctxt, Type type) {
+    CallCommand* cmd = new CallCommand(type);
+    cmd->registerCmd(ctxt);
+    return cmd;
+}
