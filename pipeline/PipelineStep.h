@@ -3,6 +3,8 @@
 #include <variant>
 
 #include "ChangeOpType.h"
+#include "CallEdgeTypeStep.h"
+#include "CallLabelStep.h"
 #include "PipelineOpcode.h"
 
 #include "operations/ScanNodesStep.h"
@@ -124,6 +126,12 @@ public:
                  ColumnVector<PropertyTypeID>* id,
                  ColumnVector<std::string>* name,
                  ColumnVector<std::string>* type);
+    PipelineStep(CallLabelStep::Tag,
+                 ColumnVector<LabelID>* id,
+                 ColumnVector<std::string>* name);
+    PipelineStep(CallEdgeTypeStep::Tag,
+                 ColumnVector<EdgeTypeID>* id,
+                 ColumnVector<std::string>* name);
 
     PROPERTY_STEPS(Int64)
     PROPERTY_STEPS(UInt64)
@@ -200,7 +208,9 @@ private:
                  CreateNodeStep,
                  CreateEdgeStep,
                  CommitStep,
-                 CallPropertyStep>
+                 CallPropertyStep,
+                 CallLabelStep,
+                 CallEdgeTypeStep>
         _impl;
 };
 

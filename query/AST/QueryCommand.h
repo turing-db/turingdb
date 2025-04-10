@@ -160,9 +160,10 @@ private:
 class CallCommand : public QueryCommand {
 public:
     enum class Type {
-        LABEL = 0,
-        LABELSET,
-        PROPERTIES
+        LABELS = 0,
+        LABELSETS,
+        PROPERTIES,
+        EDGETYPES
     };
 
     static CallCommand* create(ASTContext* ctx, Type);
@@ -177,5 +178,4 @@ private:
     CallCommand(Type type);
     //~CallCommand() override = default;
 };
-
 }

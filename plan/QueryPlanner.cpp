@@ -1418,9 +1418,29 @@ bool QueryPlanner::planCall(const CallCommand* call) {
 
     _pipeline->add<StopStep>();
     switch (call->getType()) {
-        case CallCommand::Type::LABEL:
+        case CallCommand::Type::LABELS: {
+            auto* ids = _mem->alloc<ColumnVector<LabelID>>();
+            auto* name = _mem->alloc<ColumnVector<std::string>>();
+
+            _pipeline->add<CallLabelStep>(ids, name);
+
+            _output->addColumn(ids);
+            _output->addColumn(name);
+
             break;
-        case CallCommand::Type::LABELSET:
+        }
+        case CallCommand::Type::EDGETYPES: {
+            auto* ids = _mem->alloc<ColumnVector<EdgeTypeID>>();
+            auto* name = _mem->alloc<ColumnVector<std::string>>();
+
+            _pipeline->add<CallEdgeTypeStep>(ids, name);
+
+            _output->addColumn(ids);
+            _output->addColumn(name);
+
+            break;
+        }
+        case CallCommand::Type::LABELSETS:
             break;
         case CallCommand::Type::PROPERTIES: {
             auto* ids = _mem->alloc<ColumnVector<PropertyTypeID>>();

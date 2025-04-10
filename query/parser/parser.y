@@ -110,6 +110,9 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token DELETE       "'DELETE'"
 %token PROPERTIES   "'PROPERTIES'"
 %token CALL         "'CALL'"
+%token LABELS       "'LABELS'"
+%token EDGETYPES    "'EDGETYPES'" 
+
 // Operators
 %token PLUS         "'+'"
 %token MINUS        "'-'"
@@ -459,11 +462,18 @@ history_cmd: HISTORY {
                          }
            ;
 // CALL
-call_cmd: CALL PROPERTIES OPAR CPAR{
+call_cmd: CALL PROPERTIES OPAR CPAR {
                     auto callProperties = CallCommand::create(ctxt, CallCommand::Type::PROPERTIES);
                     $$ = callProperties;
                 }
-           ;
+        | CALL LABELS OPAR CPAR {
+                    auto callProperties = CallCommand::create(ctxt, CallCommand::Type::LABELS);
+                    $$ = callProperties;
+                    }
+        | CALL EDGETYPES OPAR CPAR {
+                    auto callProperties = CallCommand::create(ctxt, CallCommand::Type::EDGETYPES);
+                    $$ = callProperties;
+                    }
 
 // CHANGE
 change_subcmd: NEW { $$ = ChangeOpType::NEW; }

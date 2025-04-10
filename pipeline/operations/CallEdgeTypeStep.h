@@ -11,14 +11,13 @@ namespace db {
 
 class ExecutionContext;
 
-class CallPropertyStep {
+class CallEdgeTypeStep {
 public:
     struct Tag {};
 
-    explicit CallPropertyStep(ColumnVector<PropertyTypeID>* id,
-                              ColumnVector<std::string>* propName,
-                              ColumnVector<std::string>* propType);
-    ~CallPropertyStep();
+    explicit CallEdgeTypeStep(ColumnVector<EdgeTypeID>* id,
+                              ColumnVector<std::string>* edgeTypeName);
+    ~CallEdgeTypeStep();
 
     void prepare(ExecutionContext* ctxt) {
         _view = &ctxt->getGraphView();
@@ -34,9 +33,8 @@ public:
 
 private:
     const GraphView* _view {nullptr};
-    ColumnVector<PropertyTypeID>* _id {nullptr};
-    ColumnVector<std::string>* _propName {nullptr};
-    ColumnVector<std::string>* _propType {nullptr};
+    ColumnVector<EdgeTypeID>* _id {nullptr};
+    ColumnVector<std::string>* _edgeTypeName {nullptr};
 };
 
 }

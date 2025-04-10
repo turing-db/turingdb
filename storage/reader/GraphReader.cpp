@@ -237,7 +237,6 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
     return false;
 }
 
-
 void GraphReader::getGraphProperties(ColumnVector<PropertyTypeID>* ids, ColumnVector<std::string>* name, ColumnVector<std::string>* type) const {
     const PropertyTypeMap& propTypeMap = getMetadata().propTypes();
     const std::unordered_map<std::string, size_t>& offsetMap = propTypeMap._offsetMap;
@@ -247,6 +246,27 @@ void GraphReader::getGraphProperties(ColumnVector<PropertyTypeID>* ids, ColumnVe
         const auto propType = propTypeMap.get(entry.first);
         ids->emplace_back(propType._id);
         type->emplace_back(PropertyValueTypeDescription::value(propType._valueType));
+    };
+}
+
+void GraphReader::getGraphLabels(ColumnVector<LabelID>* ids, ColumnVector<std::string>* name) const {
+    const LabelMap& labelMap = getMetadata().labels();
+    const std::unordered_map<LabelID, std::string_view>& idMap = labelMap._idMap;
+
+
+    for (const auto& entry : idMap) {
+        ids->emplace_back(entry.first);
+        name->emplace_back(entry.second);
+    };
+}
+void GraphReader::getGraphEdgeTypes(ColumnVector<EdgeTypeID>* ids, ColumnVector<std::string>* name) const {
+    const EdgeTypeMap& edgeTypeMap = getMetadata().edgeTypes();
+    const std::unordered_map<EdgeTypeID, std::string_view>& idMap = edgeTypeMap._idMap;
+
+
+    for (const auto& entry : idMap) {
+        ids->emplace_back(entry.first);
+        name->emplace_back(entry.second);
     };
 }
 

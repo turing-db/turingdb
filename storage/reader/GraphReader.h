@@ -58,6 +58,8 @@ public:
     [[nodiscard]] bool nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const;
 
     void getGraphProperties(ColumnVector<PropertyTypeID>* ids, ColumnVector<std::string>* name, ColumnVector<std::string>* type) const;
+    void getGraphLabels(ColumnVector<LabelID>* ids, ColumnVector<std::string>* name) const;
+    void getGraphEdgeTypes(ColumnVector<EdgeTypeID>* ids, ColumnVector<std::string>* name) const;
 
     template <SupportedType T>
     [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const;

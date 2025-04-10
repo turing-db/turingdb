@@ -21,6 +21,8 @@ set(pipeline_sources
         operations/CreateEdgeStep.cpp
         operations/CommitStep.cpp
         operations/CallPropertyStep.cpp
+        operations/CallLabelStep.cpp
+        operations/CallEdgeTypeStep.cpp
         
         PipelineStep.cpp
         Pipeline.cpp

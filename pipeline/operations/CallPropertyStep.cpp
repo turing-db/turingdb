@@ -1,8 +1,5 @@
 #include "CallPropertyStep.h"
 
-#include "DataPart.h"
-#include "versioning/CommitView.h"
-
 using namespace db;
 
 CallPropertyStep::CallPropertyStep(ColumnVector<PropertyTypeID>* id,
