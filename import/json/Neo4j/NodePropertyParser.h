@@ -79,7 +79,7 @@ public:
             }
 
             if (val == "String" || val == "Date") {
-                _metadata->getOrCreatePropertyType(_currentPropName + " (Sxtring)", ValueType::String);
+                _metadata->getOrCreatePropertyType(_currentPropName + " (String)", ValueType::String);
                 return true;
             }
 

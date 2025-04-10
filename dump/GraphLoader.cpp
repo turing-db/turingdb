@@ -36,15 +36,6 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
         }
     }
 
-    // // Loading metadata
-    // auto metadata = GraphMetadataLoader::load(path);
-
-    // if (!metadata) {
-    //     return metadata.get_unexpected();
-    // }
-
-    // graph->_metadata = std::move(metadata.value());
-
     // Listing files in the folder
     auto files = path.listDir();
     if (!files) {

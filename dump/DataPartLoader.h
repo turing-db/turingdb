@@ -9,11 +9,13 @@ namespace db {
 class DataPart;
 class PropertyManager;
 class VersionController;
+class CommitMetadata;
 
 class DataPartLoader {
 public:
     [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(const fs::Path& path,
-                                                                  VersionController& versionController);
+                                                            const CommitMetadata& metadata,
+                                                            VersionController& versionController);
 
 private:
     static constexpr std::string_view NODE_PROPS_PREFIX = "node-props-";

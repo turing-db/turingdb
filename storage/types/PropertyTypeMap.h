@@ -27,6 +27,7 @@ public:
     PropertyTypeMap& operator=(const PropertyTypeMap&);
     PropertyTypeMap& operator=(PropertyTypeMap&&) noexcept = default;
 
+    [[nodiscard]] std::optional<PropertyType> get(PropertyTypeID ptID) const;
     [[nodiscard]] std::optional<PropertyType> get(const std::string& name) const;
     [[nodiscard]] std::optional<std::string_view> getName(PropertyTypeID ptID) const;
     [[nodiscard]] size_t getCount() const;

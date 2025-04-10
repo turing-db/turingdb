@@ -15,7 +15,8 @@
 using namespace db;
 
 DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
-                                                         VersionController& versionController) {
+                                                   const CommitMetadata& metadata,
+                                                   VersionController& versionController) {
     if (!path.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
     }
@@ -48,7 +49,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         NodeContainerLoader loader {reader.value()};
 
-        auto res = loader.load();
+        auto res = loader.load(metadata);
         if (!res) {
             return res.get_unexpected();
         }
@@ -91,7 +92,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         EdgeIndexerLoader loader {reader.value()};
 
-        auto res = loader.load(*part->_edges);
+        auto res = loader.load(metadata, *part->_edges);
         if (!res) {
             return res.get_unexpected();
         }
@@ -120,85 +121,88 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROPS, reader.error());
         }
 
-        // const PropertyType pt = metadata.propTypes().get(ptID.value());
+        const auto pt = metadata.propTypes().get(ptID.value());
+        if (!pt) {
+            return DumpError::result(DumpErrorType::INCORRECT_PROPERTY_TYPE_ID);
+        }
 
-        // // Lambda to store trivial properties
-        // const auto storeTrivialContainer = [&]<TrivialSupportedType T>(PropertyManager& manager) -> DumpResult<void> {
-        //     TrivialPropertyContainerLoader<T> loader {reader.value()};
+        // Lambda to store trivial properties
+        const auto storeTrivialContainer = [&]<TrivialSupportedType T>(PropertyManager& manager) -> DumpResult<void> {
+            TrivialPropertyContainerLoader<T> loader {reader.value()};
 
-        //     auto props = loader.load();
-        //     if (!props) {
-        //         return props.get_unexpected();
-        //     }
+            auto props = loader.load();
+            if (!props) {
+                return props.get_unexpected();
+            }
 
-        //     auto* ptr = props.value().release();
-        //     manager._map.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
+            auto* ptr = props.value().release();
+            manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
-        //     if constexpr (std::is_same_v<T, types::UInt64>) {
-        //         manager._uint64s.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
-        //     } else if constexpr (std::is_same_v<T, types::Int64>) {
-        //         manager._int64s.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
-        //     } else if constexpr (std::is_same_v<T, types::Double>) {
-        //         manager._doubles.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
-        //     } else if constexpr (std::is_same_v<T, types::Bool>) {
-        //         manager._bools.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
-        //     }
+            if constexpr (std::is_same_v<T, types::UInt64>) {
+                manager._uint64s.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            } else if constexpr (std::is_same_v<T, types::Int64>) {
+                manager._int64s.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            } else if constexpr (std::is_same_v<T, types::Double>) {
+                manager._doubles.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            } else if constexpr (std::is_same_v<T, types::Bool>) {
+                manager._bools.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            }
 
-        //     return {};
-        // };
+            return {};
+        };
 
-        // // Lambda to store string properties
-        // const auto storeStringContainer = [&](PropertyManager& manager) -> DumpResult<void> {
-        //     StringPropertyContainerLoader loader {reader.value()};
+        // Lambda to store string properties
+        const auto storeStringContainer = [&](PropertyManager& manager) -> DumpResult<void> {
+            StringPropertyContainerLoader loader {reader.value()};
 
-        //     auto props = loader.load();
-        //     if (!props) {
-        //         return props.get_unexpected();
-        //     }
+            auto props = loader.load();
+            if (!props) {
+                return props.get_unexpected();
+            }
 
-        //     auto* ptr = props.value().release();
-        //     manager._map.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
+            auto* ptr = props.value().release();
+            manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
-        //     manager._strings.emplace(pt._id, static_cast<PropertyContainer*>(ptr));
+            manager._strings.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
-        //     return {};
-        // };
+            return {};
+        };
 
-        // switch (pt._valueType) {
-        //     case ValueType::UInt64: {
-        //         if (auto res = storeTrivialContainer.operator()<types::UInt64>(manager); !res) {
-        //             return res.get_unexpected();
-        //         }
-        //         break;
-        //     }
-        //     case ValueType::Int64: {
-        //         if (auto res = storeTrivialContainer.operator()<types::Int64>(manager); !res) {
-        //             return res.get_unexpected();
-        //         }
-        //         break;
-        //     }
-        //     case ValueType::Double: {
-        //         if (auto res = storeTrivialContainer.operator()<types::Double>(manager); !res) {
-        //             return res.get_unexpected();
-        //         }
-        //         break;
-        //     }
-        //     case ValueType::String: {
-        //         if (auto res = storeStringContainer(manager); !res) {
-        //             return res.get_unexpected();
-        //         }
-        //         break;
-        //     }
-        //     case ValueType::Bool: {
-        //         if (auto res = storeTrivialContainer.operator()<types::Bool>(manager); !res) {
-        //             return res.get_unexpected();
-        //         }
-        //         break;
-        //     }
-        //     case ValueType::Invalid:
-        //     case ValueType::_SIZE:
-        //         panic("Invalid value type");
-        // }
+        switch (pt->_valueType) {
+            case ValueType::UInt64: {
+                if (auto res = storeTrivialContainer.operator()<types::UInt64>(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::Int64: {
+                if (auto res = storeTrivialContainer.operator()<types::Int64>(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::Double: {
+                if (auto res = storeTrivialContainer.operator()<types::Double>(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::String: {
+                if (auto res = storeStringContainer(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::Bool: {
+                if (auto res = storeTrivialContainer.operator()<types::Bool>(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::Invalid:
+            case ValueType::_SIZE:
+                panic("Invalid value type");
+        }
 
         return {};
     };
@@ -214,7 +218,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         PropertyIndexerLoader loader {reader.value()};
 
-        auto res = loader.load(part->_nodeProperties->_indexers);
+        auto res = loader.load(metadata, part->_nodeProperties->_indexers);
         if (!res) {
             return res.get_unexpected();
         }
@@ -231,7 +235,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         PropertyIndexerLoader loader {reader.value()};
 
-        auto res = loader.load(part->_edgeProperties->_indexers);
+        auto res = loader.load(metadata, part->_edgeProperties->_indexers);
         if (!res) {
             return res.get_unexpected();
         }

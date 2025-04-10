@@ -152,7 +152,8 @@ bool SystemManager::loadBinaryDB(const std::string& graphName,
 
     auto graph = Graph::create(graphName);
 
-    if (!GraphLoader::load(graph.get(), dbPath)) {
+    if (auto res = GraphLoader::load(graph.get(), dbPath); !res) {
+        spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }

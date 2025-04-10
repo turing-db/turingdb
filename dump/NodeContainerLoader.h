@@ -6,6 +6,7 @@
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "NodeContainer.h"
+#include "versioning/CommitMetadata.h"
 #include "NodeContainerDumpConstants.h"
 
 namespace db {
@@ -19,7 +20,7 @@ public:
     {
     }
 
-    [[nodiscard]] DumpResult<std::unique_ptr<NodeContainer>> load() {
+    [[nodiscard]] DumpResult<std::unique_ptr<NodeContainer>> load(const CommitMetadata& metadata) {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {
@@ -47,7 +48,7 @@ public:
 
         NodeContainer* container = new NodeContainer {firstID, nodeCount};
 
-        //auto& ranges = container->_ranges;
+        auto& ranges = container->_ranges;
         auto& nodes = container->_nodes;
         nodes.resize(nodeCount);
 
@@ -66,19 +67,24 @@ public:
                 return DumpError::result(DumpErrorType::COULD_NOT_READ_NODES);
             }
 
-            //const size_t countInPage = it.get<uint64_t>();
+            const size_t countInPage = it.get<uint64_t>();
 
-            // TODO fix, we need to retrieve the labelset from the ID
-            //for (size_t j = 0; j < countInPage; j++) {
-            //    const auto lsetID = it.get<LabelSetID::Type>();
-            //    auto& r = ranges[lsetID];
-            //    r._first = it.get<EntityID::Type>();
-            //    r._count = it.get<uint64_t>();
-            //}
+            for (size_t j = 0; j < countInPage; j++) {
+                const auto lsetID = it.get<LabelSetID::Type>();
+                const auto& lset = metadata.labelsets().getValue(lsetID);
+
+                if (!lset) {
+                    return DumpError::result(DumpErrorType::COULD_NOT_READ_NODES);
+                }
+
+                auto& r = ranges[lset.value()];
+                r._first = it.get<EntityID::Type>();
+                r._count = it.get<uint64_t>();
+            }
         }
 
         // loading node records
-        //size_t recordOffset = 0;
+        size_t recordOffset = 0;
         for (size_t i = 0; i < recordPageCount; i++) {
             _reader.nextPage();
 
@@ -93,16 +99,21 @@ public:
                 return DumpError::result(DumpErrorType::COULD_NOT_READ_NODES);
             }
 
-            //const size_t countInPage = it.get<uint64_t>();
+            const size_t countInPage = it.get<uint64_t>();
 
             // Copy content of page into node records vector
-            // TODO  fix, we need to retrieve the labelset from the ID
-            //for (size_t j = 0; j < countInPage; j++) {
-            //    nodes[j + recordOffset]._labelsetID = it.get<LabelSetID::Type>();
+            for (size_t j = 0; j < countInPage; j++) {
+                const LabelSetID labelsetID = it.get<LabelSetID::Type>();
+                const auto labelset = metadata.labelsets().getValue(labelsetID);
 
-            //}
+                if (!labelset) {
+                    return DumpError::result(DumpErrorType::COULD_NOT_READ_NODES);
+                }
 
-            //recordOffset += countInPage;
+                nodes[j + recordOffset]._labelset = labelset.value();
+            }
+
+            recordOffset += countInPage;
         }
 
         return {std::unique_ptr<NodeContainer> {container}};

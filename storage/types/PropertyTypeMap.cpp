@@ -42,6 +42,17 @@ PropertyTypeMap& PropertyTypeMap::operator=(const PropertyTypeMap& other) {
     return *this;
 }
 
+std::optional<PropertyType> PropertyTypeMap::get(PropertyTypeID ptID) const {
+    auto it = _idMap.find(ptID);
+    if (it == _idMap.end()) {
+        return std::nullopt;
+    }
+
+    const size_t offset = it->second;
+
+    return _container[offset]._pt;
+}
+
 std::optional<PropertyType> PropertyTypeMap::get(const std::string& name) const {
     auto it = _nameMap.find(name);
     if (it == _nameMap.end()) {

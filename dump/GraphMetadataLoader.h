@@ -1,7 +1,7 @@
 #pragma once
 
 #include "FilePageReader.h"
-#include "GraphMetadata.h"
+#include "versioning/CommitMetadata.h"
 #include "LabelMapLoader.h"
 #include "EdgeTypeMapLoader.h"
 #include "PropertyTypeMapLoader.h"
@@ -13,9 +13,7 @@ class GraphMetadata;
 
 class GraphMetadataLoader {
 public:
-    [[nodiscard]] static DumpResult<std::unique_ptr<GraphMetadata>> load(const fs::Path& path) {
-        auto metadata = std::make_unique<GraphMetadata>();
-
+    [[nodiscard]] static DumpResult<void> load(const fs::Path& path, CommitMetadata& metadata) {
         // Reading labels
         {
             const fs::Path labelsPath = path / "labels";
@@ -26,7 +24,7 @@ public:
 
             LabelMapLoader loader {reader.value()};
 
-            if (auto res = loader.load(metadata->labels()); !res) {
+            if (auto res = loader.load(metadata._labelMap); !res) {
                 return res.get_unexpected();
             }
         }
@@ -40,7 +38,7 @@ public:
 
             EdgeTypeMapLoader loader {reader.value()};
 
-            if (auto res = loader.load(metadata->edgeTypes()); !res) {
+            if (auto res = loader.load(metadata._edgeTypeMap); !res) {
                 return res.get_unexpected();
             }
         }
@@ -55,7 +53,7 @@ public:
 
             PropertyTypeMapLoader loader {reader.value()};
 
-            if (auto res = loader.load(metadata->propTypes()); !res) {
+            if (auto res = loader.load(metadata._propTypeMap); !res) {
                 return res.get_unexpected();
             }
         }
@@ -70,12 +68,12 @@ public:
 
             LabelSetMapLoader loader {reader.value()};
 
-            if (auto res = loader.load(metadata->labelsets()); !res) {
+            if (auto res = loader.load(metadata._labelsetMap); !res) {
                 return res.get_unexpected();
             }
         }
 
-        return std::move(metadata);
+        return {};
     }
 };
 

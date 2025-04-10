@@ -5,6 +5,7 @@
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "PropertyIndexerDumpConstants.h"
+#include "versioning/CommitMetadata.h"
 
 namespace db {
 
@@ -13,11 +14,11 @@ public:
     using Constants = PropertyIndexerDumperConstants;
 
     explicit PropertyIndexerLoader(fs::FilePageReader& reader)
-        : _reader(reader)
-    {
+        : _reader(reader) {
     }
 
-    [[nodiscard]] DumpResult<void> load(PropertyIndexer& indexer) {
+    [[nodiscard]] DumpResult<void> load(const CommitMetadata& metadata,
+                                        PropertyIndexer& indexer) {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {
@@ -57,24 +58,29 @@ public:
             const size_t countInPage = it.get<uint64_t>();
 
             for (size_t j = 0; j < countInPage; j++) {
-                //const auto ptID = it.get<PropertyTypeID::Type>();
-                //const auto lsetCount = it.get<uint64_t>();
+                const auto ptID = it.get<PropertyTypeID::Type>();
+                const auto lsetCount = it.get<uint64_t>();
 
-                //auto& ptIndexer = indexer.emplace(ptID, &metadata.labelsets()).first->second;
+                auto& ptIndexer = indexer.emplace(ptID, LabelSetPropertyIndexer {}).first->second;
 
-                // TODO fix, we need to retrieve the lset from the id
-                // for (size_t k = 0; k < lsetCount; k++) {
-                //     const auto lsetID = it.get<LabelSetID::Type>();
+                for (size_t k = 0; k < lsetCount; k++) {
+                    const auto lsetID = it.get<LabelSetID::Type>();
 
-                //     auto& info = ptIndexer[lsetID];
+                    const auto labelset = metadata.labelsets().getValue(lsetID);
 
-                //     info.resize(it.get<uint64_t>());
+                    if (!labelset) {
+                        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROP_INDEXER);
+                    }
 
-                //     for (auto& range : info) {
-                //         range._offset = it.get<uint64_t>();
-                //         range._count = it.get<uint64_t>();
-                //     }
-                // }
+                    auto& info = ptIndexer[labelset.value()];
+
+                    info.resize(it.get<uint64_t>());
+
+                    for (auto& range : info) {
+                        range._offset = it.get<uint64_t>();
+                        range._count = it.get<uint64_t>();
+                    }
+                }
             }
         }
 

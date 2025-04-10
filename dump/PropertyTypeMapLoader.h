@@ -72,7 +72,8 @@ public:
                 }
 
                 const std::string_view name = it.get<char>(strsize);
-                propTypes.create(std::string {name}, valueType);
+                propTypes.getOrCreate(std::string {name},
+                        valueType);
             }
         }
 

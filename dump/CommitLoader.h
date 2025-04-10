@@ -6,6 +6,7 @@
 #include "DataPart.h"
 #include "DataPartLoader.h"
 #include "Graph.h"
+#include "GraphMetadataLoader.h"
 #include "Path.h"
 #include "GraphDumpHelper.h"
 #include "DumpResult.h"
@@ -36,6 +37,19 @@ public:
         commit->_data = versionController->createCommitData(hash);
         commit->_data->_hash = hash;
 
+        auto& metadata = commit->_data->_metadata;
+
+        // Loading metadata
+        {
+            const fs::Path metadataPath = path / "metadata";
+            auto res = GraphMetadataLoader::load(path, metadata);
+
+            if (!res) {
+                return res.get_unexpected();
+            }
+        }
+
+
         std::map<uint64_t, WeakArc<DataPart>> dataparts;
         for (auto& child : files.value()) {
             const auto& childStr = child.get();
@@ -55,7 +69,7 @@ public:
 
             child = path / child.get();
 
-            auto res = DataPartLoader::load(child, *versionController);
+            auto res = DataPartLoader::load(child, metadata, *versionController);
 
             if (!res) {
                 return res.get_unexpected();

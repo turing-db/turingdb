@@ -64,7 +64,7 @@ public:
                 }
 
                 const std::string_view name = it.get<char>(strsize);
-                labels.create(std::string {name});
+                labels.getOrCreate(std::string {name});
             }
         }
 
