@@ -108,8 +108,8 @@ public:
 
                 switch (col->getKind()) {
                     COL_CASE(ColumnVector<EntityID>)
-                    COL_CASE(ColumnVector<NodeID>)
-                    COL_CASE(ColumnVector<EdgeID>)
+                    COL_CASE(ColumnVector<PropertyTypeID>)
+                    COL_CASE(ColumnVector<LabelSetID>)
                     COL_CASE(ColumnVector<types::UInt64::Primitive>)
                     COL_CASE(ColumnVector<types::Int64::Primitive>)
                     COL_CASE(ColumnVector<types::Double::Primitive>)
