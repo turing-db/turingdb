@@ -2,7 +2,7 @@
 
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistory.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 
 namespace db {
 

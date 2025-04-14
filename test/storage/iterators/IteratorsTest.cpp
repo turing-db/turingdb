@@ -3,7 +3,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "FileUtils.h"

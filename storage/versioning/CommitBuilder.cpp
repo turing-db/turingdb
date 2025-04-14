@@ -7,7 +7,7 @@
 #include "versioning/CommitView.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 
 using namespace db;
 

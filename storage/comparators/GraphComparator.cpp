@@ -3,7 +3,7 @@
 #include "Graph.h"
 #include "reader/GraphReader.h"
 #include "DataPartComparator.h"
-#include "CommitMetadataComparator.h"
+#include "GraphMetadataComparator.h"
 #include "versioning/Transaction.h"
 
 using namespace db;

@@ -2,7 +2,7 @@
 
 #include "reader/GraphReader.h"
 #include "DataPart.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "properties/PropertyManager.h"
 
 namespace db {

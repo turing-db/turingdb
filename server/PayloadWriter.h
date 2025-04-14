@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "EntityID.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
 #include "types/PropertyType.h"

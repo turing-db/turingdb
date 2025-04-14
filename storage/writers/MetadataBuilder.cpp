@@ -6,7 +6,7 @@
 #include "labels/LabelSetMap.h"
 #include "types/EdgeTypeMap.h"
 #include "types/PropertyTypeMap.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 
 using namespace db;
 

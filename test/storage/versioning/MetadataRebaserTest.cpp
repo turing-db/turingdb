@@ -3,7 +3,7 @@
 #include "labels/LabelMap.h"
 #include "labels/LabelSetMap.h"
 #include "versioning/MetadataRebaser.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;

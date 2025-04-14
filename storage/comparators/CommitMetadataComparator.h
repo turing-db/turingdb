@@ -2,7 +2,7 @@
 
 #include <range/v3/view/zip.hpp>
 
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "LabelMapComparator.h"
 #include "LabelSetMapComparator.h"
 #include "PropertyTypeMapComparator.h"

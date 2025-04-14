@@ -8,7 +8,7 @@
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "EdgeIndexerDumpConstants.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 
 namespace db {
 

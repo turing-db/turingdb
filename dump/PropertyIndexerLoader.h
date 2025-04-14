@@ -5,7 +5,7 @@
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "PropertyIndexerDumpConstants.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 
 namespace db {
 

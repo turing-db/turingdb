@@ -6,7 +6,7 @@
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "NodeContainer.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "NodeContainerDumpConstants.h"
 
 namespace db {

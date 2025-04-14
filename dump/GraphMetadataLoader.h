@@ -1,7 +1,7 @@
 #pragma once
 
 #include "FilePageReader.h"
-#include "versioning/CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "LabelMapLoader.h"
 #include "EdgeTypeMapLoader.h"
 #include "PropertyTypeMapLoader.h"

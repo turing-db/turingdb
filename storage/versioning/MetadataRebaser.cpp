@@ -1,6 +1,6 @@
 #include "MetadataRebaser.h"
 
-#include "CommitMetadata.h"
+#include "metadata/GraphMetadata.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
