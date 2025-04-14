@@ -5,7 +5,8 @@
 using namespace db;
 
 MatchTarget::MatchTarget(PathPattern* pattern)
-    : _pattern(pattern) {
+    : _pattern(pattern)
+{
 }
 
 MatchTarget::~MatchTarget() {

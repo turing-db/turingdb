@@ -14,7 +14,8 @@ public:
     using Constants = PropertyIndexerDumperConstants;
 
     explicit PropertyIndexerLoader(fs::FilePageReader& reader)
-        : _reader(reader) {
+        : _reader(reader)
+    {
     }
 
     [[nodiscard]] DumpResult<void> load(const CommitMetadata& metadata,

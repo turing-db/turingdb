@@ -30,11 +30,13 @@ public:
 
     TemplateLabelSetHandle(LabelSetID id, const BaseType& base)
         : _id(id),
-          _labelset {&base} {
+          _labelset {&base}
+    {
     }
 
     explicit TemplateLabelSetHandle(const BaseType& base)
-        : _labelset {&base} {
+        : _labelset {&base}
+    {
     }
 
     TemplateLabelSetHandle(const TemplateLabelSetHandle&) = default;

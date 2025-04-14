@@ -26,7 +26,8 @@ public:
         : _buf(buf),
           _metadata(metadata),
           _nodeIDMapper(nodeIDMapper),
-          _reader(reader) {
+          _reader(reader)
+    {
     }
 
     bool null() override {

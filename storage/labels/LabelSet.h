@@ -33,7 +33,8 @@ public:
     TemplateLabelSet() = default;
     TemplateLabelSet(const TemplateLabelSet&) = default;
     TemplateLabelSet(TemplateLabelSet&& other) noexcept
-        : _integers(other._integers) {
+        : _integers(other._integers)
+    {
     }
 
     TemplateLabelSet& operator=(const TemplateLabelSet&) = default;
