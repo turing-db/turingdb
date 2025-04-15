@@ -23,7 +23,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
     // Loading info
     {
         const fs::Path infoPath = path / "info";
-        auto reader = fs::FilePageReader::open(infoPath);
+        auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
         }

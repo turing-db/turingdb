@@ -61,40 +61,40 @@ protected:
 
 TEST_F(FilePageWriterTest, HardwareChecks) {
     static const size_t systemPageSize = sysconf(_SC_PAGE_SIZE);
-    ASSERT_GT(fs::FilePageWriter::PAGE_SIZE, systemPageSize);
-    ASSERT_TRUE(fs::FilePageWriter::PAGE_SIZE % systemPageSize == 0);
-    ASSERT_TRUE(fs::FilePageWriter::InternalBuffer::ALIGNMENT % systemPageSize == 0);
+    ASSERT_GT(fs::DEFAULT_PAGE_SIZE, systemPageSize);
+    ASSERT_TRUE(fs::DEFAULT_PAGE_SIZE % systemPageSize == 0);
+    ASSERT_TRUE(fs::AlignedBuffer::ALIGNMENT % systemPageSize == 0);
 }
 
 TEST_F(FilePageWriterTest, Pages) {
     testOnes<uint64_t>(0);
     testOnes<uint64_t>(13);
     testOnes<uint64_t>(1024);
-    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE - 1);
-    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE);
-    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE + 13);
-    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE * 2);
-    testOnes<uint64_t>(fs::FilePageWriter::PAGE_SIZE * 2 + 13);
+    testOnes<uint64_t>(fs::DEFAULT_PAGE_SIZE - 1);
+    testOnes<uint64_t>(fs::DEFAULT_PAGE_SIZE);
+    testOnes<uint64_t>(fs::DEFAULT_PAGE_SIZE + 13);
+    testOnes<uint64_t>(fs::DEFAULT_PAGE_SIZE * 2);
+    testOnes<uint64_t>(fs::DEFAULT_PAGE_SIZE * 2 + 13);
 }
 
 TEST_F(FilePageWriterTest, Types) {
     testOnes<uint8_t>(0);
     testOnes<uint8_t>(13);
     testOnes<uint8_t>(1024);
-    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE - 1);
-    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE);
-    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE + 13);
-    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE * 2);
-    testOnes<uint8_t>(fs::FilePageWriter::PAGE_SIZE * 2 + 13);
+    testOnes<uint8_t>(fs::DEFAULT_PAGE_SIZE - 1);
+    testOnes<uint8_t>(fs::DEFAULT_PAGE_SIZE);
+    testOnes<uint8_t>(fs::DEFAULT_PAGE_SIZE + 13);
+    testOnes<uint8_t>(fs::DEFAULT_PAGE_SIZE * 2);
+    testOnes<uint8_t>(fs::DEFAULT_PAGE_SIZE * 2 + 13);
 
     testOnes<int8_t>(0);
     testOnes<int8_t>(13);
     testOnes<int8_t>(1024);
-    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE - 1);
-    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE);
-    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE + 13);
-    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE * 2);
-    testOnes<int8_t>(fs::FilePageWriter::PAGE_SIZE * 2 + 13);
+    testOnes<int8_t>(fs::DEFAULT_PAGE_SIZE - 1);
+    testOnes<int8_t>(fs::DEFAULT_PAGE_SIZE);
+    testOnes<int8_t>(fs::DEFAULT_PAGE_SIZE + 13);
+    testOnes<int8_t>(fs::DEFAULT_PAGE_SIZE * 2);
+    testOnes<int8_t>(fs::DEFAULT_PAGE_SIZE * 2 + 13);
 
     {
         constexpr std::string_view helloWorld = "Hello world!";

@@ -4,7 +4,7 @@
 
 using namespace fs;
 
-Result<FilePageWriter> FilePageWriter::open(const Path& path) {
+Result<FilePageWriter> FilePageWriter::open(const Path& path, size_t pageSize) {
     const int access = O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT;
     const int permissions = S_IRUSR | S_IWUSR;
 
@@ -14,10 +14,10 @@ Result<FilePageWriter> FilePageWriter::open(const Path& path) {
         return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageWriter {fd};
+    return FilePageWriter {fd, pageSize};
 }
 
-Result<FilePageWriter> FilePageWriter::openNoDirect(const Path& path) {
+Result<FilePageWriter> FilePageWriter::openNoDirect(const Path& path, size_t pageSize) {
     const int access = O_WRONLY | O_TRUNC | O_CREAT;
     const int permissions = S_IRUSR | S_IWUSR;
 
@@ -27,7 +27,7 @@ Result<FilePageWriter> FilePageWriter::openNoDirect(const Path& path) {
         return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageWriter {fd};
+    return FilePageWriter {fd, pageSize};
 }
 
 void FilePageWriter::write(const uint8_t* data, size_t size) {
@@ -67,7 +67,7 @@ void FilePageWriter::finish() {
         return;
     }
 
-    if (_buffer.size() != InternalBuffer::Capacity) {
+    if (_buffer.size() != _buffer.capacity()) {
         std::memset(_buffer.data() + _buffer.size(), 0, _buffer.avail());
     }
 
@@ -76,7 +76,7 @@ void FilePageWriter::finish() {
 }
 
 void FilePageWriter::nextPage() {
-    if (_buffer.size() != InternalBuffer::Capacity) {
+    if (_buffer.size() != _buffer.capacity()) {
         std::memset(_buffer.data() + _buffer.size(), 0, _buffer.avail());
     }
 
@@ -98,7 +98,7 @@ void FilePageWriter::reserveSpace(size_t byteCount) {
 }
 
 void FilePageWriter::flush() {
-    ssize_t remainingBytes = PAGE_SIZE;
+    ssize_t remainingBytes = buffer().capacity();
 
     while (remainingBytes > 0) {
         const ssize_t nbytes = ::write(_fd, _buffer.data(), remainingBytes);

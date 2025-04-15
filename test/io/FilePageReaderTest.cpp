@@ -54,19 +54,18 @@ protected:
 
 TEST_F(FilePageReaderTest, HardwareChecks) {
     static const size_t systemPageSize = sysconf(_SC_PAGE_SIZE);
-    ASSERT_GT(fs::FilePageReader::PAGE_SIZE, systemPageSize);
-    ASSERT_TRUE(fs::FilePageReader::PAGE_SIZE % systemPageSize == 0);
-    ASSERT_TRUE(fs::FilePageReader::InternalBuffer::ALIGNMENT % systemPageSize == 0);
+    ASSERT_GT(fs::DEFAULT_PAGE_SIZE, systemPageSize);
+    ASSERT_TRUE(fs::DEFAULT_PAGE_SIZE % systemPageSize == 0);
+    ASSERT_TRUE(fs::AlignedBuffer::ALIGNMENT % systemPageSize == 0);
 }
 
 TEST_F(FilePageReaderTest, Pages) {
     testOnes(13);
     testOnes(1024);
-    // testOnes(fs::FilePageReader::PAGE_SIZE - 1);
-    testOnes(fs::FilePageReader::PAGE_SIZE);
-    testOnes(fs::FilePageReader::PAGE_SIZE + 13);
-    testOnes(fs::FilePageReader::PAGE_SIZE * 2);
-    testOnes(fs::FilePageReader::PAGE_SIZE * 2 + 13);
+    testOnes(fs::DEFAULT_PAGE_SIZE);
+    testOnes(fs::DEFAULT_PAGE_SIZE + 13);
+    testOnes(fs::DEFAULT_PAGE_SIZE * 2);
+    testOnes(fs::DEFAULT_PAGE_SIZE * 2 + 13);
 }
 
 int main(int argc, char** argv) {

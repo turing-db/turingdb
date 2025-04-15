@@ -40,7 +40,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
     {
         const fs::Path infoPath = path / "info";
 
-        auto writer = fs::FilePageWriter::open(infoPath);
+        auto writer = fs::FilePageWriter::open(infoPath, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, writer.error());
         }

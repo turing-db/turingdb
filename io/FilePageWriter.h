@@ -5,17 +5,17 @@
 #include "AlignedBuffer.h"
 #include "Path.h"
 #include "FileResult.h"
-#include "PageSizeConfig.h"
 
 namespace fs {
 
 class FilePageWriter {
 public:
-    static constexpr size_t PAGE_SIZE = DEFAULT_PAGE_SIZE;
-    using InternalBuffer = AlignedBuffer<PAGE_SIZE>;
-    using InternalBufferIterator = AlignedBufferIterator<PAGE_SIZE>;
-
     FilePageWriter() = default;
+
+    explicit FilePageWriter(size_t pageSize)
+        : _buffer(pageSize)
+    {
+    }
 
     ~FilePageWriter() {
         finish();
@@ -26,8 +26,11 @@ public:
     FilePageWriter& operator=(const FilePageWriter&) = delete;
     FilePageWriter& operator=(FilePageWriter&&) noexcept = default;
 
-    [[nodiscard]] static Result<FilePageWriter> open(const Path& path);
-    [[nodiscard]] static Result<FilePageWriter> openNoDirect(const Path& path);
+    [[nodiscard]] static Result<FilePageWriter> open(const Path& path,
+                                                     size_t pageSize = DEFAULT_PAGE_SIZE);
+
+    [[nodiscard]] static Result<FilePageWriter> openNoDirect(const Path& path,
+                                                             size_t pageSize = DEFAULT_PAGE_SIZE);
 
     void write(const uint8_t* data, size_t size);
     void writeToCurrentPage(std::span<const uint8_t> data);
@@ -79,18 +82,19 @@ public:
     bool errorOccured() const { return _error.has_value(); }
     bool reachedEnd() const { return _reachedEnd; }
     const std::optional<Error>& error() const { return _error; }
-    InternalBuffer& buffer() { return _buffer; }
-    const InternalBuffer& buffer() const { return _buffer; }
+    AlignedBuffer& buffer() { return _buffer; }
+    const AlignedBuffer& buffer() const { return _buffer; }
 
 private:
     std::optional<Error> _error;
-    InternalBuffer _buffer;
+    AlignedBuffer _buffer;
     int _fd {-1};
     bool _reachedEnd = false;
     size_t _written {};
 
-    explicit FilePageWriter(int fd)
-        : _fd(fd)
+    explicit FilePageWriter(int fd, size_t pageSize)
+        : _buffer(pageSize),
+          _fd(fd)
     {
     }
 

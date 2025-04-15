@@ -45,9 +45,9 @@ public:
 
     // Buckets page metadata stride
     static constexpr size_t BUCKETS_HEADER_STRIDE = sizeof(uint64_t); // Bucket count
-
-    // Limits page metadata stride
-    static constexpr size_t LIMITS_HEADER_STRIDE = sizeof(uint64_t); // Limit block count
+                                                                      //
+    // Block count header
+    static constexpr size_t LIMIT_PAGE_HEADER_STRIDE = sizeof(uint64_t); // Limit block count
 
     // Single id stride
     static constexpr size_t ID_STRIDE = sizeof(EntityID::Type);
@@ -58,9 +58,12 @@ public:
     // Single string limit stride
     static constexpr size_t LIMIT_STRIDE = sizeof(StringBucket::StringLimits);
 
-    // Single string limit block stride
-    static constexpr size_t LIMIT_BLOCK_STRIDE = sizeof(uint64_t)  // Bucket index
-                                               + sizeof(uint32_t); // String count
+    // Block header stride
+    static constexpr size_t LIMIT_BLOCK_HEADER_STRIDE = sizeof(uint64_t)  // Bucket index
+                                                      + sizeof(uint32_t); // String count
+
+    // Minimal required space for a block
+    static constexpr size_t MIN_BLOCK_STRIDE = LIMIT_BLOCK_HEADER_STRIDE + LIMIT_STRIDE;
 
     // Avail space in id page
     static constexpr size_t ID_PAGE_AVAIL = DumpConfig::PAGE_SIZE - ID_HEADER_STRIDE;
@@ -69,7 +72,7 @@ public:
     static constexpr size_t BUCKET_PAGE_AVAIL = DumpConfig::PAGE_SIZE - BUCKETS_HEADER_STRIDE;
 
     // Avail space in limit stride
-    static constexpr size_t LIMIT_PAGE_AVAIL = DumpConfig::PAGE_SIZE - LIMITS_HEADER_STRIDE;
+    static constexpr size_t LIMIT_PAGE_AVAIL = DumpConfig::PAGE_SIZE - LIMIT_PAGE_HEADER_STRIDE;
 
     // ID count per page
     static constexpr size_t ID_COUNT_PER_PAGE = ID_PAGE_AVAIL / ID_STRIDE;

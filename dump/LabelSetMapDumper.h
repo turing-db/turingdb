@@ -25,7 +25,7 @@ public:
     static constexpr size_t LABELSET_STRIDE = LabelSet::IntegerSize * LabelSet::IntegerCount;
 
     // Avail space in data page
-    static constexpr size_t PAGE_AVAIL = fs::FilePageWriter::PAGE_SIZE - PAGE_HEADER_STRIDE;
+    static constexpr size_t PAGE_AVAIL = DumpConfig::PAGE_SIZE - PAGE_HEADER_STRIDE;
 
     // Count per page
     static constexpr size_t COUNT_PER_PAGE = PAGE_AVAIL / LABELSET_STRIDE;

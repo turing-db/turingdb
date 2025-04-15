@@ -19,7 +19,7 @@ public:
         writer.writeToCurrentPage(DumpConfig::VERSION);
     }
 
-    static DumpResult<void> checkFileHeader(fs::AlignedBufferIterator<DumpConfig::PAGE_SIZE>& it) {
+    static DumpResult<void> checkFileHeader(fs::AlignedBufferIterator& it) {
         const auto badcafe = it.get<decltype(DumpConfig::ONE_BAD_CAFE)>();
         const auto version = it.get<decltype(DumpConfig::VERSION)>();
 

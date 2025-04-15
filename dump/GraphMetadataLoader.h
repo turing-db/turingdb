@@ -17,7 +17,7 @@ public:
         // Reading labels
         {
             const fs::Path labelsPath = path / "labels";
-            auto reader = fs::FilePageReader::open(labelsPath);
+            auto reader = fs::FilePageReader::open(labelsPath, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, reader.error());
             }
@@ -31,7 +31,7 @@ public:
 
         {
             const fs::Path edgeTypesPath = path / "edge-types";
-            auto reader = fs::FilePageReader::open(edgeTypesPath);
+            auto reader = fs::FilePageReader::open(edgeTypesPath, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, reader.error());
             }
@@ -46,7 +46,7 @@ public:
         // Reading property types
         {
             const fs::Path propTypesPath = path / "property-types";
-            auto reader = fs::FilePageReader::open(propTypesPath);
+            auto reader = fs::FilePageReader::open(propTypesPath, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, reader.error());
             }
@@ -61,7 +61,7 @@ public:
         // Reading labelsets
         {
             const fs::Path labelsetsPath = path / "labelsets";
-            auto reader = fs::FilePageReader::open(labelsetsPath);
+            auto reader = fs::FilePageReader::open(labelsetsPath, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, reader.error());
             }

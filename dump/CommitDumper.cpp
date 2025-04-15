@@ -29,7 +29,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
     {
         const fs::Path labelsPath = path / "labels";
 
-        auto writer = fs::FilePageWriter::open(labelsPath);
+        auto writer = fs::FilePageWriter::open(labelsPath, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, writer.error());
         }
@@ -45,7 +45,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
     {
         const fs::Path edgetypesPath = path / "edge-types";
 
-        auto writer = fs::FilePageWriter::open(edgetypesPath);
+        auto writer = fs::FilePageWriter::open(edgetypesPath, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, writer.error());
         }
@@ -61,7 +61,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
     {
         const fs::Path proptypesPath = path / "property-types";
 
-        auto writer = fs::FilePageWriter::open(proptypesPath);
+        auto writer = fs::FilePageWriter::open(proptypesPath, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, writer.error());
         }
@@ -77,7 +77,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
     {
         const fs::Path labelsetsPath = path / "labelsets";
 
-        auto writer = fs::FilePageWriter::open(labelsetsPath);
+        auto writer = fs::FilePageWriter::open(labelsetsPath, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, writer.error());
         }

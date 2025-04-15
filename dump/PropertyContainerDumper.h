@@ -186,9 +186,10 @@ public:
             size_t blockCountInPage = 0;
 
             _writer.nextPage();
-            _writer.reserveSpace(Constants::LIMITS_HEADER_STRIDE);
+            _writer.reserveSpace(Constants::LIMIT_PAGE_HEADER_STRIDE);
 
             auto* buffer = &_writer.buffer();
+
 
             for (uint64_t i = 0; i < buckets.bucketCount(); i++) {
                 const auto& bucket = buckets.bucket(i);
@@ -198,8 +199,7 @@ public:
                 size_t offset = 0;
 
                 while (remainingStrCount != 0) {
-                    ssize_t availSpace = (ssize_t)buffer->avail() - Constants::LIMIT_BLOCK_STRIDE;
-                    if (availSpace <= 0) {
+                    if (buffer->avail() < (ssize_t)Constants::MIN_BLOCK_STRIDE) {
                         // Not enough space to store a block of limits
                         // Fill page header
                         buffer->patch(reinterpret_cast<const uint8_t*>(&blockCountInPage), sizeof(uint64_t), 0);
@@ -207,14 +207,15 @@ public:
                         // Next page
                         limitsPageCount++;
                         _writer.nextPage();
-                        _writer.reserveSpace(Constants::LIMITS_HEADER_STRIDE);
+                        _writer.reserveSpace(Constants::LIMIT_PAGE_HEADER_STRIDE);
                         buffer = &_writer.buffer();
                         blockCountInPage = 0;
-                        availSpace = buffer->avail();
                     }
 
-                    const size_t limitsStride = std::min((size_t)availSpace,
-                                                         remainingStrCount * Constants::LIMIT_STRIDE);
+                    const ssize_t maxStride = remainingStrCount * Constants::LIMIT_STRIDE;
+                    const ssize_t availSpace = buffer->avail() - Constants::LIMIT_BLOCK_HEADER_STRIDE;
+                    const size_t limitsStride = std::min(availSpace, maxStride);
+
                     const uint32_t blockStrCount = limitsStride / Constants::LIMIT_STRIDE;
                     const std::span blockLimits = limits.subspan(offset, blockStrCount);
                     remainingStrCount -= blockStrCount;

@@ -15,8 +15,8 @@ namespace {
 using Integer = uint64_t;
 inline constexpr size_t INTEGER_COUNT = 1024ul * 1024 * 256 + 4; // 2GB + 4B
 inline constexpr size_t NBYTES = INTEGER_COUNT * sizeof(Integer);
-inline constexpr size_t NPAGES = NBYTES / fs::FilePageWriter::PAGE_SIZE
-                               + ((NBYTES % fs::FilePageWriter::PAGE_SIZE) != 0);
+inline constexpr size_t NPAGES = NBYTES / fs::DEFAULT_PAGE_SIZE
+                               + ((NBYTES % fs::DEFAULT_PAGE_SIZE) != 0);
 
 }
 
@@ -38,7 +38,7 @@ int main() {
         fmt::print("  * {} integers\n  * {} MiB\n  * Page size: {} MiB\n  * {} pages\n",
                    ones.size(),
                    (float)NBYTES / 1024.f / 1024.f,
-                   (float)fs::FilePageWriter::PAGE_SIZE / 1024.f / 1024.f,
+                   (float)fs::DEFAULT_PAGE_SIZE / 1024.f / 1024.f,
                    NPAGES);
 
         auto t0 = Clock::now();

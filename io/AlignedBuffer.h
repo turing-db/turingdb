@@ -8,29 +8,28 @@
 #include <string_view>
 
 #include "BioAssert.h"
+#include "PageSizeConfig.h"
 #include "Primitives.h"
 
 namespace fs {
 
-template <size_t Capacity>
+inline constexpr size_t DEFAULT_BUFFER_CAPACITY = DEFAULT_PAGE_SIZE;
+
 class AlignedBufferIterator;
 
-inline constexpr size_t DEFAULT_BUFFER_CAPACITY = 1024ul * 1024 * 8;
-
-template <size_t CapacityT = DEFAULT_BUFFER_CAPACITY>
 class AlignedBuffer {
 public:
     static constexpr size_t ALIGNMENT {4096ul};
-    static constexpr size_t Capacity = CapacityT;
 
     AlignedBuffer()
     {
-        void* ptr {nullptr};
-        if (posix_memalign(&ptr, ALIGNMENT, Capacity) != 0) {
-            throw std::runtime_error("AlignedBuffer error: Failed to allocate aligned memory");
-        }
+        this->allocate();
+    }
 
-        _buffer = static_cast<uint8_t*>(ptr);
+    explicit AlignedBuffer(size_t capacity)
+        : _capacity(capacity)
+    {
+        this->allocate();
     }
 
     AlignedBuffer(const AlignedBuffer&) = delete;
@@ -83,35 +82,43 @@ public:
     }
 
     void resize(size_t size) {
-        bioassert(size <= Capacity);
+        bioassert(size <= _capacity);
         _size = size;
     }
 
+    [[nodiscard]] size_t capacity() const { return _capacity; }
     [[nodiscard]] const uint8_t* data() const { return _buffer; }
     [[nodiscard]] uint8_t* data() { return _buffer; }
     [[nodiscard]] size_t size() const { return _size; }
-    [[nodiscard]] size_t avail() const { return Capacity - _size; }
+    [[nodiscard]] size_t avail() const { return _capacity - _size; }
 
-    [[nodiscard]] AlignedBufferIterator<CapacityT> begin() const;
-    [[nodiscard]] AlignedBufferIterator<CapacityT> end() const;
+    [[nodiscard]] AlignedBufferIterator begin() const;
+    [[nodiscard]] AlignedBufferIterator end() const;
 
 private:
     uint8_t* _buffer {nullptr};
     size_t _size {0};
+    size_t _capacity {DEFAULT_BUFFER_CAPACITY};
+
+    void allocate() {
+        void* ptr {nullptr};
+        if (posix_memalign(&ptr, ALIGNMENT, _capacity) != 0) {
+            throw std::runtime_error("AlignedBuffer error: Failed to allocate aligned memory");
+        }
+
+        _buffer = static_cast<uint8_t*>(ptr);
+    }
 };
 
-template <size_t CapacityT = DEFAULT_BUFFER_CAPACITY>
 class AlignedBufferIterator {
 public:
-    static constexpr size_t Capacity = CapacityT;
-
-    explicit AlignedBufferIterator(const AlignedBuffer<CapacityT>& buf)
+    explicit AlignedBufferIterator(const AlignedBuffer& buf)
         : _buf(&buf),
           _data(buf.data())
     {
     }
 
-    AlignedBufferIterator(const AlignedBuffer<CapacityT>& buf, size_t offset)
+    AlignedBufferIterator(const AlignedBuffer& buf, size_t offset)
         : _buf(&buf),
           _data(buf.data() + offset)
     {
@@ -229,17 +236,15 @@ public:
     const uint8_t* data() const { return _data; }
 
 private:
-    const AlignedBuffer<CapacityT>* _buf;
+    const AlignedBuffer* _buf;
     const uint8_t* _data {nullptr};
 };
 
-template <size_t CapacityT>
-inline AlignedBufferIterator<CapacityT> AlignedBuffer<CapacityT>::begin() const {
+inline AlignedBufferIterator AlignedBuffer::begin() const {
     return AlignedBufferIterator {*this};
 }
 
-template <size_t CapacityT>
-inline AlignedBufferIterator<CapacityT> AlignedBuffer<CapacityT>::end() const {
+inline AlignedBufferIterator AlignedBuffer::end() const {
     return AlignedBufferIterator {*this, _size};
 }
 

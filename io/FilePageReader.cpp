@@ -4,7 +4,7 @@
 
 using namespace fs;
 
-Result<FilePageReader> FilePageReader::open(const Path& path) {
+Result<FilePageReader> FilePageReader::open(const Path& path, size_t pageSize) {
     const int access = O_RDONLY | O_DIRECT;
     const int permissions = S_IRUSR | S_IWUSR;
 
@@ -14,10 +14,10 @@ Result<FilePageReader> FilePageReader::open(const Path& path) {
         return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageReader {fd};
+    return FilePageReader {fd, pageSize};
 }
 
-Result<FilePageReader> FilePageReader::openNoDirect(const Path& path) {
+Result<FilePageReader> FilePageReader::openNoDirect(const Path& path, size_t pageSize) {
     const int access = O_RDONLY;
     const int permissions = S_IRUSR | S_IWUSR;
 
@@ -27,11 +27,11 @@ Result<FilePageReader> FilePageReader::openNoDirect(const Path& path) {
         return Error::result(ErrorType::OPEN_FILE, errno);
     }
 
-    return FilePageReader {fd};
+    return FilePageReader {fd, pageSize};
 }
 
 Result<void> FilePageReader::nextPage() {
-    ssize_t remainingBytes = PAGE_SIZE;
+    ssize_t remainingBytes = _buffer.capacity();
 
     while (remainingBytes > 0) {
         const ssize_t nbytes = ::read(_fd, _buffer.data(), remainingBytes);
@@ -53,7 +53,7 @@ Result<void> FilePageReader::nextPage() {
     }
 
     bioassert(remainingBytes >= 0);
-    _buffer.resize(PAGE_SIZE - remainingBytes);
+    _buffer.resize(_buffer.capacity() - remainingBytes);
 
     return {};
 }
