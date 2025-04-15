@@ -19,7 +19,6 @@ void CallLabelSetStep::execute() {
     _id->clear();
     _labelNames->clear();
 
-
     const LabelSetMap& labelSetMap = _view->metadata().labelsets();
     const std::unordered_map<LabelSetID, std::unique_ptr<LabelSet>>& idMap = labelSetMap._forwardMap;
 
@@ -27,7 +26,6 @@ void CallLabelSetStep::execute() {
     const std::unordered_map<LabelID, std::string_view>& labelIdMap = labelMap._idMap;
 
     for (const auto& entry : idMap) {
-
         // Loop through all the existing labelIds to 'decompose' our labelset
         for (const auto& labelEntry : labelIdMap) {
             if (entry.second->hasLabel(labelEntry.first)) {

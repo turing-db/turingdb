@@ -22,7 +22,6 @@ void CallEdgeTypeStep::execute() {
     const EdgeTypeMap& edgeTypeMap = _view->metadata().edgeTypes();
     const std::unordered_map<EdgeTypeID, std::string_view>& idMap = edgeTypeMap._idMap;
 
-
     for (const auto& entry : idMap) {
         _id->emplace_back(entry.first);
         _edgeTypeName->emplace_back(entry.second);

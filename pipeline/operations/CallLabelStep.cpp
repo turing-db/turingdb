@@ -19,10 +19,8 @@ void CallLabelStep::execute() {
     _id->clear();
     _labelName->clear();
 
-
     const LabelMap& labelMap = _view->metadata().labels();
     const std::unordered_map<LabelID, std::string_view>& idMap = labelMap._idMap;
-
 
     for (const auto& entry : idMap) {
         _id->emplace_back(entry.first);
