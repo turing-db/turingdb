@@ -13,7 +13,7 @@ class HTTPParser : public AbstractHTTPParser {
 public:
     explicit HTTPParser(NetBuffer* inputBuffer)
         : _reader(inputBuffer->getReader()),
-          _currentPtr(_reader.getData())
+        _currentPtr(_reader.getData())
     {
     }
 

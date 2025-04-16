@@ -94,7 +94,7 @@ private:
 
     explicit FilePageWriter(int fd, size_t pageSize)
         : _buffer(pageSize),
-          _fd(fd)
+        _fd(fd)
     {
     }
 

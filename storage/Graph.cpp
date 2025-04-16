@@ -87,12 +87,12 @@ std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name) {
 
 Graph::Graph()
     : _graphName("default"),
-      _versionController(new VersionController)
+    _versionController(new VersionController)
 {
 }
 
 Graph::Graph(const std::string& name)
     : _graphName(name),
-      _versionController(new VersionController)
+    _versionController(new VersionController)
 {
 }

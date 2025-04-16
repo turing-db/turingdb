@@ -11,7 +11,7 @@ public:
     template <typename... T>
     GMLError(size_t line, fmt::format_string<T...> fmt, T&&... args)
         : _line(line),
-          _msg(fmt::format("GML Error at line {}: {}",
+        _msg(fmt::format("GML Error at line {}: {}",
                            line,
                            fmt::format(fmt, std::forward<T>(args)...)))
     {

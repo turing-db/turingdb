@@ -23,7 +23,7 @@ class QueryTester {
 public:
     QueryTester(LocalMemory& mem, QueryInterpreter& interp)
         : _mem(mem),
-          _interp(interp)
+        _interp(interp)
     {
     }
 

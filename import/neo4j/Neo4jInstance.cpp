@@ -14,8 +14,8 @@
 
 Neo4jInstance::Neo4jInstance(const FileUtils::Path& baseDir)
     : _neo4jDir(baseDir / "neo4j"),
-      _neo4jBinary(_neo4jDir / "bin" / "neo4j"),
-      _neo4jAdminBinary(_neo4jDir / "bin" / "neo4j-admin")
+    _neo4jBinary(_neo4jDir / "bin" / "neo4j"),
+    _neo4jAdminBinary(_neo4jDir / "bin" / "neo4j-admin")
 {
 }
 

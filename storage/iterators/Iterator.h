@@ -11,7 +11,7 @@ public:
 
     explicit Iterator(const GraphView& view)
         : _partIt(view),
-          _view(view)
+        _view(view)
     {
     }
 

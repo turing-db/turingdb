@@ -13,15 +13,15 @@ public:
 
     FileRegion(char* map, size_t size, size_t alignmentOffset)
         : _map(map),
-          _size(size),
-          _alignmentOffset(alignmentOffset)
+        _size(size),
+        _alignmentOffset(alignmentOffset)
     {
     }
 
     FileRegion(FileRegion&& other) noexcept
         : _map(other._map),
-          _size(other._size),
-          _alignmentOffset(other._alignmentOffset)
+        _size(other._size),
+        _alignmentOffset(other._alignmentOffset)
     {
         other._map = nullptr;
         other._size = 0;

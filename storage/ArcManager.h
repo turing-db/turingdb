@@ -37,7 +37,7 @@ public:
      * */
     WeakArc(const WeakArc& other)
         : _ptr(other._ptr),
-          _refs(other._refs)
+        _refs(other._refs)
     {
         if (_refs) {
             _refs->fetch_add((size_t)1);
@@ -52,7 +52,7 @@ public:
     WeakArc(const WeakArc<U>& other) noexcept
         requires std::is_same_v<const U, T>
         : _ptr(other._ptr),
-          _refs(other._refs)
+        _refs(other._refs)
     {
         if (_refs) {
             _refs->fetch_add((size_t)1);
@@ -120,7 +120,7 @@ public:
 
     WeakArc(WeakArc&& other) noexcept
         : _ptr(other._ptr),
-          _refs(other._refs)
+        _refs(other._refs)
     {
         other._ptr = nullptr;
         other._refs = nullptr;
@@ -192,7 +192,7 @@ private:
 
     WeakArc(T* ptr, std::atomic<size_t>* refs)
         : _ptr(ptr),
-          _refs(refs)
+        _refs(refs)
     {
         _refs->fetch_add((size_t)1);
     }
@@ -213,7 +213,7 @@ public:
 
     explicit Arc(T* ptr)
         : _ptr(ptr),
-          _refs(0)
+        _refs(0)
     {
     }
 
@@ -222,7 +222,7 @@ public:
 
     Arc(Arc&& other) noexcept
         : _ptr(other._ptr),
-          _refs(other._refs.load())
+        _refs(other._refs.load())
     {
         other._ptr = nullptr;
         other._refs.store(0);

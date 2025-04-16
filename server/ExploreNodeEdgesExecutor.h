@@ -24,10 +24,10 @@ public:
 
     ExploreNodeEdgesExecutor(const GraphReader& reader, PayloadWriter& w)
         : _w(w),
-          _reader(reader),
-          _propTypes(_reader.getMetadata().propTypes()),
-          _labelsets(_reader.getMetadata().labelsets()),
-          _nodeID(1)
+        _reader(reader),
+        _propTypes(_reader.getMetadata().propTypes()),
+        _labelsets(_reader.getMetadata().labelsets()),
+        _nodeID(1)
     {
     }
 

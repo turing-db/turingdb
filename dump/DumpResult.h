@@ -148,7 +148,7 @@ public:
     DumpError(DumpErrorType type,
               std::optional<fs::Error> fileError)
         : _type(type),
-          _fileError(fileError)
+        _fileError(fileError)
     {
     }
 

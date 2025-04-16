@@ -22,7 +22,7 @@ namespace rg = ranges;
 DataPart::DataPart(EntityID firstNodeID,
                    EntityID firstEdgeID)
     : _firstNodeID(firstNodeID),
-      _firstEdgeID(firstEdgeID)
+    _firstEdgeID(firstEdgeID)
 {
 }
 

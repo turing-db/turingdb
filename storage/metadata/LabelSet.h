@@ -171,7 +171,7 @@ public:
     static size_t hashIntegers(std::span<const TType, IntegerCount> integers) {
         size_t seed = TCount;
         for (auto x : integers) {
-            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= std::hash<TType> {}(x);
         }
         return seed;
     }

@@ -6,7 +6,7 @@ using namespace db;
 
 PartIterator::PartIterator(const GraphView& view)
     : _it(view.dataparts().begin()),
-      _itEnd(view.dataparts().end())
+    _itEnd(view.dataparts().end())
 {
 }
 

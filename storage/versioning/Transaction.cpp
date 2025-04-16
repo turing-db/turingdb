@@ -6,6 +6,10 @@
 
 using namespace db;
 
+Transaction::Transaction() = default;
+
+Transaction::~Transaction() = default;
+
 GraphView Transaction::viewGraph() const {
     return GraphView {*_data};
 }

@@ -114,13 +114,13 @@ class AlignedBufferIterator {
 public:
     explicit AlignedBufferIterator(const AlignedBuffer& buf)
         : _buf(&buf),
-          _data(buf.data())
+        _data(buf.data())
     {
     }
 
     AlignedBufferIterator(const AlignedBuffer& buf, size_t offset)
         : _buf(&buf),
-          _data(buf.data() + offset)
+        _data(buf.data() + offset)
     {
     }
 
@@ -128,13 +128,13 @@ public:
 
     AlignedBufferIterator(const AlignedBufferIterator& other)
         : _buf(other._buf),
-          _data(other._data)
+        _data(other._data)
     {
     }
 
     AlignedBufferIterator(AlignedBufferIterator&& other) noexcept
         : _buf(other._buf),
-          _data(other._data)
+        _data(other._data)
     {
         other._buf = nullptr;
         other._data = nullptr;

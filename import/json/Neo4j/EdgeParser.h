@@ -24,9 +24,9 @@ public:
                IDMapper* nodeIDMapper,
                const GraphReader& reader)
         : _buf(buf),
-          _metadata(metadata),
-          _nodeIDMapper(nodeIDMapper),
-          _reader(reader)
+        _metadata(metadata),
+        _nodeIDMapper(nodeIDMapper),
+        _reader(reader)
     {
     }
 

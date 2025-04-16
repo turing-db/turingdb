@@ -14,8 +14,8 @@ class CommitBuilder;
 
 class Transaction {
 public:
-    Transaction() = default;
-    ~Transaction() = default;
+    Transaction();
+    ~Transaction();
 
     Transaction(const WeakArc<const CommitData>& data)
         : _data(data)

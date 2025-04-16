@@ -12,13 +12,13 @@ class ByteBufferIterator {
 public:
     explicit ByteBufferIterator(const ByteBuffer& buf)
         : _buf(buf),
-          _data(buf.data())
+        _data(buf.data())
     {
     }
 
     ByteBufferIterator(const ByteBuffer& buf, size_t offset)
         : _buf(buf),
-          _data(buf.data() + offset)
+        _data(buf.data() + offset)
     {
     }
 

@@ -21,9 +21,9 @@ namespace db {
 
 JsonParser::JsonParser(Graph* graph)
     : _graph(graph),
-      _transaction(graph->openWriteTransaction()),
-      _commitBuilder(_transaction.prepareCommit()),
-      _nodeIDMapper(new IDMapper)
+    _transaction(graph->openWriteTransaction()),
+    _commitBuilder(_transaction.prepareCommit()),
+    _nodeIDMapper(new IDMapper)
 {
 }
 

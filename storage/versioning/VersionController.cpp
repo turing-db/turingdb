@@ -10,7 +10,7 @@ using namespace db;
 
 VersionController::VersionController()
     : _dataManager(std::make_unique<ArcManager<CommitData>>()),
-      _partManager(std::make_unique<ArcManager<DataPart>>())
+    _partManager(std::make_unique<ArcManager<DataPart>>())
 {
 }
 

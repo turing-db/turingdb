@@ -19,7 +19,7 @@ struct NodeRange {
 
         Iterator(EntityID current, size_t left)
             : _current(current),
-              _left(left)
+            _left(left)
         {
         }
 

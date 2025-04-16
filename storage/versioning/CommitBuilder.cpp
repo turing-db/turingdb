@@ -73,7 +73,7 @@ std::unique_ptr<Commit> CommitBuilder::build(JobSystem& jobsystem) {
 
 CommitBuilder::CommitBuilder(Graph& graph, const GraphView& view)
     : _graph(&graph),
-      _view(view)
+    _view(view)
 {
 }
 

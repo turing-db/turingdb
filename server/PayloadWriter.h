@@ -50,7 +50,7 @@ class PayloadWriter {
 public:
     explicit PayloadWriter(net::NetWriter* writer, const GraphMetadata* metadata = nullptr)
         : _writer(writer),
-          _metadata(metadata)
+        _metadata(metadata)
     {
     }
 

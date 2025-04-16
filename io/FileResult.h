@@ -56,7 +56,7 @@ class Error {
 public:
     explicit Error(ErrorType type, int errnumber = -1)
         : _errno(errnumber),
-          _type(type)
+        _type(type)
     {
     }
 

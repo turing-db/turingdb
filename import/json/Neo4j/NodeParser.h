@@ -20,8 +20,8 @@ public:
                DataPartBuilder* buf,
                IDMapper* nodeIDMapper)
         : _buf(buf),
-          _metadata(metadata),
-          _nodeIDMapper(nodeIDMapper)
+        _metadata(metadata),
+        _nodeIDMapper(nodeIDMapper)
     {
     }
 

@@ -9,7 +9,7 @@ using namespace db;
 
 JobSystem::JobSystem()
     : _nThreads(std::max(1ul, (size_t)std::thread::hardware_concurrency())),
-      _jobs(_nThreads)
+    _jobs(_nThreads)
 {
 }
 
@@ -17,7 +17,7 @@ JobSystem::JobSystem(size_t nThreads)
     : _nThreads(nThreads == 0
                     ? std::max(1ul, (size_t)std::thread::hardware_concurrency())
                     : nThreads),
-      _jobs(_nThreads)
+    _jobs(_nThreads)
 {
 }
 

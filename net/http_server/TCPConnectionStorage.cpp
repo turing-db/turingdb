@@ -6,8 +6,8 @@ namespace net {
 
 TCPConnectionStorage::TCPConnectionStorage(uint32_t maxConnections)
     : _connections(maxConnections),
-      _maxConnections(maxConnections),
-      _aliveThreshold(maxConnections * 1 / 20)
+    _maxConnections(maxConnections),
+    _aliveThreshold(maxConnections * 1 / 20)
 {
 }
 

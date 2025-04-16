@@ -10,7 +10,7 @@ using namespace db;
 NodeContainer::NodeContainer(EntityID firstID,
                              size_t nodeCount)
     : _firstID(firstID),
-      _nodeCount(nodeCount)
+    _nodeCount(nodeCount)
 {
 }
 

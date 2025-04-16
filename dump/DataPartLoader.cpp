@@ -146,6 +146,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
                 manager._doubles.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
             } else if constexpr (std::is_same_v<T, types::Bool>) {
                 manager._bools.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            } else {
+                COMPILE_ERROR("Missing trivial property type");
             }
 
             return {};

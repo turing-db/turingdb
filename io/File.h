@@ -12,7 +12,7 @@ public:
 
     File(File&& other) noexcept
         : _info(other._info),
-          _fd(other._fd)
+        _fd(other._fd)
     {
         other._fd = -1;
     }
