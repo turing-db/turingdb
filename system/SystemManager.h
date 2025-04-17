@@ -47,11 +47,17 @@ public:
     BasicResult<Transaction, std::string_view> openTransaction(const std::string& graphName,
                                                                const CommitHash& commit) const;
 
+    BasicResult<CommitHash, std::string_view> newChange(const std::string& graphName);
+    BasicResult<CommitBuilder*, std::string_view> getChange(CommitHash changeHash);
+    bool acceptChange(CommitHash changeHash);
+
 private:
-    mutable RWSpinLock _lock;
+    mutable RWSpinLock _graphsLock;
+    mutable RWSpinLock _changesLock;
     fs::Path _graphsDir;
     Graph* _defaultGraph {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
+    std::unordered_map<CommitHash, std::unique_ptr<CommitBuilder>> _changes;
     GraphLoadStatus _graphLoadStatus;
 
     bool loadNeo4jJsonDB(const std::string& graphName, const fs::Path& dbPath);

@@ -87,7 +87,7 @@ protected:
         }
 
         spdlog::info(" -- Pushing 1");
-        ASSERT_TRUE(_graph->rebaseAndCommit(std::move(commitBuilder1), *_jobSystem));
+        ASSERT_TRUE(_graph->rebaseAndCommit(*commitBuilder1, *_jobSystem));
 
         /* SECOND BUFFER */
         const auto tx2 = _graph->openWriteTransaction();
@@ -145,13 +145,13 @@ protected:
         }
 
         spdlog::info(" -- Pushing 2");
-        ASSERT_TRUE(_graph->rebaseAndCommit(std::move(commitBuilder2), *_jobSystem));
+        ASSERT_TRUE(_graph->rebaseAndCommit(*commitBuilder2, *_jobSystem));
 
         /* THIRD BUFFER (Empty) */
         const auto tx3 = _graph->openWriteTransaction();
         auto commitBuilder3 = tx3.prepareCommit();
         [[maybe_unused]] auto& builder3 = commitBuilder3->newBuilder();
-        ASSERT_TRUE(_graph->rebaseAndCommit(std::move(commitBuilder3), *_jobSystem));
+        ASSERT_TRUE(_graph->rebaseAndCommit(*commitBuilder3, *_jobSystem));
         spdlog::info(" -- Pushing 3");
 
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
@@ -240,7 +240,7 @@ protected:
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         spdlog::info(" -- Pushing 4");
-        ASSERT_TRUE(_graph->rebaseAndCommit(std::move(commitBuilder4), *_jobSystem));
+        ASSERT_TRUE(_graph->rebaseAndCommit(*commitBuilder4, *_jobSystem));
     }
 
     void terminate() override {

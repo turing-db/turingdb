@@ -19,20 +19,12 @@ WriteTransaction Graph::openWriteTransaction(CommitHash hash) const {
     return _versionController->openWriteTransaction(hash);
 }
 
-CommitResult<void> Graph::commit(std::unique_ptr<CommitBuilder>& commitBuilder, JobSystem& jobSystem) {
-    if (!commitBuilder) {
-        return CommitError::result(CommitErrorType::COMMIT_INVALID);
-    }
-
+CommitResult<void> Graph::commit(CommitBuilder& commitBuilder, JobSystem& jobSystem) {
     return _versionController->commit(commitBuilder, jobSystem);
 }
 
-CommitResult<void> Graph::rebaseAndCommit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobSystem) {
-    if (!commitBuilder) {
-        return CommitError::result(CommitErrorType::COMMIT_INVALID);
-    }
-
-    if (auto res = _versionController->rebase(*commitBuilder, jobSystem); !res) {
+CommitResult<void> Graph::rebaseAndCommit(CommitBuilder& commitBuilder, JobSystem& jobSystem) {
+    if (auto res = _versionController->rebase(commitBuilder, jobSystem); !res) {
         return res;
     }
 

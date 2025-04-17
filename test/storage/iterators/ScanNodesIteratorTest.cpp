@@ -50,7 +50,7 @@ TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     const auto tx = graph->openWriteTransaction();
     auto commitBuilder = tx.prepareCommit();
     [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-    const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+    const auto res = graph->rebaseAndCommit(*commitBuilder, *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -73,7 +73,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
     for (auto i = 0; i < 3; i++) {
         auto commitBuilder = tx.prepareCommit();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        const auto res = graph->rebaseAndCommit(*commitBuilder, *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
@@ -104,7 +104,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        const auto res = graph->rebaseAndCommit(*commitBuilder, *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
@@ -154,7 +154,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        const auto res = graph->rebaseAndCommit(*commitBuilder, *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
@@ -207,7 +207,7 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
         for (size_t i = 0; i < nodeCount; i++) {
             builder.addNode(labelset);
         }
-        const auto res = graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        const auto res = graph->rebaseAndCommit(*commitBuilder, *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }

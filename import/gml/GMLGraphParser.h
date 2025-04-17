@@ -30,7 +30,7 @@ public:
     }
 
     void finish(JobSystem& jobs) {
-        _graph->rebaseAndCommit(std::move(_commitBuilder), jobs);
+        _graph->rebaseAndCommit(*_commitBuilder, jobs);
     }
 
     bool onNodeProperty(std::string_view k, std::string_view v) {

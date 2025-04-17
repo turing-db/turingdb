@@ -21,6 +21,10 @@ std::unique_ptr<CommitBuilder> CommitBuilder::prepare(Graph& graph, const GraphV
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
+CommitHash CommitBuilder::hash() const {
+    return _commit->hash();
+}
+
 GraphView CommitBuilder::viewGraph() const {
     return GraphView {*_commit->_data};
 }
@@ -97,4 +101,16 @@ void CommitBuilder::initialize() {
     history.pushPreviousDataparts(previousDataparts);
     history.pushPreviousCommits(previousCommits);
     history.pushCommit(CommitView {_commit.get()});
+}
+
+CommitResult<void> CommitBuilder::commit(JobSystem& jobsystem) {
+    buildAllPending(jobsystem);
+
+    return _graph->commit(*this, jobsystem);
+}
+
+CommitResult<void> CommitBuilder::rebaseAndCommit(JobSystem& jobsystem) {
+    buildAllPending(jobsystem);
+
+    return _graph->rebaseAndCommit(*this, jobsystem);
 }

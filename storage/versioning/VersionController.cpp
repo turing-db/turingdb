@@ -125,17 +125,17 @@ CommitResult<void> VersionController::rebase(CommitBuilder& commitBuilder, JobSy
 }
 
 
-CommitResult<void> VersionController::commit(std::unique_ptr<CommitBuilder>& commitBuilder,
+CommitResult<void> VersionController::commit(CommitBuilder& commitBuilder,
                                              JobSystem& jobSystem) {
     std::scoped_lock lock {_mutex};
 
-    commitBuilder->buildAllPending(jobSystem);
+    commitBuilder.buildAllPending(jobSystem);
 
-    if (_offsets.contains(commitBuilder->_commit->hash())) {
+    if (_offsets.contains(commitBuilder._commit->hash())) {
         return CommitError::result(CommitErrorType::COMMIT_HASH_EXISTS);
     }
 
-    const std::span commitDataparts = commitBuilder->_commit->_data->_history.allDataparts();
+    const std::span commitDataparts = commitBuilder._commit->_data->_history.allDataparts();
     if (_head.load()) {
         const std::span headDataparts = _head.load()->_data->_history.allDataparts();
 
@@ -146,7 +146,7 @@ CommitResult<void> VersionController::commit(std::unique_ptr<CommitBuilder>& com
         }
     }
 
-    auto commit = commitBuilder->build(jobSystem);
+    auto commit = commitBuilder.build(jobSystem);
     this->addCommit(std::move(commit));
 
     return {};

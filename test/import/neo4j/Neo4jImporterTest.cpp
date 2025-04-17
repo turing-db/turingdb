@@ -85,7 +85,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addEdge(0, 3, 4);
-        _graph->rebaseAndCommit(std::move(commitBuilder), *_jobSystem);
+        _graph->rebaseAndCommit(*commitBuilder, *_jobSystem);
     }
 
     const Transaction transaction = _graph->openTransaction();

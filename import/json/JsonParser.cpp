@@ -112,7 +112,7 @@ DataPartBuilder& JsonParser::newDataBuffer() {
 
 void JsonParser::commit(Graph& graph, JobSystem& jobSystem) {
     TimerStat timer("Committing dataparts");
-    _graph->rebaseAndCommit(std::move(_commitBuilder), jobSystem);
+    _graph->rebaseAndCommit(*_commitBuilder, jobSystem);
 }
 
 }

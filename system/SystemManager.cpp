@@ -7,6 +7,7 @@
 #include "Graph.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
+#include "versioning/CommitBuilder.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
 #include "GraphLoader.h"
@@ -48,7 +49,7 @@ Graph* SystemManager::createGraph(const std::string& name) {
 }
 
 bool SystemManager::addGraph(std::unique_ptr<Graph> graph, const std::string& name) {
-    std::unique_lock guard(_lock);
+    std::unique_lock guard(_graphsLock);
 
     // Search if a graph with the same name exists
     const auto it = _graphs.find(name);
@@ -61,12 +62,12 @@ bool SystemManager::addGraph(std::unique_ptr<Graph> graph, const std::string& na
 }
 
 Graph* SystemManager::getDefaultGraph() const {
-    std::shared_lock guard(_lock);
+    std::shared_lock guard(_graphsLock);
     return _defaultGraph;
 }
 
 void SystemManager::setDefaultGraph(const std::string& name) {
-    std::unique_lock guard(_lock);
+    std::unique_lock guard(_graphsLock);
 
     const auto it = _graphs.find(name);
     if (it != _graphs.end()) {
@@ -75,7 +76,7 @@ void SystemManager::setDefaultGraph(const std::string& name) {
 }
 
 Graph* SystemManager::getGraph(const std::string& graphName) const {
-    std::shared_lock guard(_lock);
+    std::shared_lock guard(_graphsLock);
 
     const auto it = _graphs.find(graphName);
     if (it == _graphs.end()) {
@@ -86,7 +87,7 @@ Graph* SystemManager::getGraph(const std::string& graphName) const {
 }
 
 void SystemManager::listGraphs(std::vector<std::string_view>& names) {
-    std::shared_lock guard(_lock);
+    std::shared_lock guard(_graphsLock);
 
     for (const auto& [name, graph] : _graphs) {
         names.push_back(name);
@@ -243,4 +244,56 @@ BasicResult<Transaction, std::string_view> SystemManager::openTransaction(const 
     }
 
     return tr;
+}
+
+
+BasicResult<CommitHash, std::string_view> SystemManager::newChange(const std::string& graphName) {
+    std::shared_lock graphGuard(_graphsLock);
+
+    const auto it = _graphs.find(graphName);
+    if (it == _graphs.end()) {
+        return BadResult<std::string_view> {"Graph does not exist"};
+    }
+
+    const auto* graph = it->second.get();
+
+    auto tx = graph->openWriteTransaction();
+    auto builder = tx.prepareCommit();
+
+    std::unique_lock guard(_changesLock);
+    const auto hash = builder->hash();
+    _changes.emplace(hash, std::move(builder));
+
+    return hash;
+}
+
+BasicResult<CommitBuilder*, std::string_view> SystemManager::getChange(CommitHash changeHash) {
+    std::shared_lock guard(_changesLock);
+
+    const auto it = _changes.find(changeHash);
+    if (it == _changes.end()) {
+        return BadResult<std::string_view> {"Change does not exist"};
+    }
+
+    return it->second.get();
+}
+
+bool SystemManager::acceptChange(CommitHash changeHash) {
+    std::unique_lock guard(_changesLock);
+
+    const auto it = _changes.find(changeHash);
+    if (it == _changes.end()) {
+        return false;
+    }
+
+    std::unique_ptr<CommitBuilder> builder = std::move(it->second);
+    _changes.erase(it);
+
+    auto jobsystem = JobSystem::create();
+
+    if (!builder->rebaseAndCommit(*jobsystem)) {
+        return false;
+    }
+
+    return true;
 }
