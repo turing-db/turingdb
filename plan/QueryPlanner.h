@@ -33,7 +33,8 @@ class Block;
 
 class QueryPlanner {
 public:
-    QueryPlanner(const GraphView& view,
+    QueryPlanner(const ASTContext*,
+                 const GraphView& view,
                  LocalMemory* mem,
                  QueryCallback callback);
 
@@ -44,6 +45,7 @@ public:
     Pipeline* getPipeline() const { return _pipeline.get(); }
 
 private:
+    const ASTContext* _astCtxt {nullptr};
     const GraphView& _view;
     LocalMemory* _mem {nullptr};
     QueryCallback _queryCallback;
@@ -81,7 +83,9 @@ private:
 
     // Planning functions
     bool planMatch(const MatchCommand* matchCmd);
+    bool planCreate(const CreateCommand* createCmd);
     void planPath(const std::vector<EntityPattern*>& path);
+    void planCreatePath(const std::vector<EntityPattern*>& path);
 
     void planScanNodes(const EntityPattern* entity);
     void planScanNodesWithPropertyConstraints(ColumnIDs* const& outputNodes,

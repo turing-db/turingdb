@@ -57,6 +57,9 @@ public:
     size_t getInPatchEdgeCount() const { return _inPatchEdgeCount; };
     size_t getPartIndex() const { return _partIndex; };
 
+    const GraphView& getView() const { return _view; }
+    MetadataBuilder& getMetadata() { return *_metadata; }
+
 private:
     friend ConcurrentWriter;
     friend DataPart;

@@ -17,6 +17,7 @@ public:
 
     enum class Kind {
         MATCH_COMMAND = 0,
+        CREATE_COMMAND,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
         LOAD_GRAPH_COMMAND,
@@ -56,6 +57,26 @@ private:
 
     MatchCommand();
     ~MatchCommand() override;
+};
+
+class CreateCommand : public QueryCommand {
+public:
+    using MatchTargets = std::vector<MatchTarget*>;
+
+    static CreateCommand* create(ASTContext* ctxt);
+
+    DeclContext* getDeclContext() const { return _declContext.get(); }
+
+    Kind getKind() const override { return Kind::CREATE_COMMAND; }
+
+    void addMatchTarget(MatchTarget* matchTarget);
+
+private:
+    std::unique_ptr<DeclContext> _declContext;
+    MatchTargets _matchTargets;
+
+    CreateCommand();
+    ~CreateCommand() override;
 };
 
 class CreateGraphCommand : public QueryCommand {

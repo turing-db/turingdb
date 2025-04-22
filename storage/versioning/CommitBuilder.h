@@ -31,8 +31,11 @@ public:
     [[nodiscard]] CommitHash hash() const;
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
-    [[nodiscard]] DataPartBuilder& newBuilder();
     [[nodiscard]] MetadataBuilder& metadata() { return *_metadata; }
+    [[nodiscard]] size_t pendingCount() const { return _builders.size(); }
+    [[nodiscard]] DataPartBuilder& getCurrentBuilder() { return *_builders.back(); }
+
+    DataPartBuilder& newBuilder();
 
     [[nodiscard]] std::unique_ptr<Commit> build(JobSystem& jobsystem);
     void buildAllPending(JobSystem& jobsystem);

@@ -9,6 +9,7 @@
 #include "PathPattern.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
+#include "ASTContext.h"
 #include "ReturnProjection.h"
 #include "VarDecl.h"
 #include "BioAssert.h"
@@ -47,6 +48,10 @@ bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     switch (cmd->getKind()) {
         case QueryCommand::Kind::MATCH_COMMAND:
             return analyzeMatch(static_cast<MatchCommand*>(cmd));
+        break;
+
+        case QueryCommand::Kind::CREATE_COMMAND:
+            return analyzeCreate(static_cast<CreateCommand*>(cmd));
         break;
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
@@ -160,6 +165,46 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
     if (returnAll) {
         returnAllVariables(cmd);
+    }
+
+    return true;
+}
+
+bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
+    DeclContext* declContext = cmd->getDeclContext();
+    const auto& targets = _ctxt->getCreateTargets();
+    for (const CreateTarget* target : targets) {
+        const PathPattern* pattern = target->getPattern();
+        const auto& elements = pattern->elements();
+
+        EntityPattern* entityPattern = elements[0];
+        entityPattern->setKind(DeclKind::NODE_DECL);
+        if (!analyzeEntityPattern(declContext, entityPattern)) {
+            return false;
+        }
+
+        fmt::print("Will create node\n");
+
+        if (elements.size() >= 2) {
+            bioassert(elements.size() >= 3);
+            for (auto triple : elements | rv::drop(1) | rv::chunk(2)) {
+                EntityPattern* edge = triple[0];
+                EntityPattern* target = triple[1];
+
+                edge->setKind(DeclKind::EDGE_DECL);
+                target->setKind(DeclKind::NODE_DECL);
+
+                if (!analyzeEntityPattern(declContext, edge)) {
+                    fmt::print("Will create edge\n");
+                    return false;
+                }
+
+                if (!analyzeEntityPattern(declContext, target)) {
+                    fmt::print("Will create node\n");
+                    return false;
+                }
+            }
+        }
     }
 
     return true;

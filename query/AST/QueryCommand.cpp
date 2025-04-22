@@ -30,6 +30,26 @@ void MatchCommand::addMatchTarget(MatchTarget* matchTarget) {
     _matchTargets.push_back(matchTarget);
 }
 
+// CreateCommand
+
+CreateCommand::CreateCommand()
+    : _declContext(std::make_unique<DeclContext>()) 
+{
+}
+
+CreateCommand::~CreateCommand() {
+}
+
+CreateCommand* CreateCommand::create(ASTContext* ctxt) {
+    CreateCommand* matchCmd = new CreateCommand();
+    matchCmd->registerCmd(ctxt);
+    return matchCmd;
+}
+
+void CreateCommand::addMatchTarget(MatchTarget* matchTarget) {
+    _matchTargets.push_back(matchTarget);
+}
+
 // CreateGraphCommand
 
 CreateGraphCommand::CreateGraphCommand(const std::string& name)

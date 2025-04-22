@@ -27,6 +27,7 @@
 #include "operations/GetFilteredPropertyStep.h"
 #include "operations/HistoryStep.h"
 #include "operations/ChangeStep.h"
+#include "operations/CreateNodeStep.h"
 
 #include "FastGet.h"
 
@@ -108,6 +109,7 @@ public:
     PipelineStep(HistoryStep::Tag, ColumnVector<std::string>*);
     PipelineStep(ChangeStep::Tag, ChangeOpType, ColumnVector<const CommitBuilder*>*);
     PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
+    PipelineStep(CreateNodeStep::Tag, const EntityPattern*);
 
     PROPERTY_STEPS(Int64)
     PROPERTY_STEPS(UInt64)
@@ -180,7 +182,8 @@ private:
                  GetFilteredEdgePropertyStringStep,
                  GetFilteredEdgePropertyBoolStep,
                  HistoryStep,
-                 ChangeStep> _impl;
+                 ChangeStep,
+                 CreateNodeStep> _impl;
 };
 
 }

@@ -1,5 +1,6 @@
 #include "QueryPlanner.h"
 
+#include <span>
 #include <spdlog/spdlog.h>
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/chunk.hpp>
@@ -13,6 +14,7 @@
 #include "Pipeline.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
+#include "ASTContext.h"
 #include "ReturnProjection.h"
 #include "TypeConstraint.h"
 #include "VarDecl.h"
@@ -28,8 +30,12 @@ using namespace db;
 
 namespace rv = ranges::views;
 
-QueryPlanner::QueryPlanner(const GraphView& view, LocalMemory* mem, QueryCallback callback)
-    : _view(view),
+QueryPlanner::QueryPlanner(const ASTContext* astCtxt,
+                           const GraphView& view,
+                           LocalMemory* mem,
+                           QueryCallback callback)
+    : _astCtxt(astCtxt),
+      _view(view),
       _mem(mem),
       _queryCallback(std::move(callback)),
       _pipeline(std::make_unique<Pipeline>()),
@@ -46,6 +52,9 @@ bool QueryPlanner::plan(const QueryCommand* query) {
     switch (kind) {
         case QueryCommand::Kind::MATCH_COMMAND:
             return planMatch(static_cast<const MatchCommand*>(query));
+
+        case QueryCommand::Kind::CREATE_COMMAND:
+            return planCreate(static_cast<const CreateCommand*>(query));
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             return planCreateGraph(static_cast<const CreateGraphCommand*>(query));
@@ -64,11 +73,9 @@ bool QueryPlanner::plan(const QueryCommand* query) {
 
         case QueryCommand::Kind::CHANGE_COMMAND:
             return planChange(static_cast<const ChangeCommand*>(query));
-
-        default:
-            spdlog::error("Unsupported query of kind {}", (unsigned)kind);
-            return false;
     }
+
+    panic("Unsupported query command");
 }
 
 bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
@@ -103,10 +110,79 @@ bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
     return true;
 }
 
+bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
+    const auto& targets = _astCtxt->getCreateTargets();
+    if (targets.size() == 0) {
+        spdlog::error("Unsupported CREATE queries without targets");
+        return false;
+    }
+
+    // Add STOP step in front of the pipeline
+    // This is necessary by convention for Executor
+    _pipeline->add<StopStep>();
+
+    for (const auto& target : targets) {
+        spdlog::info("Treating target");
+        const PathPattern* path = target->getPattern();
+        std::span pathElements {path->elements()};
+
+        if (pathElements.empty()) {
+            spdlog::error("Unsupported path pattern with zero elements");
+            return false;
+        }
+
+        // Create first node
+        _pipeline->add<CreateNodeStep>(pathElements[0]);
+
+        // for (auto step : pathElements | rv::chunk(3)) {
+        //     // Create the target + the edge (the source is already created)
+        //     //const EntityPattern* source = step[0];
+        //     //const EntityPattern* edge = step[0];
+        //     //const EntityPattern* target = step[1];
+        //     //_pipeline->add<CreateEdgeStep>(source, edge, target);
+        // }
+    }
+
+    // Add END step
+    _pipeline->add<EndStep>();
+
+    return true;
+}
+
 void QueryPlanner::planPath(const std::vector<EntityPattern*>& path) {
     // We can only do ScanOutEdges/ScanInEdges if we have no edge constraint
     // and there is only a constraint on the target or the source but not both.
     // Otherwise fallback on the scan nodes and expand edges technique
+    const auto pathSize = path.size();
+    if (pathSize >= 3) {
+        const EntityPattern* source = path[0];
+        const EntityPattern* edge = path[1];
+        const EntityPattern* target = path[2];
+        const TypeConstraint* sourceTypeConstr = source->getTypeConstraint();
+        const TypeConstraint* edgeTypeConstr = edge->getTypeConstraint();
+        const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
+        const ExprConstraint* sourceExprConstr = source->getExprConstraint();
+        const ExprConstraint* targetExprConstr = target->getExprConstraint();
+        const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
+
+        if (!(edgeTypeConstr || edgeExprConstr) && (!sourceTypeConstr || !targetTypeConstr)
+            && !(sourceExprConstr || targetExprConstr)) {
+            return planPathUsingScanEdges(path);
+        }
+    }
+
+    // General case: scan nodes for the origin and expand edges afterward
+    planScanNodes(path[0]);
+
+    const auto expandSteps = path | rv::drop(1) | rv::chunk(2);
+    for (auto step : expandSteps) {
+        const EntityPattern* edge = step[0];
+        const EntityPattern* target = step[1];
+        planExpandEdge(edge, target);
+    }
+}
+
+void QueryPlanner::planCreatePath(const std::vector<EntityPattern*>& path) {
     const auto pathSize = path.size();
     if (pathSize >= 3) {
         const EntityPattern* source = path[0];

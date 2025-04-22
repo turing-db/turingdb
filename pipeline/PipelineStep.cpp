@@ -192,6 +192,12 @@ PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
 {
 }
 
+PipelineStep::PipelineStep(CreateNodeStep::Tag, const EntityPattern* data)
+    : _opcode(PipelineOpcode::CREATE_NODE),
+    _impl(std::in_place_type<CreateNodeStep>, data)
+{
+}
+
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_INT64, Int64)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_UINT64, UInt64)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_DOUBLE, Double)

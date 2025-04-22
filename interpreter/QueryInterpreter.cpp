@@ -1,8 +1,12 @@
 #include "QueryInterpreter.h"
 
+#include <variant>
+
+#include "ChangeManager.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "versioning/Transaction.h"
+#include "versioning/CommitBuilder.h"
 #include "views/GraphView.h"
 #include "ASTContext.h"
 #include "QueryParser.h"
@@ -39,9 +43,15 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
         return QueryStatus(QueryStatus::Status::GRAPH_NOT_FOUND);
     }
 
-    // Open transaction
+    // Open either:
+    //   - Transaction to requested commit
+    //   - Requested change
     const Transaction transaction = graph->openTransaction(hash);
-    const GraphView view = transaction.viewGraph();
+    auto change = _sysMan->getChangeManager().getChange(hash);
+
+    const GraphView view = transaction.isValid() 
+        ? transaction.viewGraph() 
+        : change.value()->viewGraph();
 
     // Parsing query
     ASTContext astCtxt;
@@ -58,7 +68,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Query plan
-    QueryPlanner planner(view, mem, callback);
+    QueryPlanner planner(&astCtxt, view, mem, callback);
     try {
         if (!planner.plan(cmd)) {
             return QueryStatus(QueryStatus::Status::PLAN_ERROR);

@@ -67,7 +67,7 @@ class BoolExprConst : public ExprConst {
 public:
     static BoolExprConst* create(ASTContext* ctxt, bool val);
 
-    db::CustomBool& getVal() { return _val;};
+    const db::CustomBool& getVal() const { return _val;};
 
 private:
     db::CustomBool _val ;
@@ -85,7 +85,7 @@ class StringExprConst : public ExprConst {
 public:
     static StringExprConst* create(ASTContext* ctxt, const std::string& val);
 
-    const std::string& getVal() { return _val;};
+    const std::string& getVal() const { return _val;};
 private:
     const std::string _val;
 
@@ -102,7 +102,7 @@ class UInt64ExprConst : public ExprConst {
 public:
     static UInt64ExprConst* create(ASTContext* ctxt, uint64_t val);
 
-    uint64_t getVal() { return _val; };
+    uint64_t getVal() const { return _val; };
 
 private:
     uint64_t _val {0};
@@ -119,7 +119,7 @@ class Int64ExprConst : public ExprConst {
 public:
     static Int64ExprConst* create(ASTContext* ctxt, int64_t val);
 
-    int64_t getVal() { return _val; };
+    int64_t getVal() const { return _val; };
 
 private:
     int64_t _val {0};
@@ -136,7 +136,7 @@ class DoubleExprConst : public ExprConst {
 public:
     static DoubleExprConst* create(ASTContext* ctxt, double val);
 
-    double getVal() { return _val;}; private:
+    double getVal() const { return _val;}; private:
     double _val {0};
     DoubleExprConst(int64_t val)
         : ExprConst(db::ValueType::Double),

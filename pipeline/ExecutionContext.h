@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string>
-
 #include "versioning/CommitHash.h"
 
 namespace db {

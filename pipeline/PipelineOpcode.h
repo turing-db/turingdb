@@ -52,6 +52,7 @@ enum class PipelineOpcode : uint64_t {
     GET_FILTERED_EDGE_PROPERTY_BOOL,
     HISTORY,
     CHANGE,
+    CREATE_NODE,
     END,
     MAX
 };

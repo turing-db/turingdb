@@ -20,6 +20,7 @@ class ASTContext;
 class QueryCommand;
 class ReturnField;
 class MatchTarget;
+class CreateTarget;
 class PathPattern;
 class EntityPattern;
 class TypeConstraint;
@@ -121,6 +122,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::QueryCommand*> cmd
 
 %type<db::QueryCommand*> match_cmd
+%type<db::QueryCommand*> create_cmd
 %type<db::ReturnProjection*> return_fields
 %type<db::ReturnField*> return_field
 %type<db::MatchTarget*> match_target
@@ -159,6 +161,7 @@ query_unit: cmd { $$ = $1; }
           ;
           
 cmd: match_cmd { ctxt->setRoot($1); }
+   | create_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
@@ -174,6 +177,13 @@ match_cmd: MATCH match_target RETURN return_fields {
                                                        $$ = cmd;
                                                   }
           ;
+
+create_targets: create_targets COMMA create_target {}
+              | create_target {};
+
+create_target: path_pattern { ctxt->addCreateTarget(new CreateTarget($1)); }
+
+create_cmd: CREATE create_targets { $$ = CreateCommand::create(ctxt); } ;
 
 return_field: STAR {
                         auto field = ReturnField::create(ctxt);
@@ -232,7 +242,6 @@ path_pattern: node_pattern
             ;
 
 node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
-            | entity_pattern { $$ = $1; }
             ;
 
 edge_pattern: OSBRACK edge_entity_pattern CSBRACK { $$ = $2; }

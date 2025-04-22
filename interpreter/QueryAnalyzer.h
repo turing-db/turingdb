@@ -9,6 +9,7 @@ class PropertyTypeMap;
 class ASTContext;
 class QueryCommand;
 class MatchCommand;
+class CreateCommand;
 class CreateGraphCommand;
 class DeclContext;
 class EntityPattern;
@@ -28,6 +29,7 @@ private:
     uint64_t _nextNewVarID {0};
 
     bool analyzeMatch(MatchCommand* cmd);
+    bool analyzeCreate(CreateCommand* cmd);
     bool analyzeCreateGraph(CreateGraphCommand* cmd);
     bool analyzeLoadGraph(LoadGraphCommand* cmd);
     bool analyzeEntityPattern(DeclContext* declContext, EntityPattern* entity);

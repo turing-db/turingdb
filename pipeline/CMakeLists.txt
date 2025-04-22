@@ -17,6 +17,7 @@ set(pipeline_sources
         operations/LambdaStep.cpp
         operations/HistoryStep.cpp
         operations/ChangeStep.cpp
+        operations/CreateNodeStep.cpp
         
         PipelineStep.cpp
         Pipeline.cpp
