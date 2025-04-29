@@ -30,12 +30,10 @@ using namespace db;
 
 namespace rv = ranges::views;
 
-QueryPlanner::QueryPlanner(const ASTContext* astCtxt,
-                           const GraphView& view,
+QueryPlanner::QueryPlanner(const GraphView& view,
                            LocalMemory* mem,
                            QueryCallback callback)
-    : _astCtxt(astCtxt),
-      _view(view),
+    : _view(view),
       _mem(mem),
       _queryCallback(std::move(callback)),
       _pipeline(std::make_unique<Pipeline>()),
@@ -111,7 +109,7 @@ bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
 }
 
 bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
-    const auto& targets = _astCtxt->getCreateTargets();
+    const auto& targets = createCmd->createTargets();
     if (targets.size() == 0) {
         spdlog::error("Unsupported CREATE queries without targets");
         return false;

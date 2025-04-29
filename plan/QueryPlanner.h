@@ -33,8 +33,7 @@ class Block;
 
 class QueryPlanner {
 public:
-    QueryPlanner(const ASTContext*,
-                 const GraphView& view,
+    QueryPlanner(const GraphView& view,
                  LocalMemory* mem,
                  QueryCallback callback);
 
@@ -45,7 +44,6 @@ public:
     Pipeline* getPipeline() const { return _pipeline.get(); }
 
 private:
-    const ASTContext* _astCtxt {nullptr};
     const GraphView& _view;
     LocalMemory* _mem {nullptr};
     QueryCallback _queryCallback;

@@ -32,8 +32,9 @@ void MatchCommand::addMatchTarget(MatchTarget* matchTarget) {
 
 // CreateCommand
 
-CreateCommand::CreateCommand()
-    : _declContext(std::make_unique<DeclContext>()) 
+CreateCommand::CreateCommand(std::vector<CreateTarget*>&& targets)
+    : _declContext(std::make_unique<DeclContext>()),
+     _createTargets(std::move(targets))
 {
 }
 
@@ -41,7 +42,7 @@ CreateCommand::~CreateCommand() {
 }
 
 CreateCommand* CreateCommand::create(ASTContext* ctxt) {
-    CreateCommand* cmd = new CreateCommand();
+    CreateCommand* cmd = new CreateCommand(std::move(ctxt->getCurrentCreateTargets()));
     cmd->registerCmd(ctxt);
     return cmd;
 }

@@ -72,6 +72,7 @@ void ASTContext::addReturnField(ReturnField* field) {
 
 void ASTContext::addCreateTarget(CreateTarget* target) {
     _writeRequested = true;
+    _currentCreateTargets.push_back(target);
     _createTargets.push_back(target);
 }
 

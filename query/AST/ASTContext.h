@@ -53,6 +53,8 @@ public:
 
     bool isWriteRequested() const { return _writeRequested; }
 
+    std::vector<CreateTarget*>& getCurrentCreateTargets() { return _currentCreateTargets; }
+
 private:
     bool _isError {false};
     bool _writeRequested {false};
@@ -68,6 +70,8 @@ private:
     std::vector<Expr*> _expr;
     std::vector<VarDecl*> _varDecls;
     std::vector<ReturnProjection*> _returnProjections;
+
+    std::vector<CreateTarget*> _currentCreateTargets;
 
     void addCmd(QueryCommand* cmd);
     void addReturnField(ReturnField* field);
