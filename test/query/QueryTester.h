@@ -69,16 +69,23 @@ public:
     }
 
     QueryTester& execute() {
+        fmt::print("Testing query: {}\n", _query);
         if (_expectError) {
-            const auto res = _interp.execute(_query, "default", &_mem, [this](const Block& block) {
-                fmt::print("Testing query: {}\n", _query);
-            });
+            const auto res = _interp.execute(
+                _query,
+                _graphName,
+                &_mem,
+                [this](const Block& block) { fmt::print("Testing query: {}\n", _query); },
+                _commitHash);
             EXPECT_FALSE(res);
             return *this;
         }
 
-        fmt::print("Testing query: {}\n", _query);
-        const auto res = _interp.execute(_query, "default", &_mem, [this](const Block& block) {
+        const auto res = _interp.execute(
+            _query,
+            _graphName,
+            &_mem,
+            [this](const Block& block) {
             const size_t colCount = block.columns().size();
 
             EXPECT_EQ(_expectedColumns.size(), block.columns().size());
@@ -112,8 +119,7 @@ public:
                         panic("can not check result for column of kind {}", col->getKind());
                     }
                 }
-            }
-        });
+            } }, _commitHash);
 
         EXPECT_TRUE(res);
 
@@ -148,9 +154,19 @@ public:
         return static_cast<const ColumnConst<T>*>(col.get());
     }
 
+    void setGraphName(const std::string& graphName) {
+        _graphName = graphName;
+    }
+
+    void setCommitHash(const CommitHash& commitHash) {
+        _commitHash = commitHash;
+    }
+
 private:
     LocalMemory& _mem;
     QueryInterpreter& _interp;
+    CommitHash _commitHash = CommitHash::head();
+    std::string _graphName = "default";
     std::string _query;
     std::vector<std::pair<std::unique_ptr<Column>, bool>> _expectedColumns;
     std::vector<std::unique_ptr<Column>> _outputColumns;

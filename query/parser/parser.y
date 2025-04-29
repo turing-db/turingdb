@@ -177,8 +177,8 @@ match_cmd: MATCH match_target RETURN return_fields {
                                                        cmd->setProjection($4);
                                                        cmd->addMatchTarget($2);
                                                        $$ = cmd;
-                                                  }
-          ;
+                                                   }
+                                                   ;
 
 create_targets: create_targets COMMA create_target {}
               | create_target {};

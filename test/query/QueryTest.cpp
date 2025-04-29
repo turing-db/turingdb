@@ -416,9 +416,116 @@ TEST_F(QueryTest, ChangeQuery) {
         .execute();
 
     const auto changes = tester.query("CHANGE LIST")
-        .expectVector<const CommitBuilder*>({}, false)
-        .execute()
-        .outputColumnVector<const CommitBuilder*>(0);
+                             .expectVector<const CommitBuilder*>({}, false)
+                             .execute()
+                             .outputColumnVector<const CommitBuilder*>(0);
 
     ASSERT_TRUE(changes);
+
+    tester.setCommitHash(changes.value()->back()->hash());
+
+    tester.query(
+              R"(CREATE (n:Person { name: "New person" })
+                          -[:NEW_EDGE_TYPE { name: "New edge" } ]
+                          -(m:Interest { name: "New interest" }))")
+        .execute();
+
+    tester.query(
+              R"(CREATE (n:Interest { name: "Interest 1" }),
+                        (m:Interest { name: "Interest 2" }),
+                        (p:Interest { name: "Interest 3" }))")
+        .execute();
+
+    tester.query("MATCH n:Person RETURN n.name")
+        .expectOptVector<types::String::Primitive>({
+            "Remy",
+            "Adam",
+            "Maxime",
+            "Luc",
+            "Martina",
+            "Suhas",
+            "New person",
+        })
+        .execute();
+
+    tester.query("MATCH n:Interest RETURN n.name")
+        .expectOptVector<types::String::Primitive>({
+            "Computers",
+            "Eighties",
+            "Bio",
+            "Cooking",
+            "Ghosts",
+            "Paddle",
+            "Animals",
+            "New interest",
+            "Interest 1",
+            "Interest 2",
+            "Interest 3",
+        })
+        .execute();
+
+    tester.query("MATCH n-[e]-m RETURN e.name")
+        .expectOptVector<types::String::Primitive>({
+            "Remy -> Adam",
+            "Remy -> Ghosts",
+            "Remy -> Computers",
+            "Remy -> Eighties",
+            "Adam -> Remy",
+            "Adam -> Bio",
+            "Adam -> Cooking",
+            "Ghosts -> Remy",
+            "Maxime -> Bio",
+            "Maxime -> Paddle",
+            "Luc -> Animals",
+            "Luc -> Computers",
+            "Martina -> Cooking",
+            "New edge",
+        })
+        .execute();
+
+    tester.query("MATCH n-[e:NEW_EDGE_TYPE]-m RETURN e.name")
+        .expectOptVector<types::String::Primitive>({"New edge"})
+        .execute();
+
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setCommitHash(CommitHash::head());
+
+    tester.query("MATCH n:Person RETURN n.name")
+        .expectOptVector<types::String::Primitive>({
+            "Remy",
+            "Adam",
+            "Maxime",
+            "Luc",
+            "Martina",
+            "Suhas",
+            "New person",
+        })
+        .execute();
+}
+
+TEST_F(QueryTest, ChangeQueryErrors) {
+    QueryTester tester {_mem, *_interp};
+
+    tester.query("CHANGE NEW")
+        .expectVector<const CommitBuilder*>({}, false)
+        .execute();
+
+    const auto changes = tester.query("CHANGE LIST")
+                             .expectVector<const CommitBuilder*>({}, false)
+                             .execute()
+                             .outputColumnVector<const CommitBuilder*>(0);
+
+    ASSERT_TRUE(changes);
+
+    tester.setCommitHash(changes.value()->back()->hash());
+
+    tester.query("CREATE (n)")
+        .expectError() // Requires label
+        .execute();
+
+    tester.query("CREATE (n:Person)-[e]-(m:Person)")
+        .expectError() // Requires edge type
+        .execute();
 }
