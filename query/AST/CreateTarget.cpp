@@ -4,15 +4,13 @@
 
 using namespace db;
 
-CreateTarget* CreateTarget::create(ASTContext* ctxt, PathPattern* pattern)
-{
+CreateTarget* CreateTarget::create(ASTContext* ctxt, PathPattern* pattern) {
     auto* target = new CreateTarget(pattern);
     ctxt->addCreateTarget(target);
     return target;
 }
 
-CreateTargets* CreateTargets::create(ASTContext* ctxt)
-{
+CreateTargets* CreateTargets::create(ASTContext* ctxt) {
     CreateTargets* targets = new CreateTargets();
     ctxt->addCreateTargets(targets);
     return targets;
