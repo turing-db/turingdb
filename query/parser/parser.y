@@ -195,13 +195,12 @@ create_targets: create_targets COMMA create_target
               }
               | create_target
               {
-                  $$ = new CreateTargets;
-                  ctxt->addCreateTargets($$);
+                  $$ = CreateTargets::create(ctxt);
                   $$->push_back($1);
               }
               ;
 
-create_target: create_path_pattern { $$ = new CreateTarget($1); ctxt->addCreateTarget($$); }
+create_target: create_path_pattern { $$ = CreateTarget::create(ctxt, $1); }
              ;
 
 create_cmd: CREATE create_targets

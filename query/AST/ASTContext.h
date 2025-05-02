@@ -24,6 +24,8 @@ public:
     friend QueryCommand;
     friend ReturnField;
     friend MatchTarget;
+    friend CreateTarget;
+    friend CreateTargets;
     friend PathPattern;
     friend EntityPattern;
     friend TypeConstraint;
@@ -47,9 +49,6 @@ public:
     bool hasError() const { return _isError; }
     void setError(bool hasError) { _isError = hasError; }
 
-    void addCreateTarget(CreateTarget* target);
-    void addCreateTargets(CreateTargets* targets);
-
 private:
     bool _isError {false};
     QueryCommand* _root {nullptr};
@@ -69,6 +68,8 @@ private:
     void addCmd(QueryCommand* cmd);
     void addReturnField(ReturnField* field);
     void addMatchTarget(MatchTarget* target);
+    void addCreateTarget(CreateTarget* target);
+    void addCreateTargets(CreateTargets* targets);
     void addPathPattern(PathPattern* pattern);
     void addEntityPattern(EntityPattern* pattern);
     void addTypeConstraint(TypeConstraint* constr);
