@@ -254,6 +254,11 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
         auto* filterConstVal = _mem->alloc<ColumnConst<valType>>();                                  \
         filterConstVal->set(constVal);                                                               \
                                                                                                      \
+        if (propType._valueType != T::_valueType) {                                                  \
+            throw PlannerException("Invalid value type for property member \""                       \
+                                   + varExprName + "\"");                                            \
+        }                                                                                            \
+                                                                                                     \
         _pipeline->add<StepType>(scannedNodes,                                                       \
                                  propType,                                                           \
                                  propValues);                                                        \
@@ -327,6 +332,11 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
         valType constVal = static_cast<Type##ExprConst*>(rightExpr)->getVal();                       \
         const auto filterConstVal = _mem->alloc<ColumnConst<valType>>();                             \
         filterConstVal->set(constVal);                                                               \
+                                                                                                     \
+        if (propType._valueType != types::Type::_valueType) {                                        \
+            throw PlannerException("Invalid value type for property member \""                       \
+                                   + varExprName + "\"");                                            \
+        }                                                                                            \
                                                                                                      \
         _pipeline->add<StepType>(scannedNodes,                                                       \
                                  propType,                                                           \
@@ -507,7 +517,7 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnIDs* const& output
             caseScanNodesPropertyValueType.operator()<types::Bool>();
             break;
         }
-                                
+
         case ValueType::String: {
             caseScanNodesPropertyValueType.operator()<types::String>();
             break;
@@ -562,6 +572,11 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const
                                                                                \
         valType constVal = static_cast<Type##ExprConst*>(rightExpr)->getVal(); \
         filterConstVal->set(constVal);                                         \
+                                                                               \
+        if (propType._valueType != types::Type::_valueType) {                  \
+            throw PlannerException("Invalid value type for property member \"" \
+                                   + varExprName + "\"");                      \
+        }                                                                      \
                                                                                \
         _pipeline->add<StepType>(entities,                                     \
                                  propType,                                     \

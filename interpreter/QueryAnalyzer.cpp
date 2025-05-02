@@ -176,6 +176,10 @@ bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
         const auto& elements = pattern->elements();
 
         EntityPattern* entityPattern = elements[0];
+        if (elements.empty()) {
+            return false;
+        }
+
         entityPattern->setKind(DeclKind::NODE_DECL);
         if (!analyzeEntityPattern(declContext, entityPattern)) {
             return false;
