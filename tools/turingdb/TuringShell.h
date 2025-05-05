@@ -17,7 +17,7 @@ class TuringShell {
 public:
     struct Command {
         using Words = std::vector<std::string>;
-        std::function<void(const Words&, TuringShell&)> _func;
+        std::function<void(const Words&, TuringShell&, std::string& line)> _func;
     };
 
     TuringShell(TuringDB& turingDB, LocalMemory* mem);

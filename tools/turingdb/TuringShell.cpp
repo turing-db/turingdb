@@ -15,6 +15,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "versioning/CommitBuilder.h"
+#include "FileUtils.h"
 #include "Panic.h"
 
 using namespace db;
@@ -62,15 +63,15 @@ void extractWords(std::vector<std::string>& words, const std::string& line) {
 }
 
 // Commands
-void helpCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+void helpCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     shell.printHelp();
 }
 
-void quitCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+void quitCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     exit(EXIT_SUCCESS);
 }
 
-void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     std::string graphName;
     argparse::ArgumentParser argParser("cd",
                                        "",
@@ -100,7 +101,7 @@ void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell
     }
 }
 
-void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     std::string hashStr = "head";
 
     argparse::ArgumentParser argParser("checkout", "", argparse::default_arguments::help, false);
@@ -129,12 +130,37 @@ void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell
     }
 }
 
-void quietCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+void quietCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     shell.setQuiet(true);
 }
 
-void unquietCommand(const TuringShell::Command::Words& args, TuringShell& shell) {
+void unquietCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     shell.setQuiet(false);
+}
+
+void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    std::string fileName;
+
+    argparse::ArgumentParser argParser("read", "", argparse::default_arguments::help, false);
+    argParser.add_description("Execute a script from the local file system");
+    argParser.add_argument("file")
+        .nargs(1)
+        .metavar("file")
+        .store_into(fileName);
+
+    try {
+        argParser.parse_args(args);
+    } catch (const std::exception& e) {
+        spdlog::error("Error parsing arguments: {}", e.what());
+        return;
+    }
+
+    fileName = FileUtils::expandPath(fileName);
+    if (!FileUtils::readContent(fileName, line)) {
+        spdlog::error("Can not read content of file {}", fileName);
+        line.clear();
+        return;
+    }
 }
 
 } // namespace
@@ -151,6 +177,7 @@ TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
     _localCommands.emplace("checkout", Command {checkoutCommand});
     _localCommands.emplace("quiet", Command {quietCommand});
     _localCommands.emplace("unquiet", Command {unquietCommand});
+    _localCommands.emplace("read", Command {readCommand});
 }
 
 TuringShell::~TuringShell() {
@@ -223,8 +250,13 @@ void TuringShell::processLine(std::string& line) {
     if (localCmdIt != _localCommands.end()) {
         Command::Words words;
         extractWords(words, line);
-        localCmdIt->second._func(words, *this);
-        return;
+
+        line.clear();
+        localCmdIt->second._func(words, *this, line);
+
+        if (line.empty()) {
+            return;
+        }
     }
 
     // Execute query
