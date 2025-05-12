@@ -19,7 +19,7 @@ int main(int argc, const char** argv) {
     auto& argParser = toolInit.getArgParser();
 
     bool noServer = false;
-    unsigned port = 0;
+    unsigned port = 6666;
     bool nodemon = false;
     std::vector<std::string> graphsToLoad;
     argParser.add_argument("-cli")
