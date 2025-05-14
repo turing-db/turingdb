@@ -1,6 +1,7 @@
 set(turings3client_sources
         TuringS3Client.cpp
         S3Result.cpp
+        MockS3Client.cpp
         )
 
 add_library(turing_db_io_s3_s STATIC ${turings3client_sources})

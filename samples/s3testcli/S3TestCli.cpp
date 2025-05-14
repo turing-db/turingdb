@@ -6,7 +6,7 @@
 #include <vector>
 #include <istream>
 
-#include "TuringS3Client.h"
+#include "AwsS3ClientWrapper.h"
 #include "FileCache.h"
 #include "SystemManager.h"
 #include "spdlog/spdlog.h"
@@ -23,13 +23,12 @@ void splitString(std::string& string, std::vector<std::string>& result){
 int main() {
     linenoiseHistoryLoad("history.txt");
 
-    S3::TuringS3Client client;
-
+    auto awsClient = S3::AwsS3ClientWrapper<>();
     db::SystemManager sysMan;
-    db::FileCache cache = db::FileCache(sysMan.getGraphsDir(), sysMan.getDataDir());
+    db::FileCache cache = db::FileCache(sysMan.getGraphsDir(), sysMan.getDataDir(), awsClient);
     // Main input loop
     char* line = nullptr;
-    while((line = linenoise("prompt> ")) != nullptr) {
+    while ((line = linenoise("prompt> ")) != nullptr) {
         std::vector<std::string> tokens;
         // Add to history
         linenoiseHistoryAdd(line);
@@ -48,63 +47,61 @@ int main() {
         }
 
         if (tokens.front() == "lb") {
-            client.listBuckets();
+            // client.listBuckets();
         }
 
         if (tokens.front() == "lo") {
             std::vector<std::string> results;
-            std::cout<<tokens.size()<<std::endl;
-            if(tokens.size() ==3) {
-                client.listFiles(tokens[1], results,tokens[2]);
-            }else {
+            std::cout << tokens.size() << std::endl;
+            if (tokens.size() == 3) {
+                // client.listFiles(tokens[1], results,tokens[2]);
+            } else {
                 std::string empty;
-                client.listFiles(tokens[1], results,empty);
+                // client.listFiles(tokens[1], results,empty);
             }
-            for(const auto& result: results) {
-                std::cout<<result<<std::endl;
-
+            for (const auto& result : results) {
+                std::cout << result << std::endl;
             }
         }
 
         if (tokens.front() == "lf") {
             std::vector<std::string> results;
-            std::cout<<tokens.size()<<std::endl;
-            if(tokens.size() ==3) {
-                client.listFolders(tokens[1], results,tokens[2]);
-            }else {
+            std::cout << tokens.size() << std::endl;
+            if (tokens.size() == 3) {
+                // client.listFolders(tokens[1], results,tokens[2]);
+            } else {
                 std::string empty;
-                client.listFolders(tokens[1], results,empty);
+                // client.listFolders(tokens[1], results,empty);
             }
-            for(const auto& result: results) {
-                std::cout<<result<<std::endl;
-
+            for (const auto& result : results) {
+                std::cout << result << std::endl;
             }
         }
 
         if (tokens.front() == "cb") {
-            client.createBucket(tokens[1]);
+            // client.createBucket(tokens[1]);
         }
 
         if (tokens.front() == "db") {
-            client.deleteBucket(tokens[1]);
+            // client.deleteBucket(tokens[1]);
         }
 
         if (tokens.front() == "uf") {
-            std::cout<<"Uploading File: "<< tokens[1]<<std::endl;
-            client.uploadFile(tokens[1],tokens[2],tokens[3]);
+            std::cout << "Uploading File: " << tokens[1] << std::endl;
+            // client.uploadFile(tokens[1],tokens[2],tokens[3]);
         }
         if (tokens.front() == "df") {
-            client.downloadFile(tokens[1],tokens[2],tokens[3]);
+            // client.downloadFile(tokens[1],tokens[2],tokens[3]);
         }
 
         if (tokens.front() == "ud") {
-            std::cout<<"Uploading directory: "<< tokens[1]<<std::endl;
-            client.uploadDirectory(tokens[1],tokens[2],tokens[3]);
+            std::cout << "Uploading directory: " << tokens[1] << std::endl;
+            // client.uploadDirectory(tokens[1],tokens[2],tokens[3]);
         }
 
         if (tokens.front() == "dd") {
-            std::cout<<"Downloading directory: "<< tokens[1]<<std::endl;
-            client.downloadDirectory(tokens[1],tokens[2],tokens[3]);
+            std::cout << "Downloading directory: " << tokens[1] << std::endl;
+            // client.downloadDirectory(tokens[1],tokens[2],tokens[3]);
         }
 
         if (tokens.front() == "lsag") {
@@ -115,7 +112,6 @@ int main() {
             for(const auto& graph: graphs){
                 std::cout<<graph.c_str()<<std::endl;
             }
-
         }
 
         if (tokens.front() == "lsg") {
@@ -155,9 +151,7 @@ int main() {
             spdlog::info("Saving data directory To S3");
             cache.saveDataDirectory(tokens[1]);
         }
-
     }
 
     return 0;
-
 }
