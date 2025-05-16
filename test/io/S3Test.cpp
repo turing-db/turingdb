@@ -430,6 +430,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         create.close();
         if(chmod(testFile.c_str(), 0000) == -1){
             perror("chmod failed:");
+            FAIL();
         }
 
         Aws::S3Crt::Model::PutObjectResult putResult;

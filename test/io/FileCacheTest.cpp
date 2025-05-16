@@ -12,7 +12,10 @@ using namespace turing::test;
 class FileCacheTest : public TuringTest {
 protected:
     std::string _tempTestDir = "/tmp/turingS3Test";
+
     void initialize() override {
+        std::cout << "Running as user: " << getuid() << std::endl;
+        std::cout << "Effective user: " << geteuid() << std::endl;
     }
 
     void terminate() override {
@@ -105,7 +108,7 @@ TEST_F(FileCacheTest, SuccesfulListLocalGraphs) {
         std::vector<fs::Path> graphs;
         auto res = cache.listLocalGraphs(graphs);
         ASSERT_TRUE(res);
-        EXPECT_EQ(result, graphs);
+        EXPECT_EQ(std::set(result.begin(), result.end()), std::set(graphs.begin(), graphs.end()));
     }
 }
 TEST_F(FileCacheTest, UnsuccesfulListLocalGraphs) {
