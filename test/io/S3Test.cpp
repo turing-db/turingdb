@@ -60,15 +60,15 @@ TEST_F(S3Test, SucessfulListOperations) {
     S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
     S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-    auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix");
+    auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix/");
     ASSERT_TRUE(res);
     EXPECT_EQ(keyNames, keyResults);
 
-    res = turingS3Client.listFiles("bucketName", fileResults, "prefix");
+    res = turingS3Client.listFiles("bucketName", fileResults, "prefix/");
     ASSERT_TRUE(res);
     EXPECT_EQ(fileNames, fileResults);
 
-    res = turingS3Client.listFolders("bucketName", folderResults, "prefix");
+    res = turingS3Client.listFolders("bucketName", folderResults, "prefix/");
     ASSERT_TRUE(res);
     EXPECT_EQ(folderNames, folderResults);
 }
@@ -89,15 +89,15 @@ TEST_F(S3Test, UnsucessfulListOperations) {
         std::vector<std::string> fileResults;
         std::vector<std::string> folderResults;
 
-        auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix");
+        auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::ACCESS_DENIED);
 
-        res = turingS3Client.listFiles("bucketName", fileResults, "prefix");
+        res = turingS3Client.listFiles("bucketName", fileResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::ACCESS_DENIED);
 
-        res = turingS3Client.listFolders("bucketName", folderResults, "prefix");
+        res = turingS3Client.listFolders("bucketName", folderResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::ACCESS_DENIED);
     }
@@ -117,15 +117,15 @@ TEST_F(S3Test, UnsucessfulListOperations) {
         std::vector<std::string> fileResults;
         std::vector<std::string> folderResults;
 
-        auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix");
+        auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::INVALID_BUCKET_NAME);
 
-        res = turingS3Client.listFiles("bucketName", fileResults, "prefix");
+        res = turingS3Client.listFiles("bucketName", fileResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::INVALID_BUCKET_NAME);
 
-        res = turingS3Client.listFolders("bucketName", folderResults, "prefix");
+        res = turingS3Client.listFolders("bucketName", folderResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::INVALID_BUCKET_NAME);
     }
@@ -143,15 +143,15 @@ TEST_F(S3Test, UnsucessfulListOperations) {
         std::vector<std::string> fileResults;
         std::vector<std::string> folderResults;
 
-        auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix");
+        auto res = turingS3Client.listKeys("bucketName", keyResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_LIST_KEYS);
 
-        res = turingS3Client.listFiles("bucketName", fileResults, "prefix");
+        res = turingS3Client.listFiles("bucketName", fileResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_LIST_FILES);
 
-        res = turingS3Client.listFolders("bucketName", folderResults, "prefix");
+        res = turingS3Client.listFolders("bucketName", folderResults, "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_LIST_FOLDERS);
     }
@@ -402,7 +402,7 @@ TEST_F(S3Test, SuccesfulDirectoryUpload) {
     S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
     S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-    auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix");
+    auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
     ASSERT_TRUE(res);
 }
 
@@ -418,7 +418,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.uploadDirectory("/does/not/exist", "bucketName", "prefix");
+        auto res = turingS3Client.uploadDirectory("/does/not/exist", "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::DIRECTORY_NOT_FOUND);
     }
@@ -440,7 +440,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix");
+        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_UPLOAD_DIRECTORY);
 
@@ -461,7 +461,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix");
+        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::ACCESS_DENIED);
     }
@@ -480,7 +480,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix");
+        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::INVALID_BUCKET_NAME);
     }
@@ -500,7 +500,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix");
+        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::DIRECTORY_EXISTS);
     }
@@ -520,7 +520,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix");
+        auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_UPLOAD_DIRECTORY);
     }
@@ -546,7 +546,7 @@ TEST_F(S3Test, SuccesfulDirectoryDownload) {
     S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
     S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-    auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+    auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
     ASSERT_TRUE(res);
 }
 
@@ -567,7 +567,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::INVALID_DIRECTORY_NAME);
     }
@@ -595,7 +595,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
 
         std::filesystem::create_directory("/tmp/turingS3Test/dir0");
         chmod("/tmp/turingS3Test/dir0", 0555);
-        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         chmod("/tmp/turingS3Test/dir0", 0755);
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_DOWNLOAD_DIRECTORY);
@@ -622,7 +622,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::ACCESS_DENIED);
     }
@@ -648,7 +648,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_DOWNLOAD_DIRECTORY);
     }
@@ -674,7 +674,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::INVALID_BUCKET_NAME);
     }
@@ -701,7 +701,7 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
         S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(clientWrapper);
 
-        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix");
+        auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::ErrorType::CANNOT_DOWNLOAD_DIRECTORY);
     }

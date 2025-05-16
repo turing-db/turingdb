@@ -21,6 +21,17 @@ public:
 
     std::string& getPath() { return _path; }
 
+    void createSubDir(const std::string& dirPath) {
+        std::filesystem::create_directories(_path + dirPath);
+    }
+
+    void createFile(const std::string& filePath) {
+        std::ofstream create(_path + filePath);
+        create << "randText";
+        create.flush();
+        create.close();
+    }
+
 private:
     void init() {
         std::filesystem::create_directory(_path);
