@@ -28,17 +28,18 @@ enum class ErrorType : uint8_t {
     INVALID_DIRECTORY_NAME,
     INVALID_KEY_NAME,
     INVALID_BUCKET_NAME,
+    INVALID_PREFIX_STRING,
     _SIZE,
 };
 
 using ErrorTypeDescription = EnumToString<ErrorType>::Create<
     EnumStringPair<ErrorType::UNKNOWN, "Unknown">,
-    EnumStringPair<ErrorType::ACCESS_DENIED, "Could Not Access S3">,
-    EnumStringPair<ErrorType::FILE_EXISTS, "File Already Exists">,
-    EnumStringPair<ErrorType::DIRECTORY_EXISTS, "Directory Already Exists">,
-    EnumStringPair<ErrorType::DIRECTORY_NOT_FOUND, "Directory Could Not Be Found At Path">,
-    EnumStringPair<ErrorType::FILE_NOT_FOUND, "File Could Not Be Found At Path">,
-    EnumStringPair<ErrorType::FILE_SYSTEM_ERROR, "Filesystem Returned Error">,
+    EnumStringPair<ErrorType::ACCESS_DENIED, "Could not access S3">,
+    EnumStringPair<ErrorType::FILE_EXISTS, "File already exists">,
+    EnumStringPair<ErrorType::DIRECTORY_EXISTS, "Directory already exists">,
+    EnumStringPair<ErrorType::DIRECTORY_NOT_FOUND, "Directory could not be found at path">,
+    EnumStringPair<ErrorType::FILE_NOT_FOUND, "File could not be found at path">,
+    EnumStringPair<ErrorType::FILE_SYSTEM_ERROR, "Filesystem returned error">,
     EnumStringPair<ErrorType::CANNOT_UPLOAD_FILE, "Could not upload file">,
     EnumStringPair<ErrorType::CANNOT_DOWNLOAD_FILE, "Could not download file">,
     EnumStringPair<ErrorType::CANNOT_UPLOAD_DIRECTORY, "Could not upload directory">,
@@ -49,10 +50,12 @@ using ErrorTypeDescription = EnumToString<ErrorType>::Create<
     EnumStringPair<ErrorType::CANNOT_LIST_FOLDERS, "Could not list folders">,
     EnumStringPair<ErrorType::INVALID_DIRECTORY_NAME, "Could not find objects with the appropriate directory prefix">,
     EnumStringPair<ErrorType::INVALID_KEY_NAME, "Could not find an object mapped to the provided key">,
-    EnumStringPair<ErrorType::INVALID_BUCKET_NAME, "Could not find a bucket with the provided name">>;
+    EnumStringPair<ErrorType::INVALID_BUCKET_NAME, "Could not find a bucket with the provided name">,
+    EnumStringPair<ErrorType::INVALID_PREFIX_STRING, "The prefix string provided to the client was not valid">>;
 
 class Error {
 public:
+    Error() = default;
     explicit Error(ErrorType type)
         : _type(type)
     {

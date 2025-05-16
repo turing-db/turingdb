@@ -16,15 +16,29 @@ public:
     bool createBucket(const std::string& bucketName);
     bool deleteBucket(const std::string& bucketName);
 
-    Result<void> listKeys(const std::string& bucketName, std::vector<std::string>& keyResults, const std::string& prefix);
-    Result<void> listFiles(const std::string& bucketName, std::vector<std::string>& keyResults, const std::string& prefix);
-    Result<void> listFolders(const std::string& bucketName, std::vector<std::string>& folderResults, const std::string& prefix);
+    Result<void> listKeys(const std::string& bucketName,
+                          std::vector<std::string>& keyResults,
+                          const std::string& prefix);
+    Result<void> listFiles(const std::string& bucketName,
+                           std::vector<std::string>& keyResults,
+                           const std::string& prefix);
+    Result<void> listFolders(const std::string& bucketName,
+                             std::vector<std::string>& folderResults,
+                             const std::string& prefix);
 
-    Result<void> uploadFile(const std::string& filePath, const std::string& bucketName, const std::string& keyName);
-    Result<void> downloadFile(const std::string& filePath, const std::string& bucketName, const std::string& keyName);
+    Result<void> uploadFile(const std::string& filePath,
+                            const std::string& bucketName,
+                            const std::string& keyName);
+    Result<void> downloadFile(const std::string& filePath,
+                              const std::string& bucketName,
+                              const std::string& keyName);
 
-    Result<void> uploadDirectory(const std::string& directory, const std::string& bucketName, const std::string& prefix);
-    Result<void> downloadDirectory(const std::string& directory, const std::string& bucketName, const std::string& prefix);
+    Result<void> uploadDirectory(const std::string& directory,
+                                 const std::string& bucketName,
+                                 const std::string& prefix);
+    Result<void> downloadDirectory(const std::string& directory,
+                                   const std::string& bucketName,
+                                   const std::string& prefix);
 
 private:
     T& _client;

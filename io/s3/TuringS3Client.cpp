@@ -29,8 +29,12 @@ TuringS3Client<T>::TuringS3Client(T& client)
 }
 
 template <typename T>
-Result<void> TuringS3Client<T>::listKeys(const std::string& bucketName, std::vector<std::string>& keyResults, const std::string& prefix) {
-    spdlog::info("listing keys with prefix:{}", prefix);
+Result<void> TuringS3Client<T>::listKeys(const std::string& bucketName,
+                                         std::vector<std::string>& keyResults,
+                                         const std::string& prefix) {
+    if (prefix.back() != '/') {
+        return Error::result(ErrorType::INVALID_PREFIX_STRING);
+    }
 
     Aws::S3Crt::Model::ListObjectsV2Request request;
     request.WithBucket(bucketName).WithPrefix(prefix);
@@ -46,8 +50,6 @@ Result<void> TuringS3Client<T>::listKeys(const std::string& bucketName, std::vec
         auto outcome = _client.ListObjectsV2(request);
 
         if (!outcome.IsSuccess()) {
-            std::cerr << "Error: listObjects: " << outcome.GetError().GetMessage() << std::endl;
-            std::cerr << static_cast<int>(outcome.GetError().GetErrorType()) << std::endl;
             switch (outcome.GetError().GetErrorType()) {
                 case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
                     return Error::result(ErrorType::ACCESS_DENIED);
@@ -79,8 +81,12 @@ std::string extractFileNameFromKey(const Aws::String& commonPrefix) {
 }
 
 template <typename T>
-Result<void> TuringS3Client<T>::listFiles(const std::string& bucketName, std::vector<std::string>& keyResults, const std::string& prefix) {
-    spdlog::info("listing files with prefix:{}", prefix);
+Result<void> TuringS3Client<T>::listFiles(const std::string& bucketName,
+                                          std::vector<std::string>& keyResults,
+                                          const std::string& prefix) {
+    if (prefix.back() != '/') {
+        return Error::result(ErrorType::INVALID_PREFIX_STRING);
+    }
 
     Aws::S3Crt::Model::ListObjectsV2Request request;
     request.WithBucket(bucketName).WithPrefix(prefix).WithDelimiter("/");
@@ -96,8 +102,6 @@ Result<void> TuringS3Client<T>::listFiles(const std::string& bucketName, std::ve
         auto outcome = _client.ListObjectsV2(request);
 
         if (!outcome.IsSuccess()) {
-            std::cerr << "Error: listObjects: " << outcome.GetError().GetMessage() << std::endl;
-            std::cerr << static_cast<int>(outcome.GetError().GetErrorType()) << std::endl;
             switch (outcome.GetError().GetErrorType()) {
                 case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
                     return Error::result(ErrorType::ACCESS_DENIED);
@@ -130,8 +134,12 @@ std::string commonPrefixToFolderName(const Aws::String& commonPrefix) {
 }
 
 template <typename T>
-Result<void> TuringS3Client<T>::listFolders(const std::string& bucketName, std::vector<std::string>& folderResults, const std::string& prefix) {
-    spdlog::info("listing folders with prefix:{}", prefix);
+Result<void> TuringS3Client<T>::listFolders(const std::string& bucketName,
+                                            std::vector<std::string>& folderResults,
+                                            const std::string& prefix) {
+    if (prefix.back() != '/') {
+        return Error::result(ErrorType::INVALID_PREFIX_STRING);
+    }
 
     Aws::S3Crt::Model::ListObjectsV2Request request;
     request.WithBucket(bucketName).WithPrefix(prefix).WithDelimiter("/");
@@ -147,8 +155,6 @@ Result<void> TuringS3Client<T>::listFolders(const std::string& bucketName, std::
         auto outcome = _client.ListObjectsV2(request);
 
         if (!outcome.IsSuccess()) {
-            std::cerr << "Error listing folders : " << outcome.GetError().GetMessage() << std::endl;
-            std::cerr << static_cast<int>(outcome.GetError().GetErrorType()) << std::endl;
             switch (outcome.GetError().GetErrorType()) {
                 case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
                     return Error::result(ErrorType::ACCESS_DENIED);
@@ -165,24 +171,23 @@ Result<void> TuringS3Client<T>::listFolders(const std::string& bucketName, std::
             continuationToken = outcome.GetResult().GetNextContinuationToken();
         }
     } while (!continuationToken.empty());
-    // std::cout << allFolders.size() << " object(s) found:" << std::endl;
 
     for (const auto& folder : allFolders) {
         folderResults.push_back(commonPrefixToFolderName(folder.GetPrefix()));
-        // std::cout << "  " << folderResults.back() << std::endl;
     }
 
     return {};
 }
 
 template <typename T>
-Result<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath, const Aws::String& bucketName, const Aws::String& keyName) {
+Result<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath,
+                                           const Aws::String& bucketName,
+                                           const Aws::String& keyName) {
     std::error_code ec;
     if (!std::filesystem::exists(filePath, ec)) {
         if (ec) {
             return Error::result(ErrorType::FILE_SYSTEM_ERROR);
         }
-        spdlog::error("could not find file {}", filePath);
         return Error::result(ErrorType::FILE_NOT_FOUND);
     }
 
@@ -191,7 +196,6 @@ Result<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath, const Aw
     std::shared_ptr<Aws::IOStream> inputData = Aws::MakeShared<Aws::FStream>("TuringS3Client", filePath.c_str(), std::ios_base::in | std::ios_base::binary);
 
     if (!*inputData) {
-        std::cerr << "Error unable to read file " << filePath << std::endl;
         return Error::result(ErrorType::CANNOT_OPEN_FILE);
     }
 
@@ -200,9 +204,6 @@ Result<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath, const Aw
     Aws::S3Crt::Model::PutObjectOutcome outcome = _client.PutObject(request);
 
     if (!outcome.IsSuccess()) {
-        std::cerr << "Error: uploadFile: " << outcome.GetError().GetMessage() << std::endl;
-        std::cerr << static_cast<int>(outcome.GetError().GetErrorType()) << std::endl;
-
         switch (outcome.GetError().GetErrorType()) {
             case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
                 return Error::result(ErrorType::ACCESS_DENIED);
@@ -216,23 +217,19 @@ Result<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath, const Aw
         }
     }
 
-    // std::cout << "Added File'" << filePath << "' to bucket '"
-    //<< bucketName << "'.";
-
     return {};
 }
 
 template <typename T>
-Result<void> TuringS3Client<T>::downloadFile(const Aws::String& fileName, const Aws::String& bucketName, const Aws::String& keyName) {
+Result<void> TuringS3Client<T>::downloadFile(const Aws::String& fileName,
+                                             const Aws::String& bucketName,
+                                             const Aws::String& keyName) {
     Aws::S3Crt::Model::GetObjectRequest request;
     request.WithBucket(bucketName).WithKey(keyName);
 
     Aws::S3Crt::Model::GetObjectOutcome outcome = _client.GetObject(request);
 
     if (!outcome.IsSuccess()) {
-        std::cerr << "Error: downloadFile: " << outcome.GetError().GetMessage() << std::endl;
-        std::cerr << static_cast<int>(outcome.GetError().GetErrorType()) << std::endl;
-
         switch (outcome.GetError().GetErrorType()) {
             case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
                 return Error::result(ErrorType::ACCESS_DENIED);
@@ -248,7 +245,6 @@ Result<void> TuringS3Client<T>::downloadFile(const Aws::String& fileName, const 
     std::ofstream outputFileStream(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
 
     if (!outputFileStream.is_open()) {
-        std::cerr << "Error unable to write to file " << fileName << std::endl;
         std::error_code ec;
         std::filesystem::remove(fileName, ec);
         if (ec) {
@@ -259,15 +255,19 @@ Result<void> TuringS3Client<T>::downloadFile(const Aws::String& fileName, const 
     outputFileStream << outcome.GetResult().GetBody().rdbuf();
     outputFileStream.flush();
     outputFileStream.close();
-    // std::cout << "Downloaded File'" << fileName << "' from bucket '"
-    //<< bucketName << "'."<<std::endl;
 
     return {};
 }
 
-// No trailing forward slash at the end of the prefix parameter!
+// Need trailing forward slash at the end of the prefix parameter!
 template <typename T>
-Result<void> TuringS3Client<T>::uploadDirectory(const std::string& directory, const std::string& bucketName, const std::string& prefix) {
+Result<void> TuringS3Client<T>::uploadDirectory(const std::string& directory,
+                                                const std::string& bucketName,
+                                                const std::string& prefix) {
+    if (prefix.back() != '/') {
+        return Error::result(ErrorType::INVALID_PREFIX_STRING);
+    }
+
     std::error_code ec;
     if (!std::filesystem::exists(directory, ec)) {
         if (ec) {
@@ -284,9 +284,8 @@ Result<void> TuringS3Client<T>::uploadDirectory(const std::string& directory, co
             Aws::StringStream ssKey;
             Aws::String relativePath = entry.relativePath;
 
-            ssKey << prefix << "/" << relativePath;
+            ssKey << prefix << relativePath;
             Aws::String keyName = ssKey.str();
-            std::cout << "Uploading: " << keyName << std::endl;
             if (auto res = uploadFile(entry.path, bucketName, keyName); !res) {
                 directoryRes = res;
                 return false;
@@ -319,10 +318,15 @@ bool isFolder(const std::string& path) {
 }
 
 template <typename T>
-Result<void> TuringS3Client<T>::downloadDirectory(const std::string& directory, const std::string& bucketName, const std::string& prefix) {
-    // Add error handling
+Result<void> TuringS3Client<T>::downloadDirectory(const std::string& directory,
+                                                  const std::string& bucketName,
+                                                  const std::string& prefix) {
+    if (prefix.back() != '/') {
+        return Error::result(ErrorType::INVALID_PREFIX_STRING);
+    }
+
     std::error_code ec;
-    std::filesystem::create_directory(directory, ec); // Add error
+    std::filesystem::create_directory(directory, ec);
     if (ec) {
         return Error::result(ErrorType::FILE_SYSTEM_ERROR);
     }
@@ -330,20 +334,24 @@ Result<void> TuringS3Client<T>::downloadDirectory(const std::string& directory, 
     Aws::String downloadPath;
     std::vector<std::string> results;
 
-    listKeys(bucketName, results, prefix);
+    if (auto res = listKeys(bucketName, results, prefix); !res) {
+        if (res.error().getType() == ErrorType::CANNOT_LIST_KEYS) {
+            return Error::result(ErrorType::CANNOT_DOWNLOAD_DIRECTORY);
+        } else {
+            return res;
+        }
+    }
+
     if (results.empty()) {
         return Error::result(ErrorType::INVALID_DIRECTORY_NAME);
     }
 
     for (const auto& result : results) {
-        std::cout << "key name is:" << result << std::endl;
         if (!isFolder(result)) {
             auto pos = result.find(prefix) + prefix.size();
             downloadPath = fmt::format("{}/{}", directory, result.substr(pos));
 
             auto lastDelimiter = downloadPath.find_last_of('/');
-            std::cout << "Download path is " << downloadPath << std::endl;
-            std::cout << "Download path exists: " << std::filesystem::exists(downloadPath.substr(0, lastDelimiter));
             std::filesystem::create_directories(downloadPath.substr(0, lastDelimiter).c_str(), ec); // Add error handling
             if (ec) {
                 return Error::result(ErrorType::FILE_SYSTEM_ERROR);
