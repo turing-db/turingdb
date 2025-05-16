@@ -16,6 +16,9 @@ protected:
     void initialize() override {
         std::cout << "Running as user: " << getuid() << std::endl;
         std::cout << "Effective user: " << geteuid() << std::endl;
+        std::system("mount | grep tmp");
+        std::system("df -h /tmp");
+
     }
 
     void terminate() override {
