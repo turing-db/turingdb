@@ -43,74 +43,17 @@ int main() {
         // Free memory
         free(line);
 
-        if (tokens.front() == "exit") { break;
+        if (tokens.front() == "exit") {
+            break;
         }
 
-        if (tokens.front() == "lb") {
-            // client.listBuckets();
-        }
-
-        if (tokens.front() == "lo") {
-            std::vector<std::string> results;
-            std::cout << tokens.size() << std::endl;
-            if (tokens.size() == 3) {
-                // client.listFiles(tokens[1], results,tokens[2]);
-            } else {
-                std::string empty;
-                // client.listFiles(tokens[1], results,empty);
-            }
-            for (const auto& result : results) {
-                std::cout << result << std::endl;
-            }
-        }
-
-        if (tokens.front() == "lf") {
-            std::vector<std::string> results;
-            std::cout << tokens.size() << std::endl;
-            if (tokens.size() == 3) {
-                // client.listFolders(tokens[1], results,tokens[2]);
-            } else {
-                std::string empty;
-                // client.listFolders(tokens[1], results,empty);
-            }
-            for (const auto& result : results) {
-                std::cout << result << std::endl;
-            }
-        }
-
-        if (tokens.front() == "cb") {
-            // client.createBucket(tokens[1]);
-        }
-
-        if (tokens.front() == "db") {
-            // client.deleteBucket(tokens[1]);
-        }
-
-        if (tokens.front() == "uf") {
-            std::cout << "Uploading File: " << tokens[1] << std::endl;
-            // client.uploadFile(tokens[1],tokens[2],tokens[3]);
-        }
-        if (tokens.front() == "df") {
-            // client.downloadFile(tokens[1],tokens[2],tokens[3]);
-        }
-
-        if (tokens.front() == "ud") {
-            std::cout << "Uploading directory: " << tokens[1] << std::endl;
-            // client.uploadDirectory(tokens[1],tokens[2],tokens[3]);
-        }
-
-        if (tokens.front() == "dd") {
-            std::cout << "Downloading directory: " << tokens[1] << std::endl;
-            // client.downloadDirectory(tokens[1],tokens[2],tokens[3]);
-        }
-
-        if (tokens.front() == "lsag") {
+        if (tokens.front() == "lslg") {
             spdlog::info("Listing local graphs");
             std::vector<fs::Path> graphs;
-            cache.listAvailableGraphs(graphs);
+            cache.listLocalGraphs(graphs);
 
-            for(const auto& graph: graphs){
-                std::cout<<graph.c_str()<<std::endl;
+            for (const auto& graph : graphs) {
+                std::cout << graph.c_str() << std::endl;
             }
         }
 
@@ -132,6 +75,46 @@ int main() {
         if (tokens.front() == "sg") {
             spdlog::info("Saving Graph To S3");
             cache.saveGraph(tokens[1]);
+        }
+
+        if (tokens.front() == "lsd") {
+            spdlog::info("Listing data");
+            std::vector<std::string> files;
+            std::vector<std::string> folders;
+            if (tokens.size() == 2) {
+                cache.listData(files, folders, tokens[1]);
+            } else {
+                cache.listData(files, folders);
+            }
+
+            std::cout << "Files:" << std::endl;
+            for (const auto& file : files) {
+                std::cout << file.c_str() << std::endl;
+            }
+            std::cout << "Folders:" << std::endl;
+            for (const auto& folder : folders) {
+                std::cout << folder.c_str() << std::endl;
+            }
+        }
+
+        if (tokens.front() == "lsld") {
+            spdlog::info("Listing local data");
+            std::vector<fs::Path> folders;
+            std::vector<fs::Path> files;
+            if (tokens.size() == 2) {
+                cache.listLocalData(files, folders, tokens[1]);
+            } else {
+                cache.listLocalData(files, folders);
+            }
+
+            std::cout << "Files:" << std::endl;
+            for (const auto& file : files) {
+                std::cout << file.c_str() << std::endl;
+            }
+            std::cout << "Folders:" << std::endl;
+            for (const auto& folder : folders) {
+                std::cout << folder.c_str() << std::endl;
+            }
         }
 
         if (tokens.front() == "ldf") {

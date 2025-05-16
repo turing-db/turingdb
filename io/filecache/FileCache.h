@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "FileCacheResult.h"
 #include "Path.h"
 #include "TuringS3Client.h"
 
@@ -14,23 +15,33 @@ class FileCache {
 public:
     FileCache(fs::Path& graphDir, fs::Path& dataDir, ClientType& clientWrapper);
 
-    bool saveGraph(std::string_view graphName);
-    bool loadGraph(std::string_view graphName);
+    Result<void> saveGraph(std::string_view graphName);
+    Result<void> loadGraph(std::string_view graphName);
 
-    void listGraphs(std::vector<std::string>& graphs);
-	void listAvailableGraphs(std::vector<fs::Path>& graphs);
-	//bool loadGraph(const std::string& graphName);
-	bool getCommit(Graph *graph, std::string_view graphName);
+    Result<void> listGraphs(std::vector<std::string>& graphs);
+    Result<void> listLocalGraphs(std::vector<fs::Path>& graphs);
+    // bool loadGraph(const std::string& graphName);
+    Result<void> getCommit(Graph* graph, std::string_view graphName);
+
+    Result<void> listData(std::vector<std::string>& files,
+                          std::vector<std::string>& folders,
+                          std::string_view dir);
+    Result<void> listData(std::vector<std::string>& files,
+                          std::vector<std::string>& folders);
+    Result<void> listLocalData(std::vector<fs::Path>& files,
+                               std::vector<fs::Path>& folders,
+                               std::string_view dir);
+    Result<void> listLocalData(std::vector<fs::Path>& files,
+                               std::vector<fs::Path>& folders);
+
+    Result<void> saveDataFile(std::string_view filePath);
+    Result<void> loadDataFile(std::string_view filePath);
+
+    Result<void> saveDataDirectory(std::string_view directoryPath);
+    Result<void> loadDataDirectory(std::string_view directoryPath);
 
 
-	bool saveDataFile(std::string& filePath);
-	bool loadDataFile(std::string& filePath);
-
-	bool saveDataDirectory(std::string& directoryPath);
-	bool loadDataDirectory(std::string& directoryPath);
-
-
-	void listFiles();
+    void listFiles();
 
 private:
     fs::Path _graphsDir;
