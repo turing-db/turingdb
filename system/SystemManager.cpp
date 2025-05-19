@@ -17,7 +17,9 @@
 
 using namespace db;
 
-SystemManager::SystemManager() {
+SystemManager::SystemManager()
+    :_changes(std::make_unique<ChangeManager>())
+{
     auto turingDir = createConfigDirectories();
     _graphsDir = turingDir / "graphs/";
     _dataDir = turingDir / "data/";
