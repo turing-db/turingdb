@@ -6,13 +6,14 @@
 #include "EntityID.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
-#include "versioning/Transaction.h"
 
 namespace db {
 
 class Graph;
 class JobSystem;
 class DataPartBuilder;
+class Change;
+class CommitBuilder;
 
 class GraphWriter {
 public:

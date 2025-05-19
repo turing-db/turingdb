@@ -59,7 +59,7 @@ protected:
 TEST_F(Neo4jImporterTest, Simple) {
     {
         auto change = _graph->newChange();
-        auto* commitBuilder = change->newCommit();
+        auto* commitBuilder = change->access().newCommit();
         auto& builder1 = commitBuilder->newBuilder();
         builder1.addNode(LabelSet::fromList({1})); // 0
         builder1.addNode(LabelSet::fromList({0})); // 1

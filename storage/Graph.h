@@ -6,7 +6,6 @@
 #include "DataPart.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitResult.h"
-#include "versioning/Transaction.h"
 
 namespace db {
 
@@ -20,6 +19,8 @@ class VersionController;
 class GraphLoader;
 class Commit;
 class GraphDumper;
+class CommitBuilder;
+class Transaction;
 
 class Graph {
 public:

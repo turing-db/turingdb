@@ -2,7 +2,6 @@
 
 #include "ArcManager.h"
 #include "versioning/CommitHash.h"
-#include "versioning/Transaction.h"
 #include "versioning/CommitData.h"
 
 namespace db {
@@ -14,6 +13,7 @@ class CommitBuilder;
 class CommitLoader;
 class GraphLoader;
 class Graph;
+class Transaction;
 
 class Commit {
 public:
@@ -29,9 +29,7 @@ public:
         return _data != nullptr;
     }
 
-    [[nodiscard]] Transaction openTransaction() const {
-        return {_data};
-    }
+    [[nodiscard]] Transaction openTransaction() const;
 
     [[nodiscard]] CommitHash hash() const { return _hash; }
 

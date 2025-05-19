@@ -8,6 +8,7 @@
 #include "PipelineException.h"
 #include "VarDecl.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
 
@@ -25,7 +26,12 @@ CreateEdgeStep::~CreateEdgeStep() {
 }
 
 void CreateEdgeStep::prepare(ExecutionContext* ctxt) {
-    _builder = ctxt->getPartBuilder();
+    WriteTransaction* tx = ctxt->getWriteTransaction();
+    if (!tx) {
+        throw PipelineException("CreateEdgeStep must be executed in a write transaction");
+    }
+
+    _builder = tx->partBuilder();
 }
 
 void CreateEdgeStep::execute() {

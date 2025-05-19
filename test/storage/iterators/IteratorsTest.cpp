@@ -22,6 +22,26 @@ struct TestEdgeRecord {
     EntityID _otherID;
 };
 
+struct GraphUpdate {
+    Graph* _graph {nullptr};
+    std::unique_ptr<Change> _change;
+    CommitBuilder& _commit;
+    DataPartBuilder& _builder;
+    MetadataBuilder& _metadata;
+
+    static GraphUpdate create(Graph& graph) {
+        auto change = graph.newChange();
+        auto* commit = change->access().newCommit();
+        auto& builder = commit->newBuilder();
+        auto& metadata = builder.getMetadata();
+        return GraphUpdate {&graph, std::move(change), *commit, builder, metadata};
+    }
+
+    auto submit(JobSystem& jobSystem) {
+        return _graph->submitChange(std::move(_change), jobSystem);
+    }
+};
+
 class IteratorsTest : public TuringTest {
 protected:
     void initialize() override {
@@ -29,19 +49,20 @@ protected:
         _graph = Graph::create();
 
         /* FIRST BUFFER */
-        auto change = _graph->newChange();
-        auto* commitBuilder1 = change->newCommit();
-        auto& builder1 = commitBuilder1->newBuilder();
+        auto update1  = GraphUpdate::create(*_graph);
+        auto& builder1 = update1._builder;
+        auto& metadata1 = update1._metadata;
+
         PropertyTypeID uint64ID = 0;
         PropertyTypeID stringID = 1;
 
         {
             // Metadata
-            commitBuilder1->metadata().getOrCreateLabel("0");
-            commitBuilder1->metadata().getOrCreateLabel("1");
-            commitBuilder1->metadata().getOrCreateEdgeType("0");
-            commitBuilder1->metadata().getOrCreatePropertyType("UIntProp", ValueType::UInt64);
-            commitBuilder1->metadata().getOrCreatePropertyType("StringProp", ValueType::String);
+            metadata1.getOrCreateLabel("0");
+            metadata1.getOrCreateLabel("1");
+            metadata1.getOrCreateEdgeType("0");
+            metadata1.getOrCreatePropertyType("UIntProp", ValueType::UInt64);
+            metadata1.getOrCreatePropertyType("StringProp", ValueType::String);
         }
 
         {
@@ -88,19 +109,20 @@ protected:
         }
 
         spdlog::info(" -- Pushing 1");
-        ASSERT_TRUE(change->commitAllPending(*_jobSystem));
+        ASSERT_TRUE(update1.submit(*_jobSystem));
 
         /* SECOND BUFFER */
-        auto* commitBuilder2 = change->newCommit();
-        auto& builder2 = commitBuilder2->newBuilder();
+        auto update2  = GraphUpdate::create(*_graph);
+        auto& builder2 = update2._builder;
+        auto& metadata2 = update2._metadata;
 
         {
             // Metadata
-            commitBuilder2->metadata().getOrCreateLabel("0");
-            commitBuilder2->metadata().getOrCreateLabel("1");
-            commitBuilder2->metadata().getOrCreateEdgeType("0");
-            commitBuilder2->metadata().getOrCreatePropertyType("UIntProp", ValueType::UInt64);
-            commitBuilder2->metadata().getOrCreatePropertyType("StringProp", ValueType::String);
+            metadata2.getOrCreateLabel("0");
+            metadata2.getOrCreateLabel("1");
+            metadata2.getOrCreateEdgeType("0");
+            metadata2.getOrCreatePropertyType("UIntProp", ValueType::UInt64);
+            metadata2.getOrCreatePropertyType("StringProp", ValueType::String);
         }
 
         {
@@ -145,17 +167,16 @@ protected:
         }
 
         spdlog::info(" -- Pushing 2");
-        ASSERT_TRUE(change->commitAllPending(*_jobSystem));
+        ASSERT_TRUE(update2.submit(*_jobSystem));
 
         /* THIRD BUFFER (Empty) */
-        auto* commitBuilder3 = change->newCommit();
-        [[maybe_unused]] auto& builder3 = commitBuilder3->newBuilder();
-        ASSERT_TRUE(change->commitAllPending(*_jobSystem));
+        auto update3  = GraphUpdate::create(*_graph);
         spdlog::info(" -- Pushing 3");
+        ASSERT_TRUE(update3.submit(*_jobSystem));
 
         /* FOURTH BUFFER (First node and edge ids: 5, 5) */
-        auto* commitBuilder4 = change->newCommit();
-        auto& builder4 = commitBuilder4->newBuilder();
+        auto update4  = GraphUpdate::create(*_graph);
+        auto& builder4 = update4._builder;
 
         {
             // Node 8
@@ -238,7 +259,7 @@ protected:
             *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         spdlog::info(" -- Pushing 4");
-        ASSERT_TRUE(_graph->submitChange(std::move(change), *_jobSystem));
+        ASSERT_TRUE(update4.submit(*_jobSystem));
     }
 
     void terminate() override {

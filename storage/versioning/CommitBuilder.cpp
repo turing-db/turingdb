@@ -5,6 +5,7 @@
 #include "Graph.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
+#include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
@@ -21,11 +22,12 @@ std::unique_ptr<CommitBuilder> CommitBuilder::prepare(VersionController& control
                                                       const GraphView& view) {
     auto* ptr = new CommitBuilder {controller, change, view};
     ptr->initialize();
+    ptr->newBuilder();
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
 Transaction CommitBuilder::openTransaction() {
-    return _controller->openTransaction(_commit->hash());
+    return Transaction {_commit->_data};
 }
 
 CommitHash CommitBuilder::hash() const {
@@ -72,10 +74,6 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     _builders.clear();
 
     return {};
-}
-
-CommitResult<void> CommitBuilder::submit(JobSystem& jobsystem) {
-    return _change->commit(_commit->hash(), jobsystem);
 }
 
 CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem) {

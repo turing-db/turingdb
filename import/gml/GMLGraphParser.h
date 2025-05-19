@@ -19,7 +19,7 @@ public:
 
     bool prepare() {
         _change = _graph->newChange();
-        _commitBuilder = _change->newCommit();
+        _commitBuilder = _change->access().newCommit();
         _builder = &_commitBuilder->newBuilder();
         _metadata = &_commitBuilder->metadata();
 

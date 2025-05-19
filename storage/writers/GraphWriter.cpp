@@ -7,6 +7,7 @@
 #include "versioning/Change.h"
 #include "DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 
@@ -17,7 +18,7 @@ GraphWriter::GraphWriter(Graph* graph)
 
     if (_graph) {
         _change = _graph->newChange();
-        _commitBuilder = _change->newCommit();
+        _commitBuilder = _change->access().newCommit();
         _dataPartBuilder = &_commitBuilder->newBuilder();
     }
 }
@@ -31,12 +32,12 @@ bool GraphWriter::commit() {
         return false;
     }
 
-    if (auto res = _change->commitAllPending(*_jobSystem); !res) {
+    if (auto res = _change->access().commit(*_jobSystem); !res) {
         spdlog::error("Could not commit changes: {}", res.error().fmtMessage());
         return false;
     }
 
-    _commitBuilder = _change->newCommit();
+    _commitBuilder = _change->access().newCommit();
     _dataPartBuilder = &_commitBuilder->newBuilder();
 
     return {};

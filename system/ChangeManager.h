@@ -4,7 +4,7 @@
 
 #include "RWSpinLock.h"
 #include "versioning/ChangeResult.h"
-#include "versioning/CommitHash.h"
+#include "versioning/ChangeID.h"
 #include "versioning/Change.h"
 
 namespace db {
@@ -28,10 +28,10 @@ public:
     ChangeManager& operator=(const ChangeManager&) = delete;
     ChangeManager& operator=(ChangeManager&&) = delete;
 
-    CommitHash storeChange(std::unique_ptr<Change> change);
-    ChangeResult<Change*> getChange(ChangeID changeHash);
-    ChangeResult<void> acceptChange(ChangeID changeHash, JobSystem&);
-    ChangeResult<void> deleteChange(ChangeID changeHash);
+    ChangeID storeChange(std::unique_ptr<Change> change);
+    ChangeResult<Change*> getChange(ChangeID changeID);
+    ChangeResult<void> acceptChange(ChangeID changeID, JobSystem&);
+    ChangeResult<void> deleteChange(ChangeID changeID);
 
     void listChanges(std::vector<const Change*>& list) const;
 

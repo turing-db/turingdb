@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "versioning/CommitHash.h"
-#include "versioning/Change.h"
+#include "versioning/ChangeID.h"
 
 namespace db {
 
@@ -31,6 +31,9 @@ public:
     void startLoop();
 
     void printHelp() const;
+
+    [[nodiscard]] CommitHash getCommitHash() const { return _hash; }
+    [[nodiscard]] ChangeID getChangeID() const { return _changeID; }
 
 private:
     TuringDB& _turingDB;

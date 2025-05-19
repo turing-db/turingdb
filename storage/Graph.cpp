@@ -5,6 +5,7 @@
 #include "versioning/Change.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 

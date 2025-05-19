@@ -300,8 +300,7 @@ void DBServerProcessor::list_labels() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -381,8 +380,7 @@ void DBServerProcessor::list_property_types() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -445,8 +443,7 @@ void DBServerProcessor::list_edge_types() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -509,8 +506,7 @@ void DBServerProcessor::list_nodes() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -608,8 +604,7 @@ void DBServerProcessor::get_node_properties() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -722,8 +717,7 @@ void DBServerProcessor::get_neighbors() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -841,8 +835,7 @@ void DBServerProcessor::get_nodes() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -900,9 +893,7 @@ void DBServerProcessor::get_node_edges() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    const auto transaction = _db.getSystemManager().openTransaction(info.graphName, info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -1095,8 +1086,7 @@ void DBServerProcessor::explore_node_edges() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");
@@ -1248,8 +1238,7 @@ void DBServerProcessor::get_edges() {
 
     const auto info = getTransactionInfo();
     const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+                                                                    info.commit);
 
     if (!transaction) {
         payload.key("error");

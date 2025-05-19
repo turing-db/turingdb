@@ -9,6 +9,7 @@
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
 #include "GraphLoader.h"
@@ -278,8 +279,7 @@ void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
 }
 
 BasicResult<Transaction, std::string_view> SystemManager::openTransaction(const std::string& graphName,
-                                                                          const CommitHash& commitID,
-                                                                          const ChangeID& changeID) const {
+                                                                          const CommitHash& commitID) const {
     const auto* graph = getGraph(graphName);
     if (!graph) {
         return BadResult<std::string_view> {"Graph does not exist"};
@@ -290,22 +290,10 @@ BasicResult<Transaction, std::string_view> SystemManager::openTransaction(const 
         return tr;
     }
 
-    auto changeRes = _changes->getChange(changeID);
-    if (!changeRes) {
-        return BadResult<std::string_view> {"Invalid change ID"};
-    }
-
-    auto* change = changeRes.value();
-
-    tr = change->openTransaction(commitID);
-    if (!tr.isValid()) {
-        return BadResult<std::string_view> {"Invalid commit hash"};
-    }
-
     return tr;
 }
 
-ChangeResult<CommitHash> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
+ChangeResult<ChangeID> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
     std::shared_lock graphGuard(_graphsLock);
 
     const auto it = _graphs.find(graphName);

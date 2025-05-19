@@ -1,12 +1,10 @@
 #include "Change.h"
 
-#include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/VersionController.h"
-
-#include <mutex>
+#include "versioning/Transaction.h"
 
 using namespace db;
 
@@ -15,106 +13,128 @@ Change::~Change() = default;
 Change::Change(VersionController* versionController, ChangeID id, CommitHash base)
     : _id(id),
       _versionController(versionController),
-      _base(versionController->openTransaction(base)) {
+      _base(versionController->openTransaction(base).commitData()) {
 }
 
 std::unique_ptr<Change> Change::create(VersionController* versionController,
                                        ChangeID id,
                                        CommitHash base) {
     auto* ptr = new Change(versionController, id, base);
+    auto* commitBuilder = ptr->newCommit();
+    commitBuilder->newBuilder();
 
     return std::unique_ptr<Change> {ptr};
 }
 
-Transaction Change::openTransaction(CommitHash hash) const {
-    std::scoped_lock lock(_mutex);
+WriteTransaction Change::openWriteTransaction() {
+    auto access = this->access();
 
-    if (hash == CommitHash::head()) {
-        if (_commits.empty()) {
-            return _base;
-        }
+    const WeakArc<const CommitData>* commitData = nullptr;
+    CommitBuilder* commitBuilder = nullptr;
+    DataPartBuilder* partBuilder = nullptr;
 
-        return _commits.back()->openTransaction();
-    }
+    commitBuilder = _commitBuilder.get();
+    commitData = &commitBuilder->openTransaction().commitData();
+    partBuilder = &commitBuilder->getCurrentBuilder();
 
-    auto it = _commitOffsets.find(hash);
-    if (it == _commitOffsets.end()) {
-        return Transaction {};
-    }
-
-    return _commits[it->second]->openTransaction();
+    return WriteTransaction {
+        *commitData,
+        commitBuilder,
+        partBuilder,
+        access,
+    };
 }
 
 CommitBuilder* Change::newCommit() {
-    std::scoped_lock lock(_mutex);
+    Profile profile {"Change::newCommit"};
+
+    if (_commitBuilder) {
+        return nullptr;
+    }
 
     GraphView tipView = _commits.empty()
-                          ? _base.viewGraph()
+                          ? GraphView {*_base}
                           : _commits.back()->openTransaction().viewGraph();
 
-    auto commitBuilder = CommitBuilder::prepare(*_versionController, this, tipView);
-    auto* ptr = commitBuilder.get();
 
-    _commitBuilders[commitBuilder->hash()] = std::move(commitBuilder);
+    _commitBuilder = CommitBuilder::prepare(*_versionController, this, tipView);
 
-    return ptr;
+    return _commitBuilder.get();
 }
 
-CommitResult<void> Change::commit(CommitHash hash, JobSystem& jobsystem) {
+CommitResult<void> Change::commit(JobSystem& jobsystem) {
     Profile profile {"Change::commit"};
 
-    std::scoped_lock lock(_mutex);
-
-    auto it = _commitBuilders.find(hash);
-    if (it == _commitBuilders.end()) {
-        return CommitError::result(CommitErrorType::COMMIT_HASH_NOT_EXISTS);
+    if (!_commitBuilder) {
+        return CommitError::result(CommitErrorType::NO_PENDING_COMMIT);
     }
 
-    if (_commitOffsets.contains(hash)) {
-        return CommitError::result(CommitErrorType::COMMIT_HASH_EXISTS);
+    if (auto res = _commitBuilder->buildAllPending(jobsystem); !res) {
+        return res;
     }
 
-    auto& commitBuilder = it->second;
-    this->commit(std::move(commitBuilder), jobsystem);
+    const GraphView currentView = _commitBuilder->viewGraph();
+
+    /* The transaction does not need to be kept alive if the commit
+     * is owned by the change */
+
+    const GraphView tipView = _commits.empty()
+                                ? GraphView {*_base}
+                                : _commits.back()->openTransaction().viewGraph();
+
+
+    // Checking if the commit is up to date with the tip
+    const std::span commitDataparts = currentView.dataparts();
+    const std::span tipDataparts = tipView.dataparts();
+
+    for (size_t i = 0; i < tipDataparts.size(); i++) {
+        if (commitDataparts[i].get() != tipDataparts[i].get()) {
+            return CommitError::result(CommitErrorType::COMMIT_NEEDS_REBASE);
+        }
+    }
+
+
+    auto commit = _commitBuilder->build(jobsystem);
+    if (!commit) {
+        return commit.get_unexpected();
+    }
+
+    _commitOffsets.emplace(commit.value()->hash(), _commits.size());
+    _commits.emplace_back(std::move(commit.value()));
+
+    _commitBuilder = nullptr;
+    newCommit();
 
     return {};
 }
 
-CommitResult<void> Change::rebase(CommitHash hash, JobSystem& jobsystem) {
+CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
-    std::scoped_lock lock {_mutex};
+    if (!_commitBuilder) {
+        return CommitError::result(CommitErrorType::NO_PENDING_COMMIT);
+    }
 
     /* The transaction does not need to be kept alive if the commit
      * is owned by the change */
 
     const auto& tipData = _commits.empty()
-                            ? _base.commitData()
+                            ? _base
                             : _commits.back()->openTransaction().commitData();
 
-    const auto& tipHistory = tipData.history();
-    const auto& tipMetadata = tipData.metadata();
+    const auto& tipHistory = tipData->history();
+    const auto& tipMetadata = tipData->metadata();
     const auto& tipCommits = tipHistory.commits();
 
     size_t commitIndex = 0;
 
-    auto it = _commitBuilders.find(hash);
-    if (it == _commitBuilders.end()) {
-        return CommitError::result(CommitErrorType::COMMIT_HASH_NOT_EXISTS);
-    }
-
-    if (_commitOffsets.contains(hash)) {
-        return CommitError::result(CommitErrorType::COMMIT_HASH_EXISTS);
-    }
-
-    auto& commitBuilder = it->second;
-    if (auto res = commitBuilder->buildAllPending(jobsystem); !res) {
+    if (auto res = _commitBuilder->buildAllPending(jobsystem); !res) {
         return res;
     }
 
     MetadataRebaser metadataRebaser;
-    metadataRebaser.rebase(tipMetadata, commitBuilder->metadata());
-    auto& commit = commitBuilder->_commit;
+    metadataRebaser.rebase(tipMetadata, _commitBuilder->metadata());
+    auto& commit = _commitBuilder->_commit;
 
     size_t partIndex = 0;
 
@@ -139,11 +159,11 @@ CommitResult<void> Change::rebase(CommitHash hash, JobSystem& jobsystem) {
 
     DataPartRebaser partRebaser;
 
-    if (tipData.allDataparts().empty()) {
+    if (tipData->allDataparts().empty()) {
         return {};
     }
 
-    const DataPart* prevPart = tipData.allDataparts().back().get();
+    const DataPart* prevPart = tipData->allDataparts().back().get();
     for (auto& part : currentHistory._commitDataparts) {
         partRebaser.rebase(metadataRebaser, *prevPart, *part);
         prevPart = part.get();
@@ -152,72 +172,6 @@ CommitResult<void> Change::rebase(CommitHash hash, JobSystem& jobsystem) {
     return {};
 }
 
-CommitResult<void> Change::commitAllPending(JobSystem& jobsystem) {
-    Profile profile {"Change::commitAllPending"};
-
-    std::scoped_lock lock(_mutex);
-
-    GraphView tipView = _commits.empty()
-                          ? _base.viewGraph()
-                          : _commits.back()->openTransaction().viewGraph();
-
-    for (auto& [hash, commitBuilder] : _commitBuilders) {
-        tipView = _commits.back()->openTransaction().viewGraph();
-
-        const auto reader = tipView.read();
-        const auto firstNodeID = reader.getNodeCount();
-        const auto firstEdgeID = reader.getEdgeCount();
-        commitBuilder->setEntityIDs(firstNodeID, firstEdgeID);
-        if (auto res = commitBuilder->buildAllPending(jobsystem); !res) {
-            return res;
-        }
-
-        this->commit(std::move(commitBuilder), jobsystem);
-    }
-
-    _commitBuilders.clear();
-
-    return {};
-}
-
 CommitHash Change::baseHash() const {
-    return _base.commitData().hash();
-}
-
-
-CommitResult<void> Change::commit(std::unique_ptr<CommitBuilder> commitBuilder, JobSystem& jobsystem) {
-    if (auto res = commitBuilder->buildAllPending(jobsystem); !res) {
-        return res;
-    }
-
-    const GraphView currentView = commitBuilder->viewGraph();
-
-    /* The transaction does not need to be kept alive if the commit
-     * is owned by the change */
-
-    const GraphView tipView = _commits.empty()
-                                ? _base.viewGraph()
-                                : _commits.back()->openTransaction().viewGraph();
-
-
-    // Checking if the commit is up to date with the tip
-    const std::span commitDataparts = currentView.dataparts();
-    const std::span tipDataparts = tipView.dataparts();
-
-    for (size_t i = 0; i < tipDataparts.size(); i++) {
-        if (commitDataparts[i].get() != tipDataparts[i].get()) {
-            return CommitError::result(CommitErrorType::COMMIT_NEEDS_REBASE);
-        }
-    }
-
-
-    auto commit = commitBuilder->build(jobsystem);
-    if (!commit) {
-        return commit.get_unexpected();
-    }
-
-    _commitOffsets.emplace(commit.value()->hash(), _commits.size());
-    _commits.emplace_back(std::move(commit.value()));
-
-    return {};
+    return _base->hash();
 }

@@ -181,6 +181,7 @@ cmd: match_cmd { ctxt->setRoot($1); }
    | explain_cmd { ctxt->setRoot($1); }
    | history_cmd { ctxt->setRoot($1); }
    | change_cmd { ctxt->setRoot($1); }
+   | commit_cmd { ctxt->setRoot($1); }
    ;
 
 match_cmd: MATCH match_target RETURN return_fields {

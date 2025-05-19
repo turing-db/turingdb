@@ -3,12 +3,13 @@
 #include "DataPart.h"
 #include "Profiler.h"
 #include "versioning/CommitView.h"
+#include "versioning/Transaction.h"
+#include "versioning/Commit.h"
 
 using namespace db;
 
 HistoryStep::HistoryStep(ColumnVector<std::string>* log)
-    : _log(log)
-{
+    : _log(log) {
 }
 
 HistoryStep::~HistoryStep() {
@@ -17,10 +18,9 @@ HistoryStep::~HistoryStep() {
 void HistoryStep::execute() {
     Profile profile {"HistoryStep::execute"};
 
-    _log->clear();
-    for (const auto& commit : _view->commits()) {
-        auto& str = _log->emplace_back();
-        str += fmt::format("Commit: {:x}", commit.hash().get());
+    static constexpr auto formatCommitLog = [](std::string& str,
+                                               const CommitView& commit) {
+        str = fmt::format("Commit: {:x}", commit.hash().get());
         if (commit.isHead()) {
             str += " (HEAD)";
         }
@@ -32,6 +32,12 @@ void HistoryStep::execute() {
                                i + 1, part->getNodeCount(), part->getEdgeCount());
             i++;
         }
+    };
+
+    _log->clear();
+    for (const auto& commit : _view->commits()) {
+        auto& str = _log->emplace_back();
+        formatCommitLog(str, commit);
     }
 }
 

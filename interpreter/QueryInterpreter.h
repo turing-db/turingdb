@@ -2,12 +2,12 @@
 
 #include <string_view>
 #include <memory>
+#include <variant>
 
 #include "QueryStatus.h"
 #include "QueryCallback.h"
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
-#include "views/GraphView.h"
 
 namespace db {
 
@@ -16,6 +16,7 @@ class JobSystem;
 class LocalMemory;
 class Executor;
 class Transaction;
+class WriteTransaction;
 
 class QueryInterpreter {
 public:
@@ -34,9 +35,9 @@ private:
     JobSystem* _jobSystem {nullptr};
     std::unique_ptr<Executor> _executor;
 
-    BasicResult<Transaction, QueryStatus> openTransaction(std::string_view graphName,
-                                                          CommitHash commitHash,
-                                                          ChangeID changeID);
+    BasicResult<std::variant<Transaction, WriteTransaction>, QueryStatus> openTransaction(std::string_view graphName,
+                                                                                          CommitHash commitHash,
+                                                                                          ChangeID changeID);
 };
 
 }

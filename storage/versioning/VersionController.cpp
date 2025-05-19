@@ -7,7 +7,7 @@
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
-#include "versioning/MetadataRebaser.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 
@@ -70,7 +70,9 @@ CommitResult<void> VersionController::submitChange(std::unique_ptr<Change> chang
         return CommitError::result(CommitErrorType::CHANGE_NEEDS_REBASE);
     }
 
-    if (auto res = change->commitAllPending(jobSystem); !res) {
+    auto changeAccess = change->access();
+
+    if (auto res = changeAccess.commit(jobSystem); !res) {
         return res;
     }
 
@@ -79,10 +81,7 @@ CommitResult<void> VersionController::submitChange(std::unique_ptr<Change> chang
 }
 
 std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
-    std::scoped_lock lock {_mutex};
-    auto change = Change::create(this, ChangeID {}, base); // TODO: use a random ID generator
-
-    return change;
+    return Change::create(this, ChangeID {_nextChangeID.fetch_add(1)}, base);
 }
 
 void VersionController::lock() {

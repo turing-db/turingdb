@@ -6,6 +6,7 @@
 #include "reader/GraphReader.h"
 #include "metadata/PropertyType.h"
 #include "writers/GraphWriter.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 

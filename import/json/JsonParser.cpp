@@ -23,7 +23,7 @@ namespace db {
 JsonParser::JsonParser(Graph* graph)
     : _graph(graph),
     _change(graph->newChange()),
-    _commitBuilder(_change->newCommit()),
+    _commitBuilder(_change->access().newCommit()),
     _nodeIDMapper(new IDMapper)
 {
 }

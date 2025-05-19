@@ -43,7 +43,6 @@ public:
 
     DataPartBuilder& newBuilder();
 
-    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
 

@@ -12,7 +12,6 @@
 #include "versioning/CommitResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
-#include "versioning/Transaction.h"
 #include "DataPart.h"
 
 namespace db {
@@ -21,6 +20,7 @@ class Graph;
 class GraphLoader;
 class GraphDumper;
 class JobSystem;
+class Transaction;
 
 struct EntityIDPair {
     EntityID _nodeID;
@@ -62,6 +62,7 @@ private:
     friend GraphDumper;
 
     std::atomic<Commit*> _head {nullptr};
+    std::atomic<uint64_t> _nextChangeID {0};
 
     mutable std::mutex _mutex;
     CommitVector _commits;

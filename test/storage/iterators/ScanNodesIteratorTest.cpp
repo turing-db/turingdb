@@ -49,7 +49,7 @@ TEST_F(ScanNodesIteratorTest, emptyGraph) {
 TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     auto graph = Graph::create();
     auto change = graph->newChange();
-    auto* commitBuilder = change->newCommit();
+    auto* commitBuilder = change->access().newCommit();
     [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
     const auto res = graph->submitChange(std::move(change), *_jobSystem);
     if (!res) {
@@ -72,7 +72,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
 
     auto change = graph->newChange();
     for (auto i = 0; i < 3; i++) {
-        auto* commitBuilder = change->newCommit();
+        auto* commitBuilder = change->access().newCommit();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
     }
     const auto res = graph->submitChange(std::move(change), *_jobSystem);
@@ -98,7 +98,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 
     {
         auto change = graph->newChange();
-        auto* commitBuilder = change->newCommit();
+        auto* commitBuilder = change->access().newCommit();
         auto& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
             builder.addNode(labelset);
@@ -149,14 +149,14 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto change = graph->newChange();
 
     for (auto i = 0; i < 8; i++) {
-        auto* commitBuilder = change->newCommit();
+        auto* commitBuilder = change->access().newCommit();
         auto& builder = commitBuilder->newBuilder();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
             builder.addNode(labelset);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        ASSERT_TRUE(change->commitAllPending(*_jobSystem));
+        ASSERT_TRUE(change->access().commit(*_jobSystem));
     }
 
     const auto res = graph->submitChange(std::move(change), *_jobSystem);
@@ -206,7 +206,7 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
 
     {
         auto change = graph->newChange();
-        auto* commitBuilder = change->newCommit();
+        auto* commitBuilder = change->access().newCommit();
         auto& builder = commitBuilder->newBuilder();
 
         for (size_t i = 0; i < nodeCount; i++) {

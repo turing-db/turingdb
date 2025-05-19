@@ -10,24 +10,25 @@
 
 namespace db {
 
-class CommitHash {
+template <int = 0>
+class TemplateCommitHash {
 public:
     using ValueType = uint64_t;
 
-    constexpr CommitHash() = default;
-    constexpr ~CommitHash() = default;
+    constexpr TemplateCommitHash() = default;
+    constexpr ~TemplateCommitHash() = default;
 
-    constexpr CommitHash(const CommitHash&) = default;
-    constexpr CommitHash(CommitHash&&) noexcept = default;
-    constexpr CommitHash& operator=(const CommitHash&) = default;
-    constexpr CommitHash& operator=(CommitHash&&) noexcept = default;
+    constexpr TemplateCommitHash(const TemplateCommitHash&) = default;
+    constexpr TemplateCommitHash(TemplateCommitHash&&) noexcept = default;
+    constexpr TemplateCommitHash& operator=(const TemplateCommitHash&) = default;
+    constexpr TemplateCommitHash& operator=(TemplateCommitHash&&) noexcept = default;
 
-    constexpr explicit CommitHash(ValueType v)
+    constexpr explicit TemplateCommitHash(ValueType v)
         : _value(v)
     {
     }
 
-    constexpr CommitHash& operator=(ValueType v) {
+    constexpr TemplateCommitHash& operator=(ValueType v) {
         _value = v;
         return *this;
     }
@@ -35,38 +36,38 @@ public:
     [[nodiscard]] constexpr ValueType get() const { return _value; }
     [[nodiscard]] constexpr explicit operator ValueType() const { return _value; }
 
-    [[nodiscard]] static CommitHash create();
+    [[nodiscard]] static TemplateCommitHash create();
 
-    [[nodiscard]] static consteval CommitHash head() { return CommitHash {}; }
+    [[nodiscard]] static consteval TemplateCommitHash head() { return TemplateCommitHash {}; }
 
-    [[nodiscard]] bool operator==(const CommitHash& other) const {
+    [[nodiscard]] bool operator==(const TemplateCommitHash& other) const {
         return _value == other._value;
     }
 
-    [[nodiscard]] bool operator!=(const CommitHash& other) const {
+    [[nodiscard]] bool operator!=(const TemplateCommitHash& other) const {
         return !(*this == other);
     }
 
-    [[nodiscard]] bool operator<(const CommitHash& other) const {
+    [[nodiscard]] bool operator<(const TemplateCommitHash& other) const {
         return _value < other._value;
     }
 
-    [[nodiscard]] bool operator<=(const CommitHash& other) const {
+    [[nodiscard]] bool operator<=(const TemplateCommitHash& other) const {
         return _value <= other._value;
     }
 
-    [[nodiscard]] bool operator>=(const CommitHash& other) const {
+    [[nodiscard]] bool operator>=(const TemplateCommitHash& other) const {
         return _value >= other._value;
     }
 
-    [[nodiscard]] bool operator>(const CommitHash& other) const {
+    [[nodiscard]] bool operator>(const TemplateCommitHash& other) const {
         return _value > other._value;
     }
 
-    [[nodiscard]] static BasicResult<CommitHash, std::string_view> fromString(std::string_view str) {
-        CommitHash::ValueType hashValue = CommitHash::head().get();
+    [[nodiscard]] static BasicResult<TemplateCommitHash, std::string_view> fromString(std::string_view str) {
+        TemplateCommitHash::ValueType hashValue = TemplateCommitHash::head().get();
         if (str == "head") {
-            return CommitHash::head();
+            return TemplateCommitHash::head();
         }
 
         const char* begin = str.data();
@@ -81,34 +82,37 @@ public:
             return BadResult<std::string_view>("String contains invalid characters");
         }
 
-        return CommitHash(hashValue);
+        return TemplateCommitHash(hashValue);
     }
 
 private:
     ValueType _value = std::numeric_limits<ValueType>::max();
 };
 
+using CommitHash = TemplateCommitHash<0>;
+
 }
 
-template <>
-struct std::hash<db::CommitHash> {
-    size_t operator()(const db::CommitHash& h) const {
+template <int i>
+struct std::hash<db::TemplateCommitHash<i>> {
+    size_t operator()(const db::TemplateCommitHash<i>& h) const {
         return h.get();
     }
 };
 
 namespace std {
 
-inline string to_string(db::CommitHash h) {
+template <int i>
+inline string to_string(db::TemplateCommitHash<i> h) {
     return to_string(h.get());
 }
 
-template <typename T>
-ostream& operator<<(ostream& os, db::CommitHash h) {
+template <typename T, int i>
+ostream& operator<<(ostream& os, db::TemplateCommitHash<i> h) {
     return os << h.get();
 }
 
 }
 
-template <>
-struct fmt::formatter<db::CommitHash> : ostream_formatter {};
+template <int i>
+struct fmt::formatter<db::TemplateCommitHash<i>> : ostream_formatter {};

@@ -10,13 +10,13 @@
 #include "GraphFileType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
-#include "versioning/Transaction.h"
 
 namespace db {
 
 class Graph;
 class ChangeManager;
 class JobSystem;
+class Transaction;
 
 class SystemManager {
 public:
@@ -53,13 +53,12 @@ public:
     bool isGraphLoading(const std::string& graphName) const;
 
     BasicResult<Transaction, std::string_view> openTransaction(const std::string& graphName,
-                                                               const CommitHash& commitID,
-                                                               const ChangeID& changeID) const;
+                                                               const CommitHash& commitID) const;
 
     ChangeManager& getChangeManager() { return *_changes; }
     const ChangeManager& getChangeManager() const { return *_changes; }
 
-    ChangeResult<CommitHash> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
+    ChangeResult<ChangeID> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
 
 private:
     mutable RWSpinLock _graphsLock;

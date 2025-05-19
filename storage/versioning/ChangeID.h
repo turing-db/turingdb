@@ -4,6 +4,6 @@
 
 namespace db {
 
-using ChangeID = CommitHash;
+using ChangeID = TemplateCommitHash<1>;
 
 }

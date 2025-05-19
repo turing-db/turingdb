@@ -15,6 +15,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "FileUtils.h"
 #include "Panic.h"
 #include "Profiler.h"
@@ -104,14 +105,18 @@ void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell
 
 void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     std::string hashStr = "head";
+    std::string changeIDStr;
 
     argparse::ArgumentParser argParser("checkout", "", argparse::default_arguments::help, false);
     argParser.add_description("Checkout specific commit of current graph");
-    argParser.add_argument("hash")
+    argParser.add_argument("--commit")
         .nargs(1)
         .metavar("hash")
-        .default_value("head")
         .store_into(hashStr);
+    argParser.add_argument("--change")
+        .nargs(1)
+        .metavar("id")
+        .store_into(changeIDStr);
 
     try {
         argParser.parse_args(args);
@@ -120,22 +125,25 @@ void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell
         return;
     }
 
-    auto hash = CommitHash::fromString(hashStr);
-    if (!hash) {
-        spdlog::error("Commit {} is invalid: {}", hashStr, hash.error());
-        return;
+    const auto changeRes = ChangeID::fromString(changeIDStr);
+    const auto hashRes = CommitHash::fromString(hashStr);
+
+    const auto currentCommit = shell.getCommitHash();
+    const auto currentChange = shell.getChangeID();
+
+    if (changeRes) {
+        if (currentChange != changeRes.value() && !shell.setChangeID(changeRes.value())) {
+            spdlog::error("Change {} does not exist", changeIDStr);
+            return;
+        }
     }
 
-    if (shell.setCommitHash(hash.value())) {
-        return;
+    if (hashRes) {
+        if (currentCommit != hashRes.value() && !shell.setCommitHash(hashRes.value())) {
+            spdlog::error("Commit {} does not exist", hashStr);
+            return;
+        }
     }
-    
-    if (shell.setChangeID(ChangeID::fromString(hashStr).value())) {
-        return;
-    }
-
-
-    spdlog::error("Not commit/change was found matching hash {}", hashStr);
 }
 
 void quietCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
@@ -326,8 +334,8 @@ void TuringShell::processLine(std::string& line) {
     };
 
     const auto res = _quiet
-                       ? _turingDB.query(line, _graphName, _mem, [](const Block&) {}, _hash)
-                       : _turingDB.query(line, _graphName, _mem, queryCallback, _hash);
+                       ? _turingDB.query(line, _graphName, _mem, [](const Block&) {}, _hash, _changeID)
+                       : _turingDB.query(line, _graphName, _mem, queryCallback, _hash, _changeID);
 
     checkShellContext();
 
@@ -365,22 +373,6 @@ bool TuringShell::setGraphName(const std::string& graphName) {
     return true;
 }
 
-bool TuringShell::setCommitHash(CommitHash hash) {
-    const auto* graph = _turingDB.getSystemManager().getGraph(_graphName);
-    if (graph == nullptr) {
-        return false;
-    }
-
-    Transaction transaction = graph->openTransaction(hash);
-    if (!transaction.isValid()) {
-        return false;
-    }
-
-    _hash = hash;
-
-    return true;
-}
-
 bool TuringShell::setChangeID(ChangeID changeID) {
     auto res = _turingDB.getSystemManager().getChangeManager().getChange(changeID);
     if (!res) {
@@ -389,6 +381,39 @@ bool TuringShell::setChangeID(ChangeID changeID) {
 
     _changeID = changeID;
     return true;
+}
+
+bool TuringShell::setCommitHash(CommitHash hash) {
+    const auto* graph = _turingDB.getSystemManager().getGraph(_graphName);
+    if (graph == nullptr) {
+        return false;
+    }
+
+    if (_changeID == ChangeID::head()) {
+        if (auto tx = graph->openTransaction(hash); !tx.isValid()) {
+            return false;
+        }
+
+        _hash = hash;
+        return true;
+    }
+
+    auto& changeManager = _turingDB.getSystemManager().getChangeManager();
+    auto res = changeManager.getChange(_changeID);
+    if (!res) {
+        return false;
+    }
+
+    auto* change = res.value();
+    // TODO: add back ability to checkout a commit of a change (regular transaction)
+
+    if (auto tx = change->openWriteTransaction(); tx.isValid()) {
+        _hash = hash;
+        return true;
+    }
+
+    spdlog::error("No commit matches hash {:x}", hash.get());
+    return false;
 }
 
 void TuringShell::printHelp() const {
@@ -407,16 +432,27 @@ void TuringShell::checkShellContext() {
         return;
     }
 
-    Transaction transaction = graph->openTransaction(_hash);
-    if (transaction.isValid()) {
-        return;
+    if (_changeID == ChangeID::head()) {
+        Transaction transaction = graph->openTransaction(_hash);
+        if (transaction.isValid()) {
+            return;
+        }
     }
 
-    auto res = _turingDB.getSystemManager().getChangeManager().getChange(_hash);
+    auto res = _turingDB.getSystemManager().getChangeManager().getChange(_changeID);
     if (!res) {
         fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _hash.get());
+        setChangeID(ChangeID::head());
         setCommitHash(CommitHash::head());
         return;
     }
+
+    auto* change = res.value();
+    if (auto tx = change->openWriteTransaction(); tx.isValid()) {
+        return;
+    }
+
+    fmt::print("No commit matches hash {:x}, switching back to head\n", _hash.get());
+    setCommitHash(CommitHash::head());
 }
 

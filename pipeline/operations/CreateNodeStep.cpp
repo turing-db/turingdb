@@ -8,6 +8,7 @@
 #include "VarDecl.h"
 #include "metadata/LabelSet.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
 
@@ -22,7 +23,12 @@ CreateNodeStep::~CreateNodeStep() {
 }
 
 void CreateNodeStep::prepare(ExecutionContext* ctxt) {
-    _builder = ctxt->getPartBuilder();
+    WriteTransaction* tx = ctxt->getWriteTransaction();
+    if (!tx) {
+        throw PipelineException("CreateNodeStep must be executed in a write transaction");
+    }
+
+    _builder = tx->partBuilder();
 }
 
 void CreateNodeStep::execute() {

@@ -14,6 +14,7 @@ enum class CommitErrorType : uint8_t {
     COMMIT_NEEDS_REBASE,
     CHANGE_NEEDS_REBASE,
     BUILD_DATAPART_FAILED,
+    NO_PENDING_COMMIT,
 
     _SIZE,
 };
@@ -24,7 +25,8 @@ using CommitErrorTypeDescription = EnumToString<CommitErrorType>::Create<
     EnumStringPair<CommitErrorType::COMMIT_HASH_NOT_EXISTS, "Commit hash does not exist">,
     EnumStringPair<CommitErrorType::COMMIT_NEEDS_REBASE, "Commit needs rebase">,
     EnumStringPair<CommitErrorType::CHANGE_NEEDS_REBASE, "Change needs rebase">,
-    EnumStringPair<CommitErrorType::BUILD_DATAPART_FAILED, "Could not build datapart">>;
+    EnumStringPair<CommitErrorType::BUILD_DATAPART_FAILED, "Could not build datapart">,
+    EnumStringPair<CommitErrorType::NO_PENDING_COMMIT, "No pending commit">>;
 
 class CommitError {
 public:

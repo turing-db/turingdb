@@ -5,6 +5,7 @@
 #include "ChangeManager.h"
 #include "ExecutionContext.h"
 #include "Profiler.h"
+#include "versioning/CommitBuilder.h"
 #include "SystemManager.h"
 #include "PipelineException.h"
 
@@ -76,8 +77,8 @@ ChangeResult<ChangeID> ChangeStep::createChange() const {
 
     auto res = _sysMan->newChange(graphName);
     if (res) {
-        const auto& change = _sysMan->getChangeManager().getChange(res.value());
-        _output->push_back(change.value());
+        auto* change = _sysMan->getChangeManager().getChange(res.value()).value();
+        _output->push_back(change);
     }
 
     return res;

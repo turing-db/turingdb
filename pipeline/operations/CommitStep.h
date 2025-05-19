@@ -20,8 +20,8 @@ class CommitStep {
 public:
     struct Tag {};
 
-    CommitStep();
-    ~CommitStep();
+    CommitStep() = default;
+    ~CommitStep() = default;
 
     void prepare(ExecutionContext* ctxt);
 
@@ -35,12 +35,7 @@ public:
 
 private:
     JobSystem* _jobSystem {nullptr};
-    CommitBuilder* _commitBuilder {nullptr};
-
-    CommitResult<CommitHash> createCommit() const;
-    CommitResult<void> acceptCommit() const;
-    CommitResult<void> deleteCommit() const;
-    void listCommits() const;
+    WriteTransaction* _tx {nullptr};
 };
 
 }

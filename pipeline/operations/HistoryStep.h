@@ -18,6 +18,7 @@ public:
     ~HistoryStep();
 
     void prepare(ExecutionContext* ctxt) {
+        _writeTx = ctxt->getWriteTransaction();
         _view = &ctxt->getGraphView();
     }
 
@@ -31,6 +32,7 @@ public:
 
 private:
     const GraphView* _view {nullptr};
+    WriteTransaction* _writeTx {nullptr};
     ColumnVector<std::string>* _log {nullptr};
 };
 

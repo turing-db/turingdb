@@ -12,7 +12,7 @@ ChangeManager::ChangeManager() = default;
 
 ChangeManager::~ChangeManager() = default;
 
-CommitHash ChangeManager::storeChange(std::unique_ptr<Change> change) {
+ChangeID ChangeManager::storeChange(std::unique_ptr<Change> change) {
     std::unique_lock guard(_changesLock);
     const auto hash = change->id();
     _changes.emplace(hash, std::move(change));
@@ -20,10 +20,10 @@ CommitHash ChangeManager::storeChange(std::unique_ptr<Change> change) {
     return hash;
 }
 
-ChangeResult<Change*> ChangeManager::getChange(ChangeID changeHash) {
+ChangeResult<Change*> ChangeManager::getChange(ChangeID changeID) {
     std::shared_lock guard(_changesLock);
 
-    const auto it = _changes.find(changeHash);
+    const auto it = _changes.find(changeID);
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_EXISTS);
     }
@@ -31,10 +31,10 @@ ChangeResult<Change*> ChangeManager::getChange(ChangeID changeHash) {
     return it->second._change.get();
 }
 
-ChangeResult<void> ChangeManager::acceptChange(ChangeID changeHash, JobSystem& jobsystem) {
+ChangeResult<void> ChangeManager::acceptChange(ChangeID changeID, JobSystem& jobsystem) {
     std::unique_lock guard(_changesLock);
 
-    const auto it = _changes.find(changeHash);
+    const auto it = _changes.find(changeID);
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_EXISTS);
     }
@@ -49,10 +49,10 @@ ChangeResult<void> ChangeManager::acceptChange(ChangeID changeHash, JobSystem& j
     return {};
 }
 
-ChangeResult<void> ChangeManager::deleteChange(CommitHash changeHash) {
+ChangeResult<void> ChangeManager::deleteChange(ChangeID changeID) {
     std::unique_lock guard(_changesLock);
 
-    const auto it = _changes.find(changeHash);
+    const auto it = _changes.find(changeID);
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_EXISTS);
     }
