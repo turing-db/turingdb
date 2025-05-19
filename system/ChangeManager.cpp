@@ -12,10 +12,10 @@ ChangeManager::ChangeManager() = default;
 
 ChangeManager::~ChangeManager() = default;
 
-ChangeID ChangeManager::storeChange(std::unique_ptr<Change> change) {
+ChangeID ChangeManager::storeChange(Graph* graph, std::unique_ptr<Change> change) {
     std::unique_lock guard(_changesLock);
     const auto hash = change->id();
-    _changes.emplace(hash, std::move(change));
+    _changes.emplace(hash, GraphChangePair {std::move(change), graph});
 
     return hash;
 }
@@ -31,19 +31,20 @@ ChangeResult<Change*> ChangeManager::getChange(ChangeID changeID) {
     return it->second._change.get();
 }
 
-ChangeResult<void> ChangeManager::acceptChange(ChangeID changeID, JobSystem& jobsystem) {
+ChangeResult<void> ChangeManager::acceptChange(Change::Accessor& access, JobSystem& jobsystem) {
     std::unique_lock guard(_changesLock);
 
-    const auto it = _changes.find(changeID);
+    const auto it = _changes.find(access.getID());
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_EXISTS);
     }
 
     auto& pair = it->second;
-    if (auto res = pair._graph->submitChange(std::move(pair._change), jobsystem); !res) {
+    if (auto res = pair._change->submit(jobsystem); ! res) {
         return ChangeError::result(ChangeErrorType::COULD_NOT_ACCEPT_CHANGE, res.error());
     }
 
+    access.release();
     _changes.erase(it);
 
     return {};

@@ -31,14 +31,18 @@ struct GraphUpdate {
 
     static GraphUpdate create(Graph& graph) {
         auto change = graph.newChange();
-        auto* commit = change->access().newCommit();
+        auto* commit = change->access().getTip();
         auto& builder = commit->newBuilder();
         auto& metadata = builder.getMetadata();
         return GraphUpdate {&graph, std::move(change), *commit, builder, metadata};
     }
 
     auto submit(JobSystem& jobSystem) {
-        return _graph->submitChange(std::move(_change), jobSystem);
+        auto res = _change->access().submit(jobSystem);
+        if (!res) {
+            spdlog::error("Failed to submit change: {}", res.error().fmtMessage());
+        }
+        return res;
     }
 };
 

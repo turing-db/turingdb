@@ -14,6 +14,7 @@ class CommitLoader;
 class GraphLoader;
 class Graph;
 class Transaction;
+class Change;
 
 class Commit {
 public:
@@ -44,6 +45,7 @@ private:
     friend CommitLoader;
     friend GraphLoader;
     friend VersionController;
+    friend Change;
 
     VersionController* _controller {nullptr};
     CommitHash _hash = CommitHash::create();

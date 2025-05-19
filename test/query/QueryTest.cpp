@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "LocalMemory.h"
+#include "versioning/Change.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
 #include "SimpleGraph.h"
@@ -412,17 +413,17 @@ TEST_F(QueryTest, ChangeQuery) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("CHANGE NEW")
-        .expectVector<const CommitBuilder*>({}, false)
+        .expectVector<const Change*>({}, false)
         .execute();
 
     const auto changes = tester.query("CHANGE LIST")
-                             .expectVector<const CommitBuilder*>({}, false)
+                             .expectVector<const Change*>({}, false)
                              .execute()
-                             .outputColumnVector<const CommitBuilder*>(0);
+                             .outputColumnVector<const Change*>(0);
 
     ASSERT_TRUE(changes);
 
-    tester.setCommitHash(changes.value()->back()->hash());
+    tester.setChangeID(changes.value()->back()->id());
 
     tester.query(
               R"(CREATE (n:Person { name: "New person" })
@@ -438,6 +439,8 @@ TEST_F(QueryTest, ChangeQuery) {
 
     tester.query("CREATE (n:9)-[e:INTERESTED_IN { name: \"Luc -> Video games\" }]-(m:Interest { name: \"Video games\" })")
         .execute();
+
+    tester.query("COMMIT").execute();
 
     tester.query("MATCH n:Person RETURN n.name")
         .expectOptVector<types::String::Primitive>({
@@ -483,8 +486,8 @@ TEST_F(QueryTest, ChangeQuery) {
             "Luc -> Animals",
             "Luc -> Computers",
             "Martina -> Cooking",
-            "New edge",
             "Luc -> Video games",
+            "New edge",
         })
         .execute();
 
@@ -514,17 +517,17 @@ TEST_F(QueryTest, ChangeQueryErrors) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("CHANGE NEW")
-        .expectVector<const CommitBuilder*>({}, false)
+        .expectVector<const Change*>({}, false)
         .execute();
 
     const auto changes = tester.query("CHANGE LIST")
-                             .expectVector<const CommitBuilder*>({}, false)
+                             .expectVector<const Change*>({}, false)
                              .execute()
-                             .outputColumnVector<const CommitBuilder*>(0);
+                             .outputColumnVector<const Change*>(0);
 
     ASSERT_TRUE(changes);
 
-    tester.setCommitHash(changes.value()->back()->hash());
+    tester.setChangeID(changes.value()->back()->id());
 
     tester.query("CREATE (n)")
         .expectError() // Requires label

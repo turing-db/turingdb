@@ -41,7 +41,6 @@ public:
     VersionController& operator=(VersionController&&) = delete;
 
     void createFirstCommit(Graph*);
-    CommitResult<void> submitChange(std::unique_ptr<Change> change, JobSystem&);
     [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
 
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
@@ -60,6 +59,7 @@ public:
 private:
     friend GraphLoader;
     friend GraphDumper;
+    friend Change;
 
     std::atomic<Commit*> _head {nullptr};
     std::atomic<uint64_t> _nextChangeID {0};
@@ -74,6 +74,8 @@ private:
     void unlock();
 
     void addCommit(std::unique_ptr<Commit> commit);
+
+    [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
 };
 
 }

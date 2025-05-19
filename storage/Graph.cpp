@@ -20,10 +20,6 @@ Transaction Graph::openTransaction(CommitHash hash) const {
     return _versionController->openTransaction(hash);
 }
 
-CommitResult<void> Graph::submitChange(std::unique_ptr<Change> commit, JobSystem& jobSystem) {
-    return _versionController->submitChange(std::move(commit), jobSystem);
-}
-
 CommitHash Graph::getHeadHash() const {
     return _versionController->getHeadHash();
 }

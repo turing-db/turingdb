@@ -59,7 +59,7 @@ protected:
 TEST_F(Neo4jImporterTest, Simple) {
     {
         auto change = _graph->newChange();
-        auto* commitBuilder = change->access().newCommit();
+        auto* commitBuilder = change->access().getTip();
         auto& builder1 = commitBuilder->newBuilder();
         builder1.addNode(LabelSet::fromList({1})); // 0
         builder1.addNode(LabelSet::fromList({0})); // 1
@@ -86,7 +86,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addEdge(0, 3, 4);
-        ASSERT_TRUE(_graph->submitChange(std::move(change), *_jobSystem));
+        ASSERT_TRUE(change->access().commit(*_jobSystem));
     }
 
     const Transaction transaction = _graph->openTransaction();

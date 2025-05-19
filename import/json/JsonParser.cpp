@@ -23,7 +23,7 @@ namespace db {
 JsonParser::JsonParser(Graph* graph)
     : _graph(graph),
     _change(graph->newChange()),
-    _commitBuilder(_change->access().newCommit()),
+    _commitBuilder(_change->access().getTip()),
     _nodeIDMapper(new IDMapper)
 {
 }
@@ -113,7 +113,7 @@ DataPartBuilder& JsonParser::newDataBuffer() {
 
 CommitResult<void> JsonParser::commit(Graph& graph, JobSystem& jobSystem) {
     TimerStat timer("Committing dataparts");
-    return _graph->submitChange(std::move(_change), jobSystem);
+    return _change->access().commit(jobSystem);
 }
 
 }

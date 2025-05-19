@@ -18,8 +18,8 @@ GraphWriter::GraphWriter(Graph* graph)
 
     if (_graph) {
         _change = _graph->newChange();
-        _commitBuilder = _change->access().newCommit();
-        _dataPartBuilder = &_commitBuilder->newBuilder();
+        _commitBuilder = _change->access().getTip();
+        _dataPartBuilder = &_commitBuilder->getCurrentBuilder();
     }
 }
 
@@ -27,20 +27,28 @@ GraphWriter::~GraphWriter() {
 }
 
 bool GraphWriter::commit() {
-    if (!_commitBuilder) {
-        spdlog::error("Could not commit, no commit pending");
-        return false;
-    }
-
     if (auto res = _change->access().commit(*_jobSystem); !res) {
         spdlog::error("Could not commit changes: {}", res.error().fmtMessage());
         return false;
     }
 
-    _commitBuilder = _change->access().newCommit();
-    _dataPartBuilder = &_commitBuilder->newBuilder();
+    _commitBuilder = _change->access().getTip();
+    _dataPartBuilder = &_commitBuilder->getCurrentBuilder();
 
     return {};
+}
+
+bool GraphWriter::submit() {
+    if (auto res = _change->access().submit(*_jobSystem); !res) {
+        spdlog::error("Could not submit changes: {}", res.error().fmtMessage());
+        return false;
+    }
+
+    return true;
+}
+
+WriteTransaction GraphWriter::openWriteTransaction() {
+    return _change->openWriteTransaction();
 }
 
 EntityID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {

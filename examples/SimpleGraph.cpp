@@ -14,7 +14,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     GraphWriter writer {graph};
 
     const auto findNodeID = [&](std::string_view nodeName) {
-        const auto transaction = graph->openTransaction();
+        const auto transaction = writer.openWriteTransaction();
         const auto reader = transaction.readGraph();
 
         auto it = reader.scanNodeProperties<types::String>(0).begin();
@@ -146,5 +146,5 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(suhas, "isFrench", false);
     writer.addNodeProperty<types::Bool>(suhas, "hasPhD", false);
 
-    writer.commit();
+    writer.submit();
 }

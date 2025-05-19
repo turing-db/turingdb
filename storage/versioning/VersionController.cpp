@@ -60,23 +60,30 @@ CommitHash VersionController::getHeadHash() const {
     return head->_hash;
 }
 
-CommitResult<void> VersionController::submitChange(std::unique_ptr<Change> change, JobSystem& jobSystem) {
+CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile {"VersionController::submitChange"};
 
     std::scoped_lock lock(_mutex);
 
     const auto& head = _head.load();
     if (head->hash() != change->baseHash()) {
-        return CommitError::result(CommitErrorType::CHANGE_NEEDS_REBASE);
+        if (auto res = change->rebase(jobSystem); !res) {
+            return res;
+        }
     }
 
-    auto changeAccess = change->access();
+    for (auto& commit : change->_commits) {
+        _offsets.emplace(commit->hash(), _commits.size());
+        auto buildRes = commit->build(jobSystem);
+        if (!buildRes) {
+            return buildRes.get_unexpected();
+        }
 
-    if (auto res = changeAccess.commit(jobSystem); !res) {
-        return res;
+        _commits.emplace_back(std::move(buildRes.value()));
     }
 
-    panic("Not implemented. We need to store the new commits");
+    _head.store(_commits.back().get());
+
     return {};
 }
 

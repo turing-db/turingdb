@@ -28,9 +28,9 @@ public:
     ChangeManager& operator=(const ChangeManager&) = delete;
     ChangeManager& operator=(ChangeManager&&) = delete;
 
-    ChangeID storeChange(std::unique_ptr<Change> change);
+    ChangeID storeChange(Graph* graph, std::unique_ptr<Change> change);
     ChangeResult<Change*> getChange(ChangeID changeID);
-    ChangeResult<void> acceptChange(ChangeID changeID, JobSystem&);
+    ChangeResult<void> acceptChange(Change::Accessor& access, JobSystem&);
     ChangeResult<void> deleteChange(ChangeID changeID);
 
     void listChanges(std::vector<const Change*>& list) const;

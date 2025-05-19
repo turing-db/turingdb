@@ -31,6 +31,18 @@ public:
     bool edgeTypesChanged() const { return _edgeTypesChanged; }
     bool propTypesChanged() const { return _propTypesChanged; }
 
+    void clear() {
+        _labelMapping.clear();
+        _labelsetMapping.clear();
+        _edgeTypeMapping.clear();
+        _propTypeMapping.clear();
+
+        _labelsChanged = false;
+        _labelsetsChanged = false;
+        _edgeTypesChanged = false;
+        _propTypesChanged = false;
+    }
+
 private:
     std::unordered_map<LabelID, LabelID> _labelMapping;
     std::unordered_map<LabelSetID, LabelSetHandle> _labelsetMapping;

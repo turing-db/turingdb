@@ -20,6 +20,7 @@ class ColumnConst;
 class ColumnMask;
 class NodeView;
 class CommitBuilder;
+class Change;
 
 template <std::integral TType, size_t TCount>
 class TemplateLabelSet;
@@ -57,8 +58,6 @@ public:
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, std::string>) {
             return __COUNTER__ - minKind;
-        } else if constexpr (std::is_same_v<T, const CommitBuilder*>) {
-            return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, ColumnVector<EntityID>>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, ColumnMask>) {
@@ -84,6 +83,10 @@ public:
         } else if constexpr (std::is_same_v<T, std::optional<types::String::Primitive>>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, NodeView>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, const CommitBuilder*>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, const Change*>) {
             return __COUNTER__ - minKind;
         }
 

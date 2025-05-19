@@ -44,7 +44,7 @@ public:
     WriteTransaction(const WeakArc<const CommitData>& data,
                      CommitBuilder* builder,
                      DataPartBuilder* partBuilder,
-                     Change::Accessor& changeAccessor);
+                     Change::Accessor&& changeAccessor);
 
     WriteTransaction(const WriteTransaction&) = delete;
     WriteTransaction(WriteTransaction&&) = default;

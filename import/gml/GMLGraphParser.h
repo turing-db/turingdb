@@ -19,7 +19,7 @@ public:
 
     bool prepare() {
         _change = _graph->newChange();
-        _commitBuilder = _change->access().newCommit();
+        _commitBuilder = _change->access().getTip();
         _builder = &_commitBuilder->newBuilder();
         _metadata = &_commitBuilder->metadata();
 
@@ -31,7 +31,7 @@ public:
     }
 
     bool finish(JobSystem& jobs) {
-        return _graph->submitChange(std::move(_change), jobs).has_value();
+        return _change->access().submit(jobs).has_value();
     }
 
     bool onNodeProperty(std::string_view k, std::string_view v) {

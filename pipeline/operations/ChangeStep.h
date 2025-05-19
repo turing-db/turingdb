@@ -43,6 +43,7 @@ private:
     ChangeOpType _type {};
     ChangeInfo _changeInfo;
     ColumnVector<const Change*>* _output {nullptr};
+    WriteTransaction* _writeTx {nullptr};
 
     ChangeResult<ChangeID> createChange() const;
     ChangeResult<void> acceptChange() const;

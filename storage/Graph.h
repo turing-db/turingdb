@@ -5,7 +5,6 @@
 
 #include "DataPart.h"
 #include "versioning/CommitHash.h"
-#include "versioning/CommitResult.h"
 
 namespace db {
 
@@ -37,7 +36,6 @@ public:
 
     [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
     [[nodiscard]] Transaction openTransaction(CommitHash hash = CommitHash::head()) const;
-    [[nodiscard]] CommitResult<void> submitChange(std::unique_ptr<Change> commit, JobSystem& jobSystem);
 
     [[nodiscard]] CommitHash getHeadHash() const;
 

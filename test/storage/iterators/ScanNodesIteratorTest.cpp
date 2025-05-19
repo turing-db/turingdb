@@ -49,9 +49,9 @@ TEST_F(ScanNodesIteratorTest, emptyGraph) {
 TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     auto graph = Graph::create();
     auto change = graph->newChange();
-    auto* commitBuilder = change->access().newCommit();
+    auto* commitBuilder = change->access().getTip();
     [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-    const auto res = graph->submitChange(std::move(change), *_jobSystem);
+    const auto res = change->access().submit(*_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -72,10 +72,10 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
 
     auto change = graph->newChange();
     for (auto i = 0; i < 3; i++) {
-        auto* commitBuilder = change->access().newCommit();
+        auto* commitBuilder = change->access().getTip();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
     }
-    const auto res = graph->submitChange(std::move(change), *_jobSystem);
+    const auto res = change->access().submit(*_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -98,14 +98,14 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
 
     {
         auto change = graph->newChange();
-        auto* commitBuilder = change->access().newCommit();
+        auto* commitBuilder = change->access().getTip();
         auto& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
             builder.addNode(labelset);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        const auto res = graph->submitChange(std::move(change), *_jobSystem);
+        const auto res = change->access().submit(*_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
@@ -149,7 +149,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     auto change = graph->newChange();
 
     for (auto i = 0; i < 8; i++) {
-        auto* commitBuilder = change->access().newCommit();
+        auto* commitBuilder = change->access().getTip();
         auto& builder = commitBuilder->newBuilder();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
             builder.addNode(labelset);
@@ -159,7 +159,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         ASSERT_TRUE(change->access().commit(*_jobSystem));
     }
 
-    const auto res = graph->submitChange(std::move(change), *_jobSystem);
+    const auto res = change->access().submit(*_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -206,14 +206,14 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
 
     {
         auto change = graph->newChange();
-        auto* commitBuilder = change->access().newCommit();
+        auto* commitBuilder = change->access().getTip();
         auto& builder = commitBuilder->newBuilder();
 
         for (size_t i = 0; i < nodeCount; i++) {
             builder.addNode(labelset);
         }
 
-        const auto res = graph->submitChange(std::move(change), *_jobSystem);
+        const auto res = change->access().submit(*_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }

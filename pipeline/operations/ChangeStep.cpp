@@ -6,6 +6,7 @@
 #include "ExecutionContext.h"
 #include "Profiler.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "SystemManager.h"
 #include "PipelineException.h"
 
@@ -25,6 +26,7 @@ void ChangeStep::prepare(ExecutionContext* ctxt) {
     _sysMan = ctxt->getSystemManager();
     _jobSystem = ctxt->getJobSystem();
     _view = ctxt->getGraphView();
+    _writeTx = ctxt->getWriteTransaction();
 
     if (_type == ChangeOpType::NEW) {
         _changeInfo = std::string {ctxt->getGraphName()};
@@ -91,8 +93,7 @@ ChangeResult<void> ChangeStep::acceptChange() const {
         throw PipelineException("ChangeStep: Change info must contain the change hash");
     }
 
-    ChangeID changeID = std::get<ChangeID>(_changeInfo);
-    return _sysMan->getChangeManager().acceptChange(changeID, *_jobSystem);
+    return _sysMan->getChangeManager().acceptChange(_writeTx->changeAccessor(), *_jobSystem);
 }
 
 ChangeResult<void> ChangeStep::deleteChange() const {

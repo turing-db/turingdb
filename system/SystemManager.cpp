@@ -304,5 +304,5 @@ ChangeResult<ChangeID> SystemManager::newChange(const std::string& graphName, Co
     auto* graph = it->second.get();
     auto change = graph->newChange(baseHash);
 
-    return _changes->storeChange(std::move(change));
+    return _changes->storeChange(graph, std::move(change));
 }

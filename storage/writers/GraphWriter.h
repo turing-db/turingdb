@@ -14,6 +14,7 @@ class JobSystem;
 class DataPartBuilder;
 class Change;
 class CommitBuilder;
+class WriteTransaction;
 
 class GraphWriter {
 public:
@@ -27,6 +28,8 @@ public:
 
     bool commit();
     bool submit();
+
+    WriteTransaction openWriteTransaction();
 
     EntityID addNode(std::initializer_list<std::string_view> labels);
     EntityID addNode(std::initializer_list<LabelID> labels);

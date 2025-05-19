@@ -104,18 +104,14 @@ void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell
 }
 
 void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
-    std::string hashStr = "head";
-    std::string changeIDStr;
+    std::string changeIDStr = "head";
 
     argparse::ArgumentParser argParser("checkout", "", argparse::default_arguments::help, false);
-    argParser.add_description("Checkout specific commit of current graph");
-    argParser.add_argument("--commit")
-        .nargs(1)
-        .metavar("hash")
-        .store_into(hashStr);
-    argParser.add_argument("--change")
+    argParser.add_description("Checkout specific change of current graph");
+    argParser.add_argument("change")
         .nargs(1)
         .metavar("id")
+        .default_value("head")
         .store_into(changeIDStr);
 
     try {
@@ -126,23 +122,50 @@ void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell
     }
 
     const auto changeRes = ChangeID::fromString(changeIDStr);
+
+    const auto currentChange = shell.getChangeID();
+
+    if (!changeRes) {
+        spdlog::error("{} is not a valid change id", changeIDStr);
+        return;
+    }
+
+    if (currentChange != changeRes.value() && !shell.setChangeID(changeRes.value())) {
+        spdlog::error("Change {} does not exist", changeIDStr);
+        return;
+    }
+}
+
+void viewCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    std::string hashStr = "head";
+
+    argparse::ArgumentParser argParser("view", "", argparse::default_arguments::help, false);
+    argParser.add_description("View specific commit of current graph");
+    argParser.add_argument("commit")
+        .nargs(1)
+        .metavar("commit")
+        .default_value("head")
+        .store_into(hashStr);
+
+    try {
+        argParser.parse_args(args);
+    } catch (const std::exception& e) {
+        spdlog::error("Error parsing arguments: {}", e.what());
+        return;
+    }
+
     const auto hashRes = CommitHash::fromString(hashStr);
 
     const auto currentCommit = shell.getCommitHash();
-    const auto currentChange = shell.getChangeID();
 
-    if (changeRes) {
-        if (currentChange != changeRes.value() && !shell.setChangeID(changeRes.value())) {
-            spdlog::error("Change {} does not exist", changeIDStr);
-            return;
-        }
+    if (!hashRes) {
+        spdlog::error("{} is not a valid commit hash", hashStr);
+        return;
     }
 
-    if (hashRes) {
-        if (currentCommit != hashRes.value() && !shell.setCommitHash(hashRes.value())) {
-            spdlog::error("Commit {} does not exist", hashStr);
-            return;
-        }
+    if (currentCommit != hashRes.value() && !shell.setCommitHash(hashRes.value())) {
+        spdlog::error("Commit {} does not exist", hashStr);
+        return;
     }
 }
 
@@ -190,6 +213,7 @@ TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
     _localCommands.emplace("help", Command {helpCommand});
     _localCommands.emplace("cd", Command {changeDBCommand});
     _localCommands.emplace("checkout", Command {checkoutCommand});
+    _localCommands.emplace("view", Command {viewCommand});
     _localCommands.emplace("quiet", Command {quietCommand});
     _localCommands.emplace("unquiet", Command {unquietCommand});
     _localCommands.emplace("read", Command {readCommand});
@@ -374,6 +398,13 @@ bool TuringShell::setGraphName(const std::string& graphName) {
 }
 
 bool TuringShell::setChangeID(ChangeID changeID) {
+    _hash = CommitHash::head();
+
+    if (changeID == ChangeID::head()) {
+        _changeID = changeID;
+        return true;
+    }
+
     auto res = _turingDB.getSystemManager().getChangeManager().getChange(changeID);
     if (!res) {
         return false;
@@ -441,9 +472,8 @@ void TuringShell::checkShellContext() {
 
     auto res = _turingDB.getSystemManager().getChangeManager().getChange(_changeID);
     if (!res) {
-        fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _hash.get());
+        fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());
-        setCommitHash(CommitHash::head());
         return;
     }
 

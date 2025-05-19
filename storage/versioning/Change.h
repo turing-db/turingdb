@@ -17,6 +17,7 @@ class CommitBuilder;
 class Commit;
 class JobSystem;
 class Transaction;
+class ChangeManager;
 class WriteTransaction;
 
 class Change {
@@ -32,11 +33,11 @@ public:
         Accessor& operator=(Accessor&&) = default;
 
         [[nodiscard]] size_t commitCount() const { return _change->_commits.size(); }
-        [[nodiscard]] CommitBuilder* getPendingCommit() const {
-            return _change->_commitBuilder.get();
+        [[nodiscard]] CommitBuilder* getTip() const {
+            return _change->_tip;
         }
 
-        [[nodiscard]] Commit* getCommit(CommitHash hash) const {
+        [[nodiscard]] CommitBuilder* getCommit(CommitHash hash) const {
             if (_change->_commits.empty()) {
                 return nullptr;
             }
@@ -56,16 +57,22 @@ public:
         [[nodiscard]] auto begin() const { return _change->_commits.cbegin(); }
         [[nodiscard]] auto end() const { return _change->_commits.cend(); }
 
-        CommitBuilder* newCommit() {
-            return _change->newCommit();
-        }
-
         [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem) {
             return _change->commit(jobsystem);
         }
 
         [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem) {
             return _change->rebase(jobsystem);
+        }
+
+        [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem) {
+            return _change->submit(jobsystem);
+        }
+
+        [[nodiscard]] ChangeID getID() const { return _change->_id; }
+
+        void release() {
+            _lock.unlock();
         }
 
     private:
@@ -101,23 +108,24 @@ public:
 
 private:
     mutable std::mutex _mutex;
+    friend ChangeManager;
+    friend VersionController;
 
     ChangeID _id;
     VersionController* _versionController {nullptr};
     WeakArc<const CommitData> _base;
 
     // Committed
-    std::vector<std::unique_ptr<Commit>> _commits;
+    std::vector<std::unique_ptr<CommitBuilder>> _commits;
     std::unordered_map<CommitHash, size_t> _commitOffsets;
 
-    // Pending
-    std::unique_ptr<CommitBuilder> _commitBuilder;
+    CommitBuilder* _tip {nullptr};
 
     explicit Change(VersionController* versionController, ChangeID id, CommitHash base);
 
-    CommitBuilder* newCommit();
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
+    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
 };
 
 }

@@ -22,7 +22,7 @@ WriteTransaction::WriteTransaction() = default;
 WriteTransaction::WriteTransaction(const WeakArc<const CommitData>& data,
                                    CommitBuilder* builder,
                                    DataPartBuilder* partBuilder,
-                                   Change::Accessor& changeAccessor)
+                                   Change::Accessor&& changeAccessor)
     : _data(data),
     _builder(builder),
     _partBuilder(partBuilder),
