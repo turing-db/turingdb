@@ -195,7 +195,14 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
         create.flush();
         create.close();
         // Remove all permissions from file
-        chmod(testFile.c_str(), 0000);
+        auto ret = chmod(testFile.c_str(), 0000);
+        if(ret == 0){
+            spdlog::info("Chmod was a success");
+        }else{
+            spdlog::info("chmod failed with error {}", errno);
+        }
+
+
 
         Aws::S3Crt::Model::PutObjectResult putResult;
 
