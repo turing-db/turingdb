@@ -1,11 +1,8 @@
 #include "FileCache.h"
 #include "TuringTest.h"
-#include "S3ClientResult.h"
+#include "DummyDirectory.h"
 #include "Path.h"
 #include "AwsS3ClientWrapper.h"
-#include "DummyDirectory.h"
-
-
 
 using namespace turing::test;
 

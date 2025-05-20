@@ -20,7 +20,7 @@ using namespace db;
 SystemManager::SystemManager()
     :_changes(std::make_unique<ChangeManager>())
 {
-    auto turingDir = createConfigDirectories();
+    const auto turingDir = createConfigDirectories();
     _graphsDir = turingDir / "graphs/";
     _dataDir = turingDir / "data/";
     _defaultGraph = createGraph("default");
@@ -38,13 +38,13 @@ fs::Path SystemManager::createConfigDirectories() {
     if (!homeDir) {
         panic("HOME environment variable not set");
     }
-    
-    fs::Path configBase = fs::Path(homeDir) / ".turing";
-    fs::Path graphsDir = configBase / "graphs";
-    fs::Path dataDir = configBase / "data";
-    
-    bool configExists = configBase.exists();
-    
+
+    const fs::Path configBase = fs::Path(homeDir) / ".turing";
+    const fs::Path graphsDir = configBase / "graphs";
+    const fs::Path dataDir = configBase / "data";
+
+    const bool configExists = configBase.exists();
+
     if (!configExists) {
         spdlog::info("Creating main config directory: {}", configBase.c_str());
         if(auto res = configBase.mkdir(); !res){
@@ -53,26 +53,26 @@ fs::Path SystemManager::createConfigDirectories() {
         }
     }
 
-    bool graphsExists = graphsDir.exists();
+    const bool graphsExists = graphsDir.exists();
 
     if (!graphsExists) {
-        spdlog::info("Creating graphs directory: {}", graphsDir.c_str()); 
+        spdlog::info("Creating graphs directory: {}", graphsDir.c_str());
         if(auto res = graphsDir.mkdir(); !res){
             spdlog::error(res.error().fmtMessage());
             panic("Could not create .turing/graphs/ directory");
         }
     }
 
-    bool dataExists = dataDir.exists();
-    
+    const bool dataExists = dataDir.exists();
+
     if (!dataExists) {
-        spdlog::info("Creating data directory: {}", dataDir.c_str()); 
+        spdlog::info("Creating data directory: {}", dataDir.c_str());
         if(auto res = dataDir.mkdir(); !res){
             spdlog::error(res.error().fmtMessage());
             panic("Could not create .turing/data/ directory");
         }
     }
-    
+
     if (configExists && graphsExists && dataExists) {
         spdlog::info("Turing Directories Detected");
     }

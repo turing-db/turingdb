@@ -70,5 +70,4 @@ public:
 private:
     MockS3Client& _client;
 };
-
 }
