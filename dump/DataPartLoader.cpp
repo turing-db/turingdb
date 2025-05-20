@@ -244,7 +244,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     }
 
     for (auto& child : files.value()) {
-        const auto& childStr = child.get();
+        const auto& childStr = child.filename();
 
         if (childStr.find(NODE_PROPS_PREFIX) != std::string::npos) {
             // node properties

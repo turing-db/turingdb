@@ -52,7 +52,7 @@ public:
 
         std::map<uint64_t, WeakArc<DataPart>> dataparts;
         for (auto& child : files.value()) {
-            const auto& childStr = child.get();
+            const auto& childStr = child.filename();
 
             if (childStr.find(DATAPART_FOLDER_PREFIX) == std::string::npos) {
                 // Not a datapart folder

@@ -6,6 +6,7 @@
 #include "SimpleGraph.h"
 #include "QueryTester.h"
 #include "writers/GraphWriter.h"
+#include "TuringTest.h"
 
 #define EDGEID(edgeName) \
     edgeName._edgeID.getValue()
@@ -17,7 +18,7 @@ using namespace db;
 
 // The tests in QueryTest.cpp cover a lot of the multidatapart cases.
 // In this class we try and touch edge cases that might not be commonly seen
-class MultiDatapartQueryTest : public ::testing::Test {
+class MultiDatapartQueryTest : public turing::test::TuringTest {
 public:
 protected:
     TuringDB _db;

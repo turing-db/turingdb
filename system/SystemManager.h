@@ -27,6 +27,10 @@ public:
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
 
+    fs::Path createTuringConfigDirectories(const char* homeDir);
+    fs::Path& getGraphsDir() { return _graphsDir; };
+    fs::Path& getTuringDir() { return _turingDir; };
+
     Graph* createGraph(const std::string& graphName);
 
     void listAvailableGraphs(std::vector<fs::Path>& names);
@@ -58,6 +62,7 @@ public:
 private:
     mutable RWSpinLock _graphsLock;
     fs::Path _graphsDir;
+    fs::Path _turingDir;
     Graph* _defaultGraph {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;

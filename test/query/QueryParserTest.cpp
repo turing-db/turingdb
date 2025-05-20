@@ -2,15 +2,11 @@
 
 #include "ASTContext.h"
 #include "QueryParser.h"
+#include "TuringTest.h"
 
 using namespace db;
 
-class QueryParserTest : public ::testing::Test {
-    void SetUp() override {
-    }
-
-    void TearDown() override {
-    }
+class QueryParserTest : public turing::test::TuringTest {
 };
 
 TEST_F(QueryParserTest, matchPath1) {

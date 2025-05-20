@@ -5,19 +5,18 @@
 #include "TuringDB.h"
 #include "SimpleGraph.h"
 #include "QueryTester.h"
+#include "TuringTest.h"
 
 using namespace db;
 
-class QueryTest : public ::testing::Test {
+class QueryTest : public turing::test::TuringTest {
 public:
-    void SetUp() override {
+    void initialize() override {
         Graph* graph = _db.getSystemManager().getDefaultGraph();
         SimpleGraph::createSimpleGraph(graph);
         _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
                                                      &_db.getJobSystem());
     }
-
-    void TearDown() override {}
 
 protected:
     TuringDB _db;

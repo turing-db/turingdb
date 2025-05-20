@@ -50,7 +50,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
 
     std::map<uint64_t, std::unique_ptr<Commit>> commits;
     for (auto& child : files.value()) {
-        const auto& childStr = child.get();
+        const auto& childStr = child.filename();
 
         if (childStr.find(COMMIT_FOLDER_PREFIX) == std::string::npos) {
             // Not a commit folder

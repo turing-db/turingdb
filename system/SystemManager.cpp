@@ -18,12 +18,14 @@
 using namespace db;
 
 SystemManager::SystemManager()
-    : _changes(std::make_unique<ChangeManager>())
+    :_changes(std::make_unique<ChangeManager>())
 {
     const char* home = std::getenv("HOME");
     if (!home) {
         panic("HOME environment variable not set");
     }
+
+    _turingDir = createTuringConfigDirectories(home);
 
     _graphsDir = fs::Path(home) / "graphs_v2";
     if (!_graphsDir.exists()) {
@@ -38,6 +40,48 @@ SystemManager::~SystemManager() {
 
 void SystemManager::setGraphsDir(const fs::Path& dir) {
     _graphsDir = dir;
+}
+
+fs::Path SystemManager::createTuringConfigDirectories(const char* homeDir) {
+    const fs::Path configBase = fs::Path(homeDir) / ".turing";
+    const fs::Path graphsDir = configBase / "graphs";
+    const fs::Path dataDir = configBase / "data";
+
+    const bool configExists = configBase.exists();
+
+    if (!configExists) {
+        spdlog::info("Creating main config directory: {}", configBase.c_str());
+        if(auto res = configBase.mkdir(); !res){
+            spdlog::error(res.error().fmtMessage());
+            panic("Could not create .turing directory");
+        }
+    }
+
+    const bool graphsExists = graphsDir.exists();
+
+    if (!graphsExists) {
+        spdlog::info("Creating graphs directory: {}", graphsDir.c_str());
+        if(auto res = graphsDir.mkdir(); !res){
+            spdlog::error(res.error().fmtMessage());
+            panic("Could not create .turing/graphs/ directory");
+        }
+    }
+
+    const bool dataExists = dataDir.exists();
+
+    if (!dataExists) {
+        spdlog::info("Creating data directory: {}", dataDir.c_str());
+        if(auto res = dataDir.mkdir(); !res){
+            spdlog::error(res.error().fmtMessage());
+            panic("Could not create .turing/data/ directory");
+        }
+    }
+
+    if (configExists && graphsExists && dataExists) {
+        spdlog::info("Turing Directories Detected");
+    }
+    
+    return configBase;
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {

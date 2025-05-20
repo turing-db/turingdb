@@ -113,7 +113,7 @@ Result<std::vector<Path>> Path::listDir() const {
             }
         }
 
-        paths.push_back(Path(dir->d_name));
+        paths.push_back((*this / dir->d_name));
     }
 
     if (::closedir(d) == -1) {

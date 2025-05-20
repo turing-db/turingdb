@@ -111,7 +111,7 @@ find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
 # aws-sdk-cpp
-find_package(AWSSDK REQUIRED COMPONENTS s3)
+find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt)
 
 enable_testing()
 

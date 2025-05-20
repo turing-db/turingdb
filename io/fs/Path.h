@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <compare>
 
 #include "FileInfo.h"
 #include "FileResult.h"
@@ -51,6 +52,14 @@ public:
         Path newPath = *this;
         newPath += rhs;
         return newPath;
+    }
+
+    std::strong_ordering operator<=>(const Path& rhs) const {
+        return _path <=> rhs.get();
+    }
+
+    bool operator==(const Path& rhs) const {
+        return _path == rhs.get();
     }
 
     Result<void> mkdir() const;

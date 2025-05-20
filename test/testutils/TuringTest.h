@@ -25,9 +25,11 @@ protected:
         const testing::TestInfo* const testInfo =
             testing::UnitTest::GetInstance()->current_test_info();
 
-        _outDir = testInfo->test_suite_name();
+        _testSuiteName = testInfo->test_suite_name();
+        _testName = testInfo->name();
+        _outDir = _testSuiteName;
         _outDir += "_";
-        _outDir += testInfo->name();
+        _outDir += _testName;
         _outDir += ".out";
         _logPath = FileUtils::Path(_outDir) / "log";
         _perfPath = FileUtils::Path(_outDir) / "perf";
@@ -44,9 +46,9 @@ protected:
             const char* home = getenv("HOME");
             if (home) {
                 if (FileUtils::exists(home)) {
-                    const auto graphsV2Dir = FileUtils::Path(home) / "graphs_v2";
-                    if (!FileUtils::exists(graphsV2Dir)) {
-                        FileUtils::createDirectory(graphsV2Dir);
+                    const auto graphsDir = FileUtils::Path(home) / "graphs_v2";
+                    if (!FileUtils::exists(graphsDir)) {
+                        FileUtils::createDirectory(graphsDir);
                     }
                 }
             }
@@ -64,8 +66,9 @@ protected:
     }
 
     std::string _outDir;
+    std::string _testSuiteName;
+    std::string _testName;
     FileUtils::Path _logPath;
     FileUtils::Path _perfPath;
 };
-
 }
