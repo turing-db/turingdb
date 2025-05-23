@@ -50,30 +50,30 @@ int main(int argc, const char** argv) {
     }
 
 
-    // {
-    //     auto graph = Graph::createEmptyGraph();
-    //     const auto loadRes = GraphLoader::load(graph.get(), outDir);
-    //     const auto tx = graph->openTransaction();
+    {
+        auto graph = Graph::createEmptyGraph();
+        const auto loadRes = GraphLoader::load(graph.get(), outDir);
+        const auto tx = graph->openTransaction();
 
-    //     const PropertyType name = tx.viewGraph().metadata().propTypes().get("name").value();
-    //     const auto reader = tx.readGraph();
-    //     spdlog::info("Nodes:");
-    //     {
-    //         auto it = reader.scanNodeProperties<types::String>(name._id).begin();
-    //         for (; it.isValid(); ++it) {
-    //             spdlog::info(" - {} {}", it.getCurrentNodeID(), it.get());
-    //         }
-    //     }
+        const PropertyType name = tx.viewGraph().metadata().propTypes().get("name").value();
+        const auto reader = tx.readGraph();
+        spdlog::info("Nodes:");
+        {
+            auto it = reader.scanNodeProperties<types::String>(name._id).begin();
+            for (; it.isValid(); ++it) {
+                spdlog::info(" - {} {}", it.getCurrentNodeID(), it.get());
+            }
+        }
 
 
-    //     spdlog::info("Edges:");
-    //     {
-    //         auto it = reader.scanEdgeProperties<types::String>(name._id).begin();
-    //         for (; it.isValid(); ++it) {
-    //             spdlog::info(" - {} {}", it.getCurrentEdgeID(), it.get());
-    //         }
-    //     }
-    // }
+        spdlog::info("Edges:");
+        {
+            auto it = reader.scanEdgeProperties<types::String>(name._id).begin();
+            for (; it.isValid(); ++it) {
+                spdlog::info(" - {} {}", it.getCurrentEdgeID(), it.get());
+            }
+        }
+    }
 
     return EXIT_SUCCESS;
 }

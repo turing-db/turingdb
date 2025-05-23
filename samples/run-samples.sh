@@ -11,10 +11,14 @@ echo '- Running samples:'
 for sample in $samples; do
     echo "    $sample"
     cd "$sample" || exit 1
-    bash run.sh
+    output=$(bash run.sh)
     code=$?
+
     if [ $code -ne 0 ]; then
         echo "Failed to run sample $sample. Exit code: $code"
+        echo "== Output=="
+        echo "$output"
+        echo "== End Output=="
         exit 1
     fi
 
