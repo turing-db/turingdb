@@ -34,7 +34,7 @@ int main(int argc, const char** argv) {
     toolInit.init(argc, argv);
 
 
-    if (!nodemon) {
+    if (!noServer && !nodemon) {
         Demonology::demonize();
     }
 
