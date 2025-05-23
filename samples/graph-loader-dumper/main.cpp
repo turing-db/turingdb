@@ -15,6 +15,7 @@
 using namespace db;
 
 namespace {
+
 bool testGraph(const Graph& graph, const fs::Path& path) {
     fmt::print("- Dumping graph to: {}\n", path.c_str());
 
@@ -28,26 +29,27 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
         logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
     }
 
-    // fmt::print("- Loading graph from: {}\n", path.c_str());
+    fmt::print("- Loading graph from: {}\n", path.c_str());
 
-    // const auto t0 = Clock::now();
-    // auto loadedGraph = Graph::createEmptyGraph();
-    // auto loadedGraphRes = GraphLoader::load(loadedGraph.get(), path);
-    // if (!loadedGraphRes) {
-    //     fmt::print("{}\n", loadedGraphRes.error().fmtMessage());
-    //     return false;
-    // }
-    // const auto t1 = Clock::now();
-    // logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
+    const auto t0 = Clock::now();
+    auto loadedGraph = Graph::createEmptyGraph();
+    auto loadedGraphRes = GraphLoader::load(loadedGraph.get(), path);
+    if (!loadedGraphRes) {
+        fmt::print("{}\n", loadedGraphRes.error().fmtMessage());
+        return false;
+    }
+    const auto t1 = Clock::now();
+    logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
 
 
-    // if (!GraphComparator::same(graph, *loadedGraph)) {
-    //     fmt::print("Loaded graph is not the same as the one dumped\n");
-    //     return false;
-    // }
+    if (!GraphComparator::same(graph, *loadedGraph)) {
+        fmt::print("Loaded graph is not the same as the one dumped\n");
+        return false;
+    }
 
     return true;
 }
+
 }
 
 int main() {

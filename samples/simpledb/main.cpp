@@ -49,7 +49,6 @@ int main(int argc, const char** argv) {
         }
     }
 
-
     {
         auto graph = Graph::createEmptyGraph();
         const auto loadRes = GraphLoader::load(graph.get(), outDir);
