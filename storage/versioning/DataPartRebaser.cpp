@@ -52,6 +52,10 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             r._first = rebaseNodeID(r._first);
         }
         nodes->_ranges = std::move(newRanges);
+    } else {
+        for (auto& [labelset, range] : nodes->_ranges) {
+            range._first = rebaseNodeID(range._first);
+        }
     }
 
 

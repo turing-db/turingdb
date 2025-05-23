@@ -53,6 +53,10 @@ public:
         _firstEdgeID = firstEdgeID;
     }
 
+    bool isEmpty() const {
+        return _datapartCount == 0;
+    }
+
 private:
     friend VersionController;
     friend Change;

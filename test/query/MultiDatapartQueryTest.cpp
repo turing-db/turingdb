@@ -27,7 +27,8 @@ protected:
 };
 
 TEST_F(MultiDatapartQueryTest, MultiDatapartTest) {
-    Graph* graph = _db.getSystemManager().getDefaultGraph();
+    SystemManager& sysMan = _db.getSystemManager();
+    Graph* graph = sysMan.createGraph("simple");
     GraphWriter writer {graph};
     _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
                                                  &_db.getJobSystem());

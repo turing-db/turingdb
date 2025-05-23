@@ -44,6 +44,7 @@ public:
     bool parseNodes(const std::string& data, DataPartBuilder&);
     bool parseEdges(const std::string& data, DataPartBuilder&);
 
+    DataPartBuilder& getCurrentDataBuffer();
     DataPartBuilder& newDataBuffer();
     CommitResult<void> commit(Graph& graph, JobSystem& jobSystem);
 

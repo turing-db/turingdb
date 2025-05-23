@@ -111,6 +111,8 @@ public:
 
     InternalContainer::const_iterator begin() const { return _container.begin(); }
     InternalContainer::const_iterator end() const { return _container.end(); }
+    InternalContainer::iterator begin() { return _container.begin(); }
+    InternalContainer::iterator end() { return _container.end(); }
 
 private:
     InternalContainer _container;

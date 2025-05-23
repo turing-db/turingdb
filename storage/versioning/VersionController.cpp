@@ -12,8 +12,7 @@ using namespace db;
 
 VersionController::VersionController()
     : _dataManager(std::make_unique<ArcManager<CommitData>>()),
-      _partManager(std::make_unique<ArcManager<DataPart>>())
-{
+      _partManager(std::make_unique<ArcManager<DataPart>>()) {
 }
 
 VersionController::~VersionController() {
@@ -68,6 +67,11 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (auto res = change->rebase(jobSystem); !res) {
             return res;
         }
+    }
+
+    auto& tip = change->_commits.back();
+    if (tip->isEmpty()) {
+        change->_commits.resize(change->_commits.size() - 1);
     }
 
     for (auto& commit : change->_commits) {

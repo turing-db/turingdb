@@ -62,9 +62,11 @@ public:
     void setCommitDatapartCount(size_t count) {
         auto* begin = _history._allDataparts.data();
         const size_t totalCount = _history._allDataparts.size();
+        const size_t offset = totalCount - count;
+        auto* ptr = begin + offset;
 
         _history._commitDataparts = {
-            begin + totalCount - count,
+            ptr,
             count,
         };
     }

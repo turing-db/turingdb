@@ -27,9 +27,10 @@ namespace db {
 
 class QueryTester {
 public:
-    QueryTester(LocalMemory& mem, QueryInterpreter& interp)
+    QueryTester(LocalMemory& mem, QueryInterpreter& interp, const std::string& graphName = "simple")
         : _mem(mem),
-        _interp(interp)
+        _interp(interp),
+        _graphName(graphName)
     {
     }
 
@@ -175,7 +176,7 @@ private:
     QueryInterpreter& _interp;
     CommitHash _commitHash = CommitHash::head();
     ChangeID _changeID = ChangeID::head();
-    std::string _graphName = "default";
+    std::string _graphName = "simple";
     std::string _query;
     std::vector<std::pair<std::unique_ptr<Column>, bool>> _expectedColumns;
     std::vector<std::unique_ptr<Column>> _outputColumns;

@@ -22,20 +22,23 @@ void CommitHistory::newFromPrevious(const CommitHistory& base) {
 void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
                                   DataPartRebaser& dataPartRebaser,
                                   const CommitHistory& prevHistory) {
+    // Commits
     const CommitView tip = _history._commits.back();
     _history._commits = prevHistory._commits;
     _history._commits.push_back(tip);
 
     // Dataparts
     auto newDataparts = prevHistory._allDataparts;
+
     const size_t commitDatapartCount = _history._commitDataparts.size();
     newDataparts.resize(newDataparts.size() + commitDatapartCount);
     std::copy(_history._commitDataparts.begin(),
               _history._commitDataparts.end(),
               newDataparts.begin() + prevHistory._allDataparts.size());
+
     _history._allDataparts = std::move(newDataparts);
     _history._commitDataparts = {
-        _history._allDataparts.end() - commitDatapartCount,
+        _history._allDataparts.data() + _history._allDataparts.size() - commitDatapartCount,
         commitDatapartCount,
     };
 
