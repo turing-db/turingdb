@@ -16,6 +16,7 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
+    Profile profile {"GraphDumper::dump"};
     if (path.exists()) {
         return DumpError::result(DumpErrorType::GRAPH_DIR_ALREADY_EXISTS);
     }
@@ -29,6 +30,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
 
     // Dump graph type
     {
+        Profile profile {"GraphDumper::dump <graph type>"};
         const fs::Path graphTypePath = path / "type";
         const auto typeTag = GraphFileTypeDescription::value(GraphFileType::BINARY);
         if (!FileUtils::writeFile(graphTypePath.get(), std::string(typeTag))) {
@@ -38,6 +40,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
 
     // Dumping graph info
     {
+        Profile profile {"GraphDumper::dump <graph info>"};
         const fs::Path infoPath = path / "info";
 
         auto writer = fs::FilePageWriter::open(infoPath, DumpConfig::PAGE_SIZE);

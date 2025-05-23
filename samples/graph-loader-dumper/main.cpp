@@ -10,6 +10,7 @@
 #include "versioning/CommitBuilder.h"
 #include "FileUtils.h"
 #include "Neo4jImporter.h"
+#include "Profiler.h"
 #include "Neo4j/Neo4JParserConfig.h"
 
 using namespace db;
@@ -17,6 +18,7 @@ using namespace db;
 namespace {
 
 bool testGraph(const Graph& graph, const fs::Path& path) {
+    Profiler::clear();
     fmt::print("- Dumping graph to: {}\n", path.c_str());
 
     {
@@ -27,6 +29,12 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
         }
         const auto t1 = Clock::now();
         logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
+
+        std::string profilerOutput;
+        Profiler::dumpAndClear(profilerOutput);
+        if (!profilerOutput.empty()) {
+            fmt::print("{}\n", profilerOutput);
+        }
     }
 
     fmt::print("- Loading graph from: {}\n", path.c_str());
@@ -34,6 +42,13 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
     const auto t0 = Clock::now();
     auto loadedGraph = Graph::createEmptyGraph();
     auto loadedGraphRes = GraphLoader::load(loadedGraph.get(), path);
+
+    std::string profilerOutput;
+    Profiler::dumpAndClear(profilerOutput);
+    if (!profilerOutput.empty()) {
+        fmt::print("{}\n", profilerOutput);
+    }
+
     if (!loadedGraphRes) {
         fmt::print("{}\n", loadedGraphRes.error().fmtMessage());
         return false;

@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "Profiler.h"
 #include "properties/PropertyContainer.h"
 #include "FilePageReader.h"
 #include "DumpConfig.h"
@@ -21,6 +22,8 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load() {
+        Profile profile {"TrivialPropertyContainerLoader::load"};
+
         _reader.nextPage();
 
         if (_reader.errorOccured()) {
@@ -118,6 +121,8 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load() {
+        Profile profile {"StringPropertyContainerLoader::load"};
+
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

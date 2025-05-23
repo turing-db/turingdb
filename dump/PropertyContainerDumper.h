@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Profiler.h"
 #include "properties/PropertyContainer.h"
 #include "GraphDumpHelper.h"
 #include "FilePageWriter.h"
@@ -19,6 +20,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<T>& props) {
+        Profile profile {"TrivialPropertyContainerDumper::dump"};
         GraphDumpHelper::writeFileHeader(_writer);
 
         const uint64_t propCount = props.size();
@@ -112,6 +114,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<types::String>& props) {
+        Profile profile {"StringPropertyContainerDumper::dump"};
         const auto& buckets = props.getRawContainer();
         const uint64_t propCount = props.size();
         const uint64_t bucketCount = buckets.bucketCount();

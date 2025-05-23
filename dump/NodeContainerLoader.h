@@ -6,6 +6,7 @@
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "NodeContainer.h"
+#include "Profiler.h"
 #include "metadata/GraphMetadata.h"
 #include "NodeContainerDumpConstants.h"
 
@@ -21,6 +22,8 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<NodeContainer>> load(const GraphMetadata& metadata) {
+        Profile profile {"NodeContainerLoader::load"};
+
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

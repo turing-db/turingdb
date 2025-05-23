@@ -3,6 +3,7 @@
 #include "GraphDumpHelper.h"
 #include "NodeContainer.h"
 #include "NodeContainerDumpConstants.h"
+#include "Profiler.h"
 
 namespace db {
 
@@ -16,6 +17,8 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const NodeContainer& nodes) {
+        Profile profile {"NodeContainerDumper::dump"};
+
         GraphDumpHelper::writeFileHeader(_writer);
 
         const auto& indexer = nodes.getLabelSetIndexer();

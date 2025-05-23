@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Profiler.h"
 #include "indexers/PropertyIndexer.h"
 #include "GraphDumpHelper.h"
 #include "PropertyIndexerDumpConstants.h"
@@ -16,6 +17,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const PropertyIndexer& indexer) {
+        Profile profile {"PropertyIndexerDumper::dump"};
         _writer.nextPage();
         _writer.reserveSpace(Constants::PAGE_HEADER_STRIDE);
 

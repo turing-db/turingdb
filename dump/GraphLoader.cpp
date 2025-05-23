@@ -10,6 +10,7 @@
 using namespace db;
 
 DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
+    Profile profile {"GraphLoader::load"};
 
     auto pathInfo = path.getFileInfo();
     if (!pathInfo) {
@@ -22,6 +23,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
 
     // Loading info
     {
+        Profile profile {"GraphLoader::load <info>"};
         const fs::Path infoPath = path / "info";
         auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
@@ -39,7 +41,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
     // Listing files in the folder
     auto files = path.listDir();
     if (!files) {
-        return DumpError::result(DumpErrorType::CANNOT_LIST_DATAPARTS, files.error());
+        return DumpError::result(DumpErrorType::CANNOT_LIST_COMMITS, files.error());
     }
 
     static constexpr std::string_view COMMIT_FOLDER_PREFIX = "commit-";

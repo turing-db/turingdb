@@ -25,6 +25,8 @@ public:
                                                                   Graph& graph,
                                                                   CommitHash hash,
                                                                   const CommitHistory* prevHistory) {
+        Profile profile {"CommitLoader::load"};
+
         // Listing files in the folder
         auto files = path.listDir();
         if (!files) {
@@ -50,6 +52,8 @@ public:
 
         // Loading metadata
         {
+            Profile profile {"CommitLoader::load <metadata>"};
+
             const fs::Path metadataPath = path / "metadata";
             auto res = GraphMetadataLoader::load(path, metadata);
 

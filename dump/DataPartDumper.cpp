@@ -1,6 +1,7 @@
 #include "DataPartDumper.h"
 
 #include "DataPart.h"
+#include "Profiler.h"
 #include "properties/PropertyManager.h"
 #include "DataPartInfoDumper.h"
 #include "EdgeIndexerDumper.h"
@@ -63,6 +64,7 @@ DumpResult<void> dumpProperties(fs::FilePageWriter& writer, PropertyContainer* c
 }
 
 DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path) {
+    Profile profile {"DataPartDumper::dump"};
     if (path.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_ALREADY_EXISTS);
     }
@@ -73,6 +75,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
     {
         // Dumping info
+        Profile profile {"DataPartDumper::dump <info>"};
         const fs::Path infoPath = path / "info";
 
         auto writer = fs::FilePageWriter::open(infoPath, DumpConfig::PAGE_SIZE);
@@ -138,6 +141,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
     // Dumping node properties
     {
+        Profile profile {"DataPartDumper::dump <node props>"};
         const auto& nodeProperties = part.nodeProperties();
 
         // Dumping indexer
@@ -173,6 +177,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
     // Dumping edge properties
     {
+        Profile profile {"DataPartDumper::dump <edge props>"};
         const auto& edgeProperties = part.edgeProperties();
 
         // Dumping indexer

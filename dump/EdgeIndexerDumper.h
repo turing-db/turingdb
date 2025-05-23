@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EdgeContainer.h"
+#include "Profiler.h"
 #include "indexers/EdgeIndexer.h"
 #include "GraphDumpHelper.h"
 #include "EdgeIndexerDumpConstants.h"
@@ -17,6 +18,8 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const EdgeIndexer& indexer) {
+        Profile profile {"EdgeIndexerDumper::dump"};
+
         const auto& outLabelsetIndexer = indexer.getOutsByLabelSet();
         const auto& inLabelsetIndexer = indexer.getInsByLabelSet();
 

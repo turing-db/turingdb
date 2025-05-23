@@ -17,6 +17,8 @@ using namespace db;
 DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
                                                    const GraphMetadata& metadata,
                                                    VersionController& versionController) {
+    Profile profile {"DataPartLoader::load"};
+
     if (!path.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
     }
@@ -25,6 +27,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
     // Loading info
     {
+        Profile profile {"DataPartLoader::load <info>"};
+
         const fs::Path infoPath = path / "info";
         auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
@@ -213,6 +217,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     const fs::Path nodePropertyIndexerPath = path / "node-prop-indexer";
 
     if (nodePropertyIndexerPath.exists()) {
+        Profile profile {"DataPartLoader::load <node-prop-indexer>"};
+
         auto reader = fs::FilePageReader::open(nodePropertyIndexerPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, reader.error());
@@ -230,6 +236,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     const fs::Path edgePropertyIndexerPath = path / "edge-prop-indexer";
 
     if (edgePropertyIndexerPath.exists()) {
+        Profile profile {"DataPartLoader::load <edge-prop-indexer>"};
+
         auto reader = fs::FilePageReader::open(edgePropertyIndexerPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, reader.error());
@@ -247,11 +255,14 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         const auto& childStr = child.filename();
 
         if (childStr.find(NODE_PROPS_PREFIX) != std::string::npos) {
+            Profile profile {"DataPartLoader::load <node-props>"};
+
             // node properties
             if (auto res = loadProperties(*part->_nodeProperties, childStr); !res) {
                 return res.get_unexpected();
             }
         } else if (childStr.find(EDGE_PROPS_PREFIX) != std::string::npos) {
+            Profile profile {"DataPartLoader::load <edge-props>"};
             // edge properties
             if (auto res = loadProperties(*part->_edgeProperties, childStr); !res) {
                 return res.get_unexpected();
