@@ -67,8 +67,6 @@ public:
                 return partIndex.get_unexpected();
             }
 
-            child = path / child.get();
-
             auto res = DataPartLoader::load(child, metadata, *versionController);
 
             if (!res) {

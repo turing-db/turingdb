@@ -65,8 +65,6 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
             return suffixRes.get_unexpected();
         }
 
-        child = path / child.get();
-
         const auto [offset, hash] = suffixRes.value();
 
         auto res = CommitLoader::load(child, *graph, CommitHash {hash});
