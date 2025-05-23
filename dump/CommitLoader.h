@@ -37,14 +37,14 @@ public:
 
         auto& versionController = graph._versionController;
 
-        auto commit = std::make_unique<Commit>();
-        commit->_controller = graph._versionController.get();
-        commit->_data = versionController->createCommitData(hash);
-        commit->_data->_hash = hash;
+        auto commit = std::make_unique<Commit>(
+            graph._versionController.get(),
+            versionController->createCommitData(hash));
 
         if (prevHistory) {
             commit->_data->_history.newFromPrevious(*prevHistory);
         }
+        commit->_data->_history.pushCommit(commit->view());
 
         CommitHistoryBuilder historyBuilder {commit->_data->_history};
 
