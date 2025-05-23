@@ -27,6 +27,8 @@ build-job:
     - date
     - make test
     - date
+    - make run_samples
+    - date
   artifacts:
     when: always
     paths:
