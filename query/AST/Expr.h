@@ -178,7 +178,7 @@ public:
         OP_EQUAL,
     };
 
-    static BinExpr* create(ASTContext* ctxt, Expr* left, Expr* right, OpType _opType);// Could be a virtual protected func of parent class
+    static BinExpr* create(ASTContext* ctxt, Expr* left, Expr* right, OpType opType);
    
     Expr::Kind getKind() const override { return EK_BIN_EXPR; }
     OpType getOpType() const { return _opType; }
