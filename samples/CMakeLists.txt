@@ -50,6 +50,7 @@ add_subdirectory(graph-loader-dumper)
 add_subdirectory(simpledb)
 add_subdirectory(signature-tree)
 add_subdirectory(s3testcli)
+add_subdirectory(dist-vectors)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
