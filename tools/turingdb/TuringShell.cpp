@@ -104,47 +104,15 @@ void changeDBCommand(const TuringShell::Command::Words& args, TuringShell& shell
 }
 
 void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
-    std::string changeIDStr = "head";
+    std::string hashStr;
 
     argparse::ArgumentParser argParser("checkout", "", argparse::default_arguments::help, false);
-    argParser.add_description("Checkout specific change of current graph");
-    argParser.add_argument("change")
+    argParser.add_description("Checkout specific commit or change of current graph");
+    argParser.add_argument("hash")
         .nargs(1)
-        .metavar("id")
-        .default_value("head")
-        .store_into(changeIDStr);
-
-    try {
-        argParser.parse_args(args);
-    } catch (const std::exception& e) {
-        spdlog::error("Error parsing arguments: {}", e.what());
-        return;
-    }
-
-    const auto changeRes = ChangeID::fromString(changeIDStr);
-
-    const auto currentChange = shell.getChangeID();
-
-    if (!changeRes) {
-        spdlog::error("{} is not a valid change id", changeIDStr);
-        return;
-    }
-
-    if (currentChange != changeRes.value() && !shell.setChangeID(changeRes.value())) {
-        spdlog::error("Change {} does not exist", changeIDStr);
-        return;
-    }
-}
-
-void viewCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
-    std::string hashStr = "head";
-
-    argparse::ArgumentParser argParser("view", "", argparse::default_arguments::help, false);
-    argParser.add_description("View specific commit of current graph");
-    argParser.add_argument("commit")
-        .nargs(1)
-        .metavar("commit")
-        .default_value("head")
+        .metavar("hash")
+        .default_value("")
+        .help("Commit hash or change-{id}")
         .store_into(hashStr);
 
     try {
@@ -154,18 +122,46 @@ void viewCommand(const TuringShell::Command::Words& args, TuringShell& shell, st
         return;
     }
 
-    const auto hashRes = CommitHash::fromString(hashStr);
+    constexpr std::string_view changePrefix = "change-";
 
-    const auto currentCommit = shell.getCommitHash();
+    if (hashStr.empty()) {
+        shell.setChangeID(ChangeID::head());
+        return;
+    }
+
+    if (hashStr.size() > changePrefix.size()) {
+        if (hashStr.substr(0, changePrefix.size()) == changePrefix) {
+            // Parsing a change
+            hashStr = hashStr.substr(changePrefix.size());
+            const auto changeRes = ChangeID::fromString(hashStr);
+
+            if (!changeRes) {
+                spdlog::error("{} is not a valid change id", hashStr);
+                return;
+            }
+
+            const auto currentChange = shell.getChangeID();
+
+            if (currentChange != changeRes.value()) {
+                shell.setChangeID(changeRes.value());
+            }
+
+            return;
+        }
+    }
+
+    const auto hashRes = CommitHash::fromString(hashStr);
 
     if (!hashRes) {
         spdlog::error("{} is not a valid commit hash", hashStr);
         return;
     }
 
-    if (currentCommit != hashRes.value() && !shell.setCommitHash(hashRes.value())) {
-        spdlog::error("Commit {} does not exist", hashStr);
-        return;
+    const auto currentCommit = shell.getCommitHash();
+
+
+    if (currentCommit != hashRes.value()) {
+        shell.setCommitHash(hashRes.value());
     }
 }
 
@@ -214,7 +210,6 @@ TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
     _localCommands.emplace("help", Command {helpCommand});
     _localCommands.emplace("cd", Command {changeDBCommand});
     _localCommands.emplace("checkout", Command {checkoutCommand});
-    _localCommands.emplace("view", Command {viewCommand});
     _localCommands.emplace("quiet", Command {quietCommand});
     _localCommands.emplace("unquiet", Command {unquietCommand});
     _localCommands.emplace("read", Command {readCommand});
@@ -417,7 +412,7 @@ bool TuringShell::setChangeID(ChangeID changeID) {
 }
 
 bool TuringShell::setCommitHash(CommitHash hash) {
-    auto tx = _turingDB.getSystemManager().openTransaction(_graphName, _hash, _changeID);
+    auto tx = _turingDB.getSystemManager().openTransaction(_graphName, hash, _changeID);
     if (!tx) {
         spdlog::error("Can not switch commit: {}", tx.error().fmtMessage());
         return false;

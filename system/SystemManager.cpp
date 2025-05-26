@@ -309,7 +309,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
             return tx;
         }
 
-        return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
+        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
     }
 
     auto changeRes = this->getChangeManager().getChange(graph, changeID);
