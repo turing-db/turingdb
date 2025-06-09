@@ -132,14 +132,13 @@ void DBServerProcessor::query() {
 
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
-    payload.key("data");
-    payload.arr();
 
     const auto res = _db.query(
         httpInfo._payload,
         transactionInfo.graphName,
         &mem,
         [&](const Block& block) { JsonEncoder::writeBlock(payload, block); },
+        [&](const QueryCommand* cmd) { JsonEncoder::writeHeader(payload, cmd); },
         transactionInfo.commit,
         transactionInfo.change);
 

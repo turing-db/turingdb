@@ -21,7 +21,18 @@ QueryStatus TuringDB::query(std::string_view query,
                             CommitHash commit,
                             ChangeID change) {
     QueryInterpreter interp(&_systemManager, _jobSystem.get());
-    return interp.execute(query, graphName, mem, callback, commit, change);
+    return interp.execute(query, graphName, mem, callback, [](const auto) {}, commit, change);
+}
+
+QueryStatus TuringDB::query(std::string_view query,
+                            std::string_view graphName,
+                            LocalMemory* mem,
+                            QueryCallback callback,
+                            QueryHeaderCallback headerCallback,
+                            CommitHash commit,
+                            ChangeID change) {
+    QueryInterpreter interp(&_systemManager, _jobSystem.get());
+    return interp.execute(query, graphName, mem, callback, headerCallback, commit, change);
 }
 
 QueryStatus TuringDB::query(std::string_view query,
@@ -30,5 +41,5 @@ QueryStatus TuringDB::query(std::string_view query,
                             CommitHash commit,
                             ChangeID change) {
     QueryInterpreter interp(&_systemManager, _jobSystem.get());
-    return interp.execute(query, graphName, mem, [](const auto&){}, commit, change);
+    return interp.execute(query, graphName, mem, [](const auto&) {}, [](const auto) {}, commit, change);
 }

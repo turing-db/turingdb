@@ -1332,7 +1332,7 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
         if (memberName.empty()) {
             _output->addColumn(columnIDs);
         } else {
-            planPropertyProjection(columnIDs, decl, memberName);
+            planPropertyProjection(columnIDs, decl, field);
         }
     }
 }
@@ -1358,19 +1358,11 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
     } break;
 
 
-void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const VarDecl* parentDecl, const std::string& memberName) {
-    // Get property type information
-    const auto propTypeRes = _view.metadata().propTypes().get(memberName);
-    if (!propTypeRes) {
-        throw PlannerException("Property type not found for property member \""
-                               + memberName + "\"");
-    }
-
-    const auto propType = propTypeRes.value();
-
+void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const VarDecl* parentDecl, const ReturnField* field) {
     const DeclKind declKind = parentDecl->getKind();
+    const auto& propType = field->getMemberType();
 
-    switch (propTypeRes.value()._valueType) {
+    switch (propType._valueType) {
         CASE_PLAN_VALUE_TYPE(Int64)
         CASE_PLAN_VALUE_TYPE(UInt64)
         CASE_PLAN_VALUE_TYPE(Double)
@@ -1378,7 +1370,7 @@ void QueryPlanner::planPropertyProjection(ColumnIDs* columnIDs, const VarDecl* p
         CASE_PLAN_VALUE_TYPE(Bool)
         default: {
             throw PlannerException("Unsupported property type for property member \""
-                                   + memberName + "\"");
+                                   + field->getMemberName() + "\"");
         }
     }
 }

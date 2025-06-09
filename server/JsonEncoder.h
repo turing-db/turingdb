@@ -1,6 +1,9 @@
 #pragma once
 
+#include "QueryCommand.h"
 #include "PayloadWriter.h"
+#include "ReturnField.h"
+#include "ReturnProjection.h"
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
@@ -29,6 +32,36 @@ namespace db {
 class JsonEncoder {
 public:
     JsonEncoder() = delete;
+
+    static void writeHeader(PayloadWriter& writer, const QueryCommand* cmd) {
+        const auto& fields = static_cast<const MatchCommand*>(cmd)->getProjection()->returnFields();
+
+        writer.key("header");
+        writer.obj();
+        writer.key("column_names");
+        writer.arr();
+
+        for (const auto& field : fields) {
+            writer.value(field->getName() + (field->getMemberType().isValid() ? "." : "") + field->getMemberName());
+        }
+        writer.end();
+
+        writer.key("column_types");
+        writer.arr();
+
+        for (const auto& field : fields) {
+            if (field->getMemberType().isValid()) {
+                writer.value(ValueTypeName::value(field->getMemberType()._valueType));
+            } else {
+                writer.value(ValueTypeName::value(ValueType::UInt64));
+            }
+        }
+        writer.end();
+        writer.end();
+
+        writer.key("data");
+        writer.arr();
+    }
 
     static void writeBlock(PayloadWriter& writer, const Block& block) {
         writer.arr();

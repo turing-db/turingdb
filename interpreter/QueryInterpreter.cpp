@@ -11,6 +11,7 @@
 #include "QueryPlanner.h"
 #include "ExecutionContext.h"
 #include "Executor.h"
+#include "AnalyzeException.h"
 #include "PlannerException.h"
 #include "PipelineException.h"
 
@@ -33,6 +34,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
                                       std::string_view graphName,
                                       LocalMemory* mem,
                                       QueryCallback callback,
+                                      QueryHeaderCallback headerCallback,
                                       CommitHash commitHash,
                                       ChangeID changeID) {
     Profile profile {"QueryInterpreter::execute"};
@@ -63,8 +65,12 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
 
     // Analyze query
     QueryAnalyzer analyzer(&astCtxt, view.metadata().propTypes());
-    if (!analyzer.analyze(cmd)) {
-        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);
+    try {
+        if (!analyzer.analyze(cmd)) {
+            return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);
+        }
+    } catch (const AnalyzeException& e) {
+        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR, e.what());
     }
 
     // Query plan
@@ -76,6 +82,8 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     } catch (const PlannerException& e) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
     }
+
+    headerCallback(cmd);
 
     // Execute
     ExecutionContext execCtxt(_sysMan, _jobSystem, view, graphName, commitHash, changeID, &txRes.value());

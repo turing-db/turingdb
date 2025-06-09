@@ -11,4 +11,5 @@ target_link_libraries(turing_db_server_s PRIVATE
     turing_db_http_parser_s
     turing_db_http_server_s
     turing_db_memory_s
+    turing_db_query_AST_s
     nlohmann_json)

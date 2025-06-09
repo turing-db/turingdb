@@ -79,6 +79,7 @@ public:
                 _graphName,
                 &_mem,
                 [this](const Block& block) { fmt::print("Testing query: {}\n", _query); },
+                [](const QueryCommand* cmd) {},
                 _commitHash,
                 _changeID);
             EXPECT_FALSE(res);
@@ -124,7 +125,9 @@ public:
                         panic("can not check result for column of kind {}", col->getKind());
                     }
                 }
-            } }, _commitHash, _changeID);
+            } },
+            [](const QueryCommand* cmd) {},
+            _commitHash, _changeID);
 
         EXPECT_TRUE(res);
 

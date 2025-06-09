@@ -25,6 +25,7 @@ public:
                         std::string_view graphName,
                         LocalMemory* mem,
                         QueryCallback callback,
+                        QueryHeaderCallback headerCallback,
                         CommitHash commitHash = CommitHash::head(),
                         ChangeID changeID = ChangeID::head());
 
