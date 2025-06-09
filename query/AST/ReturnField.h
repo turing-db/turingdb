@@ -26,6 +26,9 @@ public:
     void setMemberType(const PropertyType type) { _memberType = type; }
     const PropertyType& getMemberType() const { return _memberType; }
 
+    void setMemberType(const PropertyType type) { _memberType = type; }
+    const PropertyType& getMemberType() const { return _memberType; }
+
     void setDecl(VarDecl* decl) { _decl = decl; }
     VarDecl* getDecl() const { return _decl; }
 

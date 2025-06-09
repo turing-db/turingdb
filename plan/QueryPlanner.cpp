@@ -813,6 +813,7 @@ bool QueryPlanner::planListGraph(const ListGraphCommand* listCmd) {
     _pipeline->add<StopStep>();
     _pipeline->add<ListGraphStep>(graphNames);
     _output->addColumn(graphNames);
+    planOutputLambda();
     _pipeline->add<EndStep>();
 
     return true;

@@ -263,7 +263,10 @@ void DBServerProcessor::list_loaded_graphs() {
     payload.key("data");
     payload.arr();
 
-    const auto res = _db.query("LIST GRAPHS", "", &mem);
+    const auto res = _db.query("LIST GRAPH",
+                               "",
+                               &mem,
+                               [&](const Block& block) { JsonEncoder::writeBlock(payload, block); });
 
     if (!res.isOk()) {
         payload.end();
