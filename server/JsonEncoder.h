@@ -42,7 +42,11 @@ public:
         writer.arr();
 
         for (const auto& field : fields) {
-            writer.value(field->getName() + (field->getMemberType().isValid() ? "." : "") + field->getMemberName());
+            if (field->getMemberType().isValid()) {
+                writer.value(field->getName() + "." + field->getMemberName());
+            } else {
+                writer.value(field->getName() + field->getMemberName());
+            }
         }
         writer.end();
 
