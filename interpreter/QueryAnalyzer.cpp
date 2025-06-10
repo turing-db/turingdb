@@ -2,6 +2,7 @@
 
 #include <range/v3/view.hpp>
 
+#include "AnalyzeException.h"
 #include "Profiler.h"
 #include "metadata/PropertyTypeMap.h"
 #include "DeclContext.h"
@@ -159,6 +160,17 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
             decl->setReturned(true);
             field->setDecl(decl);
+            const auto& memberName = field->getMemberName();
+            if (!memberName.empty()) {
+                const auto propTypeRes = _propTypeMap.get(memberName);
+                if (!propTypeRes) {
+                    throw AnalyzeException("Property type not found for property member \""
+                                           + field->getMemberName() + "\"");
+                }
+
+                const auto propType = propTypeRes.value();
+                field->setMemberType(propType);
+            }
         }
     }
 

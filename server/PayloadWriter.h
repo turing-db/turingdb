@@ -151,12 +151,22 @@ public:
         _comma = true;
     }
 
+    void nullValue() {
+        if (_comma) {
+            _writer->write(",null");
+        } else {
+            _writer->write("null");
+        }
+
+        _comma = true;
+    }
+
     template <typename T>
     void value(const std::optional<T>& v) {
         if (v) {
             value(*v);
         } else {
-            value("null");
+            nullValue();
         }
     }
 

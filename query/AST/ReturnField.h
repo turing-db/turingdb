@@ -1,5 +1,6 @@
 #pragma once
 
+#include "metadata/PropertyType.h"
 #include <string>
 
 namespace db {
@@ -22,6 +23,9 @@ public:
     void setMemberName(const std::string& name) { _memberName = name; }
     const std::string& getMemberName() const { return _memberName; }
 
+    void setMemberType(const PropertyType type) { _memberType = type; }
+    const PropertyType& getMemberType() const { return _memberType; }
+
     void setDecl(VarDecl* decl) { _decl = decl; }
     VarDecl* getDecl() const { return _decl; }
 
@@ -29,6 +33,7 @@ private:
     bool _isAll {false};
     std::string _name;
     std::string _memberName;
+    PropertyType _memberType;
     VarDecl* _decl {nullptr};
 
     ReturnField();

@@ -29,6 +29,7 @@ class ListGraphCommand;
 class LoadGraphCommand;
 class ExplainCommand;
 class VarDecl;
+class ReturnField;
 class Block;
 
 class QueryPlanner {
@@ -122,12 +123,11 @@ private:
     void planProjection(const MatchCommand* matchCmd);
     void planPropertyProjection(ColumnIDs* columnIDs,
                                 const VarDecl* parentDecl,
-                                const std::string& memberName);
+                                const ReturnField* field);
     void planOutputLambda();
     bool planExplain(const ExplainCommand* explain);
     bool planHistory(const HistoryCommand* history);
     bool planChange(const ChangeCommand* cmd);
     bool planCommit(const CommitCommand* commit);
 };
-
 }
