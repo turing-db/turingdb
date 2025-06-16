@@ -151,6 +151,7 @@ public:
         auto* container = new TypedPropertyContainer<types::String>;
         container->_ids.resize(propCount);
         auto& buckets = container->_values;
+        buckets.clear();
 
         std::vector<std::vector<char>> rawBuckets;
         std::vector<std::vector<StringBucket::StringLimits>> rawLimits;

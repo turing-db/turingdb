@@ -41,6 +41,11 @@ public:
         return true;
     }
 
+    void clear() {
+        _views.clear();
+        _buckets.clear();
+    }
+
     void addBucket(StringBucket&& bucket) {
         _buckets.push_back(std::move(bucket));
         auto& b = _buckets.back();
