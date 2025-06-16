@@ -9,7 +9,7 @@ namespace rv = ranges::views;
 
 using namespace db;
 
-NodeContainer::NodeContainer(EntityID firstID,
+NodeContainer::NodeContainer(NodeID firstID,
                              size_t nodeCount)
     : _firstID(firstID),
     _nodeCount(nodeCount)
@@ -19,7 +19,7 @@ NodeContainer::NodeContainer(EntityID firstID,
 NodeContainer::~NodeContainer() {
 }
 
-std::unique_ptr<NodeContainer> NodeContainer::create(EntityID firstID,
+std::unique_ptr<NodeContainer> NodeContainer::create(NodeID firstID,
                                                      const std::vector<LabelSetHandle>& nodeLabelSets) {
     Profile profile {"NodeContainer::create"};
 
@@ -55,6 +55,6 @@ std::unique_ptr<NodeContainer> NodeContainer::create(EntityID firstID,
     return container;
 }
 
-EntityID NodeContainer::getFirstNodeID(const LabelSetHandle& labelset) const {
-    return EntityID {_firstID + _ranges.at(labelset)._first};
+NodeID NodeContainer::getFirstNodeID(const LabelSetHandle& labelset) const {
+    return NodeID {_firstID + _ranges.at(labelset)._first};
 }

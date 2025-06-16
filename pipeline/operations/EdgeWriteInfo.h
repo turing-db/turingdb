@@ -7,10 +7,10 @@ namespace db {
 
 struct EdgeWriteInfo {
     ColumnVector<size_t>* _indices {nullptr};
-    ColumnIDs* _sourceNodes {nullptr};
-    ColumnIDs* _edges {nullptr};
+    ColumnNodeIDs* _sourceNodes {nullptr};
+    ColumnEdgeIDs* _edges {nullptr};
     ColumnEdgeTypes* _edgeTypes {nullptr};
-    ColumnIDs* _targetNodes {nullptr};
+    ColumnNodeIDs* _targetNodes {nullptr};
 };
 
 }

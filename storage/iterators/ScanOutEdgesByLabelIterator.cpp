@@ -130,7 +130,7 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
                 std::generate((_srcs)->begin() + prevSize,
                               (_srcs)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_nodeID;
+                                  const NodeID id = edgeIt->_nodeID;
                                   ++edgeIt;
                                   return id;
                               });
@@ -140,7 +140,7 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
                 std::generate((_edgeIDs)->begin() + prevSize,
                               (_edgeIDs)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_edgeID;
+                                  const EdgeID id = edgeIt->_edgeID;
                                   ++edgeIt;
                                   return id;
                               });
@@ -150,7 +150,7 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
                 std::generate((_tgts)->begin() + prevSize,
                               (_tgts)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_otherID;
+                                  const NodeID id = edgeIt->_otherID;
                                   ++edgeIt;
                                   return id;
                               });
@@ -160,7 +160,7 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
                 std::generate((_types)->begin() + prevSize,
                               (_types)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_edgeTypeID;
+                                  const EdgeTypeID id = edgeIt->_edgeTypeID;
                                   ++edgeIt;
                                   return id;
                               });
@@ -192,3 +192,4 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
 }
 
 }
+

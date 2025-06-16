@@ -4,7 +4,7 @@
 
 using namespace db;
 
-GetOutEdgesStep::GetOutEdgesStep(const ColumnIDs* inputNodeIDs,
+GetOutEdgesStep::GetOutEdgesStep(const ColumnNodeIDs* inputNodeIDs,
                                  const EdgeWriteInfo& edgeWriteInfo)
     : _inputNodeIDs(inputNodeIDs),
     _edgeWriteInfo(edgeWriteInfo)

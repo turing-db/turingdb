@@ -18,7 +18,7 @@ public:
 
     ~NodeView() = default;
 
-    EntityID nodeID() const { return _nodeID; }
+    NodeID nodeID() const { return _nodeID; }
     const EntityPropertyView& properties() const { return _props; }
     const NodeEdgeView& edges() const { return _edges; }
     const LabelSetHandle& labelset() const { return _labelset; }
@@ -28,7 +28,7 @@ public:
 private:
     friend GraphReader;
 
-    EntityID _nodeID;
+    NodeID _nodeID;
     LabelSetHandle _labelset;
     EntityPropertyView _props;
     NodeEdgeView _edges;

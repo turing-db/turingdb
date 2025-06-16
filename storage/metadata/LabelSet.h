@@ -3,7 +3,7 @@
 #include <bit>
 #include <span>
 
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 template <std::integral TType, size_t TCount>

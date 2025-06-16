@@ -6,7 +6,7 @@
 #include "Profiler.h"
 #include "iterators/ScanNodePropertiesByLabelIterator.h"
 #include "columns/ColumnIDs.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
 
@@ -17,7 +17,7 @@ class ScanNodesByPropertyAndLabel {
 public:
     struct Tag {};
 
-    ScanNodesByPropertyAndLabel(ColumnIDs* nodes,
+    ScanNodesByPropertyAndLabel(ColumnNodeIDs* nodes,
                                 PropertyType propType,
                                 const LabelSetHandle& labelSet,
                                 ColumnVector<typename T::Primitive>* propValues);
@@ -47,7 +47,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    ColumnIDs* _nodes {nullptr};
+    ColumnNodeIDs* _nodes {nullptr};
     ColumnVector<typename T::Primitive>* _propValues {nullptr};
     const PropertyType _propType;
     LabelSetHandle _labelSet;

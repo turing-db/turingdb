@@ -2,7 +2,7 @@
 
 #define GET_PROPERTY_STEP_IMPL(NodeOrEdge, Opcode, Type)                             \
     PipelineStep::PipelineStep(Get##NodeOrEdge##Property##Type##Step::Tag,           \
-                               const ColumnIDs* entityIDs,                           \
+                               const Column##NodeOrEdge##IDs* entityIDs,             \
                                PropertyType propertyType,                            \
                                ColumnOptVector<types::Type::Primitive>* propValues)  \
         : _opcode(PipelineOpcode::Opcode),                                           \
@@ -15,7 +15,7 @@
 
 #define SCAN_NODE_PROPERTIES_IMPL(Opcode, Type)                                  \
     PipelineStep::PipelineStep(ScanNodesByProperty##Type##Step::Tag,             \
-                               ColumnIDs* nodeIDs,                               \
+                               ColumnNodeIDs* nodeIDs,                           \
                                PropertyType propertyType,                        \
                                ColumnVector<types::Type::Primitive>* propValues) \
         : _opcode(PipelineOpcode::Opcode),                                       \
@@ -28,9 +28,9 @@
 
 #define SCAN_NODE_PROPERTIES_AND_LABEL_IMPL(Opcode, Type)                        \
     PipelineStep::PipelineStep(ScanNodesByPropertyAndLabel##Type##Step::Tag,     \
-                               ColumnIDs* nodeIDs,                               \
+                               ColumnNodeIDs* nodeIDs,                           \
                                PropertyType propertyType,                        \
-                               const LabelSetHandle& labelSet,                         \
+                               const LabelSetHandle& labelSet,                   \
                                ColumnVector<types::Type::Primitive>* propValues) \
         : _opcode(PipelineOpcode::Opcode),                                       \
           _impl(std::in_place_type<ScanNodesByPropertyAndLabel##Type##Step>,     \
@@ -43,7 +43,7 @@
 
 #define GET_FILTERED_PROPERTY_STEP_IMPL(NodeOrEdge, Opcode, Type)                  \
     PipelineStep::PipelineStep(GetFiltered##NodeOrEdge##Property##Type##Step::Tag, \
-                               const ColumnIDs* entityIDs,                         \
+                               const Column##NodeOrEdge##IDs* entityIDs,           \
                                PropertyType propertyType,                          \
                                ColumnVector<types::Type::Primitive>* propValues,   \
                                ColumnVector<size_t>* indices,                      \
@@ -61,7 +61,7 @@
 
 using namespace db;
 
-PipelineStep::PipelineStep(ScanNodesStep::Tag, ColumnIDs* nodes)
+PipelineStep::PipelineStep(ScanNodesStep::Tag, ColumnNodeIDs* nodes)
     : _opcode(PipelineOpcode::SCAN_NODES),
     _impl(std::in_place_type<ScanNodesStep>, nodes)
 {
@@ -91,7 +91,7 @@ PipelineStep::PipelineStep(ScanOutEdgesByLabelStep::Tag,
 }
 
 PipelineStep::PipelineStep(GetOutEdgesStep::Tag,
-                           const ColumnIDs* inputNodeIDs,
+                           const ColumnNodeIDs* inputNodeIDs,
                            const EdgeWriteInfo& edgeWriteInfo)
     : _opcode(PipelineOpcode::GET_OUT_EDGES),
     _impl(std::in_place_type<GetOutEdgesStep>, inputNodeIDs, edgeWriteInfo)
@@ -99,7 +99,7 @@ PipelineStep::PipelineStep(GetOutEdgesStep::Tag,
 }
 
 PipelineStep::PipelineStep(ScanNodesByLabelStep::Tag,
-                           ColumnIDs* nodes,
+                           ColumnNodeIDs* nodes,
                            const LabelSetHandle& labelSet)
     : _opcode(PipelineOpcode::SCAN_NODES_BY_LABEL),
     _impl(std::in_place_type<ScanNodesByLabelStep>, nodes, labelSet)
@@ -166,7 +166,7 @@ PipelineStep::PipelineStep(ListGraphStep::Tag, ColumnVector<std::string_view>* g
 }
 
 PipelineStep::PipelineStep(GetLabelSetIDStep::Tag,
-                           const ColumnIDs* nodeIDs,
+                           const ColumnNodeIDs* nodeIDs,
                            ColumnVector<LabelSetID>* labelsetIDs)
     : _opcode(PipelineOpcode::GET_LABELSETID_STEP),
     _impl(std::in_place_type<GetLabelSetIDStep>, nodeIDs, labelsetIDs)

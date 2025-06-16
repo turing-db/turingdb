@@ -1,15 +1,15 @@
 #pragma once
 
 #include "BioAssert.h"
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 
 struct NodeRange {
-    EntityID _first = 0;
+    NodeID _first = 0;
     size_t _count = 0;
 
-    bool hasEntity(EntityID entityID) const {
+    bool hasEntity(NodeID entityID) const {
         return (entityID - _first) < _count;
     }
 
@@ -17,13 +17,13 @@ struct NodeRange {
     public:
         Iterator() = default;
 
-        Iterator(EntityID current, size_t left)
+        Iterator(NodeID current, size_t left)
             : _current(current),
             _left(left)
         {
         }
 
-        EntityID operator*() const {
+        NodeID operator*() const {
             return _current;
         }
 
@@ -49,7 +49,7 @@ struct NodeRange {
         }
 
     private:
-        EntityID _current = 0;
+        NodeID _current = 0;
         size_t _left = 0;
     };
 

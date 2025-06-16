@@ -31,7 +31,7 @@ std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metad
     return std::unique_ptr<DataPartBuilder> {ptr};
 }
 
-EntityID DataPartBuilder::addNode(const LabelSetHandle& labelset) {
+NodeID DataPartBuilder::addNode(const LabelSetHandle& labelset) {
     if (!labelset.isStored()) {
         const LabelSet toBeStored = LabelSet::fromIntegers(labelset.integers());
         LabelSetHandle stored = _metadata->getOrCreateLabelSet(toBeStored);
@@ -43,7 +43,7 @@ EntityID DataPartBuilder::addNode(const LabelSetHandle& labelset) {
     return _nextNodeID++;
 }
 
-EntityID DataPartBuilder::addNode(const LabelSet& labelset) {
+NodeID DataPartBuilder::addNode(const LabelSet& labelset) {
     LabelSetHandle ref = _metadata->getOrCreateLabelSet(labelset);
     _coreNodeLabelSets.emplace_back(ref);
 
@@ -51,7 +51,7 @@ EntityID DataPartBuilder::addNode(const LabelSet& labelset) {
 }
 
 template <SupportedType T>
-void DataPartBuilder::addNodeProperty(EntityID nodeID,
+void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
                                       T::Primitive value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
@@ -61,7 +61,7 @@ void DataPartBuilder::addNodeProperty(EntityID nodeID,
     if (nodeID < _firstNodeID) {
         _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
     }
-    _nodeProperties->add<T>(ptID, nodeID, std::move(value));
+    _nodeProperties->add<T>(ptID, nodeID.getValue(), std::move(value));
 }
 
 template <SupportedType T>
@@ -75,10 +75,10 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
         _patchedEdges.emplace(edge._edgeID, &edge);
         _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
     }
-    _edgeProperties->add<T>(ptID, edge._edgeID, std::move(value));
+    _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::move(value));
 }
 
-const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, EntityID srcID, EntityID tgtID) {
+const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID) {
     auto& edge = _edges.emplace_back();
     edge._edgeID = _nextEdgeID;
     edge._nodeID = srcID;
@@ -103,7 +103,7 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, EntityID srcID, En
 }
 
 #define INSTANTIATE(PType)                                                   \
-    template void DataPartBuilder::addNodeProperty<PType>(EntityID,          \
+    template void DataPartBuilder::addNodeProperty<PType>(NodeID,            \
                                                           PropertyTypeID,    \
                                                           PType::Primitive); \
     template void DataPartBuilder::addEdgeProperty<PType>(const EdgeRecord&, \

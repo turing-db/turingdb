@@ -97,3 +97,4 @@ void ScanNodesByLabelChunkWriter::fill(size_t maxCount) {
 }
 
 }
+

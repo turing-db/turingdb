@@ -1,10 +1,10 @@
 #pragma once
 
+#include "views/EdgeView.h"
 #include "views/GraphView.h"
-
+#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetNodeViewsIterator.h"
-#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanEdgePropertiesIterator.h"
@@ -25,6 +25,7 @@ public:
     {
     }
 
+
     bool isValid() const {
         return _view.isValid();
     }
@@ -35,29 +36,29 @@ public:
     [[nodiscard]] const GraphView& getView() const { return _view; }
     [[nodiscard]] DataPartSpan dataparts() const { return _view.dataparts(); }
     [[nodiscard]] std::span<const CommitView> commits() const { return _view.commits(); }
-    [[nodiscard]] const EdgeRecord* getEdge(EntityID edgeID) const;
-    [[nodiscard]] LabelSetHandle getNodeLabelSet(EntityID nodeID) const;
+    [[nodiscard]] const EdgeRecord* getEdge(EdgeID edgeID) const;
+    [[nodiscard]] LabelSetHandle getNodeLabelSet(NodeID nodeID) const;
     [[nodiscard]] size_t getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const;
     [[nodiscard]] size_t getDatapartCount() const;
     [[nodiscard]] size_t getNodePropertyCount(PropertyTypeID ptID) const;
     [[nodiscard]] size_t getNodePropertyCount(size_t datapartIndex, PropertyTypeID ptID) const;
-    [[nodiscard]] EntityID getFinalNodeID(size_t partIndex, EntityID tmpID) const;
-    [[nodiscard]] NodeView getNodeView(EntityID id) const;
-    [[nodiscard]] EdgeView getEdgeView(EntityID id) const;
-    [[nodiscard]] EdgeTypeID getEdgeTypeID(EntityID edgeID) const;
-    [[nodiscard]] GetNodeViewsRange getNodeViews(const ColumnIDs* inputNodeIDs) const;
-    [[nodiscard]] GetOutEdgesRange getOutEdges(const ColumnIDs* inputNodeIDs) const;
-    [[nodiscard]] GetInEdgesRange getInEdges(const ColumnIDs* inputNodeIDs) const;
+    [[nodiscard]] NodeID getFinalNodeID(size_t partIndex, NodeID tmpID) const;
+    [[nodiscard]] NodeView getNodeView(NodeID id) const;
+    [[nodiscard]] EdgeView getEdgeView(EdgeID id) const;
+    [[nodiscard]] EdgeTypeID getEdgeTypeID(EdgeID edgeID) const;
+    [[nodiscard]] GetNodeViewsRange getNodeViews(const ColumnNodeIDs* inputNodeIDs) const;
+    [[nodiscard]] GetOutEdgesRange getOutEdges(const ColumnNodeIDs* inputNodeIDs) const;
+    [[nodiscard]] GetInEdgesRange getInEdges(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] ScanEdgesRange scanOutEdges() const;
     [[nodiscard]] ScanNodesRange scanNodes() const;
     [[nodiscard]] ScanNodesByLabelRange scanNodesByLabel(const LabelSetHandle& labelset) const;
     [[nodiscard]] ScanOutEdgesByLabelRange scanOutEdgesByLabel(const LabelSetHandle& labelset) const;
     [[nodiscard]] ScanInEdgesByLabelRange scanInEdgesByLabel(const LabelSetHandle& labelset) const;
     [[nodiscard]] MatchLabelSetIterator matchLabelSets(const LabelSetHandle& labelSet) const;
-    [[nodiscard]] bool nodeHasProperty(PropertyTypeID ptID, EntityID nodeID) const;
+    [[nodiscard]] bool nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const;
 
     template <SupportedType T>
-    [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, EntityID nodeID) const;
+    [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const;
 
     template <SupportedType T>
     [[nodiscard]] ScanNodePropertiesRange<T> scanNodeProperties(PropertyTypeID ptID) const {
@@ -71,13 +72,13 @@ public:
 
     template <SupportedType T>
     [[nodiscard]] ScanNodePropertiesByLabelRange<T> scanNodePropertiesByLabel(PropertyTypeID ptID,
-                                                                       const LabelSetHandle& labelset) const {
+                                                                              const LabelSetHandle& labelset) const {
         return ScanNodePropertiesByLabelRange<T>(_view, ptID, labelset);
     }
 
     template <SupportedType T>
     [[nodiscard]] GetNodePropertiesRange<T> getNodeProperties(PropertyTypeID ptID,
-                                                               const ColumnIDs* inputNodeIDs) const {
+                                                              const ColumnNodeIDs* inputNodeIDs) const {
         return GetNodePropertiesRange<T>(_view, ptID, inputNodeIDs);
     }
 

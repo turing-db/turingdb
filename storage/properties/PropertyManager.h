@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include "metadata/PropertyType.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "indexers/PropertyIndexer.h"
 #include "PropertyContainer.h"
 

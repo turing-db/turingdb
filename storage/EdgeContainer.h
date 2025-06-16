@@ -25,12 +25,12 @@ public:
     EdgeContainer& operator=(EdgeContainer&&) noexcept;
     ~EdgeContainer();
 
-    static std::unique_ptr<EdgeContainer> create(EntityID firstNodeID,
-                                                 EntityID firstEdgeID,
+    static std::unique_ptr<EdgeContainer> create(NodeID firstNodeID,
+                                                 EdgeID  firstEdgeID,
                                                  std::vector<EdgeRecord>&& outs);
 
-    EntityID getFirstEdgeID() const { return _firstEdgeID; }
-    EntityID getFirstNodeID() const { return _firstNodeID; }
+    EdgeID getFirstEdgeID() const { return _firstEdgeID; }
+    NodeID getFirstNodeID() const { return _firstNodeID; }
     size_t size() const { return _outEdges.size(); }
 
     std::span<const EdgeRecord> getOuts() const {
@@ -49,12 +49,12 @@ public:
         return std::span{_inEdges}.subspan(first, count);
     }
 
-    const EdgeRecord& get(EntityID edgeID) const {
+    const EdgeRecord& get(EdgeID edgeID) const {
         const size_t offset = (edgeID - _firstEdgeID).getValue();
         return _outEdges[offset];
     }
 
-    const EdgeRecord* tryGet(EntityID edgeID) const {
+    const EdgeRecord* tryGet(EdgeID edgeID) const {
         const size_t offset = (edgeID - _firstEdgeID).getValue();
         if (offset >= _outEdges.size()) {
             return nullptr;
@@ -63,7 +63,7 @@ public:
         return &_outEdges[offset];
     }
 
-    const std::unordered_map<EntityID, EntityID>& getTmpToFinalEdgeIDs() const {
+    const std::unordered_map<EdgeID, EdgeID>& getTmpToFinalEdgeIDs() const {
         return _tmpToFinalEdgeIDs;
     }
 
@@ -73,17 +73,17 @@ private:
     friend EdgeContainerLoader;
     friend DataPartRebaser;
 
-    EntityID _firstNodeID = 0;
-    EntityID _firstEdgeID = 0;
+    NodeID  _firstNodeID = 0;
+    EdgeID _firstEdgeID = 0;
 
     EdgeRecords _outEdges;
     EdgeRecords _inEdges;
 
     // TODO Remove for the new Unique ID system
-    std::unordered_map<EntityID, EntityID> _tmpToFinalEdgeIDs;
+    std::unordered_map<EdgeID, EdgeID> _tmpToFinalEdgeIDs;
 
-    EdgeContainer(EntityID firstNodeID,
-                  EntityID firstEdgeID,
+    EdgeContainer(NodeID firstNodeID,
+                  EdgeID firstEdgeID,
                   std::vector<EdgeRecord>&& outEdges,
                   std::vector<EdgeRecord>&& inEdges);
 };

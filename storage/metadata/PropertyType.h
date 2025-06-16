@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EntityID.h"
+#include "ID.h"
 #include "SupportedType.h"
 #include "EnumToString.h"
 

@@ -9,7 +9,7 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 
@@ -78,6 +78,8 @@ public:
     static void writeColumn(PayloadWriter& writer, const Column* col) {
         switch (col->getKind()) {
             JSON_ENCODE_COL_CASE(ColumnVector<EntityID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<NodeID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<EdgeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::UInt64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Int64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Double::Primitive>)

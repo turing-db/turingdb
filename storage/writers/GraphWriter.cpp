@@ -51,7 +51,7 @@ PendingCommitWriteTx GraphWriter::openWriteTransaction() {
     return _change->openWriteTransaction();
 }
 
-EntityID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {
+NodeID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {
     if (!_dataPartBuilder) {
         return {};
     }
@@ -67,7 +67,7 @@ EntityID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {
     return _dataPartBuilder->addNode(labelset);
 }
 
-EntityID GraphWriter::addNode(std::initializer_list<LabelID> labels) {
+NodeID GraphWriter::addNode(std::initializer_list<LabelID> labels) {
     if (!_dataPartBuilder) {
         return {};
     }
@@ -80,7 +80,7 @@ EntityID GraphWriter::addNode(std::initializer_list<LabelID> labels) {
     return _dataPartBuilder->addNode(labelset);
 }
 
-EntityID GraphWriter::addNode(const LabelSet& labelset) {
+NodeID GraphWriter::addNode(const LabelSet& labelset) {
     if (!_dataPartBuilder) {
         return {};
     }
@@ -88,7 +88,7 @@ EntityID GraphWriter::addNode(const LabelSet& labelset) {
     return _dataPartBuilder->addNode(labelset);
 }
 
-EntityID GraphWriter::addNode(const LabelSetHandle& labelset) {
+NodeID GraphWriter::addNode(const LabelSetHandle& labelset) {
     if (!_dataPartBuilder) {
         return {};
     }
@@ -96,7 +96,7 @@ EntityID GraphWriter::addNode(const LabelSetHandle& labelset) {
     return _dataPartBuilder->addNode(labelset);
 }
 
-EdgeRecord GraphWriter::addEdge(std::string_view edgeType, EntityID src, EntityID tgt) {
+EdgeRecord GraphWriter::addEdge(std::string_view edgeType, NodeID src, NodeID tgt) {
     if (!_dataPartBuilder) {
         return {};
     }
@@ -108,7 +108,7 @@ EdgeRecord GraphWriter::addEdge(std::string_view edgeType, EntityID src, EntityI
     return _dataPartBuilder->addEdge(edgeTypeID, src, tgt);
 }
 
-EdgeRecord GraphWriter::addEdge(EdgeTypeID edgeType, EntityID src, EntityID tgt) {
+EdgeRecord GraphWriter::addEdge(EdgeTypeID edgeType, NodeID src, NodeID tgt) {
     if (!_dataPartBuilder) {
         return {};
     }
@@ -117,7 +117,7 @@ EdgeRecord GraphWriter::addEdge(EdgeTypeID edgeType, EntityID src, EntityID tgt)
 }
 
 template <SupportedType T>
-void GraphWriter::addNodeProperty(EntityID nodeID, std::string_view propertyTypeName, T::Primitive&& value) {
+void GraphWriter::addNodeProperty(NodeID nodeID, std::string_view propertyTypeName, T::Primitive&& value) {
     if (!_dataPartBuilder) {
         return;
     }
@@ -129,7 +129,7 @@ void GraphWriter::addNodeProperty(EntityID nodeID, std::string_view propertyType
 }
 
 template <SupportedType T>
-void GraphWriter::addNodeProperty(EntityID nodeID, PropertyType propertyType, T::Primitive&& value) {
+void GraphWriter::addNodeProperty(NodeID nodeID, PropertyType propertyType, T::Primitive&& value) {
     if (!_dataPartBuilder) {
         return;
     }
@@ -158,17 +158,17 @@ void GraphWriter::addEdgeProperty(const EdgeRecord& edge, PropertyType propertyT
     _dataPartBuilder->addEdgeProperty<T>(edge, propertyType._id, std::move(value));
 }
 
-template void GraphWriter::addNodeProperty<types::Int64>(EntityID, std::string_view, types::Int64::Primitive&&);
-template void GraphWriter::addNodeProperty<types::UInt64>(EntityID, std::string_view, types::UInt64::Primitive&&);
-template void GraphWriter::addNodeProperty<types::Double>(EntityID, std::string_view, types::Double::Primitive&&);
-template void GraphWriter::addNodeProperty<types::String>(EntityID, std::string_view, types::String::Primitive&&);
-template void GraphWriter::addNodeProperty<types::Bool>(EntityID, std::string_view, types::Bool::Primitive&&);
+template void GraphWriter::addNodeProperty<types::Int64>(NodeID, std::string_view, types::Int64::Primitive&&);
+template void GraphWriter::addNodeProperty<types::UInt64>(NodeID, std::string_view, types::UInt64::Primitive&&);
+template void GraphWriter::addNodeProperty<types::Double>(NodeID, std::string_view, types::Double::Primitive&&);
+template void GraphWriter::addNodeProperty<types::String>(NodeID, std::string_view, types::String::Primitive&&);
+template void GraphWriter::addNodeProperty<types::Bool>(NodeID, std::string_view, types::Bool::Primitive&&);
 
-template void GraphWriter::addNodeProperty<types::Int64>(EntityID, PropertyType, types::Int64::Primitive&&);
-template void GraphWriter::addNodeProperty<types::UInt64>(EntityID, PropertyType, types::UInt64::Primitive&&);
-template void GraphWriter::addNodeProperty<types::Double>(EntityID, PropertyType, types::Double::Primitive&&);
-template void GraphWriter::addNodeProperty<types::String>(EntityID, PropertyType, types::String::Primitive&&);
-template void GraphWriter::addNodeProperty<types::Bool>(EntityID, PropertyType, types::Bool::Primitive&&);
+template void GraphWriter::addNodeProperty<types::Int64>(NodeID, PropertyType, types::Int64::Primitive&&);
+template void GraphWriter::addNodeProperty<types::UInt64>(NodeID, PropertyType, types::UInt64::Primitive&&);
+template void GraphWriter::addNodeProperty<types::Double>(NodeID, PropertyType, types::Double::Primitive&&);
+template void GraphWriter::addNodeProperty<types::String>(NodeID, PropertyType, types::String::Primitive&&);
+template void GraphWriter::addNodeProperty<types::Bool>(NodeID, PropertyType, types::Bool::Primitive&&);
 
 template void GraphWriter::addEdgeProperty<types::Int64>(const EdgeRecord&, std::string_view, types::Int64::Primitive&&);
 template void GraphWriter::addEdgeProperty<types::UInt64>(const EdgeRecord&, std::string_view, types::UInt64::Primitive&&);

@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "RWSpinLock.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"

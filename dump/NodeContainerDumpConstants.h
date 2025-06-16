@@ -18,7 +18,7 @@ public:
 
     // Single range stride
     static constexpr size_t RANGE_STRIDE = sizeof(LabelSetID::Type) // Labelset ID
-                                         + sizeof(EntityID::Type)   // First node ID
+                                         + sizeof(NodeID::Type)   // First node ID
                                          + sizeof(uint64_t);        // Node count in range
 
     // Single node record stride

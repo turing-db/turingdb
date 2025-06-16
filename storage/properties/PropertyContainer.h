@@ -3,7 +3,6 @@
 #include <numeric>
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/view/zip.hpp>
-#include <range/v3/view/enumerate.hpp>
 
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"

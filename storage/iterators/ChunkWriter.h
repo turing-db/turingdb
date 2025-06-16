@@ -21,22 +21,22 @@ concept NonRootChunkWriter = requires(T it) {
 
 template <typename T>
 concept NodeIDsChunkWriter = requires(T it) {
-    { it.setNodeIDs(new ColumnVector<EntityID>) };
+    { it.setNodeIDs(new ColumnVector<NodeID>) };
 };
 
 template <typename T>
 concept TgtIDsChunkWriter = requires(T it) {
-    { it.setTgtIDs(new ColumnVector<EntityID>) };
+    { it.setTgtIDs(new ColumnVector<NodeID>) };
 };
 
 template <typename T>
 concept SrcIDsChunkWriter = requires(T it) {
-    { it.setSrcIDs(new ColumnVector<EntityID>) };
+    { it.setSrcIDs(new ColumnVector<NodeID>) };
 };
 
 template <typename T>
 concept EdgeIDsChunkWriter = requires(T it) {
-    { it.setEdgeIDs(new ColumnVector<EntityID>) };
+    { it.setEdgeIDs(new ColumnVector<EdgeID>) };
 };
 
 template <typename T>

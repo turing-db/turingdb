@@ -87,32 +87,32 @@ TEST_F(MultiDatapartQueryTest, MultiDatapartTest) {
 
     // Tests labelset index when a datapart in the iteration has no labelsets and needs to be skipped
     tester.query("MATCH n:label1--m:label3 RETURN n,m")
-        .expectVector<EntityID>({NODEID(node1), NODEID(node1)})
-        .expectVector<EntityID>({NODEID(node2), NODEID(node3)})
+        .expectVector<NodeID>({NODEID(node1), NODEID(node1)})
+        .expectVector<NodeID>({NODEID(node2), NODEID(node3)})
         .execute();
 
     // Tests node property indexing when a datapart in the iteration doesn't have a node property
     // container and needs to be skipped
     tester.query("MATCH n{\"knows_djistraka\":true}--m{\"knows_djistraka\":false} RETURN n,m")
-        .expectVector<EntityID>({NODEID(node1), NODEID(node1)})
-        .expectVector<EntityID>({NODEID(node2), NODEID(node3)})
+        .expectVector<NodeID>({NODEID(node1), NODEID(node1)})
+        .expectVector<NodeID>({NODEID(node2), NODEID(node3)})
         .execute();
 
     // Tests edge property indexing when a datapart in the iteration doesn't have a edge property
     // container and needs to be skipped
     tester.query("MATCH n-[e{proficiency:\"beginner\"}]-m RETURN e")
-        .expectVector<EntityID>({EDGEID(edge3)})
+        .expectVector<EdgeID>({EDGEID(edge3)})
         .execute();
 
     // Test node property indexing when we need to skip datapart that has a node property container
     // but not the property type we are looking for.
     tester.query("MATCH n{leaf:true} RETURN n")
-        .expectVector<EntityID>({NODEID(node2), NODEID(node4)})
+        .expectVector<NodeID>({NODEID(node2), NODEID(node4)})
         .execute();
 
     // Test edge property indexing when we need to skip datapart that has a edge property container
     // but not the property type we are looking for.
     tester.query("MATCH n-[e{twig:false}]-m RETURN e")
-        .expectVector<EntityID>({EDGEID(edge3)})
+        .expectVector<EdgeID>({EDGEID(edge3)})
         .execute();
 }

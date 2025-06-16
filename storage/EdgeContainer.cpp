@@ -16,10 +16,10 @@ EdgeContainer::EdgeContainer(EdgeContainer&&) noexcept = default;
 EdgeContainer& EdgeContainer::operator=(EdgeContainer&&) noexcept = default;
 EdgeContainer::~EdgeContainer() = default;
 
-std::unique_ptr<EdgeContainer> EdgeContainer::create(EntityID firstNodeID,
-                                                     EntityID firstEdgeID,
+std::unique_ptr<EdgeContainer> EdgeContainer::create(NodeID firstNodeID,
+                                                     EdgeID firstEdgeID,
                                                      std::vector<EdgeRecord>&& outs) {
-    std::unordered_map<EntityID, EntityID> tmpToFinalEdgeIDs;
+    std::unordered_map<EdgeID, EdgeID> tmpToFinalEdgeIDs;
 
     Profile profile {"EdgeContainer::create"};
 
@@ -30,7 +30,7 @@ std::unique_ptr<EdgeContainer> EdgeContainer::create(EntityID firstNodeID,
 
     // New edge IDs
     for (const auto& [i, out] : outs | rv::enumerate) {
-        const EntityID finalOutID = EntityID {firstEdgeID + i};
+        const EdgeID finalOutID = EdgeID {firstEdgeID + i};
         tmpToFinalEdgeIDs[out._edgeID] = finalOutID;
         out._edgeID = finalOutID;
     }
@@ -62,8 +62,8 @@ std::unique_ptr<EdgeContainer> EdgeContainer::create(EntityID firstNodeID,
     return edges;
 }
 
-EdgeContainer::EdgeContainer(EntityID firstNodeID,
-                             EntityID firstEdgeID,
+EdgeContainer::EdgeContainer(NodeID firstNodeID,
+                             EdgeID firstEdgeID,
                              std::vector<EdgeRecord>&& outEdges,
                              std::vector<EdgeRecord>&& inEdges)
     : _firstNodeID(firstNodeID),

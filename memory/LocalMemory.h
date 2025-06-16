@@ -11,7 +11,7 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 
@@ -27,12 +27,16 @@ public:
 
     using MemoryPools = TypeValueMap<
         MakeMemoryPool<ColumnVector<EntityID>>::type,
+        MakeMemoryPool<ColumnVector<NodeID>>::type,
+        MakeMemoryPool<ColumnVector<EdgeID>>::type,
         MakeMemoryPool<ColumnVector<LabelSetID>>::type,
         MakeMemoryPool<ColumnVector<PropertyType>>::type,
         MakeMemoryPool<ColumnVector<size_t>>::type,
         MakeMemoryPool<ColumnVector<std::string_view>>::type,
         MakeMemoryPool<ColumnVector<std::string>>::type,
         MakeMemoryPool<ColumnMask>::type,
+        MakeMemoryPool<ColumnConst<NodeID>>::type,
+        MakeMemoryPool<ColumnConst<EdgeID>>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
         MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
@@ -69,6 +73,8 @@ public:
 
     void clear() {
         _pools.get<ColumnVector<EntityID>>().clear();
+        _pools.get<ColumnVector<NodeID>>().clear();
+        _pools.get<ColumnVector<EdgeID>>().clear();
         _pools.get<ColumnVector<PropertyType>>().clear();
         _pools.get<ColumnVector<size_t>>().clear();
         _pools.get<ColumnConst<EdgeTypeID>>().clear();

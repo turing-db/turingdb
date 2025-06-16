@@ -25,7 +25,7 @@ size_t GraphReader::getEdgeCount() const {
     return count;
 }
 
-LabelSetHandle GraphReader::getNodeLabelSet(EntityID nodeID) const {
+LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
         if (part->hasNode(nodeID)) {
             return part->nodes().getNodeLabelSet(nodeID);
@@ -34,7 +34,7 @@ LabelSetHandle GraphReader::getNodeLabelSet(EntityID nodeID) const {
     return LabelSetHandle {};
 }
 
-const EdgeRecord* GraphReader::getEdge(EntityID edgeID) const {
+const EdgeRecord* GraphReader::getEdge(EdgeID edgeID) const {
     for (const auto& part : _view.dataparts()) {
         if (part->hasEdge(edgeID)) {
             return &part->edges().get(edgeID);
@@ -78,7 +78,7 @@ size_t GraphReader::getNodePropertyCount(PropertyTypeID ptID) const {
 }
 
 size_t GraphReader::getNodePropertyCount(size_t datapartIndex,
-                                      PropertyTypeID ptID) const {
+                                         PropertyTypeID ptID) const {
     const auto& props = _view.dataparts()[datapartIndex]->nodeProperties();
     if (props.hasPropertyType(ptID)) {
         return props.count(ptID);
@@ -86,18 +86,18 @@ size_t GraphReader::getNodePropertyCount(size_t datapartIndex,
     return 0;
 }
 
-EntityID GraphReader::getFinalNodeID(size_t partIndex, EntityID tmpID) const {
+NodeID GraphReader::getFinalNodeID(size_t partIndex, NodeID tmpID) const {
     // TODO Update with a new Unique-Internal ID System.
     // This implementation does not work if multiple nodes
     // have the same temporary ID
     if (partIndex >= _view.dataparts().size()) {
-        return EntityID {};
+        return NodeID {};
     }
 
     const auto& part = _view.dataparts()[partIndex];
     auto it = part->_tmpToFinalNodeIDs.find(tmpID);
     if (it == part->_tmpToFinalNodeIDs.end()) {
-        return EntityID {};
+        return NodeID {};
     }
 
     return it->second;
@@ -108,11 +108,11 @@ const GraphMetadata& GraphReader::getMetadata() const {
     return _view.metadata();
 }
 
-GetOutEdgesRange GraphReader::getOutEdges(const ColumnIDs* inputNodeIDs) const {
+GetOutEdgesRange GraphReader::getOutEdges(const ColumnNodeIDs* inputNodeIDs) const {
     return {_view, inputNodeIDs};
 }
 
-GetInEdgesRange GraphReader::getInEdges(const ColumnIDs* inputNodeIDs) const {
+GetInEdgesRange GraphReader::getInEdges(const ColumnNodeIDs* inputNodeIDs) const {
     return {_view, inputNodeIDs};
 }
 
@@ -136,11 +136,11 @@ ScanInEdgesByLabelRange GraphReader::scanInEdgesByLabel(const LabelSetHandle& la
     return {_view, labelset};
 }
 
-GetNodeViewsRange GraphReader::getNodeViews(const ColumnIDs* inputNodeIDs) const {
+GetNodeViewsRange GraphReader::getNodeViews(const ColumnNodeIDs* inputNodeIDs) const {
     return {_view, inputNodeIDs};
 }
 
-NodeView GraphReader::getNodeView(EntityID id) const {
+NodeView GraphReader::getNodeView(NodeID id) const {
     NodeView view;
     PartIterator partIt(_view);
     LabelSetHandle labelset;
@@ -170,14 +170,14 @@ NodeView GraphReader::getNodeView(EntityID id) const {
         const EdgeIndexer& edgeIndexer = part->edgeIndexer();
         const PropertyManager& nodeProperties = part->nodeProperties();
 
-        nodeProperties.fillEntityPropertyView(id, labelset, view._props);
+        nodeProperties.fillEntityPropertyView(id.getValue(), labelset, view._props);
         edgeIndexer.fillEntityEdgeView(id, view._edges);
     }
 
     return view;
 }
 
-EdgeView GraphReader::getEdgeView(EntityID id) const {
+EdgeView GraphReader::getEdgeView(EdgeID id) const {
     EdgeView view;
     PartIterator partIt(_view);
     LabelSetHandle labelset;
@@ -208,13 +208,13 @@ EdgeView GraphReader::getEdgeView(EntityID id) const {
         const auto* part = partIt.get();
         const PropertyManager& edgeProperties = part->edgeProperties();
 
-        edgeProperties.fillEntityPropertyView(id, labelset, view._props);
+        edgeProperties.fillEntityPropertyView(id.getValue(), labelset, view._props);
     }
 
     return view;
 }
 
-EdgeTypeID GraphReader::getEdgeTypeID(EntityID edgeID) const {
+EdgeTypeID GraphReader::getEdgeTypeID(EdgeID edgeID) const {
     for (const auto& part : _view.dataparts()) {
         const auto* edge = part->edges().tryGet(edgeID);
         if (edge) {
@@ -228,9 +228,9 @@ MatchLabelSetIterator GraphReader::matchLabelSets(const LabelSetHandle& labelSet
     return MatchLabelSetIterator(_view, labelSet);
 }
 
-bool GraphReader::nodeHasProperty(PropertyTypeID ptID, EntityID nodeID) const {
+bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
-        if (part->nodeProperties().has(ptID, nodeID)) {
+        if (part->nodeProperties().has(ptID, nodeID.getValue())) {
             return true;
         }
     }
@@ -239,9 +239,9 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, EntityID nodeID) const {
 
 
 template <SupportedType T>
-const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, EntityID nodeID) const {
+const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
-        const auto* p = part->nodeProperties().tryGet<T>(ptID, nodeID);
+        const auto* p = part->nodeProperties().tryGet<T>(ptID, nodeID.getValue());
         if (p) {
             return p;
         }
@@ -251,8 +251,8 @@ const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, EntityI
 }
 
 
-template const types::UInt64::Primitive* GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, EntityID nodeID) const;
-template const types::Int64::Primitive* GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, EntityID nodeID) const;
-template const types::Double::Primitive* GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, EntityID nodeID) const;
-template const types::String::Primitive* GraphReader::tryGetNodeProperty<types::String>(PropertyTypeID ptID, EntityID nodeID) const;
-template const types::Bool::Primitive* GraphReader::tryGetNodeProperty<types::Bool>(PropertyTypeID ptID, EntityID nodeID) const;
+template const types::UInt64::Primitive* GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;
+template const types::Int64::Primitive* GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, NodeID nodeID) const;
+template const types::Double::Primitive* GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, NodeID nodeID) const;
+template const types::String::Primitive* GraphReader::tryGetNodeProperty<types::String>(PropertyTypeID ptID, NodeID nodeID) const;
+template const types::Bool::Primitive* GraphReader::tryGetNodeProperty<types::Bool>(PropertyTypeID ptID, NodeID nodeID) const;

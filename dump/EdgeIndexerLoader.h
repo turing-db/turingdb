@@ -44,8 +44,8 @@ public:
             return res.get_unexpected();
         }
 
-        const EntityID firstNodeID = it.get<EntityID::Type>();
-        const EntityID firstEdgeID = it.get<EntityID::Type>();
+        const NodeID firstNodeID = it.get<NodeID::Type>();
+        const EdgeID firstEdgeID = it.get<EdgeID::Type>();
         const uint64_t coreNodeCount = it.get<uint64_t>();
         const uint64_t patchNodeCount = it.get<uint64_t>();
         const uint64_t nodePageCount = it.get<uint64_t>();
@@ -97,7 +97,7 @@ public:
         const auto& ins = edges.getIns();
         for (size_t i = 0; i < patchNodeCount; i++) {
             const auto& data = indexer->_patchNodes[i];
-            EntityID nodeID;
+            NodeID nodeID;
 
             if (data._outRange._count != 0) {
                 nodeID = outs[data._outRange._first]._nodeID;

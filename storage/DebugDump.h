@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <type_traits>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -17,6 +17,8 @@ public:
     inline static void dump(T val) {
         if constexpr (fitsInWord<T>) {
             if constexpr (std::is_same_v<T, EntityID>
+                          || std::is_same_v<T, NodeID>
+                          || std::is_same_v<T, EdgeID>
                           || std::is_same_v<T, EdgeTypeID>
                           || std::is_same_v<T, LabelSetID>) {
                 dumpImpl(val.getValue());

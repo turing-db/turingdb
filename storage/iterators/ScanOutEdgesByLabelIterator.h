@@ -60,15 +60,15 @@ public:
 
     void fill(size_t maxCount);
 
-    void setSrcIDs(ColumnIDs* srcIDs) { _srcs = srcIDs; }
-    void setEdgeIDs(ColumnIDs* edgeIDs) { _edgeIDs = edgeIDs; }
-    void setTgtIDs(ColumnIDs* tgtIDs) { _tgts = tgtIDs; }
+    void setSrcIDs(ColumnNodeIDs* srcIDs) { _srcs = srcIDs; }
+    void setEdgeIDs(ColumnEdgeIDs* edgeIDs) { _edgeIDs = edgeIDs; }
+    void setTgtIDs(ColumnNodeIDs* tgtIDs) { _tgts = tgtIDs; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
-    ColumnIDs* _edgeIDs {nullptr};
-    ColumnIDs* _srcs {nullptr};
-    ColumnIDs* _tgts {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnNodeIDs* _srcs {nullptr};
+    ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
 };
 
@@ -87,3 +87,4 @@ static_assert(TgtIDsChunkWriter<ScanOutEdgesByLabelChunkWriter>);
 static_assert(EdgeTypesChunkWriter<ScanOutEdgesByLabelChunkWriter>);
 
 }
+

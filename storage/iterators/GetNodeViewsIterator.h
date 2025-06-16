@@ -18,7 +18,7 @@ public:
     GetNodeViewsIterator& operator=(GetNodeViewsIterator&&) noexcept = default;
 
     GetNodeViewsIterator(const GraphView& view,
-                        const ColumnIDs* inputNodeIDs);
+                        const ColumnNodeIDs* inputNodeIDs);
     ~GetNodeViewsIterator() override;
 
     void next() override;
@@ -37,9 +37,9 @@ public:
     }
 
 protected:
-    const ColumnIDs* _inputNodeIDs {nullptr};
-    ColumnIDs::ConstIterator _nodeIt;
-    ColumnIDs::ConstIterator _nodeItEnd;
+    const ColumnNodeIDs* _inputNodeIDs {nullptr};
+    ColumnNodeIDs::ConstIterator _nodeIt;
+    ColumnNodeIDs::ConstIterator _nodeItEnd;
     NodeView _nodeView;
 };
 
@@ -47,7 +47,7 @@ class GetNodeViewsChunkWriter : public GetNodeViewsIterator {
 public:
     GetNodeViewsChunkWriter() = default;
     GetNodeViewsChunkWriter(const GraphView& view,
-                           const ColumnIDs* inputNodeIDs);
+                           const ColumnNodeIDs* inputNodeIDs);
 
     void fill(size_t chunkSize);
 
@@ -61,7 +61,7 @@ private:
 
 struct GetNodeViewsRange {
     GraphView _dbView;
-    const ColumnIDs* _inputNodeIDs {nullptr};
+    const ColumnNodeIDs* _inputNodeIDs {nullptr};
 
     GetNodeViewsIterator begin() const { return {_dbView, _inputNodeIDs}; }
     DataPartIterator end() const { return PartIterator(_dbView).getEndIterator(); }

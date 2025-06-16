@@ -81,7 +81,7 @@ public:
                 }
 
                 auto& r = ranges[lset.value()];
-                r._first = it.get<EntityID::Type>();
+                r._first = it.get<NodeID::Type>();
                 r._count = it.get<uint64_t>();
             }
         }

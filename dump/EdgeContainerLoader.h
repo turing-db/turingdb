@@ -76,9 +76,9 @@ public:
                 // Copy content of page into edge records vector
                 for (size_t j = 0; j < countInPage; j++) {
                     auto& edge = edges[j + recordOffset];
-                    edge._edgeID = it.get<EntityID::Type>();
-                    edge._nodeID = it.get<EntityID::Type>();
-                    edge._otherID = it.get<EntityID::Type>();
+                    edge._edgeID = it.get<EdgeID::Type>();
+                    edge._nodeID = it.get<NodeID::Type>();
+                    edge._otherID = it.get<NodeID::Type>();
                     edge._edgeTypeID = it.get<EdgeTypeID::Type>();
                 }
 

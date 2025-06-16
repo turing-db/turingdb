@@ -2,7 +2,7 @@
 #include <spdlog/spdlog.h>
 
 #include "EdgeContainer.h"
-#include "EntityID.h"
+#include "ID.h"
 
 using namespace db;
 
@@ -16,8 +16,8 @@ protected:
 };
 
 TEST_F(EdgeContainerTest, General) {
-    const EntityID firstNodeID = 0;
-    const EntityID firstEdgeID = 0;
+    const NodeID firstNodeID = 0;
+    const EdgeID firstEdgeID = 0;
 
     std::vector<EdgeRecord> outEdges = {
         {0, 1, 2, 0},
@@ -71,8 +71,8 @@ TEST_F(EdgeContainerTest, General) {
 }
 
 TEST_F(EdgeContainerTest, IDShift) {
-    const EntityID firstNodeID = 10;
-    const EntityID firstEdgeID = 10;
+    const NodeID firstNodeID = 10;
+    const EdgeID firstEdgeID = 10;
 
     std::vector<EdgeRecord> outEdges = {
         {0, 1, 2, 0},

@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include "NodeEdgeData.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "DumpConfig.h"
 
 namespace db {

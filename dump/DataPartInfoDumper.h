@@ -17,8 +17,8 @@ public:
 
         const uint64_t nodeCount = part.getNodeCount();
         const uint64_t edgeCount = part.getEdgeCount();
-        const EntityID firstNodeID = part.getFirstNodeID();
-        const EntityID firstEdgeID = part.getFirstEdgeID();
+        const NodeID firstNodeID = part.getFirstNodeID();
+        const EdgeID firstEdgeID = part.getFirstEdgeID();
 
         _writer.writeToCurrentPage(nodeCount);
         _writer.writeToCurrentPage(edgeCount);

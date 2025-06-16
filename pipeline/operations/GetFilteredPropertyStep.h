@@ -21,7 +21,7 @@ public:
 
     using ColumnValues = ColumnVector<typename T::Primitive>;
 
-    GetFilteredPropertyStep(const ColumnIDs* entityIDs,
+    GetFilteredPropertyStep(const PropertyChunkWriter::ColumnIDs* entityIDs,
                             const PropertyType propertyType,
                             ColumnValues* propValues,
                             ColumnVector<size_t>* indices,
@@ -66,7 +66,7 @@ public:
     }
 
 private:
-    const ColumnIDs* _entityIDs {nullptr};
+    const PropertyChunkWriter::ColumnIDs* _entityIDs {nullptr};
     PropertyType _propertyType;
     ColumnValues* _propValues {nullptr};
     ColumnVector<size_t>* _indices {nullptr};

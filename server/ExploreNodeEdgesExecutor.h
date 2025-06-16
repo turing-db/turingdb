@@ -5,7 +5,7 @@
 
 #include "PayloadWriter.h"
 #include "reader/GraphReader.h"
-#include "EntityID.h"
+#include "ID.h"
 
 #define CASE_RUN_FILTER(filters_set)               \
     case combineFilters filters_set:               \
@@ -107,7 +107,7 @@ public:
 
     void addLabel(LabelID id) { _labelset.set(id); }
     void addEdgeType(EdgeTypeID id) { _edgeTypeIDs.emplace(id); }
-    void setNodeID(EntityID id) { _nodeID[0] = id; }
+    void setNodeID(NodeID id) { _nodeID[0] = id; }
     void setSkip(size_t skip) { _skip = skip; }
     void setLimit(size_t limit) { _limit = limit; }
     void setExcludeOutgoing(bool v) { _excludeOutgoing = v; }
@@ -126,7 +126,7 @@ private:
     bool _excludeOutgoing = false;
     bool _excludeincoming = false;
 
-    ColumnVector<EntityID> _nodeID;
+    ColumnVector<NodeID> _nodeID;
     std::vector<PropertyFilter> _nodeProperties;
     std::vector<PropertyFilter> _edgeProperties;
     std::unordered_set<EdgeTypeID> _edgeTypeIDs;
@@ -141,7 +141,7 @@ private:
     }
 
     template <uint64_t FiltersT>
-    bool matchesLabels(EntityID nodeID) {
+    bool matchesLabels(NodeID nodeID) {
         if constexpr ((FiltersT & (uint64_t)Filters::Labels) != 0) {
             const auto labelset = _reader.getNodeLabelSet(nodeID);
             if (!labelset.isValid()) {
@@ -153,7 +153,7 @@ private:
     }
 
     template <uint64_t FiltersT>
-    bool matchesNodeProperties(EntityID nodeID) {
+    bool matchesNodeProperties(NodeID nodeID) {
         if constexpr ((FiltersT & (uint64_t)Filters::NodeProperties) != 0) {
             for (const auto& [pID, query] : _nodeProperties) {
                 const auto* p = _reader.tryGetNodeProperty<types::String>(pID, nodeID);

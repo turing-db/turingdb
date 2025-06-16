@@ -4,7 +4,7 @@
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
-#include "columns/ColumnVector.h"
+#include "columns/ColumnIDs.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -36,8 +36,8 @@ public:
         return get();
     }
 
-    EntityID getCurrentNodeID() const {
-        return *_currentID;
+    NodeID getCurrentNodeID() const {
+        return _currentID->getValue();
     }
 
 protected:
@@ -77,13 +77,13 @@ public:
         _properties = properties;
     }
 
-    void setNodeIDs(ColumnVector<EntityID>* nodeIDs) {
+    void setNodeIDs(ColumnNodeIDs* nodeIDs) {
         _nodeIDs = nodeIDs;
     }
 
 private:
     ColumnVector<Primitive>* _properties {nullptr};
-    ColumnVector<EntityID>* _nodeIDs {nullptr};
+    ColumnNodeIDs* _nodeIDs {nullptr};
 };
 
 template <SupportedType T>
@@ -109,3 +109,4 @@ static_assert(NodeIDsChunkWriter<ScanNodePropertiesChunkWriter<types::String>>);
 static_assert(NodeIDsChunkWriter<ScanNodePropertiesChunkWriter<types::Bool>>);
 
 }
+

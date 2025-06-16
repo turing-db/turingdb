@@ -6,7 +6,7 @@
 #include <atomic>
 #include <ArcManager.h>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "Profiler.h"
 #include "versioning/Change.h"
 #include "versioning/CommitResult.h"
@@ -23,8 +23,8 @@ class JobSystem;
 class FrozenCommitTx;
 
 struct EntityIDPair {
-    EntityID _nodeID;
-    EntityID _edgeID;
+    NodeID _nodeID;
+    EdgeID _edgeID;
 };
 
 class VersionController {
@@ -52,7 +52,7 @@ public:
         return _dataManager->create(hash);
     }
 
-    WeakArc<DataPart> createDataPart(EntityID firstNodeID, EntityID firstEdgeID) {
+    WeakArc<DataPart> createDataPart(NodeID firstNodeID, EdgeID firstEdgeID) {
         Profile profile("VersionController::createDataPart");
         return _partManager->create(firstNodeID, firstEdgeID);
     }

@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 
@@ -23,16 +23,16 @@ public:
                 const DataPart& prevPart,
                 DataPart& part);
 private:
-    EntityID _prevFirstNodeID {0};
-    EntityID _prevFirstEdgeID {0};
+    NodeID _prevFirstNodeID {0};
+    EdgeID _prevFirstEdgeID {0};
     size_t _nodeOffset {0};
     size_t _edgeOffset {0};
 
-    EntityID rebaseNodeID(const EntityID& id) const {
-        return id >= _prevFirstEdgeID ? id + _nodeOffset : id;
+    NodeID rebaseNodeID(const NodeID& id) const {
+        return id >= _prevFirstNodeID ? id + _nodeOffset : id;
     }
 
-    EntityID rebaseEdgeID(const EntityID& id) const {
+    EdgeID rebaseEdgeID(const EdgeID& id) const {
         return id >= _prevFirstEdgeID ? id + _edgeOffset : id;
     }
 };

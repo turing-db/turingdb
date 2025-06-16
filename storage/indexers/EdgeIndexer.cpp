@@ -22,7 +22,7 @@ EdgeIndexer::EdgeIndexer(const EdgeContainer& edges)
 std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
                                                  const NodeContainer& nodeContainer,
                                                  size_t patchNodeCount,
-                                                 const std::map<EntityID, LabelSetHandle>& patchNodeLabelSets,
+                                                 const std::map<NodeID, LabelSetHandle>& patchNodeLabelSets,
                                                  size_t patchOutEdgeCount,
                                                  size_t patchInEdgeCount) {
     Profile profile {"EdgeIndexer::create"};
@@ -45,14 +45,14 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
 
     // Patch out edges
     {
-        EntityID currentNodeID;
+        NodeID currentNodeID;
         LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
 
         for (const auto& [i, edge] : patchOutEdges | rv::enumerate) {
-            const EntityID nodeID = edge._nodeID;
+            const NodeID nodeID = edge._nodeID;
             if (currentNodeID != nodeID) {
                 currentNodeID = nodeID;
 
@@ -88,14 +88,14 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
 
     // Core out edges
     {
-        EntityID currentNodeID;
+        NodeID currentNodeID;
         LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
 
         for (const auto& [i, edge] : coreOutEdges | rv::enumerate) {
-            const EntityID nodeID = edge._nodeID;
+            const NodeID nodeID = edge._nodeID;
             if (currentNodeID != nodeID) {
                 currentNodeID = nodeID;
 
@@ -128,14 +128,14 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
 
     // Patch in edges
     {
-        EntityID currentNodeID;
+        NodeID currentNodeID;
         LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
 
         for (const auto& [i, edge] : patchInEdges | rv::enumerate) {
-            const EntityID nodeID = edge._nodeID;
+            const NodeID nodeID = edge._nodeID;
             if (currentNodeID != nodeID) {
                 currentNodeID = nodeID;
 
@@ -171,14 +171,14 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
 
     // Core in edges
     {
-        EntityID currentNodeID;
+        NodeID currentNodeID;
         LabelSetHandle currentLabelSet;
         NodeEdgeData* currentNode = nullptr;
         size_t rangeCount = 0;
         size_t rangeFirst = 0;
 
         for (const auto& [i, edge] : coreInEdges | rv::enumerate) {
-            const EntityID nodeID = edge._nodeID;
+            const NodeID nodeID = edge._nodeID;
             if (currentNodeID != nodeID) {
                 currentNodeID = nodeID;
 
@@ -211,7 +211,7 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
     return indexer;
 }
 
-std::span<const EdgeRecord> EdgeIndexer::getNodeOutEdges(EntityID nodeID) const {
+std::span<const EdgeRecord> EdgeIndexer::getNodeOutEdges(NodeID nodeID) const {
     if (nodeID >= _firstNodeID) {
         // Core node
         const size_t nodeOffset = (nodeID - _firstNodeID).getValue();
@@ -236,7 +236,7 @@ std::span<const EdgeRecord> EdgeIndexer::getNodeOutEdges(EntityID nodeID) const 
     return std::span(_edges->_outEdges).subspan(outRange._first, outRange._count);
 }
 
-std::span<const EdgeRecord> EdgeIndexer::getNodeInEdges(EntityID nodeID) const {
+std::span<const EdgeRecord> EdgeIndexer::getNodeInEdges(NodeID nodeID) const {
     if (nodeID >= _firstNodeID) {
         // Core node
         const size_t nodeOffset = (nodeID - _firstNodeID).getValue();
@@ -261,7 +261,7 @@ std::span<const EdgeRecord> EdgeIndexer::getNodeInEdges(EntityID nodeID) const {
     return std::span(_edges->_inEdges).subspan(inRange._first, inRange._count);
 }
 
-void EdgeIndexer::fillEntityEdgeView(EntityID nodeID, NodeEdgeView& view) const {
+void EdgeIndexer::fillEntityEdgeView(NodeID nodeID, NodeEdgeView& view) const {
     auto outs = getNodeOutEdges(nodeID);
     auto ins = getNodeInEdges(nodeID);
 

@@ -69,11 +69,11 @@ TEST_F(Neo4jImporterTest, Simple) {
 
         auto& builder2 = commitBuilder->newBuilder();
         builder2.addEdge(2, 1, 2);
-        EntityID id1 = builder2.addNode(LabelSet::fromList({0}));
+        const auto id1 = builder2.addNode(LabelSet::fromList({0}));
         builder2.addNodeProperty<types::String>(id1, 0, "test1");
 
         builder2.addEdge(2, 0, 1);
-        EntityID id2 = builder2.addNode(LabelSet::fromList({0}));
+        const auto id2 = builder2.addNode(LabelSet::fromList({0}));
         builder2.addNodeProperty<types::String>(id2, 0, "test2");
         builder2.addNodeProperty<types::String>(2, 0, "test3");
         const EdgeRecord& edge = builder2.addEdge(4, 3, 4);

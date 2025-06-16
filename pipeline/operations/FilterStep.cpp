@@ -45,8 +45,7 @@ constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op, ColumnKind::Co
 }
 
 FilterStep::FilterStep(ColumnVector<size_t>* indices)
-    : _indices(indices)
-{
+    : _indices(indices) {
 }
 
 FilterStep::FilterStep() {
@@ -105,6 +104,14 @@ void FilterStep::compute() {
             EQUAL_CASE(ColumnVector<EntityID>, ColumnConst<EntityID>)
             EQUAL_CASE(ColumnConst<EntityID>, ColumnVector<EntityID>)
             EQUAL_CASE(ColumnConst<EntityID>, ColumnConst<EntityID>)
+            EQUAL_CASE(ColumnVector<NodeID>, ColumnVector<NodeID>)
+            EQUAL_CASE(ColumnVector<NodeID>, ColumnConst<NodeID>)
+            EQUAL_CASE(ColumnConst<NodeID>, ColumnVector<NodeID>)
+            EQUAL_CASE(ColumnConst<NodeID>, ColumnConst<NodeID>)
+            EQUAL_CASE(ColumnVector<EdgeID>, ColumnVector<EdgeID>)
+            EQUAL_CASE(ColumnVector<EdgeID>, ColumnConst<EdgeID>)
+            EQUAL_CASE(ColumnConst<EdgeID>, ColumnVector<EdgeID>)
+            EQUAL_CASE(ColumnConst<EdgeID>, ColumnConst<EdgeID>)
             EQUAL_CASE(ColumnVector<LabelSetID>, ColumnVector<LabelSetID>)
             EQUAL_CASE(ColumnVector<LabelSetID>, ColumnConst<LabelSetID>)
             EQUAL_CASE(ColumnConst<LabelSetID>, ColumnVector<LabelSetID>)
@@ -150,6 +157,15 @@ void FilterStep::compute() {
         }
     }
 }
+
+static constexpr auto s0 = ColumnConst<std::string_view>::staticKind();
+static constexpr auto s1 = ColumnVector<std::string>::staticKind();
+
+static constexpr auto s2 = ColumnVector<std::string_view>::staticKind();
+static constexpr auto s3 = ColumnConst<std::string_view>::staticKind();
+
+static constexpr auto t1 = OpCase<OP_EQUAL, ColumnConst<std::string_view>, ColumnVector<std::string>>;
+static constexpr auto t2 = OpCase<OP_EQUAL, ColumnVector<std::string_view>, ColumnConst<std::string_view>>;
 
 void FilterStep::generateIndices() {
     auto maskd = _expressions.back()._mask->data();
@@ -200,6 +216,8 @@ void apply(const ColumnMask* mask, const Column* src, Column* dst) {
     switch (srcKind) {
         APPLY_MASK_CASE(ColumnVector<size_t>)
         APPLY_MASK_CASE(ColumnVector<EntityID>)
+        APPLY_MASK_CASE(ColumnVector<NodeID>)
+        APPLY_MASK_CASE(ColumnVector<EdgeID>)
         APPLY_MASK_CASE(ColumnVector<LabelSetID>)
         APPLY_MASK_CASE(ColumnVector<std::string>)
         APPLY_MASK_CASE(ColumnVector<std::string_view>)

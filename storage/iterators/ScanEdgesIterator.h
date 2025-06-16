@@ -56,15 +56,15 @@ public:
 
     void fill(size_t maxCount);
 
-    void setSrcIDs(ColumnIDs* srcs) { _srcs = srcs; }
-    void setEdgeIDs(ColumnIDs* edgeIDs) { _edgeIDs = edgeIDs; }
-    void setTgtIDs(ColumnIDs* tgts) { _tgts = tgts; }
+    void setSrcIDs(ColumnNodeIDs* srcs) { _srcs = srcs; }
+    void setEdgeIDs(ColumnEdgeIDs* edgeIDs) { _edgeIDs = edgeIDs; }
+    void setTgtIDs(ColumnNodeIDs* tgts) { _tgts = tgts; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
-    ColumnIDs* _srcs {nullptr};
-    ColumnIDs* _edgeIDs {nullptr};
-    ColumnIDs* _tgts {nullptr};
+    ColumnNodeIDs* _srcs {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
 };
 

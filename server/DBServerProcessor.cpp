@@ -378,7 +378,7 @@ void DBServerProcessor::list_property_types() {
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
-    std::vector<EntityID::Type> nodeIDs;
+    std::vector<NodeID::Type> nodeIDs;
 
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
@@ -404,7 +404,7 @@ void DBServerProcessor::list_property_types() {
             // NodeIDs
             const auto nodeIDsIt = json.find("nodeIDs");
             if (nodeIDsIt != json.end()) {
-                nodeIDs = nodeIDsIt->get<std::vector<EntityID::Type>>();
+                nodeIDs = nodeIDsIt->get<std::vector<NodeID::Type>>();
             }
         } catch (const std::exception& e) {
             payload.key("error");
@@ -443,7 +443,7 @@ void DBServerProcessor::list_edge_types() {
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
-    std::vector<EntityID::Type> edgeIDs;
+    std::vector<EdgeID::Type> edgeIDs;
 
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
@@ -469,7 +469,7 @@ void DBServerProcessor::list_edge_types() {
             // EdgeIDs
             const auto edgeIDsIt = json.find("edgeIDs");
             if (edgeIDsIt != json.end()) {
-                edgeIDs = edgeIDsIt->get<std::vector<EntityID::Type>>();
+                edgeIDs = edgeIDsIt->get<std::vector<EdgeID::Type>>();
             }
         } catch (const std::exception& e) {
             payload.key("error");
@@ -627,7 +627,7 @@ void DBServerProcessor::get_node_properties() {
 
     const auto reader = transaction.value().readGraph();
 
-    ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
+    ColumnVector<NodeID>* nodeIDs = mem.alloc<ColumnVector<NodeID>>();
     std::vector<std::string> properties;
     const auto& propTypes = reader.getMetadata().propTypes();
 
@@ -642,9 +642,9 @@ void DBServerProcessor::get_node_properties() {
             return;
         }
 
-        const auto& nodeIDsVec = nodeIDsIt->get<std::vector<EntityID::Type>>();
+        const auto& nodeIDsVec = nodeIDsIt->get<std::vector<NodeID::Type>>();
         nodeIDs->reserve(nodeIDsVec.size());
-        for (const EntityID::Type nodeID : nodeIDsVec) {
+        for (const NodeID::Type nodeID : nodeIDsVec) {
             nodeIDs->push_back(nodeID);
         }
 
@@ -742,8 +742,8 @@ void DBServerProcessor::get_neighbors() {
 
     const auto reader = transaction.value().readGraph();
 
-    ColumnVector<EntityID>* allNodeIDs = mem.alloc<ColumnVector<EntityID>>();
-    ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
+    ColumnVector<NodeID>* allNodeIDs = mem.alloc<ColumnVector<NodeID>>();
+    ColumnVector<NodeID>* nodeIDs = mem.alloc<ColumnVector<NodeID>>();
     size_t limitPerNode = std::numeric_limits<size_t>::max();
 
     try {
@@ -757,9 +757,9 @@ void DBServerProcessor::get_neighbors() {
             return;
         }
 
-        const auto& vec = nodeIDsIt->get<std::vector<EntityID::Type>>();
+        const auto& vec = nodeIDsIt->get<std::vector<NodeID::Type>>();
         allNodeIDs->reserve(vec.size());
-        for (const EntityID::Type nodeID : vec) {
+        for (const NodeID::Type nodeID : vec) {
             allNodeIDs->push_back(nodeID);
         }
 
@@ -865,7 +865,7 @@ void DBServerProcessor::get_nodes() {
 
     payload.setMetadata(&metadata);
 
-    ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
+    ColumnVector<NodeID>* nodeIDs = mem.alloc<ColumnVector<NodeID>>();
 
     try {
         const auto json = nlohmann::json::parse(reqBody);
@@ -878,9 +878,9 @@ void DBServerProcessor::get_nodes() {
             return;
         }
 
-        const auto& vec = nodeIDsIt->get<std::vector<EntityID::Type>>();
+        const auto& vec = nodeIDsIt->get<std::vector<NodeID::Type>>();
         nodeIDs->reserve(vec.size());
-        for (const EntityID::Type nodeID : vec) {
+        for (const NodeID::Type nodeID : vec) {
             nodeIDs->push_back(nodeID);
         }
     } catch (const std::exception& e) {
@@ -926,7 +926,7 @@ void DBServerProcessor::get_node_edges() {
 
     payload.setMetadata(&metadata);
 
-    ColumnVector<EntityID>* nodeIDs = mem.alloc<ColumnVector<EntityID>>();
+    ColumnVector<NodeID>* nodeIDs = mem.alloc<ColumnVector<NodeID>>();
     std::unordered_map<EdgeTypeID, size_t> outEdgeTypeLimits;
     std::unordered_map<EdgeTypeID, size_t> inEdgeTypeLimits;
     size_t defaultLimit = 10;
@@ -943,9 +943,9 @@ void DBServerProcessor::get_node_edges() {
             return;
         }
 
-        const auto& vec = nodeIDsIt->get<std::vector<EntityID::Type>>();
+        const auto& vec = nodeIDsIt->get<std::vector<NodeID::Type>>();
         nodeIDs->reserve(vec.size());
-        for (const EntityID::Type nodeID : vec) {
+        for (const NodeID::Type nodeID : vec) {
             nodeIDs->push_back(nodeID);
         }
 
@@ -996,9 +996,9 @@ void DBServerProcessor::get_node_edges() {
     payload.key("data");
     payload.obj();
 
-    ColumnVector<EntityID> singleNodeID(1);
+    ColumnVector<NodeID> singleNodeID(1);
 
-    for (const EntityID nodeID : *nodeIDs) {
+    for (const NodeID nodeID : *nodeIDs) {
         outCounts.clear();
         inCounts.clear();
         singleNodeID[0] = nodeID;
@@ -1136,7 +1136,7 @@ void DBServerProcessor::explore_node_edges() {
             return;
         }
 
-        EntityID nodeID = (size_t)it.value();
+        NodeID nodeID = (size_t)it.value();
         if (!nodeID.isValid()) {
             payload.key("error");
             payload.value(EndpointStatusDescription::value(EndpointStatus::INVALID_NODE_ID));
@@ -1273,7 +1273,7 @@ void DBServerProcessor::get_edges() {
     const auto reader = transaction.value().readGraph();
     payload.setMetadata(&reader.getMetadata());
 
-    ColumnVector<EntityID>* edgeIDs = mem.alloc<ColumnVector<EntityID>>();
+    ColumnVector<EdgeID>* edgeIDs = mem.alloc<ColumnVector<EdgeID>>();
 
     try {
         const auto json = nlohmann::json::parse(reqBody);
@@ -1285,9 +1285,9 @@ void DBServerProcessor::get_edges() {
             return;
         }
 
-        const auto& vec = edgeIDsIt->get<std::vector<EntityID::Type>>();
+        const auto& vec = edgeIDsIt->get<std::vector<EdgeID::Type>>();
         edgeIDs->reserve(vec.size());
-        for (const EntityID::Type edgeID : vec) {
+        for (const EdgeID::Type edgeID : vec) {
             edgeIDs->push_back(edgeID);
         }
     } catch (const std::exception& e) {

@@ -16,7 +16,7 @@ class ScanNodesByLabelStep {
 public:
     struct Tag {};
 
-    ScanNodesByLabelStep(ColumnIDs* nodes, const LabelSetHandle& labelSet);
+    ScanNodesByLabelStep(ColumnNodeIDs* nodes, const LabelSetHandle& labelSet);
     ScanNodesByLabelStep(ScanNodesByLabelStep&& other) = default;
     ~ScanNodesByLabelStep();
 
@@ -42,7 +42,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    ColumnIDs* _nodes {nullptr};
+    ColumnNodeIDs* _nodes {nullptr};
     LabelSetHandle _labelSet;
     std::unique_ptr<ScanNodesByLabelChunkWriter> _it;
 };

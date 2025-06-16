@@ -4,7 +4,7 @@
 
 using namespace db;
 
-ScanNodesByLabelStep::ScanNodesByLabelStep(ColumnIDs* nodes, const LabelSetHandle& labelSet)
+ScanNodesByLabelStep::ScanNodesByLabelStep(ColumnNodeIDs* nodes, const LabelSetHandle& labelSet)
     : _nodes(nodes),
     _labelSet(labelSet)
 {

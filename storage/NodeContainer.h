@@ -23,12 +23,12 @@ public:
     NodeContainer& operator=(const NodeContainer&) = delete;
     ~NodeContainer();
 
-    EntityID getFirstNodeID() const { return _firstID; }
-    EntityID getFirstNodeID(const LabelSetHandle& labelset) const;
+    NodeID getFirstNodeID() const { return _firstID; }
+    NodeID getFirstNodeID(const LabelSetHandle& labelset) const;
 
     size_t size() const { return _nodeCount; }
 
-    LabelSetHandle getNodeLabelSet(EntityID nodeID) const {
+    LabelSetHandle getNodeLabelSet(NodeID nodeID) const {
         if (!hasEntity(nodeID)) {
             return LabelSetHandle {};
         }
@@ -36,17 +36,17 @@ public:
         return _nodes[getOffset(nodeID)]._labelset;
     }
 
-    EntityID getID(size_t offset) const {
+    NodeID getID(size_t offset) const {
         msgbioassert(hasOffset(offset), "DataPart does not have this node");
-        return EntityID {_firstID + offset};
+        return NodeID {_firstID + offset};
     }
 
-    size_t getOffset(EntityID nodeID) const {
+    size_t getOffset(NodeID nodeID) const {
         msgbioassert(hasEntity(nodeID), "DataPart does not have this node");
         return (nodeID - _firstID).getValue();
     }
 
-    bool hasEntity(EntityID nodeID) const {
+    bool hasEntity(NodeID nodeID) const {
         return (nodeID - _firstID) < _nodeCount;
     }
 
@@ -75,7 +75,7 @@ public:
         return _ranges.contains(labelset);
     }
 
-    static std::unique_ptr<NodeContainer> create(EntityID firstID,
+    static std::unique_ptr<NodeContainer> create(NodeID firstID,
                                                  const std::vector<LabelSetHandle>& nodeLabelSets);
 
 private:
@@ -83,13 +83,13 @@ private:
     friend DataPartLoader;
     friend DataPartRebaser;
 
-    EntityID _firstID {0};
+    NodeID _firstID {0};
     size_t _nodeCount {0};
 
     LabelSetIndexer<NodeRange> _ranges;
     NodeRecords _nodes;
 
-    NodeContainer(EntityID firstID,
+    NodeContainer(NodeID firstID,
                   size_t nodeCount);
 };
 

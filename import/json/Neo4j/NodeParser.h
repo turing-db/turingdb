@@ -212,7 +212,7 @@ private:
     IDMapper* _nodeIDMapper;
     LabelSet _labelset;
     size_t _nesting = 0;
-    EntityID _currentNodeID = 0;
+    NodeID _currentNodeID = 0;
     std::string _currentPropName;
     bool _parsingLabels = false;
     bool _parsingNode = false;

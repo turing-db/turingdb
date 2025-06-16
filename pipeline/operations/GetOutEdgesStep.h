@@ -18,7 +18,7 @@ class GetOutEdgesStep {
 public:
     struct Tag {};
     
-    GetOutEdgesStep(const ColumnIDs* inputNodeIDs,
+    GetOutEdgesStep(const ColumnNodeIDs* inputNodeIDs,
                     const EdgeWriteInfo& edgeWriteInfo);
     GetOutEdgesStep(GetOutEdgesStep&& other) = default;
     ~GetOutEdgesStep();
@@ -48,7 +48,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    const ColumnIDs* _inputNodeIDs {nullptr};
+    const ColumnNodeIDs* _inputNodeIDs {nullptr};
     EdgeWriteInfo _edgeWriteInfo;
     std::unique_ptr<GetOutEdgesChunkWriter> _it;
 };

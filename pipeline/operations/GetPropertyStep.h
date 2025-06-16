@@ -21,7 +21,7 @@ public:
 
     using ColumnValues = ColumnOptVector<typename T::Primitive>;
 
-    GetPropertyStep(const ColumnIDs* entityIDs,
+    GetPropertyStep(const PropertyChunkWriter::ColumnIDs* entityIDs,
                     PropertyType propertyType,
                     ColumnValues* propValues)
         : _entityIDs(entityIDs)
@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    const ColumnIDs* _entityIDs {nullptr};
+    const PropertyChunkWriter::ColumnIDs* _entityIDs {nullptr};
     PropertyType _propertyType;
     ColumnValues* _propValues {nullptr};
     std::unique_ptr<PropertyChunkWriter> _it;

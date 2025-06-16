@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 #include "BioAssert.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "RWSpinLock.h"
 
 namespace db {

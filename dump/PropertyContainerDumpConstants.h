@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/SupportedType.h"
 #include "DumpConfig.h"
 #include "StringBucket.h"

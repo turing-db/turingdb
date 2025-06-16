@@ -5,7 +5,7 @@
 using namespace db;
 
 template <SupportedType T>
-ScanNodesByPropertyAndLabel<T>::ScanNodesByPropertyAndLabel(ColumnIDs* nodes,
+ScanNodesByPropertyAndLabel<T>::ScanNodesByPropertyAndLabel(ColumnNodeIDs* nodes,
                                                             PropertyType propType,
                                                             const LabelSetHandle& labelSet,
                                                             ColumnVector<typename T::Primitive>* propValues)

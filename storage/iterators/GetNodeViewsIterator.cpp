@@ -9,7 +9,7 @@
 namespace db {
 
 GetNodeViewsIterator::GetNodeViewsIterator(const GraphView& view,
-                                           const ColumnIDs* inputNodeIDs)
+                                           const ColumnNodeIDs* inputNodeIDs)
     : Iterator(view),
       _inputNodeIDs(inputNodeIDs),
       _nodeIt(inputNodeIDs->cbegin()),
@@ -35,7 +35,7 @@ void GetNodeViewsIterator::next() {
 }
 
 GetNodeViewsChunkWriter::GetNodeViewsChunkWriter(const GraphView& view,
-                                                 const ColumnIDs* inputNodeIDs)
+                                                 const ColumnNodeIDs* inputNodeIDs)
     : GetNodeViewsIterator(view, inputNodeIDs)
 {
 }

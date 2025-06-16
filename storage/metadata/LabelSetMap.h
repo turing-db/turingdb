@@ -3,7 +3,7 @@
 #include <optional>
 #include <unordered_map>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "LabelSetHandle.h"
 
 namespace db {

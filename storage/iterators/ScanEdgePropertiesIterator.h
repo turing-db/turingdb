@@ -35,7 +35,7 @@ public:
         return get();
     }
 
-    EntityID getCurrentEdgeID() const;
+    EdgeID getCurrentEdgeID() const;
 
 protected:
     using SpanUnion = union {
@@ -70,10 +70,10 @@ public:
     void fill(size_t maxCount);
 
     void setProperties(ColumnVector<Primitive>* properties) { _properties = properties; }
-    void setEdgeIDs(ColumnIDs* edgeIDs) { _edgeIDs = edgeIDs; }
+    void setEdgeIDs(ColumnEdgeIDs* edgeIDs) { _edgeIDs = edgeIDs; }
 
 private:
-    ColumnIDs* _edgeIDs {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnVector<Primitive>* _properties {nullptr};
 };
 
@@ -100,3 +100,4 @@ static_assert(EdgeIDsChunkWriter<ScanEdgePropertiesChunkWriter<types::String>>);
 static_assert(EdgeIDsChunkWriter<ScanEdgePropertiesChunkWriter<types::Bool>>);
 
 }
+

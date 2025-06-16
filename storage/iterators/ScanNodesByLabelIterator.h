@@ -23,7 +23,7 @@ public:
 
     void next() override;
 
-    EntityID get() const {
+    NodeID get() const {
         return *_rangeIt;
     }
 
@@ -32,7 +32,7 @@ public:
         return *this;
     }
 
-    EntityID operator*() const {
+    NodeID operator*() const {
         return get();
     }
 
@@ -54,10 +54,10 @@ public:
 
     void fill(size_t maxCount);
 
-    void setNodeIDs(ColumnIDs* nodeIDs) { _nodeIDs = nodeIDs; }
+    void setNodeIDs(ColumnNodeIDs* nodeIDs) { _nodeIDs = nodeIDs; }
 
 private:
-    ColumnIDs* _nodeIDs {nullptr};
+    ColumnNodeIDs* _nodeIDs {nullptr};
 };
 
 struct ScanNodesByLabelRange {
@@ -72,3 +72,4 @@ struct ScanNodesByLabelRange {
 static_assert(NodeIDsChunkWriter<ScanNodesByLabelChunkWriter>);
 
 }
+

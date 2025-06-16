@@ -4,7 +4,7 @@
 #include "GraphMetadata.h"
 #include "EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "NodeContainer.h"
 
 using namespace db;

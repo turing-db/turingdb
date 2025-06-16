@@ -6,7 +6,7 @@
 #include "Profiler.h"
 #include "iterators/ScanNodePropertiesIterator.h"
 #include "columns/ColumnIDs.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "iterators/ChunkConfig.h"
 #include "ExecutionContext.h"
 
@@ -17,7 +17,7 @@ class ScanNodesByPropertyStep {
 public:
     struct Tag {};
 
-    ScanNodesByPropertyStep(ColumnIDs* nodes,
+    ScanNodesByPropertyStep(ColumnNodeIDs* nodes,
                             PropertyType propType,
                             ColumnVector<typename T::Primitive>* propValues);
     ScanNodesByPropertyStep(ScanNodesByPropertyStep&& other) = default;
@@ -46,7 +46,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    ColumnIDs* _nodes {nullptr};
+    ColumnNodeIDs* _nodes {nullptr};
     ColumnVector<typename T::Primitive>* _propValues {nullptr};
     const PropertyType _propType;
     std::unique_ptr<ScanNodePropertiesChunkWriter<T>> _it;

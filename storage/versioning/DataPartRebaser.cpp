@@ -175,7 +175,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         if (_nodeOffset != 0) {
             for (auto& [ptID, container] : nodeProperties->_map) {
                 for (auto& id : container->ids()) {
-                    id = rebaseNodeID(id);
+                    id = rebaseNodeID(id.getValue()).getValue();
                 }
                 container->sort();
             }
@@ -249,7 +249,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         if (_edgeOffset != 0) {
             for (auto& [ptID, container] : edgeProperties->_map) {
                 for (auto& id : container->ids()) {
-                    id = rebaseEdgeID(id);
+                    id = rebaseEdgeID(id.getValue()).getValue();
                 }
                 container->sort();
             }

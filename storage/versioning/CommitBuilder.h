@@ -4,7 +4,7 @@
 #include <vector>
 #include <memory>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "versioning/CommitResult.h"
 #include "views/GraphView.h"
 
@@ -48,7 +48,7 @@ public:
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
 
-    void setEntityIDs(EntityID firstNodeID, EntityID firstEdgeID) {
+    void setEntityIDs(NodeID firstNodeID, EdgeID firstEdgeID) {
         _firstNodeID = firstNodeID;
         _firstEdgeID = firstEdgeID;
     }
@@ -67,10 +67,10 @@ private:
     Change* _change {nullptr};
     GraphView _view;
 
-    EntityID _firstNodeID;
-    EntityID _firstEdgeID;
-    EntityID _nextNodeID;
-    EntityID _nextEdgeID;
+    NodeID _firstNodeID;
+    EdgeID _firstEdgeID;
+    NodeID _nextNodeID;
+    EdgeID _nextEdgeID;
 
     WeakArc<CommitData> _commitData;
     std::unique_ptr<MetadataBuilder> _metadataBuilder;

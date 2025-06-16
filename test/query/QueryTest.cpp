@@ -30,38 +30,38 @@ TEST_F(QueryTest, ReturnNode) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("MATCH n RETURN n")
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
         .execute();
 
 
     tester.query("MATCH n-[e]-m RETURN e")
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
         .execute();
 
     tester.query("MATCH n-[e]-m RETURN n")
-        .expectVector<EntityID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
+        .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
         .execute();
 
     tester.query("MATCH n-[e]-m RETURN m")
-        .expectVector<EntityID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
         .execute();
 
     tester.query("MATCH n-[e]-m RETURN n, m")
-        .expectVector<EntityID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
-        .expectVector<EntityID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
+        .expectVector<NodeID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
         .execute();
 
     tester.query("MATCH n-[e]-m RETURN n, e, m")
-        .expectVector<EntityID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
-        .expectVector<EntityID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
         .execute();
 
     tester.query("MATCH n--m--q--r RETURN n, m, q, r")
-        .expectVector<EntityID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 6, 6, 6, 6})
-        .expectVector<EntityID>({1, 1, 1, 1, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0})
-        .expectVector<EntityID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 6, 1, 1, 1, 6})
-        .expectVector<EntityID>({1, 6, 2, 3, 1, 6, 2, 3, 0, 4, 5, 0, 0, 4, 5, 0})
+        .expectVector<NodeID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 6, 6, 6, 6})
+        .expectVector<NodeID>({1, 1, 1, 1, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0})
+        .expectVector<NodeID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 6, 1, 1, 1, 6})
+        .expectVector<NodeID>({1, 6, 2, 3, 1, 6, 2, 3, 0, 4, 5, 0, 0, 4, 5, 0})
         .execute();
 }
 
@@ -69,24 +69,24 @@ TEST_F(QueryTest, EdgeMatching) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("MATCH n-[e]-m RETURN n, e, m")
-        .expectVector<EntityID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
-        .expectVector<EntityID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
         .execute();
 
     tester.query("MATCH n-[e]-m-[e1]-q-[e2]-r RETURN n, e, m, e1, q, e2, r")
-        .expectVector<EntityID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 6, 6, 6, 6})
-        .expectVector<EntityID>({0, 0, 0, 0, 1, 1, 1, 1, 4, 4, 4, 4, 7, 7, 7, 7})
-        .expectVector<EntityID>({1, 1, 1, 1, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0})
-        .expectVector<EntityID>({4, 4, 4, 4, 7, 7, 7, 7, 0, 0, 0, 1, 0, 0, 0, 1})
-        .expectVector<EntityID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 6, 1, 1, 1, 6})
-        .expectVector<EntityID>({0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7})
-        .expectVector<EntityID>({1, 6, 2, 3, 1, 6, 2, 3, 0, 4, 5, 0, 0, 4, 5, 0})
+        .expectVector<NodeID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 6, 6, 6, 6})
+        .expectVector<EdgeID>({0, 0, 0, 0, 1, 1, 1, 1, 4, 4, 4, 4, 7, 7, 7, 7})
+        .expectVector<NodeID>({1, 1, 1, 1, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0})
+        .expectVector<EdgeID>({4, 4, 4, 4, 7, 7, 7, 7, 0, 0, 0, 1, 0, 0, 0, 1})
+        .expectVector<NodeID>({0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 6, 1, 1, 1, 6})
+        .expectVector<EdgeID>({0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7})
+        .expectVector<NodeID>({1, 6, 2, 3, 1, 6, 2, 3, 0, 4, 5, 0, 0, 4, 5, 0})
         .execute();
 
 
     tester.query("MATCH n:Person-[e]-m:Interest RETURN n, n.name, e.name, m.name, m")
-        .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+        .expectVector<NodeID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
         .expectOptVector<types::String::Primitive>({
             "Remy",
             "Remy",
@@ -123,27 +123,27 @@ TEST_F(QueryTest, EdgeMatching) {
             "Computers",
             "Cooking",
         })
-        .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
         .execute();
 }
 
 TEST_F(QueryTest, MatchWildcard) {
     QueryTester tester {_mem, *_interp};
     tester.query("MATCH n RETURN *")
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
         .execute();
 
     tester.query("MATCH n--m RETURN *")
-        .expectVector<EntityID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
-        .expectVector<EntityID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 10, 2, 5})
         .execute();
 
     tester.query("MATCH n:Person--m:Person RETURN n.name, *")
         .expectOptVector<types::String::Primitive>({"Remy", "Adam"})
-        .expectVector<EntityID>({0, 1})
-        .expectVector<EntityID>({0, 4})
-        .expectVector<EntityID>({1, 0})
+        .expectVector<NodeID>({0, 1})
+        .expectVector<EdgeID>({0, 4})
+        .expectVector<NodeID>({1, 0})
         .execute();
 }
 
@@ -151,24 +151,24 @@ TEST_F(QueryTest, MatchNodeLabel) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("MATCH n:Person RETURN n")
-        .expectVector<EntityID>({0, 1, 8, 9, 11, 12})
+        .expectVector<NodeID>({0, 1, 8, 9, 11, 12})
         .execute();
 
     tester.query("MATCH n:Interest RETURN n")
-        .expectVector<EntityID>({2, 3, 4, 5, 6, 7, 10})
+        .expectVector<NodeID>({2, 3, 4, 5, 6, 7, 10})
         .execute();
 
     tester.query("MATCH n:Founder RETURN n, n.name")
-        .expectVector<EntityID>({0, 1})
+        .expectVector<NodeID>({0, 1})
         .expectOptVector<types::String::Primitive>({"Remy", "Adam"})
         .execute();
 
     tester.query("MATCH n:Founder,SoftwareEngineering RETURN n")
-        .expectVector<EntityID>({0})
+        .expectVector<NodeID>({0})
         .execute();
 
     tester.query("MATCH n:SoftwareEngineering RETURN n")
-        .expectVector<EntityID>({0, 2, 9, 12})
+        .expectVector<NodeID>({0, 2, 9, 12})
         .execute();
 }
 
@@ -176,25 +176,25 @@ TEST_F(QueryTest, MatchEdgeType) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("MATCH n-[e:INTERESTED_IN]-m RETURN n, e, m")
-        .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
-        .expectVector<EntityID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
-        .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+        .expectVector<EdgeID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
         .execute();
 
     tester.query("MATCH n-[e:KNOWS_WELL]-m RETURN n, n.name, e, e.name, m, m.name")
-        .expectVector<EntityID>({0, 1, 6})
+        .expectVector<NodeID>({0, 1, 6})
         .expectOptVector<types::String::Primitive>({
             "Remy",
             "Adam",
             "Ghosts",
         })
-        .expectVector<EntityID>({0, 4, 7})
+        .expectVector<EdgeID>({0, 4, 7})
         .expectOptVector<types::String::Primitive>({
             "Remy -> Adam",
             "Adam -> Remy",
             "Ghosts -> Remy",
         })
-        .expectVector<EntityID>({1, 0, 0})
+        .expectVector<NodeID>({1, 0, 0})
         .expectOptVector<types::String::Primitive>({
             "Adam",
             "Remy",
@@ -203,9 +203,9 @@ TEST_F(QueryTest, MatchEdgeType) {
         .execute();
 
     tester.query("MATCH n-[e:DOES_NOT_EXIST]-m RETURN n, e, m")
-        .expectVector<EntityID>({})
-        .expectVector<EntityID>({})
-        .expectVector<EntityID>({})
+        .expectVector<NodeID>({})
+        .expectVector<EdgeID>({})
+        .expectVector<NodeID>({})
         .execute();
 }
 
@@ -213,7 +213,7 @@ TEST_F(QueryTest, NodePropertyProjection) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("MATCH n RETURN n, n.name")
-        .expectVector<EntityID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
         .expectOptVector<types::String::Primitive>({
             "Remy",
             "Adam",
@@ -232,27 +232,27 @@ TEST_F(QueryTest, NodePropertyProjection) {
         .execute();
 
     tester.query("MATCH n:Person RETURN n, n.name")
-        .expectVector<EntityID>({0, 1, 8, 9, 11, 12})
+        .expectVector<NodeID>({0, 1, 8, 9, 11, 12})
         .expectOptVector<types::String::Primitive>({"Remy", "Adam", "Maxime", "Luc", "Martina", "Suhas"})
         .execute();
 
     tester.query("MATCH n:Interest RETURN n, n.name")
-        .expectVector<EntityID>({2, 3, 4, 5, 6, 7, 10})
+        .expectVector<NodeID>({2, 3, 4, 5, 6, 7, 10})
         .expectOptVector<types::String::Primitive>({"Computers", "Eighties", "Bio", "Cooking", "Ghosts", "Paddle", "Animals"})
         .execute();
 
     tester.query("MATCH n:Founder RETURN n, n.name")
-        .expectVector<EntityID>({0, 1})
+        .expectVector<NodeID>({0, 1})
         .expectOptVector<types::String::Primitive>({"Remy", "Adam"})
         .execute();
 
     tester.query("MATCH n:Founder,SoftwareEngineering RETURN n, n.name")
-        .expectVector<EntityID>({0})
+        .expectVector<NodeID>({0})
         .expectOptVector<types::String::Primitive>({"Remy"})
         .execute();
 
     tester.query("MATCH n:SoftwareEngineering RETURN n, n.name")
-        .expectVector<EntityID>({0, 2, 9, 12})
+        .expectVector<NodeID>({0, 2, 9, 12})
         .expectOptVector<types::String::Primitive>({"Remy", "Computers", "Luc", "Suhas"})
         .execute();
 
@@ -283,7 +283,7 @@ TEST_F(QueryTest, EdgePropertyProjection) {
         .execute();
 
     tester.query("MATCH n:Person--m:Interest RETURN n, n.name, m, m.name")
-        .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+        .expectVector<NodeID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
         .expectOptVector<types::String::Primitive>({
             "Remy",
             "Remy",
@@ -296,7 +296,7 @@ TEST_F(QueryTest, EdgePropertyProjection) {
             "Luc",
             "Martina",
         })
-        .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
         .expectOptVector<types::String::Primitive>({
             "Ghosts",
             "Computers",
@@ -315,7 +315,7 @@ TEST_F(QueryTest, EdgePropertyProjection) {
         .expectError();
 
     tester.query("MATCH n-[e:INTERESTED_IN]-m RETURN n, n.name, e, e.name, m, m.name")
-        .expectVector<EntityID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
+        .expectVector<NodeID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
         .expectOptVector<types::String::Primitive>({
             "Remy",
             "Remy",
@@ -328,7 +328,7 @@ TEST_F(QueryTest, EdgePropertyProjection) {
             "Luc",
             "Martina",
         })
-        .expectVector<EntityID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
+        .expectVector<EdgeID>({1, 2, 3, 5, 6, 8, 9, 10, 11, 12})
         .expectOptVector<types::String::Primitive>({
             "Remy -> Ghosts",
             "Remy -> Computers",
@@ -341,7 +341,7 @@ TEST_F(QueryTest, EdgePropertyProjection) {
             "Luc -> Computers",
             "Martina -> Cooking",
         })
-        .expectVector<EntityID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
+        .expectVector<NodeID>({6, 2, 3, 4, 5, 4, 7, 10, 2, 5})
         .expectOptVector<types::String::Primitive>({
             "Ghosts",
             "Computers",
@@ -608,7 +608,7 @@ TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
     tester.setChangeID(ChangeID::head());
 
     tester.query("MATCH (n:Person) RETURN n, n.name")
-        .expectVector<EntityID>({0, 1})
+        .expectVector<NodeID>({0, 1})
         .expectOptVector<types::String::Primitive>({"Luc", "Remy"})
         .execute();
 }

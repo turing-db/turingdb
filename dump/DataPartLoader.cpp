@@ -82,7 +82,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         part->_edges = std::move(res.value());
         part->_firstEdgeID = part->_edges->getFirstEdgeID();
     } else {
-        auto* ptr = new EdgeContainer(part->_firstEdgeID, part->_firstEdgeID, {}, {});
+        auto* ptr = new EdgeContainer(part->_firstNodeID, part->_firstEdgeID, {}, {});
         part->_edges = std::unique_ptr<EdgeContainer> {ptr};
     }
 

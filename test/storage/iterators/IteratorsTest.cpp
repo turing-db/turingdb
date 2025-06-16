@@ -17,9 +17,9 @@ using namespace db;
 using namespace turing::test;
 
 struct TestEdgeRecord {
-    EntityID _edgeID;
-    EntityID _nodeID;
-    EntityID _otherID;
+    EdgeID _edgeID;
+    NodeID _nodeID;
+    NodeID _otherID;
 };
 
 struct GraphUpdate {
@@ -71,7 +71,7 @@ protected:
 
         {
             // Node 0
-            const EntityID tmpID = builder1.addNode(LabelSet::fromList({0}));
+            const NodeID tmpID = builder1.addNode(LabelSet::fromList({0}));
             builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder1.addNodeProperty<types::String>(
@@ -80,7 +80,7 @@ protected:
 
         {
             // Node 1
-            const EntityID tmpID = builder1.addNode(LabelSet::fromList({0}));
+            const NodeID tmpID = builder1.addNode(LabelSet::fromList({0}));
             builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder1.addNodeProperty<types::String>(
@@ -89,7 +89,7 @@ protected:
 
         {
             // Node 2
-            const EntityID tmpID = builder1.addNode(LabelSet::fromList({1}));
+            const NodeID tmpID = builder1.addNode(LabelSet::fromList({1}));
             builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
@@ -131,7 +131,7 @@ protected:
 
         {
             // Node 4
-            const EntityID tmpID = builder2.addNode(LabelSet::fromList({0, 1}));
+            const NodeID tmpID = builder2.addNode(LabelSet::fromList({0, 1}));
             builder2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder2.addNodeProperty<types::String>(
@@ -140,7 +140,7 @@ protected:
 
         {
             // Node 3
-            const EntityID tmpID = builder2.addNode(LabelSet::fromList({1}));
+            const NodeID tmpID = builder2.addNode(LabelSet::fromList({1}));
             builder2.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
         }
@@ -184,7 +184,7 @@ protected:
 
         {
             // Node 8
-            const EntityID tmpID = builder4.addNode(LabelSet::fromList({0, 1}));
+            const NodeID tmpID = builder4.addNode(LabelSet::fromList({0, 1}));
             builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder4.addNodeProperty<types::String>(
@@ -193,7 +193,7 @@ protected:
 
         {
             // Node 5
-            const EntityID tmpID = builder4.addNode(LabelSet::fromList({0}));
+            const NodeID tmpID = builder4.addNode(LabelSet::fromList({0}));
             builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder4.addNodeProperty<types::String>(
@@ -202,7 +202,7 @@ protected:
 
         {
             // Node 6
-            const EntityID tmpID = builder4.addNode(LabelSet::fromList({1}));
+            const NodeID tmpID = builder4.addNode(LabelSet::fromList({1}));
             builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder4.addNodeProperty<types::String>(
@@ -211,7 +211,7 @@ protected:
 
         {
             // Node 7
-            const EntityID tmpID = builder4.addNode(LabelSet::fromList({1}));
+            const NodeID tmpID = builder4.addNode(LabelSet::fromList({1}));
             builder4.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
             builder4.addNodeProperty<types::String>(
@@ -309,11 +309,11 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
 TEST_F(IteratorsTest, ScanNodesIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::vector<EntityID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    std::vector<NodeID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     auto it = compareSet.begin();
     size_t count = 0;
-    for (const EntityID id : reader.scanNodes()) {
+    for (const NodeID id : reader.scanNodes()) {
         fmt::print("node: {}\n", id.getValue());
         ASSERT_EQ(it->getValue(), id.getValue());
         ASSERT_EQ(it->getValue(), id.getValue());
@@ -326,13 +326,13 @@ TEST_F(IteratorsTest, ScanNodesIteratorTest) {
 TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::vector<EntityID> compareSet {2, 3, 4, 6, 7, 8};
+    std::vector<NodeID> compareSet {2, 3, 4, 6, 7, 8};
 
     auto it = compareSet.begin();
     size_t count = 0;
     const auto labelset = LabelSet::fromList({1});
 
-    for (const EntityID id : reader.scanNodesByLabel(labelset.handle())) {
+    for (const NodeID id : reader.scanNodesByLabel(labelset.handle())) {
         fmt::print("Found node id: {}\n", id.getValue());
         ASSERT_EQ(it->getValue(), id.getValue());
         count++;
@@ -344,13 +344,13 @@ TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
 TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
-    std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
+    std::map<EdgeID, const EdgeRecord*> byScanNodesRecords;
+    std::map<EdgeID, const EdgeRecord*> byScanEdgesRecords;
 
     // For each existing labelset compare scanOutEdgesByLabel to scanNodesByLabel -> getOutEdges
     for (const auto& [lsetID, labelset] : reader.getMetadata().labelsets()) {
-        ColumnIDs nodeIDs;
-        for (const EntityID nodeID : reader.scanNodesByLabel(labelset->handle())) {
+        ColumnNodeIDs nodeIDs;
+        for (const NodeID nodeID : reader.scanNodesByLabel(labelset->handle())) {
             nodeIDs = ColumnVector {nodeID};
             for (const EdgeRecord& edge : reader.getOutEdges(&nodeIDs)) {
                 byScanNodesRecords.emplace(edge._edgeID, &edge);
@@ -364,7 +364,7 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 
     ASSERT_EQ(byScanNodesRecords.size(), byScanEdgesRecords.size());
     const size_t count = byScanNodesRecords.size();
-    for (EntityID edgeID = 0; edgeID < count; ++edgeID) {
+    for (EdgeID edgeID = 0; edgeID < count; ++edgeID) {
         const auto& byScanNodes = *byScanNodesRecords.at(edgeID);
         const auto& byScanEdges = *byScanEdgesRecords.at(edgeID);
         spdlog::info("Comparing [{}:{}->{}] to [{}:{}->{}]",
@@ -378,8 +378,8 @@ TEST_F(IteratorsTest, ScanOutEdgesByLabelIteratorTest) {
 TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::map<EntityID, const EdgeRecord*> byScanNodesRecords;
-    std::map<EntityID, const EdgeRecord*> byScanEdgesRecords;
+    std::map<EdgeID, const EdgeRecord*> byScanNodesRecords;
+    std::map<EdgeID, const EdgeRecord*> byScanEdgesRecords;
 
     const auto& labelsets = reader.getMetadata().labelsets();
     const size_t labelsetCount = labelsets.getCount();
@@ -389,11 +389,11 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
         const auto labelset = labelsets.getValue(lid);
         ASSERT_TRUE(labelset);
 
-        ColumnIDs nodeIDs;
+        ColumnNodeIDs nodeIDs;
         std::vector<LabelID> labelIDs;
         labelset.value().decompose(labelIDs);
         fmt::print("Scanning nodes from labelset {}: [{}]\n", lid, fmt::join(labelIDs, ", "));
-        for (const EntityID nodeID : reader.scanNodesByLabel(labelset.value())) {
+        for (const NodeID nodeID : reader.scanNodesByLabel(labelset.value())) {
             nodeIDs = ColumnVector {nodeID};
             fmt::print("- Expanding in edges from node {}\n", nodeID.getValue());
             for (const EdgeRecord& edge : reader.getInEdges(&nodeIDs)) {
@@ -411,7 +411,7 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 
     ASSERT_EQ(byScanNodesRecords.size(), byScanEdgesRecords.size());
     const size_t count = byScanNodesRecords.size();
-    for (EntityID edgeID = 0; edgeID < count; ++edgeID) {
+    for (EdgeID edgeID = 0; edgeID < count; ++edgeID) {
         fmt::print("- Checking edge {}\n", edgeID);
         const auto& byScanNodes = *byScanNodesRecords.at(edgeID);
         const auto& byScanEdges = *byScanEdgesRecords.at(edgeID);
@@ -426,7 +426,7 @@ TEST_F(IteratorsTest, ScanInEdgesByLabelIteratorTest) {
 TEST_F(IteratorsTest, GetEdgesIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    ColumnIDs inputNodeIDs = {1, 2, 3, 8};
+    ColumnNodeIDs inputNodeIDs = {1, 2, 3, 8};
     std::vector<TestEdgeRecord> compareSet {
         {2, 3, 4},
         {5, 2, 8},
@@ -588,11 +588,11 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
 TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    ColumnIDs inputNodeIDs = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    ColumnNodeIDs inputNodeIDs = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     {
         struct NodeInfo {
-            EntityID _tmpID;
+            NodeID _tmpID;
             size_t _props = 0;
             size_t _outs = 0;
             size_t _ins = 0;
@@ -639,7 +639,7 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
 TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    ColumnIDs inputNodeIDs = {1, 3, 8};
+    ColumnNodeIDs inputNodeIDs = {1, 3, 8};
 
     {
         std::vector<uint64_t> compareSet {1, 4, 5};

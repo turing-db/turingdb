@@ -63,7 +63,7 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
     }
 
     auto nodeID = builder->addNode(labelSet);
-    static_cast<ColumnID*>(col)->set(nodeID);
+    static_cast<ColumnNodeID*>(col)->set(nodeID);
 
     if (!expr) {
         return;

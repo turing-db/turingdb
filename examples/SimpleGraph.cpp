@@ -2,7 +2,7 @@
 
 #include "SystemManager.h"
 #include "Graph.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "reader/GraphReader.h"
 #include "metadata/PropertyType.h"
 #include "writers/GraphWriter.h"

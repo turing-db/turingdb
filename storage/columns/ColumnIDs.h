@@ -2,11 +2,13 @@
 
 #include "ColumnVector.h"
 #include "ColumnConst.h"
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 
-using ColumnIDs = ColumnVector<EntityID>;
-using ColumnID = ColumnConst<EntityID>;
+using ColumnNodeIDs = ColumnVector<NodeID>;
+using ColumnNodeID = ColumnConst<NodeID>;
+using ColumnEdgeIDs = ColumnVector<EdgeID>;
+using ColumnEdgeID = ColumnConst<EdgeID>;
 
 }

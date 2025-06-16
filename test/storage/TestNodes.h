@@ -1,7 +1,7 @@
 #pragma once
 #include "PropertyType.h"
 #include "LabelSet.h"
-#include "EntityID.h"
+#include "ID.h"
 
 #include <variant>
 #include <memory>

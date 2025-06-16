@@ -3,23 +3,22 @@
 #include "Iterator.h"
 
 #include "PartIterator.h"
-#include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/SupportedType.h"
 
 namespace db {
 
-enum class PropertyIteratorClass {
-    NODE,
-    EDGE
-};
+template <typename T>
+concept IteratedID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
 
-template <PropertyIteratorClass IteratorClass, SupportedType T>
+template <IteratedID ID, SupportedType T>
 class GetPropertiesIterator : public Iterator {
 public:
+    using ColumnIDs = ColumnVector<ID>;
+
     GetPropertiesIterator(const GraphView& view,
                           PropertyTypeID propTypeID,
-                          const ColumnIDs* inputEntityIDs);
+                          const ColumnIDs* inputIDs);
 
     void init();
     void reset();
@@ -30,11 +29,11 @@ public:
         return *_prop;
     }
 
-    EntityID getCurrentEntityID() const {
+    ID getCurrentEntityID() const {
         return *_entityIt;
     }
 
-    GetPropertiesIterator<IteratorClass, T>& operator++() {
+    GetPropertiesIterator& operator++() {
         next();
         return *this;
     }
@@ -49,28 +48,32 @@ private:
 
 protected:
     ColumnIDs::ConstIterator _entityIt;
-    const ColumnIDs* _inputEntityIDs {nullptr};
+    const ColumnIDs* _inputIDs {nullptr};
 };
 
-template <PropertyIteratorClass IteratorClass, SupportedType T>
+template <IteratedID ID, SupportedType T>
 struct GetPropertiesRange {
+    using ColumnIDs = ColumnVector<ID>;
+
     GraphView _view;
     PropertyTypeID _propTypeID {0};
-    const ColumnIDs* _inputEntityIDs {nullptr};
+    const ColumnIDs* _inputIDs {nullptr};
 
-    GetPropertiesIterator<IteratorClass, T> begin() const { return {_view, _propTypeID, _inputEntityIDs}; }
+    GetPropertiesIterator<ID, T> begin() const { return {_view, _propTypeID, _inputIDs}; }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }
 };
 
-template <PropertyIteratorClass IteratorClass, SupportedType T>
+template <IteratedID ID, SupportedType T>
 class GetPropertiesIteratorWithNull : public Iterator {
 public:
+    using ColumnIDs = ColumnVector<ID>;
+
     GetPropertiesIteratorWithNull(const GraphView& view,
                                   PropertyTypeID propTypeID,
-                                  const ColumnIDs* inputEntityIDs);
+                                  const ColumnIDs* inputIDs);
 
     bool isValid() const override {
-        return _entityIt != _inputEntityIDs->end();
+        return _entityIt != _inputIDs->end();
     }
 
     void reset();
@@ -81,11 +84,11 @@ public:
         return _prop;
     }
 
-    EntityID getCurrentEntityID() const {
+    ID getCurrentID() const {
         return *_entityIt;
     }
 
-    GetPropertiesIteratorWithNull<IteratorClass, T>& operator++() {
+    GetPropertiesIteratorWithNull& operator++() {
         next();
         return *this;
     }
@@ -97,18 +100,20 @@ public:
 protected:
     PropertyTypeID _propTypeID;
     const T::Primitive* _prop {nullptr};
-    const ColumnIDs* _inputEntityIDs {nullptr};
+    const ColumnIDs* _inputIDs {nullptr};
     ColumnIDs::ConstIterator _entityIt;
 
     void init();
 };
 
-template <PropertyIteratorClass IteratorClass, SupportedType T>
-class GetPropertiesChunkWriter : public GetPropertiesIterator<IteratorClass, T> {
+template <IteratedID ID, SupportedType T>
+class GetPropertiesChunkWriter : public GetPropertiesIterator<ID, T> {
 public:
+    using ColumnIDs = ColumnVector<ID>;
+
     GetPropertiesChunkWriter(const GraphView& view,
                              PropertyTypeID propTypeID,
-                             const ColumnIDs* inputEntityIDs);
+                             const ColumnIDs* inputIDs);
 
     void fill(size_t maxCount);
 
@@ -121,12 +126,14 @@ private:
     ColumnVector<typename T::Primitive>* _output {nullptr};
 };
 
-template <PropertyIteratorClass IteratorClass, SupportedType T>
-class GetPropertiesWithNullChunkWriter : public GetPropertiesIteratorWithNull<IteratorClass, T> {
+template <IteratedID ID, SupportedType T>
+class GetPropertiesWithNullChunkWriter : public GetPropertiesIteratorWithNull<ID, T> {
 public:
+    using ColumnIDs = ColumnVector<ID>;
+
     GetPropertiesWithNullChunkWriter(const GraphView& view,
                                      PropertyTypeID propTypeID,
-                                     const ColumnIDs* inputEntityIDs);
+                                     const ColumnIDs* inputIDs);
 
     void fill(size_t maxCount);
 
@@ -137,25 +144,25 @@ private:
 };
 
 template <SupportedType T>
-using GetNodePropertiesIterator = GetPropertiesIterator<PropertyIteratorClass::NODE, T>;
+using GetNodePropertiesIterator = GetPropertiesIterator<NodeID, T>;
 template <SupportedType T>
-using GetNodePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<PropertyIteratorClass::NODE, T>;
+using GetNodePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<NodeID, T>;
 template <SupportedType T>
-using GetNodePropertiesRange = GetPropertiesRange<PropertyIteratorClass::NODE, T>;
+using GetNodePropertiesRange = GetPropertiesRange<NodeID, T>;
 template <SupportedType T>
-using GetNodePropertiesChunkWriter = GetPropertiesChunkWriter<PropertyIteratorClass::NODE, T>;
+using GetNodePropertiesChunkWriter = GetPropertiesChunkWriter<NodeID, T>;
 template <SupportedType T>
-using GetNodePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<PropertyIteratorClass::NODE, T>;
+using GetNodePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<NodeID, T>;
 
 template <SupportedType T>
-using GetEdgePropertiesIterator = GetPropertiesIterator<PropertyIteratorClass::EDGE, T>;
+using GetEdgePropertiesIterator = GetPropertiesIterator<EdgeID, T>;
 template <SupportedType T>
-using GetEdgePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<PropertyIteratorClass::EDGE, T>;
+using GetEdgePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<EdgeID, T>;
 template <SupportedType T>
-using GetEdgePropertiesRange = GetPropertiesRange<PropertyIteratorClass::EDGE, T>;
+using GetEdgePropertiesRange = GetPropertiesRange<EdgeID, T>;
 template <SupportedType T>
-using GetEdgePropertiesChunkWriter = GetPropertiesChunkWriter<PropertyIteratorClass::EDGE, T>;
+using GetEdgePropertiesChunkWriter = GetPropertiesChunkWriter<EdgeID, T>;
 template <SupportedType T>
-using GetEdgePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<PropertyIteratorClass::EDGE, T>;
+using GetEdgePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<EdgeID, T>;
 
 }

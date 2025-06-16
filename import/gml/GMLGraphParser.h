@@ -13,8 +13,7 @@ namespace db {
 class GMLGraphSax {
 public:
     explicit GMLGraphSax(Graph* graph)
-        : _graph(graph)
-    {
+        : _graph(graph) {
     }
 
     bool prepare() {
@@ -166,8 +165,8 @@ public:
 
     bool onEdgeBegin() {
         _currentEdge = nullptr;
-        _edgeSourceID = EntityID();
-        _edgeTargetID = EntityID();
+        _edgeSourceID = NodeID {};
+        _edgeTargetID = NodeID {};
         return true;
     }
 
@@ -180,13 +179,13 @@ private:
     MetadataBuilder* _metadata {nullptr};
     DataPartBuilder* _builder {nullptr};
     LabelSetHandle _labelset;
-    EntityID _currentNodeID;
-    EntityID _edgeSourceID;
-    EntityID _edgeTargetID;
+    NodeID _currentNodeID;
+    NodeID _edgeSourceID;
+    NodeID _edgeTargetID;
     EdgeTypeID _edgeTypeID;
     const EdgeRecord* _currentEdge {nullptr};
     std::string _currentPropName;
-    std::unordered_map<uint64_t, EntityID> _nodeIDMapper;
+    std::unordered_map<uint64_t, NodeID> _nodeIDMapper;
 };
 
 using GMLGraphParser = GMLParser<GMLGraphSax>;

@@ -52,7 +52,7 @@ private:
 
     // Code generation utilities
     std::unique_ptr<Block> _output;
-    ColumnIDs* _result {nullptr};
+    ColumnNodeIDs* _result {nullptr};
     std::unique_ptr<TransformData> _transformData;
 
     // Temporary containers
@@ -75,10 +75,10 @@ private:
     // Property Functions
     void generateNodePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
                                          std::span<const BinExpr* const> expressions,
-                                         const ColumnIDs* entities);
+                                         const ColumnNodeIDs* entities);
     void generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
                                          std::span<const BinExpr* const> expressions,
-                                         const ColumnIDs* entities);
+                                         const ColumnEdgeIDs* entities);
 
     // Planning functions
     bool planMatch(const MatchCommand* matchCmd);
@@ -86,9 +86,9 @@ private:
     void planPath(const std::vector<EntityPattern*>& path);
 
     void planScanNodes(const EntityPattern* entity);
-    void planScanNodesWithPropertyConstraints(ColumnIDs* const& outputNodes,
+    void planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& outputNodes,
                                               const ExprConstraint* exprConstraint);
-    void planScanNodesWithPropertyAndLabelConstraints(ColumnIDs* const& outputNodes,
+    void planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* const& outputNodes,
                                                       const LabelSet* labelSet,
                                                       const ExprConstraint* exprConstraint);
 
@@ -104,8 +104,8 @@ private:
 
     void planExpressionConstraintFilters(const ExprConstraint* edgeExprConstr,
                                          const ExprConstraint* targetExprConstr,
-                                         const ColumnIDs* edges,
-                                         const ColumnIDs* targetNodes,
+                                         const ColumnEdgeIDs* edges,
+                                         const ColumnNodeIDs* targetNodes,
                                          VarDecl* edgeDecl,
                                          VarDecl* targetDecl,
                                          bool mustWriteEdges,
@@ -121,7 +121,10 @@ private:
     bool planListGraph(const ListGraphCommand* listCmd);
     bool planLoadGraph(const LoadGraphCommand* loadCmd);
     void planProjection(const MatchCommand* matchCmd);
-    void planPropertyProjection(ColumnIDs* columnIDs,
+    void planPropertyProjection(ColumnNodeIDs* columnIDs,
+                                const VarDecl* parentDecl,
+                                const ReturnField* field);
+    void planPropertyProjection(ColumnEdgeIDs* columnIDs,
                                 const VarDecl* parentDecl,
                                 const ReturnField* field);
     void planOutputLambda();

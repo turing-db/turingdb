@@ -15,9 +15,9 @@ public:
     ~EdgeView() = default;
 
     const EntityPropertyView& properties() const { return _props; }
-    EntityID id() const { return _edgeID; }
-    EntityID sourceID() const { return _srcID; }
-    EntityID targetID() const { return _tgtID; }
+    EdgeID id() const { return _edgeID; }
+    NodeID sourceID() const { return _srcID; }
+    NodeID targetID() const { return _tgtID; }
     EdgeTypeID edgeTypeID() const { return _typeID; }
 
     bool isValid() const { return _edgeID.isValid(); }
@@ -25,9 +25,9 @@ public:
 private:
     friend GraphReader;
 
-    EntityID _edgeID;
-    EntityID _srcID;
-    EntityID _tgtID;
+    EdgeID _edgeID;
+    NodeID _srcID;
+    NodeID _tgtID;
     EntityPropertyView _props;
     EdgeTypeID _typeID;
     EdgeView() = default;

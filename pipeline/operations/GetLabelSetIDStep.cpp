@@ -8,7 +8,7 @@
 
 using namespace db;
 
-GetLabelSetIDStep::GetLabelSetIDStep(const ColumnIDs* nodeIDs,
+GetLabelSetIDStep::GetLabelSetIDStep(const ColumnNodeIDs* nodeIDs,
                                      ColumnVector<LabelSetID>* labelsetIDs)
     : _nodeIDs(nodeIDs),
     _labelsetIDs(labelsetIDs)
@@ -27,7 +27,7 @@ void GetLabelSetIDStep::execute() {
 
     labelsetIDs.clear();
     labelsetIDs.reserve(nodeIDs.size());
-    for (EntityID nodeID : nodeIDs) {
+    for (NodeID nodeID : nodeIDs) {
         labelsetIDs.emplace_back(reader.getNodeLabelSet(nodeID).getID());
     }
 }

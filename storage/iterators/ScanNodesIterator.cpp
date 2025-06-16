@@ -34,7 +34,7 @@ void ScanNodesIterator::reset() {
     init();
 }
 
-void ScanNodesIterator::fill(ColumnIDs* column, size_t maxNodes) {
+void ScanNodesIterator::fill(ColumnNodeIDs* column, size_t maxNodes) {
     size_t remainingToMax = maxNodes;
 
     while (isValid() && remainingToMax > 0) {
@@ -89,7 +89,7 @@ void ScanNodesChunkWriter::fill(size_t maxCount) {
         const auto* part = _partIt.get();
         const auto partLastNode = part->getFirstNodeID() + part->getNodeCount();
         const size_t availInPart = partLastNode.getValue() - _currentNodeID.getValue();
-        const size_t rangeSize = std::min(maxCount, availInPart);
+        const size_t rangeSize = std::min(remainingToMax, availInPart);
         const size_t prevSize = _nodeIDs->size();
         const size_t newSize = prevSize + rangeSize;
 
@@ -100,3 +100,4 @@ void ScanNodesChunkWriter::fill(size_t maxCount) {
         nextValid();
     }
 }
+

@@ -5,7 +5,7 @@
 using namespace db;
 
 template <SupportedType T>
-ScanNodesByPropertyStep<T>::ScanNodesByPropertyStep(ColumnIDs* nodes,
+ScanNodesByPropertyStep<T>::ScanNodesByPropertyStep(ColumnNodeIDs* nodes,
                                                     PropertyType propType,
                                                     ColumnVector<typename T::Primitive>* propValues)
     : _nodes(nodes),

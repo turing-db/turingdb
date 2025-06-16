@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <optional>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -51,6 +51,10 @@ public:
         if constexpr (std::is_same_v<T, size_t>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, EntityID>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, NodeID>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, EdgeID>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, LabelSetID>) {
             return __COUNTER__ - minKind;

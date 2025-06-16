@@ -7,7 +7,7 @@
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 #include "views/NodeView.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "PayloadWriter.h"
 
 namespace {
@@ -119,11 +119,11 @@ public:
     }
 
     template <ExecType execType>
-    void getFilteredIDs(ColumnVector<EntityID>& finalIDs) {
+    void getFilteredIDs(ColumnVector<NodeID>& finalIDs) {
         const auto* firstProp = &_properties.front();
         const size_t needed = _limit + _skip;
-        ColumnVector<EntityID> currentChunk; // Used to to filter and generate nextChunk
-        ColumnVector<EntityID> nextChunk;    // Used to serve as input for next step
+        ColumnVector<NodeID> currentChunk; // Used to to filter and generate nextChunk
+        ColumnVector<NodeID> nextChunk;    // Used to serve as input for next step
         // TODO: _reachedEnd should be true if we reached the end of the iteration (no more entries if page increased)
 
         // scanNodeProperties or scanNodePropertiesByLabel
@@ -171,7 +171,7 @@ public:
                     auto strIt = std::search(lower.begin(), lower.end(), query);
 
                     if (strIt != lower.end()) {
-                        nextChunk.push_back(propIt.getCurrentEntityID());
+                        nextChunk.push_back(propIt.getCurrentEntityID().getValue());
                     }
                 }
                 std::swap(currentChunk, nextChunk);
@@ -184,7 +184,7 @@ public:
         }
     };
 
-    void processNode(EntityID nodeID) {
+    void processNode(NodeID nodeID) {
         _encounteredNodeCount++;
 
         if (_encounteredNodeCount <= _skip) {
@@ -253,7 +253,7 @@ private:
     }
 
     void processPropertyFiltered() {
-        ColumnVector<EntityID> nodeIDs;
+        ColumnVector<NodeID> nodeIDs;
 
         getFilteredIDs<ExecType::PropertyFiltered>(nodeIDs);
 
@@ -275,7 +275,7 @@ private:
     }
 
     void processPropertyAndLabelFiltered() {
-        ColumnVector<EntityID> nodeIDs;
+        ColumnVector<NodeID> nodeIDs;
 
         getFilteredIDs<ExecType::PropertyAndLabelFiltered>(nodeIDs);
 

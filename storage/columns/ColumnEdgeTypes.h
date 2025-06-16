@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ColumnVector.h"
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 

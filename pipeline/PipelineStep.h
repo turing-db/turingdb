@@ -35,30 +35,30 @@
 
 #define PROPERTY_STEPS(TYPE)                                           \
     PipelineStep(GetNodeProperty##TYPE##Step::Tag,                     \
-                 const ColumnIDs* entityIDs,                           \
+                 const ColumnNodeIDs* entityIDs,                       \
                  PropertyType propertyType,                            \
                  ColumnOptVector<types::TYPE::Primitive>* propValues); \
     PipelineStep(GetEdgeProperty##TYPE##Step::Tag,                     \
-                 const ColumnIDs* entityIDs,                           \
+                 const ColumnEdgeIDs* entityIDs,                       \
                  PropertyType propertyType,                            \
                  ColumnOptVector<types::TYPE::Primitive>* propValues); \
     PipelineStep(ScanNodesByProperty##TYPE##Step::Tag,                 \
-                 ColumnIDs* nodeIDs,                                   \
+                 ColumnNodeIDs* nodeIDs,                               \
                  PropertyType propertyType,                            \
                  ColumnVector<types::TYPE::Primitive>* propValues);    \
     PipelineStep(ScanNodesByPropertyAndLabel##TYPE##Step::Tag,         \
-                 ColumnIDs* nodeIDs,                                   \
+                 ColumnNodeIDs* nodeIDs,                               \
                  PropertyType propertyType,                            \
                  const LabelSetHandle& labelSet,                       \
                  ColumnVector<types::TYPE::Primitive>* propValues);    \
     PipelineStep(GetFilteredNodeProperty##TYPE##Step::Tag,             \
-                 const ColumnIDs* entityIDs,                           \
+                 const ColumnNodeIDs* entityIDs,                       \
                  PropertyType propertyType,                            \
                  ColumnVector<types::TYPE::Primitive>* propValues,     \
                  ColumnVector<size_t>* indices,                        \
                  ColumnMask* projectedMask);                           \
     PipelineStep(GetFilteredEdgeProperty##TYPE##Step::Tag,             \
-                 const ColumnIDs* entityIDs,                           \
+                 const ColumnEdgeIDs* entityIDs,                       \
                  PropertyType propertyType,                            \
                  ColumnVector<types::TYPE::Primitive>* propValues,     \
                  ColumnVector<size_t>* indices,                        \
@@ -74,9 +74,9 @@ struct EdgeWriteInfo;
 
 class PipelineStep {
 public:
-    PipelineStep(ScanNodesStep::Tag, ColumnIDs* nodes);
+    PipelineStep(ScanNodesStep::Tag, ColumnNodeIDs* nodes);
     PipelineStep(ScanNodesByLabelStep::Tag,
-                 ColumnIDs* nodes,
+                 ColumnNodeIDs* nodes,
                  const LabelSetHandle& labelSet);
     PipelineStep(ScanEdgesStep::Tag,
                  const EdgeWriteInfo& edgeWriteInfo);
@@ -87,10 +87,10 @@ public:
                  const EdgeWriteInfo& edgeWriteInfo,
                  const LabelSetHandle& labelSet);
     PipelineStep(GetOutEdgesStep::Tag,
-                 const ColumnIDs* inputNodeIDs,
+                 const ColumnNodeIDs* inputNodeIDs,
                  const EdgeWriteInfo& edgeWriteInfo);
     PipelineStep(GetLabelSetIDStep::Tag,
-                 const ColumnIDs* nodeIDs,
+                 const ColumnNodeIDs* nodeIDs,
                  ColumnVector<LabelSetID>* labelsetIDs);
     PipelineStep(FilterStep::Tag,
                  ColumnVector<size_t>* indices);

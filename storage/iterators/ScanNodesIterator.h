@@ -4,7 +4,7 @@
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "columns/ColumnIDs.h"
 
 namespace db {
@@ -19,20 +19,20 @@ public:
 
     void next() override;
 
-    EntityID get() const { return _currentNodeID; }
+    NodeID get() const { return _currentNodeID; }
 
-    inline EntityID operator*() const { return get(); }
+    inline NodeID operator*() const { return get(); }
 
     inline ScanNodesIterator& operator++() {
         next();
         return *this;
     }
 
-    void fill(ColumnIDs* column, size_t maxNodes);
+    void fill(ColumnNodeIDs* column, size_t maxNodes);
 
 protected:
-    EntityID _currentNodeID;
-    EntityID _partEnd;
+    NodeID _currentNodeID;
+    NodeID _partEnd;
 
     void init();
     void nextValid();
@@ -43,12 +43,12 @@ public:
     ScanNodesChunkWriter();
     explicit ScanNodesChunkWriter(const GraphView& view);
 
-    void setNodeIDs(ColumnIDs* nodeIDs) { _nodeIDs = nodeIDs; }
+    void setNodeIDs(ColumnNodeIDs* nodeIDs) { _nodeIDs = nodeIDs; }
 
     void fill(size_t maxCount);
 
 private:
-    ColumnIDs* _nodeIDs {nullptr};
+    ColumnNodeIDs* _nodeIDs {nullptr};
 };
 
 struct ScanNodesRange {
@@ -62,3 +62,4 @@ struct ScanNodesRange {
 static_assert(NodeIDsChunkWriter<ScanNodesChunkWriter>);
 
 }
+

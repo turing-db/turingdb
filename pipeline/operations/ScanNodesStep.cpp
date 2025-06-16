@@ -4,7 +4,7 @@
 
 using namespace db;
 
-ScanNodesStep::ScanNodesStep(ColumnIDs* nodes)
+ScanNodesStep::ScanNodesStep(ColumnNodeIDs* nodes)
     : _nodes(nodes)
 {
 }

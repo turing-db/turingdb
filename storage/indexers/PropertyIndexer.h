@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "LabelSetIndexer.h"
 
 namespace db {

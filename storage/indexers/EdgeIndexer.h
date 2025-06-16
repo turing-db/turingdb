@@ -4,7 +4,7 @@
 #include <memory>
 #include <span>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "LabelSetIndexer.h"
 #include "NodeEdgeData.h"
 
@@ -23,18 +23,18 @@ public:
     using EdgeSpan = std::span<const EdgeRecord>;
     using EdgeSpans = std::vector<EdgeSpan>;
 
-    EntityID getFirstNodeID() const { return _firstNodeID; }
-    EntityID getFirstEdgeID() const { return _firstEdgeID; }
+    NodeID getFirstNodeID() const { return _firstNodeID; }
+    EdgeID getFirstEdgeID() const { return _firstEdgeID; }
 
-    std::span<const EdgeRecord> getNodeOutEdges(EntityID nodeID) const;
-    std::span<const EdgeRecord> getNodeInEdges(EntityID nodeID) const;
+    std::span<const EdgeRecord> getNodeOutEdges(NodeID nodeID) const;
+    std::span<const EdgeRecord> getNodeInEdges(NodeID nodeID) const;
 
-    void fillEntityEdgeView(EntityID nodeID, NodeEdgeView& view) const;
+    void fillEntityEdgeView(NodeID nodeID, NodeEdgeView& view) const;
 
     static std::unique_ptr<EdgeIndexer> create(const EdgeContainer& edges,
                                                const NodeContainer& nodeContainer,
                                                size_t patchNodeCount,
-                                               const std::map<EntityID, LabelSetHandle>& patchNodeLabelSets,
+                                               const std::map<NodeID, LabelSetHandle>& patchNodeLabelSets,
                                                size_t patchOutEdgeCount,
                                                size_t patchInEdgeCount);
 
@@ -63,8 +63,8 @@ private:
     friend EdgeIndexerLoader;
     friend DataPartRebaser;
 
-    EntityID _firstNodeID;
-    EntityID _firstEdgeID;
+    NodeID _firstNodeID;
+    EdgeID _firstEdgeID;
     const EdgeContainer* _edges = nullptr;
 
     // Out edge ranges and in edge ranges for each node
@@ -77,7 +77,7 @@ private:
     std::span<NodeEdgeData> _patchNodes;
 
     // Map of offsets for patch nodes
-    std::unordered_map<EntityID, size_t> _patchNodeOffsets;
+    std::unordered_map<NodeID, size_t> _patchNodeOffsets;
 
     // Stores the edge spans per labelset
     // (multiple spans allowed for a given labelset due to patches)

@@ -42,9 +42,9 @@ void CreateEdgeStep::execute() {
 
     auto& metadata = _builder->getMetadata();
 
-    const auto* srcID = static_cast<ColumnID*>(_src->getVar()->getDecl()->getColumn());
-    auto* edgeID = static_cast<ColumnID*>(_edge->getVar()->getDecl()->getColumn());
-    auto* tgtID = static_cast<ColumnID*>(_tgt->getVar()->getDecl()->getColumn());
+    const auto* srcID = static_cast<ColumnNodeID*>(_src->getVar()->getDecl()->getColumn());
+    auto* edgeID = static_cast<ColumnEdgeID*>(_edge->getVar()->getDecl()->getColumn());
+    auto* tgtID = static_cast<ColumnNodeID*>(_tgt->getVar()->getDecl()->getColumn());
 
     if (!tgtID->getRaw().isValid()) {
         CreateNodeStep::createNode(_builder, _tgt);

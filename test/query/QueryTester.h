@@ -101,6 +101,8 @@ public:
 
                 switch (col->getKind()) {
                     COL_CASE(ColumnVector<EntityID>)
+                    COL_CASE(ColumnVector<NodeID>)
+                    COL_CASE(ColumnVector<EdgeID>)
                     COL_CASE(ColumnVector<types::UInt64::Primitive>)
                     COL_CASE(ColumnVector<types::Int64::Primitive>)
                     COL_CASE(ColumnVector<types::Double::Primitive>)
@@ -113,6 +115,8 @@ public:
                     COL_CASE(ColumnOptVector<types::Bool::Primitive>)
                     COL_CASE(ColumnVector<std::string>)
                     COL_CASE(ColumnConst<EntityID>)
+                    COL_CASE(ColumnConst<NodeID>)
+                    COL_CASE(ColumnConst<EdgeID>)
                     COL_CASE(ColumnConst<types::UInt64::Primitive>)
                     COL_CASE(ColumnConst<types::Int64::Primitive>)
                     COL_CASE(ColumnConst<types::Double::Primitive>)

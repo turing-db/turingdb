@@ -15,7 +15,7 @@ class ScanNodesStep {
 public:
     struct Tag {};
 
-    ScanNodesStep(ColumnIDs* nodes);
+    ScanNodesStep(ColumnNodeIDs* nodes);
     ScanNodesStep(ScanNodesStep&& other) = default;
     ~ScanNodesStep();
 
@@ -41,7 +41,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    ColumnIDs* _nodes {nullptr};
+    ColumnNodeIDs* _nodes {nullptr};
     std::unique_ptr<ScanNodesChunkWriter> _it {nullptr};
 };
 

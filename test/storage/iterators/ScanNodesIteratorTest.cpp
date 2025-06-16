@@ -41,7 +41,7 @@ TEST_F(ScanNodesIteratorTest, emptyGraph) {
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
-    ColumnIDs colNodes;
+    ColumnNodeIDs colNodes;
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(colNodes.empty());
 }
@@ -62,7 +62,7 @@ TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
-    ColumnIDs colNodes;
+    ColumnNodeIDs colNodes;
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(colNodes.empty());
 }
@@ -86,7 +86,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
     auto it = reader.scanNodes().begin();
     ASSERT_TRUE(!it.isValid());
 
-    ColumnIDs colNodes;
+    ColumnNodeIDs colNodes;
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(colNodes.empty());
 }
@@ -118,8 +118,8 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     ASSERT_TRUE(it.isValid());
 
     // Read node by node
-    std::vector<EntityID> nodes;
-    EntityID expectedID = 0;
+    std::vector<NodeID> nodes;
+    NodeID expectedID = 0;
     for (; it.isValid(); ++it) {
         ASSERT_EQ(*it, expectedID);
         expectedID++;
@@ -127,14 +127,14 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     ASSERT_TRUE(!it.isValid());
 
     // Read nodes by chunks
-    ColumnIDs colNodes;
+    ColumnNodeIDs colNodes;
     it = reader.scanNodes().begin();
     it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(!colNodes.empty());
     ASSERT_EQ(colNodes.size(), ChunkConfig::CHUNK_SIZE);
 
     expectedID = 0;
-    for (EntityID id : colNodes) {
+    for (NodeID id : colNodes) {
         ASSERT_EQ(id, expectedID);
         expectedID++;
     }
@@ -171,7 +171,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     ASSERT_TRUE(it.isValid());
 
     // Read node by node
-    EntityID expectedID = 0;
+    NodeID expectedID = 0;
     for (; it.isValid(); ++it) {
         ASSERT_EQ(*it, expectedID);
         expectedID++;
@@ -179,7 +179,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
     ASSERT_TRUE(!it.isValid());
 
     // Read nodes by chunks
-    ColumnIDs colNodes;
+    ColumnNodeIDs colNodes;
     it = reader.scanNodes().begin();
 
     expectedID = 0;
@@ -191,7 +191,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         // ASSERT_LE(colNodes.size(), ChunkConfig::CHUNK_SIZE);
     }
 
-    for (EntityID id : colNodes) {
+    for (NodeID id : colNodes) {
         ASSERT_EQ(id, expectedID);
         expectedID++;
     }
@@ -226,17 +226,17 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     const GraphReader reader = transaction.readGraph();
     auto it = reader.scanNodes().begin();
 
-    ColumnIDs colNodes;
+    ColumnNodeIDs colNodes;
     colNodes.reserve(ChunkConfig::CHUNK_SIZE);
 
     // Read nodes by chunks
     it = reader.scanNodes().begin();
-    EntityID expectedID = 0;
+    NodeID expectedID = 0;
     while (it.isValid()) {
         it.fill(&colNodes, ChunkConfig::CHUNK_SIZE);
     }
 
-    for (EntityID id : colNodes) {
+    for (NodeID id : colNodes) {
         ASSERT_EQ(id, expectedID);
         expectedID++;
     }

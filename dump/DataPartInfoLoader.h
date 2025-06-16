@@ -33,8 +33,8 @@ public:
 
         [[maybe_unused]] const uint64_t nodeCount = it.get<uint64_t>();
         [[maybe_unused]] const uint64_t edgeCount = it.get<uint64_t>();
-        const EntityID firstNodeID = it.get<uint64_t>();
-        const EntityID firstEdgeID = it.get<uint64_t>();
+        const NodeID firstNodeID = it.get<uint64_t>();
+        const EdgeID firstEdgeID = it.get<uint64_t>();
 
         part._firstNodeID = firstNodeID;
         part._firstEdgeID = firstEdgeID;

@@ -3,7 +3,7 @@
 #include <initializer_list>
 
 #include "EdgeRecord.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
 
@@ -31,19 +31,19 @@ public:
 
     PendingCommitWriteTx openWriteTransaction();
 
-    EntityID addNode(std::initializer_list<std::string_view> labels);
-    EntityID addNode(std::initializer_list<LabelID> labels);
-    EntityID addNode(const LabelSet& labelset);
-    EntityID addNode(const LabelSetHandle& labelset);
+    NodeID addNode(std::initializer_list<std::string_view> labels);
+    NodeID addNode(std::initializer_list<LabelID> labels);
+    NodeID addNode(const LabelSet& labelset);
+    NodeID addNode(const LabelSetHandle& labelset);
 
-    EdgeRecord addEdge(std::string_view edgeType, EntityID src, EntityID tgt);
-    EdgeRecord addEdge(EdgeTypeID edgeType, EntityID src, EntityID tgt);
-
-    template<SupportedType T>
-    void addNodeProperty(EntityID nodeID, std::string_view propertyTypeName, T::Primitive&& value);
+    EdgeRecord addEdge(std::string_view edgeType, NodeID src, NodeID tgt);
+    EdgeRecord addEdge(EdgeTypeID edgeType, NodeID src, NodeID tgt);
 
     template<SupportedType T>
-    void addNodeProperty(EntityID nodeID, PropertyType propertyType, T::Primitive&& value);
+    void addNodeProperty(NodeID nodeID, std::string_view propertyTypeName, T::Primitive&& value);
+
+    template<SupportedType T>
+    void addNodeProperty(NodeID nodeID, PropertyType propertyType, T::Primitive&& value);
 
     template<SupportedType T>
     void addEdgeProperty(const EdgeRecord& edge, std::string_view propertyTypeName, T::Primitive&& value);

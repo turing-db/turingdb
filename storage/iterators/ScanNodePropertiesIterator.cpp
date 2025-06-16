@@ -9,8 +9,7 @@ namespace db {
 template <SupportedType T>
 ScanNodePropertiesIterator<T>::ScanNodePropertiesIterator(const GraphView& view, PropertyTypeID propTypeID)
     : Iterator(view),
-      _propTypeID(propTypeID)
-{
+      _propTypeID(propTypeID) {
     init();
 }
 
@@ -84,8 +83,7 @@ ScanNodePropertiesChunkWriter<T>::ScanNodePropertiesChunkWriter() = default;
 
 template <SupportedType T>
 ScanNodePropertiesChunkWriter<T>::ScanNodePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID)
-    : ScanNodePropertiesIterator<T>(view, propTypeID)
-{
+    : ScanNodePropertiesIterator<T>(view, propTypeID) {
 }
 
 static constexpr size_t NColumns = 2;
@@ -103,7 +101,7 @@ void ScanNodePropertiesChunkWriter<T>::fill(size_t maxCount) {
         size_t size = 0;
         while (this->isValid() && remainingToMax > 0) {
             const size_t availInPart = std::distance(this->_propIt, this->_props.end());
-            const size_t rangeSize = std::min(maxCount, availInPart);
+            const size_t rangeSize = std::min(remainingToMax, availInPart);
             const size_t newSize = size + rangeSize;
 
             if constexpr (conditions[0]) {
@@ -130,7 +128,7 @@ void ScanNodePropertiesChunkWriter<T>::fill(size_t maxCount) {
                 auto& nodeIDs = *this->_nodeIDs;
                 auto& currentID = this->_currentID;
                 for (size_t i = size; i < newSize; i++) {
-                    nodeIDs[i] = *this->_currentID;
+                    nodeIDs[i] = NodeID {this->_currentID->getValue()};
                     ++currentID++;
                 }
             }
@@ -168,3 +166,4 @@ template class ScanNodePropertiesChunkWriter<types::String>;
 template class ScanNodePropertiesChunkWriter<types::Bool>;
 
 }
+

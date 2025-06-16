@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EntityID.h"
+#include "ID.h"
 #include "RWSpinLock.h"
 
 #include <mutex>
@@ -12,11 +12,11 @@ namespace db {
 class IDMapper {
 public:
     struct NodeIdentifier {
-        EntityID nodeID;
+        NodeID nodeID;
         size_t partIndex {};
     };
 
-    void registerID(uint64_t rawID, size_t partIndex, EntityID dbID) {
+    void registerID(uint64_t rawID, size_t partIndex, NodeID dbID) {
         std::unique_lock guard(_lock);
         _idMapper.emplace(rawID, NodeIdentifier{dbID, partIndex});
     }

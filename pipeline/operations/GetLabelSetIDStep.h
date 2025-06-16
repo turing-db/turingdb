@@ -13,7 +13,7 @@ class GetLabelSetIDStep {
 public:
     struct Tag {};
 
-    GetLabelSetIDStep(const ColumnIDs* nodeIDs, ColumnVector<LabelSetID>* labelsetIDs);
+    GetLabelSetIDStep(const ColumnNodeIDs* nodeIDs, ColumnVector<LabelSetID>* labelsetIDs);
     ~GetLabelSetIDStep();
 
     void prepare(ExecutionContext* ctxt) {
@@ -29,7 +29,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    const ColumnIDs* _nodeIDs {nullptr};
+    const ColumnNodeIDs* _nodeIDs {nullptr};
     ColumnVector<LabelSetID>* _labelsetIDs {nullptr};
     const GraphView* _view {nullptr};
 };

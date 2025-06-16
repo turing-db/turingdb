@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "GraphMetadata.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "NodeContainer.h"
 
 using namespace db;

@@ -11,7 +11,7 @@ namespace db {
 template <typename T>
 concept IntegralType = (std::is_integral_v<T>);
 
-template <IntegralType T>
+template <IntegralType T, int = 0>
 class ID {
 public:
     using Type = T;
@@ -19,12 +19,10 @@ public:
     ID() = default;
 
     ID(T id)
-        : _id(id)
-    {
+        : _id(id) {
     }
 
-    ID& operator=(T id)
-    {
+    ID& operator=(T id) {
         _id = id;
         return *this;
     }
@@ -93,34 +91,40 @@ private:
     T _id {_max};
 };
 
-using EntityID = ID<uint64_t>;
+using EntityID = ID<uint64_t, 0>;
+using NodeID = ID<uint64_t, 1>;
+using EdgeID = ID<uint64_t, 2>;
 using PropertyID = ID<uint64_t>;
 using EdgeTypeID = ID<uint64_t>;
 using PropertyTypeID = ID<uint16_t>;
 using LabelID = ID<uint64_t>;
 using LabelSetID = ID<uint32_t>;
 
+template <typename T>
+concept TypedInternalID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
+
 }
 
-template <typename T>
-struct std::hash<db::ID<T>> {
-    size_t operator()(const db::ID<T>& id) const {
+template <typename T, int I>
+struct std::hash<db::ID<T, I>> {
+    size_t operator()(const db::ID<T, I>& id) const {
         return std::hash<size_t> {}(id.getValue());
     }
 };
 
 namespace std {
 
-template <typename T>
-inline string to_string(db::ID<T> id) {
+template <typename T, int I>
+inline string to_string(db::ID<T, I> id) {
     return to_string(id.getValue());
 }
 
-template <typename T>
-ostream& operator<<(ostream& os, db::ID<T> id) {
+template <typename T, int I>
+ostream& operator<<(ostream& os, db::ID<T, I> id) {
     return os << id.getValue();
 }
 
 }
 
-template <typename T> struct fmt::formatter<db::ID<T>> : ostream_formatter {};
+template <typename T, int I>
+struct fmt::formatter<db::ID<T, I>> : ostream_formatter {};

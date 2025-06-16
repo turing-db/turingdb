@@ -162,7 +162,7 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
                     (*this->_properties)[i] = *this->_propIt;
                 }
                 if constexpr (conditions[1]) {
-                    (*this->_nodeIDs)[i] = *this->_currentIDIt;
+                    (*this->_nodeIDs)[i] = this->_currentIDIt->getValue();
                 }
                 ++this->_propIt;
                 ++this->_currentIDIt++;

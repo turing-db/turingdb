@@ -3,7 +3,7 @@
 #include "Iterator.h"
 
 #include "ChunkWriter.h"
-#include "columns/ColumnVector.h"
+#include "columns/ColumnIDs.h"
 #include "iterators/PartIterator.h"
 #include "properties/PropertyManager.h"
 #include "metadata/PropertyType.h"
@@ -33,8 +33,8 @@ public:
         return *_propIt;
     }
 
-    EntityID getCurrentNodeID() const {
-        return *_currentIDIt;
+    NodeID getCurrentNodeID() const {
+        return NodeID {_currentIDIt->getValue()};
     }
 
     ScanNodePropertiesByLabelIterator<T>& operator++() {
@@ -77,13 +77,13 @@ public:
     void setProperties(ColumnVector<Primitive>* properties) {
         _properties = properties;
     }
-    void setNodeIDs(ColumnVector<EntityID>* nodeIDs) {
+    void setNodeIDs(ColumnNodeIDs* nodeIDs) {
         _nodeIDs = nodeIDs;
     }
 
 private:
     ColumnVector<Primitive>* _properties {nullptr};
-    ColumnVector<EntityID>* _nodeIDs {nullptr};
+    ColumnNodeIDs* _nodeIDs {nullptr};
 };
 
 template <SupportedType T>
@@ -111,3 +111,4 @@ static_assert(NodeIDsChunkWriter<ScanNodePropertiesByLabelChunkWriter<types::Str
 static_assert(NodeIDsChunkWriter<ScanNodePropertiesByLabelChunkWriter<types::Bool>>);
 
 }
+

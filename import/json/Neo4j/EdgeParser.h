@@ -103,8 +103,8 @@ public:
                 _parsedTargetID = true;
                 auto tmpSrcIdentifier = _nodeIDMapper->getID(_sourceID);
                 auto tmpTgtIdentifier = _nodeIDMapper->getID(_targetID);
-                const EntityID srcID = _reader.getFinalNodeID(tmpSrcIdentifier.partIndex, tmpSrcIdentifier.nodeID);
-                const EntityID tgtID = _reader.getFinalNodeID(tmpTgtIdentifier.partIndex, tmpTgtIdentifier.nodeID);
+                const NodeID srcID = _reader.getFinalNodeID(tmpSrcIdentifier.partIndex, tmpSrcIdentifier.nodeID);
+                const NodeID tgtID = _reader.getFinalNodeID(tmpTgtIdentifier.partIndex, tmpTgtIdentifier.nodeID);
 
                 _currentEdge = &_buf->addEdge(_edgeTypeID, srcID, tgtID);
                 return true;

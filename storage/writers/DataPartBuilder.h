@@ -4,7 +4,7 @@
 #include <unordered_set>
 
 #include "EdgeRecord.h"
-#include "EntityID.h"
+#include "ID.h"
 #include "properties/PropertyManager.h"
 #include "views/GraphView.h"
 
@@ -33,11 +33,11 @@ public:
         const GraphView& view,
         size_t partIndex);
 
-    EntityID addNode(const LabelSetHandle& labelset);
-    EntityID addNode(const LabelSet& labelset);
+    NodeID addNode(const LabelSetHandle& labelset);
+    NodeID addNode(const LabelSet& labelset);
 
     template <SupportedType T>
-    void addNodeProperty(EntityID nodeID,
+    void addNodeProperty(NodeID nodeID,
                          PropertyTypeID ptID,
                          T::Primitive value);
 
@@ -46,10 +46,10 @@ public:
                          PropertyTypeID ptID,
                          T::Primitive value);
 
-    const EdgeRecord& addEdge(EdgeTypeID typeID, EntityID srcID, EntityID tgtID);
+    const EdgeRecord& addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID);
 
-    EntityID firstNodeID() const { return _firstNodeID; }
-    EntityID firstEdgeID() const { return _firstEdgeID; }
+    NodeID firstNodeID() const { return _firstNodeID; }
+    EdgeID firstEdgeID() const { return _firstEdgeID; }
     size_t nodeCount() const { return _coreNodeLabelSets.size(); }
     size_t edgeCount() const { return _edges.size(); }
     size_t getOutPatchEdgeCount() const { return _outPatchEdgeCount; };
@@ -64,10 +64,10 @@ private:
     friend DataPart;
     friend CommitBuilder;
 
-    EntityID _firstNodeID {0};
-    EntityID _firstEdgeID {0};
-    EntityID _nextNodeID {0};
-    EntityID _nextEdgeID {0};
+    NodeID _firstNodeID {0};
+    EdgeID _firstEdgeID {0};
+    NodeID _nextNodeID {0};
+    EdgeID _nextEdgeID {0};
     GraphView _view;
     MetadataBuilder* _metadata {nullptr};
     size_t _outPatchEdgeCount {0};
@@ -76,9 +76,9 @@ private:
 
     std::vector<LabelSetHandle> _coreNodeLabelSets;
     std::vector<EdgeRecord> _edges;
-    std::unordered_map<EntityID, const EdgeRecord*> _patchedEdges;
-    std::unordered_set<EntityID> _nodeHasPatchEdges;
-    std::map<EntityID, LabelSetHandle> _patchNodeLabelSets;
+    std::unordered_map<EdgeID, const EdgeRecord*> _patchedEdges;
+    std::unordered_set<NodeID> _nodeHasPatchEdges;
+    std::map<NodeID, LabelSetHandle> _patchNodeLabelSets;
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
 
@@ -86,8 +86,8 @@ private:
     std::vector<EdgeRecord>& edges() { return _edges; }
     std::unique_ptr<PropertyManager>& nodeProperties() { return _nodeProperties; }
     std::unique_ptr<PropertyManager>& edgeProperties() { return _edgeProperties; }
-    std::map<EntityID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
-    std::unordered_map<EntityID, const EdgeRecord*>& patchedEdges() { return _patchedEdges; }
+    std::map<NodeID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
+    std::unordered_map<EdgeID, const EdgeRecord*>& patchedEdges() { return _patchedEdges; }
     size_t patchNodeEdgeDataCount() const {
         return _nodeHasPatchEdges.size();
     }

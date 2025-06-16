@@ -323,6 +323,8 @@ void TuringShell::processLine(std::string& line) {
             for (const Column* col : block.columns()) {
                 switch (col->getKind()) {
                     TABULATE_COL_CASE(ColumnVector<EntityID>, i)
+                    TABULATE_COL_CASE(ColumnVector<NodeID>, i)
+                    TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
                     TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
                     TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
                     TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
@@ -337,6 +339,8 @@ void TuringShell::processLine(std::string& line) {
                     TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
                     TABULATE_COL_CASE(ColumnVector<const Change*>, i)
                     TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
                     TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
                     TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
                     TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)

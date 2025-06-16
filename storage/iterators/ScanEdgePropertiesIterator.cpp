@@ -10,8 +10,7 @@ namespace db {
 template <SupportedType T>
 ScanEdgePropertiesIterator<T>::ScanEdgePropertiesIterator(const GraphView& view, PropertyTypeID propTypeID)
     : Iterator(view),
-      _propTypeID(propTypeID)
-{
+      _propTypeID(propTypeID) {
     for (; _partIt.isValid(); _partIt.next()) {
         const PropertyManager& properties = _partIt.get()->edgeProperties();
         if (properties.hasPropertyType(_propTypeID)) {
@@ -70,14 +69,13 @@ void ScanEdgePropertiesIterator<T>::nextValid() {
 }
 
 template <SupportedType T>
-EntityID ScanEdgePropertiesIterator<T>::getCurrentEdgeID() const {
-    return *_currentID;
+EdgeID ScanEdgePropertiesIterator<T>::getCurrentEdgeID() const {
+    return _currentID->getValue();
 }
 
 template <SupportedType T>
 ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID)
-    : ScanEdgePropertiesIterator<T>(view, propTypeID)
-{
+    : ScanEdgePropertiesIterator<T>(view, propTypeID) {
 }
 
 static constexpr size_t NColumns = 2;
@@ -112,7 +110,7 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
         while (this->isValid() && remainingToMax > 0) {
             const auto partOutEnd = this->_props.end();
             const size_t availInPart = std::distance(this->_propIt, partOutEnd);
-            const size_t rangeSize = std::min(maxCount, availInPart);
+            const size_t rangeSize = std::min(remainingToMax, availInPart);
             const size_t prevSize = getPrevSize();
             const size_t newSize = prevSize + rangeSize;
 
@@ -129,7 +127,7 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
                     (*this->_properties)[i] = *this->_propIt;
                 }
                 if constexpr (conditions[1]) {
-                    (*this->_edgeIDs)[i] = *this->_currentID;
+                    (*this->_edgeIDs)[i] = this->_currentID->getValue();
                 }
                 ++this->_propIt;
                 ++this->_currentID;
@@ -160,3 +158,4 @@ template class ScanEdgePropertiesChunkWriter<types::String>;
 template class ScanEdgePropertiesChunkWriter<types::Bool>;
 
 }
+

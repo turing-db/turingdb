@@ -8,10 +8,10 @@
 
 namespace db {
 
-GetInEdgesIterator::GetInEdgesIterator(const GraphView& view, const ColumnIDs* inputNodeIDs)
+GetInEdgesIterator::GetInEdgesIterator(const GraphView& view, const ColumnNodeIDs* inputNodeIDs)
     : Iterator(view),
-      _inputNodeIDs(inputNodeIDs),
-      _nodeIt(inputNodeIDs->cend())
+    _inputNodeIDs(inputNodeIDs),
+    _nodeIt(inputNodeIDs->cend())
 {
     init();
 }
@@ -33,7 +33,7 @@ void GetInEdgesIterator::init() {
         const EdgeIndexer& indexer = part->edgeIndexer();
 
         for (; _nodeIt != _inputNodeIDs->cend(); _nodeIt++) {
-            const EntityID nodeID = *_nodeIt;
+            const NodeID nodeID = *_nodeIt;
             _edges = indexer.getNodeInEdges(nodeID);
 
             if (!_edges.empty()) {
@@ -66,7 +66,7 @@ void GetInEdgesIterator::nextValid() {
         }
 
         const DataPart* part = _partIt.get();
-        const EntityID nodeID = *_nodeIt;
+        const NodeID nodeID = *_nodeIt;
         const EdgeIndexer& indexer = part->edgeIndexer();
 
         _edges = indexer.getNodeInEdges(nodeID);
@@ -75,7 +75,7 @@ void GetInEdgesIterator::nextValid() {
 }
 
 GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
-                                               const ColumnIDs* inputNodeIDs)
+                                             const ColumnNodeIDs* inputNodeIDs)
     : GetInEdgesIterator(view, inputNodeIDs)
 {
 }
@@ -119,7 +119,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
                 std::generate((_edgeIDs)->begin() + prevSize,
                               (_edgeIDs)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_edgeID;
+                                  const EdgeID id = edgeIt->_edgeID;
                                   ++edgeIt;
                                   return id;
                               });
@@ -129,7 +129,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
                 std::generate((_tgts)->begin() + prevSize,
                               (_tgts)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_otherID;
+                                  const NodeID id = edgeIt->_otherID;
                                   ++edgeIt;
                                   return id;
                               });
@@ -139,7 +139,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
                 std::generate((_types)->begin() + prevSize,
                               (_types)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
-                                  const EntityID id = edgeIt->_edgeTypeID;
+                                  const EdgeTypeID id = edgeIt->_edgeTypeID;
                                   ++edgeIt;
                                   return id;
                               });

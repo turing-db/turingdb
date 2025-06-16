@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/PropertyType.h"
 
 #include <variant>

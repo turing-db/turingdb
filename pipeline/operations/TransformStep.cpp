@@ -29,6 +29,8 @@ inline void copyChunk(const Column* srcPtr,
                       Column* dstPtr) {
     switch (srcPtr->getKind()) {
         COPY_CHUNK_CASE(ColumnVector<EntityID>)
+        COPY_CHUNK_CASE(ColumnVector<NodeID>)
+        COPY_CHUNK_CASE(ColumnVector<EdgeID>)
         COPY_CHUNK_CASE(ColumnVector<types::UInt64::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<types::Int64::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<types::Double::Primitive>)
@@ -57,6 +59,8 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
     msgbioassert(srcPtr, "col is invalid");
     switch (srcPtr->getKind()) {
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityID>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<NodeID>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EdgeID>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::UInt64::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Int64::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Double::Primitive>)
@@ -202,6 +206,8 @@ void TransformStep::describe(std::string& descr) const {
     template void TransformData::addColumn<Type>(const Type* col, VarDecl* decl);
 
 INSTANTIATE(ColumnVector<EntityID>);
+INSTANTIATE(ColumnVector<NodeID>);
+INSTANTIATE(ColumnVector<EdgeID>);
 INSTANTIATE(ColumnVector<types::UInt64::Primitive>);
 INSTANTIATE(ColumnVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnVector<types::Double::Primitive>);

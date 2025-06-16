@@ -20,7 +20,7 @@ public:
     GetOutEdgesIterator& operator=(const GetOutEdgesIterator&) = default;
     GetOutEdgesIterator& operator=(GetOutEdgesIterator&&) noexcept = default;
 
-    GetOutEdgesIterator(const GraphView& view, const ColumnIDs* inputNodeIDs);
+    GetOutEdgesIterator(const GraphView& view, const ColumnNodeIDs* inputNodeIDs);
     ~GetOutEdgesIterator() override;
 
     void reset();
@@ -41,8 +41,8 @@ public:
     }
 
 protected:
-    const ColumnIDs* _inputNodeIDs {nullptr};
-    ColumnIDs::ConstIterator _nodeIt;
+    const ColumnNodeIDs* _inputNodeIDs {nullptr};
+    ColumnNodeIDs::ConstIterator _nodeIt;
 
     std::span<const EdgeRecord> _edges;
     std::span<const EdgeRecord>::iterator _edgeIt;
@@ -54,26 +54,26 @@ protected:
 class GetOutEdgesChunkWriter : public GetOutEdgesIterator {
 public:
     GetOutEdgesChunkWriter() = default;
-    GetOutEdgesChunkWriter(const GraphView& view, const ColumnIDs* inputNodeIDs);
+    GetOutEdgesChunkWriter(const GraphView& view, const ColumnNodeIDs* inputNodeIDs);
 
     void fill(size_t maxCount);
 
-    void setInputNodeIDs(const ColumnIDs* inputNodeIDs) { _inputNodeIDs = inputNodeIDs; }
+    void setInputNodeIDs(const ColumnNodeIDs* inputNodeIDs) { _inputNodeIDs = inputNodeIDs; }
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
-    void setEdgeIDs(ColumnIDs* edgeIDs) { _edgeIDs = edgeIDs; }
-    void setTgtIDs(ColumnIDs* tgts) { _tgts = tgts; }
+    void setEdgeIDs(ColumnEdgeIDs* edgeIDs) { _edgeIDs = edgeIDs; }
+    void setTgtIDs(ColumnNodeIDs* tgts) { _tgts = tgts; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
     ColumnVector<size_t>* _indices {nullptr};
-    ColumnIDs* _edgeIDs {nullptr};
-    ColumnIDs* _tgts {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
 };
 
 struct GetOutEdgesRange {
     GraphView _view;
-    const ColumnIDs* _inputNodeIDs {nullptr};
+    const ColumnNodeIDs* _inputNodeIDs {nullptr};
 
     GetOutEdgesIterator begin() const { return {_view, _inputNodeIDs}; }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }

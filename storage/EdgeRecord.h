@@ -1,13 +1,13 @@
 #pragma once
 
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 
 struct EdgeRecord {
-    EntityID _edgeID;
-    EntityID _nodeID;
-    EntityID _otherID;
+    EdgeID _edgeID;
+    NodeID _nodeID;
+    NodeID _otherID;
     EdgeTypeID _edgeTypeID;
 };
 

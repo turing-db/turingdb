@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "EntityID.h"
+#include "ID.h"
 
 namespace db {
 

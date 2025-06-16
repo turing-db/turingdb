@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/GraphMetadata.h"
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
@@ -30,6 +30,8 @@ concept JsonPrimitive = std::same_as<uint64_t, T>
                      || std::same_as<bool, T>
                      || std::same_as<CustomBool, T>
                      || std::same_as<EntityID, T>
+                     || std::same_as<NodeID, T>
+                     || std::same_as<EdgeID, T>
                      || std::same_as<LabelSetID, T>
                      || std::same_as<PropertyTypeID, T>
                      || std::same_as<LabelID, T>;
@@ -209,8 +211,8 @@ private:
         _writer->write(v ? "true" : "false");
     }
 
-    template <std::integral T>
-    void write(db::ID<T> id) {
+    template <std::integral T, int I>
+    void write(db::ID<T, I> id) {
         _writer->write(id.getValue());
     }
 
