@@ -94,18 +94,6 @@ find_package(Threads REQUIRED)
 # Curl
 find_package(CURL REQUIRED)
 
-# Python
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-
-# Protobuf
-set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "")
-find_package(Protobuf REQUIRED
-    PATHS "/turing/tools/lib/cmake/protobuf")
-message(STATUS "Protobuf version ${Protobuf_VERSION}")
-
-# gRPC
-find_package(gRPC REQUIRED)
-
 # Bison and Flex
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
