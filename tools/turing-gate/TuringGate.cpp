@@ -97,28 +97,33 @@ public:
                 std::cerr << "Invalid Supabase URL: must start with https://" << std::endl;
                 return false;
             }
-            
+
             // Construct the REST API endpoint
-            const std::string endpoint = path + "/rest/v1/" + config.tokenTableName + "?select=token&is_active=eq.true";
-            
-            httplib::Client client(host);
+            const std::string endpoint = path + "/rest/v1/" + config.tokenTableName + "?select=token";
+
+            httplib::SSLClient client(host);
             client.set_connection_timeout(10, 0);
             client.set_read_timeout(30, 0);
-            
+
             httplib::Headers headers = {
-                {"apikey", config.apiKey},
+                {"apikey",        config.apiKey            },
                 {"Authorization", "Bearer " + config.apiKey},
-                {"Content-Type", "application/json"}
+                {"Content-Type",  "application/json"       }
             };
-            
-            const auto res = client.Get(endpoint.c_str(), headers);
-            
+
+            const auto res = client.Get(endpoint, headers);
+
+            for (const auto& header : res->headers) {
+                std::cout << "  " << header.first << ": " << header.second << std::endl;
+            }
+            std::cout << "Debug: Response body: " << res->body << std::endl;
+
             if (!res || res->status != 200) {
-                std::cerr << "Failed to fetch tokens from Supabase. Status: " 
-                         << (res ? std::to_string(res->status) : "No response") << std::endl;
+                std::cerr << "Failed to fetch tokens from Supabase. Status: "
+                          << (res ? std::to_string(res->status) : "No response") << std::endl;
                 return false;
             }
-            
+
             // Parse JSON response manually (simple parser for array of objects)
             std::unordered_set<std::string> newTokens;
             std::string jsonStr = res->body;
@@ -184,24 +189,13 @@ public:
         if (_backends.empty()) {
             return nullptr;
         }
-        
-        const size_t startIndex = _currentIndex.load();
-        size_t attempts = 0;
-        
-        while (attempts < _backends.size()) {
-            const size_t index = (startIndex + attempts) % _backends.size();
-            
-            if (_backends[index].isHealthy) {
-                _currentIndex = (index + 1) % _backends.size();
-                return &_backends[index];
-            }
-            
-            attempts++;
-        }
-        
-        return nullptr; // No healthy backends available
+
+        const size_t index = _currentIndex.load();
+        _currentIndex = (index + 1) % _backends.size();
+
+        return &_backends[index];
     }
-    
+
     void markUnhealthy(const std::string& host, const int port) {
         const std::unique_lock<std::shared_mutex> lock(_backendMutex);
         
@@ -212,7 +206,7 @@ public:
             }
         }
     }
-    
+
     void markHealthy(const std::string& host, const int port) {
         const std::unique_lock<std::shared_mutex> lock(_backendMutex);
         
@@ -245,19 +239,19 @@ public:
     void setBackendServers(const std::vector<std::pair<std::string, int>>& backendList) {
         _loadBalancer.setBackendServers(backendList);
     }
-    
+
     void setupRoutes() {
         // POST /query route
-        _server.Post("/query", [this](const httplib::Request& req, httplib::Response& res) {
+        _server.Post(R"(/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
             _requestCount++;
-            
+
             if (!validateAuth(req, res)) {
                 return;
             }
-            
-            forwardRequest(req, res, "POST", "/query");
+
+            forwardRequest(req, res, "POST", req.target);
         });
-        
+
         // GET /status route
         _server.Get("/status", [this](const httplib::Request& req, httplib::Response& res) {
             _requestCount++;
@@ -277,25 +271,28 @@ public:
                 status << "      \"port\": " << backends[i].port << ",\n";
                 status << "      \"healthy\": " << (backends[i].isHealthy ? "true" : "false") << "\n";
                 status << "    }";
-                if (i < backends.size() - 1) status << ",";
+
+                if (i < backends.size() - 1) {
+                    status << ",";
+                }
                 status << "\n";
             }
-            
+
             status << "  ]\n";
             status << "}";
             
             res.set_content(status.str(), "application/json");
         });
-        
+
         // Default handler for unsupported routes
-        _server.set_error_handler([this](const httplib::Request& req, httplib::Response& res) {
+        _server.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
             if (res.status == 404) {
-                res.set_content("{\"error\": \"Not Found: Unsupported route\"}", 
-                              "application/json");
+                res.set_content("{\"error\": \"Not Found: Unsupported route\"}",
+                                "application/json");
             }
         });
     }
-    
+
     void start(const std::string& host, const int port, const int numThreads) {
         std::cout << "Starting HTTP Proxy Server on " << host << ":" << port << std::endl;
         std::cout << "Using " << numThreads << " worker threads" << std::endl;
@@ -384,14 +381,14 @@ private:
         
         // Forward the request based on method
         httplib::Result result;
-        
+
         if (method == "POST") {
-            result = client.Post(path.c_str(), headers, req.body, 
-                               req.get_header_value("Content-Type"));
+            result = client.Post(path, headers, req.body,
+                                 req.get_header_value("Content-Type"));
         } else if (method == "GET") {
-            result = client.Get(path.c_str(), headers);
+            result = client.Get(path, headers);
         }
-        
+
         if (!result) {
             // Mark backend as unhealthy if connection failed
             _loadBalancer.markUnhealthy(backend->host, backend->port);
@@ -402,16 +399,17 @@ private:
             _errorCount++;
             return false;
         }
-        
+
         // Copy response from backend
         res.status = result->status;
         res.body = result->body;
-        
+
         // Copy response headers
         for (const auto& header : result->headers) {
-            res.set_header(header.first.c_str(), header.second.c_str());
+            if (header.first != "Transfer-Encoding" && header.first != "Content-Length" && header.first != "Connection") {
+                res.set_header(header.first, header.second);
+            }
         }
-        
         return true;
     }
 };
