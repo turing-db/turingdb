@@ -1,5 +1,6 @@
 #include "QueryAnalyzer.h"
 
+#include <optional>
 #include <range/v3/view.hpp>
 
 #include "AnalyzeException.h"
@@ -15,6 +16,10 @@
 #include "ReturnProjection.h"
 #include "VarDecl.h"
 #include "BioAssert.h"
+
+
+#include "range/v3/utility/optional.hpp"
+#include "reader/GraphReader.h"
 
 using namespace db;
 namespace rv = ranges::views;
@@ -257,6 +262,25 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
             if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
                 return false;
             }
+            // XXX: Assumes that variable is left operand, constant is right operand
+            const VarExpr* leftOperand =
+                static_cast<VarExpr*>(binExpr->getLeftExpr());
+
+            const ExprConst* rightOperand =
+                static_cast<ExprConst*>(binExpr->getRightExpr());
+
+            const std::string& varExprName = leftOperand->getName();
+            
+            // Check variable and then constant expression are the same type
+            const GraphReader reader = _view.read();
+            const auto propTypeOpt = reader.getMetadata().propTypes().get(varExprName);
+            if (propTypeOpt == std::nullopt) {
+                throw AnalyzeException("Variable" +
+                                       varExprName +" has invalid property type");
+            }
+
+            const PropertyType propType = propTypeOpt.value();
+            
         }
     }
 
