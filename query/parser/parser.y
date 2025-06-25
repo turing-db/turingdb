@@ -118,15 +118,17 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 // Constants
 %token <std::string> STRING_CONSTANT
 %token <std::string> INT_CONSTANT
+%token <std::string> UINT_CONSTANT
 %token <std::string> DECIMAL_CONSTANT
 %token <std::string> BOOLEAN_CONSTANT
 %token <std::string> BACKTICK_STRING_CONSTANT
 
+// Constant suffixes
+%token USGN_SFX
+
 %type<db::QueryCommand*> query_unit
 %type<db::QueryCommand*> cmd
 
-%type<uint64_t> unsigned_integer
-%type<int64_t> signed_integer
 %type<db::QueryCommand*> match_cmd
 %type<db::QueryCommand*> create_cmd
 %type<db::ReturnProjection*> return_fields
@@ -339,10 +341,10 @@ entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBR
               { $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr); }
               ;
 
-known_entity_pattern: entity_var COLON unsigned_integer
-                    { $$ = EntityPattern::create(ctxt, $1, $3); }
-                    | COLON unsigned_integer
-                    { $$ = EntityPattern::create(ctxt, nullptr, $2); }
+known_entity_pattern: entity_var COLON INT_CONSTANT
+                    { $$ = EntityPattern::create(ctxt, $1, std::stoull($3)); }
+                    | COLON INT_CONSTANT
+                    { $$ = EntityPattern::create(ctxt, nullptr, std::stoull($2)); }
                     ;
 
 entity_var: ID { $$ = VarExpr::create(ctxt, $1); }
@@ -375,13 +377,11 @@ prop_equals_expr: prop_ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, 
           | prop_ID COLON prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
           ;
 
-signed_integer: MINUS INT_CONSTANT { $$ = - std::stoul($2); }
-unsigned_integer: INT_CONSTANT { $$ = std::stoull($1); }
-
 prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
                      | DECIMAL_CONSTANT { $$ =  DoubleExprConst::create(ctxt, std::stod($1));}
-                     | signed_integer     { $$ = Int64ExprConst::create(ctxt, $1); }
-                     | unsigned_integer   { $$ = UInt64ExprConst::create(ctxt, $1); }
+                     | INT_CONSTANT USGN_SFX { $$ = UInt64ExprConst::create(ctxt, std::stoull($1)); }
+                     | MINUS INT_CONSTANT { $$ = Int64ExprConst::create(ctxt, std::stoll("-"+$2)); }
+                     | INT_CONSTANT { $$ = Int64ExprConst::create(ctxt, std::stoll($1)); }
                      | BOOLEAN_CONSTANT { 
                                 if($1[0] == 't' || $1[0] == 'T'){
                                     $$ = BoolExprConst::create(ctxt, true); 
