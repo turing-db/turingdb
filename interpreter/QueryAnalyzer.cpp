@@ -5,6 +5,7 @@
 
 #include "AnalyzeException.h"
 #include "Profiler.h"
+#include "metadata/PropertyType.h"
 #include "metadata/PropertyTypeMap.h"
 #include "DeclContext.h"
 #include "Expr.h"
@@ -265,21 +266,36 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
             // XXX: Assumes that variable is left operand, constant is right operand
             const VarExpr* leftOperand =
                 static_cast<VarExpr*>(binExpr->getLeftExpr());
-
             const ExprConst* rightOperand =
                 static_cast<ExprConst*>(binExpr->getRightExpr());
 
+            // Query graph for name and type of variable
             const std::string& varExprName = leftOperand->getName();
-            
-            // Check variable and then constant expression are the same type
             const GraphReader reader = _view.read();
             const auto propTypeOpt = reader.getMetadata().propTypes().get(varExprName);
             if (propTypeOpt == std::nullopt) {
                 throw AnalyzeException("Variable" +
-                                       varExprName +" has invalid property type");
+                                       varExprName + " has invalid property type");
             }
-
             const PropertyType propType = propTypeOpt.value();
+            // NOTE: Directly accessing struct member
+            const ValueType valueType = propType._valueType; 
+
+            const ValueType exprType = rightOperand->getType();
+
+            // FIXME: Should there be non-equal types that are allowed to be compared?
+            // (e.g. int64 and uint64)
+            if (valueType != exprType) {
+                std::string varTypeName = std::string(ValueTypeName::value(valueType));
+                std::string exprTypeName = std::string(ValueTypeName::value(exprType));
+                throw AnalyzeException(
+                                       "Variable '" + varExprName +
+                                       "' of type " + varTypeName +
+                                       " cannot be compared to value of type " +
+                                       exprTypeName
+                                       
+                );
+            }
             
         }
     }
