@@ -64,7 +64,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     }
 
     // Analyze query
-    QueryAnalyzer analyzer(&astCtxt, view.metadata().propTypes());
+    QueryAnalyzer analyzer(view, &astCtxt, view.metadata().propTypes());
     try {
         if (!analyzer.analyze(cmd)) {
             return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);

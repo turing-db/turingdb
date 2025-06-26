@@ -21,6 +21,7 @@ public:
                                  TypeConstraint* typeConstr,
                                  ExprConstraint* exprConstr);
 
+    // User defined entityID for create_node_pattern
     static EntityPattern* create(ASTContext* ctxt,
                                  VarExpr* var,
                                  uint64_t entityID);

@@ -1,9 +1,11 @@
 #include "QueryAnalyzer.h"
 
+#include <optional>
 #include <range/v3/view.hpp>
 
 #include "AnalyzeException.h"
 #include "Profiler.h"
+#include "metadata/PropertyType.h"
 #include "metadata/PropertyTypeMap.h"
 #include "DeclContext.h"
 #include "Expr.h"
@@ -15,6 +17,8 @@
 #include "ReturnProjection.h"
 #include "VarDecl.h"
 #include "BioAssert.h"
+
+#include "reader/GraphReader.h"
 
 using namespace db;
 namespace rv = ranges::views;
@@ -36,14 +40,18 @@ void returnAllVariables(MatchCommand* cmd) {
 
 }
 
-QueryAnalyzer::QueryAnalyzer(ASTContext* ctxt, const PropertyTypeMap& propTypeMap)
-    : _ctxt(ctxt),
+QueryAnalyzer::QueryAnalyzer(const GraphView& view,
+                             ASTContext* ctxt,
+                             const PropertyTypeMap& propTypeMap) 
+    : _view(view),
+    _ctxt(ctxt),
     _propTypeMap(propTypeMap)
 {
 }
 
 QueryAnalyzer::~QueryAnalyzer() {
 }
+
 bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     Profile profile {"QueryAnalyzer::analyze"};
 
@@ -106,6 +114,7 @@ bool QueryAnalyzer::analyzeCreateGraph(CreateGraphCommand* cmd) {
 }
 
 bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
+    bool isCreate{false}; // Flag to distinguish create and match commands
     ReturnProjection* proj = cmd->getProjection();
     if (!proj) {
         return false;
@@ -119,24 +128,24 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
         EntityPattern* entityPattern = elements[0];
         entityPattern->setKind(DeclKind::NODE_DECL);
-        if (!analyzeEntityPattern(declContext, entityPattern)) {
+        if (!analyzeEntityPattern(declContext, entityPattern, isCreate)) {
             return false;
         }
 
         if (elements.size() >= 2) {
             bioassert(elements.size() >= 3);
-            for (auto triple : elements | rv::drop(1) | rv::chunk(2)) {
-                EntityPattern* edge = triple[0];
-                EntityPattern* target = triple[1];
+            for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
+                EntityPattern* edge = pair[0];
+                EntityPattern* target = pair[1];
 
                 edge->setKind(DeclKind::EDGE_DECL);
                 target->setKind(DeclKind::NODE_DECL);
 
-                if (!analyzeEntityPattern(declContext, edge)) {
+                if (!analyzeEntityPattern(declContext, edge, isCreate)) {
                     return false;
                 }
 
-                if (!analyzeEntityPattern(declContext, target)) {
+                if (!analyzeEntityPattern(declContext, target, isCreate)) {
                     return false;
                 }
             }
@@ -161,6 +170,8 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
             decl->setReturned(true);
             field->setDecl(decl);
             const auto& memberName = field->getMemberName();
+
+            // If returning a member, get (and check) its type
             if (!memberName.empty()) {
                 const auto propTypeRes = _propTypeMap.get(memberName);
                 if (!propTypeRes) {
@@ -185,6 +196,7 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 }
 
 bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
+    bool isCreate{true}; // Flag to distinguish create and match commands
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -197,36 +209,97 @@ bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
         }
 
         entityPattern->setKind(DeclKind::NODE_DECL);
-        if (!analyzeEntityPattern(declContext, entityPattern)) {
+        if (!analyzeEntityPattern(declContext, entityPattern, isCreate)) {
             return false;
         }
 
         if (elements.size() >= 2) {
             bioassert(elements.size() >= 3);
-            for (auto triple : elements | rv::drop(1) | rv::chunk(2)) {
-                EntityPattern* edge = triple[0];
-                EntityPattern* target = triple[1];
+            for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
+                EntityPattern* edge = pair[0];
+                EntityPattern* target = pair[1];
 
                 edge->setKind(DeclKind::EDGE_DECL);
                 target->setKind(DeclKind::NODE_DECL);
 
-                if (!analyzeEntityPattern(declContext, edge)) {
+                if (!analyzeEntityPattern(declContext, edge,isCreate)) {
                     return false;
                 }
 
-                if (!analyzeEntityPattern(declContext, target)) {
+                if (!analyzeEntityPattern(declContext, target, isCreate)) {
                     return false;
                 }
             }
         }
     }
+    return true;
+}
 
+bool QueryAnalyzer::typeCheckBinExprConstr(const ValueType lhs, const ValueType rhs) {
+    // FIXME: Should there be non-equal types that are allowed to be compared?
+    // (e.g. int64 and uint64)
+    if (lhs != rhs) {
+        return false;
+    }
+    return true;
+}
+
+bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
+                                             bool isCreate) {
+    // Currently only support equals
+    if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
+        throw AnalyzeException("Unsupported operator");
+    }
+
+    // Assumes that variable is left operand, constant is right operand
+    const VarExpr* leftOperand =
+        static_cast<VarExpr*>(binExpr->getLeftExpr());
+    const ExprConst* rightOperand =
+        static_cast<ExprConst*>(binExpr->getRightExpr());
+
+    // Query graph for name and type of variable
+    const std::string& lhsName = leftOperand->getName();
+    const GraphReader reader = _view.read();
+    const auto lhsPropTypeOpt = reader.getMetadata().propTypes().get(lhsName);
+
+    // Property type does not exist
+    if (lhsPropTypeOpt == std::nullopt) {
+        // If this is a match query: error
+        if (!isCreate) {
+            throw AnalyzeException("Variable '" +
+                                   lhsName +
+                                   "' has invalid property type");
+        }
+        else { // If a create query: no need to type check
+            return true;
+        }
+    }
+
+    // If property type exists: get types and type check
+    const PropertyType lhsPropType = lhsPropTypeOpt.value();
+    // NOTE: Directly accessing struct member
+    const ValueType lhsType = lhsPropType._valueType; 
+
+    const ValueType rhsType = rightOperand->getType();
+
+    if (!QueryAnalyzer::typeCheckBinExprConstr(lhsType, rhsType)) {
+        const std::string varTypeName = std::string(ValueTypeName::value(lhsType));
+        const std::string exprTypeName = std::string(ValueTypeName::value(rhsType));
+        const std::string verb = isCreate ? "assigned" : "compared to";
+        throw AnalyzeException("Variable '" + lhsName +
+                               "' of type " + varTypeName +
+                               " cannot be " + verb +
+                               " value of type " +
+                               exprTypeName);
+    }
     return true;
 }
 
 bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
-                                         EntityPattern* entity) {
+                                         EntityPattern* entity,
+                                         bool isCreate) {
     VarExpr* var = entity->getVar();
+    // Handle the case where the entity is unlabeled edge (--)
     if (!var) {
         var = VarExpr::create(_ctxt, createVarName());
         entity->setVar(var);
@@ -238,24 +311,31 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
             var->getName(),
             entity->getKind(),
             entity->getEntityID());
+
     if (!decl) {
         // decl already exists from prev targets
-        decl = declContext->getDecl(var->getName());
-        if (decl->getEntityID() != entity->getEntityID()) {
+        VarDecl* existingDecl = declContext->getDecl(var->getName());
+        if (existingDecl->getEntityID() != entity->getEntityID()) {
             return false;
         }
     }
 
-    if (auto* exprConstraint = entity->getExprConstraint()) {
-        for (auto* binExpr : exprConstraint->getExpressions()) {
-            if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
-                return false;
-            }
-        }
+    auto* exprConstraint = entity->getExprConstraint();
+    // If there are no constraints, no need to type check
+    if (exprConstraint == nullptr) {
+        var->setDecl(decl);
+        return true;
     }
 
+    // Otherwise, verify all constraints are valid
+    const auto binExprs = exprConstraint->getExpressions();
+    for (const BinExpr* binExpr : binExprs) {
+        if (!QueryAnalyzer::analyzeBinExprConstraint(binExpr, isCreate)) {
+          return false;
+        }
+    }
+    
     var->setDecl(decl);
-
     return true;
 }
 
