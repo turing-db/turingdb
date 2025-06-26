@@ -18,7 +18,6 @@
 #include "VarDecl.h"
 #include "BioAssert.h"
 
-
 #include "reader/GraphReader.h"
 
 using namespace db;
@@ -247,54 +246,52 @@ bool QueryAnalyzer::typeCheckBinExprConstr(const ValueType lhs, const ValueType 
 
 bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
                                              bool isCreate) {
-        // Currently only support equals
-        if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
-            throw AnalyzeException("Unsupported operator");
+    // Currently only support equals
+    if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
+        throw AnalyzeException("Unsupported operator");
+    }
+
+    // Assumes that variable is left operand, constant is right operand
+    const VarExpr* leftOperand =
+        static_cast<VarExpr*>(binExpr->getLeftExpr());
+    const ExprConst* rightOperand =
+        static_cast<ExprConst*>(binExpr->getRightExpr());
+
+    // Query graph for name and type of variable
+    const std::string& lhsName = leftOperand->getName();
+    const GraphReader reader = _view.read();
+    const auto lhsPropTypeOpt = reader.getMetadata().propTypes().get(lhsName);
+
+    // Property type does not exist
+    if (lhsPropTypeOpt == std::nullopt) {
+        // If this is a match query: error
+        if (!isCreate) {
+            throw AnalyzeException("Variable '" +
+                                   lhsName +
+                                   "' has invalid property type");
         }
-
-        // Assumes that variable is left operand, constant is right operand
-        const VarExpr* leftOperand =
-            static_cast<VarExpr*>(binExpr->getLeftExpr());
-        const ExprConst* rightOperand =
-            static_cast<ExprConst*>(binExpr->getRightExpr());
-
-        // Query graph for name and type of variable
-        const std::string& lhsName = leftOperand->getName();
-        const GraphReader reader = _view.read();
-        const auto lhsPropTypeOpt = reader.getMetadata().propTypes().get(lhsName);
-
-        // Property type does not exist
-        if (lhsPropTypeOpt == std::nullopt) {
-            // If this is a match query: error
-            if (!isCreate) {
-                throw AnalyzeException("Variable '" +
-                                       lhsName +
-                                       "' has invalid property type");
-            }
-            else { // If a create query: no need to type check
-                return true;
-            }
+        else { // If a create query: no need to type check
+            return true;
         }
+    }
 
-        // If property type exists: get types and type check
-        const PropertyType lhsPropType = lhsPropTypeOpt.value();
-        // NOTE: Directly accessing struct member
-        const ValueType lhsType = lhsPropType._valueType; 
+    // If property type exists: get types and type check
+    const PropertyType lhsPropType = lhsPropTypeOpt.value();
+    // NOTE: Directly accessing struct member
+    const ValueType lhsType = lhsPropType._valueType; 
 
-        const ValueType rhsType = rightOperand->getType();
+    const ValueType rhsType = rightOperand->getType();
 
-        if (!QueryAnalyzer::typeCheckBinExprConstr(lhsType, rhsType)) {
-            std::string varTypeName = std::string(ValueTypeName::value(lhsType));
-            std::string exprTypeName = std::string(ValueTypeName::value(rhsType));
-            std::string verb = isCreate ? "assigned" : "compared to";
-            throw AnalyzeException(
-                                   "Variable '" + lhsName +
-                                   "' of type " + varTypeName +
-                                   " cannot be " + verb +
-                                   " value of type " +
-                                   exprTypeName
-            );
-        }
+    if (!QueryAnalyzer::typeCheckBinExprConstr(lhsType, rhsType)) {
+        const std::string varTypeName = std::string(ValueTypeName::value(lhsType));
+        const std::string exprTypeName = std::string(ValueTypeName::value(rhsType));
+        const std::string verb = isCreate ? "assigned" : "compared to";
+        throw AnalyzeException("Variable '" + lhsName +
+                               "' of type " + varTypeName +
+                               " cannot be " + verb +
+                               " value of type " +
+                               exprTypeName);
+    }
     return true;
 }
 

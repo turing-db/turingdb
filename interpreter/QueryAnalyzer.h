@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Expr.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 #include <stdint.h>
@@ -18,6 +17,8 @@ class DeclContext;
 class EntityPattern;
 class LoadGraphCommand;
 class ExplainCommand;
+class GraphView;
+class BinExpr;
 
 class QueryAnalyzer {
 public:
