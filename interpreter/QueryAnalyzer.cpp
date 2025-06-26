@@ -19,7 +19,6 @@
 #include "BioAssert.h"
 
 
-#include "range/v3/utility/optional.hpp"
 #include "reader/GraphReader.h"
 
 using namespace db;
@@ -42,7 +41,9 @@ void returnAllVariables(MatchCommand* cmd) {
 
 }
 
-QueryAnalyzer::QueryAnalyzer(const GraphView& view, ASTContext* ctxt, const PropertyTypeMap& propTypeMap) 
+QueryAnalyzer::QueryAnalyzer(const GraphView& view,
+                             ASTContext* ctxt,
+                             const PropertyTypeMap& propTypeMap) 
     : _view(view),
     _ctxt(ctxt),
     _propTypeMap(propTypeMap)
@@ -51,6 +52,7 @@ QueryAnalyzer::QueryAnalyzer(const GraphView& view, ASTContext* ctxt, const Prop
 
 QueryAnalyzer::~QueryAnalyzer() {
 }
+
 bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     Profile profile {"QueryAnalyzer::analyze"};
 
@@ -113,7 +115,7 @@ bool QueryAnalyzer::analyzeCreateGraph(CreateGraphCommand* cmd) {
 }
 
 bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
-    bool isCreate{false};
+    bool isCreate{false}; // Flag to distinguish create and match commands
     ReturnProjection* proj = cmd->getProjection();
     if (!proj) {
         return false;
@@ -195,7 +197,7 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 }
 
 bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
-    bool isCreate{true};
+    bool isCreate{true}; // Flag to distinguish create and match commands
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -231,7 +233,68 @@ bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
             }
         }
     }
+    return true;
+}
 
+bool QueryAnalyzer::typeCheckBinExprConstr(const ValueType lhs, const ValueType rhs) {
+    // FIXME: Should there be non-equal types that are allowed to be compared?
+    // (e.g. int64 and uint64)
+    if (lhs != rhs) {
+        return false;
+    }
+    return true;
+}
+
+bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
+                                             bool isCreate) {
+        // Currently only support equals
+        if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
+            throw AnalyzeException("Unsupported operator");
+        }
+
+        // XXX: Assumes that variable is left operand, constant is right operand
+        const VarExpr* leftOperand =
+            static_cast<VarExpr*>(binExpr->getLeftExpr());
+        const ExprConst* rightOperand =
+            static_cast<ExprConst*>(binExpr->getRightExpr());
+
+        // Query graph for name and type of variable
+        const std::string& lhsName = leftOperand->getName();
+        const GraphReader reader = _view.read();
+        const auto lhsPropTypeOpt = reader.getMetadata().propTypes().get(lhsName);
+
+        // Property type does not exist
+        if (lhsPropTypeOpt == std::nullopt) {
+            // If this is a match query: error
+            if (!isCreate) {
+                throw AnalyzeException("Variable '" +
+                                       lhsName +
+                                       "' has invalid property type");
+            }
+            else { // If a create query: no need to type check
+                return true;
+            }
+        }
+
+        // Else: property type exists: get types and type check
+        const PropertyType lhsPropType = lhsPropTypeOpt.value();
+        // NOTE: Directly accessing struct member
+        const ValueType lhsType = lhsPropType._valueType; 
+
+        const ValueType rhsType = rightOperand->getType();
+
+        if (!QueryAnalyzer::typeCheckBinExprConstr(lhsType, rhsType)) {
+            std::string varTypeName = std::string(ValueTypeName::value(lhsType));
+            std::string exprTypeName = std::string(ValueTypeName::value(rhsType));
+            std::string verb = isCreate ? "assigned" : "compared to";
+            throw AnalyzeException(
+                                   "Variable '" + lhsName +
+                                   "' of type " + varTypeName +
+                                   " cannot be " + verb +
+                                   " value of type " +
+                                   exprTypeName
+            );
+        }
     return true;
 }
 
@@ -261,61 +324,21 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
     }
 
     auto* exprConstraint = entity->getExprConstraint();
-    // If there are no constraints, return
+    // If there are no constraints, no need to type check
     if (!exprConstraint) {
         var->setDecl(decl);
         return true;
     }
 
-    // Otherwise, type check all constraints
-    for (auto* binExpr : exprConstraint->getExpressions()) {
-        // Currently only support equals
-        if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
-            throw AnalyzeException("Unsupported operator");
-        }
-        // XXX: Assumes that variable is left operand, constant is right operand
-        const VarExpr* leftOperand =
-            static_cast<VarExpr*>(binExpr->getLeftExpr());
-        const ExprConst* rightOperand =
-            static_cast<ExprConst*>(binExpr->getRightExpr());
-
-        // Query graph for name and type of variable
-        const std::string& varExprName = leftOperand->getName();
-        const GraphReader reader = _view.read();
-        const auto propTypeOpt = reader.getMetadata().propTypes().get(varExprName);
-
-        // Property type exists: type check
-        if (propTypeOpt != std::nullopt) {
-            const PropertyType propType = propTypeOpt.value();
-            // NOTE: Directly accessing struct member
-            const ValueType valueType = propType._valueType; 
-
-            const ValueType exprType = rightOperand->getType();
-
-            // FIXME: Should there be non-equal types that are allowed to be compared?
-            // (e.g. int64 and uint64)
-            if (valueType != exprType) {
-                std::string varTypeName = std::string(ValueTypeName::value(valueType));
-                std::string exprTypeName = std::string(ValueTypeName::value(exprType));
-                std::string verb = isCreate ? "assigned" : "compared to";
-                throw AnalyzeException(
-                                       "Variable '" + varExprName +
-                                       "' of type " + varTypeName +
-                                       " cannot be " + verb +
-                                       " value of type " +
-                                       exprTypeName
-                );
-            }
-        } else { // Else: property type does exist
-            // If a MATCH query: error
-            if (!isCreate) {
-                throw AnalyzeException("Variable '" +
-                                       varExprName + "' has invalid property type");
-            }
+    // Otherwise, verify all constraints are valid
+    const auto binExprs = exprConstraint->getExpressions();
+    for (const BinExpr* binExpr : binExprs) {
+        if (!QueryAnalyzer::analyzeBinExprConstraint(binExpr, isCreate)) {
+          return false;
         }
     }
+    
     var->setDecl(decl);
-
     return true;
 }
 
