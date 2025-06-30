@@ -1,6 +1,7 @@
 #include <cctype>
 #include <iostream>
 #include <array>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -22,7 +23,7 @@ public:
 
 
     struct PrefixTreeNode {
-        std::array<PrefixTreeNode*, SIGMA> _children{};
+        std::array<std::unique_ptr<PrefixTreeNode>, SIGMA> _children{};
         // Termination char denotes terminal node
         char _val{'\0'};
         bool _isComplete{false};
@@ -34,11 +35,11 @@ public:
         {
         }
 
-        ~PrefixTreeNode() {
-            for (auto child : _children) {
-                delete child;
-            }
-        }
+        // ~PrefixTreeNode() {
+        //     for.get() (auto child : _children) {
+        //         delete child;
+        //     }
+        // }
 
     };
 
@@ -51,17 +52,17 @@ public:
 
     StringApproximatorIndex()
     {
-        _root = new PrefixTreeNode{'\1'};
+        _root = std::make_unique<PrefixTreeNode>('\1');
     }
 
-    void insert(std::string_view str) { return _insert(_root, str); }
+    void insert(std::string_view str) { return _insert(_root.get(), str); }
 
-    PrefixTreeIterator find(std::string_view str) { return _find(_root, str); }
+    PrefixTreeIterator find(std::string_view str) { return _find(_root.get(), str); }
 
-    void print() const { _printTree(_root); }
+    void print() const { _printTree(_root.get()); }
 
 private:
-    PrefixTreeNode* _root{nullptr};
+    std::unique_ptr<PrefixTreeNode> _root{};
 
     static size_t charToIndex(char c) {
         // Children array layout:
@@ -80,11 +81,10 @@ private:
         PrefixTreeNode* node = root;
         for (const char c : sv) {
             size_t idx = charToIndex(c);
-            if (node->_children[idx] == nullptr) {
-                auto* newChild = new PrefixTreeNode(c);
-                node->_children[idx] = newChild;
+            if (!node->_children[idx]) {
+                node->_children[idx] = std::make_unique<PrefixTreeNode>(c);
             }
-            node = node->_children[idx];
+            node = node->_children[idx].get();
         }
         node->_isComplete = true;
     }
@@ -93,19 +93,19 @@ private:
     PrefixTreeIterator _find(PrefixTreeNode* root, std::string_view sv) {
         char firstChar = sv[0];
         size_t idx = charToIndex(firstChar);
-        if (root->_children[idx] == nullptr) {
+        if (!root->_children[idx]) {
             return PrefixTreeIterator{NOT_FOUND, nullptr};
         }
 
         sv.remove_prefix(1);        
 
-        PrefixTreeNode* node = root->_children[idx];
+        PrefixTreeNode* node = root->_children[idx].get();
         for (const char c : sv) {
             size_t idx = charToIndex(c);
-            if (node->_children[idx] == nullptr) {
+            if (!node->_children[idx]) {
                 return PrefixTreeIterator{NOT_FOUND, node};
             }
-            node = node->_children[idx];
+            node = node->_children[idx].get();
         }
         FindResult res = node->_isComplete ? FOUND : FOUND_PREFIX;
         return PrefixTreeIterator{res, node};
@@ -132,7 +132,7 @@ private:
         std::vector<PrefixTreeNode*> kids;
         kids.reserve(SIGMA);
         for (std::size_t i = 0; i < SIGMA; ++i)
-            if (node->_children[i]) kids.push_back(node->_children[i]);
+            if (node->_children[i]) kids.push_back(node->_children[i].get());
 
         // Prefix extension: keep vertical bar if this isn’t last
         std::string nextPrefix = prefix;
