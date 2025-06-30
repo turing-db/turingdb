@@ -6,7 +6,8 @@
 #include "SupabaseConfig.h"
 class TokenValidator {
 public:
-    TokenValidator() {
+    TokenValidator()
+    {
         // Initialize with some example tokens as fallback
         // These will be replaced by tokens from Supabase
         _validTokens = {
@@ -16,9 +17,7 @@ public:
     }
 
     bool isValidToken(const std::string& token) const;
-
     void addToken(const std::string& token);
-
     void removeToken(const std::string& token);
 
     // Replace all tokens with a new set

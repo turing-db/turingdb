@@ -1,5 +1,7 @@
 #include "HttpProxy.h"
 
+#include "Profiler.h"
+
 void HttpProxy::setBackendServers(const std::vector<std::pair<std::string, int>>& backendList) {
     _loadBalancer.setBackendServers(backendList);
 }
@@ -9,11 +11,17 @@ void HttpProxy::setupRoutes() {
     _server.Post(R"(/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
         _requestCount++;
 
-        if (!validateAuth(req, res)) {
+        const std::string token = extractBearerToken(req);
+        if (!validateAuth(token, res)) {
             return;
         }
 
-        forwardRequest(req, res, "POST", req.target);
+        forwardRequest(req, res, "POST", req.target, token);
+        std::string profileLogs;
+
+        Profiler::dump(profileLogs);
+
+        std::cout << profileLogs << std::endl;
     });
 
     // GET /status route
@@ -78,6 +86,7 @@ void HttpProxy::stop() {
 
 // Extract Bearer token from Authorization header
 std::string HttpProxy::extractBearerToken(const httplib::Request& req) const {
+    Profile profile {"HttpProxy::extractBearerToken"};
     const auto auth = req.get_header_value("Authorization");
     if (auth.empty()) {
         return "";
@@ -91,9 +100,16 @@ std::string HttpProxy::extractBearerToken(const httplib::Request& req) const {
     return auth.substr(bearerPrefix.length());
 }
 
+// Extract Bearer token from Authorization header
+std::string HttpProxy::extractInstanceId(const httplib::Request& req) const {
+    Profile profile {"HttpProxy::extractInstanceId"};
+    auto instance = req.get_header_value("Turing-Instance-Id");
+    return instance;
+}
+
 // Validate request authentication
-bool HttpProxy::validateAuth(const httplib::Request& req, httplib::Response& res) const {
-    const std::string token = extractBearerToken(req);
+bool HttpProxy::validateAuth(const std::string& token, httplib::Response& res) const {
+    Profile profile {"HttpProxy::validAuth"};
 
     if (token.empty() || !_tokenValidator.isValidToken(token)) {
         res.status = 403;
@@ -105,20 +121,62 @@ bool HttpProxy::validateAuth(const httplib::Request& req, httplib::Response& res
     return true;
 }
 
-// Forward request to backend server
-bool HttpProxy::forwardRequest(const httplib::Request& req, httplib::Response& res,
-                               const std::string& method, const std::string& path) const {
-    const auto* backend = _loadBalancer.getNextBackend();
+// Validate request authentication
+bool HttpProxy::validateRoute(const std::string& token, const std::string& instance, httplib::Response& res) const {
+    Profile profile {"HttpProxy::validRoute"};
+    if (_addressRouter.isValidAddress(instance, token)) {
+        res.status = 403;
+        res.set_content("{\"error\": \"Forbidden: Invalid or unauthorized instance id\"}",
+                        "application/json");
+        return false;
+    }
 
-    if (!backend) {
-        res.status = 503;
-        res.set_content("{\"error\": \"Service Unavailable: No healthy backends\"}",
+    return true;
+}
+
+std::pair<std::string, int> parseAddress(const std::string& localAddress) {
+    Profile profile {"HttpProxy::parseAddress"};
+    size_t seperatorPos = localAddress.find_last_of(':');
+
+    if (seperatorPos == std::string::npos) {
+        return std::pair<std::string, int>();
+    }
+
+    std::string host = localAddress.substr(0, seperatorPos);
+    int port = std::stoi(localAddress.substr(seperatorPos + 1));
+
+    return std::pair<std::string, int>(host, port);
+}
+
+// Forward request to backend server
+bool HttpProxy::forwardRequest(const httplib::Request& req,
+                               httplib::Response& res,
+                               const std::string& method,
+                               const std::string& path,
+                               const std::string& token) const {
+    Profile profile {"HttpProxy::forwardRequest"};
+    std::string instance = extractInstanceId(req);
+    const auto& routeMapEntry = _addressRouter.getRouteMapEntry(instance);
+    if (!routeMapEntry) {
+        res.status = 403;
+        res.set_content("{\"error\": \"Forbidden: Invalid or unauthorized instance id\"}",
                         "application/json");
         _errorCount++;
         return false;
     }
 
-    httplib::Client client(backend->host, backend->port);
+    const auto& [instanceToken, address] = routeMapEntry.value();
+
+    if (instanceToken != token) {
+        res.status = 403;
+        res.set_content("{\"error\": \"Forbidden: Invalid or unauthorized instance id\"}",
+                        "application/json");
+        _errorCount++;
+        return false;
+    }
+
+    const auto& [host, port] = parseAddress(address);
+    httplib::Client client(host, port);
     client.set_connection_timeout(5, 0); // 5 seconds
     client.set_read_timeout(30, 0);      // 30 seconds
 
@@ -133,17 +191,17 @@ bool HttpProxy::forwardRequest(const httplib::Request& req, httplib::Response& r
     // Forward the request based on method
     httplib::Result result;
 
-    if (method == "POST") {
-        result = client.Post(path, headers, req.body,
-                             req.get_header_value("Content-Type"));
-    } else if (method == "GET") {
-        result = client.Get(path, headers);
+    {
+        Profile fwdProf {"yum"};
+        if (method == "POST") {
+            result = client.Post(path, headers, req.body,
+                                 req.get_header_value("Content-Type"));
+        } else if (method == "GET") {
+            result = client.Get(path, headers);
+        }
     }
 
     if (!result) {
-        // Mark backend as unhealthy if connection failed
-        _loadBalancer.markUnhealthy(backend->host, backend->port);
-
         res.status = 502;
         res.set_content("{\"error\": \"Bad Gateway: Backend connection failed\"}",
                         "application/json");

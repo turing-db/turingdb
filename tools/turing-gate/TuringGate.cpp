@@ -9,6 +9,7 @@
 #include <fstream>
 #include <cstring>
 
+#include "AddressRouter.h"
 #include "HttpProxy.h"
 #include "LoadBalancer.h"
 #include "SupabaseConfig.h"
@@ -54,6 +55,26 @@ void tokenRefreshThread(TokenValidator* const validator, const SupabaseConfig* c
             std::cout << "Refreshing tokens from Supabase..." << std::endl;
             if (!validator->fetchTokensFromSupabase(*config)) {
                 std::cerr << "Failed to refresh tokens, keeping existing tokens" << std::endl;
+            }
+        }
+    }
+}
+
+void routesRefreshThread(AddressRouter* const router, const SupabaseConfig* const config,
+                         const std::atomic<bool>* const running) {
+    // Initial fetch on startup
+    router->fetchRoutesFromSupabase(*config);
+
+    while (running->load()) {
+        // Wait for 5 minutes before refreshing tokens
+        for (int i = 0; i < 300 && running->load(); i++) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+        if (running->load()) {
+            std::cout << "Refreshing routes from Supabase..." << std::endl;
+            if (!router->fetchRoutesFromSupabase(*config)) {
+                std::cerr << "Failed to refresh routes, keeping existing routes" << std::endl;
             }
         }
     }
@@ -146,7 +167,8 @@ int main(int argc, char* argv[]) {
     const SupabaseConfig supabaseConfig(
         std::getenv("SUPABASE_URL") ? std::getenv("SUPABASE_URL") : "https://your-project.supabase.co",
         std::getenv("SUPABASE_API_KEY") ? std::getenv("SUPABASE_API_KEY") : "your-api-key",
-        std::getenv("SUPABASE_TOKEN_TABLE") ? std::getenv("SUPABASE_TOKEN_TABLE") : "bearer_tokens");
+        std::getenv("SUPABASE_TOKEN_TABLE") ? std::getenv("SUPABASE_TOKEN_TABLE") : "bearer_tokens",
+        std::getenv("SUPABASE_TOKEN_INSTANCE_JOIN_FUNC") ? std::getenv("SUPABASE_TOKEN_INSTANCE_JOIN_FUNC") : "routes");
 
     // Create and start the proxy server
     std::unique_ptr<HttpProxy> proxy = std::make_unique<HttpProxy>();
@@ -170,31 +192,36 @@ int main(int argc, char* argv[]) {
     }
 
     // Start health check thread
-    std::atomic<bool> healthCheckRunning{true};
+    std::atomic<bool> healthCheckRunning {true};
     std::thread healthChecker(healthCheckThread, &proxy->getLoadBalancer(), &healthCheckRunning);
-    
+
     // Start token refresh thread if Supabase is configured
-    std::atomic<bool> tokenRefreshRunning{true};
+    std::atomic<bool> tokenRefreshRunning {true};
     std::thread tokenRefresher;
-    
+
+    std::atomic<bool> routesRefreshRunning {true};
+    std::thread routesRefresher;
+
     if (supabaseConfig.apiKey != "your-api-key") {
         std::cout << "Starting Supabase token synchronization..." << std::endl;
-        tokenRefresher = std::thread(tokenRefreshThread, &proxy->getTokenValidator(), 
-                                    &supabaseConfig, &tokenRefreshRunning);
+        tokenRefresher = std::thread(tokenRefreshThread, &proxy->getTokenValidator(),
+                                     &supabaseConfig, &tokenRefreshRunning);
+        routesRefresher = std::thread(routesRefreshThread, &proxy->getAddressRouter(),
+                                      &supabaseConfig, &routesRefreshRunning);
     } else {
         std::cout << "Warning: Supabase not configured. Using default tokens only." << std::endl;
         std::cout << "Set SUPABASE_URL and SUPABASE_API_KEY environment variables to enable token sync." << std::endl;
     }
-    
+
     // Handle graceful shutdown
     std::signal(SIGINT, [](int) {
         std::cout << "\nShutting down proxy server..." << std::endl;
         std::exit(0);
     });
-    
+
     // Start the proxy server
     proxy->start("0.0.0.0", 8080, static_cast<int>(numThreads));
-    
+
     // Cleanup
     healthCheckRunning = false;
     tokenRefreshRunning = false;

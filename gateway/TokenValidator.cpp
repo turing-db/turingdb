@@ -4,9 +4,12 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_set>
+
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
+#include <nlohmann/json.hpp>
 
+using json = nlohmann::json;
 
 bool TokenValidator::isValidToken(const std::string& token) const {
     const std::shared_lock<std::shared_mutex> lock(_tokenMutex);
@@ -68,10 +71,7 @@ bool TokenValidator::fetchTokensFromSupabase(const SupabaseConfig& config) {
 
         const auto res = client.Get(endpoint, headers);
 
-        for (const auto& header : res->headers) {
-            std::cout << "  " << header.first << ": " << header.second << std::endl;
-        }
-        std::cout << "Debug: Response body: " << res->body << std::endl;
+        // std::cout << "Debug: Response body: " << res->body << std::endl;
 
         if (!res || res->status != 200) {
             std::cerr << "Failed to fetch tokens from Supabase. Status: "
@@ -81,24 +81,10 @@ bool TokenValidator::fetchTokensFromSupabase(const SupabaseConfig& config) {
 
         // Parse JSON response manually (simple parser for array of objects)
         std::unordered_set<std::string> newTokens;
-        std::string jsonStr = res->body;
+        auto jsonRes = json::parse(res->body);
 
-        // Remove whitespace
-        jsonStr.erase(std::remove_if(jsonStr.begin(), jsonStr.end(), ::isspace), jsonStr.end());
-
-        // Simple JSON array parser for format: [{"token":"value1"},{"token":"value2"}]
-        size_t pos = 0;
-        while ((pos = jsonStr.find("\"token\":\"", pos)) != std::string::npos) {
-            pos += 9; // Length of "token":"
-            const size_t endPos = jsonStr.find("\"", pos);
-
-            if (endPos != std::string::npos) {
-                const std::string token = jsonStr.substr(pos, endPos - pos);
-                if (!token.empty()) {
-                    newTokens.insert(token);
-                }
-                pos = endPos;
-            }
+        for (const auto& record : jsonRes) {
+            newTokens.insert(record["token"].get<std::string>());
         }
 
         if (!newTokens.empty()) {
