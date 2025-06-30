@@ -25,7 +25,9 @@ public:
                        QueryCallback callback);
     ~PlanGraphGenerator();
 
-    void generate(const QueryCommand& query);
+    const PlanGraph& getPlanGraph() const { return _tree; }
+
+    void generate(const QueryCommand* query);
 
 private:
     using LabelNamePtr = const std::string*;
@@ -52,10 +54,10 @@ private:
     PlanGraphNode* getOrCreateVarNode(VarDecl* varDecl);
     PlanGraphNode* getVarNode(VarDecl* varDecl) const;
 
-    void planMatchCommand(const MatchCommand& cmd);
+    void planMatchCommand(const MatchCommand* cmd);
     void planMatchTarget(const MatchTarget* target);
-    void planCreateCommand(const CreateCommand& cmd);
-    void planCreateGraphCommand(const CreateGraphCommand& cmd);
+    void planCreateCommand(const CreateCommand* cmd);
+    void planCreateGraphCommand(const CreateGraphCommand* cmd);
 
     PlanGraphNode* planPathMatchOrigin(const EntityPattern* pattern);
     PlanGraphNode* planPathExpand(PlanGraphNode* currentNode,

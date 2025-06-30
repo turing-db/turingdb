@@ -1,0 +1,53 @@
+#include <gtest/gtest.h>
+
+#include <iostream>
+
+#include "ASTContext.h"
+#include "QueryParser.h"
+#include "Graph.h"
+#include "versioning/Transaction.h"
+#include "views/GraphView.h"
+#include "columns/Block.h"
+#include "SystemManager.h"
+#include "SimpleGraph.h"
+#include "PlanGraphGenerator.h"
+#include "QueryAnalyzer.h"
+
+using namespace db;
+
+class PlanGenTest : public ::testing::Test {
+    void SetUp() override {
+        _graph = _sysMan.createGraph("simpledb");
+        SimpleGraph::createSimpleGraph(_graph);
+    }
+
+    void TearDown() override {
+    }
+
+protected:
+    SystemManager _sysMan;
+    Graph* _graph {nullptr};
+};
+
+TEST_F(PlanGenTest, matchLinear1) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL]-(p:Person) RETURN n,p";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    analyzer.analyze(queryCmd);
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
+}

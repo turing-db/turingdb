@@ -9,12 +9,9 @@ namespace db {
 class PlannerException : public TuringException {
 public:
     explicit PlannerException(std::string&& msg)
-        : _msg(std::move(msg))
+        : TuringException(std::move(msg))
     {
     }
-
-private:
-    std::string _msg;
 };
 
 }

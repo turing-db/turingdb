@@ -1,5 +1,7 @@
 #include "PlanGraphGenerator.h"
 
+#include <iostream>
+
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/chunk.hpp>
 
@@ -26,29 +28,29 @@ PlanGraphGenerator::PlanGraphGenerator(const GraphView& view,
 PlanGraphGenerator::~PlanGraphGenerator() {
 }
 
-void PlanGraphGenerator::generate(const QueryCommand& query) {
-    switch (query.getKind()) {
+void PlanGraphGenerator::generate(const QueryCommand* query) {
+    switch (query->getKind()) {
         case QueryCommand::Kind::MATCH_COMMAND:
-            planMatchCommand(static_cast<const MatchCommand&>(query));
+            planMatchCommand(static_cast<const MatchCommand*>(query));
             break;
 
         case QueryCommand::Kind::CREATE_COMMAND:
-            planCreateCommand(static_cast<const CreateCommand&>(query));
+            planCreateCommand(static_cast<const CreateCommand*>(query));
             break;
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
-            planCreateGraphCommand(static_cast<const CreateGraphCommand&>(query));
+            planCreateGraphCommand(static_cast<const CreateGraphCommand*>(query));
             break;
 
         default:
             throw PlannerException("Unsupported query command of type "
-                                   + std::to_string((unsigned)query.getKind()));
+                                   + std::to_string((unsigned)query->getKind()));
             break;
     }
 }
 
-void PlanGraphGenerator::planMatchCommand(const MatchCommand& cmd) {    
-    const auto& matchTargets = cmd.matchTargets();
+void PlanGraphGenerator::planMatchCommand(const MatchCommand* cmd) {    
+    const auto& matchTargets = cmd->matchTargets();
     for (const auto& target : matchTargets) {
         planMatchTarget(target);
     }
@@ -195,8 +197,8 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
 
 // ===== CREATE =====
 
-void PlanGraphGenerator::planCreateCommand(const CreateCommand& cmd) {
-    const auto& createTargets = cmd.createTargets();
+void PlanGraphGenerator::planCreateCommand(const CreateCommand* cmd) {
+    const auto& createTargets = cmd->createTargets();
     for (const auto& target : createTargets) {
         planCreateTarget(target);
     }
@@ -319,9 +321,9 @@ PlanGraphNode* PlanGraphGenerator::planCreateStep(PlanGraphNode* currentNode,
 
 // ===== CREATE GRAPH =====
 
-void PlanGraphGenerator::planCreateGraphCommand(const CreateGraphCommand& cmd) {
+void PlanGraphGenerator::planCreateGraphCommand(const CreateGraphCommand* cmd) {
     auto createGraph = _tree.create(PlanGraphOpcode::CREATE_GRAPH);
-    createGraph->setString(cmd.getName());
+    createGraph->setString(cmd->getName());
 }
 
 // ===== Labels and labelsets utilities =====

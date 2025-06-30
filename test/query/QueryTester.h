@@ -11,7 +11,6 @@
 
 namespace db {
 
-
 #define COL_CASE(Type)                                                \
     case Type::staticKind(): {                                        \
         EXPECT_EQ(col->getKind(), expectedCol->getKind());            \

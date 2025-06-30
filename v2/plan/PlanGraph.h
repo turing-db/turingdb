@@ -2,10 +2,11 @@
 
 #include <vector>
 #include <optional>
+#include <ostream>
 
 #include "EntityID.h"
 #include "metadata/LabelSet.h"
-#include "Arena.h"
+#include "EnumToString.h"
 
 namespace db {
 
@@ -26,45 +27,63 @@ enum class PlanGraphOpcode {
     GET_EDGE_TARGET,
     CREATE_NODE,
     CREATE_EDGE,
-    CREATE_GRAPH
+    CREATE_GRAPH,
+    _SIZE
 };
+
+using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
+    EnumStringPair<PlanGraphOpcode::UNKNOWN, "UNKNOWN">,
+    EnumStringPair<PlanGraphOpcode::VAR, "VAR">,
+    EnumStringPair<PlanGraphOpcode::SCAN_NODES, "SCAN_NODES">,
+    EnumStringPair<PlanGraphOpcode::SCAN_NODES_BY_LABEL, "SCAN_NODES_BY_LABEL">,
+    EnumStringPair<PlanGraphOpcode::FILTER_NODE_EXPR, "FILTER_NODE_EXPR">,
+    EnumStringPair<PlanGraphOpcode::FILTER_EDGE_EXPR, "FILTER_EDGE_EXPR">,
+    EnumStringPair<PlanGraphOpcode::FILTER_NODE_LABEL, "FILTER_NODE_LABEL">,
+    EnumStringPair<PlanGraphOpcode::FILTER_EDGE_TYPE, "FILTER_EDGE_TYPE">,
+    EnumStringPair<PlanGraphOpcode::GET_OUT_EDGES, "GET_OUT_EDGES">,
+    EnumStringPair<PlanGraphOpcode::GET_EDGE_TARGET, "GET_EDGE_TARGET">,
+    EnumStringPair<PlanGraphOpcode::CREATE_NODE, "CREATE_NODE">,
+    EnumStringPair<PlanGraphOpcode::CREATE_EDGE, "CREATE_EDGE">,
+    EnumStringPair<PlanGraphOpcode::CREATE_GRAPH, "CREATE_GRAPH">>;
 
 class PlanGraphNode {
 public:
-    PlanGraphNode()
-    {
-    }
+    using Nodes = std::vector<PlanGraphNode*>;
 
-    PlanGraphNode(PlanGraphOpcode opcode)
+    explicit PlanGraphNode(PlanGraphOpcode opcode)
         : _opcode(opcode)
     {
     }
 
     PlanGraphOpcode getOpcode() const { return _opcode; }
 
-    VarDecl* getVarDecl() const { return _varDecl; }
-    const BinExpr* getExpr() const { return _expr; }
-    std::optional<EdgeTypeID> getEdgeTypeID() const { return _edgeTypeID; }
-    const LabelSet* getLabelSet() const { return _labelSet; }
+    const Nodes& inputs() const { return _inputs; }
+
+    const Nodes& outputs() const { return _outputs; }
+
+    bool isRoot() const { return _inputs.empty(); }
 
     void connectOut(PlanGraphNode* succ) {
         _outputs.emplace_back(succ);
         succ->_inputs.emplace_back(this);
     }
 
+    VarDecl* getVarDecl() const { return _varDecl; }
+    const BinExpr* getExpr() const { return _expr; }
+    std::optional<EdgeTypeID> getEdgeTypeID() const { return _edgeTypeID; }
+    const LabelSet* getLabelSet() const { return _labelSet; }
+
     void setVarDecl(VarDecl* varDecl) { _varDecl = varDecl; }
     void setExpr(const BinExpr* expr) { _expr = expr; }
     void setEdgeTypeID(EdgeTypeID edgeTypeID) { _edgeTypeID = edgeTypeID; }
     void setLabelSet(const LabelSet* labelSet) { _labelSet = labelSet; }
-    void setExprConstraint(const ExprConstraint* exprConstraint) { _exprConstraint = exprConstraint; }
+    void setExprConstraint(const ExprConstraint* constr) { _exprConstraint = constr; }
     void setString(const std::string& str) { _string = str; }
 
 private:
-    static constexpr std::size_t MAX_OUTS = 4;
-
     PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
-    std::vector<PlanGraphNode*> _inputs;
-    std::vector<PlanGraphNode*> _outputs;
+    Nodes _inputs;
+    Nodes _outputs;
     
     // Metadata per node
     VarDecl* _varDecl {nullptr};
@@ -81,11 +100,14 @@ public:
     ~PlanGraph();
 
     PlanGraphNode* create(PlanGraphOpcode opcode) {
-        return &_nodes.emplace_back(opcode);
+        _nodes.emplace_back(std::make_unique<PlanGraphNode>(opcode));
+        return _nodes.back().get();
     }
 
+    void dump(std::ostream& out) const ;
+
 private:
-    Arena<PlanGraphNode> _nodes;
+    std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
 };
 
 }
