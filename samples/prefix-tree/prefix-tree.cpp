@@ -3,6 +3,9 @@
 #include <array>
 #include <vector>
 
+#include "utils.h"
+
+
 using namespace std;
 
 // Size of our alphabet: assumes some preprocessing,
@@ -72,20 +75,16 @@ private:
 
    void _printTree(prefixTreeNode* node)
     {
-        // root acts as a sentinel, so start with empty prefix
-        _printTree(node, /*prefix=*/"", /*isLast=*/true);
+        _printTree(node, "", true);
     }
 
-    // Recursive worker
     void _printTree(prefixTreeNode* node,
                     const std::string& prefix,
                     bool isLastChild)
     {
         if (!node) return;
 
-        // Skip printing the sentinel root ('\1')
         if (node->val != '\1') {
-            // Draw the branch line for this node
             std::cout << prefix
                       << (isLastChild ? "└── " : "├── ")
                       << node->val
@@ -99,7 +98,7 @@ private:
         for (std::size_t i = 0; i < SIGMA; ++i)
             if (node->children[i]) kids.push_back(node->children[i]);
 
-        // Prefix extension: keep vertical bar if *this* isn’t last
+        // Prefix extension: keep vertical bar if this isn’t last
         std::string nextPrefix = prefix;
         if (node->val != '\1')          // don’t add for sentinel root
             nextPrefix += (isLastChild ? "    " : "│   ");
@@ -112,11 +111,26 @@ private:
 };
 
 
+const string help = "";
+
 int main() {
-    auto tree = new StringApproximatorIndex();
-    tree->insert("dog");
-    tree->print();
-    tree->insert("doge");
-    tree->print();
+    cout << help << endl;
+
+    StringApproximatorIndex tree{};
+
+    string in;
+    while (true) {
+        cout << ">";
+        getline(cin, in);
+        auto tokens = split(in, " ");
+        if (tokens[0] == "i") {
+            if (tokens.size() != 2) cout << "i <param>" << endl;
+            else tree.insert(tokens[1]);
+        }
+        else if (tokens[0] == "p") tree.print();
+        else cout << "unkown cmd" << endl;
+        
+    }
+
 }
 
