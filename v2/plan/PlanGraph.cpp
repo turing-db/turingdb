@@ -40,3 +40,11 @@ void PlanGraph::dump(std::ostream& out) const {
         out << "]\n\n";
     }
 }
+
+void PlanGraph::getRoots(std::vector<PlanGraphNode*>& roots) const {
+    for (const auto& node : _nodes) {
+        if (node->isRoot()) {
+            roots.emplace_back(node.get());
+        }
+    }
+}

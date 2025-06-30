@@ -149,7 +149,6 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
 
     const VarExpr* edgeVar = edge->getVar();
     if (edgeVar) {
-        std::cout << "EdgeVar\n";
         auto* varNode = getOrCreateVarNode(edgeVar->getDecl());
         currentNode->connectOut(varNode);
         currentNode = varNode;

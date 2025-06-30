@@ -104,6 +104,8 @@ public:
         return _nodes.back().get();
     }
 
+    void getRoots(std::vector<PlanGraphNode*>& roots) const;
+
     void dump(std::ostream& out) const ;
 
 private:

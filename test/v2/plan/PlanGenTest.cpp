@@ -12,6 +12,7 @@
 #include "SimpleGraph.h"
 #include "PlanGraphGenerator.h"
 #include "QueryAnalyzer.h"
+#include "PlanGraphTester.h"
 
 using namespace db;
 
@@ -51,6 +52,13 @@ TEST_F(PlanGenTest, matchAllNodes) {
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
+
+    std::vector<PlanGraphNode*> roots;
+    planGraph.getRoots(roots);
+
+    PlanGraphTester(roots.front())
+        .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::VAR);
 }
 
 TEST_F(PlanGenTest, matchAllEdgesWithVar) {
