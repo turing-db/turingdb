@@ -17,6 +17,8 @@ NodeID CURRENT_ID = 1;
 // so only a-z and 1-9
 constexpr size_t SIGMA = 26 + 10;
 
+//https://www.notion.so/turingbio/Approximate-String-Matching-21e3aad664c880dba168d3f65a3dac73
+ 
 class StringApproximatorIndex {
 public:
     enum FindResult {
@@ -25,20 +27,19 @@ public:
         NOT_FOUND
     };
 
-
-
     struct PrefixTreeNode {
+        using NodeOwners = std::vector<NodeID>;
+
         std::array<std::unique_ptr<PrefixTreeNode>, SIGMA> _children{};
-        // Termination char denotes terminal node
         char _val{'\0'};
         bool _isComplete{false};
-        std::unique_ptr<std::vector<NodeID>> _owners;
+        std::unique_ptr<NodeOwners> _owners;
 
         PrefixTreeNode(char val)
             : _children{},
             _val{val},
             _isComplete{false},
-            _owners{nullptr}
+            _owners{}
 
         {
         }
@@ -48,8 +49,6 @@ public:
         FindResult _result{NOT_FOUND};
         PrefixTreeNode* _nodePtr{nullptr};
     };
-
-
 
     StringApproximatorIndex()
     {
