@@ -4,7 +4,7 @@
 #include <optional>
 #include <ostream>
 
-#include "EntityID.h"
+#include "ID.h"
 #include "metadata/LabelSet.h"
 #include "EnumToString.h"
 

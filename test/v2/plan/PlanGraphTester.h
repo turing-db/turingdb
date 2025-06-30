@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PlanGraph.h"
+#include "VarDecl.h"
 
 #include "TuringException.h"
 
@@ -14,6 +15,10 @@ public:
     }
 
     PlanGraphTester& expect(PlanGraphOpcode opcode) {
+        if (_current == nullptr) {
+            throw TuringException("PlanGraphTester: no more nodes to test");
+        }
+
         const auto currentOpcode = _current->getOpcode();
         if (currentOpcode != opcode) {
             const auto currentOpStr = std::string(PlanGraphOpcodeDescription::value(currentOpcode));
@@ -27,9 +32,45 @@ public:
         const auto& outs = _current->outputs();
         if (!outs.empty()) {
             _current = outs.front();
+        } else {
+            _current = nullptr;
         }
 
         return *this;
+    }
+
+    PlanGraphTester& expectVar(const std::string& var) {
+        if (_current == nullptr) {
+            throw TuringException("PlanGraphTester: no more nodes to test");
+        }
+
+        if (_current->getOpcode() != PlanGraphOpcode::VAR) {
+            throw TuringException("PlanGraphTester: expected var node");
+        }
+
+        const VarDecl* varDecl = _current->getVarDecl();
+        if (varDecl == nullptr) {
+            throw TuringException("PlanGraphTester: no var decl in node");
+        }
+
+        if (varDecl->getName() != var) {
+            throw TuringException("PlanGraphTester: wrong var name");
+        }
+
+        const auto& outs = _current->outputs();
+        if (!outs.empty()) {
+            _current = outs.front();
+        } else {
+            _current = nullptr;
+        }
+
+        return *this;
+    }
+
+    void validateComplete() {
+        if (_current != nullptr) {
+            throw TuringException("PlanGraphTester: not all nodes were tested");
+        }
     }
 
 private:

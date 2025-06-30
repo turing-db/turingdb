@@ -43,7 +43,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    QueryAnalyzer analyzer(view, &ctxt, view.metadata().propTypes());
     const bool anaRes = analyzer.analyze(queryCmd);
     ASSERT_TRUE(anaRes);
 
@@ -58,7 +58,8 @@ TEST_F(PlanGenTest, matchAllNodes) {
 
     PlanGraphTester(roots.front())
         .expect(PlanGraphOpcode::SCAN_NODES)
-        .expect(PlanGraphOpcode::VAR);
+        .expectVar("n")
+        .validateComplete();
 }
 
 TEST_F(PlanGenTest, matchAllEdgesWithVar) {
@@ -74,7 +75,7 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    QueryAnalyzer analyzer(view, &ctxt, view.metadata().propTypes());
     const bool anaRes = analyzer.analyze(queryCmd);
     ASSERT_TRUE(anaRes);
 
@@ -83,6 +84,18 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
+
+    std::vector<PlanGraphNode*> roots;
+    planGraph.getRoots(roots);
+
+    PlanGraphTester(roots.front())
+        .expect(PlanGraphOpcode::SCAN_NODES)
+        .expectVar("n")
+        .expect(PlanGraphOpcode::GET_OUT_EDGES)
+        .expectVar("e")
+        .expect(PlanGraphOpcode::GET_EDGE_TARGET)
+        .expectVar("m")
+        .validateComplete();
 }
 
 TEST_F(PlanGenTest, matchAllEdges2) {
@@ -98,7 +111,7 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    QueryAnalyzer analyzer(view, &ctxt, view.metadata().propTypes());
     const bool anaRes = analyzer.analyze(queryCmd);
     ASSERT_TRUE(anaRes);
 
@@ -107,6 +120,18 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
+
+    std::vector<PlanGraphNode*> roots;
+    planGraph.getRoots(roots);
+
+    PlanGraphTester(roots.front())
+        .expect(PlanGraphOpcode::SCAN_NODES)
+        .expectVar("n")
+        .expect(PlanGraphOpcode::GET_OUT_EDGES)
+        .expectVar("0")
+        .expect(PlanGraphOpcode::GET_EDGE_TARGET)
+        .expectVar("m")
+        .validateComplete();
 }
 
 TEST_F(PlanGenTest, matchSingleByLabel) {
@@ -122,7 +147,7 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    QueryAnalyzer analyzer(view, &ctxt, view.metadata().propTypes());
     const bool anaRes = analyzer.analyze(queryCmd);
     ASSERT_TRUE(anaRes);
 
@@ -131,6 +156,14 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
+
+    std::vector<PlanGraphNode*> roots;
+    planGraph.getRoots(roots);
+
+    PlanGraphTester(roots.front())
+        .expect(PlanGraphOpcode::SCAN_NODES_BY_LABEL)
+        .expectVar("n")
+        .validateComplete();
 }
 
 TEST_F(PlanGenTest, matchLinear1) {
@@ -146,7 +179,7 @@ TEST_F(PlanGenTest, matchLinear1) {
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    QueryAnalyzer analyzer(view, &ctxt, view.metadata().propTypes());
     const bool anaRes = analyzer.analyze(queryCmd);
     ASSERT_TRUE(anaRes);
 
@@ -155,4 +188,18 @@ TEST_F(PlanGenTest, matchLinear1) {
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
+
+    std::vector<PlanGraphNode*> roots;
+    planGraph.getRoots(roots);
+
+    PlanGraphTester(roots.front())
+        .expect(PlanGraphOpcode::SCAN_NODES_BY_LABEL)
+        .expectVar("n")
+        .expect(PlanGraphOpcode::GET_OUT_EDGES)
+        .expect(PlanGraphOpcode::FILTER_EDGE_TYPE)
+        .expectVar("e")
+        .expect(PlanGraphOpcode::GET_EDGE_TARGET)
+        .expect(PlanGraphOpcode::FILTER_NODE_LABEL)
+        .expectVar("p")
+        .validateComplete();
 }
