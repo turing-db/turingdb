@@ -111,8 +111,8 @@ PlanGraphNode* PlanGraphGenerator::planPathMatchOrigin(const EntityPattern* patt
 }
 
 PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
-                                              const EntityPattern* edge,
-                                              const EntityPattern* target) {
+                                                  const EntityPattern* edge,
+                                                  const EntityPattern* target) {
     // Get out edges
     auto getOutEdges = _tree.create(PlanGraphOpcode::GET_OUT_EDGES);
     currentNode->connectOut(getOutEdges);
@@ -151,6 +151,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
 
     const VarExpr* edgeVar = edge->getVar();
     if (edgeVar) {
+        std::cout << "EdgeVar\n";
         auto* varNode = getOrCreateVarNode(edgeVar->getDecl());
         currentNode->connectOut(varNode);
         currentNode = varNode;

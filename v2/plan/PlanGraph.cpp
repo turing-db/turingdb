@@ -1,5 +1,7 @@
 #include "PlanGraph.h"
 
+#include "VarDecl.h"
+
 using namespace db;
 
 PlanGraph::PlanGraph()
@@ -12,8 +14,14 @@ PlanGraph::~PlanGraph() {
 void PlanGraph::dump(std::ostream& out) const {
     for (const auto& node : _nodes) {
         out << "node id=" << std::hex << node.get()
-            << " opcode=" << PlanGraphOpcodeDescription::value(node->getOpcode())
-            << " [\n";
+            << " opcode=" << PlanGraphOpcodeDescription::value(node->getOpcode());
+
+        auto varDecl = node->getVarDecl();
+        if (varDecl) {
+            out << " var=" << varDecl->getName();
+        }
+
+        out << " [\n";
         out << "    inputs = [ ";
 
         for (const PlanGraphNode* input : node->inputs()) {

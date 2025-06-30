@@ -29,6 +29,102 @@ protected:
     Graph* _graph {nullptr};
 };
 
+TEST_F(PlanGenTest, matchAllNodes) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH n RETURN n";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    const bool anaRes = analyzer.analyze(queryCmd);
+    ASSERT_TRUE(anaRes);
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
+}
+
+TEST_F(PlanGenTest, matchAllEdgesWithVar) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH (n)-[e]-(m) RETURN n,e,m";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    const bool anaRes = analyzer.analyze(queryCmd);
+    ASSERT_TRUE(anaRes);
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
+}
+
+TEST_F(PlanGenTest, matchAllEdges2) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH (n)--(m) RETURN n,m";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    const bool anaRes = analyzer.analyze(queryCmd);
+    ASSERT_TRUE(anaRes);
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
+}
+
+TEST_F(PlanGenTest, matchSingleByLabel) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH (n:Person) RETURN n";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
+    const bool anaRes = analyzer.analyze(queryCmd);
+    ASSERT_TRUE(anaRes);
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
+}
+
 TEST_F(PlanGenTest, matchLinear1) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
@@ -43,7 +139,8 @@ TEST_F(PlanGenTest, matchLinear1) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(&ctxt, view.metadata().propTypes());
-    analyzer.analyze(queryCmd);
+    const bool anaRes = analyzer.analyze(queryCmd);
+    ASSERT_TRUE(anaRes);
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
