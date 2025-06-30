@@ -7,6 +7,7 @@
 
 #include "utils.h"
 
+using NodeID = uint32_t;
 
 // Size of our alphabet: assumes some preprocessing,
 // so only a-z and 1-9
@@ -27,20 +28,16 @@ public:
         // Termination char denotes terminal node
         char _val{'\0'};
         bool _isComplete{false};
+        std::unique_ptr<std::vector<NodeID>> _owners;
 
         PrefixTreeNode(char val)
             : _children{},
             _val{val},
-            _isComplete(false)
+            _isComplete{false},
+            _owners{nullptr}
+
         {
         }
-
-        // ~PrefixTreeNode() {
-        //     for.get() (auto child : _children) {
-        //         delete child;
-        //     }
-        // }
-
     };
 
     struct PrefixTreeIterator {
@@ -77,7 +74,7 @@ private:
         else return 26 + c - '0';
     }
 
-    void _insert(PrefixTreeNode* root, std::string_view sv) {
+    void _insert(PrefixTreeNode* root, std::string_view sv, NodeID owner=-1) {
         PrefixTreeNode* node = root;
         for (const char c : sv) {
             size_t idx = charToIndex(c);
@@ -86,7 +83,11 @@ private:
             }
             node = node->_children[idx].get();
         }
-        node->_isComplete = true;
+        node->_isComplete |= true;
+        if (!node->_owners) {
+            node->_owners = std::make_unique<std::vector<NodeID>>();
+        }
+        node->_owners->push_back(owner);
     }
 
 
@@ -147,7 +148,11 @@ private:
 };
 
 
-const std::string help = "";
+const std::string help = "usage: \n \
+    insert a string into the trie: 'i <string>' \n \
+    query a string in the trie: 'f <string>' \n \
+    print the trie: 'p' \
+    ";
 
 int main() {
     std::cout << help << std::endl;
