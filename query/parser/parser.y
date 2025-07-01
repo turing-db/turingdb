@@ -329,45 +329,32 @@ create_node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
 node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
             ;
 
-edge_pattern: OSBRACK edge_entity_pattern CSBRACK { $$ = $2; }
+edge_pattern: OSBRACK entity_pattern CSBRACK { $$ = $2; }
             ;
-
-edge_entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK
-              {
-                  $$ = EntityPattern::create(ctxt, $1, $3, $5);
-              }
-              | entity_var COLON type_constraint
-              { 
-                  $$ = EntityPattern::create(ctxt, $1, $3, nullptr);
-              }
-              | entity_var OBRACK prop_expr_constraint CBRACK
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
-              | entity_var 
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
-              | COLON type_constraint OBRACK prop_expr_constraint CBRACK
-              { 
-                  $$ = EntityPattern::create(ctxt, nullptr, $2, $4); 
-              }
-              | COLON type_constraint
-              { 
-                  $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr); 
-              }
-              ;
 
 entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
-                  $$ = EntityPattern::create(ctxt, $1, $3, $5);
+                    $$ = EntityPattern::create(ctxt, $1, $3, $5);
               }
               | entity_var COLON type_constraint
-              { $$ = EntityPattern::create(ctxt, $1, $3, nullptr); }
+              { 
+                    $$ = EntityPattern::create(ctxt, $1, $3, nullptr);
+              }
               | entity_var OBRACK prop_expr_constraint CBRACK
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
+              { 
+                    $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
               | entity_var 
-              { $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr); }
+              { 
+                    $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr);
+              }
               | COLON type_constraint OBRACK prop_expr_constraint CBRACK
-              { $$ = EntityPattern::create(ctxt, nullptr, $2, $4); }
+              {
+                    $$ = EntityPattern::create(ctxt, nullptr, $2, $4);
+              }
               | COLON type_constraint
-              { $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr); }
+              {
+                    $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr);
+              }
               ;
 
 known_entity_pattern: entity_var COLON INT_CONSTANT
