@@ -3,6 +3,7 @@
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/chunk.hpp>
 
+#include "PlanGraph.h"
 #include "QueryCommand.h"
 #include "MatchTarget.h"
 #include "PathPattern.h"
@@ -80,17 +81,17 @@ PlanGraphNode* PlanGraphGenerator::planPathMatchOrigin(const EntityPattern* patt
     // Scan nodes
     PlanGraphNode* current = nullptr;
     if (typeConstr) {
-        current = _tree.create(PlanGraphOpcode::SCAN_NODES_BY_LABEL); 
+        const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
+        current = _tree.create<ScanNodesByLabelNode>(labelSet); 
     } else {
-        current = _tree.create(PlanGraphOpcode::SCAN_NODES);
+        current = _tree.create<ScanNodesNode>();
     }
 
     // Expression constraints
     if (exprConstr) {
         const auto& exprs = exprConstr->getExpressions();
         for (const BinExpr* expr : exprs) {
-            auto filter = _tree.create(PlanGraphOpcode::FILTER_NODE_EXPR);
-            filter->setExpr(expr);
+            auto filter = _tree.create<FilterNodeExprNode>(expr);
 
             current->connectOut(filter);
             current = filter;
@@ -112,7 +113,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
                                                   const EntityPattern* edge,
                                                   const EntityPattern* target) {
     // Get out edges
-    auto getOutEdges = _tree.create(PlanGraphOpcode::GET_OUT_EDGES);
+    auto getOutEdges = _tree.create<GetOutEdgesNode>();
     currentNode->connectOut(getOutEdges);
     currentNode = getOutEdges;
 
@@ -131,8 +132,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
             throw PlannerException("Edge type " + edgeTypeName + " not found");
         }
 
-        auto filterEdgeTypes = _tree.create(PlanGraphOpcode::FILTER_EDGE_TYPE);
-        filterEdgeTypes->setEdgeTypeID(edgeTypeID.value());
+        auto filterEdgeTypes = _tree.create<FilterEdgeTypeNode>(edgeTypeID.value());
         currentNode->connectOut(filterEdgeTypes);
         currentNode = filterEdgeTypes;
     }
@@ -140,8 +140,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
     if (edgeExprConstr) {
         const auto& exprs = edgeExprConstr->getExpressions();
         for (const BinExpr* expr : exprs) {
-            auto filterExpr = _tree.create(PlanGraphOpcode::FILTER_EDGE_EXPR);
-            filterExpr->setExpr(expr);
+            auto filterExpr = _tree.create<FilterEdgeExprNode>(expr);
             currentNode->connectOut(filterExpr);
             currentNode = filterExpr;
         }
@@ -158,7 +157,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
     const TypeConstraint* targetTypeConstr = target->getTypeConstraint();
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
 
-    auto getTargetNodes = _tree.create(PlanGraphOpcode::GET_EDGE_TARGET);
+    auto getTargetNodes = _tree.create<GetEdgeTargetNode>();
     currentNode->connectOut(getTargetNodes);
     currentNode = getTargetNodes;
 
@@ -166,8 +165,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
     if (targetTypeConstr) {
         const LabelSet* labelSet = getOrCreateLabelSet(targetTypeConstr);
 
-        auto filterLabel = _tree.create(PlanGraphOpcode::FILTER_NODE_LABEL);
-        filterLabel->setLabelSet(labelSet);
+        auto filterLabel = _tree.create<FilterNodeLabelNode>(labelSet);
 
         currentNode->connectOut(filterLabel);
         currentNode = filterLabel;
@@ -176,8 +174,7 @@ PlanGraphNode* PlanGraphGenerator::planPathExpand(PlanGraphNode* currentNode,
     if (targetExprConstr) {
         const auto& exprs = targetExprConstr->getExpressions();
         for (const BinExpr* expr : exprs) {
-            auto filterExpr = _tree.create(PlanGraphOpcode::FILTER_NODE_EXPR);
-            filterExpr->setExpr(expr);
+            auto filterExpr = _tree.create<FilterNodeExprNode>(expr);
             currentNode->connectOut(filterExpr);
             currentNode = filterExpr;
         }
@@ -232,15 +229,14 @@ PlanGraphNode* PlanGraphGenerator::planCreateOrigin(const EntityPattern* pattern
 
             return foundVarNode;
         } else {
-            varNode = _tree.create(PlanGraphOpcode::VAR);
-            varNode->setVarDecl(var->getDecl());
+            varNode = _tree.create<VarNode>(var->getDecl());
             addVarNode(varNode, var->getDecl());
         }
     }
 
     // If we are here, we need to create a new node
     // and maybe connect it to the var node if it exists
-    PlanGraphNode* createNode = _tree.create(PlanGraphOpcode::CREATE_NODE);
+    CreateNodeNode* createNode = _tree.create<CreateNodeNode>();
     if (varNode) {
         createNode->connectOut(varNode);
     }
@@ -266,8 +262,7 @@ PlanGraphNode* PlanGraphGenerator::planCreateStep(PlanGraphNode* currentNode,
         if (foundEdgeVarNode) {
             throw PlannerException("Variable for edge "+edgeVar->getName()+" is already bound");
         } else {
-            edgeVarNode = _tree.create(PlanGraphOpcode::VAR);
-            edgeVarNode->setVarDecl(edgeVar->getDecl());
+            edgeVarNode = _tree.create<VarNode>(edgeVar->getDecl());
             addVarNode(edgeVarNode, edgeVar->getDecl());
         }
     }
@@ -291,12 +286,11 @@ PlanGraphNode* PlanGraphGenerator::planCreateStep(PlanGraphNode* currentNode,
     PlanGraphNode* targetNode = nullptr;
     if (!foundTargetVarNode) {
         // If the target node is not already bound to an existing variable, we need to create a new node
-        targetNode = _tree.create(PlanGraphOpcode::CREATE_NODE);
+        targetNode = _tree.create<CreateNodeNode>();
 
         if (targetVar) {
             // And if there is a variable requested, we need to create a new var node
-            auto targetVarNode = _tree.create(PlanGraphOpcode::VAR);
-            targetVarNode->setVarDecl(targetVar->getDecl());
+            auto targetVarNode = _tree.create<VarNode>(targetVar->getDecl());
             addVarNode(targetVarNode, targetVar->getDecl());
             targetNode->connectOut(targetVarNode);
             targetNode = targetVarNode;
@@ -306,7 +300,7 @@ PlanGraphNode* PlanGraphGenerator::planCreateStep(PlanGraphNode* currentNode,
     }
 
     // Create the edge
-    PlanGraphNode* createEdge = _tree.create(PlanGraphOpcode::CREATE_EDGE);
+    PlanGraphNode* createEdge = _tree.create<CreateEdgeNode>();
     currentNode->connectOut(createEdge);
     targetNode->connectOut(createEdge);
 
@@ -320,8 +314,7 @@ PlanGraphNode* PlanGraphGenerator::planCreateStep(PlanGraphNode* currentNode,
 // ===== CREATE GRAPH =====
 
 void PlanGraphGenerator::planCreateGraphCommand(const CreateGraphCommand* cmd) {
-    auto createGraph = _tree.create(PlanGraphOpcode::CREATE_GRAPH);
-    createGraph->setString(cmd->getName());
+    _tree.create<CreateGraphNode>(cmd->getName());
 }
 
 // ===== Labels and labelsets utilities =====
@@ -390,8 +383,7 @@ PlanGraphNode* PlanGraphGenerator::getVarNode(VarDecl* varDecl) const {
 PlanGraphNode* PlanGraphGenerator::getOrCreateVarNode(VarDecl* varDecl) {
     auto varNode = getVarNode(varDecl);
     if (!varNode) {
-        varNode = _tree.create(PlanGraphOpcode::VAR);
-        varNode->setVarDecl(varDecl);
+        varNode = _tree.create<VarNode>(varDecl);
         addVarNode(varNode, varDecl);
     }
 

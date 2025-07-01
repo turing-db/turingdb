@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <optional>
 #include <ostream>
 
 #include "ID.h"
@@ -50,10 +49,7 @@ class PlanGraphNode {
 public:
     using Nodes = std::vector<PlanGraphNode*>;
 
-    explicit PlanGraphNode(PlanGraphOpcode opcode)
-        : _opcode(opcode)
-    {
-    }
+    virtual ~PlanGraphNode() = default;
 
     PlanGraphOpcode getOpcode() const { return _opcode; }
 
@@ -68,30 +64,16 @@ public:
         succ->_inputs.emplace_back(this);
     }
 
-    VarDecl* getVarDecl() const { return _varDecl; }
-    const BinExpr* getExpr() const { return _expr; }
-    std::optional<EdgeTypeID> getEdgeTypeID() const { return _edgeTypeID; }
-    const LabelSet* getLabelSet() const { return _labelSet; }
-
-    void setVarDecl(VarDecl* varDecl) { _varDecl = varDecl; }
-    void setExpr(const BinExpr* expr) { _expr = expr; }
-    void setEdgeTypeID(EdgeTypeID edgeTypeID) { _edgeTypeID = edgeTypeID; }
-    void setLabelSet(const LabelSet* labelSet) { _labelSet = labelSet; }
-    void setExprConstraint(const ExprConstraint* constr) { _exprConstraint = constr; }
-    void setString(const std::string& str) { _string = str; }
+protected:
+    explicit PlanGraphNode(PlanGraphOpcode opcode)
+        : _opcode(opcode)
+    {
+    }
 
 private:
     PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
     Nodes _inputs;
     Nodes _outputs;
-    
-    // Metadata per node
-    VarDecl* _varDecl {nullptr};
-    const BinExpr* _expr {nullptr};
-    std::optional<EdgeTypeID> _edgeTypeID;
-    const LabelSet* _labelSet {nullptr};
-    const ExprConstraint* _exprConstraint {nullptr};
-    std::string _string;
 };
 
 class PlanGraph {
@@ -99,9 +81,12 @@ public:
     PlanGraph();
     ~PlanGraph();
 
-    PlanGraphNode* create(PlanGraphOpcode opcode) {
-        _nodes.emplace_back(std::make_unique<PlanGraphNode>(opcode));
-        return _nodes.back().get();
+    template<typename T, typename... Args>
+    T* create(Args&&... args) {
+        auto node = std::make_unique<T>(std::forward<Args>(args)...);
+        auto* nodePtr = node.get();
+        _nodes.emplace_back(std::move(node));
+        return nodePtr;
     }
 
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
@@ -110,6 +95,155 @@ public:
 
 private:
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
+};
+
+class VarNode : public PlanGraphNode {
+public:
+    explicit VarNode(const VarDecl* varDecl)
+        : PlanGraphNode(PlanGraphOpcode::VAR),
+        _varDecl(varDecl)
+    {
+    }
+
+    const VarDecl* getVarDecl() const { return _varDecl; }
+
+private:
+    const VarDecl* _varDecl {nullptr};
+};
+
+class ScanNodesNode : public PlanGraphNode {
+public:
+    explicit ScanNodesNode() 
+        : PlanGraphNode(PlanGraphOpcode::SCAN_NODES)
+    {}
+};
+
+class ScanNodesByLabelNode : public PlanGraphNode {
+public:
+    explicit ScanNodesByLabelNode(const LabelSet* labelSet) 
+        : PlanGraphNode(PlanGraphOpcode::SCAN_NODES_BY_LABEL),
+        _labelSet(labelSet)
+    {
+    }
+
+    const LabelSet* getLabelSet() const { return _labelSet; }
+
+private:
+    const LabelSet* _labelSet {nullptr};
+};
+
+class FilterNodeExprNode : public PlanGraphNode {
+public:
+    explicit FilterNodeExprNode(const BinExpr* expr) 
+        : PlanGraphNode(PlanGraphOpcode::FILTER_NODE_EXPR),
+        _expr(expr)
+    {
+    }
+
+    const BinExpr* getExpr() const { return _expr; }
+
+private:
+    const BinExpr* _expr {nullptr};
+};
+
+class FilterEdgeExprNode : public PlanGraphNode {
+public:
+    explicit FilterEdgeExprNode(const BinExpr* expr) 
+        : PlanGraphNode(PlanGraphOpcode::FILTER_EDGE_EXPR),
+        _expr(expr)
+    {
+    }
+
+    const BinExpr* getExpr() const { return _expr; }
+
+private:
+    const BinExpr* _expr {nullptr};
+};
+
+class FilterNodeLabelNode : public PlanGraphNode {
+public:
+    explicit FilterNodeLabelNode(const LabelSet* labelSet) 
+        : PlanGraphNode(PlanGraphOpcode::FILTER_NODE_LABEL),
+        _labelSet(labelSet)
+    {
+    }
+
+    const LabelSet* getLabelSet() const { return _labelSet; }
+
+private:
+    const LabelSet* _labelSet {nullptr};
+};
+
+class FilterEdgeTypeNode : public PlanGraphNode {
+public:
+    explicit FilterEdgeTypeNode(EdgeTypeID edgeTypeID) 
+        : PlanGraphNode(PlanGraphOpcode::FILTER_EDGE_TYPE),
+        _edgeTypeID(edgeTypeID)
+    {
+    }
+
+    EdgeTypeID getEdgeTypeID() const { return _edgeTypeID; }
+
+private:
+    EdgeTypeID _edgeTypeID;
+};
+
+class GetOutEdgesNode : public PlanGraphNode {
+public:
+    explicit GetOutEdgesNode()
+        : PlanGraphNode(PlanGraphOpcode::GET_OUT_EDGES)
+    {
+    }
+};
+
+class GetEdgeTargetNode : public PlanGraphNode {
+public:
+    explicit GetEdgeTargetNode()
+        : PlanGraphNode(PlanGraphOpcode::GET_EDGE_TARGET)
+    {
+    }
+
+};
+
+class CreateNodeNode : public PlanGraphNode {
+public:
+    explicit CreateNodeNode()
+        : PlanGraphNode(PlanGraphOpcode::CREATE_NODE)
+    {
+    }
+
+    void setLabelSet(const LabelSet* labelSet) { _labelSet = labelSet; }
+    void setExprConstraint(const ExprConstraint* exprConstraint) { _exprConstraint = exprConstraint; }
+
+    const LabelSet* getLabelSet() const { return _labelSet; }
+
+    const ExprConstraint* getExprConstraint() const { return _exprConstraint; }
+
+private:
+    const LabelSet* _labelSet {nullptr};
+    const ExprConstraint* _exprConstraint {nullptr};
+};
+
+class CreateEdgeNode : public PlanGraphNode {
+public:
+    explicit CreateEdgeNode()
+        : PlanGraphNode(PlanGraphOpcode::CREATE_EDGE)
+    {
+    }
+};
+
+class CreateGraphNode : public PlanGraphNode {
+public:
+    explicit CreateGraphNode(const std::string& graphName)
+        : PlanGraphNode(PlanGraphOpcode::CREATE_GRAPH),
+        _graphName(graphName)
+    {
+    }
+
+    const std::string& getGraphName() const { return _graphName; }
+
+private:
+    std::string _graphName;
 };
 
 }

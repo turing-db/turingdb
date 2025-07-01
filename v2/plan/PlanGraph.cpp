@@ -16,9 +16,8 @@ void PlanGraph::dump(std::ostream& out) const {
         out << "node id=" << std::hex << node.get()
             << " opcode=" << PlanGraphOpcodeDescription::value(node->getOpcode());
 
-        auto varDecl = node->getVarDecl();
-        if (varDecl) {
-            out << " var=" << varDecl->getName();
+        if (const auto* varNode = dynamic_cast<VarNode*>(node.get())) {
+            out << " var=" << varNode->getVarDecl()->getName();
         }
 
         out << " [\n";

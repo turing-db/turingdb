@@ -48,13 +48,13 @@ public:
             throw TuringException("PlanGraphTester: expected var node");
         }
 
-        const VarDecl* varDecl = _current->getVarDecl();
-        if (varDecl == nullptr) {
-            throw TuringException("PlanGraphTester: no var decl in node");
-        }
-
-        if (varDecl->getName() != var) {
-            throw TuringException("PlanGraphTester: wrong var name");
+        if (const auto* varNode = dynamic_cast<const VarNode*>(_current)) {
+            const VarDecl* varDecl = varNode->getVarDecl();
+            if (varDecl->getName() != var) {
+                throw TuringException("PlanGraphTester: wrong var name");
+            }
+        } else {
+            throw TuringException("PlanGraphTester: expected var node");
         }
 
         const auto& outs = _current->outputs();
