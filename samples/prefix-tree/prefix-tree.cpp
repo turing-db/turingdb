@@ -58,6 +58,8 @@ void StringApproximatorIndex::_insert(PrefixTreeNode* root, std::string_view sv,
 
 StringApproximatorIndex::PrefixTreeIterator StringApproximatorIndex::_find(PrefixTreeNode* root, std::string_view sv) {
     char firstChar = sv[0];
+    // XXX should fix this so this isnt needed
+    if (firstChar == 0) return PrefixTreeIterator{NOT_FOUND, nullptr};
     size_t idx = charToIndex(firstChar);
     if (idx >= SIGMA) return PrefixTreeIterator{NOT_FOUND, nullptr};
     if (!root->_children[idx]) {
