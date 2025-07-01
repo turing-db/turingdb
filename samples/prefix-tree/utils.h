@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include <string_view>
 
 enum CMD {
     INSERT,
@@ -11,4 +12,9 @@ enum CMD {
 
 std::vector<std::string> split(std::string_view str, std::string_view delim);
 
-std::vector<std::string> preprocess(std::string);
+bool replace(std::string& str, const std::string_view from, const std::string_view to);
+
+void replaceAll(std::string& str, const std::string_view from, const std::string_view to);
+
+std::vector<std::string> preprocess(const std::string_view in);
+

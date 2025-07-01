@@ -1,5 +1,11 @@
 set(SAMPLE_NAME prefix-tree)
-set(SOURCES prefix-tree.cpp)
+set(SOURCES
+    main.cpp
+    prefix-tree.cpp
+    utils.cpp
+    cli.cpp
+    benchmark.cpp
+)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
