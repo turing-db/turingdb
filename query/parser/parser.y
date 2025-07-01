@@ -13,7 +13,6 @@
 
 #include <string>
 #include <memory>
-#include <iostream>
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
 
@@ -379,7 +378,7 @@ prop_equals_expr: prop_ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, 
           ;
 
 prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
-                     | DECIMAL_CONSTANT { std::cout << "Value in parser: " << $1 << std::endl; $$ =  DoubleExprConst::create(ctxt, std::stod($1));}
+                     | DECIMAL_CONSTANT { $$ =  DoubleExprConst::create(ctxt, std::stod($1));}
                      | INT_CONSTANT UNSIGNED_SUFFIX { $$ = UInt64ExprConst::create(ctxt, std::stoull($1)); }
                      | MINUS INT_CONSTANT { $$ = Int64ExprConst::create(ctxt, std::stoll("-"+$2)); }
                      | INT_CONSTANT { $$ = Int64ExprConst::create(ctxt, std::stoll($1)); }

@@ -11,7 +11,6 @@
 #include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
-#include <iostream>
 
 using namespace db;
 
@@ -95,8 +94,6 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
             }
             case ValueType::Double: {
                 const auto* casted = static_cast<const DoubleExprConst*>(right);
-                // XXX: CASTED VALUE IS TRUNCATED HERE
-                std::cout << "Value of casted expression: " << casted->getVal() << std::endl;
                 builder->addNodeProperty<types::Double>(nodeID, propType._id, casted->getVal());
                 break;
             }

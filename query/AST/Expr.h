@@ -141,7 +141,7 @@ public:
 
 private:
     double _val {0};
-    DoubleExprConst(int64_t val)
+    DoubleExprConst(double val)
         : ExprConst(db::ValueType::Double),
         _val(val)
     {
