@@ -120,18 +120,13 @@ void QueryAnalyzer::ensureMatchVarsUnique(const MatchTarget* target) {
 
     const PathElements& elements = ptn->elements();
 
-    const auto isNotNullptr = [](auto* ptr) { return ptr != nullptr; };
-    const auto getVar = [](EntityPattern* e) { return e->getVar(); };
-    const auto getVarName = [](VarExpr* v) { return v->getName(); };
-
-    const std::vector<std::string> varNames = elements
-                                            | ranges::views::filter(isNotNullptr)
-                                            | ranges::views::transform(getVar)
-                                            | ranges::views::filter(isNotNullptr)
-                                            | ranges::views::transform(getVarName)
-                                            | ranges::to<std::vector<std::string>>()
-                                            | ranges::actions::sort;
-
+    std::vector<std::string> varNames;
+    for (auto&& e : elements) {
+        if (e && e->getVar()) {
+            varNames.push_back(e->getVar()->getName());
+        }
+    }
+    std::ranges::sort(varNames);
 
     // Adjacent find returns an iterator to the first occurences of two consecutive
     // identical elements. Since the vector is sorted, identical variable names are
