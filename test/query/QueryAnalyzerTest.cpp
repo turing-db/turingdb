@@ -172,3 +172,40 @@ TEST_F(QueryAnalyzerTest, typeCheckBool) {
         .expectError()
         .execute();
 }
+
+TEST_F(QueryAnalyzerTest, checkMatchVariableUniqueness) {
+    QueryTester tester {_mem, *_interp};
+
+    tester.query("MATCH n--m return n")
+        .expectVector<NodeID>({0})
+        .execute();
+
+    tester.query("MATCH n--m--n return n")
+        .expectError()
+        .execute();
+
+    tester.query("MATCH n:Typer--m:Friend return n")
+        .expectVector<NodeID>({0})
+        .execute();
+
+    tester.query("MATCH n:Typer--m:Friend--n:Typer return n")
+        .expectError()
+        .execute();
+
+    tester.query("MATCH n-[e]-m-[r]-p return n")
+        .expectVector<NodeID>({})
+        .execute();
+
+    tester.query("MATCH n-[e:FRIENDS_WITH]-m-[r:FRIENDS_WITH]-p return n")
+        .expectVector<NodeID>({})
+        .execute();
+
+    tester.query("MATCH n-[e]-m-[e]-p return n")
+        .expectError()
+        .execute();
+
+    tester.query("MATCH n-[e:FRIENDS_WITH]-m-[e:FRIENDS_WITH]-p return n")
+        .expectError()
+        .execute();
+    
+}

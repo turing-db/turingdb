@@ -28,7 +28,7 @@ void TypingGraph::createTypingGraph(Graph* graph) {
     writer.commit();
 
     const auto typeFriend = writer.addEdge("FRIENDS_WITH", typeHolder, frend);
-    writer.addEdgeProperty<types::String>(typeFriend, "name", "type has a freind");
+    writer.addEdgeProperty<types::String>(typeFriend, "name", "type has a friend");
     writer.commit();
 
 
