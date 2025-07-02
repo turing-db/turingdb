@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string>
 
+#include "MatchTarget.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -40,6 +41,7 @@ private:
     bool analyzeEntityPattern(DeclContext* declContext,
                               EntityPattern* entity,
                               bool isCreate);
+    void ensureMatchVarsUnique(const MatchTarget* target);
     bool analyzeBinExprConstraint(const BinExpr* constraint, bool isCreate);
     bool typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
     bool analyzeExplain(ExplainCommand* cmd);

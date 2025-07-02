@@ -3,11 +3,13 @@
 #include <cstdint>
 #include <optional>
 #include <range/v3/view.hpp>
+#include <range/v3/action/sort.hpp>
+#include <range/v3/algorithm/adjacent_find.hpp>
 
 #include "AnalyzeException.h"
 #include "Profiler.h"
 #include "metadata/PropertyType.h"
-#include "metadata/PropertyTypeMap.h"
+#include "reader/GraphReader.h"
 #include "DeclContext.h"
 #include "Expr.h"
 #include "MatchTarget.h"
@@ -19,7 +21,6 @@
 #include "VarDecl.h"
 #include "BioAssert.h"
 
-#include "reader/GraphReader.h"
 
 using namespace db;
 namespace rv = ranges::views;
@@ -111,6 +112,47 @@ bool QueryAnalyzer::analyzeCreateGraph(CreateGraphCommand* cmd) {
     return true;
 }
 
+// Checks if a match target contains multiple variables
+void QueryAnalyzer::ensureMatchVarsUnique(const MatchTarget* target) {
+    using PathElements = std::vector<EntityPattern*>;
+
+    const PathPattern* ptn = target->getPattern();
+    if (ptn == nullptr) {
+        throw new AnalyzeException("Match target path pattern not found");
+    }
+
+    const PathElements& elements = ptn->elements();
+
+    const auto isNotNullptr = [](auto* ptr) { return ptr != nullptr; };
+    const auto getVar = [](EntityPattern* e) { return e->getVar(); };
+    const auto getVarName = [] (VarExpr* v) { return v->getName(); };
+
+    const std::vector<std::string> varNames = elements
+                    | ranges::views::filter(isNotNullptr)
+                    | ranges::views::transform(getVar)       
+                    | ranges::views::filter(isNotNullptr)
+                    | ranges::views::transform(getVarName)   
+                    | ranges::to<std::vector<std::string>>() 
+                    | ranges::actions::sort;                 
+    
+
+    // Adjacent find returns an iterator to the first occurences of two consecutive
+    // identical elements. Since the vector is sorted, identical variable names are
+    // contiguous, and thus if adjacent_find returns no such two consecutive
+    // identical elements, all variables must be unique.
+    auto duplicateVarIt = ranges::adjacent_find(varNames);
+    bool hasDuplicate = duplicateVarIt != std::end(varNames);
+
+    if (hasDuplicate) [[unlikely]] {
+        std::string duplicateVarName = *duplicateVarIt;
+        throw AnalyzeException(fmt::format(
+            "Variable {} occurs multiple times in MATCH query", 
+            duplicateVarName));
+    }
+
+    return;
+}
+
 bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
     bool isCreate{false}; // Flag to distinguish create and match commands
     ReturnProjection* proj = cmd->getProjection();
@@ -121,7 +163,11 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
     // match targets
     DeclContext* declContext = cmd->getDeclContext();
     for (const MatchTarget* target : cmd->matchTargets()) {
+        ensureMatchVarsUnique(target);
         const PathPattern* pattern = target->getPattern();
+        if (pattern == nullptr) {
+            throw new AnalyzeException("Match target path pattern not found");
+        }
         const auto& elements = pattern->elements();
 
         EntityPattern* entityPattern = elements[0];
