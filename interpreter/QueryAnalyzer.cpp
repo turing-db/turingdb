@@ -132,17 +132,15 @@ void QueryAnalyzer::ensureMatchVarsUnique(const MatchTarget* target) {
     // identical elements. Since the vector is sorted, identical variable names are
     // contiguous, and thus if adjacent_find returns no such two consecutive
     // identical elements, all variables must be unique.
-    auto duplicateVarIt = ranges::adjacent_find(varNames);
-    bool hasDuplicate = duplicateVarIt != std::end(varNames);
+    const auto duplicateVarIt = ranges::adjacent_find(varNames);
+    const bool hasDuplicate = duplicateVarIt != std::end(varNames);
 
     if (hasDuplicate) [[unlikely]] {
-        std::string duplicateVarName = *duplicateVarIt;
+        const std::string duplicateVarName = *duplicateVarIt;
         throw AnalyzeException(fmt::format(
             "Variable {} occurs multiple times in MATCH query",
             duplicateVarName));
     }
-
-    return;
 }
 
 bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
