@@ -44,7 +44,7 @@ void returnAllVariables(MatchCommand* cmd) {
 
 QueryAnalyzer::QueryAnalyzer(const GraphView& view, ASTContext* ctxt)
     : _view(view),
-    _ctxt(ctxt)
+      _ctxt(ctxt)
 {
 }
 
@@ -57,36 +57,36 @@ bool QueryAnalyzer::analyze(QueryCommand* cmd) {
     switch (cmd->getKind()) {
         case QueryCommand::Kind::MATCH_COMMAND:
             return analyzeMatch(static_cast<MatchCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::CREATE_COMMAND:
             return analyzeCreate(static_cast<CreateCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             return analyzeCreateGraph(static_cast<CreateGraphCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::LIST_GRAPH_COMMAND:
             return true;
-        break;
+            break;
 
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
             return analyzeLoadGraph(static_cast<LoadGraphCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::EXPLAIN_COMMAND:
             return analyzeExplain(static_cast<ExplainCommand*>(cmd));
-        break;
+            break;
 
         case QueryCommand::Kind::HISTORY_COMMAND:
         case QueryCommand::Kind::CHANGE_COMMAND:
         case QueryCommand::Kind::COMMIT_COMMAND:
             return true;
-        break;
+            break;
 
         default:
-        return false;
+            return false;
     }
 
     return true;
@@ -125,16 +125,16 @@ void QueryAnalyzer::ensureMatchVarsUnique(const MatchTarget* target) {
 
     const auto isNotNullptr = [](auto* ptr) { return ptr != nullptr; };
     const auto getVar = [](EntityPattern* e) { return e->getVar(); };
-    const auto getVarName = [] (VarExpr* v) { return v->getName(); };
+    const auto getVarName = [](VarExpr* v) { return v->getName(); };
 
     const std::vector<std::string> varNames = elements
-                    | ranges::views::filter(isNotNullptr)
-                    | ranges::views::transform(getVar)       
-                    | ranges::views::filter(isNotNullptr)
-                    | ranges::views::transform(getVarName)   
-                    | ranges::to<std::vector<std::string>>() 
-                    | ranges::actions::sort;                 
-    
+                                            | ranges::views::filter(isNotNullptr)
+                                            | ranges::views::transform(getVar)
+                                            | ranges::views::filter(isNotNullptr)
+                                            | ranges::views::transform(getVarName)
+                                            | ranges::to<std::vector<std::string>>()
+                                            | ranges::actions::sort;
+
 
     // Adjacent find returns an iterator to the first occurences of two consecutive
     // identical elements. Since the vector is sorted, identical variable names are
@@ -146,7 +146,7 @@ void QueryAnalyzer::ensureMatchVarsUnique(const MatchTarget* target) {
     if (hasDuplicate) [[unlikely]] {
         std::string duplicateVarName = *duplicateVarIt;
         throw AnalyzeException(fmt::format(
-            "Variable {} occurs multiple times in MATCH query", 
+            "Variable {} occurs multiple times in MATCH query",
             duplicateVarName));
     }
 
@@ -154,7 +154,7 @@ void QueryAnalyzer::ensureMatchVarsUnique(const MatchTarget* target) {
 }
 
 bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
-    bool isCreate{false}; // Flag to distinguish create and match commands
+    bool isCreate {false}; // Flag to distinguish create and match commands
     ReturnProjection* proj = cmd->getProjection();
     if (!proj) {
         return false;
@@ -241,7 +241,7 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 }
 
 bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
-    bool isCreate{true}; // Flag to distinguish create and match commands
+    bool isCreate {true}; // Flag to distinguish create and match commands
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -267,7 +267,7 @@ bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
                 edge->setKind(DeclKind::EDGE_DECL);
                 target->setKind(DeclKind::NODE_DECL);
 
-                if (!analyzeEntityPattern(declContext, edge,isCreate)) {
+                if (!analyzeEntityPattern(declContext, edge, isCreate)) {
                     return false;
                 }
 
@@ -283,7 +283,7 @@ bool QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
 bool QueryAnalyzer::typeCheckBinExprConstr(const PropertyType lhs,
                                            const ExprConst* rhs) {
     // NOTE: Directly accessing struct member
-    const ValueType lhsType = lhs._valueType; 
+    const ValueType lhsType = lhs._valueType;
     const ValueType rhsType = rhs->getType();
 
     if (lhsType == rhsType) {
@@ -321,11 +321,8 @@ bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
     if (lhsPropTypeOpt == std::nullopt) {
         // If this is a match query: error
         if (!isCreate) [[unlikely]] {
-            throw AnalyzeException("Variable '" +
-                                   lhsName +
-                                   "' has invalid property type");
-        }
-        else { // If a create query: no need to type check
+            throw AnalyzeException("Variable '" + lhsName + "' has invalid property type");
+        } else { // If a create query: no need to type check
             return true;
         }
     }
@@ -334,16 +331,12 @@ bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
     const PropertyType lhsPropType = lhsPropTypeOpt.value();
 
     if (!QueryAnalyzer::typeCheckBinExprConstr(lhsPropType, rhsExpr)) [[unlikely]] {
-        const ValueType lhsType = lhsPropType._valueType; 
+        const ValueType lhsType = lhsPropType._valueType;
         const ValueType rhsType = rhsExpr->getType();
         const std::string varTypeName = std::string(ValueTypeName::value(lhsType));
         const std::string exprTypeName = std::string(ValueTypeName::value(rhsType));
         const std::string verb = isCreate ? "assigned" : "compared to";
-        throw AnalyzeException("Variable '" + lhsName +
-                               "' of type " + varTypeName +
-                               " cannot be " + verb +
-                               " value of type " +
-                               exprTypeName);
+        throw AnalyzeException("Variable '" + lhsName + "' of type " + varTypeName + " cannot be " + verb + " value of type " + exprTypeName);
     }
     return true;
 }
@@ -360,10 +353,10 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
 
     // Create the variable declaration in the scope of the command
     VarDecl* decl = VarDecl::create(_ctxt,
-            declContext,
-            var->getName(),
-            entity->getKind(),
-            entity->getEntityID());
+                                    declContext,
+                                    var->getName(),
+                                    entity->getKind(),
+                                    entity->getEntityID());
 
     if (!decl) {
         // decl already exists from prev targets
@@ -384,10 +377,10 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
     const auto binExprs = exprConstraint->getExpressions();
     for (const BinExpr* binExpr : binExprs) {
         if (!QueryAnalyzer::analyzeBinExprConstraint(binExpr, isCreate)) {
-          return false;
+            return false;
         }
     }
-    
+
     var->setDecl(decl);
     return true;
 }
