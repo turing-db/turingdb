@@ -32,9 +32,9 @@ public:
 
         PrefixTreeNode(char val)
             : _children{},
-            _val{val},
-            _isComplete{false},
-            _owners{}
+              _val{val},
+              _isComplete{false},
+              _owners{}
 
         {
         }
