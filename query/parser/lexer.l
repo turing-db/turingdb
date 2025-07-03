@@ -5,7 +5,8 @@
 
 using namespace db;
 
-#define yyterminate() return YParser::make_YYEOF(location());
+#define yyterminate() return YParser::make_YYEOF(location()); // otherwise loc panic on eof
+#define YY_USER_ACTION advanceLocation(yyleng);  // each token, advance current location
 
 %}
 
@@ -15,8 +16,12 @@ using namespace db;
 %option prefix="YScanner_"
 %%
 
-[ \t\r\n]+  { }
+\n        { locationNewLine(); } // handle new lines specifically w.r.t location
+[ \t\r]+  { }
 
+%{
+// Pass location when making each token for location based parse errors
+%}
 "select"|"SELECT" { return YParser::make_SELECT(getLocation()); }
 "from"|"FROM" { return YParser::make_FROM(getLocation()); }
 "match"|"MATCH" { return YParser::make_MATCH(getLocation()); }

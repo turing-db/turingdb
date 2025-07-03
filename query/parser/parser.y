@@ -14,6 +14,7 @@
 {
 
 #include <string>
+#include <sstream>
 #include <memory>
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
@@ -458,9 +459,14 @@ commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
 %%
 
 
+// Using our own custom location in YScanner, not yylloc (loc)
 void db::YParser::error(const location_type& loc, const std::string& msg) {
-    // This function is required by the base class.
-    // It might never be called if you're only catching syntax_error exceptions.
-    throw db::YParser::syntax_error(loc, msg);
+    std::ostringstream oss;
+    location turingLoc = scanner.getLocation();
+    oss << "Parse error on line " << turingLoc.begin.line 
+        << ", from column " << turingLoc.begin.column 
+        << ", to column " << turingLoc.end.column 
+        << ": " << msg;
+    throw db::YParser::syntax_error(turingLoc, oss.str());
 }
 
