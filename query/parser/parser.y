@@ -7,7 +7,7 @@
 %define api.value.type variant
 %define parse.assert
 %define api.namespace { db }
-%define parse.error verbose
+%define parse.error detailed
 
 
 %code requires
@@ -72,51 +72,49 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %define api.token.prefix {TOKEN_}
 
 %token UNKNOWN_TOKEN
+%token YYEOF 0 "end of query" // For pretty error messages
 
 %token<std::string> ID
-%token COMMA
-%token COLON
-%token STAR
-%token OBRACK
-%token CBRACK
-%token OPAR
-%token CPAR
-%token OSBRACK
-%token CSBRACK
-%token ARROW
-%token POINT
-
+%token COMMA        "','"
+%token COLON        "':'"
+%token STAR         "'*'"
+%token OBRACK       "'{'"
+%token CBRACK       "'}'"
+%token OPAR         "'('"
+%token CPAR         "')'"
+%token OSBRACK      "'['"
+%token CSBRACK      "']'"
+%token ARROW        "'->'"
+%token POINT        "'.'"
 // Keywords
-%token SELECT
-%token FROM
-%token MATCH 
-%token RETURN
-%token CREATE
-%token LIST
-%token GRAPH
-%token LOAD
-%token EXPLAIN
-%token HISTORY
-%token CHANGE
-%token COMMIT
-%token NEW
-%token SUBMIT
-%token DELETE
-
+%token SELECT       "'SELECT'"
+%token FROM         "'FROM'"
+%token MATCH        "'MATCH'"
+%token RETURN       "'RETURN'"
+%token CREATE       "'CREATE'"
+%token LIST         "'LIST'"
+%token GRAPH        "'GRAPH'"
+%token LOAD         "'LOAD'"
+%token EXPLAIN      "'EXPLAIN'"
+%token HISTORY      "'HISTORY'"
+%token CHANGE       "'CHANGE'"
+%token COMMIT       "'COMMIT'"
+%token NEW          "'NEW'"
+%token SUBMIT       "'SUBMIT'"
+%token DELETE       "'DELETE'"
 // Operators
-%token PLUS
-%token MINUS
-%token GREATER
-%token GREATER_EQUAL
-%token LOWER
-%token LOWER_EQUAL
-%token OR
-%token AND
-%token EQUAL
-%token NOT_EQUAL
-%token STR_APPROX
-%token LIKE
-%token NOT
+%token PLUS         "'+'"
+%token MINUS        "'-'"
+%token GREATER      "'>'"
+%token GREATER_EQUAL "'>='"
+%token LOWER        "'<'"
+%token LOWER_EQUAL  "'<='"
+%token OR           "'OR'"
+%token AND          "'AND'"
+%token EQUAL        "'='"
+%token NOT_EQUAL    "'!='"
+%token LIKE         "'LIKE'"
+%token NOT          "'NOT'"
 
 // Constants
 %token <std::string> STRING_CONSTANT
@@ -127,7 +125,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token <std::string> BACKTICK_STRING_CONSTANT
 
 // Constant suffixes
-%token UNSIGNED_SUFFIX
+%token UNSIGNED_SUFFIX "'u' (Unsigned suffix)"
 
 %type<db::QueryCommand*> query_unit
 %type<db::QueryCommand*> cmd
@@ -458,8 +456,9 @@ commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
 %%
 
 
-void db::YParser::error(const std::string& msg) {
+void db::YParser::error(/*const location_type& loc,*/ const std::string& msg) {
     // This function is required by the base class.
     // It might never be called if you're only catching syntax_error exceptions.
-    throw db::YParser::syntax_error(msg);
+    throw db::YParser::syntax_error(/*loc,*/ msg);
 }
+
