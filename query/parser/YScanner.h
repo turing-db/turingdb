@@ -25,9 +25,20 @@ namespace db {
 
 class YScanner : public yyFlexLexer {
 public:
-    YScanner() = default;
+    YScanner()
+    : _location{0}
+    {
+    }
     virtual ~YScanner() = default;
     virtual db::YParser::symbol_type get_next_token();
+
+    location getLocation() const { return _location; }
+
+    void increaseLocation(uint64_t loc) {
+        _location += loc;
+    }
+private:
+    location _location;
 };
 
 }

@@ -40,6 +40,8 @@ class ReturnProjection;
 
 }
 
+%locations
+
 %code top
 {
 
@@ -456,9 +458,9 @@ commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
 %%
 
 
-void db::YParser::error(/*const location_type& loc,*/ const std::string& msg) {
+void db::YParser::error(const location_type& loc, const std::string& msg) {
     // This function is required by the base class.
     // It might never be called if you're only catching syntax_error exceptions.
-    throw db::YParser::syntax_error(/*loc,*/ msg);
+    throw db::YParser::syntax_error(loc, msg);
 }
 

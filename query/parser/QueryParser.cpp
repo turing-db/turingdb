@@ -34,3 +34,4 @@ QueryCommand* QueryParser::parse(std::string_view query) {
     
     return _astCtxt->getRoot();
 }
+
