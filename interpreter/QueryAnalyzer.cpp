@@ -293,11 +293,17 @@ bool QueryAnalyzer::typeCheckBinExprConstr(const PropertyType lhs,
 
 bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
                                              bool isCreate) {
-    // Currently only support equals
-    if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
+    switch (binExpr->getOpType()) {
+        case BinExpr::OP_EQUAL:
+        break;
+
+        case BinExpr::OP_STR_APPROX:
+        break;
+
+        default:
         throw AnalyzeException("Unsupported operator");
     }
-
+    
     // Assumes that variable is left operand, constant is right operand
     const VarExpr* lhsExpr =
         static_cast<VarExpr*>(binExpr->getLeftExpr());
