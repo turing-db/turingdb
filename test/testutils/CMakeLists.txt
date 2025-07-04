@@ -3,6 +3,7 @@ add_library(turing_test_utils_s
 
 target_link_libraries(turing_test_utils_s
     PUBLIC  GTest::gtest
+            GTest::gmock
             turing_db_log_s
             turing_common_s
             spdlog)

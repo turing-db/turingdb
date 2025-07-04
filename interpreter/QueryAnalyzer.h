@@ -19,6 +19,7 @@ class EntityPattern;
 class LoadGraphCommand;
 class ExplainCommand;
 class GraphView;
+class Expr;
 class BinExpr;
 class ExprConst;
 
@@ -46,6 +47,10 @@ private:
     bool typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
     bool analyzeExplain(ExplainCommand* cmd);
     std::string createVarName();
+
+
+    template<typename T>
+    T* enforceType(Expr* exp);
 };
 
 }

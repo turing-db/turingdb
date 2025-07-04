@@ -293,11 +293,20 @@ bool QueryAnalyzer::typeCheckBinExprConstr(const PropertyType lhs,
 
 bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
                                              bool isCreate) {
+    Expr* constExpr = binExpr->getRightExpr();
+
     switch (binExpr->getOpType()) {
         case BinExpr::OP_EQUAL:
+            // No special handling requrired
         break;
 
         case BinExpr::OP_STR_APPROX:
+            // Ensure the constant value is a string
+            if (!enforceType<StringExprConst>(constExpr)) [[unlikely]] {
+                throw AnalyzeException("Operator '~=' must be "
+                                       "used with values of type 'String'.");
+            }
+            throw AnalyzeException("OPERATOR '~=' NOT SUPPORTED");
         break;
 
         default:
@@ -403,4 +412,11 @@ bool QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
     }
 
     return true;
+}
+
+
+template <typename T>
+T* QueryAnalyzer::enforceType(Expr* exp) {
+    T* castedExp = dynamic_cast<T*>(exp);
+    return castedExp;
 }

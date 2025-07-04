@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
+#include "AnalyzeException.h"
 #include "ID.h"
 #include "LocalMemory.h"
 #include "QueryInterpreter.h"
@@ -14,7 +16,7 @@ class QueryAnalyzerTest : public turing::test::TuringTest {
 public:
     void initialize() override {
         SystemManager& sysMan = _db.getSystemManager();
-        Graph* graph = sysMan.createGraph("simple");
+        Graph* graph = sysMan.createGraph("typing");
         TypingGraph::createTypingGraph(graph);
         _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
                                                      &_db.getJobSystem());
@@ -60,7 +62,8 @@ TEST_F(QueryAnalyzerTest, typeCheckInt64) {
 TEST_F(QueryAnalyzerTest, typeCheckUInt64) {
     QueryTester tester {_mem, *_interp};
 
-    // Query UInt64 with Int64 NOTE: Coercion implemented
+    // Query UInt64 with Int64
+    // NOTE: Coercion implemented
     tester.query("MATCH n:Typer{uint = 333} return n")
         .expectVector<NodeID>({0})
         .execute();
@@ -208,4 +211,28 @@ TEST_F(QueryAnalyzerTest, checkMatchVariableUniqueness) {
         .expectError()
         .execute();
     
+}
+
+TEST_F(QueryAnalyzerTest, testApproxStringOperator) {
+    QueryTester tester {_mem, *_interp};
+    // Correct usage of the string approximate operator
+    const std::string query1 = "MATCH (n:Typer{str~=\"string property\"}) return n";
+    // Incorrect usage of the string approximate operator: comparing string to int
+    const std::string query2 = "MATCH (n:Typer{str~=2}) return n";
+
+    // XXX: Not implemented yet
+    EXPECT_THAT(
+    [&]() { tester.query(query1); },
+    testing::Throws<AnalyzeException>(
+        testing::Property(&std::exception::what, 
+                             testing::HasSubstr("OPERATOR '~=' NOT SUPPORTED")))
+    );
+
+    EXPECT_THAT(
+    [&]() { tester.query(query2); },
+    testing::Throws<AnalyzeException>(
+        testing::Property(&std::exception::what, 
+                             testing::HasSubstr("Operator '~=' must be used with values of type 'String'.")))
+    );
+
 }
