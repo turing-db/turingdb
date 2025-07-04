@@ -42,8 +42,7 @@ QueryCommand* QueryParser::parse(std::string_view query) {
 void QueryParser::generateErrorMsg(std::string& msg,
                           const std::string_view query,
                           const std::string_view excptMsg,
-                          const location& loc){
-
+                          const location& loc) {
     std::ostringstream out;
     // Get error line of query
     const uint32_t errLineNo = loc.begin.line;

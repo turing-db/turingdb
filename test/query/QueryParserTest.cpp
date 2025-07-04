@@ -105,7 +105,6 @@ TEST_F(QueryParserTest, returnProperties) {
     ASSERT_TRUE(parser.parse(query3));
 }
 
-
 TEST_F(QueryParserTest, parseErrors) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
@@ -136,7 +135,6 @@ TEST_F(QueryParserTest, parseErrors) {
                          ))
         )
     );
-    
 
     ASSERT_TRUE(parser.parse(query2.str()));
 
@@ -151,5 +149,4 @@ TEST_F(QueryParserTest, parseErrors) {
                          ))
         )
     );
-
 }

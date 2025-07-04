@@ -21,13 +21,12 @@
 
 #include "parser.hpp" // this is needed for symbol_type, and location
 
-
 namespace db {
 
 class YScanner : public yyFlexLexer {
 public:
     YScanner()
-    : _location{0}
+        : _location{0}
     {
         _location.initialize(); // see location.hh
     }
