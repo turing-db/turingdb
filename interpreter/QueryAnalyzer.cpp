@@ -40,6 +40,12 @@ void returnAllVariables(MatchCommand* cmd) {
     }
 }
 
+template <typename T>
+const T* enforceType(const Expr* exp) {
+    const T* castedExp = dynamic_cast<const T*>(exp);
+    return castedExp;
+}
+
 }
 
 QueryAnalyzer::QueryAnalyzer(const GraphView& view, ASTContext* ctxt)
@@ -86,7 +92,8 @@ bool QueryAnalyzer::analyze(QueryCommand* cmd) {
         break;
 
         default:
-        return false;
+            return false;
+        break;
     }
 
     return true;
@@ -155,7 +162,7 @@ bool QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
     for (const MatchTarget* target : cmd->matchTargets()) {
         const PathPattern* pattern = target->getPattern();
         if (pattern == nullptr) {
-            throw new AnalyzeException("Match target path pattern not found");
+            throw AnalyzeException("Match target path pattern not found");
         }
 
         ensureMatchVarsUnique(target);
@@ -293,11 +300,27 @@ bool QueryAnalyzer::typeCheckBinExprConstr(const PropertyType lhs,
 
 bool QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
                                              bool isCreate) {
-    // Currently only support equals
-    if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
-        throw AnalyzeException("Unsupported operator");
-    }
+    const Expr* constExpr = binExpr->getRightExpr();
 
+    switch (binExpr->getOpType()) {
+        case BinExpr::OP_EQUAL:
+            // No special handling requrired
+        break;
+
+        case BinExpr::OP_STR_APPROX:
+            // Ensure the constant value is a string
+            if (!enforceType<StringExprConst>(constExpr)) [[unlikely]] {
+                throw AnalyzeException("Operator '~=' must be "
+                                       "used with values of type 'String'.");
+            }
+            throw AnalyzeException("OPERATOR '~=' NOT SUPPORTED");
+        break;
+
+        default:
+            throw AnalyzeException("Unsupported operator");
+        break;
+    }
+    
     // Assumes that variable is left operand, constant is right operand
     const VarExpr* lhsExpr =
         static_cast<VarExpr*>(binExpr->getLeftExpr());
@@ -370,9 +393,7 @@ bool QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
     // Otherwise, verify all constraints are valid
     const auto binExprs = exprConstraint->getExpressions();
     for (const BinExpr* binExpr : binExprs) {
-        if (!QueryAnalyzer::analyzeBinExprConstraint(binExpr, isCreate)) {
-            return false;
-        }
+        analyzeBinExprConstraint(binExpr, isCreate);
     }
 
     var->setDecl(decl);
@@ -398,3 +419,4 @@ bool QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
 
     return true;
 }
+

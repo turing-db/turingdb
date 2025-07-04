@@ -112,6 +112,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token AND
 %token EQUAL
 %token NOT_EQUAL
+%token STR_APPROX
 %token LIKE
 %token NOT
 
@@ -146,6 +147,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::EntityPattern*> edge_entity_pattern
 %type<db::TypeConstraint*> type_constraint
 %type<db::BinExpr*> prop_equals_expr
+%type<db::BinExpr*> prop_approx_expr
 %type<db::ExprConstraint*> prop_expr_constraint
 %type<db::ExprConst*> prop_expr_constant
 %type<std::string> prop_ID
@@ -365,7 +367,16 @@ prop_expr_constraint : prop_expr_constraint COMMA prop_equals_expr {
                                                             $1->addExpr($3);
                                                             $$ = $1; 
                                                         }
+         | prop_expr_constraint COMMA prop_approx_expr  {
+                                                            $1->addExpr($3);
+                                                            $$ = $1;
+                                                        }
          | prop_equals_expr                             {
+                                                            auto ExprConstraint = ExprConstraint::create(ctxt);
+                                                            ExprConstraint->addExpr($1);
+                                                            $$ = ExprConstraint;
+                                                        }
+         | prop_approx_expr                             {
                                                             auto ExprConstraint = ExprConstraint::create(ctxt);
                                                             ExprConstraint->addExpr($1);
                                                             $$ = ExprConstraint;
@@ -376,6 +387,9 @@ prop_equals_expr: prop_ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, 
           | prop_ID NOT_EQUAL prop_expr_constant { $$ = nullptr; }
           | prop_ID COLON prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
           ;
+
+prop_approx_expr: prop_ID STR_APPROX prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1), $3, BinExpr::OpType::OP_STR_APPROX); }
+        ;
 
 prop_expr_constant: STRING_CONSTANT  { $$ = StringExprConst::create(ctxt, $1); }
                      | DECIMAL_CONSTANT { $$ =  DoubleExprConst::create(ctxt, std::stod($1));}

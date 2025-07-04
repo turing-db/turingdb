@@ -177,6 +177,7 @@ class BinExpr : public Expr {
 public:
     enum OpType {
         OP_EQUAL,
+        OP_STR_APPROX,
     };
 
     static BinExpr* create(ASTContext* ctxt, Expr* left, Expr* right, OpType opType);

@@ -19,6 +19,7 @@ class EntityPattern;
 class LoadGraphCommand;
 class ExplainCommand;
 class GraphView;
+class Expr;
 class BinExpr;
 class ExprConst;
 

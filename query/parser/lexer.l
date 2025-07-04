@@ -52,6 +52,7 @@ using namespace db;
 "<" { return YParser::make_LOWER(); }
 "=" { return YParser::make_EQUAL(); }
 "!=" { return YParser::make_NOT_EQUAL(); }
+"~=" { return YParser::make_STR_APPROX(); }
 "!" { return YParser::make_NOT(); }
 "[" { return YParser::make_OSBRACK(); }
 "]" { return YParser::make_CSBRACK(); }

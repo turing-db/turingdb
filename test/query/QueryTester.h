@@ -70,6 +70,11 @@ public:
         return *this;
     }
 
+    QueryTester& expectErrorMessage(std::string_view msg) {
+        _expectErrMsg = msg;
+        return *this;
+    }
+
     QueryTester& execute() {
         fmt::print("Testing query: {}\n", _query);
         if (_expectError) {
@@ -82,6 +87,9 @@ public:
                 _commitHash,
                 _changeID);
             EXPECT_FALSE(res);
+            if (_expectErrMsg.has_value()) {
+                EXPECT_EQ(res.getError(), _expectErrMsg.value());
+            }
             return *this;
         }
 
@@ -187,5 +195,6 @@ private:
     std::vector<std::pair<std::unique_ptr<Column>, bool>> _expectedColumns;
     std::vector<std::unique_ptr<Column>> _outputColumns;
     bool _expectError = false;
+    std::optional<std::string> _expectErrMsg{std::nullopt};
 };
 }
