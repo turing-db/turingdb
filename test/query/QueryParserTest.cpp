@@ -1,7 +1,9 @@
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
 
 #include "ASTContext.h"
 #include "QueryParser.h"
+#include "ParserException.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -101,4 +103,50 @@ TEST_F(QueryParserTest, returnProperties) {
     ASSERT_TRUE(parser.parse(query1));
     ASSERT_TRUE(parser.parse(query2));
     ASSERT_TRUE(parser.parse(query3));
+}
+
+TEST_F(QueryParserTest, parseErrors) {
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    // 1 line query with error
+    const auto query1 = "MATCH n{location;'cytosol'} RETURN n.name";
+
+    // 2 line query with no error
+    std::ostringstream query2;
+    query2 << "MATCH n{location:'cytosol'}" << std::endl;
+    query2 << "RETURN n.name";
+
+    // 2 line query with error
+    std::ostringstream query3;
+    query3 << "MATCH n{location:'cytosol'}" << std::endl;
+    query3 << "RETURN n <>name";
+
+
+    EXPECT_THAT(
+    [&]() { parser.parse(query1); },
+    testing::Throws<ParserException>(
+        testing::Property(&std::exception::what, 
+                         testing::AllOf(
+                             testing::HasSubstr("syntax error"),
+                             testing::HasSubstr("line 1"),
+                             testing::HasSubstr("column 17"),
+                             testing::HasSubstr("column 18")
+                         ))
+        )
+    );
+
+    ASSERT_TRUE(parser.parse(query2.str()));
+
+    EXPECT_THAT([&]() { parser.parse(query3.str()); },
+        testing::Throws<ParserException>(
+        testing::Property(&std::exception::what, 
+                         testing::AllOf(
+                             testing::HasSubstr("syntax error"),
+                             testing::HasSubstr("line 2"),
+                             testing::HasSubstr("column 10"),
+                             testing::HasSubstr("column 11")
+                         ))
+        )
+    );
 }

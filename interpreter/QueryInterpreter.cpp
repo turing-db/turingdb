@@ -1,6 +1,7 @@
 #include "QueryInterpreter.h"
 
 #include "ChangeManager.h"
+#include "QueryStatus.h"
 #include "SystemManager.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
@@ -13,6 +14,7 @@
 #include "Executor.h"
 #include "AnalyzeException.h"
 #include "PlannerException.h"
+#include "ParserException.h"
 #include "PipelineException.h"
 
 #include "Profiler.h"
@@ -58,9 +60,14 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     // Parsing query
     ASTContext astCtxt;
     QueryParser parser(&astCtxt);
-    QueryCommand* cmd = parser.parse(query);
-    if (!cmd) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR);
+    QueryCommand* cmd {nullptr};
+    try {
+        cmd = parser.parse(query);
+        if (!cmd) {
+            return QueryStatus(QueryStatus::Status::PARSE_ERROR);
+        }
+    } catch (const ParserException& e){
+        return QueryStatus(QueryStatus::Status::PARSE_ERROR, e.what());
     }
 
     // Analyze query

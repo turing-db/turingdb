@@ -19,15 +19,31 @@
 #undef YY_DECL
 #define YY_DECL db::YParser::symbol_type db::YScanner::get_next_token()
 
-#include "parser.hpp" // this is needed for symbol_type
+#include "parser.hpp" // this is needed for symbol_type, and location
 
 namespace db {
 
 class YScanner : public yyFlexLexer {
 public:
-    YScanner() = default;
+    YScanner()
+        : _location{0}
+    {
+        _location.initialize(); // see location.hh
+    }
     virtual ~YScanner() = default;
     virtual db::YParser::symbol_type get_next_token();
+
+    location getLocation() const { return _location; }
+
+    void advanceLocation(uint64_t yyleng) { // yyleng is number of bytes of the current token
+        _location.step();           // begin = end
+        _location.columns(yyleng);  // cols end += yyleng
+    }
+
+    void locationNewLine() { _location.lines(1); } // lines begin ++
+    
+private:
+    location _location;
 };
 
 }

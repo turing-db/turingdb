@@ -11,7 +11,8 @@ add_flex_bison_dependency(lexer parser)
 set(parser_sources
         ${BISON_parser_OUTPUTS}
         ${FLEX_lexer_OUTPUTS}
-        QueryParser.cpp)
+        QueryParser.cpp
+        ParserException.cpp)
 
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/parser.cpp 
     PROPERTIES

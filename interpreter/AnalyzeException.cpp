@@ -7,5 +7,5 @@ AnalyzeException::AnalyzeException(std::string&& msg)
 {
 }
 
-AnalyzeException::~AnalyzeException() {
+AnalyzeException::~AnalyzeException() noexcept {
 }
