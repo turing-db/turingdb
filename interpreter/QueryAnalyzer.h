@@ -28,24 +28,24 @@ public:
     QueryAnalyzer(const GraphView& view, ASTContext* ctxt);
     ~QueryAnalyzer();
 
-    bool analyze(QueryCommand* cmd);
+    void analyze(QueryCommand* cmd);
 
 private:
     const GraphView& _view;
     ASTContext* _ctxt {nullptr};
     uint64_t _nextNewVarID {0};
 
-    bool analyzeMatch(MatchCommand* cmd);
-    bool analyzeCreate(CreateCommand* cmd);
-    bool analyzeCreateGraph(CreateGraphCommand* cmd);
-    bool analyzeLoadGraph(LoadGraphCommand* cmd);
-    bool analyzeEntityPattern(DeclContext* declContext,
+    void analyzeMatch(MatchCommand* cmd);
+    void analyzeCreate(CreateCommand* cmd);
+    void analyzeCreateGraph(CreateGraphCommand* cmd);
+    void analyzeLoadGraph(LoadGraphCommand* cmd);
+    void analyzeEntityPattern(DeclContext* declContext,
                               EntityPattern* entity,
                               bool isCreate);
     void ensureMatchVarsUnique(const MatchTarget* target);
-    bool analyzeBinExprConstraint(const BinExpr* constraint, bool isCreate);
-    bool typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
-    bool analyzeExplain(ExplainCommand* cmd);
+    void analyzeBinExprConstraint(const BinExpr* constraint, bool isCreate);
+    void typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
+    void analyzeExplain(ExplainCommand* cmd);
     std::string createVarName();
 };
 

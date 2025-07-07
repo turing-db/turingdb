@@ -73,9 +73,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     // Analyze query
     QueryAnalyzer analyzer(view, &astCtxt);
     try {
-        if (!analyzer.analyze(cmd)) {
-            return QueryStatus(QueryStatus::Status::ANALYZE_ERROR);
-        }
+        analyzer.analyze(cmd);
     } catch (const AnalyzeException& e) {
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR, e.what());
     }

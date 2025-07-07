@@ -44,8 +44,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
@@ -76,8 +75,7 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
@@ -112,8 +110,7 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
@@ -148,8 +145,7 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
@@ -180,8 +176,7 @@ TEST_F(PlanGenTest, matchLinear1) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
@@ -218,8 +213,7 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
@@ -257,8 +251,7 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
     ASSERT_TRUE(queryCmd);
 
     QueryAnalyzer analyzer(view, &ctxt);
-    const bool anaRes = analyzer.analyze(queryCmd);
-    ASSERT_TRUE(anaRes);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
