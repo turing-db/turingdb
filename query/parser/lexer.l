@@ -58,6 +58,7 @@ using namespace db;
 "<" { return YParser::make_LOWER(getLocation()); }
 "=" { return YParser::make_EQUAL(getLocation()); }
 "!=" { return YParser::make_NOT_EQUAL(getLocation()); }
+"~=" { return YParser::make_STR_APPROX(getLocation()); }
 "!" { return YParser::make_NOT(getLocation()); }
 "[" { return YParser::make_OSBRACK(getLocation()); }
 "]" { return YParser::make_CSBRACK(getLocation()); }

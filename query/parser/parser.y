@@ -116,6 +116,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token AND          "'AND'"
 %token EQUAL        "'='"
 %token NOT_EQUAL    "'!='"
+%token STR_APPROX   "'~='"
 %token LIKE         "'LIKE'"
 %token NOT          "'NOT'"
 
