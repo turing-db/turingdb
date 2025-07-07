@@ -60,7 +60,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     // Parsing query
     ASTContext astCtxt;
     QueryParser parser(&astCtxt);
-    QueryCommand* cmd{nullptr};
+    QueryCommand* cmd {nullptr};
     try {
         cmd = parser.parse(query);
         if (!cmd) {
