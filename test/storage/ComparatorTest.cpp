@@ -50,7 +50,7 @@ protected:
         writer.addEdgeProperty<types::UInt64>(k1, "Since", 3);
         writer.addEdgeProperty<types::UInt64>(k2, "Since", 3);
 
-        writer.commit();
+        writer.submit();
 
         return graph;
     }
@@ -86,7 +86,7 @@ protected:
         writer.addEdgeProperty<types::UInt64>(k1, "Since", 3);
         writer.addEdgeProperty<types::UInt64>(k2, "Since", 3);
 
-        writer.commit();
+        writer.submit();
 
         return graph;
     }
