@@ -22,7 +22,7 @@ void runPlan2(const std::string& query);
 
 int main(int argc, char** argv) {
     std::string queryStr = "match (n:Person{hasPhD: true})--(m:Person) return m";
-    if (argc != 2) {
+    if (argc == 2) {
        queryStr = argv[1];
     }
 
