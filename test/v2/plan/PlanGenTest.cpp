@@ -40,7 +40,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const std::string queryStr = "MATCH n RETURN n";
+    const std::string queryStr = "MATCH (n) RETURN n";
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
