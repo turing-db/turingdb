@@ -13,6 +13,7 @@
 #include "PlanGraphGenerator.h"
 #include "QueryAnalyzer.h"
 #include "PlanGraphTester.h"
+#include "PlanOptimizer.h"
 
 using namespace db;
 
@@ -39,7 +40,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
     ASTContext ctxt;
     QueryParser parser(&ctxt);
 
-    const std::string queryStr = "MATCH n RETURN n";
+    const std::string queryStr = "MATCH (n) RETURN n";
     QueryCommand* queryCmd = parser.parse(queryStr);
     ASSERT_TRUE(queryCmd);
 
@@ -255,9 +256,12 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
 
     PlanGraphGenerator planGen(view, callback);
     planGen.generate(queryCmd);
-    const PlanGraph& planGraph = planGen.getPlanGraph();
+    PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    //planGraph.dump(std::cout);
+
+    PlanOptimizer optimizer(planGraph);
+    optimizer.optimize();
 
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
@@ -275,4 +279,50 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
         .expect(PlanGraphOpcode::FILTER_NODE_EXPR)
         .expectVar("p")
         .validateComplete();
+}
+
+TEST_F(PlanGenTest, matchMultiTargetsLinear) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH (n:Person)--(m), (m{isFrench:true})--(z) RETURN n,z";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(view, &ctxt);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
+}
+
+TEST_F(PlanGenTest, matchMultiTargets1) {
+    const Transaction transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    auto callback = [](const Block& block) {};
+
+    ASTContext ctxt;
+    QueryParser parser(&ctxt);
+
+    const std::string queryStr = "MATCH (a)--(b)--(c), (b{isFrench:true})--(z), (b)--(y), (z)--(n)--(y) RETURN n,z";
+    QueryCommand* queryCmd = parser.parse(queryStr);
+    ASSERT_TRUE(queryCmd);
+
+    QueryAnalyzer analyzer(view, &ctxt);
+    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+
+    PlanGraphGenerator planGen(view, callback);
+    planGen.generate(queryCmd);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    planGraph.dump(std::cout);
 }

@@ -9,7 +9,7 @@ namespace db {
 class ASTContext;
 class DeclContext;
 class ReturnProjection;
-class MatchTarget;
+class MatchTargets;
 class CreateTarget;
 class CreateTargets;
 
@@ -39,8 +39,6 @@ protected:
 
 class MatchCommand : public QueryCommand {
 public:
-    using MatchTargets = std::vector<MatchTarget*>;
-
     static MatchCommand* create(ASTContext* ctxt);
 
     DeclContext* getDeclContext() const { return _declContext.get(); }
@@ -48,15 +46,15 @@ public:
     Kind getKind() const override { return Kind::MATCH_COMMAND; }
 
     ReturnProjection* getProjection() const { return _proj; }
-    const MatchTargets& matchTargets() const { return _matchTargets; }
+    MatchTargets* getMatchTargets() const { return _matchTargets; }
 
     void setProjection(ReturnProjection* proj) { _proj = proj; }
-    void addMatchTarget(MatchTarget* matchTarget);
+    void setMatchTargets(MatchTargets* targets) { _matchTargets = targets; }
 
 private:
     std::unique_ptr<DeclContext> _declContext;
     ReturnProjection* _proj {nullptr};
-    MatchTargets _matchTargets;
+    MatchTargets* _matchTargets {nullptr};
 
     MatchCommand();
     ~MatchCommand() override;

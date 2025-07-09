@@ -26,6 +26,7 @@ public:
     ~PlanGraphGenerator();
 
     const PlanGraph& getPlanGraph() const { return _tree; }
+    PlanGraph& getPlanGraph() { return _tree; }
 
     void generate(const QueryCommand* query);
 

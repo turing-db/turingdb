@@ -26,10 +26,6 @@ MatchCommand* MatchCommand::create(ASTContext* ctxt) {
     return matchCmd;
 }
 
-void MatchCommand::addMatchTarget(MatchTarget* matchTarget) {
-    _matchTargets.push_back(matchTarget);
-}
-
 // CreateCommand
 
 CreateCommand::CreateCommand(CreateTargets* targets)

@@ -24,12 +24,10 @@ public:
 
     const std::string& getName() const { return _name; }
 
-    bool isReturned() const { return _returned; }
-
-    void setReturned(bool returned) { _returned = returned; }
+    bool isUsed() const { return _used; }
+    void setUsed(bool used) { _used = used; }
 
     void setColumn(Column* column) { _column = column; }
-
     Column* getColumn() const { return _column; }
 
     uint64_t getEntityID() const { return _entityID; }
@@ -37,7 +35,7 @@ public:
 private:
     DeclKind _kind {DeclKind::UNKNOWN};
     std::string _name;
-    bool _returned {false};
+    bool _used {false};
     Column* _column {nullptr};
     uint64_t _entityID {UINT64_MAX};
 

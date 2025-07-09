@@ -2,7 +2,8 @@
 set(plan_sources
     PlanGraphGenerator.cpp
     PlanGraph.cpp
-    PipelineGenerator.cpp)
+    PipelineGenerator.cpp
+    PlanOptimizer.cpp)
 
 add_library(turing_db_v2_plan_s STATIC ${plan_sources})
 

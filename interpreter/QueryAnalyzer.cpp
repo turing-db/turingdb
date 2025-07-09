@@ -13,11 +13,13 @@
 #include "DeclContext.h"
 #include "Expr.h"
 #include "MatchTarget.h"
+#include "MatchTargets.h"
 #include "PathPattern.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
 #include "ASTContext.h"
 #include "ReturnProjection.h"
+#include "CreateTarget.h"
 #include "VarDecl.h"
 #include "BioAssert.h"
 
@@ -28,12 +30,13 @@ namespace rv = ranges::views;
 namespace {
 
 void returnAllVariables(MatchCommand* cmd) {
-    for (const MatchTarget* target : cmd->matchTargets()) {
+    const auto& targets = cmd->getMatchTargets()->targets();
+    for (const MatchTarget* target : targets) {
         const PathPattern* pattern = target->getPattern();
         for (EntityPattern* entityPattern : pattern->elements()) {
             if (VarExpr* var = entityPattern->getVar()) {
                 if (VarDecl* decl = var->getDecl()) {
-                    decl->setReturned(true);
+                    decl->setUsed(true);
                 }
             }
         }
@@ -158,7 +161,8 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
     // match targets
     DeclContext* declContext = cmd->getDeclContext();
-    for (const MatchTarget* target : cmd->matchTargets()) {
+    const auto& matchTargets = cmd->getMatchTargets()->targets();
+    for (const MatchTarget* target : matchTargets) {
         const PathPattern* pattern = target->getPattern();
         if (pattern == nullptr) {
             throw AnalyzeException("Match target path pattern not found.");
@@ -201,7 +205,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
                 throw AnalyzeException("Could not get declation context.");
             }
 
-            decl->setReturned(true);
+            decl->setUsed(true);
             field->setDecl(decl);
             const auto& memberName = field->getMemberName();
 
@@ -230,6 +234,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
 void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
     bool isCreate {true}; // Flag to distinguish create and match commands
+                         //
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -360,8 +365,9 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
 
     if (!decl) {
         // decl already exists from prev targets
-        VarDecl* existingDecl = declContext->getDecl(var->getName());
-        if (existingDecl->getEntityID() != entity->getEntityID()) {
+        decl = declContext->getDecl(var->getName());
+        decl->setUsed(true);
+        if (decl->getEntityID() != entity->getEntityID()) {
             throw AnalyzeException(
                 fmt::format("Variable {} has conflicting declarations.", var->getName()));
         }

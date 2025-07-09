@@ -3,6 +3,7 @@
 #include "Expr.h"
 #include "ExprConstraint.h"
 #include "MatchTarget.h"
+#include "MatchTargets.h"
 #include "CreateTarget.h"
 #include "PathPattern.h"
 #include "QueryCommand.h"
@@ -28,6 +29,10 @@ ASTContext::~ASTContext() {
 
     for (MatchTarget* target : _matchTargets) {
         delete target;
+    }
+
+    for (MatchTargets* targets : _matchTargetCollections) {
+        delete targets;
     }
 
     for (CreateTarget* target : _createTargets) {
@@ -85,6 +90,10 @@ void ASTContext::addReturnField(ReturnField* field) {
 
 void ASTContext::addMatchTarget(MatchTarget* target) {
     _matchTargets.push_back(target);
+}
+
+void ASTContext::addMatchTargets(MatchTargets* targets) {
+    _matchTargetCollections.push_back(targets);
 }
 
 void ASTContext::addPathPattern(PathPattern* pattern) {

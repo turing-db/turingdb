@@ -9,6 +9,8 @@
 #include "Expr.h"
 #include "HistoryStep.h"
 #include "MatchTarget.h"
+#include "MatchTargets.h"
+#include "CreateTarget.h"
 #include "LocalMemory.h"
 #include "PathPattern.h"
 #include "Pipeline.h"
@@ -107,7 +109,7 @@ bool QueryPlanner::plan(const QueryCommand* query) {
 }
 
 bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
-    const auto& matchTargets = matchCmd->matchTargets();
+    const auto& matchTargets = matchCmd->getMatchTargets()->targets();
     if (matchTargets.size() != 1) {
         spdlog::error("Unsupported MATCH queries with more than one target");
         return false;
@@ -264,7 +266,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
     const VarExpr* nodeVar = entity->getVar();
     if (nodeVar) {
         VarDecl* nodeDecl = nodeVar->getDecl();
-        if (nodeDecl->isReturned()) {
+        if (nodeDecl->isUsed()) {
             _transformData->addColumn(nodes, nodeDecl);
         }
     }
@@ -640,7 +642,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     const VarExpr* targetVar = target->getVar();
     if (targetVar) {
         VarDecl* targetDecl = targetVar->getDecl();
-        if (targetDecl->isReturned()) {
+        if (targetDecl->isUsed()) {
             _transformData->addColumn(targets, targetDecl);
         }
     }
@@ -649,7 +651,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     const VarExpr* sourceVar = source->getVar();
     if (sourceVar) {
         VarDecl* sourceDecl = sourceVar->getDecl();
-        if (sourceDecl->isReturned()) {
+        if (sourceDecl->isUsed()) {
             auto* sources = _mem->alloc<ColumnNodeIDs>();
             edgeWriteInfo._sourceNodes = sources;
             _transformData->addColumn(sources, sourceDecl);
@@ -660,7 +662,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
     const VarExpr* edgeVar = edge->getVar();
     if (edgeVar) {
         VarDecl* edgeDecl = edgeVar->getDecl();
-        if (edgeDecl->isReturned()) {
+        if (edgeDecl->isUsed()) {
             auto* edges = _mem->alloc<ColumnEdgeIDs>();
             edgeWriteInfo._edges = edges;
             _transformData->addColumn(edges, edgeDecl);
@@ -763,12 +765,12 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isUsed();
 
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
 
     EdgeWriteInfo edgeWriteInfo;
     edgeWriteInfo._indices = indices;
@@ -938,11 +940,11 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
 
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isUsed();
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
 
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
@@ -1079,11 +1081,11 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
 
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isUsed();
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
 
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
@@ -1132,7 +1134,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isReturned();
+    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
 
     if (mustWriteEdges || edgeExprConstr) {
         auto* edges = _mem->alloc<ColumnEdgeIDs>();
@@ -1200,7 +1202,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
     const VarExpr* targetVar = target->getVar();
     VarDecl* targetDecl = targetVar ? targetVar->getDecl() : nullptr;
-    const bool mustWriteTargetNodes = targetDecl && targetDecl->isReturned();
+    const bool mustWriteTargetNodes = targetDecl && targetDecl->isUsed();
 
     if (edgeExprConstr || targetExprConstr) {
         planExpressionConstraintFilters(edgeExprConstr, targetExprConstr, outputEdges, filterOutNodes,
@@ -1228,10 +1230,11 @@ bool QueryPlanner::planLoadGraph(const LoadGraphCommand* loadCmd) {
 
 void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
     const auto& projection = matchCmd->getProjection();
+    const auto& matchTargets = matchCmd->getMatchTargets()->targets();
 
     for (const ReturnField* field : projection->returnFields()) {
         if (field->isAll()) {
-            for (const MatchTarget* target : matchCmd->matchTargets()) {
+            for (const MatchTarget* target : matchTargets) {
                 const PathPattern* pattern = target->getPattern();
                 for (EntityPattern* entityPattern : pattern->elements()) {
                     if (const VarExpr* var = entityPattern->getVar()) {

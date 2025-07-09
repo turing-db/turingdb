@@ -5,6 +5,7 @@ set(AST_sources
         Expr.cpp 
         ExprConstraint.cpp 
         MatchTarget.cpp
+        MatchTargets.cpp
         CreateTarget.cpp
         PathPattern.cpp 
         QueryCommand.cpp 

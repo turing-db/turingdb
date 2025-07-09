@@ -2,6 +2,8 @@
 
 #include "VarDecl.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 PlanGraph::PlanGraph()
@@ -17,6 +19,7 @@ void PlanGraph::dump(std::ostream& out) const {
             << " opcode=" << PlanGraphOpcodeDescription::value(node->getOpcode());
 
         if (const auto* varNode = dynamic_cast<VarNode*>(node.get())) {
+            bioassert(varNode->getVarDecl());
             out << " var=" << varNode->getVarDecl()->getName();
         }
 

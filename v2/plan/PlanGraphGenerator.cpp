@@ -6,6 +6,7 @@
 #include "PlanGraph.h"
 #include "QueryCommand.h"
 #include "MatchTarget.h"
+#include "MatchTargets.h"
 #include "PathPattern.h"
 #include "Expr.h"
 #include "TypeConstraint.h"
@@ -49,7 +50,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 }
 
 void PlanGraphGenerator::planMatchCommand(const MatchCommand* cmd) {    
-    const auto& matchTargets = cmd->matchTargets();
+    const auto& matchTargets = cmd->getMatchTargets()->targets();
     for (const auto& target : matchTargets) {
         planMatchTarget(target);
     }

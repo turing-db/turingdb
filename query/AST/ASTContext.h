@@ -2,13 +2,12 @@
 
 #include <vector>
 
-#include "CreateTarget.h"
-
 namespace db {
 
 class QueryCommand;
 class ReturnField;
 class MatchTarget;
+class MatchTargets;
 class CreateTarget;
 class CreateTargets;
 class PathPattern;
@@ -24,6 +23,7 @@ public:
     friend QueryCommand;
     friend ReturnField;
     friend MatchTarget;
+    friend MatchTargets;
     friend CreateTarget;
     friend CreateTargets;
     friend PathPattern;
@@ -55,6 +55,7 @@ private:
     std::vector<QueryCommand*> _cmds;
     std::vector<ReturnField*> _returnFields;
     std::vector<MatchTarget*> _matchTargets;
+    std::vector<MatchTargets*> _matchTargetCollections;
     std::vector<PathPattern*> _pathPatterns;
     std::vector<EntityPattern*> _entityPatterns;
     std::vector<TypeConstraint*> _typeConstraints;
@@ -68,6 +69,7 @@ private:
     void addCmd(QueryCommand* cmd);
     void addReturnField(ReturnField* field);
     void addMatchTarget(MatchTarget* target);
+    void addMatchTargets(MatchTargets* targets);
     void addCreateTarget(CreateTarget* target);
     void addCreateTargets(CreateTargets* targets);
     void addPathPattern(PathPattern* pattern);

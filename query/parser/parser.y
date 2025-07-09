@@ -16,6 +16,7 @@
 #include <string>
 #include <sstream>
 #include <memory>
+
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
 
@@ -25,6 +26,7 @@ class ASTContext;
 class QueryCommand;
 class ReturnField;
 class MatchTarget;
+class MatchTargets;
 class CreateTarget;
 class CreateTargets;
 class PathPattern;
@@ -54,6 +56,7 @@ class ReturnProjection;
 #include "ChangeCommand.h"
 #include "ReturnField.h"
 #include "MatchTarget.h"
+#include "MatchTargets.h"
 #include "PathPattern.h"
 #include "Expr.h"
 #include "TypeConstraint.h"
@@ -139,6 +142,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::ReturnProjection*> return_fields
 %type<db::ReturnField*> return_field
 %type<db::MatchTarget*> match_target
+%type<db::MatchTargets*> match_targets
 %type<db::CreateTarget*> create_target
 %type<db::CreateTargets*> create_targets
 %type<db::PathPattern*> create_path_pattern
@@ -192,13 +196,24 @@ cmd: match_cmd { ctxt->setRoot($1); }
    | commit_cmd { ctxt->setRoot($1); }
    ;
 
-match_cmd: MATCH match_target RETURN return_fields {
+match_cmd: MATCH match_targets RETURN return_fields {
                                                        auto cmd = MatchCommand::create(ctxt); 
                                                        cmd->setProjection($4);
-                                                       cmd->addMatchTarget($2);
+                                                       cmd->setMatchTargets($2);
                                                        $$ = cmd;
-                                                   }
-                                                   ;
+                                                    }
+         ;
+
+match_targets: match_targets COMMA match_target {
+                                                    $1->addTarget($3);
+                                                    $$ = $1; 
+                                                }
+             | match_target                     {
+                                                    auto targets = MatchTargets::create(ctxt);
+                                                    targets->addTarget($1);
+                                                    $$ = targets;
+                                                }
+             ;
 
 create_targets: create_targets COMMA create_target
               {
@@ -303,7 +318,6 @@ create_node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
                    ;
 
 node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
-            | entity_pattern { $$ = $1; }
             ;
 
 edge_pattern: OSBRACK edge_entity_pattern CSBRACK { $$ = $2; }
