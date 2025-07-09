@@ -102,16 +102,16 @@ TEST_F(QueryParserTest, parseErrors) {
     QueryParser parser(&ctxt);
 
     // 1 line query with error
-    const auto query1 = "MATCH n{location;'cytosol'} RETURN n.name";
+    const auto query1 = "MATCH (n{location;'cytosol'}) RETURN n.name";
 
     // 2 line query with no error
     std::ostringstream query2;
-    query2 << "MATCH n{location:'cytosol'}" << std::endl;
+    query2 << "MATCH (n{location:'cytosol'})" << std::endl;
     query2 << "RETURN n.name";
 
     // 2 line query with error
     std::ostringstream query3;
-    query3 << "MATCH n{location:'cytosol'}" << std::endl;
+    query3 << "MATCH (n{location:'cytosol'})" << std::endl;
     query3 << "RETURN n <>name";
 
 
@@ -122,8 +122,8 @@ TEST_F(QueryParserTest, parseErrors) {
                          testing::AllOf(
                              testing::HasSubstr("syntax error"),
                              testing::HasSubstr("line 1"),
-                             testing::HasSubstr("column 17"),
-                             testing::HasSubstr("column 18")
+                             testing::HasSubstr("column 18"),
+                             testing::HasSubstr("column 19")
                          ))
         )
     );
