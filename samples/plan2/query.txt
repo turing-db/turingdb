@@ -1,0 +1,4 @@
+MATCH (n:Person)-[:KNOWS_WELL]-(m:Person)--(i:Interest),
+      (n)-[:INTERESTED_IN]-(i:Interest),
+      (m)-[:INTERESTED_IN]-(i)
+RETURN n.name, m.name

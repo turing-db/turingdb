@@ -2,6 +2,7 @@
 set(plan_sources
     PlanGraphGenerator.cpp
     PlanGraph.cpp
+    PlanGraphDebug.cpp
     PipelineGenerator.cpp
     PlanOptimizer.cpp)
 

@@ -94,6 +94,8 @@ public:
     void dump(std::ostream& out) const ;
 
 private:
+    friend class PlanGraphDebug;
+
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
 };
 
