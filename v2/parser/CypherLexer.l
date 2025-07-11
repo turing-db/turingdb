@@ -12,6 +12,8 @@ using namespace db;
 
 using Token = db::YCypherParser::token;
 
+#define KEYWORD(name) yylval->emplace<std::string>(yytext, yyleng); return Token::name;
+
 %}
 
 %option caseless noyywrap c++ yyclass="YCypherScanner"
@@ -63,68 +65,69 @@ using Token = db::YCypherParser::token;
 "<"  { return Token::LT; }
 
 
-"DESCENDING" { return Token::DESCENDING; }
-"CONSTRAINT" { return Token::CONSTRAINT; }
-"MANDATORY" { return Token::MANDATORY; }
-"ASCENDING" { return Token::ASCENDING; }
-"OPTIONAL" { return Token::OPTIONAL; }
-"CONTAINS" { return Token::CONTAINS; }
-"DISTINCT" { return Token::DISTINCT; }
-"EXTRACT" { return Token::EXTRACT; }
-"REQUIRE" { return Token::REQUIRE; }
-"STARTS" { return Token::STARTS; }
-"UNIQUE" { return Token::UNIQUE; }
-"FILTER" { return Token::FILTER; }
-"SINGLE" { return Token::SINGLE; }
-"SCALAR" { return Token::SCALAR; }
-"UNWIND" { return Token::UNWIND; }
-"REMOVE" { return Token::REMOVE; }
-"RETURN" { return Token::RETURN; }
-"CREATE" { return Token::CREATE; }
-"DELETE" { return Token::DELETE; }
-"DETACH" { return Token::DETACH; }
-"EXISTS" { return Token::EXISTS; }
-"LIMIT" { return Token::LIMIT; }
-"YIELD" { return Token::YIELD; }
-"MATCH" { return Token::MATCH; }
-"MERGE" { return Token::MERGE; }
-"ORDER" { return Token::ORDER; }
-"WHERE" { return Token::WHERE; }
-"UNION" { return Token::UNION; }
-"FALSE" { return Token::FALSE; }
-"COUNT" { return Token::COUNT; }
-"DESC" { return Token::DESC; }
-"CALL" { return Token::CALL; }
-"NULL" { return Token::NULL_; }
-"TRUE" { return Token::TRUE; }
-"WHEN" { return Token::WHEN; }
-"NONE" { return Token::NONE; }
-"THEN" { return Token::THEN; }
-"ELSE" { return Token::ELSE; }
-"CASE" { return Token::CASE; }
-"ENDS" { return Token::ENDS; }
-"DROP" { return Token::DROP; }
-"SKIP" { return Token::SKIP; }
-"WITH" { return Token::WITH; }
-"ANY" { return Token::ANY; }
-"SET" { return Token::SET; }
-"ALL" { return Token::ALL; }
-"ASC" { return Token::ASC; }
-"NOT" { return Token::NOT; }
-"END" { return Token::END; }
-"XOR" { return Token::XOR; }
-"FOR" { return Token::FOR; }
-"ADD" { return Token::ADD; }
-"AND" { return Token::AND; }
-"OR" { return Token::OR; }
-"||" { return Token::OR; }
-"IN" { return Token::IN; }
-"IS" { return Token::IS; }
-"BY" { return Token::BY; }
-"DO" { return Token::DO; }
-"OF" { return Token::OF; }
-"ON" { return Token::ON; }
-"AS" { return Token::AS; }
+"DESCENDING" { KEYWORD(DESCENDING) }
+"CONSTRAINT" { KEYWORD(CONSTRAINT) }
+"MANDATORY" { KEYWORD(MANDATORY) }
+"ASCENDING" { KEYWORD(ASCENDING) }
+"OPTIONAL" { KEYWORD(OPTIONAL) }
+"CONTAINS" { KEYWORD(CONTAINS) }
+"DISTINCT" { KEYWORD(DISTINCT) }
+"EXTRACT" { KEYWORD(EXTRACT) }
+"REQUIRE" { KEYWORD(REQUIRE) }
+"STARTS" { KEYWORD(STARTS) }
+"UNIQUE" { KEYWORD(UNIQUE) }
+"FILTER" { KEYWORD(FILTER) }
+"SINGLE" { KEYWORD(SINGLE) }
+"SCALAR" { KEYWORD(SCALAR) }
+"UNWIND" { KEYWORD(UNWIND) }
+"REMOVE" { KEYWORD(REMOVE) }
+"RETURN" { KEYWORD(RETURN) }
+"CREATE" { KEYWORD(CREATE) }
+"DELETE" { KEYWORD(DELETE) }
+"DETACH" { KEYWORD(DETACH) }
+"EXISTS" { KEYWORD(EXISTS) }
+"IS NOT" { KEYWORD(IS_NOT) }
+"LIMIT" { KEYWORD(LIMIT) }
+"YIELD" { KEYWORD(YIELD) }
+"MATCH" { KEYWORD(MATCH) }
+"MERGE" { KEYWORD(MERGE) }
+"ORDER" { KEYWORD(ORDER) }
+"WHERE" { KEYWORD(WHERE) }
+"UNION" { KEYWORD(UNION) }
+"FALSE" { KEYWORD(FALSE) }
+"COUNT" { KEYWORD(COUNT) }
+"DESC" { KEYWORD(DESC) }
+"CALL" { KEYWORD(CALL) }
+"NULL" { KEYWORD(NULL_) }
+"TRUE" { KEYWORD(TRUE) }
+"WHEN" { KEYWORD(WHEN) }
+"NONE" { KEYWORD(NONE) }
+"THEN" { KEYWORD(THEN) }
+"ELSE" { KEYWORD(ELSE) }
+"CASE" { KEYWORD(CASE) }
+"ENDS" { KEYWORD(ENDS) }
+"DROP" { KEYWORD(DROP) }
+"SKIP" { KEYWORD(SKIP) }
+"WITH" { KEYWORD(WITH) }
+"ANY" { KEYWORD(ANY) }
+"SET" { KEYWORD(SET) }
+"ALL" { KEYWORD(ALL) }
+"ASC" { KEYWORD(ASC) }
+"NOT" { KEYWORD(NOT) }
+"END" { KEYWORD(END) }
+"XOR" { KEYWORD(XOR) }
+"FOR" { KEYWORD(FOR) }
+"ADD" { KEYWORD(ADD) }
+"AND" { KEYWORD(AND) }
+"OR" { KEYWORD(OR) }
+"||" { KEYWORD(OR) }
+"IN" { KEYWORD(IN) }
+"IS" { KEYWORD(IS) }
+"BY" { KEYWORD(BY) }
+"DO" { KEYWORD(DO) }
+"OF" { KEYWORD(OF) }
+"ON" { KEYWORD(ON) }
+"AS" { KEYWORD(AS) }
 
 
 `[^`]*` {

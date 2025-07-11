@@ -24,14 +24,13 @@ void db::YCypherScanner::syntaxError(const std::string& msg) {
 
     const size_t errLen = _location.end.column - _location.begin.column;
     const std::string errorBars(errLen, '^');
-    const std::string blank(_location.begin.column - 1, ' ');
 
     std::string prefixLine = fmt::format("Line {}: ", errLineNo);
     const size_t blankLen = prefixLine.size() + _location.begin.column - 1;
+    const std::string blank(blankLen, ' ');
 
-    errorMsg = "\n |";
-    errorMsg = fmt::format("Line {}: {}\n", errLineNo, errLine);
-    errorMsg += fmt::format("{:>{}}\n", errorBars, blankLen + 1);
+    errorMsg = fmt::format("{}{}\n", prefixLine, errLine);
+    errorMsg += fmt::format("{}{}\n", blank, errorBars);
     errorMsg += "\t" + msg + "\n\n";
 
     throw ParserException(std::move(errorMsg));

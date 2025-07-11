@@ -133,9 +133,110 @@ MATCH (n {name: 'Stefan'})
 SET n:German
 RETURN n.name, labels(n) AS labels;
 
+//// Not supported
 // MATCH (n:Swedish)
-// SET n:$(n.name) // Not supported
+// SET n:$(n.name)
 // RETURN n.name, labels(n) AS labels;
 
-CALL db.labels() YIELD *
-RETURN count(*) AS results;
+CALL db.propertyKeys() YIELD propertyKey AS prop
+MATCH (n)
+WHERE n[prop] IS NOT NULL
+RETURN prop, count(n) AS numNodes;
+
+CALL db.labels() YIELD * RETURN count(*) AS results;
+
+MATCH (n)
+OPTIONAL CALL apoc.neighbors.tohop(n, "KNOWS>", 1)
+YIELD node
+RETURN n.name AS name, collect(node.name) AS connections;
+
+MATCH (o:Order)
+RETURN o.id AS order,
+       elementId(o) AS elementId
+  ORDER BY elementId;
+
+MATCH (o:Order)
+RETURN o.id AS order
+  ORDER BY COUNT { (o)-[:CONTAINS]->(:Item) };
+
+MATCH (o:Order)
+RETURN o.id AS order,
+       o.total AS total
+  ORDER BY total ASC;
+
+MATCH (o:Order)
+RETURN o.id AS order,
+       o.total AS total
+  ORDER BY total DESC;
+
+
+MATCH (o:Order)
+RETURN o.id AS order,
+       o.total AS total,
+       o.orderDate AS orderDate
+  ORDER BY total DESC,
+           orderDate ASC;
+
+MATCH (o:Order)
+ORDER BY o.orderDate DESC
+LIMIT 1
+MATCH (o)-[:CONTAINS]->(i:Item)
+RETURN o.id AS order,
+       o.total,
+       collect(i.name) AS items;
+
+MATCH (o:Order)-[:CONTAINS]->(i:Item)
+WITH o, i
+  ORDER BY i.price DESC
+RETURN o.id AS order,
+       collect(i.name || " ($" || toString(i.price) || ")") AS orderedListOfItems;
+
+MATCH (i:Item)
+ORDER BY i.price DESC
+SKIP 1
+LIMIT 1
+RETURN i.name AS secondMostExpensiveItem,
+       i.price AS price;
+
+MATCH (m:Movie {title: 'Man of Tai Chi'})
+RETURN m.released < 2012, "I'm a literal",[p=(m)--() | p] AS `(m)--()`;
+
+MATCH (p:Person {name: 'Keanu Reeves'})-->(m)
+RETURN DISTINCT m;
+
+MATCH (n)
+DETACH DELETE n;
+
+
+WITH [] AS list
+UNWIND
+  CASE
+    WHEN list = [] THEN [null]
+    ELSE list
+  END AS emptylist
+RETURN emptylist;
+
+
+UNWIND $events AS event
+MERGE (y:Year {year: event.year})
+MERGE (y)<-[:IN]-(e:Event {id: event.id})
+RETURN e.id AS x ORDER BY x;
+
+MATCH (c:Customer)-[:BUYS]->(p:Product)
+WITH c.firstName AS customer,
+     sum(p.price) AS totalSpent,
+     collect(p.name) AS productsBought
+RETURN customer,
+       totalSpent,
+       productsBought
+ORDER BY totalSpent DESC;
+
+MATCH (c:Customer)-[:BUYS]->(p:Product)
+WITH c,
+     sum(p.price) AS totalSpent
+  ORDER BY totalSpent DESC
+  SKIP 3
+SET c.topSpender = false
+RETURN c.firstName AS customer,
+       totalSpent,
+       c.topSpender AS topSpender;

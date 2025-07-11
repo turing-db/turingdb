@@ -65,67 +65,69 @@
 %token GT
 %token LT
 
-%token DESCENDING
-%token CONSTRAINT
-%token MANDATORY
-%token ASCENDING
-%token OPTIONAL
-%token CONTAINS
-%token DISTINCT
-%token EXTRACT
-%token REQUIRE
-%token STARTS
-%token UNIQUE
-%token FILTER
-%token SINGLE
-%token SCALAR
-%token UNWIND
-%token REMOVE
-%token RETURN
-%token CREATE
-%token DELETE
-%token DETACH
-%token EXISTS
-%token LIMIT
-%token YIELD
-%token MATCH
-%token MERGE
-%token ORDER
-%token WHERE
-%token UNION
-%token FALSE
-%token COUNT
-%token DESC
-%token CALL
-%token NULL_
-%token TRUE
-%token WHEN
-%token NONE
-%token THEN
-%token ELSE
-%token CASE
-%token ENDS
-%token DROP
-%token SKIP
-%token WITH
-%token ANY
-%token SET
-%token ALL
-%token ASC
-%token NOT
-%token END
-%token XOR
-%token FOR
-%token ADD
-%token AND
-%token OR
-%token IN
-%token IS
-%token BY
-%token DO
-%token OF
-%token ON
-%token AS
+// Keywords
+%token<std::string> DESCENDING
+%token<std::string> CONSTRAINT
+%token<std::string> MANDATORY
+%token<std::string> ASCENDING
+%token<std::string> OPTIONAL
+%token<std::string> CONTAINS
+%token<std::string> DISTINCT
+%token<std::string> EXTRACT
+%token<std::string> REQUIRE
+%token<std::string> STARTS
+%token<std::string> UNIQUE
+%token<std::string> FILTER
+%token<std::string> SINGLE
+%token<std::string> SCALAR
+%token<std::string> UNWIND
+%token<std::string> REMOVE
+%token<std::string> RETURN
+%token<std::string> CREATE
+%token<std::string> DELETE
+%token<std::string> DETACH
+%token<std::string> EXISTS
+%token<std::string> IS_NOT
+%token<std::string> LIMIT
+%token<std::string> YIELD
+%token<std::string> MATCH
+%token<std::string> MERGE
+%token<std::string> ORDER
+%token<std::string> WHERE
+%token<std::string> UNION
+%token<std::string> FALSE
+%token<std::string> COUNT
+%token<std::string> DESC
+%token<std::string> CALL
+%token<std::string> NULL_
+%token<std::string> TRUE
+%token<std::string> WHEN
+%token<std::string> NONE
+%token<std::string> THEN
+%token<std::string> ELSE
+%token<std::string> CASE
+%token<std::string> ENDS
+%token<std::string> DROP
+%token<std::string> SKIP
+%token<std::string> WITH
+%token<std::string> ANY
+%token<std::string> SET
+%token<std::string> ALL
+%token<std::string> ASC
+%token<std::string> NOT
+%token<std::string> END
+%token<std::string> XOR
+%token<std::string> FOR
+%token<std::string> ADD
+%token<std::string> AND
+%token<std::string> OR
+%token<std::string> IN
+%token<std::string> IS
+%token<std::string> BY
+%token<std::string> DO
+%token<std::string> OF
+%token<std::string> ON
+%token<std::string> AS
 
 %token<std::string> ESC_LITERAL
 %token<std::string> STRING_LITERAL
@@ -135,6 +137,24 @@
 %token<float> FLOAT
 
 %token UNKNOWN
+
+%type<std::string> symbol
+%type<std::string> name
+%type<std::string> qualifiedName
+%type<std::string> invocationName
+%type<std::string> reservedWord
+
+%left OR
+%left XOR
+%left AND
+%left NOT
+%left ASSIGN LE GE GT LT NOT_EQUAL CONTAINS IS IS_NOT
+%left PLUS SUB
+%left MULT DIV MOD
+%left CARET
+%left OBRACK
+
+%right UPLUS USUB // Right associative for unary operators
 
 %expect 0
 
@@ -153,11 +173,6 @@ queries
     ;
 
 query
-    : regularQuery
-    | standaloneCall
-    ;
-
-regularQuery
     : singleQuery
     | singleQuery unionList
     ;
@@ -170,13 +185,6 @@ unionList
 singleQuery
     : singlePartQ
     | multiPartQ
-    ;
-
-standaloneCall
-    : CALL invocationName
-    | CALL invocationName parenExpressionChain
-    | CALL invocationName yieldClause
-    | CALL invocationName parenExpressionChain yieldClause
     ;
 
 returnSt
@@ -197,7 +205,7 @@ limitSt
     ;
 
 projectionBody
-    : opt_Distinct projectionItems opt_OrderSt opt_skipSt opt_limitSt
+    : opt_Distinct projectionItems opt_orderSt opt_skipSt opt_limitSt
     ;
 
 opt_Distinct
@@ -205,7 +213,7 @@ opt_Distinct
     | /* empty */
     ;
 
-opt_OrderSt
+opt_orderSt
     : orderSt
     | /* empty */
     ;
@@ -228,7 +236,7 @@ projectionItems
 
 projectionItem
     : expression
-    | expression AS symbol
+    | expression AS name
     ;
 
 orderItem
@@ -279,8 +287,8 @@ updateWithSt
     ;
 
 matchSt
-    : MATCH patternWhere
-    | OPTIONAL MATCH patternWhere
+    : MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt
+    | OPTIONAL MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt
     ;
 
 unwindSt
@@ -322,7 +330,9 @@ removeItem
 
 queryCallSt
     : CALL invocationName parenExpressionChain
-    | CALL invocationName parenExpressionChain YIELD yieldItems
+    | CALL invocationName parenExpressionChain yieldClause
+    | OPTIONAL CALL invocationName parenExpressionChain
+    | OPTIONAL CALL invocationName parenExpressionChain yieldClause
     ;
 
 expressionChain
@@ -407,68 +417,38 @@ pattern
     ;
 
 expression
-    : xorExpression
-    | expression OR xorExpression
-    ;
-
-xorExpression
-    : andExpression
-    | xorExpression XOR andExpression
-    ;
-
-andExpression
-    : notExpression
-    | andExpression AND notExpression
-    ;
-
-notExpression
-    : comparisonExpression
-    | NOT notExpression
-    ;
-
-comparisonExpression
-    : addSubExpression
-    | comparisonExpression comparisonSigns addSubExpression
-    ;
-
-comparisonSigns
-    : ASSIGN
-    | LE
-    | GE
-    | GT
-    | LT
-    | NOT_EQUAL
-    ;
-
-addSubExpression
-    : multDivExpression
-    | addSubExpression PLUS multDivExpression
-    | addSubExpression SUB multDivExpression
-    ;
-
-multDivExpression
-    : powerExpression
-    | multDivExpression MULT powerExpression
-    | multDivExpression DIV powerExpression
-    | multDivExpression MOD powerExpression
-    ;
-
-powerExpression
-    : unaryAddSubExpression
-    | powerExpression CARET unaryAddSubExpression
-    ;
-
-unaryAddSubExpression
     : atomicExpression
-    | PLUS atomicExpression
-    | SUB atomicExpression
+    | expression OR expression
+    | expression XOR expression
+    | expression AND expression
+    | expression NOT expression
+    | expression ASSIGN expression
+    | expression LE expression
+    | expression GE expression
+    | expression GT expression
+    | expression LT expression
+    | expression CONTAINS expression
+    | expression IS expression
+    | expression IS_NOT expression
+    | expression NOT_EQUAL expression
+    | expression PLUS expression
+    | expression SUB expression
+    | expression MULT expression
+    | expression DIV expression
+    | expression MOD expression
+    | expression CARET expression
+    | PLUS expression %prec UPLUS
+    | SUB expression %prec USUB
+    | STARTS WITH propertyOrLabelExpression
+    | ENDS WITH propertyOrLabelExpression
+    | CONTAINS propertyOrLabelExpression
+    | IS_NOT NULL_
+    | IS NULL_
     ;
 
 atomicExpression
     : propertyOrLabelExpression
-    | atomicExpression stringExpression
     | atomicExpression listExpression
-    | atomicExpression nullExpression
     ;
 
 listExpression
@@ -480,21 +460,6 @@ listExpression
     | OBRACK RANGE CBRACK
     ;
 
-stringExpression
-    : stringExpPrefix propertyOrLabelExpression
-    ;
-
-stringExpPrefix
-    : STARTS WITH
-    | ENDS WITH
-    | CONTAINS
-    ;
-
-nullExpression
-    : IS NOT NULL_
-    | IS NULL_
-    ;
-
 propertyOrLabelExpression
     : propertyExpression
     | propertyExpression nodeLabels
@@ -502,7 +467,7 @@ propertyOrLabelExpression
 
 propertyExpression
     : atom
-    | propertyExpression DOT name
+    | qualifiedName DOT name
     ;
 
 patternPart
@@ -521,7 +486,6 @@ patternElemChain
 
 properties
     : mapLit
-    | parameter
     ;
 
 nodePattern
@@ -557,7 +521,7 @@ atom
     : literal
     | parameter
     | caseExpression
-    | countAll
+    | countFunc
     | listComprehension
     | patternComprehension
     | filterWith
@@ -598,13 +562,17 @@ unionSt
     ;
 
 subqueryExist
-    : EXISTS OBRACE regularQuery CBRACE
+    : EXISTS OBRACE query CBRACE
     | EXISTS OBRACE patternWhere CBRACE
     ;
 
+qualifiedName
+    : symbol { $$ = std::move($1); }
+    | qualifiedName DOT symbol { $$ = std::move($1); $$ += "." + std::move($3); }
+    ;
+
 invocationName
-    : symbol
-    //| invocationName DOT symbol // Enabling this causes conflicts. We need this!
+    : qualifiedName { $$ = std::move($1); }
     ;
 
 functionInvocation
@@ -651,8 +619,13 @@ filterExpression
     | symbol IN expression where
     ;
 
-countAll
+countFunc
     : COUNT OPAREN MULT CPAREN
+    | COUNT OPAREN CPAREN
+    | COUNT OPAREN DISTINCT CPAREN
+    | COUNT OPAREN expressionChain CPAREN
+    | COUNT OPAREN DISTINCT expressionChain CPAREN
+    | COUNT OBRACE patternWhere CBRACE
     ;
 
 caseExpression
@@ -728,11 +701,11 @@ listLitItem
     : literal
     | parameter
     | caseExpression
-    | countAll
+    | countFunc
     | listComprehension
     | patternComprehension
     | filterWith
-    //| parenthesizedExpression // Enabling this causes conflicts
+    //| parenthesizedExpression // Enabling this causes conflicts, not needed?
     | functionInvocation
     | symbol
     | subqueryExist
@@ -760,8 +733,7 @@ name
 symbol
     : ESC_LITERAL
     | ID
-    //| COUNT // Not sure needing this yet
-    //| FILTER
+    //| FILTER // We should not need to support these
     //| EXTRACT
     //| ANY
     //| NONE
