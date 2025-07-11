@@ -1,3 +1,9 @@
+MATCH (n) RETURN n;
+
+MATCH (n)-[e]-(m) RETURN n, e, m;
+
+MATCH (n:Person)-[e]-(m) RETURN n, e, m;
+
 CREATE (p:Product {price: 10})
 SET p.discountPrice = p.price * (1 - 0.15)
 RETURN p.discountPrice AS discountPrice;

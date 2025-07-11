@@ -157,7 +157,7 @@ script
 
 queries
     : query
-    | queries SEMI_COLON query { scanner.notImplemented("Multiple queries"); }
+    | queries SEMI_COLON query
     ;
 
 query
@@ -415,28 +415,28 @@ pattern
     ;
 
 expression
-    : xorExpression { scanner.notImplemented("XOR"); }
-    | expression OR xorExpression
+    : xorExpression
+    | expression OR xorExpression { scanner.notImplemented("OR"); }
     ;
 
 xorExpression
-    : andExpression { scanner.notImplemented("AND"); }
-    | xorExpression XOR andExpression
+    : andExpression
+    | xorExpression XOR andExpression { scanner.notImplemented("XOR"); }
     ;
 
 andExpression
-    : notExpression { scanner.notImplemented("NOT"); }
-    | andExpression AND notExpression
+    : notExpression
+    | andExpression AND notExpression { scanner.notImplemented("AND"); }
     ;
 
 notExpression
-    : comparisonExpression { scanner.notImplemented("Comparison expressions"); }
-    | NOT notExpression
+    : comparisonExpression
+    | NOT notExpression { scanner.notImplemented("NOT"); }
     ;
 
 comparisonExpression
-    : addSubExpression { scanner.notImplemented("Add/Sub expressions"); }
-    | comparisonExpression comparisonSigns addSubExpression
+    : addSubExpression
+    | comparisonExpression comparisonSigns addSubExpression { scanner.notImplemented("Comparison expressions"); }
     ;
 
 comparisonSigns
@@ -451,27 +451,27 @@ comparisonSigns
     ;
 
 addSubExpression
-    : multDivExpression { scanner.notImplemented("Mult/Div expressions"); }
-    | addSubExpression PLUS multDivExpression
-    | addSubExpression SUB multDivExpression
+    : multDivExpression
+    | addSubExpression PLUS multDivExpression { scanner.notImplemented("Add/Sub expressions"); }
+    | addSubExpression SUB multDivExpression { scanner.notImplemented("Add/Sub expressions"); }
     ;
 
 multDivExpression
-    : powerExpression { scanner.notImplemented("Power expressions"); }
-    | multDivExpression MULT powerExpression
-    | multDivExpression DIV powerExpression
-    | multDivExpression MOD powerExpression
+    : powerExpression
+    | multDivExpression MULT powerExpression { scanner.notImplemented("Mult/Div expressions"); }
+    | multDivExpression DIV powerExpression { scanner.notImplemented("Mult/Div expressions"); }
+    | multDivExpression MOD powerExpression { scanner.notImplemented("Mult/Div expressions"); }
     ;
 
 powerExpression
-    : unaryAddSubExpression { scanner.notImplemented("Unary Add/Sub expressions"); }
-    | powerExpression CARET unaryAddSubExpression
+    : unaryAddSubExpression
+    | powerExpression CARET unaryAddSubExpression { scanner.notImplemented("Power expressions"); }
     ;
 
 unaryAddSubExpression
-    : atomicExpression { scanner.notImplemented("Atomic expressions"); }
-    | PLUS atomicExpression
-    | SUB atomicExpression
+    : atomicExpression
+    | PLUS atomicExpression { scanner.notImplemented("Unary Add/Sub expressions"); }
+    | SUB atomicExpression { scanner.notImplemented("Unary Add/Sub expressions"); }
     ;
 
 atomicExpression
@@ -500,7 +500,7 @@ stringExpPrefix
     ;
 
 propertyOrLabelExpression
-    : propertyExpression { scanner.notImplemented("Property expressions"); }
+    : propertyExpression
     | propertyExpression nodeLabels
     ;
 
