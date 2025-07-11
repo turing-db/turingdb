@@ -144,18 +144,6 @@
 %type<std::string> invocationName
 %type<std::string> reservedWord
 
-%left OR
-%left XOR
-%left AND
-%left NOT
-%left ASSIGN LE GE GT LT NOT_EQUAL CONTAINS IS IS_NOT
-%left PLUS SUB
-%left MULT DIV MOD
-%left CARET
-%left OBRACK
-
-%right UPLUS USUB // Right associative for unary operators
-
 %expect 0
 
 %start script
@@ -417,37 +405,68 @@ pattern
     ;
 
 expression
+    : xorExpression
+    | expression OR xorExpression
+    ;
+
+xorExpression
+    : andExpression
+    | xorExpression XOR andExpression
+    ;
+
+andExpression
+    : notExpression
+    | andExpression AND notExpression
+    ;
+
+notExpression
+    : comparisonExpression
+    | NOT notExpression
+    ;
+
+comparisonExpression
+    : addSubExpression
+    | comparisonExpression comparisonSigns addSubExpression
+    ;
+
+comparisonSigns
+    : ASSIGN
+    | LE
+    | GE
+    | GT
+    | LT
+    | NOT_EQUAL
+    | IS
+    | IS_NOT
+    ;
+
+addSubExpression
+    : multDivExpression
+    | addSubExpression PLUS multDivExpression
+    | addSubExpression SUB multDivExpression
+    ;
+
+multDivExpression
+    : powerExpression
+    | multDivExpression MULT powerExpression
+    | multDivExpression DIV powerExpression
+    | multDivExpression MOD powerExpression
+    ;
+
+powerExpression
+    : unaryAddSubExpression
+    | powerExpression CARET unaryAddSubExpression
+    ;
+
+unaryAddSubExpression
     : atomicExpression
-    | expression OR expression
-    | expression XOR expression
-    | expression AND expression
-    | expression NOT expression
-    | expression ASSIGN expression
-    | expression LE expression
-    | expression GE expression
-    | expression GT expression
-    | expression LT expression
-    | expression CONTAINS expression
-    | expression IS expression
-    | expression IS_NOT expression
-    | expression NOT_EQUAL expression
-    | expression PLUS expression
-    | expression SUB expression
-    | expression MULT expression
-    | expression DIV expression
-    | expression MOD expression
-    | expression CARET expression
-    | PLUS expression %prec UPLUS
-    | SUB expression %prec USUB
-    | STARTS WITH propertyOrLabelExpression
-    | ENDS WITH propertyOrLabelExpression
-    | CONTAINS propertyOrLabelExpression
-    | IS_NOT NULL_
-    | IS NULL_
+    | PLUS atomicExpression
+    | SUB atomicExpression
     ;
 
 atomicExpression
     : propertyOrLabelExpression
+    | atomicExpression stringExpression
     | atomicExpression listExpression
     ;
 
@@ -458,6 +477,16 @@ listExpression
     | OBRACK RANGE expression CBRACK
     | OBRACK expression RANGE CBRACK
     | OBRACK RANGE CBRACK
+    ;
+
+stringExpression
+    : stringExpPrefix propertyOrLabelExpression
+    ;
+
+stringExpPrefix
+    : STARTS WITH
+    | ENDS WITH
+    | CONTAINS
     ;
 
 propertyOrLabelExpression
