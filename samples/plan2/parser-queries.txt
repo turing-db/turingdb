@@ -290,11 +290,20 @@ RETURN start.id as startId,
        collect(intermediate.id) as intermediateNodes,
        summary.traversalCount as timesTraversed;
 
-UNWIND [1, 2, 3] AS x
-CALL () {
-    MATCH (p:Player {name: 'Player A'})
-    SET p.age = p.age + 1
-    RETURN p.age AS newAge
-}
-MATCH (p:Player {name: 'Player A'})
-RETURN x AS iteration, newAge, p.age AS totalAge;
+MATCH (person:Person)
+WHERE COUNT {
+  (person)-[:HAS_DOG]->(dog:Dog)
+  WHERE person.name = dog.name
+} = 1
+RETURN person.name AS name;
+
+MATCH (person:Person)
+RETURN
+    person.name AS name,
+    COUNT {
+        MATCH (person)-[:HAS_DOG]->(dog:Dog)
+        RETURN dog.name AS petName
+        UNION
+        MATCH (person)-[:HAS_CAT]->(cat:Cat)
+        RETURN cat.name AS petName
+    } AS numPets;

@@ -321,9 +321,9 @@ queryCallSt
     | CALL invocationName parenExpressionChain yieldClause
     | OPTIONAL CALL invocationName parenExpressionChain
     | OPTIONAL CALL invocationName parenExpressionChain yieldClause
-    | CALL OBRACE singleQuery CBRACE
-    | CALL OPAREN CPAREN OBRACE singleQuery CBRACE
-    | CALL OPAREN callCapture CPAREN OBRACE singleQuery CBRACE
+    | CALL OBRACE query CBRACE
+    | CALL OPAREN CPAREN OBRACE query CBRACE
+    | CALL OPAREN callCapture CPAREN OBRACE query CBRACE
     ;
 
 callCapture
@@ -665,6 +665,7 @@ countFunc
     | COUNT OPAREN expressionChain CPAREN
     | COUNT OPAREN DISTINCT expressionChain CPAREN
     | COUNT OBRACE patternWhere CBRACE
+    | COUNT OBRACE query CBRACE // returnSt is mandatory for MATCH subqueries, as opposed to Neo4j's Cypher parser
     ;
 
 caseExpression
