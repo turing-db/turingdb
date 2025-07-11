@@ -383,7 +383,9 @@ setItem
 
 nodeLabels
     : COLON name
+    | COLON parameter
     | nodeLabels COLON name
+    | nodeLabels COLON parameter
     ;
 
 createSt
@@ -602,7 +604,7 @@ subqueryExist
 
 invocationName
     : symbol
-    // | invocationName DOT symbol // Enabling this causes conflicts, not sure if we need it
+    //| invocationName DOT symbol // Enabling this causes conflicts. We need this!
     ;
 
 functionInvocation
@@ -826,7 +828,8 @@ reservedWord
 %%
 
 void db::YCypherParser::error(const location_type& l, const std::string& m) {
-    throw db::YCypherParser::syntax_error(l, m);
+    location turingLoc = scanner.getLocation();
+    scanner.syntaxError(m);
 }
 
 

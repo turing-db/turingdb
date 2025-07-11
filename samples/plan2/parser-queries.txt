@@ -133,6 +133,9 @@ MATCH (n {name: 'Stefan'})
 SET n:German
 RETURN n.name, labels(n) AS labels;
 
-MATCH (n:Swedish)
-SET n:$(n.name)
-RETURN n.name, labels(n) AS labels;
+// MATCH (n:Swedish)
+// SET n:$(n.name) // Not supported
+// RETURN n.name, labels(n) AS labels;
+
+CALL db.labels() YIELD *
+RETURN count(*) AS results;

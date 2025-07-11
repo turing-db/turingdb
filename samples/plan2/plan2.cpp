@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
         queryStr = argv[1];
 
     } else {
-        fs::Path path(SAMPLE_DIR "/query.txt");
+        fs::Path path(SAMPLE_DIR "/parser-queries.txt");
         fmt::print("Reading query from file: {}\n", path.get());
         fs::File file = fs::File::open(path).value();
         fs::FileReader reader;
@@ -53,6 +53,8 @@ int main(int argc, char** argv) {
 
 void runParser2(const std::string& query) {
     YCypherScanner yscanner;
+    yscanner.setQuery(query);
+
     YCypherParser yparser(yscanner);
 
     std::istringstream iss;
@@ -64,8 +66,8 @@ void runParser2(const std::string& query) {
         auto t0 = Clock::now();
         yparser.parse();
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const db::YCypherParser::syntax_error& e) {
-        fmt::print("Syntax error: {}\n", e.what());
+    } catch (const ParserException& e) {
+        fmt::print("{}\n", e.what());
     }
 }
 
