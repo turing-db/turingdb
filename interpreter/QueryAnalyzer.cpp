@@ -6,6 +6,9 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/algorithm/adjacent_find.hpp>
 
+#include "spdlog/spdlog.h"
+#include "views/GraphView.h"
+#include "reader/GraphReader.h"
 #include "AnalyzeException.h"
 #include "Profiler.h"
 #include "metadata/PropertyType.h"
@@ -172,17 +175,17 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
         const auto& elements = pattern->elements();
 
         EntityPattern* entityPattern = elements[0];
-        entityPattern->setKind(DeclKind::NODE_DECL);
-        analyzeEntityPattern(declContext, entityPattern, isCreate);
+        if(elements[0]->getKind() == DeclKind::INJECT_DECL) {
+            analyzeInjectNodes(declContext,static_cast<InjectedNodes*>(entityPattern));
+        }else {
+            analyzeEntityPattern(declContext, entityPattern, isCreate);
+        }
 
         if (elements.size() >= 2) {
             bioassert(elements.size() >= 3);
             for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
                 EntityPattern* edge = pair[0];
                 EntityPattern* target = pair[1];
-
-                edge->setKind(DeclKind::EDGE_DECL);
-                target->setKind(DeclKind::NODE_DECL);
 
                 analyzeEntityPattern(declContext, edge, isCreate);
                 analyzeEntityPattern(declContext, target, isCreate);
@@ -246,7 +249,6 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
             throw AnalyzeException("Entity pattern has no elements.");
         }
 
-        entityPattern->setKind(DeclKind::NODE_DECL);
         analyzeEntityPattern(declContext, entityPattern, isCreate);
 
         if (elements.size() >= 2) {
@@ -255,10 +257,8 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
                 EntityPattern* edge = pair[0];
                 EntityPattern* target = pair[1];
 
-                edge->setKind(DeclKind::EDGE_DECL);
-                target->setKind(DeclKind::NODE_DECL);
-
                 analyzeEntityPattern(declContext, edge, isCreate);
+
                 analyzeEntityPattern(declContext, target, isCreate);
             }
         }
@@ -346,9 +346,53 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
     }
 }
 
+void QueryAnalyzer::analyzeInjectNodes(DeclContext* declContext, InjectedNodes* nodes) {
+    //Throw exceptions instead of false
+    VarExpr* var = nodes->getVar();
+    if (!var) {
+        var = VarExpr::create(_ctxt, createVarName());
+        nodes->setVar(var);
+    }
+
+    VarDecl* decl = VarDecl::create(_ctxt,
+            declContext,
+            var->getName(),
+            nodes->getKind(),
+            nodes->getEntityID());
+    if (!decl) {
+        //should never happen as injected noes are the first declaration
+        throw AnalyzeException("Could Not Create Entity Declaration:\""
+                               + var->getName() + "\"");
+    }
+    var->setDecl(decl);
+
+    const auto& injectedNodes = nodes->nodes();
+    for(const auto& node: injectedNodes) {
+        //make this more efficient!
+        if(!_view.read().graphHasNode(node)){
+        throw AnalyzeException("Could Not Find Injected Node In Graph:\""
+                               + std::to_string(node.getValue()) + "\"");
+        }
+    }
+
+    if (auto* exprConstraint = nodes->getExprConstraint()) {
+        for (const auto* binExpr : exprConstraint->getExpressions()) {
+            if (binExpr->getOpType() != BinExpr::OP_EQUAL) {
+                throw AnalyzeException("Expression Type Not Supported:\""
+                                       + std::string(BinExpr::OpTypeName::value(binExpr
+                                        ->getOpType()))+ "\"");
+            }
+        }
+    }
+}
+
 void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
                                          EntityPattern* entity,
                                          bool isCreate) {
+    if(entity->getKind() == DeclKind::INJECT_DECL) {
+        throw AnalyzeException("Injecting Nodes In Non-Primary Entity:\""
+                               + entity->getVar()->getName() + "\"");
+    }
     VarExpr* var = entity->getVar();
     // Handle the case where the entity is unlabeled edge (--)
     if (!var) {

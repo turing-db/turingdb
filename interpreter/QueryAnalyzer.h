@@ -9,6 +9,7 @@
 namespace db {
 
 class PropertyTypeMap;
+class GraphView;
 class ASTContext;
 class QueryCommand;
 class MatchCommand;
@@ -16,6 +17,7 @@ class CreateCommand;
 class CreateGraphCommand;
 class DeclContext;
 class EntityPattern;
+class InjectedNodes;
 class LoadGraphCommand;
 class ExplainCommand;
 class GraphView;
@@ -45,6 +47,7 @@ private:
     void ensureMatchVarsUnique(const MatchTarget* target);
     void analyzeBinExprConstraint(const BinExpr* constraint, bool isCreate);
     void typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
+    void analyzeInjectNodes(DeclContext* declContext, InjectedNodes* nodes);
     void analyzeExplain(ExplainCommand* cmd);
     std::string createVarName();
 };
