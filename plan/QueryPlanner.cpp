@@ -137,7 +137,11 @@ bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
     // This is necessary by convention for Executor
     _pipeline->add<StopStep>();
 
-    planPath(pathElements);
+    if(pathElements[0]->getKind() == DeclKind::INJECT_DECL) {
+        planInjectNodes(pathElements);
+    }else {
+        planPath(pathElements);
+    }
     planTransformStep();
     planProjection(matchCmd);
     planOutputLambda();
@@ -217,6 +221,42 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
     _pipeline->add<EndStep>();
 
     return true;
+}
+
+void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
+    const auto* injectedNodes = static_cast<InjectedNodes*>(path[0]);
+
+    const TypeConstraint* injectTypeConstr = injectedNodes->getTypeConstraint();
+    if(injectTypeConstr) {
+        const LabelSet* injectLabelSet = getOrCreateLabelSet(injectTypeConstr);
+
+        getMatchingLabelSets(_tmpLabelSetIDs, injectLabelSet);
+
+        // If no matching LabelSet, empty result
+        if (_tmpLabelSetIDs.empty()) {
+            _result = _mem->alloc<ColumnNodeIDs>();
+            return;
+        }
+
+    }
+
+    auto* injectedNodesCol = _mem->alloc<ColumnNodeIDs>(injectedNodes->nodes());
+    const VarExpr* nodeVar = injectedNodes->getVar();
+    if (nodeVar) {
+        VarDecl* nodeDecl = nodeVar->getDecl();
+        if (nodeDecl->isReturned()) {
+            _transformData->addColumn(injectedNodesCol, nodeDecl);
+        }
+    }
+
+    _result = injectedNodesCol;
+
+    const auto expandSteps = path | rv::drop(1) | rv::chunk(2);
+    for (auto step : expandSteps) {
+        const EntityPattern* edge = step[0];
+        const EntityPattern* target = step[1];
+        planExpandEdge(edge, target);
+    }
 }
 
 void QueryPlanner::planPath(const std::vector<EntityPattern*>& path) {
@@ -1269,9 +1309,13 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
 
         // Skip variables for which no columnIDs have been generated
         const VarDecl* decl = field->getDecl();
-        if (decl->getKind() == DeclKind::NODE_DECL) {
+        const auto kind = decl->getKind();
+        if (kind == DeclKind::NODE_DECL || kind == DeclKind::INJECT_DECL) {
             auto* column = decl->getColumn()->cast<ColumnNodeIDs>();
             if (!column) {
+                //For the case where a plan step breaks out before
+                //setting the Decl Column - e.g If an invalid Label
+                //is Filtered On.
                 column = _mem->alloc<ColumnNodeIDs>();
             }
 
@@ -1282,12 +1326,11 @@ void QueryPlanner::planProjection(const MatchCommand* matchCmd) {
                 planPropertyProjection(column, decl, field);
             }
 
-        } else if (decl->getKind() == DeclKind::EDGE_DECL) {
+        } else if (kind == DeclKind::EDGE_DECL) {
             auto* column = decl->getColumn()->cast<ColumnEdgeIDs>();
             if (!column) {
                 column = _mem->alloc<ColumnEdgeIDs>();
             }
-
 
             const auto& memberName = field->getMemberName();
             if (memberName.empty()) {

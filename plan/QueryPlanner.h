@@ -83,6 +83,7 @@ private:
     // Planning functions
     bool planMatch(const MatchCommand* matchCmd);
     bool planCreate(const CreateCommand* createCmd);
+    void planInjectNodes(const std::vector<EntityPattern*>& path);
     void planPath(const std::vector<EntityPattern*>& path);
 
     void planScanNodes(const EntityPattern* entity);
