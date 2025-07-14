@@ -237,6 +237,15 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
     return false;
 }
 
+bool GraphReader::graphHasNode(NodeID nodeID) const {
+    for (const auto& part : _view.dataparts()) {
+        if (part->hasNode(nodeID)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
