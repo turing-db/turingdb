@@ -41,6 +41,7 @@ using namespace db;
 "submit"|"SUBMIT" { return YParser::make_SUBMIT(getLocation()); }
 "delete"|"DELETE" { return YParser::make_DELETE(getLocation()); }
 "call"|"CALL" { return YParser::make_CALL(getLocation()); }
+"@"|"at"|"AT" { return YParser::make_AT(getLocation()); }
 
 "properties"|"PROPERTIES" { return YParser::make_PROPERTIES(getLocation()); }
 "labels"|"LABELS" { return YParser::make_LABELS(getLocation()); }

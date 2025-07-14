@@ -31,6 +31,7 @@ class CreateTarget;
 class CreateTargets;
 class PathPattern;
 class EntityPattern;
+class InjectedNodes;
 class TypeConstraint;
 class ExprConstraint;
 class VarExpr;
@@ -47,7 +48,6 @@ class ReturnProjection;
 
 %code top
 {
-
 #include "YScanner.h"
 #include "parser.hpp"
 
@@ -108,6 +108,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token NEW          "'NEW'"
 %token SUBMIT       "'SUBMIT'"
 %token DELETE       "'DELETE'"
+%token AT           "'AT'"
 %token PROPERTIES   "'PROPERTIES'"
 %token CALL         "'CALL'"
 %token LABELS       "'LABELS'"
@@ -153,16 +154,19 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::CreateTargets*> create_targets
 %type<db::PathPattern*> create_path_pattern
 %type<db::PathPattern*> path_pattern
+%type<db::PathPattern*> inject_pattern
+%type<db::InjectedNodes*> injected_nodes
 %type<db::EntityPattern*> create_node_pattern
 %type<db::EntityPattern*> node_pattern
 %type<db::EntityPattern*> edge_pattern
 %type<db::EntityPattern*> entity_pattern
 %type<db::EntityPattern*> known_entity_pattern
-%type<db::EntityPattern*> edge_entity_pattern
 %type<db::TypeConstraint*> type_constraint
+%type<db::TypeConstraint*> opt_type_constraint
 %type<db::BinExpr*> prop_equals_expr
 %type<db::BinExpr*> prop_approx_expr
 %type<db::ExprConstraint*> prop_expr_constraint
+%type<db::ExprConstraint*> opt_prop_expr_constraint
 %type<db::ExprConst*> prop_expr_constant
 %type<std::string> prop_ID
 %type<db::VarExpr*> entity_var
@@ -274,10 +278,11 @@ return_fields: return_fields COMMA return_field {
                             }
              ;
 
-match_target: path_pattern {
-                              auto target = MatchTarget::create(ctxt, $1);
-                              $$ = target;
-                          }
+match_target: path_pattern 
+            {
+                        auto target = MatchTarget::create(ctxt, $1);
+                        $$ = target;
+            }
            ;
 
 create_path_pattern: create_node_pattern
@@ -289,6 +294,7 @@ create_path_pattern: create_node_pattern
                    | create_path_pattern MINUS MINUS create_node_pattern
                    {
                        auto edge = EntityPattern::create(ctxt, nullptr, nullptr, nullptr);
+                       edge->setKind(DeclKind::EDGE_DECL);
                        $1->addElement(edge);
                        $1->addElement($4);
                        $$ = $1;
@@ -310,6 +316,7 @@ path_pattern: node_pattern
             | path_pattern MINUS MINUS node_pattern
             {
                 auto edge = EntityPattern::create(ctxt, nullptr, nullptr, nullptr);
+                edge->setKind(DeclKind::EDGE_DECL);
                 $1->addElement(edge);
                 $1->addElement($4);
                 $$ = $1;
@@ -322,38 +329,139 @@ path_pattern: node_pattern
             }
             ;
 
-create_node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
-                   | OPAR known_entity_pattern CPAR { $$ = $2; }
+//inject_pattern: entity_var opt_type_constraint ATSYM injected_nodes opt_prop_expr_constraint
+//              {
+//                  auto pattern = PathPattern::create(ctxt);
+//                  $4->setVar($1);
+//                  $4->setTypeConstraint($2);
+//                  $4->setExprConstraint($5);
+//                  pattern->addElement($4);
+//                  $$ = pattern;
+//              }
+//              | entity_var opt_type_constraint opt_prop_expr_constraint ATSYM injected_nodes
+//              {
+//                  auto pattern = PathPattern::create(ctxt);
+//                  $5->setVar($1);
+//                  $5->setTypeConstraint($2);
+//                  $5->setExprConstraint($3);
+//                  pattern->addElement($5);
+//                  $$ = pattern;
+//              }
+//              ;
+
+injected_nodes: unsigned_integer
+                   {
+                        printf("actually creating injected nodes");
+                        auto injectedNodes = InjectedNodes::create(ctxt);
+                        injectedNodes->addNode($1);
+                        $$ = injectedNodes;
+                   }
+                   | injected_nodes COMMA unsigned_integer
+                   {
+                        $1->addNode($3);
+                        $$ = $1;
+                   }
+                   
+create_node_pattern: OPAR entity_pattern CPAR
+                   {
+                        $2->setKind(DeclKind::NODE_DECL);
+                        $$ = $2;
+                   }
+                   | OPAR known_entity_pattern CPAR
+                   {
+                        $2->setKind(DeclKind::NODE_DECL);
+                        $$ = $2;
+                   }
                    ;
 
 node_pattern: OPAR entity_pattern CPAR { $$ = $2; }
+            | entity_pattern { $$ = $1; }
             ;
 
-edge_pattern: OSBRACK entity_pattern CSBRACK { $$ = $2; }
+edge_pattern: OSBRACK entity_pattern CSBRACK
+            { 
+                $2->setKind(DeclKind::EDGE_DECL);
+                $$ = $2; 
+            }
             ;
 
 entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
-                    $$ = EntityPattern::create(ctxt, $1, $3, $5);
+                    auto* pattern = EntityPattern::create(ctxt, $1, $3, $5);
+                    pattern->setKind(DeclKind::NODE_DECL);
+                    $$=pattern;
               }
               | entity_var COLON type_constraint
               { 
-                    $$ = EntityPattern::create(ctxt, $1, $3, nullptr);
+                    auto* pattern = EntityPattern::create(ctxt, $1, $3, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
+                    $$=pattern;
               }
               | entity_var OBRACK prop_expr_constraint CBRACK
               { 
-                    $$ = EntityPattern::create(ctxt, $1, nullptr, $3); }
+                    auto* pattern = EntityPattern::create(ctxt, $1, nullptr, $3); 
+                    pattern->setKind(DeclKind::NODE_DECL);
+                    $$=pattern;
+              }
               | entity_var 
               { 
-                    $$ = EntityPattern::create(ctxt, $1, nullptr, nullptr);
+                    printf("entity var!\n");
+                    auto* pattern = EntityPattern::create(ctxt, $1, nullptr, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
+                    $$=pattern;
               }
               | COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
-                    $$ = EntityPattern::create(ctxt, nullptr, $2, $4);
+                    auto* pattern = EntityPattern::create(ctxt, nullptr, $2, $4);
+                    pattern->setKind(DeclKind::NODE_DECL);
+                    $$=pattern;
               }
               | COLON type_constraint
               {
-                    $$ = EntityPattern::create(ctxt, nullptr, $2, nullptr);
+                    auto* pattern = EntityPattern::create(ctxt, nullptr, $2, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
+                    $$ = pattern;
+              }
+              |entity_var COLON type_constraint AT injected_nodes OBRACK prop_expr_constraint CBRACK
+              {
+                    $5->setVar($1);
+                    $5->setTypeConstraint($3);
+                    $5->setExprConstraint($7);
+                    $$=$5;
+
+              }
+              | entity_var COLON type_constraint AT injected_nodes
+              {
+                    $5->setVar($1);
+                    $5->setTypeConstraint($3);
+                    $$=$5;
+
+              }
+              | entity_var AT injected_nodes OBRACK prop_expr_constraint CBRACK
+              {
+                    $3->setVar($1);
+                    $3->setExprConstraint($5);
+                    $$=$3;
+
+              }
+              | entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK AT injected_nodes
+              {
+                    $8->setVar($1);
+                    $8->setTypeConstraint($3);
+                    $8->setExprConstraint($5);
+                    $$=$8;
+              }
+              | entity_var OBRACK prop_expr_constraint CBRACK AT injected_nodes
+              {
+                    $6->setVar($1);
+                    $6->setExprConstraint($3);
+                    $$=$6;
+              }
+              | entity_var AT injected_nodes
+              {
+                    printf("creating injected node\n");
+                    $3->setVar($1);
+                    $$=static_cast<EntityPattern*>($3);
               }
               ;
 
@@ -396,6 +504,27 @@ prop_expr_constraint : prop_expr_constraint COMMA prop_equals_expr {
                                                             $$ = ExprConstraint;
                                                         }
          ;
+
+opt_prop_expr_constraint : OBRACK prop_expr_constraint CBRACK
+                         {
+                            $$=$2;
+
+                         }
+                         | /*empty*/
+                         {
+                            $$=nullptr;
+                         }
+                         ;
+opt_type_constraint : COLON type_constraint
+                         {
+                            $$=$2;
+
+                         }
+                         | /*empty*/
+                         {
+                            $$=nullptr;
+                         }
+                         ;
 
 prop_equals_expr: prop_ID EQUAL prop_expr_constant { $$ = BinExpr::create(ctxt, VarExpr::create(ctxt,$1),$3, BinExpr::OpType::OP_EQUAL); }
           | prop_ID NOT_EQUAL prop_expr_constant { $$ = nullptr; }
