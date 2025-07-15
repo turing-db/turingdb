@@ -7,6 +7,7 @@
 %define parse.error detailed
 %define api.namespace { db }
 %parse-param {db::YCypherScanner& scanner}
+%parse-param {db::CypherAST& ast}
 %locations
 
 %header
@@ -14,15 +15,25 @@
 
 %code requires {
     #include <spdlog/fmt/bundled/core.h>
+    #include <optional>
+    #include <vector>
+
+    #include "expressions/Operators.h"
+    #include "Literal.h"
+    #include "Atom.h"
+    #include "Symbol.h"
+    #include "QualifiedName.h"
 
     namespace db {
         class YCypherScanner;
+        class CypherAST;
     }
 }
 
 %code top {
     #include "YCypherScanner.h"
     #include "GeneratedCypherParser.h"
+    #include "CypherAST.h"
 
     #undef yylex
     #define yylex scanner.lex
@@ -138,11 +149,23 @@
 
 %token UNKNOWN
 
-%type<std::string> symbol
+%type<db::Literal> numLit boolLit charLit literal stringLit
+%type<db::Atom> atom
+%type<db::Symbol> symbol
+%type<db::QualifiedName> qualifiedName
+%type<db::QualifiedName> invocationName
 %type<std::string> name
-%type<std::string> qualifiedName
-%type<std::string> invocationName
 %type<std::string> reservedWord
+
+%type<std::vector<std::string>> nodeLabels
+%type<std::vector<std::string>> relationshipTypes
+
+%type<std::optional<Symbol>> opt_symbol
+%type<std::optional<std::vector<std::string>>> opt_nodeLabels
+%type<std::optional<std::vector<std::string>>> opt_relationshipTypes
+
+%type<BinaryOperator> comparisonSign
+%type<StringOperator> stringExpPrefix
 
 %expect 0
 
@@ -156,13 +179,13 @@ script
     ;
 
 queries
-    : query
-    | queries SEMI_COLON query
+    : query { fmt::print("Finished query\n"); }
+    | queries SEMI_COLON query { scanner.notImplemented("Multiple queries"); }
     ;
 
 query
     : singleQuery
-    | singleQuery unionList
+    | singleQuery unionList { scanner.notImplemented("Query + Unions"); }
     ;
 
 unionList
@@ -172,11 +195,11 @@ unionList
 
 singleQuery
     : singlePartQ
-    | multiPartQ
+    | multiPartQ { scanner.notImplemented("Multi-part queries"); }
     ;
 
 returnSt
-    : RETURN projectionBody
+    : RETURN projectionBody { fmt::print("RETURN projectionBody\n"); }
     ;
 
 withSt
@@ -217,13 +240,13 @@ opt_limitSt
     ;
 
 projectionItems
-    : MULT
-    | projectionItem
+    : MULT { fmt::print("projectionItems '*'\n"); }
+    | projectionItem { fmt::print("projectionItem\n"); }
     | projectionItems COMMA projectionItem
     ;
 
 projectionItem
-    : expression
+    : expression { fmt::print("projectionItem\n"); }
     | expression AS name
     ;
 
@@ -242,40 +265,40 @@ orderSt
 
 singlePartQ
     : readingStatements returnSt
-    | returnSt
-    | readingStatements singlePartUpdateQ
-    | singlePartUpdateQ
+    | returnSt { scanner.notImplemented("Return only"); }
+    | readingStatements singlePartUpdateQ { scanner.notImplemented("Reading statement + Update"); }
+    | singlePartUpdateQ { scanner.notImplemented("Single-part update"); }
     ;
 
 singlePartUpdateQ
-    : updatingStatements
-    | updatingStatements returnSt
+    : updatingStatements { scanner.notImplemented("Single-part update"); }
+    | updatingStatements returnSt { scanner.notImplemented("Single-part update + Return"); }
     ;
 
 readingStatements
     : readingStatement
-    | readingStatements readingStatement
+    | readingStatements readingStatement {}
     ;
 
 updatingStatements
-    : updatingStatement
-    | updatingStatements updatingStatement
+    : updatingStatement { scanner.notImplemented("Updating statement"); }
+    | updatingStatements updatingStatement { scanner.notImplemented("Multiple updating statements"); }
     ;
  
 multiPartQ
-    : updateWithSt singlePartQ
-    | readingStatements updateWithSt singlePartQ
+    : updateWithSt singlePartQ { scanner.notImplemented("Update + With + Reading"); }
+    | readingStatements updateWithSt singlePartQ { scanner.notImplemented("Reading + With + Update + Reading"); }
     ;
 
 updateWithSt
-    : updatingStatements withSt
-    | withSt
-    | updateWithSt updatingStatements withSt
-    | updateWithSt withSt
+    : updatingStatements withSt { scanner.notImplemented("Update + With"); }
+    | withSt { scanner.notImplemented("With"); }
+    | updateWithSt updatingStatements withSt { scanner.notImplemented("Update + With + Update"); }
+    | updateWithSt withSt { scanner.notImplemented("Update + With"); }
     ;
 
 matchSt
-    : MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt
+    : MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt { fmt::print("MATCH patternWhere\n"); }
     | OPTIONAL MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt { scanner.notImplemented("OPTIONAL MATCH"); }
     ;
 
@@ -284,17 +307,17 @@ unwindSt
     ;
 
 readingStatement
-    : matchSt
-    | unwindSt
-    | queryCallSt
+    : matchSt { /* ast.finishMatch(); */  }
+    | unwindSt { scanner.notImplemented("UNWIND"); }
+    | queryCallSt { scanner.notImplemented("CALL"); }
     ;
 
 updatingStatement
-    : createSt
-    | mergeSt
-    | deleteSt
-    | setSt
-    | removeSt
+    : createSt { scanner.notImplemented("CREATE"); }
+    | mergeSt { scanner.notImplemented("MERGE"); }
+    | deleteSt { scanner.notImplemented("DELETE"); }
+    | setSt { scanner.notImplemented("SET"); }
+    | removeSt { scanner.notImplemented("REMOVE"); }
     ;
  
 deleteSt
@@ -307,13 +330,13 @@ removeSt
     ;
 
 removeItemChain
-    : removeItem
-    | removeItemChain COMMA removeItem
+    : removeItem { scanner.notImplemented("REMOVE"); }
+    | removeItemChain COMMA removeItem { scanner.notImplemented("REMOVE multiple items"); }
     ;
 
 removeItem
-    : symbol nodeLabels
-    | propertyExpression
+    : symbol nodeLabels { scanner.notImplemented("REMOVE"); }
+    | propertyExpression { scanner.notImplemented("REMOVE"); }
     ;
 
 queryCallSt
@@ -327,10 +350,10 @@ queryCallSt
     ;
 
 callCapture
-    : symbol
-    | symbol AS symbol
-    | callCapture COMMA symbol
-    | callCapture COMMA symbol AS symbol
+    : symbol { scanner.notImplemented("CALL capture"); }
+    | symbol AS symbol { scanner.notImplemented("CALL capture"); }
+    | callCapture COMMA symbol { scanner.notImplemented("CALL capture"); }
+    | callCapture COMMA symbol AS symbol { scanner.notImplemented("CALL capture"); }
     ;
 
 expressionChain
@@ -390,10 +413,10 @@ setItem
     ;
 
 nodeLabels
-    : COLON name
-    | COLON parameter
-    | nodeLabels COLON name
-    | nodeLabels COLON parameter
+    : COLON name { $$ = {std::move($2)}; }
+    | COLON parameter { scanner.notImplemented("Parameters"); }
+    | nodeLabels COLON name { $$.emplace_back(std::move($3)); }
+    | nodeLabels COLON parameter { scanner.notImplemented("Parameters"); }
     ;
 
 createSt
@@ -401,81 +424,81 @@ createSt
     ;
 
 patternWhere
-    : pattern
-    | pattern where { scanner.notImplemented("WHERE"); }
+    : pattern { fmt::print("pattern\n"); }
+    | pattern where { }
     ;
 
 where
-    : WHERE expression { scanner.notImplemented("WHERE"); }
+    : WHERE expression { }
     ;
 
 pattern
-    : patternPart
-    | pattern COMMA patternPart
+    : patternPart { fmt::print("patternPart\n"); }
+    | pattern COMMA patternPart { fmt::print("pattern, patternPart\n"); }
     ;
 
 expression
-    : xorExpression
-    | expression OR xorExpression { scanner.notImplemented("OR"); }
+    : xorExpression { fmt::print("expression\n"); }
+    | expression OR xorExpression { fmt::print("expression OR xorExpression\n"); }
     ;
 
 xorExpression
-    : andExpression
-    | xorExpression XOR andExpression { scanner.notImplemented("XOR"); }
+    : andExpression { fmt::print("xorExpression\n"); }
+    | xorExpression XOR andExpression  { fmt::print("xorExpression XOR andExpression\n"); }
     ;
 
 andExpression
-    : notExpression
-    | andExpression AND notExpression { scanner.notImplemented("AND"); }
+    : notExpression { fmt::print("andExpression\n"); }
+    | andExpression AND notExpression { fmt::print("andExpression AND notExpression\n"); }
     ;
 
 notExpression
-    : comparisonExpression
-    | NOT notExpression { scanner.notImplemented("NOT"); }
+    : comparisonExpression { fmt::print("notExpression\n"); }
+    | NOT notExpression { fmt::print("NOT notExpression\n"); }
     ;
 
 comparisonExpression
-    : addSubExpression
-    | comparisonExpression comparisonSigns addSubExpression { scanner.notImplemented("Comparison expressions"); }
+    : addSubExpression { fmt::print("comparisonExpression\n"); }
+    | comparisonExpression comparisonSign addSubExpression { fmt::print("comparisonExpression comparisonSign addSubExpression\n"); }
     ;
 
-comparisonSigns
-    : ASSIGN
-    | LE
-    | GE
-    | GT
-    | LT
-    | NOT_EQUAL
-    | IS
-    | IS_NOT
+comparisonSign
+    : ASSIGN { $$ = BinaryOperator::Equal; }
+    | LE { $$ = BinaryOperator::LessThanOrEqual; }
+    | GE { $$ = BinaryOperator::GreaterThanOrEqual; }
+    | GT { $$ = BinaryOperator::GreaterThan; }
+    | LT { $$ = BinaryOperator::LessThan; }
+    | NOT_EQUAL { $$ = BinaryOperator::NotEqual; }
+    | IS { $$ = BinaryOperator::Equal; }
+    | IS_NOT { $$ = BinaryOperator::NotEqual; }
     ;
 
 addSubExpression
-    : multDivExpression
-    | addSubExpression PLUS multDivExpression { scanner.notImplemented("Add/Sub expressions"); }
-    | addSubExpression SUB multDivExpression { scanner.notImplemented("Add/Sub expressions"); }
+    : multDivExpression { fmt::print("addSubExpression\n"); }
+    | addSubExpression PLUS multDivExpression { fmt::print("addSubExpression PLUS multDivExpression\n"); }
+    | addSubExpression SUB multDivExpression { fmt::print("addSubExpression SUB multDivExpression\n"); }
     ;
 
 multDivExpression
-    : powerExpression
-    | multDivExpression MULT powerExpression { scanner.notImplemented("Mult/Div expressions"); }
-    | multDivExpression DIV powerExpression { scanner.notImplemented("Mult/Div expressions"); }
-    | multDivExpression MOD powerExpression { scanner.notImplemented("Mult/Div expressions"); }
+    : powerExpression { fmt::print("multDivExpression\n"); }
+    | multDivExpression MULT powerExpression { fmt::print("multDivExpression MULT powerExpression\n"); }
+    | multDivExpression DIV powerExpression { fmt::print("multDivExpression DIV powerExpression\n"); }
+    | multDivExpression MOD powerExpression { fmt::print("multDivExpression MOD powerExpression\n"); }
     ;
 
 powerExpression
-    : unaryAddSubExpression
-    | powerExpression CARET unaryAddSubExpression { scanner.notImplemented("Power expressions"); }
+    : unaryAddSubExpression { fmt::print("powerExpression\n"); }
+    | powerExpression CARET unaryAddSubExpression { fmt::print("powerExpression CARET unaryAddSubExpression\n"); }
     ;
 
 unaryAddSubExpression
-    : atomicExpression
+    : atomicExpression { fmt::print("unaryAddSubExpression\n"); }
     | PLUS atomicExpression { scanner.notImplemented("Unary Add/Sub expressions"); }
     | SUB atomicExpression { scanner.notImplemented("Unary Add/Sub expressions"); }
     ;
 
 atomicExpression
-    : propertyOrLabelExpression
+    : propertyOrLabelExpression { fmt::print("atomicExpression\n"); }
     | atomicExpression stringExpression { scanner.notImplemented("String expressions"); }
     | atomicExpression listExpression { scanner.notImplemented("List expressions"); }
     ;
@@ -490,37 +513,40 @@ listExpression
     ;
 
 stringExpression
-    : stringExpPrefix propertyOrLabelExpression
+    : stringExpPrefix propertyOrLabelExpression { fmt::print("stringExpPrefix propertyOrLabelExpression\n"); }
     ;
 
 stringExpPrefix
-    : STARTS WITH
-    | ENDS WITH
-    | CONTAINS
+    : STARTS WITH { $$ = StringOperator::StartsWith; }
+    | ENDS WITH { $$ = StringOperator::EndsWith; }
+    | CONTAINS { $$ = StringOperator::Contains; }
     ;
 
 propertyOrLabelExpression
-    : propertyExpression
-    | propertyExpression nodeLabels
+    : propertyExpression { fmt::print("propertyExpression\n"); }
+    | propertyExpression nodeLabels { fmt::print("propertyExpression nodeLabels\n"); }
     ;
 
 propertyExpression
-    : atom
-    | qualifiedName DOT name
+    : atom { fmt::print("atom\n"); }
+    | qualifiedName DOT name { fmt::print("qualifiedName DOT name\n"); }
     ;
 
 patternPart
     : patternElem
-    | symbol ASSIGN patternElem
+    | patternAlias { scanner.notImplemented("Pattern alias: Symbol = ()-[]-()-[]-()..."); }
     ;
 
+patternAlias
+    : symbol ASSIGN patternElem { scanner.notImplemented("Pattern alias: Symbol = ()-[]-()-[]-()..."); }
+
 patternElem
-    : nodePattern
+    : nodePattern { fmt::print("patternElem: Node\n"); }
     | patternElem patternElemChain
     ;
 
 patternElemChain
-    : relationshipPattern nodePattern
+    : relationshipPattern nodePattern { fmt::print("patternElemChain: Edge + Node\n"); }
     ;
 
 properties
@@ -528,27 +554,27 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN
+    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { ast.newNodePattern(std::move($2), std::move($3)); }
     ;
 
 opt_symbol
-    : symbol
-    | /* empty */
+    : symbol { $$ = std::move($1); }
+    | { $$ = std::nullopt; }
     ;
 
 opt_nodeLabels
-    : nodeLabels
-    | /* empty */
+    : nodeLabels { $$ = std::move($1); }
+    | { $$ = std::nullopt; }
     ;
 
 opt_properties
-    : properties
+    : properties { scanner.notImplemented("Properties"); }
     | /* empty */
     ;
 
 opt_relationshipTypes
-    : relationshipTypes
-    | /* empty */
+    : relationshipTypes { $$ = std::move($1); }
+    | { $$ = std::nullopt; }
     ;
 
 opt_rangeLit
@@ -557,18 +583,18 @@ opt_rangeLit
     ;
 
 atom
-    : literal
-    | parameter
-    | caseExpression
-    | countFunc
-    | listComprehension
-    | patternComprehension
-    | filterWith
+    : literal { $$ = std::move($1); }
+    | parameter { scanner.notImplemented("Parameters"); }
+    | caseExpression { scanner.notImplemented("CASE"); }
+    | countFunc { scanner.notImplemented("COUNT"); }
+    | listComprehension { scanner.notImplemented("List comprehensions"); }
+    | patternComprehension { scanner.notImplemented("Pattern comprehensions"); }
+    | filterWith { scanner.notImplemented("Filter keywords"); }
     //| relationshipsChainPattern // Enabling this causes conflicts, not sure if we need it
-    | parenthesizedExpression
-    | functionInvocation
-    | symbol
-    | subqueryExist
+    | parenthesizedExpression { scanner.notImplemented("Parenthesized expressions"); }
+    | functionInvocation { scanner.notImplemented("Function invocations"); }
+    | symbol { $$ = std::move($1); }
+    | subqueryExist { scanner.notImplemented("EXISTS"); }
     ;
 
 lhs
@@ -590,9 +616,9 @@ relationDetail
     ;
 
 relationshipTypes
-    : COLON name
-    | relationshipTypes PIPE name
-    | relationshipTypes PIPE COLON name
+    : COLON name { $$ = {std::move($2)}; }
+    | relationshipTypes PIPE name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
+    | relationshipTypes PIPE COLON name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
     ;
 
 unionSt
@@ -606,8 +632,8 @@ subqueryExist
     ;
 
 qualifiedName
-    : symbol { $$ = std::move($1); }
-    | qualifiedName DOT symbol { $$ = std::move($1); $$ += "." + std::move($3); }
+    : symbol { $$.addSymbol(std::move($1)); }
+    | qualifiedName DOT symbol { $$.addSymbol(std::move($3)); }
     ;
 
 invocationName
@@ -692,11 +718,11 @@ parameter
     ;
 
 literal
-    : boolLit
-    | numLit
-    | NULL_ { scanner.notImplemented("NULL"); }
-    | stringLit
-    | charLit
+    : boolLit { $$ = Literal(std::move($1)); }
+    | numLit { $$ = Literal(std::move($1)); }
+    | NULL_ { $$ = Literal(std::nullopt); }
+    | stringLit { $$ = Literal(std::move($1)); }
+    | charLit { $$ = Literal(std::move($1)); }
     | listLit { scanner.notImplemented("Lists"); }
     | mapLit { scanner.notImplemented("Maps"); }
     ;
@@ -711,21 +737,21 @@ rangeLit
     ;
 
 boolLit
-    : TRUE
-    | FALSE
+    : TRUE { $$ = Literal(true); }
+    | FALSE { $$ = Literal(false); }
     ;
 
 numLit
-    : DIGIT
-    | FLOAT
+    : DIGIT { $$ = Literal($1); }
+    | FLOAT { $$ = Literal($1); }
     ;
 
 stringLit
-    : STRING_LITERAL
+    : STRING_LITERAL { $$ = Literal(std::move($1)); }
     ;
 
 charLit
-    : CHAR_LITERAL
+    : CHAR_LITERAL { $$ = Literal($1); }
     ;
 
 listLit
@@ -769,13 +795,13 @@ mapPair
     ;
 
 name
-    : symbol
-    | reservedWord
+    : symbol { $$ = std::move($1._name) ; }
+    | reservedWord { $$ = std::move($1) ; }
     ;
 
 symbol
-    : ESC_LITERAL
-    | ID
+    : ESC_LITERAL { $$ = Symbol { ._name = std::move($1)}; }
+    | ID { $$ = Symbol { ._name = std::move($1) }; }
     //| FILTER // We should not need to support these
     //| EXTRACT
     //| ANY
@@ -784,59 +810,59 @@ symbol
     ;
 
 reservedWord
-    : ALL
-    | ASC
-    | ASCENDING
-    | BY
-    | CREATE
-    | DELETE
-    | DESC
-    | DESCENDING
-    | DETACH
-    | EXISTS
-    | LIMIT
-    | MATCH
-    | MERGE
-    | ON
-    | OPTIONAL
-    | ORDER
-    | REMOVE
-    | RETURN
-    | SET
-    | SKIP
-    | WHERE
-    | WITH
-    | UNION
-    | UNWIND
-    | AND
-    | AS
-    | CONTAINS
-    | DISTINCT
-    | ENDS
-    | IN
-    | IS
-    | NOT
-    | OR
-    | STARTS
-    | XOR
-    | FALSE
-    | TRUE
-    | NULL_
-    | CONSTRAINT
-    | DO
-    | FOR
-    | REQUIRE
-    | UNIQUE
-    | CASE
-    | WHEN
-    | THEN
-    | ELSE
-    | END
-    | MANDATORY
-    | SCALAR
-    | OF
-    | ADD
-    | DROP
+    : ALL { $$ = std::move($1); }
+    | ASC { $$ = std::move($1); }
+    | ASCENDING { $$ = std::move($1); }
+    | BY { $$ = std::move($1); }
+    | CREATE { $$ = std::move($1); }
+    | DELETE { $$ = std::move($1); }
+    | DESC { $$ = std::move($1); }
+    | DESCENDING { $$ = std::move($1); }
+    | DETACH { $$ = std::move($1); }
+    | EXISTS { $$ = std::move($1); }
+    | LIMIT { $$ = std::move($1); }
+    | MATCH { $$ = std::move($1); }
+    | MERGE { $$ = std::move($1); }
+    | ON { $$ = std::move($1); }
+    | OPTIONAL { $$ = std::move($1); }
+    | ORDER { $$ = std::move($1); }
+    | REMOVE { $$ = std::move($1); }
+    | RETURN { $$ = std::move($1); }
+    | SET { $$ = std::move($1); }
+    | SKIP { $$ = std::move($1); }
+    | WHERE { $$ = std::move($1); }
+    | WITH { $$ = std::move($1); }
+    | UNION { $$ = std::move($1); }
+    | UNWIND { $$ = std::move($1); }
+    | AND { $$ = std::move($1); }
+    | AS { $$ = std::move($1); }
+    | CONTAINS { $$ = std::move($1); }
+    | DISTINCT { $$ = std::move($1); }
+    | ENDS { $$ = std::move($1); }
+    | IN { $$ = std::move($1); }
+    | IS { $$ = std::move($1); }
+    | NOT { $$ = std::move($1); }
+    | OR { $$ = std::move($1); }
+    | STARTS { $$ = std::move($1); }
+    | XOR { $$ = std::move($1); }
+    | FALSE { $$ = std::move($1); }
+    | TRUE { $$ = std::move($1); }
+    | NULL_ { $$ = std::move($1); }
+    | CONSTRAINT { $$ = std::move($1); }
+    | DO { $$ = std::move($1); }
+    | FOR { $$ = std::move($1); }
+    | REQUIRE { $$ = std::move($1); }
+    | UNIQUE { $$ = std::move($1); }
+    | CASE { $$ = std::move($1); }
+    | WHEN { $$ = std::move($1); }
+    | THEN { $$ = std::move($1); }
+    | ELSE { $$ = std::move($1); }
+    | END { $$ = std::move($1); }
+    | MANDATORY { $$ = std::move($1); }
+    | SCALAR { $$ = std::move($1); }
+    | OF { $$ = std::move($1); }
+    | ADD { $$ = std::move($1); }
+    | DROP { $$ = std::move($1); }
     ;
 
 

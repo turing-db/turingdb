@@ -214,6 +214,7 @@ using Token = db::YCypherParser::token;
 
 [a-zA-Z_][a-zA-Z0-9_]* {
     /* Identifier */
+    fmt::print("ID: {}\n", yytext);
     yylval->emplace<std::string>(yytext, yyleng);
     return Token::ID;
 }

@@ -1,29 +1,15 @@
 #include <stdlib.h>
 
-#include <iostream>
 #include <sstream>
 
-#include "SystemManager.h"
 #include "Time.h"
-#include "PlanGraphDebug.h"
-#include "Graph.h"
-#include "SimpleGraph.h"
 #include "YCypherScanner.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
-#include "PlanGraphGenerator.h"
-#include "PlanGraph.h"
-#include "QueryAnalyzer.h"
-#include "QueryParser.h"
-#include "ASTContext.h"
-#include "QueryCommand.h"
 #include "ParserException.h"
-#include "AnalyzeException.h"
 #include "FileReader.h"
+#include "CypherAST.h"
 
 using namespace db;
 
-void runPlan2(std::string_view query);
 void runParser2(const std::string& query);
 
 int main(int argc, char** argv) {
@@ -53,10 +39,11 @@ int main(int argc, char** argv) {
 
 void runParser2(const std::string& query) {
     YCypherScanner yscanner;
-    yscanner.setThrowNotImplemented(false);
+    CypherAST ast;
+    yscanner.setThrowNotImplemented(true);
     yscanner.setQuery(query);
 
-    YCypherParser yparser(yscanner);
+    YCypherParser yparser(yscanner, ast);
 
     std::istringstream iss;
     iss.rdbuf()->pubsetbuf((char*)query.data(), query.size());
@@ -70,46 +57,4 @@ void runParser2(const std::string& query) {
     } catch (const ParserException& e) {
         fmt::print("{}\n", e.what());
     }
-}
-
-void runPlan2(std::string_view query) {
-    SystemManager sysMan;
-    Graph* graph = sysMan.createGraph("simpledb");
-    SimpleGraph::createSimpleGraph(graph);
-
-    const Transaction transaction = graph->openTransaction();
-    const GraphView view = transaction.viewGraph();
-
-    auto callback = [](const Block& block) {};
-
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
-    QueryCommand* queryCmd {nullptr};
-    try {
-        auto t0 = Clock::now();
-        queryCmd = parser.parse(query);
-        if (!queryCmd) {
-            std::cerr << "Failed to parse query" << std::endl;
-            return;
-        }
-        fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ParserException& e) {
-        std::cerr << "Syntax error: " << e.what() << std::endl;
-        return;
-    }
-
-    QueryAnalyzer analyzer(view, &ctxt);
-    try {
-        analyzer.analyze(queryCmd);
-    } catch (const AnalyzeException& e) {
-        std::cerr << "Analyze error: " << e.what() << std::endl;
-        return;
-    }
-
-    PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
-    const PlanGraph& planGraph = planGen.getPlanGraph();
-
-    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 }
