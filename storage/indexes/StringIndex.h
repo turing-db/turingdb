@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
+#include <unordered_set>
 
 #include "ID.h"
 
@@ -64,7 +66,53 @@ public:
      * matches of any of the tokens in @param sv
      * @param str The string to query
      */
-    const void query(std::vector<EntityID>& result, std::string_view sv) const;
+    template <typename T>
+    const void query(std::vector<T>& result, std::string_view queryString) const {
+        using Node = StringIndexNode;
+
+        //result.clear();
+        // Track owners in a set to avoid duplicates
+        std::unordered_set<T> resSet;
+
+        std::vector<std::string> tokens {};
+        preprocess(tokens, queryString);
+
+        for (const auto& tok : tokens) {
+            auto it = find(tok);
+
+            // Early exit if no match
+            if (it._result == NOT_FOUND || !it._nodePtr) {
+                continue;
+            }
+
+            // Otherwise: match or partial match
+            Node* node = it._nodePtr;
+            std::deque<Node*> q {node};
+            // BFS, collecting owners
+            while (!q.empty()) {
+                const Node* n = q.front();
+                q.pop_front();
+                for (size_t i {0}; i < n->_children.size(); i++) {
+                    if (Node* child = n->_children[i].get()) {
+                        q.push_back(child);
+                    }
+                }
+                // Collect owners to report back
+                if (n->_isComplete) {
+                    std::vector<EntityID>* owners = n->_owners.get();
+
+                    // XXX: nasty
+                    for (const EntityID& id : *owners) {
+                        resSet.emplace(T(id.getValue()));
+                    }
+                
+                    //resSet.insert(std::begin(*owners), std::end(*owners));
+                }
+            }
+        }
+        //result.resize(resSet.size());  // Allocate enough space
+        std::copy(resSet.begin(), resSet.end(), std::back_inserter(result));
+    }
 
     /**
      * @brief Replaces punctuation with spaces and splits into words (separated by space)
@@ -91,4 +139,5 @@ private:
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
 };
+
 }

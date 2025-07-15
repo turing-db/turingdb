@@ -57,7 +57,7 @@ void Step::execute() {
         const auto& strIndex = nodeStringIndex.at(_pId);
 
         // Accumulates matching node IDs into _nodes column vec
-        strIndex->query(_nodes->getRaw(), _strQuery);
+        strIndex->query<NodeID>(_nodes->getRaw(), _strQuery);
     }
     _dps.reset();
 }
