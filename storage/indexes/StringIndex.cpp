@@ -1,0 +1,168 @@
+#include "StringIndex.h"
+#include "ID.h"
+#include "TuringException.h"
+
+#include <memory>
+#include <deque>
+#include <unordered_set>
+
+using namespace db;
+
+StringIndex::StringIndex()
+    : _root(std::make_unique<StringIndexNode>('\1'))
+{
+}
+
+// NOTE: Better to do lookup table?
+size_t StringIndex::charToIndex(char c) {
+    // Children array layout:
+    // INDEX CHARACTER VALUE
+    // 0     a
+    // ...  ...
+    // 25    z
+    // 26    0
+    // ...  ...
+    // 36    9
+
+    // NOTE: Converts upper-case characters to lower to calculate index,
+    // but the value of the node is still uppercase
+    if (isalpha(c)) return std::tolower(c, std::locale()) - 'a';
+    else if (isdigit(c)) return 26 + c - '0';
+    else throw TuringException("Invalid character: " + std::to_string(c));
+}
+
+void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
+    out.clear();            // Does not deallocate space
+    if (in.empty()) return;
+
+    std::locale loc {"C"};  // NOTE: Only support ASCII, remove all else
+    auto ppxChar = [&loc](char c) {
+        if (!std::isalnum(c, loc)) return ' ';
+        else if (std::isalpha(c)) return std::tolower(c, loc);
+        else return c;
+    };
+
+    std::transform(std::begin(in), std::end(in), std::back_inserter(out), ppxChar);
+}
+
+void StringIndex::split(std::vector<std::string>& res,
+                        std::string_view str,
+                        std::string_view delim) {
+    res.clear();
+    if (str.empty()) {
+        return;
+    }
+    size_t l {0};
+    size_t r = str.find(delim);
+
+    while (r != std::string::npos) {
+        // Add only if the string is non-empty (removes repeated delims)
+        if (l != r) {
+            res.push_back(std::string(str.substr(l, r - l)));
+        }
+        l = r + 1;
+        r = str.find(delim, l);
+    }
+
+    res.push_back(std::string(str.substr(l, std::min(r, str.size()) - l + 1)));
+}
+
+
+void StringIndex::preprocess(std::vector<std::string>& res, const std::string_view in) {
+    std::string cleaned {};
+    StringIndex::alphaNumericise(in, cleaned);
+    split(res, cleaned, " ");
+}
+
+void StringIndex::insert(std::string_view str, EntityID owner) {
+    using Node = StringIndexNode;
+
+    if (str.empty()) return;
+
+    Node* node = this->_root.get();
+
+    if (!node) [[unlikely]] {
+        throw TuringException("Could not get root of string indexer");
+    }
+
+    for (const char c : str) {
+        const size_t idx = charToIndex(c);
+        if (!node->_children[idx]) {
+            node->_children[idx] = std::make_unique<Node>(c);
+        }
+        node = node->_children[idx].get();
+    }
+
+    node->_isComplete = true;
+    if (!node->_owners) {
+        node->_owners = std::make_unique<std::vector<EntityID>>();
+    }
+    node->_owners->push_back(owner);
+}
+
+const StringIndex::StringIndexIterator
+StringIndex::find(std::string_view sv) const {
+    using Iterator = StringIndexIterator;
+    using Node = StringIndexNode;
+
+    if (sv.empty()) [[unlikely]] {
+        return Iterator {NOT_FOUND, nullptr};
+    }
+
+    Node* node = this->_root.get();
+    if (!node) [[unlikely]] {
+        throw TuringException("Could not get root of string indexer");
+    }
+
+    for (const char c : sv) {
+        const size_t idx = charToIndex(c);
+        if (!node->_children[idx]) {
+            return Iterator {NOT_FOUND, nullptr};
+        }
+        node = node->_children[idx].get();
+    }
+    const FindResult res = node->_isComplete ? FOUND : FOUND_PREFIX;
+    return Iterator{res, node};
+}
+
+const void StringIndex::query(std::vector<EntityID>& result,
+                              std::string_view queryString) const {
+    using Node = StringIndexNode;
+
+    result.clear();
+    // Track owners in a set to avoid duplicates
+    std::unordered_set<EntityID> resSet;
+
+    std::vector<std::string> tokens {};
+    preprocess(tokens, queryString);
+
+    for (const auto& tok : tokens) {
+        auto it = find(tok);
+
+        // Early exit if no match
+        if (it._result == NOT_FOUND || !it._nodePtr) {
+            continue;
+        }
+
+        // Otherwise: match or partial match
+        Node* node = it._nodePtr;
+        std::deque<Node*> q {node};
+        // BFS, collecting owners
+        while (!q.empty()) {
+            const Node* n = q.front();
+            q.pop_front();
+            for (size_t i {0}; i < n->_children.size(); i++) {
+                if (Node* child = n->_children[i].get()) {
+                    q.push_back(child);
+                }
+            }
+            // Collect owners to report back
+            if (n->_isComplete) {
+                std::vector<EntityID>* owners = n->_owners.get();
+                resSet.insert(std::begin(*owners), std::end(*owners));
+            }
+        }
+    }
+    result.resize(resSet.size());  // Allocate enough space
+    std::copy(resSet.begin(), resSet.end(), result.begin());
+}

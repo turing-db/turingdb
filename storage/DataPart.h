@@ -4,6 +4,8 @@
 
 #include "ID.h"
 #include "metadata/LabelSetHandle.h"
+#include "metadata/PropertyType.h"
+#include "indexes/StringIndex.h"
 
 namespace db {
 
@@ -18,8 +20,15 @@ class EdgeIndexer;
 class DataPartLoader;
 class DataPartRebaser;
 class JobSystem;
+class StringIndex;
+template <SupportedType T>
+class TypedPropertyContainer;
+class PropertyContainer;
 
 class DataPart {
+    using StringPropertyIndex =
+        std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>>;
+    using StringPropertyContainer = TypedPropertyContainer<types::String>;
 public:
     DataPart(NodeID firstNodeID,
              EdgeID firstEdgeID);
@@ -46,6 +55,8 @@ public:
     const PropertyManager& edgeProperties() const { return *_edgeProperties; }
     const EdgeContainer& edges() const { return *_edges; }
     const EdgeIndexer& edgeIndexer() const { return *_edgeIndexer; }
+    const StringPropertyIndex& getNodeStrPropIndex() const { return _nodeStrPropIdx; }
+    const StringPropertyIndex& getEdgeStrPropIndex() const { return _edgeStrPropIdx; }
 
 private:
     friend DataPartInfoLoader;
@@ -65,6 +76,17 @@ private:
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
     std::unique_ptr<EdgeIndexer> _edgeIndexer;
+
+    // NOTE: Currently an ID->Prefix Trie umap. Can we change to array?
+    StringPropertyIndex _nodeStrPropIdx {};
+    StringPropertyIndex _edgeStrPropIdx {};
+
+    void buildIndex(std::vector<std::pair<PropertyTypeID, PropertyContainer*>>& toIndex, bool isNode);
+    void initialiseIndexTrie(PropertyTypeID propertyID, bool isNode);
+    void addStringPropertyToIndex(PropertyTypeID propertyID,
+                          const StringPropertyContainer& stringPropertyContainer,
+                          bool isNode);
+    
 };
 
 }

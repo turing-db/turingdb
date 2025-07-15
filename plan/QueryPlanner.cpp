@@ -356,6 +356,7 @@ void QueryPlanner::planPath(const std::vector<EntityPattern*>& path) {
     }
 
     // General case: scan nodes for the origin and expand edges afterward
+    spdlog::info("ScanNodes");
     planScanNodes(path[0]);
 
     const auto expandSteps = path | rv::drop(1) | rv::chunk(2);
@@ -373,14 +374,18 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
     const ExprConstraint* exprConstr = entity->getExprConstraint();
 
     if (exprConstr && typeConstr) {
+        spdlog::info("ScanNodesWithPropertyAndLabelConstraints");
         const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
         planScanNodesWithPropertyAndLabelConstraints(nodes, labelSet, exprConstr);
     } else if (exprConstr) {
+        spdlog::info("ScanNodesWithPropertyConstraints");
         planScanNodesWithPropertyConstraints(nodes, exprConstr);
     } else if (typeConstr) {
+        spdlog::info("ScanNodesByLabelStep");
         const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
         _pipeline->add<ScanNodesByLabelStep>(nodes, labelSet->handle());
     } else {
+        spdlog::info("");
         _pipeline->add<ScanNodesStep>(nodes);
     }
 
@@ -412,14 +417,23 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& ou
         throw PlannerException("Property type does not exist");
     }
 
+    // Get the PropertyType (ID and type) which we are scanning for
     const PropertyType propType = propTypeRes.value();
 
-    auto* filterMask = _mem->alloc<ColumnMask>();
+    // Here construct new step
+
+    const auto opType = expressions[0]->getOpType();
+
+    if (opType == BinExpr::OP_STR_APPROX) {
+        spdlog::info("We are approximating the string {}",
+                     static_cast<StringExprConst*>(rightExpr)->getVal());
+    }
 
     const auto caseScanNodesPropertyValueType = [&]<SupportedType T>() {
         using Step = ScanNodesByPropertyStep<T>;
         using Val = typename T::Primitive;
 
+        auto* filterMask = _mem->alloc<ColumnMask>();
         auto* propValues = _mem->alloc<ColumnVector<Val>>();
         const auto valueType = rightExpr->getType();
         if (valueType != T::_valueType) {
@@ -430,6 +444,8 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& ou
         auto* filterConstVal = _mem->alloc<ColumnConst<Val>>();
         filterConstVal->set(constVal);
 
+        // Gets nodes that have the property of the type in `propType`, putting the values
+        // of these properties into `propValues`
         _pipeline->add<Step>(scannedNodes,
                              propType,
                              propValues);
