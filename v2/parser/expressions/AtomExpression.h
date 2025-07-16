@@ -19,8 +19,13 @@ class AtomExpression : public Expression {
 public:
     using ValueType = std::variant<Symbol, Literal, Parameter>;
 
-    AtomExpression() = default;
+    AtomExpression() = delete;
     ~AtomExpression() override = default;
+
+    explicit AtomExpression(ValueType&& symbol)
+        : Expression(ExpressionType::Atom),
+          _value(std::move(symbol)) {
+    }
 
     AtomExpression(const AtomExpression&) = delete;
     AtomExpression(AtomExpression&&) = delete;
@@ -28,14 +33,10 @@ public:
     AtomExpression& operator=(AtomExpression&&) = delete;
 
     static std::unique_ptr<Expression> create(ValueType&& v) {
-        return std::unique_ptr<Expression> {new AtomExpression {std::move(v)}};
+        return std::make_unique<AtomExpression>(std::move(v));
     }
 
 private:
-    explicit AtomExpression(ValueType&& symbol)
-        : _value(std::move(symbol)) {
-    }
-
     ValueType _value;
 };
 

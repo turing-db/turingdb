@@ -10,6 +10,7 @@ namespace db {
 
 class NodeLabelExpression : public Expression {
 public:
+    NodeLabelExpression() = delete;
     ~NodeLabelExpression() override = default;
 
     NodeLabelExpression(const NodeLabelExpression&) = delete;
@@ -17,23 +18,21 @@ public:
     NodeLabelExpression& operator=(const NodeLabelExpression&) = delete;
     NodeLabelExpression& operator=(NodeLabelExpression&&) = delete;
 
-    const Symbol& symbol() { return _symbol; }
-    const std::vector<std::string>& labels() { return _labels; }
-
-    static std::unique_ptr<Expression> create(Symbol&& symbol, std::vector<std::string>&& labels) {
-
-        return std::unique_ptr<Expression> {
-            new NodeLabelExpression {std::move(symbol), std::move(labels)}
-        };
-    }
-
-private:
     NodeLabelExpression(Symbol&& symbol, std::vector<std::string>&& labels)
         : Expression(ExpressionType::NodeLabel),
           _symbol(std::move(symbol)),
           _labels(std::move(labels)) {
     }
 
+    const Symbol& symbol() { return _symbol; }
+    const std::vector<std::string>& labels() { return _labels; }
+
+    static std::unique_ptr<Expression> create(Symbol&& symbol,
+                                              std::vector<std::string>&& labels) {
+        return std::make_unique<NodeLabelExpression>(std::move(symbol), std::move(labels));
+    }
+
+private:
     Symbol _symbol;
     std::vector<std::string> _labels;
 };

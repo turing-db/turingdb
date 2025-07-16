@@ -4,13 +4,18 @@
 
 #include "Expression.h"
 #include "QualifiedName.h"
-#include "spdlog/fmt/bundled/core.h"
 
 namespace db {
 
 class PropertyExpression : public Expression {
 public:
+    PropertyExpression() = delete;
     ~PropertyExpression() override = default;
+
+    PropertyExpression(QualifiedName&& name)
+        : Expression(ExpressionType::Property),
+          _name(std::move(name)) {
+    }
 
     PropertyExpression(const PropertyExpression&) = delete;
     PropertyExpression(PropertyExpression&&) = delete;
@@ -20,18 +25,10 @@ public:
     const QualifiedName& name() { return _name; }
 
     static std::unique_ptr<Expression> create(QualifiedName&& name) {
-
-        fmt::print("PropertyExpression::create\n");
-        return std::unique_ptr<Expression> {
-            new PropertyExpression {std::move(name)}};
+        return std::make_unique<PropertyExpression>(std::move(name));
     }
 
 private:
-    PropertyExpression(QualifiedName&& name)
-        : Expression(ExpressionType::Property),
-          _name(std::move(name)) {
-    }
-
     QualifiedName _name;
 };
 

@@ -8,6 +8,7 @@ enum class ExpressionType {
     String,
     NodeLabel,
     Property,
+    Atom
 };
 
 
@@ -16,7 +17,7 @@ public:
     explicit Expression(ExpressionType type)
         : _type(type) {}
 
-    Expression() = default;
+    Expression() = delete;
     virtual ~Expression() = default;
 
     Expression(const Expression&) = delete;

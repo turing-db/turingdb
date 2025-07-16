@@ -1,22 +1,33 @@
 #pragma once
 
-namespace db {
+#include "expressions/Expression.h"
 
-#include "Expression.h"
+namespace db {
 
 class WhereClause {
 public:
     WhereClause() = default;
     ~WhereClause() = default;
 
-    WhereClause(const WhereClause&) = delete;
-    WhereClause(WhereClause&&) = delete;
-    WhereClause& operator=(const WhereClause&) = delete;
-    WhereClause& operator=(WhereClause&&) = delete;
+    WhereClause(const WhereClause&) = default;
+    WhereClause(WhereClause&&) = default;
+    WhereClause& operator=(const WhereClause&) = default;
+    WhereClause& operator=(WhereClause&&) = default;
 
+    WhereClause(Expression* expression)
+        : _expression(expression) {
+    }
+
+    Expression& getExpression() const {
+        return *_expression;
+    }
+
+    void setExpression(Expression* expression) {
+        _expression = expression;
+    }
 
 private:
-    std::shared_ptr<Expression> _expression;
+    Expression* _expression {nullptr};
 };
 
 }

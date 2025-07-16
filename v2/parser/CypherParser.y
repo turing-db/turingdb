@@ -23,11 +23,15 @@
     #include "expressions/All.h"
     #include "Literal.h"
     #include "Symbol.h"
-    #include "QualifiedName.h"
+    #include "WhereClause.h"
+    #include "pattern/Pattern.h"
+    #include "pattern/PatternNode.h"
+    #include "pattern/PatternEdge.h"
 
     namespace db {
         class YCypherScanner;
         class CypherAST;
+        class QualifiedName;
     }
 }
 
@@ -35,6 +39,7 @@
     #include "YCypherScanner.h"
     #include "GeneratedCypherParser.h"
     #include "CypherAST.h"
+    #include "QualifiedName.h"
 
     #undef yylex
     #define yylex scanner.lex
@@ -158,11 +163,11 @@
 %type<std::string> reservedWord
 
 %type<std::vector<std::string>> nodeLabels
-%type<std::vector<std::string>> relationshipTypes
+%type<std::vector<std::string>> edgeTypes
 
 %type<std::optional<Symbol>> opt_symbol
 %type<std::optional<std::vector<std::string>>> opt_nodeLabels
-%type<std::optional<std::vector<std::string>>> opt_relationshipTypes
+%type<std::optional<std::vector<std::string>>> opt_edgeTypes
 
 %type<db::Expression*> expression
 %type<db::Expression*> xorExpression
@@ -182,6 +187,15 @@
 
 %type<BinaryOperator> comparisonSign
 %type<StringOperator> stringExpPrefix
+
+%type<db::Pattern*> pattern
+%type<db::Pattern*> patternWhere
+%type<db::PatternPart*> patternPart
+%type<db::PatternPart*> patternElem
+%type<db::PatternNode*> nodePattern
+%type<db::PatternEdge*> edgePattern
+%type<std::pair<db::PatternEdge*, db::PatternNode*>> patternElemChain
+%type<db::WhereClause> where
 
 %expect 0
 
@@ -440,17 +454,17 @@ createSt
     ;
 
 patternWhere
-    : pattern { fmt::print("pattern\n"); }
-    | pattern where { }
+    : pattern { $$ = $1; }
+    | pattern where { $1->setWhere($2); $$ = $1; }
     ;
 
 where
-    : WHERE expression { }
+    : WHERE expression { $$.setExpression($2); }
     ;
 
 pattern
-    : patternPart { fmt::print("patternPart\n"); }
-    | pattern COMMA patternPart { fmt::print("pattern, patternPart\n"); }
+    : patternPart { $$ = ast.newPattern(); }
+    | pattern COMMA patternPart { $$ = $1; }
     ;
 
 expression
@@ -567,12 +581,12 @@ atomExpression
     | parenthesizedExpression { scanner.notImplemented("Parenthesized expressions"); }
     | functionInvocation { scanner.notImplemented("Function invocations"); }
     | subqueryExist { scanner.notImplemented("EXISTS"); }
-    //| relationshipsChainPattern // Enabling this causes conflicts, not sure if we need it
+    //| edgesChainPattern // Enabling this causes conflicts, not sure if we need it
     ;
 
 
 patternPart
-    : patternElem
+    : patternElem { $$ = $1; }
     | patternAlias { scanner.notImplemented("Pattern alias: Symbol = ()-[]-()-[]-()..."); }
     ;
 
@@ -580,12 +594,12 @@ patternAlias
     : symbol ASSIGN patternElem { scanner.notImplemented("Pattern alias: Symbol = ()-[]-()-[]-()..."); }
 
 patternElem
-    : nodePattern { fmt::print("patternElem: Node\n"); }
-    | patternElem patternElemChain
+    : nodePattern { $$ = ast.newPatternPart(); $$->addNode($1); }
+    | patternElem patternElemChain { $$ = $1; $$->addEdge($2.first); $$->addNode($2.second); }
     ;
 
 patternElemChain
-    : relationshipPattern nodePattern { fmt::print("patternElemChain: Edge + Node\n"); }
+    : edgePattern nodePattern { $$ = std::make_pair($1, $2); }
     ;
 
 properties
@@ -593,7 +607,7 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { ast.newNodePattern(std::move($2), std::move($3)); }
+    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = ast.newNode(std::move($2), std::move($3)); }
     ;
 
 opt_symbol
@@ -611,8 +625,8 @@ opt_properties
     | /* empty */
     ;
 
-opt_relationshipTypes
-    : relationshipTypes { $$ = std::move($1); }
+opt_edgeTypes
+    : edgeTypes { $$ = std::move($1); }
     | { $$ = std::nullopt; }
     ;
 
@@ -626,23 +640,23 @@ lhs
     ;
 
 
-relationshipPattern
-    : TAIL_TAIL     // --
-    | TIP_TAIL_TAIL // <--
-    | TAIL_TAIL_TIP // -->
-    | TAIL_BRACKET relationDetail BRACKET_TAIL     // -[]-
-    | TIP_TAIL_BRACKET relationDetail BRACKET_TAIL // <-[]-
-    | TAIL_BRACKET relationDetail BRACKET_TAIL_TIP // -[]->
+edgePattern
+    : TAIL_TAIL     { $$ = ast.newOutEdge(); } // --
+    | TIP_TAIL_TAIL { $$ = ast.newInEdge(); }  // <--
+    | TAIL_TAIL_TIP { $$ = ast.newOutEdge(); } // -->
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = ast.newOutEdge(); } // -[]->
+    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = ast.newInEdge(); }  // <-[]-
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = ast.newOutEdge(); } // -[]->
     ;
 
-relationDetail
-    : opt_symbol opt_relationshipTypes opt_rangeLit opt_properties
+edgeDetail
+    : opt_symbol opt_edgeTypes opt_rangeLit opt_properties
     ;
 
-relationshipTypes
+edgeTypes
     : COLON name { $$ = {std::move($2)}; }
-    | relationshipTypes PIPE name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
-    | relationshipTypes PIPE COLON name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
+    | edgeTypes PIPE name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
+    | edgeTypes PIPE COLON name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
     ;
 
 unionSt
@@ -687,15 +701,15 @@ filterKeyword
     ;
 
 patternComprehension
-    : OBRACK relationshipsChainPattern PIPE expression CBRACK
-    | OBRACK lhs relationshipsChainPattern PIPE expression CBRACK
-    | OBRACK relationshipsChainPattern where PIPE expression CBRACK
-    | OBRACK lhs relationshipsChainPattern where PIPE expression CBRACK
+    : OBRACK edgesChainPattern PIPE expression CBRACK
+    | OBRACK lhs edgesChainPattern PIPE expression CBRACK
+    | OBRACK edgesChainPattern where PIPE expression CBRACK
+    | OBRACK lhs edgesChainPattern where PIPE expression CBRACK
     ;
 
-relationshipsChainPattern
+edgesChainPattern
     : nodePattern patternElemChain
-    | relationshipsChainPattern patternElemChain
+    | edgesChainPattern patternElemChain
     ;
 
 listComprehension
@@ -761,13 +775,13 @@ rangeLit
     ;
 
 boolLit
-    : TRUE { fmt::print("bool true\n"); $$ = Literal(true); }
-    | FALSE { fmt::print("bool false\n"); $$ = Literal(false); }
+    : TRUE { $$ = Literal(true); }
+    | FALSE { $$ = Literal(false); }
     ;
 
 numLit
-    : DIGIT { fmt::print("numLit {}\n", $1); $$ = Literal($1); }
-    | FLOAT { fmt::print("numLit {}\n", $1); $$ = Literal($1); }
+    : DIGIT { $$ = Literal($1); }
+    | FLOAT { $$ = Literal($1); }
     ;
 
 stringLit
@@ -824,8 +838,8 @@ name
     ;
 
 symbol
-    : ESC_LITERAL { fmt::print("symbol {}\n", $1); $$ = Symbol { ._name = std::move($1)}; }
-    | ID { fmt::print("symbol {}\n", $1); $$ = Symbol { ._name = std::move($1) }; }
+    : ESC_LITERAL { $$ = Symbol { ._name = std::move($1)}; }
+    | ID { $$ = Symbol { ._name = std::move($1) }; }
     //| FILTER // We should not need to support these
     //| EXTRACT
     //| ANY
