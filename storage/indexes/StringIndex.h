@@ -92,6 +92,7 @@ public:
             Node* node = it._nodePtr;
             std::deque<Node*> q {node};
             // BFS, collecting owners
+            // TODO: Depth limit
             while (!q.empty()) {
                 const Node* n = q.front();
                 q.pop_front();
@@ -104,7 +105,7 @@ public:
                 if (n->_isComplete) {
                     std::vector<EntityID>* owners = n->_owners.get();
 
-                    // XXX: nasty
+                    // XXX: Need better option of conversion here
                     for (const EntityID& id : *owners) {
                         resSet.emplace(T(id.getValue()));
                     }
