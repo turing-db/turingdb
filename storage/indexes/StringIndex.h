@@ -5,7 +5,6 @@
 #include <unordered_set>
 
 #include "ID.h"
-#include "spdlog/spdlog.h"
 
 // Size of our alphabet: assumes some preprocessing,
 // so only a-z and 1-9
@@ -77,12 +76,9 @@ public:
 
         std::vector<std::string> tokens {};
         preprocess(tokens, queryString);
-        spdlog::info("token 1: {}", tokens[0]);
 
         for (const auto& tok : tokens) {
             auto it = find(tok);
-            if (it._result == NOT_FOUND) spdlog::info("not found");
-            else spdlog::info("found or partial");
 
             // Early exit if no match
             if (it._result == NOT_FOUND || !it._nodePtr) {

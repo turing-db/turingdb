@@ -61,12 +61,7 @@ void Step::execute() {
 
         // Get any matches for the query string in the index
         std::vector<NodeID> owners {};
-        strIndex->query<NodeID>(owners, _strQuery);
-
-        // Add them to the output ColumnVector
-        for (const auto& id : owners) {
-            _nodes->push_back(id);
-        }
+        strIndex->query<NodeID>(_nodes->getRaw(), _strQuery);
     }
     _dps.reset();
     _done = true;
