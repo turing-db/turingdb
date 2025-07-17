@@ -4,6 +4,7 @@
 #include "ColumnConst.h"
 #include "ColumnMask.h"
 #include "ColumnVector.h"
+#include "columns/ColumnSet.h"
 
 namespace db {
 
@@ -130,6 +131,27 @@ public:
         const auto size = rhs.size();
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i]._value || rhsd[i]._value;
+        }
+    }
+
+    /**
+     * @brief Fills a mask corresponding to mask[i] = lhs[i] \in rhs
+     *
+     * @param mask The mask to fill
+     * @param lhs Vector of possible candidates
+     * @param lhs Lookup set
+     */
+    template <typename T>
+    static void inOp(ColumnMask& mask,
+                     const ColumnVector<T> lhs,
+                     const ColumnSet<T> rhs) {
+        msgbioassert(lhs.size() == rhs.size() == mask.size(),
+                     "Columns must have matching dimensions");
+        auto* maskd = mask.data();
+        const auto* lhsd = lhs.data();
+        const auto size = lhs.size();
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = rhs.contains(lhs[i]);
         }
     }
 
