@@ -33,6 +33,7 @@ public:
         VECTOR = 0,
         CONST,
         MASK,
+        SET,
 
         _SIZE,
     };
