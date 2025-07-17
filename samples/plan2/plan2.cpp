@@ -15,7 +15,7 @@ void runParser2(const std::string& query);
 int main(int argc, char** argv) {
     std::string queryStr;
 
-    if (argc == 2) {
+    if (argc > 1 && strlen(argv[1]) > 0) {
         queryStr = argv[1];
 
     } else {
@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
 void runParser2(const std::string& query) {
     YCypherScanner yscanner;
     CypherAST ast;
-    yscanner.setThrowNotImplemented(true);
+    yscanner.setThrowNotImplemented(false);
     yscanner.setQuery(query);
 
     YCypherParser yparser(yscanner, ast);

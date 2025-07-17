@@ -1,3 +1,7 @@
+CREATE (p:Product {price: 10})
+SET p.discountPrice = p.price * (1 - 0.15)
+RETURN p.discountPrice AS discountPrice;
+
 MATCH (n)
 WHERE (n)-->(m)
 RETURN n;
@@ -8,149 +12,143 @@ RETURN n, m;
 
 MATCH (n:Person)-[e]-(m) RETURN n, e, m;
 
-//CREATE (p:Product {price: 10})
-//SET p.discountPrice = p.price * (1 - 0.15)
-//RETURN p.discountPrice AS discountPrice;
+CREATE (p:Product {price: 10})
+SET p.discountPrice = p.price * (1 - 0.15)
+RETURN p.discountPrice AS discountPrice;
 
-//RETURN 10 ^ 5 AS result;
+RETURN 10 ^ 5 AS result;
 
-//RETURN -50 + 6 * 3 - 100 / 5 ^ 2 % 12 AS result1,
-//       (((-50) + (6 * 3)) - ((100 / (5 ^ 2)) % 12)) AS result2;
+RETURN -50 + 6 * 3 - 100 / 5 ^ 2 % 12 AS result1,
+       (((-50) + (6 * 3)) - ((100 / (5 ^ 2)) % 12)) AS result2;
 
-//RETURN 'Neo' || '4j' AS result1, 'Neo' + '4j' AS result2;
+RETURN 'Neo' || '4j' AS result1, 'Neo' + '4j' AS result2;
 
-//RETURN 'The number is: ' || toString(42) AS result;
+RETURN 'The number is: ' || toString(42) AS result;
 
-//WITH localdatetime({year:1984, month:10, day:11, hour:12, minute:31, second:14}) AS aDateTime,
-//     duration({years: 12, nanoseconds: 2}) AS aDuration
-//RETURN aDateTime + aDuration AS addition,
-//      aDateTime - aDuration AS subtraction;
+WITH localdatetime({year:1984, month:10, day:11, hour:12, minute:31, second:14}) AS aDateTime,
+     duration({years: 12, nanoseconds: 2}) AS aDuration
+RETURN aDateTime + aDuration AS addition,
+      aDateTime - aDuration AS subtraction;
 
-//WITH date({year:1984, month:10, day:11}) AS aDate,
-//     duration({years: 12, nanoseconds: 2}) AS aDuration
-//RETURN aDate + aDuration AS addition,
-//       aDate - aDuration AS subtraction;
-
-
-//WITH duration({days: 14, minutes: 12, seconds: 70, nanoseconds: 1}) AS aDuration
-//RETURN aDuration,
-//       aDuration * 2 AS multipliedDuration,
-//       aDuration / 3 AS dividedDuration;
+WITH date({year:1984, month:10, day:11}) AS aDate,
+     duration({years: 12, nanoseconds: 2}) AS aDuration
+RETURN aDate + aDuration AS addition,
+       aDate - aDuration AS subtraction;
 
 
-//CREATE (alice:Person {name:'Alice', age: 65, role: 'Project manager', skills: ['Java', 'Python']}),
-//       (cecil:Person {name: 'Cecil', age: 25, role: 'Software developer', skills: ['Java', 'Python']}),
-//       (cecilia:Person {name: 'Cecilia', age: 31, role: 'Software developer', skills: ['JavaScript', 'TypeScript']}),
-//       (charlie:Person {name: 'Charlie', age: 61, role: 'Security engineer', skills: ['C++', 'Python']}),
-//       (daniel:Person {name: 'Daniel', age: 39, role: 'Director', skills: ['Ruby', 'Go']}),
-//       (eskil:Person {name: 'Eskil', age: 39, role: 'CEO', skills: ['Java', 'C++', 'Python']}),
-//
-//       (cecil)-[:WORKS_FOR]->(alice),
-//       (cecilia)-[:WORKS_FOR]->(alice),
-//       (charlie)-[:WORKS_FOR]->(daniel),
-//       (alice)-[:WORKS_FOR]->(daniel),
-//       (daniel)-[:WORKS_FOR]->(eskil);
+WITH duration({days: 14, minutes: 12, seconds: 70, nanoseconds: 1}) AS aDuration
+RETURN aDuration,
+       aDuration * 2 AS multipliedDuration,
+       aDuration / 3 AS dividedDuration;
+
+CREATE (alice:Person {name:'Alice', age: 65, role: 'Project manager', skills: ['Java', 'Python']}),
+       (cecil:Person {name: 'Cecil', age: 25, role: 'Software developer', skills: ['Java', 'Python']}),
+       (cecilia:Person {name: 'Cecilia', age: 31, role: 'Software developer', skills: ['JavaScript', 'TypeScript']}),
+       (charlie:Person {name: 'Charlie', age: 61, role: 'Security engineer', skills: ['C++', 'Python']}),
+       (daniel:Person {name: 'Daniel', age: 39, role: 'Director', skills: ['Ruby', 'Go']}),
+       (eskil:Person {name: 'Eskil', age: 39, role: 'CEO', skills: ['Java', 'C++', 'Python']}),
+
+       (cecil)-[:WORKS_FOR]->(alice),
+       (cecilia)-[:WORKS_FOR]->(alice),
+       (charlie)-[:WORKS_FOR]->(daniel),
+       (alice)-[:WORKS_FOR]->(daniel),
+       (daniel)-[:WORKS_FOR]->(eskil);
 
 
-//WITH [1, 2, 3, 4] AS list
-//RETURN list[0] AS firstElement,
-//       list[2] AS thirdElement,
-//       list[-1] AS finalElement;
+WITH [1, 2, 3, 4] AS list
+RETURN list[0] AS firstElement,
+       list[2] AS thirdElement,
+       list[-1] AS finalElement;
+
+WITH [[1, 2], [3, 4], [5, 6]] AS nestedList
+RETURN nestedList[1] AS secondList,
+       nestedList[1][0] AS firstElementOfSecondList;
 
 
-//WITH [[1, 2], [3, 4], [5, 6]] AS nestedList
-//RETURN nestedList[1] AS secondList,
-//       nestedList[1][0] AS firstElementOfSecondList;
-//
-//
-//WITH [1, 2, 3, 4, 5, 6] AS list
-//RETURN list[2..4] AS middleElements,
-//       list[..2] AS noLowerBound,
-//       list[2..] AS noUpperBound;
-//
-//
-//WITH [1, 2, 3, 4, 5, 6] AS list
-//RETURN list[..-1] AS finalElementRemoved,
-//       list[..-2] AS finalTwoElementsRemoved,
-//       list[-3..-1] AS removedFirstThreeAndLast;
-//
-//
-//MATCH (cecil:Person {name: 'Cecil'}), (cecilia:Person {name: 'Cecilia'})
-//RETURN cecil.skills || cecilia.skills AS combinedSkills;
+WITH [1, 2, 3, 4, 5, 6] AS list
+RETURN list[2..4] AS middleElements,
+       list[..2] AS noLowerBound,
+       list[2..] AS noUpperBound;
 
 
-//MATCH (p:Person)
-//WITH p, ['Software developer', 'CEO'] AS roles
-//WHERE p.role IN roles
-//WITH [1,3,4] AS sub, [3,5,1,7,6,2,8,4] AS list
-//RETURN all(x IN sub WHERE x IN list) AS subInList;
-//RETURN p.name AS name, p.role AS role;
+WITH [1, 2, 3, 4, 5, 6] AS list
+RETURN list[..-1] AS finalElementRemoved,
+       list[..-2] AS finalTwoElementsRemoved,
+       list[-3..-1] AS removedFirstThreeAndLast;
 
-//CREATE (n1:Station {name: 'Denmark Hill'}),
-//(n5:Station {name: 'Battersea Park'}),
-//(n6:Station {name: 'Wandsworth Road'}),
-//(n15:Station {name: 'Clapham High Street'}),
-//(n16:Station {name: 'Peckham Rye'}),
-//(n17:Station {name: 'Brixton'}),
-//(n14:Station {name: 'London Victoria'}),
-//(n18:Station {name: 'Clapham Junction'}),
-//(p10:Stop {departs: time('22:37'), arrives: time('22:36')}),
-//(p0:Stop {departs: time('22:41'), arrives: time('22:41')}),
-//(p2:Stop {departs: time('22:43'), arrives: time('22:43')}),
-//(p17:Stop {arrives: time('22:50'), departs: time('22:50')}),
-//(p18:Stop {arrives: time('22:46'), departs: time('22:46')}),
-//(p19:Stop {departs: time('22:33'), arrives: time('22:31')}),
-//(p21:Stop {arrives: time('22:55')}),
-//(p20:Stop {departs: time('22:44'), arrives: time('22:43')}),
-//(p22:Stop {arrives: time('22:55')}),
-//(p23:Stop {arrives: time('22:48')}),
-//(n15)-[:LINK {distance: 1.96}]->(n1)-[:LINK {distance: 0.86}]->(n16),
-//(n15)-[:LINK {distance: 0.39}]->(n6)<-[:LINK {distance: 0.7}]-(n5)-[:LINK {distance: 1.24}]->(n14), (n5)-[:LINK {distance: 1.45}]->(n18),
-//(n14)<-[:LINK {distance: 3.18}]-(n17)-[:LINK {distance: 1.11}]->(n1),
-//(p2)-[:CALLS_AT]->(n6), (p17)-[:CALLS_AT]->(n5), (p19)-[:CALLS_AT]->(n16),
-//(p22)-[:CALLS_AT]->(n14), (p18)-[:CALLS_AT]->(n18), (p0)-[:CALLS_AT]->(n15), (p23)-[:CALLS_AT]->(n5), (p20)-[:CALLS_AT]->(n1),
-//(p21)-[:CALLS_AT]->(n14), (p10)-[:CALLS_AT]->(n1), (p19)-[:NEXT]->(p10)-[:NEXT]->(p0)-[:NEXT]->(p2)-[:NEXT]->(p23),
-//(p22)<-[:NEXT]-(p17)<-[:NEXT]-(p18), (p21)<-[:NEXT]-(p20);
-//
-//MATCH (p {name: 'Peter'})
-//SET p = {name: 'Peter Smith', position: 'Entrepreneur'}
-//RETURN p.name, p.age, p.position;
-//
-//MATCH (p {name: 'Peter'})
-//SET p = {}
-//RETURN p.name, p.age;
-//
-//MATCH (p {name: 'Peter'})
-//SET p += {age: 38, hungry: true, position: 'Entrepreneur'}
-//RETURN p.name, p.age, p.hungry, p.position;
-//
-//MATCH (p {name: 'Peter'})
-//SET p += {}
-//RETURN p.name, p.age;
-//
-//MATCH (n {name: 'Andy'})
-//SET n.position = 'Developer', n.surname = 'Taylor';
-//
-//MATCH (n {name: 'Andy'})
-//SET n.surname = $surname
-//RETURN n.name, n.surname;
-//
-//MATCH (n {name: 'Andy'})
-//SET n = $props
-//RETURN n.name, n.position, n.age, n.hungry;
 
-MATCH 
-(n {name: 'Stefan'})
-SET
-n:
-German
-RETURN 
-n.name, labels(n) AS labels;
+MATCH (cecil:Person {name: 'Cecil'}), (cecilia:Person {name: 'Cecilia'})
+RETURN cecil.skills || cecilia.skills AS combinedSkills;
+
+
+MATCH (p:Person)
+WITH p, ['Software developer', 'CEO'] AS roles
+WHERE p.role IN roles
+WITH [1,3,4] AS sub, [3,5,1,7,6,2,8,4] AS list
+RETURN all(x IN sub WHERE x IN list) AS subInList;
+RETURN p.name AS name, p.role AS role;
+
+CREATE (n1:Station {name: 'Denmark Hill'}),
+(n5:Station {name: 'Battersea Park'}),
+(n6:Station {name: 'Wandsworth Road'}),
+(n15:Station {name: 'Clapham High Street'}),
+(n16:Station {name: 'Peckham Rye'}),
+(n17:Station {name: 'Brixton'}),
+(n14:Station {name: 'London Victoria'}),
+(n18:Station {name: 'Clapham Junction'}),
+(p10:Stop {departs: time('22:37'), arrives: time('22:36')}),
+(p0:Stop {departs: time('22:41'), arrives: time('22:41')}),
+(p2:Stop {departs: time('22:43'), arrives: time('22:43')}),
+(p17:Stop {arrives: time('22:50'), departs: time('22:50')}),
+(p18:Stop {arrives: time('22:46'), departs: time('22:46')}),
+(p19:Stop {departs: time('22:33'), arrives: time('22:31')}),
+(p21:Stop {arrives: time('22:55')}),
+(p20:Stop {departs: time('22:44'), arrives: time('22:43')}),
+(p22:Stop {arrives: time('22:55')}),
+(p23:Stop {arrives: time('22:48')}),
+(n15)-[:LINK {distance: 1.96}]->(n1)-[:LINK {distance: 0.86}]->(n16),
+(n15)-[:LINK {distance: 0.39}]->(n6)<-[:LINK {distance: 0.7}]-(n5)-[:LINK {distance: 1.24}]->(n14), (n5)-[:LINK {distance: 1.45}]->(n18),
+(n14)<-[:LINK {distance: 3.18}]-(n17)-[:LINK {distance: 1.11}]->(n1),
+(p2)-[:CALLS_AT]->(n6), (p17)-[:CALLS_AT]->(n5), (p19)-[:CALLS_AT]->(n16),
+(p22)-[:CALLS_AT]->(n14), (p18)-[:CALLS_AT]->(n18), (p0)-[:CALLS_AT]->(n15), (p23)-[:CALLS_AT]->(n5), (p20)-[:CALLS_AT]->(n1),
+(p21)-[:CALLS_AT]->(n14), (p10)-[:CALLS_AT]->(n1), (p19)-[:NEXT]->(p10)-[:NEXT]->(p0)-[:NEXT]->(p2)-[:NEXT]->(p23),
+(p22)<-[:NEXT]-(p17)<-[:NEXT]-(p18), (p21)<-[:NEXT]-(p20);
+
+MATCH (p {name: 'Peter'})
+SET p = {name: 'Peter Smith', position: 'Entrepreneur'}
+RETURN p.name, p.age, p.position;
+
+MATCH (p {name: 'Peter'})
+SET p = {}
+RETURN p.name, p.age;
+
+MATCH (p {name: 'Peter'})
+SET p += {age: 38, hungry: true, position: 'Entrepreneur'}
+RETURN p.name, p.age, p.hungry, p.position;
+
+MATCH (p {name: 'Peter'})
+SET p += {}
+RETURN p.name, p.age;
+
+MATCH (n {name: 'Andy'})
+SET n.position = 'Developer', n.surname = 'Taylor';
+
+MATCH (n {name: 'Andy'})
+SET n.surname = $surname
+RETURN n.name, n.surname;
+
+MATCH (n {name: 'Andy'})
+SET n = $props
+RETURN n.name, n.position, n.age, n.hungry;
+
+MATCH (n {name: 'Stefan'})
+SET n:German
+RETURN n.name, labels(n) AS labels;
 
 // // Not supported
 //  MATCH (n:Swedish)
 //  SET n:$(n.name)
-//  RETURN n.name, labels(n) AS labels;
+// RETURN n.name, labels(n) AS labels;
 
 CALL db.propertyKeys() YIELD propertyKey AS prop
 MATCH (n)

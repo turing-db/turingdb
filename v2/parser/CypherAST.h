@@ -156,7 +156,6 @@ private:
     std::vector<std::unique_ptr<Projection>> _projections;
     std::vector<std::unique_ptr<Query>> _queries;
     std::vector<std::unique_ptr<MapLiteral>> _mapLiterals;
-    ;
 
     Scope* _currentScope = nullptr;
 };

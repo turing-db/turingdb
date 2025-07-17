@@ -33,12 +33,12 @@ public:
         return _where.value();
     }
 
-    void addPart(const PatternPart& part) {
+    void addPart(PatternPart* part) {
         _parts.push_back(part);
     }
 
 private:
-    std::vector<PatternPart> _parts;
+    std::vector<PatternPart*> _parts;
     std::optional<WhereClause> _where;
 };
 
