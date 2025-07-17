@@ -63,21 +63,22 @@ public:
             return nullptr;
         }
 
-        if (const auto* atomExpr = dynamic_cast<db::AtomExpression*>(e)) {
-            if (const auto* value = std::get_if<db::Symbol>(&atomExpr->value())) {
-                return newNode(*value, std::nullopt);
+        if (auto* atomExpr = dynamic_cast<AtomExpression*>(e)) {
+            if (auto* value = std::get_if<Symbol>(&atomExpr->value())) {
+                return newNode(*value, std::nullopt, nullptr);
             }
 
-            if (const auto* literal = std::get_if<db::Literal>(&atomExpr->value())) {
-                if ([[maybe_unused]] const auto* maplit = literal->as<db::MapLiteral*>()) {
-                    // TODO, use the properties there
-                    return newNode(std::nullopt, std::nullopt);
+            if (auto* literal = std::get_if<Literal>(&atomExpr->value())) {
+                if (auto* maplit = literal->as<MapLiteral*>()) {
+                    return newNode(std::nullopt, std::nullopt, *maplit);
                 }
             }
         }
 
         else if (const auto* nodeLabelExpr = dynamic_cast<db::NodeLabelExpression*>(e)) {
-            return newNode(std::nullopt, std::vector<std::string>(nodeLabelExpr->labels()));
+            return newNode(nodeLabelExpr->symbol(),
+                           std::vector<std::string>(nodeLabelExpr->labels()),
+                           nullptr);
         }
 
         return nullptr;
@@ -110,8 +111,14 @@ public:
     }
 
     PatternNode* newNode(std::optional<Symbol>&& symbol,
-                         std::optional<std::vector<std::string>>&& labels) {
+                         std::optional<std::vector<std::string>>&& labels,
+                         MapLiteral* properties) {
         auto node = PatternNode::create();
+
+        node->setSymbol(std::move(symbol));
+        node->setLabels(std::move(labels));
+        node->setProperties(properties);
+
         auto* ptr = node.get();
         _patternEntity.emplace_back(std::move(node));
 

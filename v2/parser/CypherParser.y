@@ -177,7 +177,7 @@
 
 %type<std::optional<Symbol>> opt_symbol
 %type<std::optional<std::vector<std::string>>> opt_nodeLabels
-%type<std::optional<MapLiteral*>> opt_properties
+%type<db::MapLiteral*> opt_properties
 %type<std::optional<std::vector<std::string>>> opt_edgeTypes
 
 %type<db::Expression*> expression
@@ -653,7 +653,7 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = ast.newNode(std::move($2), std::move($3)); }
+    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = ast.newNode(std::move($2), std::move($3), $4); }
     ;
 
 opt_symbol
@@ -668,7 +668,7 @@ opt_nodeLabels
 
 opt_properties
     : properties { $$ = $1; }
-    | { $$ = std::nullopt; }
+    | { $$ = nullptr; }
     ;
 
 opt_edgeTypes
@@ -734,10 +734,10 @@ functionInvocation
 pathExpression
     : parenthesizedExpression { $$ = $1; }
     | OPAREN CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($3); }
-    | OPAREN symbol properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($5); $5->addRootNode(ast.newNode($2, std::nullopt)); }
-    | OPAREN symbol nodeLabels properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($6); $6->addRootNode(ast.newNode($2, std::move($3))); }
-    | OPAREN nodeLabels CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($4); $4->addRootNode(ast.newNode(std::nullopt, std::move($2))); }
-    | OPAREN nodeLabels properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($5); $5->addRootNode(ast.newNode(std::nullopt, std::move($2))); }
+    | OPAREN symbol properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($5); $5->addRootNode(ast.newNode($2, std::nullopt, $3)); }
+    | OPAREN symbol nodeLabels properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($6); $6->addRootNode(ast.newNode($2, std::move($3), $4)); }
+    | OPAREN nodeLabels CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($4); $4->addRootNode(ast.newNode(std::nullopt, std::move($2), nullptr)); }
+    | OPAREN nodeLabels properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($5); $5->addRootNode(ast.newNode(std::nullopt, std::move($2), nullptr)); }
 
     // Those three expressions are tricky and cause conflicts with 'OPAREN expression CPAREN'
 

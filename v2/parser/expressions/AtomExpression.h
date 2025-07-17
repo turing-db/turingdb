@@ -40,6 +40,10 @@ public:
         return _value;
     }
 
+    ValueType& value() {
+        return _value;
+    }
+
 private:
     ValueType _value;
 };
