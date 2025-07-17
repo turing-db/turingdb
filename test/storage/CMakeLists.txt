@@ -5,6 +5,13 @@ function(add_storage_tests exe_name cpp_file)
             turing_common_s
             turing_db_log_s
             turing_db_jobs_s
+            turing_db_query_parser_s
+            turing_db_query_AST_s
+            turing_db_system_s
+            turing_db_memory_s
+            turing_db_interpreter_s
+            turing_db_examples_s
+            turing_db_s
             turing_test_utils_s
             gtest_main)
 
@@ -28,3 +35,5 @@ add_storage_tests(test_storage_arcmanager ArcManagerTest.cpp)
 add_storage_tests(test_storage_iterator iterators/IteratorsTest.cpp)
 add_storage_tests(test_storage_scan_nodes_iterator iterators/ScanNodesIteratorTest.cpp)
 add_storage_tests(test_storage_metadatarebaser versioning/MetadataRebaserTest.cpp)
+
+add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
