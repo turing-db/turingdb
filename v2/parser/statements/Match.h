@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "pattern/Pattern.h"
+#include "types/Pattern.h"
 #include "Skip.h"
 #include "Statement.h"
 #include "Limit.h"

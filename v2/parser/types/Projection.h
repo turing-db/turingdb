@@ -1,9 +1,10 @@
 #pragma once
 
-#include "ParserException.h"
 #include <memory>
 #include <variant>
 #include <vector>
+
+#include "ParserException.h"
 
 namespace db {
 

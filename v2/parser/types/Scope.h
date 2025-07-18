@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <spdlog/fmt/bundled/core.h>
 #include <vector>
 
 namespace db {

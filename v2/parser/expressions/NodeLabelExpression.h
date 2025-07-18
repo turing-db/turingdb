@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Expression.h"
-#include "Symbol.h"
+#include "types/Symbol.h"
 
 namespace db {
 

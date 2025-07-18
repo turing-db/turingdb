@@ -2,8 +2,8 @@
 
 #include <optional>
 
-#include "pattern/PatternPart.h"
-#include "WhereClause.h"
+#include "types/PatternPart.h"
+#include "types/WhereClause.h"
 
 namespace db {
 

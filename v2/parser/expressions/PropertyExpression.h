@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "Expression.h"
-#include "QualifiedName.h"
+#include "types/QualifiedName.h"
 
 namespace db {
 

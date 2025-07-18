@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "Symbol.h"
-#include "pattern/PatternEntity.h"
+#include "PatternEntity.h"
 
 namespace db {
 

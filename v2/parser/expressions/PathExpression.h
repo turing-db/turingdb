@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "Expression.h"
-#include "pattern/PatternPart.h"
+#include "types/PatternPart.h"
 
 namespace db {
 

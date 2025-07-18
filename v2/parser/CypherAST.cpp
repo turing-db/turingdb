@@ -1,17 +1,17 @@
 #include "CypherAST.h"
 
-#include "Projection.h"
-#include "SinglePartQuery.h"
 #include "expressions/AtomExpression.h"
 #include "expressions/NodeLabelExpression.h"
-#include "pattern/Pattern.h"
-#include "pattern/PatternNode.h"
-#include "pattern/PatternEdge.h"
-#include "Scope.h"
-#include "Symbol.h"
 #include "expressions/Expression.h"
+#include "types/Projection.h"
+#include "types/SinglePartQuery.h"
+#include "types/Pattern.h"
+#include "types/PatternNode.h"
+#include "types/PatternEdge.h"
+#include "types/Scope.h"
+#include "types/Literal.h"
+#include "types/Symbol.h"
 #include "statements/Statement.h"
-#include "Literal.h"
 
 using namespace db;
 

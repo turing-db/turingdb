@@ -3,10 +3,10 @@
 #include <memory>
 #include <variant>
 
-#include "Literal.h"
-#include "Parameter.h"
-#include "Symbol.h"
 #include "Expression.h"
+#include "types/Literal.h"
+#include "types/Parameter.h"
+#include "types/Symbol.h"
 
 namespace db {
 

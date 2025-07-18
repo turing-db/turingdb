@@ -20,19 +20,18 @@
     #include <optional>
     #include <vector>
 
-    #include "expressions/All.h"
-    #include "Literal.h"
-    #include "Symbol.h"
-    #include "WhereClause.h"
-    #include "pattern/Pattern.h"
-    #include "pattern/PatternNode.h"
-    #include "pattern/PatternEdge.h"
     #include "statements/StatementContainer.h"
-    #include "expressions/PathExpression.h"
     #include "statements/Return.h"
     #include "statements/Match.h"
-    #include "SinglePartQuery.h"
-    #include "Projection.h"
+    #include "expressions/All.h"
+    #include "types/Literal.h"
+    #include "types/Symbol.h"
+    #include "types/WhereClause.h"
+    #include "types/Pattern.h"
+    #include "types/PatternNode.h"
+    #include "types/PatternEdge.h"
+    #include "types/SinglePartQuery.h"
+    #include "types/Projection.h"
 
     namespace db {
         class YCypherScanner;
@@ -45,7 +44,7 @@
     #include "YCypherScanner.h"
     #include "GeneratedCypherParser.h"
     #include "CypherAST.h"
-    #include "QualifiedName.h"
+    #include "types/QualifiedName.h"
 
     #undef yylex
     #define yylex scanner.lex

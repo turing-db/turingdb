@@ -3,8 +3,8 @@
 #include <memory>
 #include <optional>
 
-#include "Symbol.h"
-#include "pattern/PatternEntity.h"
+#include "types/Symbol.h"
+#include "types/PatternEntity.h"
 
 namespace db {
 
