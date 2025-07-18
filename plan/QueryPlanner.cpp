@@ -226,7 +226,7 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
 void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
     const auto* injectedNodes = static_cast<InjectedNodes*>(path[0]);
 
-    auto* nodes = _mem->alloc<ColumnNodeIDs>(injectedNodes->nodes());
+    _result = _mem->alloc<ColumnNodeIDs>(injectedNodes->nodes());
 
     const TypeConstraint* injectTypeConstr = injectedNodes->getTypeConstraint();
     const ExprConstraint* injectExprConstr = injectedNodes->getExprConstraint();
@@ -243,7 +243,7 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
         }
 
         auto* nodesLabelSetIDs = _mem->alloc<ColumnVector<LabelSetID>>();
-        _pipeline->add<GetLabelSetIDStep>(nodes, nodesLabelSetIDs);
+        _pipeline->add<GetLabelSetIDStep>(_result, nodesLabelSetIDs);
 
         auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
 
@@ -279,14 +279,14 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
         auto* filterOutNodes = _mem->alloc<ColumnNodeIDs>();
         filter.addOperand(FilterStep::Operand {
             ._mask = filterMask,
-            ._src = nodes,
+            ._src = _result,
             ._dest = filterOutNodes,
         });
 
 
         // Assign the filtered nodes column to the general node column
         // pointer so we can iteratively apply filters.
-        nodes = filterOutNodes;
+        _result = filterOutNodes;
     }
 
     if (injectExprConstr) {
@@ -297,7 +297,7 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
             mask = _mem->alloc<ColumnMask>();
         }
 
-        generateNodePropertyFilterMasks(masks, expressions, nodes);
+        generateNodePropertyFilterMasks(masks, expressions, _result);
 
         auto* filterOutNodes = _mem->alloc<ColumnNodeIDs>();
         auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -311,21 +311,19 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
         }
         filter.addOperand(FilterStep::Operand {
             ._mask = masks[0],
-            ._src = nodes,
+            ._src = _result,
             ._dest = filterOutNodes});
 
-        nodes = filterOutNodes;
+        _result = filterOutNodes;
     }
 
     const VarExpr* nodeVar = injectedNodes->getVar();
     if (nodeVar) {
         VarDecl* nodeDecl = nodeVar->getDecl();
         if (nodeDecl->isReturned()) {
-            _transformData->addColumn(nodes, nodeDecl);
+            _transformData->addColumn(_result, nodeDecl);
         }
     }
-
-    _result = nodes;
 
     const auto expandSteps = path | rv::drop(1) | rv::chunk(2);
     for (auto step : expandSteps) {
