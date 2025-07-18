@@ -18,9 +18,9 @@ public:
     NodeLabelExpression& operator=(const NodeLabelExpression&) = delete;
     NodeLabelExpression& operator=(NodeLabelExpression&&) = delete;
 
-    NodeLabelExpression(Symbol&& symbol, std::vector<std::string_view>&& labels)
+    NodeLabelExpression(const Symbol& symbol, std::vector<std::string_view>&& labels)
         : Expression(ExpressionType::NodeLabel),
-          _symbol(std::move(symbol)),
+          _symbol(symbol),
           _labels(std::move(labels))
     {
     }
@@ -28,9 +28,9 @@ public:
     const Symbol& symbol() const { return _symbol; }
     const std::vector<std::string_view>& labels() const { return _labels; }
 
-    static std::unique_ptr<NodeLabelExpression> create(Symbol&& symbol,
+    static std::unique_ptr<NodeLabelExpression> create(const Symbol& symbol,
                                               std::vector<std::string_view>&& labels) {
-        return std::make_unique<NodeLabelExpression>(std::move(symbol), std::move(labels));
+        return std::make_unique<NodeLabelExpression>(symbol, std::move(labels));
     }
 
 private:

@@ -12,9 +12,9 @@ public:
     PropertyExpression() = delete;
     ~PropertyExpression() override = default;
 
-    PropertyExpression(QualifiedName&& name)
+    PropertyExpression(const QualifiedName& name)
         : Expression(ExpressionType::Property),
-          _name(std::move(name))
+          _name(name)
     {
     }
 
@@ -25,8 +25,8 @@ public:
 
     const QualifiedName& name() { return _name; }
 
-    static std::unique_ptr<PropertyExpression> create(QualifiedName&& name) {
-        return std::make_unique<PropertyExpression>(std::move(name));
+    static std::unique_ptr<PropertyExpression> create(const QualifiedName& name) {
+        return std::make_unique<PropertyExpression>(name);
     }
 
 private:

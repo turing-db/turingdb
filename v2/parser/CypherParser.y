@@ -217,8 +217,8 @@
 %type<db::WhereClause> where
 
 %type<db::SinglePartQuery*> singlePartQ
-%type<db::Query*> singleQuery
-%type<db::Query*> query
+%type<db::QueryCompound*> singleQuery
+%type<db::QueryCompound*> query
 %type<db::Statement*> readingStatement
 %type<db::Match*> matchSt
 %type<db::Skip*> skipSt
@@ -479,9 +479,9 @@ setItem
     ;
 
 nodeLabels
-    : COLON name { $$ = {std::move($2)}; }
+    : COLON name { $$ = { $2 }; }
     | COLON parameter { scanner.notImplemented("Parameters"); }
-    | nodeLabels COLON name { $$.emplace_back(std::move($3)); }
+    | nodeLabels COLON name { $$.emplace_back($3); }
     | nodeLabels COLON parameter { scanner.notImplemented("Parameters"); }
     ;
 
@@ -596,18 +596,18 @@ propertyOrLabelExpression
     // This seems too permissive, it allows 'n.name:Person' which is weird
 
     // Replaced by this more specific rule
-    | symbol nodeLabels { $$ = ast.newExpression<NodeLabelExpression>(std::move($1), std::move($2)); }
+    | symbol nodeLabels { $$ = ast.newExpression<NodeLabelExpression>($1, std::move($2)); }
     ;
 
 propertyExpression
     : atomExpression { $$ = $1; }
-    | qualifiedName DOT name { $1.addName(std::move($3)); $$ = ast.newExpression<PropertyExpression>(std::move($1)); }
+    | qualifiedName DOT name { $1.addName($3); $$ = ast.newExpression<PropertyExpression>(std::move($1)); }
     ;
 
 atomExpression
     : pathExpression { $$ = $1; }
-    | literal { $$ = ast.newExpression<AtomExpression>(std::move($1)); }
-    | symbol { $$ = ast.newExpression<AtomExpression>(std::move($1)); }
+    | literal { $$ = ast.newExpression<AtomExpression>($1); }
+    | symbol { $$ = ast.newExpression<AtomExpression>($1); }
 
     | parameter { scanner.notImplemented("Parameters"); }
     | caseExpression { scanner.notImplemented("CASE"); }
@@ -648,11 +648,11 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = ast.newNode(std::move($2), std::move($3), $4); }
+    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = ast.newNode($2, std::move($3), $4); }
     ;
 
 opt_symbol
-    : symbol { $$ = std::move($1); }
+    : symbol { $$ = $1; }
     | { $$ = std::nullopt; }
     ;
 
@@ -695,7 +695,7 @@ edgeDetail
     ;
 
 edgeTypes
-    : COLON name { $$ = {std::move($2)}; }
+    : COLON name { $$ = { $2 }; }
     | edgeTypes PIPE name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
     | edgeTypes PIPE COLON name { scanner.notImplemented("EdgeType | EdgeType | ..."); }
     ;
@@ -711,12 +711,12 @@ subqueryExist
     ;
 
 qualifiedName
-    : symbol { $$.addName(std::move($1._name)); }
-    | qualifiedName DOT symbol { $$.addName(std::move($3._name)); }
+    : symbol { $$.addName($1._name); }
+    | qualifiedName DOT symbol { $$.addName($3._name); }
     ;
 
 invocationName
-    : qualifiedName { $$ = std::move($1); }
+    : qualifiedName { $$ = $1; }
     ;
 
 functionInvocation
@@ -837,7 +837,7 @@ literal
     : boolLit { $$ = Literal($1); }
     | numLit { $$ = Literal($1); }
     | NULL_ { $$ = Literal(std::nullopt); }
-    | stringLit { $$ = Literal(std::move($1)); }
+    | stringLit { $$ = Literal($1); }
     | charLit { $$ = Literal($1); }
     | listLit { scanner.notImplemented("Lists"); }
     | mapLit { $$ = Literal(std::move($1)); }
@@ -863,7 +863,7 @@ numLit
     ;
 
 stringLit
-    : STRING_LITERAL { $$ = Literal(std::move($1)); }
+    : STRING_LITERAL { $$ = Literal($1); }
     ;
 
 charLit
@@ -902,27 +902,27 @@ mapLit
     ;
 
 mapPairChain
-    : mapPair { $$ = ast.newMapLiteral(); $$->set(std::move($1.first), $1.second); }
-    | mapPairChain COMMA mapPair { $$ = $1; $$->set(std::move($3.first), $3.second); }
+    : mapPair { $$ = ast.newMapLiteral(); $$->set($1.first, $1.second); }
+    | mapPairChain COMMA mapPair { $$ = $1; $$->set($3.first, $3.second); }
     ;
 
 mapPair
-    : name COLON expression { $$ = std::make_pair(std::move($1), $3); }
+    : name COLON expression { $$ = std::make_pair($1, $3); }
     ;
 
 name
-    : symbol { $$ = std::move($1._name) ; }
-    | reservedWord { $$ = std::move($1) ; }
+    : symbol { $$ = $1._name ; }
+    | reservedWord { $$ = $1 ; }
     ;
 
 symbol
-    : ESC_LITERAL { $$ = Symbol { ._name = std::move($1)}; }
-    | ID { $$ = Symbol { ._name = std::move($1) }; }
-    | FILTER { $$ = Symbol { ._name = std::move($1) }; }
-    | EXTRACT { $$ = Symbol { ._name = std::move($1) }; }
-    //| ANY { $$ = Symbol { ._name = std::move($1) }; } // Causes conflicts
-    //| NONE { $$ = Symbol { ._name = std::move($1) }; } // Causes conflicts
-    //| SINGLE { $$ = Symbol { ._name = std::move($1) }; } // Causes conflicts
+    : ESC_LITERAL { $$ = Symbol { ._name = $1 }; }
+    | ID { $$ = Symbol { ._name = $1 }; }
+    | FILTER { $$ = Symbol { ._name = $1 }; }
+    | EXTRACT { $$ = Symbol { ._name = $1 }; }
+    //| ANY { $$ = Symbol { ._name = $1 }; } // Causes conflicts
+    //| NONE { $$ = Symbol { ._name = $1 }; } // Causes conflicts
+    //| SINGLE { $$ = Symbol { ._name = $1 }; } // Causes conflicts
     ;
 
 createConstraint
@@ -954,61 +954,61 @@ dropConstraint
     ;
 
 reservedWord
-    : ALL { $$ = std::move($1); }
-    | ASC { $$ = std::move($1); }
-    | ASCENDING { $$ = std::move($1); }
-    | BY { $$ = std::move($1); }
-    | CREATE { $$ = std::move($1); }
-    | DELETE { $$ = std::move($1); }
-    | DESC { $$ = std::move($1); }
-    | DESCENDING { $$ = std::move($1); }
-    | DETACH { $$ = std::move($1); }
-    | EXISTS { $$ = std::move($1); }
-    | LIMIT { $$ = std::move($1); }
-    | MATCH { $$ = std::move($1); }
-    | MERGE { $$ = std::move($1); }
-    | ON { $$ = std::move($1); }
-    | IF { $$ = std::move($1); }
-    | OPTIONAL { $$ = std::move($1); }
-    | ORDER { $$ = std::move($1); }
-    | REMOVE { $$ = std::move($1); }
-    | RETURN { $$ = std::move($1); }
-    | SET { $$ = std::move($1); }
-    | SKIP { $$ = std::move($1); }
-    | WHERE { $$ = std::move($1); }
-    | WITH { $$ = std::move($1); }
-    | UNION { $$ = std::move($1); }
-    | UNWIND { $$ = std::move($1); }
-    | AND { $$ = std::move($1); }
-    | AS { $$ = std::move($1); }
-    | CONTAINS { $$ = std::move($1); }
-    | DISTINCT { $$ = std::move($1); }
-    | ENDS { $$ = std::move($1); }
-    | IN { $$ = std::move($1); }
-    | IS { $$ = std::move($1); }
-    | NOT { $$ = std::move($1); }
-    | OR { $$ = std::move($1); }
-    | STARTS { $$ = std::move($1); }
-    | XOR { $$ = std::move($1); }
-    | FALSE { $$ = std::move($1); }
-    | TRUE { $$ = std::move($1); }
-    | NULL_ { $$ = std::move($1); }
-    | CONSTRAINT { $$ = std::move($1); }
-    | DO { $$ = std::move($1); }
-    | FOR { $$ = std::move($1); }
-    | REQUIRE { $$ = std::move($1); }
-    | COLLECT { $$ = std::move($1); }
-    | UNIQUE { $$ = std::move($1); }
-    | CASE { $$ = std::move($1); }
-    | WHEN { $$ = std::move($1); }
-    | THEN { $$ = std::move($1); }
-    | ELSE { $$ = std::move($1); }
-    | END { $$ = std::move($1); }
-    | MANDATORY { $$ = std::move($1); }
-    | SCALAR { $$ = std::move($1); }
-    | OF { $$ = std::move($1); }
-    | ADD { $$ = std::move($1); }
-    | DROP { $$ = std::move($1); }
+    : ALL { $$ = $1; }
+    | ASC { $$ = $1; }
+    | ASCENDING { $$ = $1; }
+    | BY { $$ = $1; }
+    | CREATE { $$ = $1; }
+    | DELETE { $$ = $1; }
+    | DESC { $$ = $1; }
+    | DESCENDING { $$ = $1; }
+    | DETACH { $$ = $1; }
+    | EXISTS { $$ = $1; }
+    | LIMIT { $$ = $1; }
+    | MATCH { $$ = $1; }
+    | MERGE { $$ = $1; }
+    | ON { $$ = $1; }
+    | IF { $$ = $1; }
+    | OPTIONAL { $$ = $1; }
+    | ORDER { $$ = $1; }
+    | REMOVE { $$ = $1; }
+    | RETURN { $$ = $1; }
+    | SET { $$ = $1; }
+    | SKIP { $$ = $1; }
+    | WHERE { $$ = $1; }
+    | WITH { $$ = $1; }
+    | UNION { $$ = $1; }
+    | UNWIND { $$ = $1; }
+    | AND { $$ = $1; }
+    | AS { $$ = $1; }
+    | CONTAINS { $$ = $1; }
+    | DISTINCT { $$ = $1; }
+    | ENDS { $$ = $1; }
+    | IN { $$ = $1; }
+    | IS { $$ = $1; }
+    | NOT { $$ = $1; }
+    | OR { $$ = $1; }
+    | STARTS { $$ = $1; }
+    | XOR { $$ = $1; }
+    | FALSE { $$ = $1; }
+    | TRUE { $$ = $1; }
+    | NULL_ { $$ = $1; }
+    | CONSTRAINT { $$ = $1; }
+    | DO { $$ = $1; }
+    | FOR { $$ = $1; }
+    | REQUIRE { $$ = $1; }
+    | COLLECT { $$ = $1; }
+    | UNIQUE { $$ = $1; }
+    | CASE { $$ = $1; }
+    | WHEN { $$ = $1; }
+    | THEN { $$ = $1; }
+    | ELSE { $$ = $1; }
+    | END { $$ = $1; }
+    | MANDATORY { $$ = $1; }
+    | SCALAR { $$ = $1; }
+    | OF { $$ = $1; }
+    | ADD { $$ = $1; }
+    | DROP { $$ = $1; }
     ;
 
 %%

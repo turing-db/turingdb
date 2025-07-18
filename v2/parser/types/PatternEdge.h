@@ -60,8 +60,8 @@ public:
         return _properties != nullptr;
     }
 
-    void setSymbol(Symbol&& symbol) {
-        _symbol = std::move(symbol);
+    void setSymbol(const Symbol& symbol) {
+        _symbol = symbol;
     }
 
     void setType(const std::string_view& type) {

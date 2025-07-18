@@ -14,7 +14,7 @@ class PatternPart;
 class PatternEntity;
 class Pattern;
 class Expression;
-class Query;
+class QueryCompound;
 class Projection;
 class MapLiteral;
 class SinglePartQuery;
@@ -43,7 +43,7 @@ public:
     Projection* newProjection();
     MapLiteral* newMapLiteral();
     SinglePartQuery* newSinglePartQuery();
-    PatternNode* newNode(std::optional<Symbol>&& symbol,
+    PatternNode* newNode(const std::optional<Symbol>& symbol,
                          std::optional<std::vector<std::string_view>>&& labels,
                          MapLiteral* properties);
 
@@ -72,7 +72,7 @@ public:
         return *_currentScope;
     }
 
-    const std::vector<std::unique_ptr<Query>>& queries() const {
+    const std::vector<std::unique_ptr<QueryCompound>>& queries() const {
         return _queries;
     }
 
@@ -85,7 +85,7 @@ private:
     std::vector<std::unique_ptr<PatternEntity>> _patternEntity;
     std::vector<std::unique_ptr<Statement>> _statements;
     std::vector<std::unique_ptr<Projection>> _projections;
-    std::vector<std::unique_ptr<Query>> _queries;
+    std::vector<std::unique_ptr<QueryCompound>> _queries;
     std::vector<std::unique_ptr<MapLiteral>> _mapLiterals;
     std::vector<std::unique_ptr<StatementContainer>> _statementContainers;
 

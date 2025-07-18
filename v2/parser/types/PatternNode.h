@@ -61,8 +61,8 @@ public:
         return _properties != nullptr;
     }
 
-    void setSymbol(std::optional<Symbol>&& symbol) {
-        _symbol = std::move(symbol);
+    void setSymbol(const std::optional<Symbol>& symbol) {
+        _symbol = symbol;
     }
 
     void setLabels(std::optional<std::vector<std::string_view>>&& labels) {

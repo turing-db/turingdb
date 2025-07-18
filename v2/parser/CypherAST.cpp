@@ -86,12 +86,12 @@ PatternEdge* CypherAST::newInEdge() {
     return ptr;
 }
 
-PatternNode* CypherAST::newNode(std::optional<Symbol>&& symbol,
+PatternNode* CypherAST::newNode(const std::optional<Symbol>& symbol,
                                 std::optional<std::vector<std::string_view>>&& labels,
                                 MapLiteral* properties) {
     auto node = PatternNode::create();
 
-    node->setSymbol(std::move(symbol));
+    node->setSymbol(symbol);
     node->setLabels(std::move(labels));
     node->setProperties(properties);
 
