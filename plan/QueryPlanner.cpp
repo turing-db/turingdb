@@ -250,7 +250,6 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
         // Build filter expression to compute filter for each LabelSetID
         ColumnMask* filterMask {nullptr};
         for (LabelSetID labelSetID : _tmpLabelSetIDs) {
-            spdlog::info("labelsetid = {}", labelSetID);
             auto* targetLabelSetID = _mem->alloc<ColumnConst<LabelSetID>>();
             targetLabelSetID->set(labelSetID);
 

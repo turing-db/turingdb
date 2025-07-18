@@ -72,9 +72,8 @@ public:
 private:
     std::vector<NodeID> _nodeIds;
 
-
     InjectedNodes();
-    ~InjectedNodes();
+    ~InjectedNodes() override;
 };
 
 class PathPattern {
@@ -94,6 +93,4 @@ private:
     PathPattern();
     ~PathPattern();
 };
-
-
 }

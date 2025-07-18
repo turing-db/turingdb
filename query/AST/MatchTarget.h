@@ -11,15 +11,14 @@ class MatchTarget {
 public:
     friend ASTContext;
 
-    static MatchTarget* create(ASTContext* ctxt, PathPattern* pattern = nullptr);
+    static MatchTarget* create(ASTContext* ctxt, PathPattern* pattern);
 
     PathPattern* getPattern() const { return _pattern; }
 
 private:
     PathPattern* _pattern {nullptr};
 
-    explicit MatchTarget(PathPattern* pattern = nullptr);
+    explicit MatchTarget(PathPattern*);
     ~MatchTarget();
 };
-
 }

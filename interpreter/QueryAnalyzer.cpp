@@ -6,7 +6,6 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/algorithm/adjacent_find.hpp>
 
-#include "spdlog/spdlog.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "AnalyzeException.h"

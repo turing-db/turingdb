@@ -103,7 +103,6 @@ NodeID GraphReader::getFinalNodeID(size_t partIndex, NodeID tmpID) const {
     return it->second;
 }
 
-
 const GraphMetadata& GraphReader::getMetadata() const {
     return _view.metadata();
 }
@@ -252,7 +251,6 @@ const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID 
 
     return nullptr;
 }
-
 
 template const types::UInt64::Primitive* GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::Int64::Primitive* GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, NodeID nodeID) const;
