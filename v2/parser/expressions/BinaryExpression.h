@@ -16,7 +16,9 @@ public:
         : Expression(ExpressionType::Binary),
           _left(left),
           _right(right),
-          _operator(op) {}
+          _operator(op)
+    {
+    }
 
     BinaryExpression(const BinaryExpression&) = delete;
     BinaryExpression(BinaryExpression&&) = delete;

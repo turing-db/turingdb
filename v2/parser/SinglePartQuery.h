@@ -14,7 +14,8 @@ public:
     ~SinglePartQuery() override = default;
 
     SinglePartQuery(StatementContainer* statements)
-        : _statements(statements) {
+        : _statements(statements)
+    {
     }
 
     SinglePartQuery(const SinglePartQuery&) = delete;

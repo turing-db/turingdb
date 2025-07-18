@@ -7,4 +7,5 @@
 #include "expressions/PropertyExpression.h"
 #include "expressions/StringExpression.h"
 #include "expressions/NodeLabelExpression.h"
+#include "expressions/PathExpression.h"
 

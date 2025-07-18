@@ -24,7 +24,8 @@ public:
 
     explicit AtomExpression(ValueType&& symbol)
         : Expression(ExpressionType::Atom),
-          _value(std::move(symbol)) {
+          _value(std::move(symbol))
+    {
     }
 
     AtomExpression(const AtomExpression&) = delete;

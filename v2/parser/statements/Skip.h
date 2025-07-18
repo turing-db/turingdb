@@ -14,7 +14,9 @@ public:
     ~Skip() = default;
 
     explicit Skip(Expression* expression)
-        : _expression(expression) {}
+        : _expression(expression)
+    {
+    }
 
     Skip(const Skip&) = default;
     Skip& operator=(const Skip&) = default;

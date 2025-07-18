@@ -28,7 +28,9 @@ public:
         : _pattern(pattern),
           _limit(limit),
           _skip(skip),
-          _optional(optional) {}
+          _optional(optional)
+    {
+    }
 
     static std::unique_ptr<Match> create(Pattern* pattern,
                                          Skip* skip = nullptr,

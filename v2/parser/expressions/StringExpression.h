@@ -15,7 +15,9 @@ public:
     StringExpression(StringOperator op, Expression* right)
         : Expression(ExpressionType::String),
           _right(right),
-          _operator(op) {}
+          _operator(op)
+    {
+    }
 
     StringExpression(const StringExpression&) = delete;
     StringExpression(StringExpression&&) = delete;

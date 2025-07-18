@@ -14,7 +14,9 @@ public:
     ~Limit() = default;
 
     explicit Limit(Expression* expression)
-        : _expression(expression) {}
+        : _expression(expression)
+    {
+    }
 
     Limit(const Limit&) = default;
     Limit& operator=(const Limit&) = default;

@@ -15,7 +15,8 @@ public:
     WhereClause& operator=(WhereClause&&) = default;
 
     WhereClause(Expression* expression)
-        : _expression(expression) {
+        : _expression(expression)
+    {
     }
 
     Expression& getExpression() const {

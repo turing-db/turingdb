@@ -16,7 +16,9 @@ enum class ExpressionType {
 class Expression {
 public:
     explicit Expression(ExpressionType type)
-        : _type(type) {}
+        : _type(type)
+    {
+    }
 
     Expression() = delete;
     virtual ~Expression() = default;

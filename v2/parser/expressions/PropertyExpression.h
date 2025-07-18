@@ -14,7 +14,8 @@ public:
 
     PropertyExpression(QualifiedName&& name)
         : Expression(ExpressionType::Property),
-          _name(std::move(name)) {
+          _name(std::move(name))
+    {
     }
 
     PropertyExpression(const PropertyExpression&) = delete;

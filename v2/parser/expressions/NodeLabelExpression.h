@@ -21,7 +21,8 @@ public:
     NodeLabelExpression(Symbol&& symbol, std::vector<std::string>&& labels)
         : Expression(ExpressionType::NodeLabel),
           _symbol(std::move(symbol)),
-          _labels(std::move(labels)) {
+          _labels(std::move(labels))
+    {
     }
 
     const Symbol& symbol() const { return _symbol; }

@@ -19,7 +19,9 @@ public:
     Return& operator=(Return&&) = delete;
 
     Return(Projection* projection)
-        : _projection(projection) {}
+        : _projection(projection)
+    {
+    }
 
     static std::unique_ptr<Return> create(Projection* projection) {
         return std::make_unique<Return>(projection);

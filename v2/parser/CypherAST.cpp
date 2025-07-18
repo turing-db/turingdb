@@ -16,7 +16,8 @@
 using namespace db;
 
 
-CypherAST::CypherAST() {
+CypherAST::CypherAST()
+{
     _rootScope = std::make_unique<Scope>();
     _currentStatements = newStatementContainer();
     _currentScope = _rootScope.get();

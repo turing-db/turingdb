@@ -19,7 +19,8 @@ public:
 
     explicit PathExpression(PatternPart* pattern)
         : Expression(ExpressionType::Path),
-          _pattern(pattern) {
+          _pattern(pattern)
+    {
     }
 
 

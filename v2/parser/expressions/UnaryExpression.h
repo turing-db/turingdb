@@ -14,7 +14,9 @@ public:
     UnaryExpression(UnaryOperator op, Expression* right)
         : Expression(ExpressionType::Unary),
           _right(right),
-          _operator(op) {}
+          _operator(op)
+    {
+    }
 
     ~UnaryExpression() override = default;
 
