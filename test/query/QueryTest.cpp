@@ -660,4 +660,71 @@ TEST_F(QueryTest, CallGraphInfo) {
         .expectVector<LabelSetID>({0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 5, 5, 5, 6, 6, 7, 7, 8, 8})
         .expectVector<std::string_view>({"Person", "SoftwareEngineering", "Founder", "Person", "Founder", "Bioinformatics", "SoftwareEngineering", "Interest", "Interest", "Exotic", "Interest", "Interest", "Exotic", "Supernatural", "SleepDisturber", "Person", "Bioinformatics", "Person", "SoftwareEngineering", "Interest", "SleepDisturber"})
         .execute();
+
+}
+
+TEST_F(QueryTest, InjectNodes) {
+    QueryTester tester {_mem, *_interp};
+
+    tester.query("MATCH n@0,1,8,9,11 RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Remy", "Adam", "Maxime", "Luc", "Martina"})
+        .execute();
+
+    tester.query("MATCH n@0,1,8,9,11--m return n.name,m.name")
+        .expectOptVector<types::String::Primitive>({
+            "Remy",
+            "Remy",
+            "Remy",
+            "Remy",
+            "Adam",
+            "Adam",
+            "Adam",
+            "Maxime",
+            "Maxime",
+            "Luc",
+            "Luc",
+            "Martina",
+        })
+        .expectOptVector<types::String::Primitive>({
+            "Adam",
+            "Ghosts",
+            "Computers",
+            "Eighties",
+            "Remy",
+            "Bio",
+            "Cooking",
+            "Bio",
+            "Paddle",
+            "Animals",
+            "Computers",
+            "Cooking",
+        });
+    
+    tester.query("MATCH n:Founder@0,1,8,9,11 RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Remy", "Adam"})
+        .execute();
+
+    tester.query("MATCH n:Founder,SoftwareEngineering@0,1,8,9,11 RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Remy"})
+        .execute();
+
+    tester.query("MATCH n{hasPhD:False}@0,1,8,9,11 RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Maxime"})
+        .execute();
+
+    tester.query("MATCH n{hasPhD:True, isFrench:True}@0,1,8,9,11 RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Remy","Adam","Luc"})
+        .execute();
+
+    tester.query("MATCH n:Founder@0,1,8,9,11{hasPhD:True, isFrench:True} RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Remy","Adam"})
+        .execute();
+
+    tester.query("MATCH n:Founder,Bioinformatics@0,1,8,9,11{hasPhD:True, isFrench:True} RETURN n.name")
+        .expectOptVector<types::String::Primitive>({"Adam"})
+        .execute();
+
+    tester.query("MATCH n@1001 RETURN n")
+        .expectError()
+        .execute();
 }
