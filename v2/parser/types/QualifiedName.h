@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include <string>
+#include <string_view>
 
 namespace db {
 
@@ -15,12 +15,12 @@ public:
     QualifiedName& operator=(const QualifiedName&) = default;
     QualifiedName& operator=(QualifiedName&&) = default;
 
-    void addName(std::string&& name) { _names.emplace_back(std::move(name)); }
+    void addName(const std::string_view& name) { _names.emplace_back(name); }
 
-    const std::vector<std::string>& getNames() const { return _names; }
+    const std::vector<std::string_view>& getNames() const { return _names; }
 
 private:
-    std::vector<std::string> _names;
+    std::vector<std::string_view> _names;
 };
 
 }

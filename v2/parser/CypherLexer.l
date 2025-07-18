@@ -12,7 +12,9 @@ using namespace db;
 
 using Token = db::YCypherParser::token;
 
-#define KEYWORD(name) yylval->emplace<std::string>(yytext, yyleng); return Token::name;
+#define STORE_STRING(start, length) yylval->emplace<std::string_view>(getStringView(start, length))
+
+#define KEYWORD(name) STORE_STRING(_offset, yyleng); return Token::name;
 
 %}
 
@@ -133,7 +135,7 @@ using Token = db::YCypherParser::token;
 
 `[^`]*` {
     /* Escaped identifier. Example: `my-var` */
-    yylval->emplace<std::string>(yytext + 1, yyleng - 2);
+    STORE_STRING(_offset + 1, yyleng - 2);
     return Token::ESC_LITERAL;
 }
 
@@ -147,13 +149,13 @@ using Token = db::YCypherParser::token;
 
 \"([^\"\\\r\n]|\\.)*\" {
     /* String literal */
-    yylval->emplace<std::string>(yytext + 1, yyleng - 2);
+    STORE_STRING(_offset + 1, yyleng - 2);
     return Token::STRING_LITERAL;
 }
 
 \'([^\'\\\r\n]|\\.)*\' {
     /* Single-quoted string literal */
-    yylval->emplace<std::string>(yytext + 1, yyleng - 2);
+    STORE_STRING(_offset + 1, yyleng - 2);
     return Token::STRING_LITERAL;
 }
 
@@ -215,7 +217,7 @@ using Token = db::YCypherParser::token;
 
 [a-zA-Z_][a-zA-Z0-9_]* {
     /* Identifier */
-    yylval->emplace<std::string>(yytext, yyleng);
+    STORE_STRING(_offset + 1, yyleng - 2);
     return Token::ID;
 }
 

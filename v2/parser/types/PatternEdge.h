@@ -28,7 +28,7 @@ public:
         return _symbol.value();
     }
 
-    const std::string& type() const {
+    const std::string_view& type() const {
         return _type.value();
     }
 
@@ -40,7 +40,7 @@ public:
         return _symbol.value();
     }
 
-    std::string& type() {
+    std::string_view& type() {
         return _type.value();
     }
 
@@ -64,8 +64,8 @@ public:
         _symbol = std::move(symbol);
     }
 
-    void setType(std::string&& type) {
-        _type = std::move(type);
+    void setType(const std::string_view& type) {
+        _type = type;
     }
 
     void setProperties(MapLiteral* properties) {
@@ -76,7 +76,7 @@ public:
 
 private:
     std::optional<Symbol> _symbol;
-    std::optional<std::string> _type;
+    std::optional<std::string_view> _type;
     MapLiteral* _properties {nullptr};
 };
 

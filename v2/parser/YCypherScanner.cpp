@@ -1,6 +1,5 @@
 #include "YCypherScanner.h"
 
-#include "BioAssert.h"
 #include "ParserException.h"
 
 std::string_view nextLine(std::string_view& str) {
@@ -24,8 +23,13 @@ void ignoreLines(std::string_view& str, size_t count) {
 }
 
 void db::YCypherScanner::generateError(const std::string& msg, std::string& errorOutput, bool printErrorBars) {
-    bioassert(_query != nullptr);
     errorOutput.clear();
+
+    if (_query.empty()) {
+        errorOutput += "Empty query\n";
+        return;
+    }
+
 
     std::string_view q = _query;
     const auto& loc = _location;
@@ -95,7 +99,7 @@ void db::YCypherScanner::syntaxError(const std::string& msg) {
 }
 
 void db::YCypherScanner::notImplemented(std::string_view rawMsg) {
-    if (!_allowNotImplemented) {
+    if (_allowNotImplemented) {
         return;
     }
 

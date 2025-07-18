@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 #include <memory>
 
 namespace db {
@@ -20,7 +20,7 @@ public:
     }
 
 private:
-    std::string _name;
+    std::string_view _name;
 };
 
 }

@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 
@@ -25,26 +25,22 @@ public:
         return std::make_unique<MapLiteral>();
     }
 
-    void set(const std::string& key, Expression* value) {
+    void set(const std::string_view& key, Expression* value) {
         _map[key] = value;
     }
 
-    void set(std::string&& key, Expression* value) {
-        _map.emplace(std::move(key), value);
-    }
-
 private:
-    std::unordered_map<std::string, Expression*> _map;
+    std::unordered_map<std::string_view, Expression*> _map;
 };
 
 class Literal {
 public:
-    using ValueType = std::variant<bool, int64_t, double, std::string, char, MapLiteral*, std::nullopt_t>;
+    using ValueType = std::variant<bool, int64_t, double, std::string_view, char, MapLiteral*, std::nullopt_t>;
 
     Literal() = default;
 
-    explicit Literal(ValueType&& vt)
-        : _value(std::move(vt))
+    explicit Literal(const ValueType& vt)
+        : _value(vt)
     {
     }
 

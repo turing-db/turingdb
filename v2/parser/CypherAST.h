@@ -44,7 +44,7 @@ public:
     MapLiteral* newMapLiteral();
     SinglePartQuery* newSinglePartQuery();
     PatternNode* newNode(std::optional<Symbol>&& symbol,
-                         std::optional<std::vector<std::string>>&& labels,
+                         std::optional<std::vector<std::string_view>>&& labels,
                          MapLiteral* properties);
 
     template <typename T, typename... Args>

@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
 
 void runParser2(const std::string& query) {
     CypherParser parser;
-    parser.allowNotImplemented(true);
+    parser.allowNotImplemented(false);
 
     try {
         auto t0 = Clock::now();

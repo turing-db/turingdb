@@ -26,6 +26,8 @@ public:
     }
 
     void advanceLocation(uint64_t yyleng) {
+        _offset = _nextOffset;
+        _nextOffset += yyleng;
         _location.step();
         _location.columns(yyleng);
     }
@@ -39,9 +41,15 @@ public:
     void notImplemented(std::string_view rawMsg);
 
 private:
+    size_t _nextOffset = 0;
+    size_t _offset = 0;
     location _location;
     std::string_view _query;
     bool _allowNotImplemented = true;
+
+    std::string_view getStringView(size_t offset, size_t length) const {
+        return _query.substr(offset, length);
+    }
 };
 
 }

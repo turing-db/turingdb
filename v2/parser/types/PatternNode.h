@@ -29,7 +29,7 @@ public:
         return _symbol.value();
     }
 
-    const std::vector<std::string>& labels() const {
+    const std::vector<std::string_view>& labels() const {
         return _labels.value();
     }
 
@@ -41,7 +41,7 @@ public:
         return _symbol.value();
     }
 
-    std::vector<std::string>& labels() {
+    std::vector<std::string_view>& labels() {
         return _labels.value();
     }
 
@@ -65,7 +65,7 @@ public:
         _symbol = std::move(symbol);
     }
 
-    void setLabels(std::optional<std::vector<std::string>>&& labels) {
+    void setLabels(std::optional<std::vector<std::string_view>>&& labels) {
         _labels = std::move(labels);
     }
 
@@ -75,7 +75,7 @@ public:
 
 private:
     std::optional<Symbol> _symbol;
-    std::optional<std::vector<std::string>> _labels;
+    std::optional<std::vector<std::string_view>> _labels;
     MapLiteral* _properties {nullptr};
 };
 

@@ -52,7 +52,7 @@ PatternNode* CypherAST::nodeFromExpression(Expression* e) {
 
     else if (const auto* nodeLabelExpr = dynamic_cast<db::NodeLabelExpression*>(e)) {
         return newNode(nodeLabelExpr->symbol(),
-                       std::vector<std::string>(nodeLabelExpr->labels()),
+                       std::vector<std::string_view>(nodeLabelExpr->labels()),
                        nullptr);
     }
 
@@ -87,7 +87,7 @@ PatternEdge* CypherAST::newInEdge() {
 }
 
 PatternNode* CypherAST::newNode(std::optional<Symbol>&& symbol,
-                                std::optional<std::vector<std::string>>&& labels,
+                                std::optional<std::vector<std::string_view>>&& labels,
                                 MapLiteral* properties) {
     auto node = PatternNode::create();
 
