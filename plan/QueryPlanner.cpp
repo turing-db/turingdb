@@ -320,7 +320,7 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
     const VarExpr* nodeVar = path[0]->getVar();
     if (nodeVar) {
         VarDecl* nodeDecl = nodeVar->getDecl();
-        if (nodeDecl->isReturned()) {
+        if (nodeDecl->isUsed()) {
             _transformData->addColumn(_result, nodeDecl);
         }
     }

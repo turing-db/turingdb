@@ -1,6 +1,5 @@
 #include "QueryAnalyzer.h"
 
-#include <cstdint>
 #include <optional>
 #include <range/v3/view.hpp>
 #include <range/v3/action/sort.hpp>
@@ -280,7 +279,6 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
     }
 }
 
-<<<<<<< HEAD
 void QueryAnalyzer::typeCheckBinExprConstr(const PropertyType lhs,
                                            const ExprConst* rhs) {
     // NOTE: Directly accessing struct member

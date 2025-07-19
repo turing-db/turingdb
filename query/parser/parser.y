@@ -85,6 +85,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token<std::string> ID
 %token COMMA        "','"
 %token COLON        "':'"
+%token SEMICOLON    "';'"
 %token STAR         "'*'"
 %token OBRACK       "'{'"
 %token CBRACK       "'}'"
@@ -217,7 +218,7 @@ match_cmd: MATCH match_targets RETURN return_fields {
                                                     }
          ;
 
-match_targets: match_targets COMMA match_target {
+match_targets: match_targets SEMICOLON match_target {
                                                     $1->addTarget($3);
                                                     $$ = $1; 
                                                 }
@@ -329,15 +330,15 @@ path_pattern: node_pattern
             }
             ;
 
-injected_nodes: unsigned_integer
+injected_nodes: INT_CONSTANT
                    {
                         auto injectedNodes = InjectedIDs::create(ctxt);
-                        injectedNodes->addID($1);
+                        injectedNodes->addID(std::stoull($1));
                         $$ = injectedNodes;
                    }
-                   | injected_nodes COMMA unsigned_integer
+                   | injected_nodes COMMA INT_CONSTANT
                    {
-                        $1->addID($3);
+                        $1->addID(std::stoull($3));
                         $$ = $1;
                    }
                    
@@ -478,13 +479,6 @@ edge_entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constrain
                     $$ = pattern;
               }
               ;
-
-known_entity_pattern: entity_var COLON unsigned_integer
-                    { $$ = EntityPattern::create(ctxt, $1, $3); }
-                    | COLON unsigned_integer
-                    { $$ = EntityPattern::create(ctxt, nullptr, $2); }
->>>>>>> 6070c8016 (Clean Up Parser Grammar (!68))
-                    ;
 
 entity_var: ID { $$ = VarExpr::create(ctxt, $1); }
           ;
