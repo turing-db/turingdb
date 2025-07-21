@@ -9,6 +9,8 @@
 #include <fstream>
 #include <cstring>
 
+#include <argparse.hpp>
+
 #include "AddressRouter.h"
 #include "HttpProxy.h"
 #include "LoadBalancer.h"
@@ -137,56 +139,41 @@ int main(int argc, char* argv[]) {
     std::string backendFile;
     std::string certFile;
     std::string keyFile;
-    int port = 8080;
 
-    for (int i = 1; i < argc; i++) {
-        const std::string arg = argv[i];
+    argparse::ArgumentParser gateway;
+    gateway.add_argument("-b", "--backends")
+        .help("File containing backend servers (one per line, format: host:port)")
+        .metavar("FILE");
 
-        if (arg == "-b" || arg == "--backends") {
-            if (i + 1 < argc) {
-                backendFile = argv[++i];
-            } else {
-                std::cerr << "Error: --backends requires a filename argument" << std::endl;
-                printUsage(argv[0]);
-                return 1;
-            }
-        } else if (arg == "-p" || arg == "--port") {
-            if (i + 1 < argc) {
-                try {
-                    port = std::stoi(argv[++i]);
-                } catch (const std::invalid_argument& e) {
-                    std::cerr << "Error: Invalid port number '" << argv[i] << "'" << std::endl;
-                    printUsage(argv[0]);
-                    return 1;
-                }
-                if (port < 1 || port > 65535) {
-                    std::cerr << "Error: Port must be between 1 and 65535" << std::endl;
-                    printUsage(argv[0]);
-                    return 1;
-                }
-            } else {
-                std::cerr << "Error: --port requires a port number argument" << std::endl;
-                printUsage(argv[0]);
-                return 1;
-            }
+    gateway.add_argument("-p", "--port")
+        .help("Specify Port Number Of Gateway")
+        .default_value(8080)
+        .scan<'i', int>()
+        .metavar("PORT");
 
-        } else if (arg == "-t" || arg == "--tls") {
-            if (i + 2 < argc) {
-                certFile = argv[++i];
-                keyFile = argv[++i];
-            } else {
-                std::cerr << "Error: --tls requires certificate and key file arguments" << std::endl;
-                printUsage(argv[0]);
-                return 1;
-            }
-        } else if (arg == "-h" || arg == "--help") {
-            printUsage(argv[0]);
-            return 0;
-        } else {
-            std::cerr << "Error: Unknown option: " << arg << std::endl;
-            printUsage(argv[0]);
-            return 1;
-        }
+    gateway.add_argument("-t", "--tls")
+        .help("Run Gateway as a https server")
+        .nargs(2)
+        .metavar("CERT_FILE KEY_FILE");
+
+    try {
+        gateway.parse_args(argc, argv);
+    } catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << gateway;
+        return 1;
+    }
+
+    if (gateway.is_used("--backends")) {
+        std::string backendFile = gateway.get<std::string>("--backends");
+    }
+
+    int port = gateway.get<int>("--port");
+
+    if (gateway.is_used("--tls")) {
+        auto tlsFiles = gateway.get<std::vector<std::string>>("--tls");
+        certFile = tlsFiles[0];
+        keyFile = tlsFiles[1];
     }
 
     // Determine number of threads based on hardware concurrency

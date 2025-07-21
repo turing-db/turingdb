@@ -69,7 +69,9 @@ void HttpProxy<server>::setupRoutes() {
 
 template <ServerType server>
 void HttpProxy<server>::start(const std::string& host, const int port, const int numThreads) {
-    std::cout << "Starting HTTP Proxy Server on " << host << ":" << port << std::endl;
+    constexpr std::string_view httpString = std::is_same_v<server, httplib::SSLServer> ? "HTTPS" : "HTTP";
+
+    std::cout << "Starting " << httpString << " Proxy Server on " << host << ":" << port << std::endl;
     std::cout << "Using " << numThreads << " worker threads" << std::endl;
 
     // Configure server thread pool
