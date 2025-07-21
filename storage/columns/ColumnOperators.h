@@ -139,12 +139,12 @@ public:
      *
      * @param mask The mask to fill
      * @param lhs Vector of possible candidates
-     * @param lhs Lookup set
+     * @param rhs Lookup set
      */
     template <typename T>
     static void inOp(ColumnMask& mask,
-                     const ColumnVector<T> lhs,
-                     const ColumnSet<T> rhs) {
+                     const ColumnVector<T>& lhs,
+                     const ColumnSet<T>& rhs) {
         msgbioassert(lhs.size() == rhs.size() == mask.size(),
                      "Columns must have matching dimensions");
         auto* maskd = mask.data();
