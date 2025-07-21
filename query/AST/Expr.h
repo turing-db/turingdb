@@ -181,10 +181,11 @@ public:
         _SIZE
     };
     using OpTypeName = EnumToString<OpType>::Create<
-        EnumStringPair<OpType::OP_EQUAL, "Equals">>;
+        EnumStringPair<OpType::OP_EQUAL, "Equals">,
+        EnumStringPair<OpType::OP_STR_APPROX, "String Approximation">>;
 
     static BinExpr* create(ASTContext* ctxt, Expr* left, Expr* right, OpType opType);
-   
+
     Expr::Kind getKind() const override { return EK_BIN_EXPR; }
     OpType getOpType() const { return _opType; }
     Expr* getLeftExpr() const { return _lexpr; }
