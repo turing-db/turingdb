@@ -67,7 +67,8 @@ public:
     /**
      * @brief Get the EntityID owners which the query string @param sv matches against
      * @detail Preprocesses the input string, and returns the IDs of any full or prefix
-     * matches of any of the tokens in @param sv
+     * matches of any of the tokens in @param sv.
+     * @warn Does not empty/clear @param result
      * @param str The string to query
      */
     template <typename T>

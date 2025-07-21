@@ -6,6 +6,7 @@
 #include <range/v3/view/chunk.hpp>
 #include <range/v3/all.hpp>
 
+#include "DataPart.h"
 #include "Expr.h"
 #include "HistoryStep.h"
 #include "MatchTarget.h"
@@ -28,6 +29,8 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
 
+#include "columns/ColumnSet.h"
+#include "metadata/SupportedType.h"
 #include "reader/GraphReader.h"
 #include "PlannerException.h"
 
@@ -35,6 +38,7 @@ using namespace db;
 
 struct PropertyTypeDispatcher {
     ValueType _valueType;
+    BinExpr::OpType _opType;
 
     auto execute(const auto& executor) const {
         switch (_valueType) {
@@ -352,6 +356,7 @@ void QueryPlanner::planPath(const std::vector<EntityPattern*>& path) {
 
         if (!(edgeTypeConstr || edgeExprConstr) && (!sourceTypeConstr || !targetTypeConstr)
             && !(sourceExprConstr || targetExprConstr)) {
+            spdlog::info("Using ScanEdges hack");
             return planPathUsingScanEdges(path);
         }
     }
@@ -647,7 +652,6 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
     PropertyTypeDispatcher {propType._valueType}.execute(treat);
 }
 
-
 void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
                                                    const std::span<const BinExpr* const> expressions,
                                                    const ColumnNodeIDs* entities) {
@@ -658,6 +662,7 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
 
         const VarExpr* leftExpr = static_cast<VarExpr*>(expressions[i]->getLeftExpr());
         ExprConst* rightExpr = static_cast<ExprConst*>(expressions[i]->getRightExpr());
+        BinExpr::OpType op = expressions[i]->getOpType();
 
         const std::string& varExprName = leftExpr->getName();
         const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
@@ -672,8 +677,8 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
             using StepType = GetFilteredNodePropertyStep<Type>;
             using Primitive = typename Type::Primitive;
 
-            auto* propValues = _mem->alloc<ColumnVector<Primitive>>();
             auto* propValFilterMask = _mem->alloc<ColumnMask>();
+            auto* propValues = _mem->alloc<ColumnVector<Primitive>>();
             auto* filterConstVal = _mem->alloc<ColumnConst<Primitive>>();
 
             const Primitive& constVal = static_cast<PropertyTypeExprConst<Type>::ExprConstType*>(rightExpr)->getVal();
@@ -698,7 +703,47 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
                 ._rhs = propValFilterMask});
         };
 
-        PropertyTypeDispatcher {propType._valueType}.execute(treat);
+        PropertyTypeDispatcher {propType._valueType, op}.execute(treat);
+    }
+}
+
+template <typename IDType>
+void QueryPlanner::addStringApproxSteps(const BinExpr* const expr,
+                                        const ColumnVector<IDType>* entities,
+                                        ColumnSet<IDType>* outSet) {
+    const auto& dps = _view.dataparts();
+
+    // Get the query string literal from the binary expression
+    const std::string& queryString =
+        static_cast<const StringExprConst* const>(expr->getRightExpr())->getVal();
+
+    // Get the property name being constrained
+    const std::string& propName =
+        static_cast<const VarExpr*>(expr->getLeftExpr())->getName();
+
+    // Get property ID being constrained
+    const auto& propOpt = _view.metadata().propTypes().get(propName);
+    if (!propOpt) {
+        throw PlannerException("Property type " + propName + " not found");
+    }
+    const PropertyTypeID propId = propOpt.value()._id;
+
+    std::vector<IDType> matches;
+    for (auto it = dps.begin(); it != dps.end(); it++) {
+        const auto& nodeStringIndex = it->get()->getNodeStrPropIndex();
+        // Check if the datapart contains an index of this property ID
+        if (!nodeStringIndex.contains(propId)) {
+            continue;
+        }
+
+        // Get the index for this property
+        const auto& strIndex = nodeStringIndex.at(propId);
+
+        // Get any matches for the query string in the index
+        strIndex->query<IDType>(matches, queryString);
+    }
+    for (const auto&& id : matches) {
+        outSet->insert(id);
     }
 }
 
@@ -707,11 +752,12 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
                                                    const ColumnEdgeIDs* entities) {
     const auto reader = _view.read();
 
-    for (size_t i = 0; i < filterMasks.size(); i++) {
+    for (size_t i{0}; const auto& expr : expressions) {
         auto* indices = _mem->alloc<ColumnVector<size_t>>();
 
-        const VarExpr* leftExpr = static_cast<VarExpr*>(expressions[i]->getLeftExpr());
-        ExprConst* rightExpr = static_cast<ExprConst*>(expressions[i]->getRightExpr());
+        const VarExpr* leftExpr = static_cast<VarExpr*>(expr->getLeftExpr());
+        ExprConst* rightExpr = static_cast<ExprConst*>(expr->getRightExpr());
+        BinExpr::OpType op = expr->getOpType();
 
         const std::string& varExprName = leftExpr->getName();
         const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
@@ -720,6 +766,12 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
         }
 
         const PropertyType propType = propTypeRes.value();
+
+        // Handle string approximator case and then early exit (temp solution)
+        if (op == BinExpr::OP_STR_APPROX) {
+            //addStringApproxSteps();
+            return;
+        }
 
         const auto treat = [&]<SupportedType Type>() {
             using StepType = GetFilteredEdgePropertyStep<Type>;
@@ -753,6 +805,7 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
         };
 
         PropertyTypeDispatcher {propType._valueType}.execute(treat);
+        i++;
     }
 }
 

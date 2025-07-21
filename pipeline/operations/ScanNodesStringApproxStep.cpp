@@ -48,7 +48,7 @@ void Step::execute() {
 
     // For each datapart
     for (DataPartIterator it = _dps->begin(); it != _dps->end(); it++) {
-        // Get ProprtyID -> Index map
+        // Get PropertyID -> Index map
         const auto& nodeStringIndex = it->get()->getNodeStrPropIndex();
 
         // Check if the datapart contains an index of this property ID

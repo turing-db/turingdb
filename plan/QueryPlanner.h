@@ -9,6 +9,7 @@
 #include "ExprConstraint.h"
 #include "QueryCommand.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnSet.h"
 #include "metadata/LabelSet.h"
 #include "VectorHash.h"
 #include "QueryCallback.h"
@@ -71,6 +72,13 @@ private:
     LabelID getLabel(const std::string& labelName);
     void getMatchingLabelSets(std::vector<LabelSetID>& labelSets,
                               const LabelSet* targetLabelSet);
+
+    // StringApprox functions:
+    template <typename T>
+    void addStringApproxSteps(const BinExpr* const expr,
+                                            const ColumnVector<T>* entities,
+                                            ColumnSet<T>* outSet);
+
 
     // Property Functions
     void generateNodePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
