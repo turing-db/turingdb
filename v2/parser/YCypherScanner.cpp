@@ -69,9 +69,8 @@ void db::YCypherScanner::generateError(const std::string& msg, std::string& erro
 
     if (errLineNo > 1) {
         errorOutput += fmt::format("{:<4} | {}\n", errLineNo - 1, errLine);
+        errLine = nextLine(q);
     }
-
-    errLine = nextLine(q);
 
     const size_t errLen = loc.end.column - loc.begin.column;
     const std::string errorBars(errLen, '^');

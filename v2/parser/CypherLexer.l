@@ -217,7 +217,7 @@ using Token = db::YCypherParser::token;
 
 [a-zA-Z_][a-zA-Z0-9_]* {
     /* Identifier */
-    STORE_STRING(_offset + 1, yyleng - 2);
+    STORE_STRING(_offset, yyleng);
     return Token::ID;
 }
 

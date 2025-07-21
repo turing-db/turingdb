@@ -1,13 +1,12 @@
-#include <stdlib.h>
+#include <iostream>
 
+#include "CypherASTDumper.h"
 #include "CypherParser.h"
 #include "Time.h"
 #include "ParserException.h"
 #include "FileReader.h"
 
 using namespace db;
-
-void runParser2(const std::string& query);
 
 int main(int argc, char** argv) {
     std::string queryStr;
@@ -29,21 +28,21 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    runParser2(queryStr);
-
-    return EXIT_SUCCESS;
-}
-
-void runParser2(const std::string& query) {
     CypherParser parser;
-    parser.allowNotImplemented(true);
+    parser.allowNotImplemented(false);
+
 
     try {
         auto t0 = Clock::now();
-        parser.parse(query);
+        parser.parse(queryStr);
         auto t1 = Clock::now();
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
     } catch (const ParserException& e) {
         fmt::print("{}\n", e.what());
     }
+
+    CypherASTDumper dumper(parser.getAST());
+    dumper.dump(std::cout);
+
+    return EXIT_SUCCESS;
 }

@@ -19,6 +19,9 @@ public:
 
     const std::vector<std::string_view>& getNames() const { return _names; }
 
+    std::vector<std::string_view>::const_iterator begin() const { return _names.begin(); }
+    std::vector<std::string_view>::const_iterator end() const { return _names.end(); }
+
 private:
     std::vector<std::string_view> _names;
 };

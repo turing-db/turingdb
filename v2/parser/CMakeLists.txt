@@ -13,6 +13,7 @@ add_flex_bison_dependency(cypher_lexer cypher_parser)
 set(parser_sources
     YCypherScanner.cpp
     CypherAST.cpp
+    CypherASTDumper.cpp
     CypherParser.cpp
     ParserException.cpp
     ${BISON_cypher_parser_OUTPUTS}

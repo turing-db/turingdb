@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "statements/StatementContainer.h"
+#include "statements/SubStatement.h"
 
 namespace db {
 
@@ -38,8 +39,12 @@ public:
     PatternNode* nodeFromExpression(Expression* e);
     Pattern* newPattern();
     PatternPart* newPatternPart();
-    PatternEdge* newOutEdge();
-    PatternEdge* newInEdge();
+    PatternEdge* newOutEdge(const std::optional<Symbol>& symbol,
+                            std::optional<std::vector<std::string_view>>&& types,
+                            MapLiteral* properties);
+    PatternEdge* newInEdge(const std::optional<Symbol>& symbol,
+                           std::optional<std::vector<std::string_view>>&& types,
+                           MapLiteral* properties);
     Projection* newProjection();
     MapLiteral* newMapLiteral();
     SinglePartQuery* newSinglePartQuery();
@@ -54,6 +59,16 @@ public:
         auto* ptr = st.get();
         _statements.emplace_back(std::move(st));
         _currentStatements->add(ptr);
+
+        return ptr;
+    }
+
+    template <typename T, typename... Args>
+        requires std::is_base_of_v<SubStatement, T>
+    T* newSubStatement(Args&&... args) {
+        auto st = T::create(std::forward<Args>(args)...);
+        auto* ptr = st.get();
+        _subStatements.emplace_back(std::move(st));
 
         return ptr;
     }
@@ -84,6 +99,7 @@ private:
     std::vector<std::unique_ptr<PatternPart>> _patternParts;
     std::vector<std::unique_ptr<PatternEntity>> _patternEntity;
     std::vector<std::unique_ptr<Statement>> _statements;
+    std::vector<std::unique_ptr<SubStatement>> _subStatements;
     std::vector<std::unique_ptr<Projection>> _projections;
     std::vector<std::unique_ptr<QueryCompound>> _queries;
     std::vector<std::unique_ptr<MapLiteral>> _mapLiterals;

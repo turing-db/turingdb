@@ -37,6 +37,10 @@ public:
         _parts.push_back(part);
     }
 
+    const std::vector<PatternPart*>& getParts() const {
+        return _parts;
+    }
+
 private:
     std::vector<PatternPart*> _parts;
     std::optional<WhereClause> _where;

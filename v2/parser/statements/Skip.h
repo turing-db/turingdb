@@ -2,16 +2,16 @@
 
 #include <memory>
 
-#include "Statement.h"
+#include "SubStatement.h"
 
 namespace db {
 
 class Expression;
 
-class Skip : public Statement {
+class Skip : public SubStatement {
 public:
     Skip() = default;
-    ~Skip() = default;
+    ~Skip() override = default;
 
     explicit Skip(Expression* expression)
         : _expression(expression)

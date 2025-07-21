@@ -2,8 +2,8 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
-#include "types/Symbol.h"
 #include "types/PatternEntity.h"
 
 namespace db {
@@ -24,60 +24,24 @@ public:
         return std::make_unique<PatternEdge>();
     }
 
-    const Symbol& symbol() const {
-        return _symbol.value();
+    const std::vector<std::string_view>& types() const {
+        return _types.value();
     }
 
-    const std::string_view& type() const {
-        return _type.value();
+    std::vector<std::string_view>& types() {
+        return _types.value();
     }
 
-    const MapLiteral& properties() const {
-        return *_properties;
+    bool hasTypes() const {
+        return _types.has_value();
     }
 
-    Symbol& symbol() {
-        return _symbol.value();
+    void setTypes(std::optional<std::vector<std::string_view>>&& types) {
+        _types = std::move(types);
     }
-
-    std::string_view& type() {
-        return _type.value();
-    }
-
-    MapLiteral& properties() {
-        return *_properties;
-    }
-
-    bool hasSymbol() const {
-        return _symbol.has_value();
-    }
-
-    bool hasType() const {
-        return _type.has_value();
-    }
-
-    bool hasProperties() const {
-        return _properties != nullptr;
-    }
-
-    void setSymbol(const Symbol& symbol) {
-        _symbol = symbol;
-    }
-
-    void setType(const std::string_view& type) {
-        _type = type;
-    }
-
-    void setProperties(MapLiteral* properties) {
-        _properties = properties;
-    }
-
-
 
 private:
-    std::optional<Symbol> _symbol;
-    std::optional<std::string_view> _type;
-    MapLiteral* _properties {nullptr};
+    std::optional<std::vector<std::string_view>> _types;
 };
 
 }

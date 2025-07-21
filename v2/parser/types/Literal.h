@@ -29,6 +29,14 @@ public:
         _map[key] = value;
     }
 
+    std::unordered_map<std::string_view, Expression*>::const_iterator begin() const {
+        return _map.begin();
+    }
+
+    std::unordered_map<std::string_view, Expression*>::const_iterator end() const {
+        return _map.end();
+    }
+
 private:
     std::unordered_map<std::string_view, Expression*> _map;
 };
@@ -40,8 +48,7 @@ public:
     Literal() = default;
 
     explicit Literal(const ValueType& vt)
-        : _value(vt)
-    {
+        : _value(vt) {
     }
 
     template <typename T>
@@ -57,6 +64,10 @@ public:
     template <typename T>
     T* as() {
         return std::get_if<T>(&_value);
+    }
+
+    const auto& value() const {
+        return _value;
     }
 
 private:

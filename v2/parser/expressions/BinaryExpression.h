@@ -12,7 +12,9 @@ public:
     BinaryExpression() = delete;
     ~BinaryExpression() override = default;
 
-    BinaryExpression(Expression* left, BinaryOperator op, Expression* right)
+    BinaryExpression(const Expression* left,
+                     BinaryOperator op,
+                     const Expression* right)
         : Expression(ExpressionType::Binary),
           _left(left),
           _right(right),
@@ -26,18 +28,18 @@ public:
     BinaryExpression& operator=(BinaryExpression&&) = delete;
 
     BinaryOperator getBinaryOperator() const { return _operator; }
-    Expression& left() { return *_left; }
-    Expression& right() { return *_right; }
+    const Expression& left() const { return *_left; }
+    const Expression& right() const { return *_right; }
 
-    static std::unique_ptr<BinaryExpression> create(Expression* left,
+    static std::unique_ptr<BinaryExpression> create(const Expression* left,
                                                     BinaryOperator op,
-                                                    Expression* right) {
+                                                    const Expression* right) {
         return std::make_unique<BinaryExpression>(left, op, right);
     }
 
 private:
-    Expression* _left {nullptr};
-    Expression* _right {nullptr};
+    const Expression* _left {nullptr};
+    const Expression* _right {nullptr};
     BinaryOperator _operator {};
 };
 

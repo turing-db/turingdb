@@ -11,7 +11,7 @@ class Projection;
 class Return : public Statement {
 public:
     Return() = default;
-    ~Return() = default;
+    ~Return() override = default;
 
     Return(const Return&) = delete;
     Return& operator=(const Return&) = delete;

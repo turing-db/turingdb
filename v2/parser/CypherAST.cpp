@@ -70,16 +70,30 @@ PatternPart* CypherAST::newPatternPart() {
     return patternPart.get();
 }
 
-PatternEdge* CypherAST::newOutEdge() {
+PatternEdge* CypherAST::newOutEdge(const std::optional<Symbol>& symbol,
+                                   std::optional<std::vector<std::string_view>>&& types,
+                                   MapLiteral* properties) {
     auto edge = PatternEdge::create();
+
+    edge->setSymbol(symbol);
+    edge->setTypes(std::move(types));
+    edge->setProperties(properties);
+
     auto* ptr = edge.get();
     _patternEntity.emplace_back(std::move(edge));
 
     return ptr;
 }
 
-PatternEdge* CypherAST::newInEdge() {
+PatternEdge* CypherAST::newInEdge(const std::optional<Symbol>& symbol,
+                                  std::optional<std::vector<std::string_view>>&& types,
+                                  MapLiteral* properties) {
     auto edge = PatternEdge::create();
+
+    edge->setSymbol(symbol);
+    edge->setTypes(std::move(types));
+    edge->setProperties(properties);
+
     auto* ptr = edge.get();
     _patternEntity.emplace_back(std::move(edge));
 
@@ -123,5 +137,6 @@ SinglePartQuery* CypherAST::newSinglePartQuery() {
 
 StatementContainer* CypherAST::newStatementContainer() {
     auto& statementContainer = _statementContainers.emplace_back(StatementContainer::create());
+    _currentStatements = statementContainer.get();
     return statementContainer.get();
 }

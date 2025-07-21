@@ -213,6 +213,7 @@
 %type<db::PatternPart*> pathExpressionElem
 %type<db::PatternNode*> nodePattern
 %type<db::PatternEdge*> edgePattern
+%type<std::tuple<std::optional<db::Symbol>, std::optional<std::vector<std::string_view>>, db::MapLiteral*>> edgeDetail
 %type<std::pair<db::PatternEdge*, db::PatternNode*>> patternElemChain
 %type<db::WhereClause> where
 
@@ -221,12 +222,12 @@
 %type<db::QueryCompound*> query
 %type<db::Statement*> readingStatement
 %type<db::Match*> matchSt
-%type<db::Skip*> skipSt
-%type<db::Limit*> limitSt
+%type<db::Skip*> skipSSt
+%type<db::Limit*> limitSSt
 %type<db::Return*> returnSt
 
-%type<db::Skip*> opt_skipSt
-%type<db::Limit*> opt_limitSt
+%type<db::Skip*> opt_skipSSt
+%type<db::Limit*> opt_limitSSt
 %type<bool> opt_distinct
 
 %expect 0
@@ -271,16 +272,16 @@ withSt
     | WITH projectionBody { scanner.notImplemented("WITH"); }
     ;
 
-skipSt
-    : SKIP expression { $$ = ast.newStatement<Skip>($2); }
+skipSSt
+    : SKIP expression { $$ = ast.newSubStatement<Skip>($2); }
     ;
 
-limitSt
-    : LIMIT expression { $$ = ast.newStatement<Limit>($2); }
+limitSSt
+    : LIMIT expression { $$ = ast.newSubStatement<Limit>($2); }
     ;
 
 projectionBody
-    : opt_distinct projectionItems opt_orderSt opt_skipSt opt_limitSt {
+    : opt_distinct projectionItems opt_orderSSt opt_skipSSt opt_limitSSt {
         $$ = $2;
         $$->setDistinct($1);
         $$->setSkip($4);
@@ -293,18 +294,18 @@ opt_distinct
     | { $$ = false; }
     ;
 
-opt_orderSt
-    : orderSt { scanner.notImplemented("ORDER BY"); }
+opt_orderSSt
+    : orderSSt { scanner.notImplemented("ORDER BY"); }
     | /* empty */
     ;
 
-opt_skipSt
-    : skipSt { $$ = $1; }
+opt_skipSSt
+    : skipSSt { $$ = $1; }
     | { $$ = nullptr; }
     ;
 
-opt_limitSt
-    : limitSt { $$ = $1; }
+opt_limitSSt
+    : limitSSt { $$ = $1; }
     | { $$ = nullptr; }
     ;
 
@@ -327,9 +328,9 @@ orderItem
     | expression DESC { scanner.notImplemented("DESC"); }
     ;
 
-orderSt
+orderSSt
     : ORDER BY orderItem { scanner.notImplemented("ORDER BY"); }
-    | orderSt COMMA orderItem
+    | orderSSt COMMA orderItem
     ;
 
 singlePartQ
@@ -364,8 +365,8 @@ updateWithSt
     ;
 
 matchSt
-    : MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt { $$ = ast.newStatement<Match>($2, $4, $5); }
-    | OPTIONAL MATCH patternWhere opt_orderSt opt_skipSt opt_limitSt { $$ = ast.newStatement<Match>($3, $5, $6, true); }
+    : MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = ast.newStatement<Match>($2, $4, $5); }
+    | OPTIONAL MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = ast.newStatement<Match>($3, $5, $6, true); }
     ;
 
 unwindSt
@@ -373,7 +374,7 @@ unwindSt
     ;
 
 readingStatement
-    : matchSt { /* ast.finishMatch(); */  }
+    : matchSt { }
     | unwindSt { scanner.notImplemented("UNWIND"); }
     | queryCallSt { scanner.notImplemented("CALL"); }
     ;
@@ -481,8 +482,8 @@ setItem
 nodeLabels
     : COLON name { $$ = { $2 }; }
     | COLON parameter { scanner.notImplemented("Parameters"); }
-    | nodeLabels COLON name { $$.emplace_back($3); }
-    | nodeLabels COLON parameter { scanner.notImplemented("Parameters"); }
+    | nodeLabels COLON name { $$ = std::move($1); $$.push_back($3); }
+    | nodeLabels COLON parameter { $$ = std::move($1); scanner.notImplemented("Parameters"); }
     ;
 
 createSt
@@ -560,7 +561,7 @@ powerExpression
 
 stringExpression
     : unaryAddSubExpression { $$ = $1; }
-    | stringExpPrefix unaryAddSubExpression { $$ = ast.newExpression<StringExpression>($1, $2); }
+    | stringExpression stringExpPrefix unaryAddSubExpression { $$ = ast.newExpression<StringExpression>($1, $2, $3); }
     ;
 
 stringExpPrefix
@@ -682,16 +683,16 @@ opt_rangeLit
 
 
 edgePattern
-    : TAIL_TAIL     { $$ = ast.newOutEdge(); } // --
-    | TIP_TAIL_TAIL { $$ = ast.newInEdge(); }  // <--
-    | TAIL_TAIL_TIP { $$ = ast.newOutEdge(); } // -->
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = ast.newOutEdge(); } // -[]->
-    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = ast.newInEdge(); }  // <-[]-
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = ast.newOutEdge(); } // -[]->
+    : TAIL_TAIL     { $$ = ast.newOutEdge(std::nullopt, std::nullopt, nullptr); }
+    | TIP_TAIL_TAIL { $$ = ast.newInEdge(std::nullopt, std::nullopt, nullptr); }
+    | TAIL_TAIL_TIP { $$ = ast.newOutEdge(std::nullopt, std::nullopt, nullptr); }
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = ast.newOutEdge(std::get<0>($2), std::move(std::get<1>($2)), std::get<2>($2)); }
+    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = ast.newInEdge(std::get<0>($2), std::move(std::get<1>($2)), std::get<2>($2)); }
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = ast.newOutEdge(std::get<0>($2), std::move(std::get<1>($2)), std::get<2>($2)); }
     ;
 
 edgeDetail
-    : opt_symbol opt_edgeTypes opt_rangeLit opt_properties
+    : opt_symbol opt_edgeTypes opt_rangeLit opt_properties { $$ = std::make_tuple($1, std::move($2), $4); }
     ;
 
 edgeTypes

@@ -14,7 +14,7 @@ class Expression;
 class Match : public Statement {
 public:
     Match() = default;
-    ~Match() = default;
+    ~Match() override = default;
 
     Match(const Match&) = delete;
     Match& operator=(const Match&) = delete;

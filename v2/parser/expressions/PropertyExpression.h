@@ -23,7 +23,7 @@ public:
     PropertyExpression& operator=(const PropertyExpression&) = delete;
     PropertyExpression& operator=(PropertyExpression&&) = delete;
 
-    const QualifiedName& name() { return _name; }
+    const QualifiedName& name() const { return _name; }
 
     static std::unique_ptr<PropertyExpression> create(const QualifiedName& name) {
         return std::make_unique<PropertyExpression>(name);

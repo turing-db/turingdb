@@ -20,7 +20,9 @@ public:
 
     void allowNotImplemented(bool allow) { _allowNotImplemented = allow; }
 
-    const CypherAST& getAST() const;
+    const CypherAST& getAST() const {
+        return *_ast;
+    }
 
 private:
     std::unique_ptr<CypherAST> _ast;

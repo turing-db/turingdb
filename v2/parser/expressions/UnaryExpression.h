@@ -11,7 +11,7 @@ class UnaryExpression : public Expression {
 public:
     UnaryExpression() = delete;
 
-    UnaryExpression(UnaryOperator op, Expression* right)
+    UnaryExpression(UnaryOperator op, const Expression* right)
         : Expression(ExpressionType::Unary),
           _right(right),
           _operator(op)
@@ -26,14 +26,14 @@ public:
     UnaryExpression& operator=(UnaryExpression&&) = delete;
 
     UnaryOperator getUnaryOperator() const { return _operator; }
-    Expression& right() { return *_right; }
+    const Expression& right() const { return *_right; }
 
-    static std::unique_ptr<UnaryExpression> create(UnaryOperator op, Expression* right) {
+    static std::unique_ptr<UnaryExpression> create(UnaryOperator op, const Expression* right) {
         return std::make_unique<UnaryExpression>(op, right);
     }
 
 private:
-    Expression* _right = nullptr;
+    const Expression* _right = nullptr;
     UnaryOperator _operator {};
 };
 

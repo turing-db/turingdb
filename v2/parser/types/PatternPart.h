@@ -3,6 +3,8 @@
 #include <vector>
 
 #include "PatternEntity.h"
+#include "PatternNode.h"
+#include "PatternEdge.h"
 
 namespace db {
 
@@ -37,6 +39,10 @@ public:
 
     void addEdge(PatternEdge* edge) {
         _entities.emplace_back(edge);
+    }
+
+    const std::vector<PatternEntity*>& getEntities() const {
+        return _entities;
     }
 
 private:

@@ -2,16 +2,16 @@
 
 #include <memory>
 
-#include "Statement.h"
+#include "SubStatement.h"
 
 namespace db {
 
 class Expression;
 
-class Limit : public Statement {
+class Limit : public SubStatement {
 public:
     Limit() = default;
-    ~Limit() = default;
+    ~Limit() override = default;
 
     explicit Limit(Expression* expression)
         : _expression(expression)
