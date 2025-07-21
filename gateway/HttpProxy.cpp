@@ -2,11 +2,13 @@
 
 #include "Profiler.h"
 
-void HttpProxy::setBackendServers(const std::vector<std::pair<std::string, int>>& backendList) {
+template <ServerType server>
+void HttpProxy<server>::setBackendServers(const std::vector<std::pair<std::string, int>>& backendList) {
     _loadBalancer.setBackendServers(backendList);
 }
 
-void HttpProxy::setupRoutes() {
+template <ServerType server>
+void HttpProxy<server>::setupRoutes() {
     // POST /query route
     _server.Post(R"(/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
         _requestCount++;
@@ -65,8 +67,11 @@ void HttpProxy::setupRoutes() {
     });
 }
 
-void HttpProxy::start(const std::string& host, const int port, const int numThreads) {
-    std::cout << "Starting HTTP Proxy Server on " << host << ":" << port << std::endl;
+template <ServerType server>
+void HttpProxy<server>::start(const std::string& host, const int port, const int numThreads) {
+    constexpr std::string_view httpString = std::is_same_v<server, httplib::SSLServer> ? "HTTPS" : "HTTP";
+
+    std::cout << "Starting " << httpString << " Proxy Server on " << host << ":" << port << std::endl;
     std::cout << "Using " << numThreads << " worker threads" << std::endl;
 
     // Configure server thread pool
@@ -80,12 +85,14 @@ void HttpProxy::start(const std::string& host, const int port, const int numThre
     }
 }
 
-void HttpProxy::stop() {
+template <ServerType server>
+void HttpProxy<server>::stop() {
     _server.stop();
 }
 
 // Extract Bearer token from Authorization header
-std::string HttpProxy::extractBearerToken(const httplib::Request& req) const {
+template <ServerType server>
+std::string HttpProxy<server>::extractBearerToken(const httplib::Request& req) const {
     Profile profile {"HttpProxy::extractBearerToken"};
     const auto auth = req.get_header_value("Authorization");
     if (auth.empty()) {
@@ -101,14 +108,16 @@ std::string HttpProxy::extractBearerToken(const httplib::Request& req) const {
 }
 
 // Extract Bearer token from Authorization header
-std::string HttpProxy::extractInstanceId(const httplib::Request& req) const {
+template <ServerType server>
+std::string HttpProxy<server>::extractInstanceId(const httplib::Request& req) const {
     Profile profile {"HttpProxy::extractInstanceId"};
     auto instance = req.get_header_value("Turing-Instance-Id");
     return instance;
 }
 
 // Validate request authentication
-bool HttpProxy::validateAuth(const std::string& token, httplib::Response& res) const {
+template <ServerType server>
+bool HttpProxy<server>::validateAuth(const std::string& token, httplib::Response& res) const {
     Profile profile {"HttpProxy::validAuth"};
 
     if (token.empty() || !_tokenValidator.isValidToken(token)) {
@@ -122,7 +131,8 @@ bool HttpProxy::validateAuth(const std::string& token, httplib::Response& res) c
 }
 
 // Validate request authentication
-bool HttpProxy::validateRoute(const std::string& token, const std::string& instance, httplib::Response& res) const {
+template <ServerType server>
+bool HttpProxy<server>::validateRoute(const std::string& token, const std::string& instance, httplib::Response& res) const {
     Profile profile {"HttpProxy::validRoute"};
     if (_addressRouter.isValidAddress(instance, token)) {
         res.status = 403;
@@ -149,11 +159,12 @@ std::pair<std::string, int> parseAddress(const std::string& localAddress) {
 }
 
 // Forward request to backend server
-bool HttpProxy::forwardRequest(const httplib::Request& req,
-                               httplib::Response& res,
-                               const std::string& method,
-                               const std::string& path,
-                               const std::string& token) const {
+template <ServerType server>
+bool HttpProxy<server>::forwardRequest(const httplib::Request& req,
+                                       httplib::Response& res,
+                                       const std::string& method,
+                                       const std::string& path,
+                                       const std::string& token) const {
     Profile profile {"HttpProxy::forwardRequest"};
     std::string instance = extractInstanceId(req);
     const auto& routeMapEntry = _addressRouter.getRouteMapEntry(instance);
@@ -219,5 +230,9 @@ bool HttpProxy::forwardRequest(const httplib::Request& req,
             res.set_header(header.first, header.second);
         }
     }
+
     return true;
 }
+
+template class HttpProxy<httplib::Server>;
+template class HttpProxy<httplib::SSLServer>;
