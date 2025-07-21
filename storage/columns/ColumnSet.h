@@ -57,14 +57,14 @@ public:
     bool empty() const { return _data.empty(); }
     size_t size() const override { return _data.size(); }
 
-
     Iterator begin() { return _data.begin(); }
     ConstIterator begin() const { return _data.begin(); }
     ConstIterator cbegin() const { return _data.cbegin(); }
 
     void assign(const Column* other) override {
         const ColumnSet<T>* otherCol = dynamic_cast<const ColumnSet<T>*>(other);
-        msgbioassert(otherCol, "ColumnSet::assign: other is not a ColumnSet of the same type");
+        msgbioassert(otherCol,
+                     "ColumnSet::assign: other is not a ColumnSet of the same type");
         _data = otherCol->_data;
     }
 
@@ -78,7 +78,7 @@ public:
         return _data.emplace(std::forward<Args>(args)...);
     }
 
-    //TODO: Iterator hinted insertions and emplacings
+    // TODO: Iterator hinted insertions and emplacings
 
     Iterator erase(Iterator pos) { return _data.erase(pos); }
     ConstIterator erase(ConstIterator cpos) { return _data.erase(cpos); }
@@ -112,4 +112,3 @@ private:
     static constexpr auto _staticKind = ColumnKind::getColumnKind<ColumnSet<T>>();
 };
 }
-
