@@ -17,14 +17,14 @@ concept IsAtomExpression = std::is_same_v<T, Symbol>
 
 class AtomExpression : public Expression {
 public:
-    using ValueType = std::variant<Symbol, Literal, Parameter>;
+    using AtomType = std::variant<Symbol, Literal, Parameter>;
 
     AtomExpression() = delete;
     ~AtomExpression() override = default;
 
-    explicit AtomExpression(const ValueType& symbol)
+    explicit AtomExpression(const AtomType& atom)
         : Expression(ExpressionType::Atom),
-        _value(symbol)
+        _atom(atom)
     {
     }
 
@@ -33,20 +33,20 @@ public:
     AtomExpression& operator=(const AtomExpression&) = delete;
     AtomExpression& operator=(AtomExpression&&) = delete;
 
-    static std::unique_ptr<AtomExpression> create(const ValueType& v) {
-        return std::make_unique<AtomExpression>(v);
+    static std::unique_ptr<AtomExpression> create(const AtomType& atom) {
+        return std::make_unique<AtomExpression>(atom);
     }
 
-    const ValueType& value() const {
-        return _value;
+    const AtomType& value() const {
+        return _atom;
     }
 
-    ValueType& value() {
-        return _value;
+    AtomType& atom() {
+        return _atom;
     }
 
 private:
-    ValueType _value;
+    AtomType _atom;
 };
 
 }

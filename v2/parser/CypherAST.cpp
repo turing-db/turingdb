@@ -28,11 +28,11 @@ PatternNode* CypherAST::nodeFromExpression(Expression* e) {
     }
 
     if (auto* atomExpr = dynamic_cast<AtomExpression*>(e)) {
-        if (auto* value = std::get_if<Symbol>(&atomExpr->value())) {
+        if (auto* value = std::get_if<Symbol>(&atomExpr->atom())) {
             return newNode(*value, std::nullopt, nullptr);
         }
 
-        if (auto* literal = std::get_if<Literal>(&atomExpr->value())) {
+        if (auto* literal = std::get_if<Literal>(&atomExpr->atom())) {
             if (auto* maplit = literal->as<MapLiteral*>()) {
                 return newNode(std::nullopt, std::nullopt, *maplit);
             }
