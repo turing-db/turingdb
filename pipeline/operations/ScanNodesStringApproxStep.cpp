@@ -1,22 +1,26 @@
 #include "ScanNodesStringApproxStep.h"
 
+#include <memory>
+#include <sstream>
+
 #include "DataPart.h"
+#include "ID.h"
 #include "ExecutionContext.h"
 #include "Profiler.h"
 #include "columns/ColumnVector.h"
-#include "indexes/StringIndex.h"
+#include "indexes/StringIndexUtils.h"
 #include "views/GraphView.h"
 
-#include <memory>
-#include <sstream>
+
 
 using namespace db;
 using Step = ScanNodesStringApproxStep;
 
 
-Step::ScanNodesStringApproxStep(ColumnVector<NodeID>* nodes, PropertyTypeID propID,
+Step::ScanNodesStringApproxStep(ColumnVector<NodeID>* nodes, const GraphView& view, PropertyTypeID propID,
                                 std::string_view strQuery)
     : _nodes(nodes),
+      _view(view),
       _pId(propID),
       _strQuery(strQuery)
 {
@@ -45,23 +49,6 @@ void Step::reset() {
 
 void Step::execute() {
     Profile profile {"ScanNodesStringApproxStep::execute"};
-
-    // For each datapart
-    for (DataPartIterator it = _dps->begin(); it != _dps->end(); it++) {
-        // Get PropertyID -> Index map
-        const auto& nodeStringIndex = it->get()->getNodeStrPropIndex();
-
-        // Check if the datapart contains an index of this property ID
-        if (!nodeStringIndex.contains(_pId)) {
-            continue;
-        }
-
-        // Get the index for this property
-        const auto& strIndex = nodeStringIndex.at(_pId);
-
-        // Get any matches for the query string in the index
-        strIndex->query<NodeID>(_nodes->getRaw(), _strQuery);
-    }
-    _dps.reset();
-    _done = true;
+    // Fill _nodes with the matches of all datapart's indexes
+    StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
 }

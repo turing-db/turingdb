@@ -540,7 +540,7 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& ou
                     const std::string strConstantValue = strConstant->getVal();
                     const auto strPropID = propType._id;
 
-                    _pipeline->add<ScanNodesStringApproxStep>(outputNodes, strPropID,
+                    _pipeline->add<ScanNodesStringApproxStep>(outputNodes, _view, strPropID,
                                                               strConstantValue);
                 break;
                 }
