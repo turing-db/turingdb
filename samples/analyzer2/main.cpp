@@ -49,11 +49,11 @@ void runAnalyzer2(const std::string& query) {
         fmt::print("{}\n", e.what());
     }
 
-    CypherAnalyzer analyzer(query);
+    CypherAnalyzer analyzer {parser.takeAST()};
 
     try {
         auto t0 = Clock::now();
-        analyzer.analyze(query);
+        analyzer.analyze(*ast);
         auto t1 = Clock::now();
         fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, t1));
     } catch (const AnalyzeException& e) {

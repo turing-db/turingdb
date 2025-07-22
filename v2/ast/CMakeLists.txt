@@ -1,6 +1,8 @@
 set(ast_sources
     CypherAST.cpp
     CypherASTDumper.cpp
+    attribution/DeclContext.cpp
+    types/QueryCommand.cpp
     ASTException.cpp)
 
 add_library(turing_db_v2_ast_s STATIC ${ast_sources})

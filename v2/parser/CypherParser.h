@@ -24,6 +24,10 @@ public:
         return *_ast;
     }
 
+    std::unique_ptr<CypherAST> takeAST() {
+        return std::move(_ast);
+    }
+
 private:
     std::unique_ptr<CypherAST> _ast;
     bool _allowNotImplemented = false;

@@ -39,6 +39,10 @@ public:
         return std::make_unique<Match>(pattern, skip, limit, optional);
     }
 
+    bool hasPattern() const {
+        return _pattern != nullptr;
+    }
+
     bool isOptional() const {
         return _optional;
     }
