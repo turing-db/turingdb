@@ -32,7 +32,7 @@ public:
     }
 
 private:
-    const Expression* _right = nullptr;
+    const Expression* _right {nullptr};
     UnaryOperator _operator {};
 };
 

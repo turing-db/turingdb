@@ -28,20 +28,42 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    CypherParser parser;
-    parser.allowNotImplemented(false);
+    {
+        // Try but allow not implemented to test the parser
+        CypherParser parser;
+        parser.allowNotImplemented(true);
 
-    try {
-        auto t0 = Clock::now();
-        parser.parse(queryStr);
-        auto t1 = Clock::now();
-        fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
-    } catch (const ParserException& e) {
-        fmt::print("{}\n", e.what());
+        try {
+            auto t0 = Clock::now();
+            parser.parse(queryStr);
+            auto t1 = Clock::now();
+            fmt::print("Full query parsed in {} us\n", duration<Microseconds>(t0, t1));
+        } catch (const ParserException& e) {
+            fmt::print("{}\n", e.what());
+            return EXIT_FAILURE; // Should always succeed unless there's a bug
+        }
     }
 
-    CypherASTDumper dumper(parser.getAST());
-    dumper.dump(std::cout);
+    {
+        // Disallow not implemented.
+        // This should print the AST if parsing was successful
+        CypherParser parser;
+        parser.allowNotImplemented(false);
+
+        try {
+            auto t0 = Clock::now();
+            parser.parse(queryStr);
+            auto t1 = Clock::now();
+            fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
+        } catch (const ParserException& e) {
+            fmt::print("{}\n", e.what());
+            return 0; // Do not return error, user might test not implemented features
+        }
+
+        CypherASTDumper dumper(parser.getAST());
+        dumper.dump(std::cout);
+    }
+
 
     return EXIT_SUCCESS;
 }
