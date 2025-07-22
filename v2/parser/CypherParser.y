@@ -208,9 +208,9 @@
 
 %type<db::Pattern*> pattern
 %type<db::Pattern*> patternWhere
-%type<db::PatternPart*> patternPart
-%type<db::PatternPart*> patternElem
-%type<db::PatternPart*> pathExpressionElem
+%type<db::PatternElement*> patternPart
+%type<db::PatternElement*> patternElem
+%type<db::PatternElement*> pathExpressionElem
 %type<db::PatternNode*> nodePattern
 %type<db::PatternEdge*> edgePattern
 %type<std::tuple<std::optional<db::Symbol>, std::optional<std::vector<std::string_view>>, db::MapLiteral*>> edgeDetail
@@ -500,8 +500,8 @@ where
     ;
 
 pattern
-    : patternPart { $$ = ast.newPattern(); $$->addPart($1); }
-    | pattern COMMA patternPart { $$ = $1, $$->addPart($3); }
+    : patternPart { $$ = ast.newPattern(); $$->addElem($1); }
+    | pattern COMMA patternPart { $$ = $1, $$->addElem($3); }
     ;
 
 expression
@@ -636,7 +636,7 @@ patternAlias
     : symbol ASSIGN patternElem { scanner.notImplemented("Pattern alias: Symbol = ()-[]-()-[]-()..."); }
 
 patternElem
-    : nodePattern { $$ = ast.newPatternPart(); $$->addNode($1); }
+    : nodePattern { $$ = ast.newPatternElem(); $$->addNode($1); }
     | patternElem patternElemChain { $$ = $1; $$->addEdge($2.first); $$->addNode($2.second); }
     ;
 
@@ -760,7 +760,7 @@ pathExpression
     ;
 
 pathExpressionElem
-    : patternElemChain { $$ = ast.newPatternPart(); $$->addRootNode($1.second); $$->addRootEdge($1.first); }
+: patternElemChain { $$ = ast.newPatternElem(); $$->addRootNode($1.second); $$->addRootEdge($1.first); }
     | pathExpressionElem patternElemChain { $$ = $1; $$->addRootNode($2.second); $$->addRootEdge($2.first); }
     ;
 

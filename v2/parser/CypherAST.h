@@ -11,7 +11,7 @@ namespace db {
 
 class PatternNode;
 class PatternEdge;
-class PatternPart;
+class PatternElement;
 class PatternEntity;
 class Pattern;
 class Expression;
@@ -34,7 +34,7 @@ public:
 
     PatternNode* nodeFromExpression(Expression* e);
     Pattern* newPattern();
-    PatternPart* newPatternPart();
+    PatternElement* newPatternElem();
     PatternEdge* newOutEdge(const std::optional<Symbol>& symbol,
                             std::optional<std::vector<std::string_view>>&& types,
                             MapLiteral* properties);
@@ -86,7 +86,7 @@ public:
 private:
     std::vector<std::unique_ptr<Expression>> _expressions;
     std::vector<std::unique_ptr<Pattern>> _patterns;
-    std::vector<std::unique_ptr<PatternPart>> _patternParts;
+    std::vector<std::unique_ptr<PatternElement>> _patternElems;
     std::vector<std::unique_ptr<PatternEntity>> _patternEntity;
     std::vector<std::unique_ptr<Statement>> _statements;
     std::vector<std::unique_ptr<SubStatement>> _subStatements;

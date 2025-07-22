@@ -214,7 +214,7 @@ void CypherASTDumper::dumpPattern(const Pattern& pattern) {
     fmt::format_to(_o, "        ASTType Pattern\n");
     fmt::format_to(_o, "    }}\n");
 
-    for (const auto& part : pattern.getParts()) {
+    for (const auto& part : pattern.elements()) {
         fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
                        fmt::ptr(&pattern),
                        fmt::ptr(part));
@@ -230,7 +230,7 @@ void CypherASTDumper::dumpPattern(const Pattern& pattern) {
     }
 }
 
-void CypherASTDumper::dumpPatternPart(const PatternPart& part) {
+void CypherASTDumper::dumpPatternPart(const PatternElement& part) {
     fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&part));
     fmt::format_to(_o, "        ASTType PatternPart\n");
     fmt::format_to(_o, "    }}\n");

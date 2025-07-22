@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "Expression.h"
-#include "types/PatternPart.h"
+#include "types/PatternElement.h"
 
 namespace db {
 
@@ -17,17 +17,17 @@ public:
     PathExpression& operator=(const PathExpression&) = delete;
     PathExpression& operator=(PathExpression&&) = delete;
 
-    explicit PathExpression(PatternPart* pattern)
+    explicit PathExpression(PatternElement* pattern)
         : Expression(ExpressionType::Path),
         _pattern(pattern)
     {
     }
 
-    static std::unique_ptr<PathExpression> create(PatternPart* pattern) {
+    static std::unique_ptr<PathExpression> create(PatternElement* pattern) {
         return std::make_unique<PathExpression>(pattern);
     }
 
-    const PatternPart* pattern() const {
+    const PatternElement* pattern() const {
         return _pattern;
     }
 
@@ -41,7 +41,7 @@ public:
     }
 
 private:
-    PatternPart* _pattern {nullptr};
+    PatternElement* _pattern {nullptr};
 };
 
 }

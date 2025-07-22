@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "types/PatternPart.h"
+#include "types/PatternElement.h"
 #include "types/WhereClause.h"
 
 namespace db {
@@ -33,16 +33,16 @@ public:
         return _where.value();
     }
 
-    void addPart(PatternPart* part) {
-        _parts.push_back(part);
+    void addElem(PatternElement* part) {
+        _elems.push_back(part);
     }
 
-    const std::vector<PatternPart*>& getParts() const {
-        return _parts;
+    const std::vector<PatternElement*>& elements() const {
+        return _elems;
     }
 
 private:
-    std::vector<PatternPart*> _parts;
+    std::vector<PatternElement*> _elems;
     std::optional<WhereClause> _where;
 };
 

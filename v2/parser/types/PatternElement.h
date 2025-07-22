@@ -11,18 +11,18 @@ namespace db {
 class PatternNode;
 class PatternEdge;
 
-class PatternPart {
+class PatternElement {
 public:
-    PatternPart() = default;
-    ~PatternPart() = default;
+    PatternElement() = default;
+    ~PatternElement() = default;
 
-    PatternPart(const PatternPart&) = default;
-    PatternPart(PatternPart&&) = default;
-    PatternPart& operator=(const PatternPart&) = default;
-    PatternPart& operator=(PatternPart&&) = default;
+    PatternElement(const PatternElement&) = default;
+    PatternElement(PatternElement&&) = default;
+    PatternElement& operator=(const PatternElement&) = default;
+    PatternElement& operator=(PatternElement&&) = default;
 
-    static std::unique_ptr<PatternPart> create() {
-        return std::make_unique<PatternPart>();
+    static std::unique_ptr<PatternElement> create() {
+        return std::make_unique<PatternElement>();
     }
 
     void addRootNode(PatternNode* node) {

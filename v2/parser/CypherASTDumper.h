@@ -14,7 +14,7 @@ class Skip;
 class Return;
 class Projection;
 class Pattern;
-class PatternPart;
+class PatternElement;
 class WhereClause;
 class Expression;
 class PatternNode;
@@ -52,7 +52,7 @@ private:
     void dumpReturn(const Return& ret);
     void dumpProjection(const Projection& projection);
     void dumpPattern(const Pattern& pattern);
-    void dumpPatternPart(const PatternPart& part);
+    void dumpPatternPart(const PatternElement& part);
     void dumpWhere(const WhereClause& where);
     void dumpNode(const PatternNode& node);
     void dumpEdge(const PatternEdge& edge);

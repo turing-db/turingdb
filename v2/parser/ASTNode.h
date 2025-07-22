@@ -9,7 +9,7 @@ class Statement;
 class SubStatement;
 class Pattern;
 class PatternEntity;
-class PatternPart;
+class PatternElement;
 class PatternNode;
 class Projection;
 class MapLiteral;
@@ -23,7 +23,7 @@ public:
                                  SubStatement*,
                                  Pattern*,
                                  PatternEntity*,
-                                 PatternPart*,
+                                 PatternElement*,
                                  PatternNode*,
                                  Projection*,
                                  MapLiteral*,

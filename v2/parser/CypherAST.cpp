@@ -54,8 +54,8 @@ Pattern* CypherAST::newPattern() {
     return pattern.get();
 }
 
-PatternPart* CypherAST::newPatternPart() {
-    auto& patternPart = _patternParts.emplace_back(PatternPart::create());
+PatternElement* CypherAST::newPatternElem() {
+    auto& patternPart = _patternElems.emplace_back(PatternElement::create());
     return patternPart.get();
 }
 
