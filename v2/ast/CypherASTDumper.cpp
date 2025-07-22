@@ -3,7 +3,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
-#include "ParserException.h"
+#include "ASTException.h"
 #include "expressions/AtomExpression.h"
 #include "expressions/BinaryExpression.h"
 #include "expressions/NodeLabelExpression.h"
@@ -55,7 +55,7 @@ void CypherASTDumper::dump(std::ostream& output) {
             continue;
         }
 
-        throw ParserException("Only single part queries are supported");
+        throw ASTException("Only single part queries are supported");
     }
 }
 
@@ -84,7 +84,7 @@ void CypherASTDumper::dumpQuery(const SinglePartQuery& query) {
             continue;
         }
 
-        throw ParserException("Unknown statement type");
+        throw ASTException("Unknown statement type");
     }
 }
 
@@ -404,7 +404,7 @@ void CypherASTDumper::dumpExpression(const Expression& expr) {
         return;
     }
 
-    throw ParserException("Unknown expression type");
+    throw ASTException("Unknown expression type");
 }
 
 void CypherASTDumper::dumpBinaryExpression(const BinaryExpression& expr) {

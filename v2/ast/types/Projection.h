@@ -4,7 +4,7 @@
 #include <variant>
 #include <vector>
 
-#include "ParserException.h"
+#include "ASTException.h"
 
 namespace db {
 
@@ -73,7 +73,7 @@ public:
     void add(Expression* expression) {
         auto* items = std::get_if<ItemVector>(&_items);
         if (!items) {
-            throw ParserException("Cannot add item to a project that already holds '*'");
+            throw ASTException("Cannot add item to a projection that already holds '*'");
         }
 
         items->emplace_back(expression);
