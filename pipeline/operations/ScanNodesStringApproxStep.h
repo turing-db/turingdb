@@ -1,9 +1,7 @@
 #pragma once
 
-#include "DataPartSpan.h"
 #include "ID.h"
 #include "views/GraphView.h"
-#include <memory>
 
 namespace db {
 
@@ -35,7 +33,6 @@ public:
 
 private:
     bool _done {false};
-    std::unique_ptr<DataPartSpan> _dps;
     ColumnVector<NodeID>* _nodes {nullptr};
     const GraphView& _view;
     PropertyTypeID _pId {0};

@@ -33,14 +33,12 @@ void Step::describe(std::string& descr) const {
     std::stringstream ss;
     ss << "ScanNodesByPropertyStep";
     ss << " nodes=" << std::hex << _nodes;
+    ss << " propID=" << std::hex << _pId;
     ss << " query=" << std::hex << _strQuery;
     descr.assign(ss.str());
-    
 }
 
 void Step::prepare(ExecutionContext* ctxt) {
-    // XXX: Does this need be uniqueptr?
-    _dps = std::make_unique<DataPartSpan>(ctxt->getGraphView().dataparts());
 }
 
 void Step::reset() {
