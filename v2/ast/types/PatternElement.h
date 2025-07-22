@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "PatternEntity.h"
+#include "EntityPattern.h"
 #include "NodePattern.h"
 #include "PatternEdge.h"
 
@@ -26,11 +26,11 @@ public:
     }
 
     void addRootNode(NodePattern* node) {
-        _entities.insert(_entities.begin(), (PatternEntity*)node);
+        _entities.insert(_entities.begin(), (EntityPattern*)node);
     }
 
     void addRootEdge(EdgePattern* edge) {
-        _entities.insert(_entities.begin(), (PatternEntity*)edge);
+        _entities.insert(_entities.begin(), (EntityPattern*)edge);
     }
 
     void addNode(NodePattern* node) {
@@ -41,12 +41,12 @@ public:
         _entities.emplace_back(edge);
     }
 
-    const std::vector<PatternEntity*>& getEntities() const {
+    const std::vector<EntityPattern*>& getEntities() const {
         return _entities;
     }
 
 private:
-    std::vector<PatternEntity*> _entities;
+    std::vector<EntityPattern*> _entities;
 };
 
 }

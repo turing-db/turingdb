@@ -4,13 +4,13 @@
 #include <optional>
 #include <vector>
 
-#include "types/PatternEntity.h"
+#include "types/EntityPattern.h"
 
 namespace db {
 
 class MapLiteral;
 
-class EdgePattern : public PatternEntity {
+class EdgePattern : public EntityPattern {
 public:
     using EdgeTypeVector = std::vector<std::string_view>;
 

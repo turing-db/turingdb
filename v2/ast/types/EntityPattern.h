@@ -9,18 +9,18 @@ namespace db {
 
 class MapLiteral;
 
-class PatternEntity {
+class EntityPattern {
 public:
-    PatternEntity() = default;
-    virtual ~PatternEntity() = default;
+    EntityPattern() = default;
+    virtual ~EntityPattern() = default;
 
-    PatternEntity(const PatternEntity&) = default;
-    PatternEntity(PatternEntity&&) = default;
-    PatternEntity& operator=(const PatternEntity&) = default;
-    PatternEntity& operator=(PatternEntity&&) = default;
+    EntityPattern(const EntityPattern&) = default;
+    EntityPattern(EntityPattern&&) = default;
+    EntityPattern& operator=(const EntityPattern&) = default;
+    EntityPattern& operator=(EntityPattern&&) = default;
 
-    static std::unique_ptr<PatternEntity> create() {
-        return std::make_unique<PatternEntity>();
+    static std::unique_ptr<EntityPattern> create() {
+        return std::make_unique<EntityPattern>();
     }
 
     const Symbol& symbol() const {

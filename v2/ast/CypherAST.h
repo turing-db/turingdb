@@ -12,7 +12,7 @@ namespace db {
 class NodePattern;
 class EdgePattern;
 class PatternElement;
-class PatternEntity;
+class EntityPattern;
 class Pattern;
 class Expression;
 class QueryCommand;
@@ -87,7 +87,7 @@ private:
     std::vector<std::unique_ptr<Expression>> _expressions;
     std::vector<std::unique_ptr<Pattern>> _patterns;
     std::vector<std::unique_ptr<PatternElement>> _patternElems;
-    std::vector<std::unique_ptr<PatternEntity>> _patternEntity;
+    std::vector<std::unique_ptr<EntityPattern>> _patternEntity;
     std::vector<std::unique_ptr<Statement>> _statements;
     std::vector<std::unique_ptr<SubStatement>> _subStatements;
     std::vector<std::unique_ptr<Projection>> _projections;

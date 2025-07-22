@@ -4,13 +4,13 @@
 #include <optional>
 #include <vector>
 
-#include "PatternEntity.h"
+#include "EntityPattern.h"
 
 namespace db {
 
 class MapLiteral;
 
-class NodePattern : public PatternEntity {
+class NodePattern : public EntityPattern {
 public:
     using LabelVector = std::vector<std::string_view>;
 
