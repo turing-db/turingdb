@@ -2,13 +2,13 @@
 
 #include <memory>
 
-#include "QueryCompound.h"
+#include "QueryCommand.h"
 
 namespace db {
 
 class StatementContainer;
 
-class SinglePartQuery : public QueryCompound {
+class SinglePartQuery : public QueryCommand {
 public:
     SinglePartQuery() = default;
     ~SinglePartQuery() override = default;

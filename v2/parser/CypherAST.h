@@ -15,7 +15,7 @@ class PatternPart;
 class PatternEntity;
 class Pattern;
 class Expression;
-class QueryCompound;
+class QueryCommand;
 class Projection;
 class MapLiteral;
 class SinglePartQuery;
@@ -79,7 +79,7 @@ public:
         return ptr;
     }
 
-    const std::vector<std::unique_ptr<QueryCompound>>& queries() const {
+    const std::vector<std::unique_ptr<QueryCommand>>& queries() const {
         return _queries;
     }
 
@@ -91,7 +91,7 @@ private:
     std::vector<std::unique_ptr<Statement>> _statements;
     std::vector<std::unique_ptr<SubStatement>> _subStatements;
     std::vector<std::unique_ptr<Projection>> _projections;
-    std::vector<std::unique_ptr<QueryCompound>> _queries;
+    std::vector<std::unique_ptr<QueryCommand>> _queries;
     std::vector<std::unique_ptr<MapLiteral>> _mapLiterals;
     std::vector<std::unique_ptr<StatementContainer>> _statementContainers;
 

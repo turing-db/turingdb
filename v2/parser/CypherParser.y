@@ -218,8 +218,8 @@
 %type<db::WhereClause> where
 
 %type<db::SinglePartQuery*> singlePartQ
-%type<db::QueryCompound*> singleQuery
-%type<db::QueryCompound*> query
+%type<db::QueryCommand*> singleQuery
+%type<db::QueryCommand*> query
 %type<db::Statement*> readingStatement
 %type<db::Match*> matchSt
 %type<db::Skip*> skipSSt
