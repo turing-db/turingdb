@@ -27,3 +27,7 @@ void CypherParser::parse(std::string_view query) {
     yscanner.switch_streams(&iss, NULL);
     yparser.parse();
 }
+
+std::unique_ptr<CypherAST> CypherParser::takeAST() {
+    return std::move(_ast);
+}

@@ -1,5 +1,5 @@
 MATCH (n)
-WHERE (n)-->(m)
+WHERE (n)-[n]->(m)
 RETURN n;
 
 MATCH (n)--(a:Officer), (n:Country)--(b), (m)--(c:Ceo), (m)--(d:City) 

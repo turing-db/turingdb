@@ -8,6 +8,7 @@
 namespace db {
 
 class MapLiteral;
+class VarDecl;
 
 class EntityPattern {
 public:
@@ -59,7 +60,16 @@ public:
         _properties = properties;
     }
 
+    const VarDecl* decl() const {
+        return _decl;
+    }
+
+    void setDecl(VarDecl* decl) {
+        _decl = decl;
+    }
+
 private:
+    VarDecl* _decl {nullptr};
     std::optional<Symbol> _symbol;
     MapLiteral* _properties {nullptr};
 };

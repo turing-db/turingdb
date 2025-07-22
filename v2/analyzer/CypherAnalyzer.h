@@ -14,6 +14,14 @@ class Pattern;
 class PatternElement;
 class NodePattern;
 class EdgePattern;
+class Expression;
+class BinaryExpression;
+class UnaryExpression;
+class AtomExpression;
+class PropertyExpression;
+class StringExpression;
+class NodeLabelExpression;
+class PathExpression;
 class DeclContext;
 
 class CypherAnalyzer {
@@ -48,6 +56,16 @@ private:
     void analyze(const PatternElement& element);
     void analyze(NodePattern& node);
     void analyze(EdgePattern& edge);
+
+    // Expressions
+    void analyze(Expression& expr);
+    void analyze(BinaryExpression& expr);
+    void analyze(UnaryExpression& expr);
+    void analyze(AtomExpression& expr);
+    void analyze(PropertyExpression& expr);
+    void analyze(StringExpression& expr);
+    void analyze(NodeLabelExpression& expr);
+    void analyze(PathExpression& expr);
 };
 
 }

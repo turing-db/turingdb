@@ -24,9 +24,7 @@ public:
         return *_ast;
     }
 
-    std::unique_ptr<CypherAST> takeAST() {
-        return std::move(_ast);
-    }
+    std::unique_ptr<CypherAST> takeAST();
 
 private:
     std::unique_ptr<CypherAST> _ast;

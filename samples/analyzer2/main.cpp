@@ -6,6 +6,7 @@
 #include "ParserException.h"
 #include "CypherAnalyzer.h"
 #include "FileReader.h"
+#include "CypherAST.h"
 
 using namespace db;
 
@@ -53,7 +54,7 @@ void runAnalyzer2(const std::string& query) {
 
     try {
         auto t0 = Clock::now();
-        analyzer.analyze(*ast);
+        analyzer.analyze();
         auto t1 = Clock::now();
         fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, t1));
     } catch (const AnalyzeException& e) {
