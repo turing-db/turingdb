@@ -752,6 +752,7 @@ TEST_F(QueryTest, StringApproxTest) {
                           .expectVector<const Change*>({}, false)
                           .execute()
                           .outputColumnVector<const Change*>(0);
+
     const ChangeID change1 = change1Res.value()->back()->id();
 
     tester.setChangeID(change1);

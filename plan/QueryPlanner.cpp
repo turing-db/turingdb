@@ -576,6 +576,7 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
     const VarExpr* leftExpr = static_cast<VarExpr*>(expressions[0]->getLeftExpr());
     ExprConst* rightExpr = static_cast<ExprConst*>(expressions[0]->getRightExpr());
     const std::string& varExprName = leftExpr->getName();
+    const BinExpr::OpType op = expressions[0]->getOpType();
 
     const auto propTypeRes = reader.getMetadata().propTypes().get(varExprName);
     if (!propTypeRes) {
@@ -640,6 +641,25 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                 ._src = scannedMatchingNodes,
                 ._dest = outputNodes});
         } else {
+            // Special case: use string approx operator with single expression
+            if (op == BinExpr::OP_STR_APPROX) {
+                const std::string& queryString = static_cast<StringExprConst*>(rightExpr)->getVal();
+                // Step to generate lookup set with Nodes that match
+                auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
+                _pipeline->add<QueryNodeIndexStep>(lookupSet, _view, propType._id, queryString);
+
+                // Fill filtermask[i] with a mask for the Nodes that match approx
+                auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
+                filter.addExpression(FilterStep::Expression {._op = ColumnOperator::OP_IN,
+                                                             ._mask = filterMask,
+                                                             ._lhs = scannedNodes,
+                                                             ._rhs = lookupSet});
+                filter.addOperand(FilterStep::Operand {
+                    ._mask = filterMask,
+                    ._src = scannedNodes,
+                    ._dest = outputNodes});
+                return;
+            }
             auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
             filter.addExpression(FilterStep::Expression {
                 ._op = ColumnOperator::OP_EQUAL,
