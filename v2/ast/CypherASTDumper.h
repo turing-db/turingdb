@@ -1,8 +1,9 @@
 #pragma once
 
+#include "attribution/DeclID.h"
 #include <iterator>
 #include <ostream>
-#include <vector>
+#include <unordered_set>
 
 namespace db {
 
@@ -19,7 +20,6 @@ class WhereClause;
 class Expression;
 class NodePattern;
 class EdgePattern;
-class Symbol;
 class MapLiteral;
 class BinaryExpression;
 class UnaryExpression;
@@ -28,6 +28,11 @@ class PathExpression;
 class NodeLabelExpression;
 class StringExpression;
 class PropertyExpression;
+class ConstVariableDecl;
+
+struct PropertyExpressionData;
+struct NodeLabelExpressionData;
+struct LiteralExpressionData;
 
 class CypherASTDumper {
 public:
@@ -45,6 +50,8 @@ private:
     const CypherAST& _ast;
     std::ostream_iterator<char> _o;
 
+    std::unordered_set<DeclID> _dumpedVariables;
+
     void dump(const SinglePartQuery& query);
     void dump(const Match& match);
     void dump(const Limit& lim);
@@ -56,9 +63,7 @@ private:
     void dump(const WhereClause& where);
     void dump(const NodePattern& node);
     void dump(const EdgePattern& edge);
-    void dump(const Symbol& symbol);
     void dump(const MapLiteral& map);
-    void dump(const std::vector<std::string_view>& types);
     void dump(const Expression& expr);
     void dump(const BinaryExpression& expr);
     void dump(const UnaryExpression& expr);
@@ -67,6 +72,10 @@ private:
     void dump(const NodeLabelExpression& expr);
     void dump(const StringExpression& expr);
     void dump(const PropertyExpression& expr);
+    void dump(const ConstVariableDecl& var);
+    void dump(const ConstVariableDecl& var, const PropertyExpressionData& data);
+    void dump(const ConstVariableDecl& var, const NodeLabelExpressionData& data);
+    void dump(const ConstVariableDecl& var, const LiteralExpressionData& data);
 };
 
 }

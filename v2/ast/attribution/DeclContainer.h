@@ -18,10 +18,11 @@ public:
     DeclContainer(DeclContainer&&) = delete;
     DeclContainer& operator=(DeclContainer&&) = delete;
 
-    DeclID newVariable(VariableType type) {
+    DeclID newVariable(VariableType type, std::string_view name = "") {
         auto id = _types.size();
         _types.push_back(type);
         _data.emplace_back(std::monostate {});
+        _names.push_back(name);
 
         return id;
     }
@@ -42,9 +43,14 @@ public:
         _data[id.value()] = std::move(data);
     }
 
+    std::string_view getName(DeclID id) const {
+        return _names[id.value()];
+    }
+
 private:
     std::vector<VariableType> _types;
     std::vector<VariableData> _data;
+    std::vector<std::string_view> _names;
 };
 
 }

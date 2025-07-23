@@ -57,7 +57,10 @@ int main(int argc, char** argv) {
         CypherAnalyzer analyzer(parser.takeAST(), view);
 
         try {
+            auto t0 = Clock::now();
             analyzer.analyze();
+            auto t1 = Clock::now();
+            fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const AnalyzeException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;

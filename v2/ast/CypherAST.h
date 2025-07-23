@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "attribution/DeclContainer.h"
+#include "attribution/VariableDecl.h"
 #include "statements/StatementContainer.h"
 #include "statements/SubStatement.h"
 
@@ -83,6 +84,10 @@ public:
 
     const std::vector<std::unique_ptr<QueryCommand>>& queries() const {
         return _queries;
+    }
+
+    ConstVariableDecl getVariable(DeclID id) const {
+        return ConstVariableDecl(_decls, id);
     }
 
 private:

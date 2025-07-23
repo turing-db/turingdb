@@ -30,6 +30,14 @@ public:
         return _value >= 0;
     }
 
+    bool operator==(const DeclID& other) const {
+        return _value == other._value;
+    }
+
+    bool operator!=(const DeclID& other) const {
+        return !(*this == other);
+    }
+
 private:
     ValueType _value {-1};
 };

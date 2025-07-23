@@ -10,7 +10,8 @@ using namespace db;
 
 DeclContext::DeclContext(DeclContainer* container, DeclContext* parent)
     : _container(container),
-      _parent(parent) {
+      _parent(parent)
+{
 }
 
 DeclContext::~DeclContext() = default;
@@ -42,7 +43,7 @@ VariableDecl DeclContext::getVariable(std::string_view name) const {
 }
 
 VariableDecl DeclContext::getUnnamedVariable(DeclID id) const {
-    if (id.valid()) {
+    if (!id.valid()) {
         throw ASTException("Variable does not exist (ID is invalid)");
     }
 
@@ -75,7 +76,7 @@ VariableDecl DeclContext::getOrCreateNamedVariable(std::string_view name, Variab
                                            VariableTypeName::value(typeFirstOccurrence)));
         }
 
-        VariableDecl decl(*_container, it->second);
+        return VariableDecl (*_container, it->second);
     }
 
     // Search in parent scope
@@ -95,7 +96,7 @@ VariableDecl DeclContext::getOrCreateNamedVariable(std::string_view name, Variab
     }
 
     // Not found anywhere, create it
-    const DeclID id = _container->newVariable(type);
+    const DeclID id = _container->newVariable(type, name);
     _decls.emplace(name, id);
 
     return VariableDecl(*_container, id);
@@ -106,7 +107,7 @@ VariableDecl DeclContext::createNamedVariable(std::string_view name, VariableTyp
         throw ASTException(fmt::format("Variable '{}' already exists", name));
     }
 
-    const DeclID id = _container->newVariable(type);
+    const DeclID id = _container->newVariable(type, name);
     _decls.emplace(name, id);
 
     return VariableDecl(*_container, id);

@@ -6,11 +6,11 @@
 
 #include "attribution/DeclID.h"
 #include "attribution/VariableType.h"
+#include "attribution/VariableDecl.h"
 
 namespace db {
 
 class DeclContainer;
-class VariableDecl;
 
 class DeclContext {
 public:

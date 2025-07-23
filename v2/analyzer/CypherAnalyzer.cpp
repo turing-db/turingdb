@@ -32,7 +32,8 @@ CypherAnalyzer::CypherAnalyzer(std::unique_ptr<CypherAST> ast,
                                GraphView graphView)
     : _ast(std::move(ast)),
       _graphView(graphView),
-      _graphMetadata(graphView.metadata()) {
+      _graphMetadata(graphView.metadata())
+{
 }
 
 CypherAnalyzer::~CypherAnalyzer() = default;
@@ -121,7 +122,14 @@ void CypherAnalyzer::analyze(const Pattern& pattern) {
     }
 
     if (pattern.hasWhere()) {
-        analyze(pattern.getWhere().getExpression());
+        auto& whereExpr = pattern.getWhere().getExpression();
+        analyze(whereExpr);
+
+        const auto whereVar = _ctxt->getUnnamedVariable(whereExpr.id());
+
+        if (whereVar.type() != VariableType::Bool) {
+            throw AnalyzeException("WHERE expression must be a boolean");
+        }
     }
 }
 
@@ -141,7 +149,7 @@ void CypherAnalyzer::analyze(const PatternElement& element) {
 
 void CypherAnalyzer::analyze(NodePattern& node) {
     const VariableDecl var = node.hasSymbol()
-                               ? _ctxt->createNamedVariable(node.symbol()._name, VariableType::Node)
+                               ? _ctxt->getOrCreateNamedVariable(node.symbol()._name, VariableType::Node)
                                : _ctxt->createUnnamedVariable(VariableType::Node);
 
     node.setID(var.id());
@@ -149,7 +157,7 @@ void CypherAnalyzer::analyze(NodePattern& node) {
 
 void CypherAnalyzer::analyze(EdgePattern& edge) {
     const VariableDecl var = edge.hasSymbol()
-                               ? _ctxt->createNamedVariable(edge.symbol()._name, VariableType::Edge)
+                               ? _ctxt->getOrCreateNamedVariable(edge.symbol()._name, VariableType::Edge)
                                : _ctxt->createUnnamedVariable(VariableType::Edge);
 
     edge.setID(var.id());
@@ -420,8 +428,9 @@ void CypherAnalyzer::analyze(StringExpression& expr) {
 void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
     const auto& labelMap = _graphMetadata.labels();
 
-    VariableDecl var = _ctxt->getOrCreateNamedVariable(expr.symbol()._name, VariableType::Node);
-    expr.setID(var.id());
+    const VariableDecl var = _ctxt->getVariable(expr.symbol()._name);
+    VariableDecl exprVar = _ctxt->createUnnamedVariable(VariableType::Bool);
+    expr.setID(exprVar.id());
 
     VariableData data = VariableData::create<NodeLabelExpressionData>(var);
     NodeLabelExpressionData& labelData = data.as<NodeLabelExpressionData>();
@@ -436,7 +445,7 @@ void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
         labelset.set(labelID.value());
     }
 
-    var.setData(std::move(data));
+    exprVar.setData(std::move(data));
 }
 
 void CypherAnalyzer::analyze(PathExpression& expr) {
