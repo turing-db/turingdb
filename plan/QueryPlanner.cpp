@@ -605,6 +605,13 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                                  LabelSetHandle {*labelSet},
                                  propValues);
 
+        // Optimisation: if we have more than one expression constraint, then we use the
+        // result of the above filter step, which fills the properties and labels into
+        // columns, and filter based on those columns. This is only possible for the first
+        // expression, because we can only pull the property values for a single property
+        // type. For subsequent expression constraints, we generate the masks and filter
+        // in @ref generateNodePropertyFilterMasks, which uses an additional step to get
+        // the nodes' other property values. We save a single GetProperty step.
         if (expressions.size() > 1) {
             auto* scannedMatchingNodes = _mem->alloc<ColumnNodeIDs>();
             std::vector<ColumnMask*> masks(expressions.size() - 1);
@@ -612,8 +619,8 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                 mask = _mem->alloc<ColumnMask>();
             }
 
+            auto& filterScannedNodes = _pipeline->add<FilterStep>().get<FilterStep>();
             if (op == BinExpr::OP_EQUAL) {
-                auto& filterScannedNodes = _pipeline->add<FilterStep>().get<FilterStep>();
                 filterScannedNodes.addExpression(
                     FilterStep::Expression {._op = ColumnOperator::OP_EQUAL,
                                             ._mask = filterMask,
@@ -623,7 +630,22 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                     FilterStep::Operand {._mask = filterMask,
                                          ._src = scannedNodes,
                                          ._dest = scannedMatchingNodes});
-            } 
+            } else if (op == BinExpr::OP_STR_APPROX) {
+                const std::string& queryString = static_cast<StringExprConst*>(rightExpr)->getVal();
+                auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
+                _pipeline->add<QueryNodeIndexStep>(lookupSet, _view, propType._id, queryString);
+
+                // Fill filtermask[i] with a mask for the Nodes that match approx
+                auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
+                filter.addExpression(FilterStep::Expression {._op = ColumnOperator::OP_IN,
+                                                             ._mask = filterMask,
+                                                             ._lhs = scannedNodes,
+                                                             ._rhs = lookupSet});
+                filter.addOperand(FilterStep::Operand {
+                    ._mask = filterMask,
+                    ._src = scannedNodes,
+                    ._dest = outputNodes});
+            }
             // If OP_EQUALS : we filter those with matching property values. If OP_STR_APPROX
             const auto* nodesToFilter = op == BinExpr::OP_EQUAL ? scannedMatchingNodes : scannedNodes;
 
