@@ -735,16 +735,6 @@ TEST_F(QueryTest, InjectNodes) {
         .execute();
 }
 
-TEST_F(QueryTest, StringApproxSimpleTest) {
-    QueryTester tester {_mem, *_interp};
-
-    const std::string createQuery = "create (n:NewNode{poem=\"the cat jumped\", rating=5u})";
-    tester.query("change new")
-        .expectVector<const Change*>({}, false)
-        .execute();
-    //FAIL() << "Not implemented";
-}
-
 TEST_F(QueryTest, StringApproxTest) {
     QueryTester tester {_mem, *_interp};
     
@@ -835,5 +825,33 @@ TEST_F(QueryTest, StringApproxTest) {
     
     tester.query(allApproxNoLabels)
         .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+}
+
+TEST_F(QueryTest, StringAproxMultiExpr) {
+    QueryTester tester {_mem, *_interp};
+
+    using StrOpt = std::optional<types::String::Primitive>;
+
+    const std::string createQuery = "create (n:NewNode{poem=\"the cat jumped\", rating=5u})";
+    const auto change1Res = tester.query("change new")
+                                .expectVector<const Change*>({}, false)
+                                .execute()
+                                .outputColumnVector<const Change*>(0);
+
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+
+    tester.query(createQuery).execute();
+    tester.query("CHANGE SUBMIT").execute();
+    tester.setChangeID(ChangeID::head());
+
+    
+    const std::string matchQuery = "match (n:NewNode{poem~=\"cat\", rating=5u}) return n.poem";
+
+    
+    tester.query(matchQuery)
+        .expectVector<StrOpt>({"the cat jumped"})
         .execute();
 }
