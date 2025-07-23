@@ -313,7 +313,6 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
                 throw AnalyzeException("Operator '~=' must be "
                                        "used with values of type 'String'.");
             }
-            //throw AnalyzeException("OPERATOR '~=' NOT SUPPORTED");
         break;
 
         default:
