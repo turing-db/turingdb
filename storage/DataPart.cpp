@@ -59,13 +59,14 @@ void DataPart::addStringPropertyToIndex(PropertyTypeID propertyID,
 
     // Get [nodeID, stringValue] pairs
     const auto zipped = stringPropertyContainer.zipped();
-    for (const auto&& [nodeID, stringValue] : zipped) {
+    for (const auto&& [id, stringValue] : zipped) {
         // Preprocess and tokenise the string into alphanumeric subwords
+        // TODO: Extract this into public facing member function
         std::vector<std::string> tokens;
         StringIndex::preprocess(tokens, stringValue);
         // Insert each subword
         for (const auto& token : tokens) {
-            trie->insert(token, nodeID.getValue());
+            trie->insert(token, id.getValue());
         }
     }
 }
@@ -78,6 +79,7 @@ void DataPart::buildIndex(
     }
 
     for (const auto& [ptID, props] : toIndex) {
+        
         const TypedPropertyContainer<types::String>& strPropContainer =
             props->cast<types::String>();
         addStringPropertyToIndex(ptID, strPropContainer, isNode);

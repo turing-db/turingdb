@@ -637,6 +637,7 @@ TEST_F(QueryTest, ChangeQueryErrors) {
         .expectError() // Requires edge type
         .execute();
 }
+
 TEST_F(QueryTest, CallGraphInfo) {
     QueryTester tester {_mem, *_interp};
 
@@ -731,4 +732,81 @@ TEST_F(QueryTest, InjectNodes) {
     tester.query("MATCH (m)--(n@0) RETURN n")
         .expectError()
         .execute();
+}
+
+TEST_F(QueryTest, StringApproxTest) {
+    QueryTester tester {_mem, *_interp};
+    
+    tester.query("CHANGE NEW")
+        .expectVector<const Change*>({}, false)
+        .execute();
+
+    const std::string createQuery = "create (n:NewNode{name=\"Norbert "
+                                    "Norman\"})-[e:NewEdge{name=\"Norbert->Micheal\"}]-("
+                                    "m:NewNode{name=\"Micheal Mann\"})";
+
+    const std::string sanityCheck = "match (n:NewNode{name=\"Norbert "
+                                    "Norman\"})-[e:NewEdge{name=\"Norbert->Micheal\"}]-("
+                                    "m:NewNode{name=\"Micheal Mann\"}) return e.name";
+
+    tester.query(createQuery);
+    tester.query("COMMIT");
+
+    tester.query(sanityCheck)
+        .expectVector({"Norbert->Micheal"}); // Ensure the edge is created
+
+    // Strict node contraints, approx on edge name
+    const std::string approxEdgeNameNorbert =
+        "match (n:NewNode{name=\"Norbert "
+        "Norman\"})-[e:NewEdge{name~=\"Norbert\"}]-("
+        "m:NewNode{name=\"Micheal Mann\"}) return e.name";
+    const std::string approxEdgeNameMicheal =
+        "match (n:NewNode{name=\"Norbert "
+        "Norman\"})-[e:NewEdge{name~=\"Micheal\"}]-("
+        "m:NewNode{name=\"Micheal Mann\"}) return e.name";
+
+    tester.query(approxEdgeNameNorbert)
+        .expectVector({"Norbert->Micheal"});
+    tester.query(approxEdgeNameMicheal)
+        .expectVector({"Norbert->Micheal"});
+
+
+    // No name constraints on nodes
+    const std::string approxEdgeNameNorbertSlim =
+        "match (n:NewNode"
+        ")-[e:NewEdge{name~=\"Norbert\"}]-("
+        "m:NewNode) return e.name";
+    const std::string approxEdgeNameMichealSlim =
+        "match (n:NewNode"
+        ")-[e:NewEdge{name~=\"Micheal\"}]-("
+        "m:NewNode) return e.name";
+
+    tester.query(approxEdgeNameNorbertSlim)
+        .expectVector({"Norbert->Micheal"});
+    tester.query(approxEdgeNameMichealSlim)
+        .expectVector({"Norbert->Micheal"});
+
+    // Approximate constraints on nodes and edge
+    const std::string approxEdgeNameApproxNorbert =
+        "match (n:NewNode{name~=\"Norbert "
+        "\"})-[e:NewEdge{name~=\"Norbert\"}]-("
+        "m:NewNode) return e.name";
+
+    const std::string approxEdgeNameApproxMicheal =
+        "match (n:NewNode"
+        ")-[e:NewEdge{name~=\"Micheal\"}]-("
+        "m:NewNode{name~=\"Micheal\"}) return e.name";
+
+    tester.query(approxEdgeNameApproxNorbert)
+        .expectVector({"Norbert->Micheal"});
+    tester.query(approxEdgeNameApproxMicheal)
+        .expectVector({"Norbert->Micheal"});
+
+    const std::string allApproxNoLabels =
+        "match (n{name~=\"Norbert\"}"
+        ")-[e{name~=\"Micheal\"}]-("
+        "m{name~=\"Micheal\"}) return e.name";
+    
+    tester.query(allApproxNoLabels)
+        .expectVector({"Norbert->Micheal"});
 }

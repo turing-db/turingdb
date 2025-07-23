@@ -64,6 +64,8 @@ public:
      */
     void insert(std::string_view str, EntityID owner);
 
+    void print() const;
+
     /**
      * @brief Get the EntityID owners which the query string @param sv matches against
      * @detail Preprocesses the input string, and returns the IDs of any full or prefix
@@ -140,6 +142,10 @@ private:
 
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
+
+    void printTree(PrefixTreeNode* node,
+                    const std::string& prefix,
+                    bool isLastChild) const;
 };
 
 }

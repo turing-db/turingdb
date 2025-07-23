@@ -5,6 +5,7 @@
 #include <memory>
 #include <deque>
 #include <unordered_set>
+#include <iostream>
 
 using namespace db;
 
@@ -125,4 +126,36 @@ StringIndex::find(std::string_view sv) const {
     return Iterator{res, node};
 }
 
+void StringIndex::print() const {
+    printTree(this->_root.get(), "", false);
+}
 
+void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
+                const std::string& prefix,
+                bool isLastChild) const {
+    if (!node) return;
+
+    if (node->_val != '\1') {
+        std::cout << prefix
+                  << (isLastChild ? "└── " : "├── ")
+                  << node->_val
+                  << (node->_isComplete ? "*" : "")
+                  << '\n';
+    }
+
+    // Gather existing children so we know which one is the last
+    std::vector<PrefixTreeNode*> kids;
+    kids.reserve(SIGMA);
+    for (std::size_t i = 0; i < SIGMA; ++i)
+        if (node->_children[i]) kids.push_back(node->_children[i].get());
+
+    // Prefix extension: keep vertical bar if this isn’t last
+    std::string nextPrefix = prefix;
+    if (node->_val != '\1')          // don’t add for sentinel root
+        nextPrefix += (isLastChild ? "    " : "│   ");
+
+    // Recurse over children
+    for (std::size_t k = 0; k < kids.size(); ++k) {
+        printTree(kids[k], nextPrefix, k + 1 == kids.size());
+    }
+}

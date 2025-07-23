@@ -49,4 +49,5 @@ void Step::execute() {
     Profile profile {"ScanNodesStringApproxStep::execute"};
     // Fill _nodes with the matches of all datapart's indexes
     StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
+    _done = true;
 }
