@@ -1,0 +1,74 @@
+#pragma once
+
+#include <concepts>
+
+#include "DataPart.h"
+#include "DataPartSpan.h"
+#include "ID.h"
+#include "views/GraphView.h"
+
+namespace db {
+
+class GraphView;
+class StringIndex;
+
+template <typename IDT>
+concept Identifier = (std::same_as<IDT, NodeID> || std::same_as<IDT, EdgeID>);
+
+class StringIndexUtils {
+public:
+    /*
+     * @brief Fills @param ouput with matches on the query @param query in the indexes for
+     * all dataparts
+     * @warn Clears @param output on entry
+     * @param view The graphview to retrieve dataparts from
+     * @param propType The property type to query against
+     * @param query The string to query against
+     */
+    template <typename IDT>
+        requires(Identifier<IDT>)
+    static void getMatches(std::vector<IDT>& output, const GraphView& view,
+                           PropertyTypeID propID, const std::string& query) {
+        const auto& dps = view.dataparts();
+        output.clear();
+
+        if constexpr (std::same_as<IDT, NodeID>) {
+            // For each datapart
+            for (DataPartIterator it = dps.begin(); it != dps.end(); it++) {
+                // Get PropertyID -> Index map
+                const auto& nodeStringIndex = it->get()->getNodeStrPropIndex();
+
+                // Check if the datapart contains an index of this property ID
+                if (!nodeStringIndex.contains(propID)) {
+                    continue;
+                }
+
+                // Get the index for this property
+                const auto& strIndex = nodeStringIndex.at(propID);
+                strIndex->print();
+
+                // Get any matches for the query string in the index
+                strIndex->query<IDT>(output, query);
+            }
+        } else if constexpr (std::same_as<IDT, EdgeID>) {
+            // For each datapart
+            for (DataPartIterator it = dps.begin(); it != dps.end(); it++) {
+                // Get PropertyID -> Index map
+                const auto& nodeStringIndex = it->get()->getEdgeStrPropIndex();
+
+                // Check if the datapart contains an index of this property ID
+                if (!nodeStringIndex.contains(propID)) {
+                    continue;
+                }
+
+                // Get the index for this property
+                const auto& strIndex = nodeStringIndex.at(propID);
+                strIndex->print();
+
+                // Get any matches for the query string in the index
+                strIndex->query<IDT>(output, query);
+            }
+        }
+    }
+};
+}
