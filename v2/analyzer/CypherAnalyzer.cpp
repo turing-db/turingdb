@@ -152,12 +152,11 @@ void CypherAnalyzer::analyze(NodePattern& node) {
     if (node.hasSymbol()) {
         auto& data = _ast->newAnalysisData(EvaluatedType::NodePattern);
         VariableDecl& decl = _ctxt->getOrCreateNamedVariable(EvaluatedType::NodePattern, node.symbol()._name);
-        data.emplace<NodePatternData>(decl);
+        data.emplace<NodePatternData>(&decl);
         node.setData(&data);
     } else {
         auto& data = _ast->newAnalysisData(EvaluatedType::NodePattern);
-        VariableDecl& decl = _ctxt->createUnnamedVariable(EvaluatedType::NodePattern);
-        data.emplace<NodePatternData>(decl);
+        data.emplace<NodePatternData>();
         node.setData(&data);
     }
 
@@ -229,12 +228,11 @@ void CypherAnalyzer::analyze(EdgePattern& edge) {
     if (edge.hasSymbol()) {
         auto& data = _ast->newAnalysisData(EvaluatedType::EdgePattern);
         VariableDecl& decl = _ctxt->getOrCreateNamedVariable(EvaluatedType::EdgePattern, edge.symbol()._name);
-        data.emplace<EdgePatternData>(decl);
+        data.emplace<EdgePatternData>(&decl);
         edge.setData(&data);
     } else {
         auto& data = _ast->newAnalysisData(EvaluatedType::EdgePattern);
-        VariableDecl& decl = _ctxt->createUnnamedVariable(EvaluatedType::EdgePattern);
-        data.emplace<EdgePatternData>(decl);
+        data.emplace<EdgePatternData>();
         edge.setData(&data);
     }
 

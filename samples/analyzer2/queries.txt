@@ -1,4 +1,4 @@
-MATCH (n:Person)-[e]-(m), (m:Person) WHERE n.isFrench = m.isFrench RETURN n, m;
+MATCH (n:Person)-[]-(m), (m:Person) WHERE n.isFrench = m.isFrench RETURN n, m;
 
 //MATCH (n)--(a:Officer), (n:Country)--(b), (m)--(c:Ceo), (m)--(d:City) 
 //WHERE (n:Person) AND 5 > 1 AND m:Person AND 2 > 4 AND a.name = "Luc"

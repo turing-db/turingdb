@@ -65,13 +65,13 @@ struct SymbolData {
 };
 
 struct NodePatternData {
-    const VariableDecl& _decl;
+    const VariableDecl* _decl {nullptr};
     LabelSet _labelConstraints;
     std::vector<std::pair<PropertyType, Expression*>> _exprConstraints;
 
     using UniquePtr = std::unique_ptr<NodePatternData, void (*)(NodePatternData*)>;
 
-    static UniquePtr create(const VariableDecl& decl) {
+    static UniquePtr create(const VariableDecl* decl = nullptr) {
         return UniquePtr {new NodePatternData {decl}, &cleanUp};
     }
 
@@ -81,13 +81,13 @@ struct NodePatternData {
 };
 
 struct EdgePatternData {
-    const VariableDecl& _decl;
+    const VariableDecl* _decl {nullptr};
     std::vector<EdgeTypeID> _edgeTypeConstraints;
     std::vector<std::pair<PropertyType, Expression*>> _exprConstraints;
 
     using UniquePtr = std::unique_ptr<EdgePatternData, void (*)(EdgePatternData*)>;
 
-    static UniquePtr create(const VariableDecl& decl) {
+    static UniquePtr create(const VariableDecl* decl = nullptr) {
         return UniquePtr {new EdgePatternData {decl}, &cleanUp};
     }
 

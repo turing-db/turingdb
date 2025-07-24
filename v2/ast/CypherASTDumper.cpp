@@ -305,11 +305,13 @@ void CypherASTDumper::dump(const NodePattern& node) {
         fmt::format_to(_o, "    _{} ||--o{{ _NOT_ANALYZED : _\n",
                        fmt::ptr(&node));
     } else {
-        const ConstVariableDecl& var = node.data().as<NodePatternData>()._decl;
-        fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                       fmt::ptr(&node),
-                       var.id());
-        dump(var);
+        const VariableDecl* var = node.data().as<NodePatternData>()._decl;
+        if (var) {
+            fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
+                           fmt::ptr(&node),
+                           var->id());
+            dump(*var);
+        }
     }
 }
 
@@ -341,11 +343,13 @@ void CypherASTDumper::dump(const EdgePattern& edge) {
         fmt::format_to(_o, "    _{} ||--o{{ _NOT_ANALYZED : _\n",
                        fmt::ptr(&edge));
     } else {
-        const ConstVariableDecl& var = edge.data().as<EdgePatternData>()._decl;
-        fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                       fmt::ptr(&edge),
-                       var.id());
-        dump(var);
+        const VariableDecl* var = edge.data().as<EdgePatternData>()._decl;
+        if (var) {
+            fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
+                           fmt::ptr(&edge),
+                           var->id());
+            dump(*var);
+        }
     }
 }
 
