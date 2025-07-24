@@ -3,8 +3,8 @@
 #include <vector>
 
 #include "attribution/ASTNodeID.h"
-#include "attribution/VariableType.h"
-#include "attribution/VariableData.h"
+#include "attribution/EvaluatedType.h"
+#include "attribution/AnalysisData.h"
 
 namespace db {
 
@@ -18,33 +18,25 @@ public:
     ASTDataContainer(ASTDataContainer&&) = delete;
     ASTDataContainer& operator=(ASTDataContainer&&) = delete;
 
-    std::pair<ASTNodeID, VariableData*> newVariable(VariableType type, std::string_view name = "") {
+    AnalysisData& newAnalysisData(EvaluatedType type) {
         auto id = _data.size();
-        auto& data = _data.emplace_back(type);
-        _names.push_back(name);
+        auto data = std::make_unique<AnalysisData>(id, type);
+        auto* ptr = data.get();
+        _data.push_back(std::move(data));
 
-        return std::make_pair(id, &data);
+        return *ptr;
     }
 
-    const VariableData& getData(ASTNodeID id) const {
-        return _data[id.value()];
+    const AnalysisData& get(ASTNodeID id) const {
+        return *_data[id.value()];
     }
 
-    VariableData& getData(ASTNodeID id) {
-        return _data[id.value()];
-    }
-
-    void setData(ASTNodeID id, VariableData&& data) {
-        _data[id.value()] = std::move(data);
-    }
-
-    std::string_view getName(ASTNodeID id) const {
-        return _names[id.value()];
+    AnalysisData& get(ASTNodeID id) {
+        return *_data[id.value()];
     }
 
 private:
-    std::vector<VariableData> _data;
-    std::vector<std::string_view> _names;
+    std::vector<std::unique_ptr<AnalysisData>> _data;
 };
 
 }

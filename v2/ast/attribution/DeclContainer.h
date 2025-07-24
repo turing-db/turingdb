@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "attribution/DeclID.h"
-#include "attribution/VariableType.h"
+#include "attribution/EvaluatedType.h"
 
 namespace db {
 
@@ -19,19 +19,19 @@ public:
     DeclContainer& operator=(const DeclContainer&) = delete;
     DeclContainer& operator=(DeclContainer&&) = delete;
 
-    VariableDecl& newDecl(VariableType type);
-    VariableDecl& newDecl(VariableType type, std::string_view name);
+    VariableDecl& newDecl(EvaluatedType type);
+    VariableDecl& newDecl(EvaluatedType type, std::string_view name);
 
     VariableDecl& getVariable(DeclID id) {
-        return *_variables[id.value()];
+        return *_decls[id.value()];
     }
 
-    const VariableDecl& getVariable(DeclID id) const {
-        return *_variables[id.value()];
+    const VariableDecl& getDecl(DeclID id) const {
+        return *_decls[id.value()];
     }
 
 private:
-    std::vector<std::unique_ptr<VariableDecl>> _variables;
+    std::vector<std::unique_ptr<VariableDecl>> _decls;
     DeclID _nextID {0};
 };
 

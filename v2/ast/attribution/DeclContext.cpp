@@ -80,17 +80,17 @@ bool DeclContext::hasVariable(std::string_view name) const {
     return false;
 }
 
-VariableDecl& DeclContext::getOrCreateNamedVariable(VariableType type, std::string_view name) {
+VariableDecl& DeclContext::getOrCreateNamedVariable(EvaluatedType type, std::string_view name) {
     // Search in current scope
 
     auto it = _decls.find(name);
     if (it != _decls.end()) {
-        const VariableType typeFirstOccurrence = it->second->type();
+        const EvaluatedType typeFirstOccurrence = it->second->type();
 
         if (type != typeFirstOccurrence) {
             throw ASTException(fmt::format("Variable type mismatch. Variable is of type '{}', first occurrence was '{}'",
-                                           VariableTypeName::value(type),
-                                           VariableTypeName::value(typeFirstOccurrence)));
+                                           EvaluatedTypeName::value(type),
+                                           EvaluatedTypeName::value(typeFirstOccurrence)));
         }
 
         return *it->second;
@@ -104,8 +104,8 @@ VariableDecl& DeclContext::getOrCreateNamedVariable(VariableType type, std::stri
             // Found it, checking type match
             if (decl->type() != type) {
                 throw ASTException(fmt::format("Variable type mismatch. Variable is of type '{}', first occurrence was '{}'",
-                                               VariableTypeName::value(type),
-                                               VariableTypeName::value(decl->type())));
+                                               EvaluatedTypeName::value(type),
+                                               EvaluatedTypeName::value(decl->type())));
             }
 
             return *decl;
@@ -119,7 +119,7 @@ VariableDecl& DeclContext::getOrCreateNamedVariable(VariableType type, std::stri
     return decl;
 }
 
-VariableDecl& DeclContext::createNamedVariable(VariableType type, std::string_view name) {
+VariableDecl& DeclContext::createNamedVariable(EvaluatedType type, std::string_view name) {
     if (_decls.contains(name)) {
         throw ASTException(fmt::format("Variable '{}' already exists", name));
     }
@@ -130,7 +130,7 @@ VariableDecl& DeclContext::createNamedVariable(VariableType type, std::string_vi
     return decl;
 }
 
-VariableDecl& DeclContext::createUnnamedVariable(VariableType type) {
+VariableDecl& DeclContext::createUnnamedVariable(EvaluatedType type) {
     return _container.newDecl(type);
 }
 

@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "attribution/DeclID.h"
-#include "attribution/VariableType.h"
+#include "attribution/EvaluatedType.h"
 #include "attribution/VariableDecl.h"
 
 namespace db {
@@ -33,9 +33,9 @@ public:
     const VariableDecl& getUnnamedVariable(DeclID id) const;
     bool hasVariable(std::string_view name) const;
 
-    VariableDecl& getOrCreateNamedVariable(VariableType type, std::string_view name);
-    VariableDecl& createNamedVariable(VariableType type, std::string_view name);
-    VariableDecl& createUnnamedVariable(VariableType type);
+    VariableDecl& getOrCreateNamedVariable(EvaluatedType type, std::string_view name);
+    VariableDecl& createNamedVariable(EvaluatedType type, std::string_view name);
+    VariableDecl& createUnnamedVariable(EvaluatedType type);
 
 private:
     DeclContainer& _container;

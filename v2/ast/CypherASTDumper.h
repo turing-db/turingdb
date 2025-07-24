@@ -29,7 +29,7 @@ class NodeLabelExpression;
 class StringExpression;
 class PropertyExpression;
 class ConstVariableDecl;
-class VariableData;
+class AnalysisData;
 
 struct NodePatternData;
 struct EdgePatternData;
@@ -62,7 +62,7 @@ private:
     void dump(const Return& ret);
     void dump(const Projection& projection);
     void dump(const Pattern& pattern);
-    void dump(const PatternElement& part);
+    void dump(const PatternElement& elem);
     void dump(const WhereClause& where);
     void dump(const NodePattern& node);
     void dump(const EdgePattern& edge);

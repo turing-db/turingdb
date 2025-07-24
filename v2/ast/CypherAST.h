@@ -94,17 +94,20 @@ public:
         return _dataContainer;
     }
 
-    const VariableData& getVariableData(ASTNodeID id) const {
-        return _dataContainer.getData(id);
+    AnalysisData& newAnalysisData(EvaluatedType type) {
+        return _dataContainer.newAnalysisData(type);
+    }
+
+    const AnalysisData& getAnalysisData(ASTNodeID id) const {
+        return _dataContainer.get(id);
+    }
+
+    AnalysisData& getAnalysisData(ASTNodeID id) {
+        return _dataContainer.get(id);
     }
 
     const VariableDecl& getVarDecl(DeclID id) const {
-        return _declContainer.getVariable(id);
-    }
-
-    const VariableDecl& getVarDecl(ASTNodeID id) const {
-        const auto& data = _dataContainer.getData(id);
-        return data.decl();
+        return _declContainer.getDecl(id);
     }
 
 private:

@@ -4,12 +4,12 @@
 #include <optional>
 
 #include "Symbol.h"
-#include "attribution/ASTNodeID.h"
 
 namespace db {
 
 class MapLiteral;
 class VarDecl;
+class AnalysisData;
 
 class EntityPattern {
 public:
@@ -61,12 +61,20 @@ public:
         _properties = properties;
     }
 
-    ASTNodeID id() const { return _id; }
+    bool analyzed() const {
+        return _data != nullptr;
+    }
 
-    void setID(ASTNodeID id) { _id = id; }
+    const AnalysisData& data() const { return *_data; }
+
+    AnalysisData& data() { return *_data; }
+
+    void setData(AnalysisData* data) {
+        _data = data;
+    }
 
 private:
-    ASTNodeID _id;
+    AnalysisData* _data {nullptr};
     std::optional<Symbol> _symbol;
     MapLiteral* _properties {nullptr};
 };

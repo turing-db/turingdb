@@ -1,7 +1,7 @@
 #pragma once
 
 #include "attribution/DeclID.h"
-#include "attribution/VariableType.h"
+#include "attribution/EvaluatedType.h"
 
 namespace db {
 
@@ -11,7 +11,7 @@ class VariableDecl {
 public:
     ~VariableDecl() = default;
 
-    VariableDecl(VariableType type = VariableType::Invalid, DeclID id = -1)
+    VariableDecl(EvaluatedType type = EvaluatedType::Invalid, DeclID id = -1)
         : _id(id),
           _type(type)
     {
@@ -32,7 +32,7 @@ public:
         return _id.valid();
     }
 
-    VariableType type() const {
+    EvaluatedType type() const {
         return _type;
     }
 
@@ -46,7 +46,7 @@ public:
 
 private:
     DeclID _id;
-    VariableType _type {VariableType::Invalid};
+    EvaluatedType _type {EvaluatedType::Invalid};
     std::string_view _name;
 };
 
@@ -54,7 +54,7 @@ class ConstVariableDecl {
 public:
     ~ConstVariableDecl() = default;
 
-    ConstVariableDecl(VariableType type = VariableType::Invalid, DeclID id = -1, std::string_view name = "")
+    ConstVariableDecl(EvaluatedType type = EvaluatedType::Invalid, DeclID id = -1, std::string_view name = "")
         : _id(id),
           _type(type),
           _name(name)
@@ -74,7 +74,7 @@ public:
         return _id.valid();
     }
 
-    VariableType type() const {
+    EvaluatedType type() const {
         return _type;
     }
 
@@ -84,7 +84,7 @@ public:
 
 private:
     DeclID _id;
-    VariableType _type {VariableType::Invalid};
+    EvaluatedType _type {EvaluatedType::Invalid};
     std::string_view _name;
 };
 
