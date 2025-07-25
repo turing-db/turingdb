@@ -26,4 +26,17 @@ struct SourceLocation {
     }
 };
 
+#define YYLLOC_DEFAULT(Current, Rhs, N) \
+    do { \
+        if (N) { \
+            (Current).beginLine = YYRHSLOC(Rhs, 1).beginLine; \
+            (Current).beginColumn = YYRHSLOC(Rhs, 1).beginColumn; \
+            (Current).endLine = YYRHSLOC(Rhs, N).endLine; \
+            (Current).endColumn = YYRHSLOC(Rhs, N).endColumn; \
+        } else { \
+            (Current).beginLine = (Current).endLine = YYRHSLOC(Rhs, 0).endLine; \
+            (Current).beginColumn = (Current).endColumn = YYRHSLOC(Rhs, 0).endColumn; \
+        } \
+    } while (0)
+
 }

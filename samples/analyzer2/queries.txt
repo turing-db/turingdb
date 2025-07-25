@@ -1,2 +1,5 @@
-MATCH (n:Person)-[]-(m), (m:Person) WHERE n.isFrench = m.isFrench RETURN n, m;
-
+MATCH (n1:Person)-[e1:KNOWS_WELL]->(n2:Person),
+      (n2:Person)-[:INTERESTED_IN]->(m1:Interest:SoftwareEngineering),
+      (n3:Person)--(m1)
+WHERE n1.isFrench AND n2.isFrench * 5 AND e1.duration > 4
+RETURN n1, n2, n3;

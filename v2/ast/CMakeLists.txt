@@ -1,6 +1,7 @@
 set(ast_sources
     CypherAST.cpp
     CypherASTDumper.cpp
+    CypherError.cpp
     attribution/DeclContext.cpp
     attribution/DeclContainer.cpp
     attribution/ASTDataContainer.cpp

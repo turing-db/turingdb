@@ -8,7 +8,7 @@
 using namespace db;
 
 #define yyterminate() return db::YCypherParser::token::PROG_END
-#define YY_USER_ACTION advanceLocation(yyleng);
+#define YY_USER_ACTION advanceLocation(*yylloc, yyleng);
 
 using Token = db::YCypherParser::token;
 
@@ -24,7 +24,7 @@ using Token = db::YCypherParser::token;
 
 "//"[^\n]* { }
 
-\n        { locationNewLine(); }
+\n        { locationNewLine(*yylloc); }
 [ \t\r]+  { }
 
 "-"[ \t\r]*-  { return Token::TAIL_TAIL; }

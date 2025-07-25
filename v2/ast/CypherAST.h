@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 
+#include "SourceLocation.h"
 #include "attribution/ASTDataContainer.h"
 #include "attribution/DeclContainer.h"
 #include "statements/StatementContainer.h"
@@ -110,6 +111,23 @@ public:
         return _declContainer.getDecl(id);
     }
 
+    template <typename T>
+    void setLocation(const T* ptr, const SourceLocation& loc) {
+        _locationMap[(std::uintptr_t)ptr] = loc;
+    }
+
+    const SourceLocation* getLocation(uintptr_t ptr) const {
+        auto it = _locationMap.find(ptr);
+        if (it != _locationMap.end()) {
+            return &it->second;
+        }
+        return nullptr;
+    }
+
+    const std::string_view& query() const {
+        return _query;
+    }
+
 private:
     std::string_view _query;
 
@@ -123,6 +141,8 @@ private:
     std::vector<std::unique_ptr<QueryCommand>> _queries;
     std::vector<std::unique_ptr<MapLiteral>> _mapLiterals;
     std::vector<std::unique_ptr<StatementContainer>> _statementContainers;
+
+    std::unordered_map<std::uintptr_t, SourceLocation> _locationMap;
 
     StatementContainer* _currentStatements = nullptr;
     ASTDataContainer _dataContainer;

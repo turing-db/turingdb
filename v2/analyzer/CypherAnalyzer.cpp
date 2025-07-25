@@ -3,6 +3,7 @@
 #include <spdlog/fmt/bundled/core.h>
 
 #include "AnalyzeException.h"
+#include "CypherError.h"
 #include "CypherAST.h"
 
 #include "attribution/DeclContext.h"
@@ -375,7 +376,11 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
             }
 
             if (!compatible(lhsType, rhsType)) {
-                throw AnalyzeException("Operands must be compatible types");
+                std::string error = fmt::format("Operands have incompatible types: '{}' and '{}'",
+                                                EvaluatedTypeName::value(lhsType),
+                                                EvaluatedTypeName::value(rhsType));
+                throwError(std::move(error),
+                           (std::uintptr_t)&expr);
             }
 
             type = EvaluatedType::Bool;
@@ -388,7 +393,11 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
         case BinaryOperator::Mod:
         case BinaryOperator::Pow: {
             if (!compatible(lhsType, rhsType)) {
-                throw AnalyzeException("Operands must be compatible types");
+                std::string error = fmt::format("Operands have incompatible types: '{}' and '{}'",
+                                                EvaluatedTypeName::value(lhsType),
+                                                EvaluatedTypeName::value(rhsType));
+                throwError(std::move(error),
+                           (std::uintptr_t)&expr);
             }
 
             if (lhsType == EvaluatedType::Double || rhsType == EvaluatedType::Double) {
@@ -592,4 +601,21 @@ void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
 
 void CypherAnalyzer::analyze(PathExpression& expr) {
     throw AnalyzeException("Path expressions not supported");
+}
+
+void CypherAnalyzer::throwError(std::string&& msg, std::uintptr_t obj) {
+    const auto* location = _ast->getLocation(obj);
+    if (!location) {
+        throw AnalyzeException(std::move(msg));
+    }
+
+    std::string errorMsg;
+
+    CypherError err {_ast->query()};
+    err.setTitle("Query analysis error");
+    err.setErrorMsg(msg);
+    err.setLocation(*location);
+    err.generate(errorMsg);
+
+    throw AnalyzeException(std::move(errorMsg));
 }

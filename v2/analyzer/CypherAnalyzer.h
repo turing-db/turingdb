@@ -79,6 +79,8 @@ private:
     void analyze(StringExpression& expr);
     void analyze(NodeLabelExpression& expr);
     void analyze(PathExpression& expr);
+
+    void throwError(std::string&& msg, std::uintptr_t obj = 0);
 };
 
 }
