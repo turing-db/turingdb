@@ -4,9 +4,11 @@ using namespace db;
 
 namespace {
 
-constexpr std::string_view emptyPrefix = "       | ";
-constexpr std::string_view metaPrefix = "-------* ";
-constexpr std::string_view prefixFmt = "  {:>4} | ";
+constexpr std::string_view EMPTY_PREFIX = "       | ";
+constexpr std::string_view META_PREFIX = "-------* ";
+constexpr std::string_view PREFIX_FMT = "  {:>4} | ";
+constexpr char16_t DOWN_ERR_CHAR = u'⌄';
+constexpr char16_t UP_ERR_CHAR = u'^';
 
 std::string_view nextLine(std::string_view& str) {
     const auto pos = str.find('\n');
@@ -28,43 +30,54 @@ void ignoreLines(std::string_view& str, size_t count) {
     }
 }
 
-void errorBars(std::string& errorOutput,
-               size_t blankLen,
-               size_t errLen,
-               std::string_view character = "^") {
+struct LinePatternLocation {
+    size_t beginLine {};
+    size_t count {};
+};
 
-    errorOutput += emptyPrefix;
+template <char16_t Char>
+std::string errorBars(const LinePatternLocation& loc) {
+    constexpr std::string_view charStr = Char == UP_ERR_CHAR ? "^" : "⌄";
 
-    for (size_t i = 0; i < blankLen; i++) {
-        errorOutput += ' ';
+    std::string errBar;
+
+    errBar += EMPTY_PREFIX;
+
+    for (size_t i = 0; i < loc.beginLine; i++) {
+        errBar += ' ';
     }
 
-    for (size_t i = 0; i < errLen; i++) {
-        errorOutput += character;
+    for (size_t i = 0; i < loc.count; i++) {
+        errBar += charStr;
     }
 
-    errorOutput += "\n";
+    errBar += "\n";
+    return errBar;
+}
+
+std::string lineNoPrefix(size_t lineNo) {
+    return fmt::format(PREFIX_FMT, lineNo);
 }
 
 }
 
 void CypherError::generate(std::string& errorOutput) {
     if (!_title.empty()) {
-        errorOutput += metaPrefix;
+        errorOutput += META_PREFIX;
         errorOutput += _title;
         errorOutput += "\n";
     }
 
     if (_query.empty()) {
-        errorOutput += emptyPrefix;
+        errorOutput += EMPTY_PREFIX;
         errorOutput += "Empty query\n";
         return;
     }
 
     if (!_loc) {
-        errorOutput += emptyPrefix;
+        errorOutput += EMPTY_PREFIX;
         errorOutput += "Unknown location\n";
-        errorOutput += emptyPrefix;
+        errorOutput += EMPTY_PREFIX;
         errorOutput += _errorMsg;
         return;
     }
@@ -73,34 +86,14 @@ void CypherError::generate(std::string& errorOutput) {
     const size_t lastLineNo = _loc->endLine;
 
     if (firstLineNo != lastLineNo) {
-        // Multi-line error
-        size_t lineCount = lastLineNo - firstLineNo + 1;
-        ignoreLines(_query, firstLineNo - 1);
-
-        std::string_view line = nextLine(_query);
-        std::string prefix = fmt::format(prefixFmt, firstLineNo);
-        errorBars(errorOutput,
-                  _loc->beginColumn - 1,
-                  line.size() - _loc->beginColumn - 1,
-                  "⌄");
-
-        errorOutput += fmt::format("{}{}\n", prefix, line);
-
-        for (size_t i = 1; i < lineCount; i++) {
-            line = nextLine(_query);
-            const size_t lineNo = firstLineNo + i;
-            prefix = fmt::format(prefixFmt, lineNo);
-            errorOutput += fmt::format("{}{}\n", prefix, line);
-        }
-
-        errorBars(errorOutput, 0, _loc->endColumn - 1, "^");
-
-        errorOutput += metaPrefix;
-        errorOutput += _errorMsg;
-        errorOutput += "\n";
-        return;
+        return generateMultiLine(errorOutput);
+    } else {
+        return generateSingleLine(errorOutput);
     }
+}
 
+void CypherError::generateSingleLine(std::string& errorOutput) {
+    const size_t firstLineNo = _loc->beginLine;
     const size_t errLineNo = firstLineNo;
 
     if (errLineNo != 1) {
@@ -110,22 +103,60 @@ void CypherError::generate(std::string& errorOutput) {
     std::string_view errLine = nextLine(_query);
 
     if (errLineNo > 1) {
-        errorOutput += fmt::format(prefixFmt, errLineNo - 1);
+        errorOutput += lineNoPrefix(errLineNo - 1);
         errorOutput += errLine;
         errorOutput += "\n";
         errLine = nextLine(_query);
     }
 
-    const size_t errLen = _loc->endColumn - _loc->beginColumn;
+    errorOutput += lineNoPrefix(firstLineNo);
+    errorOutput += errLine;
+    errorOutput += "\n";
 
-    std::string prefixLine = fmt::format(prefixFmt, errLineNo);
-    const size_t blankLen =  _loc->beginColumn - 1;
-    const std::string blank(blankLen, ' ');
+    const LinePatternLocation errLineLoc = {
+        .beginLine = _loc->beginColumn - 1,
+        .count = _loc->endColumn - _loc->beginColumn,
+    };
 
-    errorOutput += fmt::format("{}{}\n", prefixLine, errLine);
-    errorBars(errorOutput, _loc->beginColumn - 1, errLen);
+    errorOutput += errorBars<UP_ERR_CHAR>(errLineLoc);
+    errorOutput += META_PREFIX;
+    errorOutput += _errorMsg;
+    errorOutput += "\n";
+}
 
-    errorOutput += metaPrefix;
+void CypherError::generateMultiLine(std::string& errorOutput) {
+    // Multi-line error
+    const size_t firstLineNo = _loc->beginLine;
+    const size_t lastLineNo = _loc->endLine;
+
+    ignoreLines(_query, firstLineNo - 1);
+
+    std::string_view line = nextLine(_query);
+
+    const LinePatternLocation firstLineLoc = {
+        .beginLine = _loc->beginColumn - 1,
+        .count = line.size() - _loc->beginColumn + 1,
+    };
+
+    errorOutput += errorBars<DOWN_ERR_CHAR>(firstLineLoc);
+    errorOutput += lineNoPrefix(firstLineNo);
+    errorOutput += line;
+    errorOutput += "\n";
+
+    for (size_t i = 1; i < lastLineNo - firstLineNo + 1; i++) {
+        line = nextLine(_query);
+        errorOutput += lineNoPrefix(firstLineNo + i);
+        errorOutput += line;
+        errorOutput += "\n";
+    }
+
+    const LinePatternLocation lastLineLoc = {
+        .beginLine = 0,
+        .count = _loc->endColumn + 1,
+    };
+
+    errorOutput += errorBars<UP_ERR_CHAR>(lastLineLoc);
+    errorOutput += META_PREFIX;
     errorOutput += _errorMsg;
     errorOutput += "\n";
 }

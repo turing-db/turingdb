@@ -27,6 +27,9 @@ private:
     std::string_view _query;
     std::string_view _errorMsg = "Unknown error";
     const SourceLocation* _loc {nullptr};
+
+    void generateSingleLine(std::string& errorOutput);
+    void generateMultiLine(std::string& errorOutput);
 };
 
 }

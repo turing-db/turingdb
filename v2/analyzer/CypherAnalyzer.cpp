@@ -54,9 +54,7 @@ void CypherAnalyzer::analyze(const SinglePartQuery& query) {
     for (const auto* statement : query.getStatements()) {
         if (const auto* s = dynamic_cast<const Match*>(statement)) {
             analyze(*s);
-        }
-
-        else if (const auto* s = dynamic_cast<const Return*>(statement)) {
+        } else if (const auto* s = dynamic_cast<const Return*>(statement)) {
             analyze(*s);
         } else {
             throw AnalyzeException("Unsupported statement type");
