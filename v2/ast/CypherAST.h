@@ -99,6 +99,10 @@ public:
 
     template <typename T>
     void setLocation(const T* ptr, const SourceLocation& loc) {
+        if (!_debugLocation) {
+            return;
+        }
+
         _locationMap[(std::uintptr_t)ptr] = loc;
     }
 
@@ -112,6 +116,10 @@ public:
 
     const std::string_view& query() const {
         return _query;
+    }
+
+    void setDebugLocation(bool debug) {
+        _debugLocation = debug;
     }
 
 private:
@@ -133,6 +141,8 @@ private:
 
     StatementContainer* _currentStatements = nullptr;
     DeclContainer _declContainer;
+
+    bool _debugLocation = true;
 
     StatementContainer* newStatementContainer();
 };

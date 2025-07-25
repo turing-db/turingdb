@@ -569,18 +569,18 @@ void CypherAnalyzer::analyze(PathExpression& expr) {
     throw AnalyzeException("Path expressions not supported");
 }
 
-void CypherAnalyzer::throwError(std::string&& msg, const void* obj) {
+void CypherAnalyzer::throwError(std::string_view msg, const void* obj) {
     const auto* location = _ast->getLocation((uintptr_t)obj);
-    if (!location) {
-        throw AnalyzeException(std::move(msg));
-    }
-
     std::string errorMsg;
 
     CypherError err {_ast->query()};
     err.setTitle("Query analysis error");
     err.setErrorMsg(msg);
-    err.setLocation(*location);
+
+    if (location) {
+        err.setLocation(*location);
+    }
+
     err.generate(errorMsg);
 
     throw AnalyzeException(std::move(errorMsg));

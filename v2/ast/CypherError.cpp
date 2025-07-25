@@ -76,8 +76,6 @@ void CypherError::generate(std::string& errorOutput) {
 
     if (!_loc) {
         errorOutput += EMPTY_PREFIX;
-        errorOutput += "Unknown location\n";
-        errorOutput += EMPTY_PREFIX;
         errorOutput += _errorMsg;
         return;
     }

@@ -82,7 +82,7 @@ private:
     void analyze(NodeLabelExpression& expr);
     void analyze(PathExpression& expr);
 
-    void throwError(std::string&& msg, const void* obj = 0);
+    void throwError(std::string_view msg, const void* obj = 0);
 };
 
 }

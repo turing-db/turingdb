@@ -41,6 +41,7 @@ int main(int argc, char** argv) {
     }
 
     CypherAST ast(queryStr);
+    ast.setDebugLocation(true);
 
     {
         CypherParser parser(ast);
