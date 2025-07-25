@@ -2,8 +2,6 @@
 
 #include <memory>
 
-#include "attribution/ASTNodeID.h"
-#include "attribution/EvaluatedType.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -21,7 +19,9 @@ class EdgePattern;
 class Expression;
 class BinaryExpression;
 class UnaryExpression;
-class AtomExpression;
+class SymbolExpression;
+class LiteralExpression;
+class ParameterExpression;
 class PropertyExpression;
 class StringExpression;
 class NodeLabelExpression;
@@ -74,13 +74,15 @@ private:
     void analyze(Expression& expr);
     void analyze(BinaryExpression& expr);
     void analyze(UnaryExpression& expr);
-    void analyze(AtomExpression& expr);
+    void analyze(SymbolExpression& expr);
+    void analyze(LiteralExpression& expr);
+    void analyze(ParameterExpression& expr);
     void analyze(PropertyExpression& expr);
     void analyze(StringExpression& expr);
     void analyze(NodeLabelExpression& expr);
     void analyze(PathExpression& expr);
 
-    void throwError(std::string&& msg, std::uintptr_t obj = 0);
+    void throwError(std::string&& msg, const void* obj = 0);
 };
 
 }

@@ -3,18 +3,10 @@
 #include <variant>
 #include <memory>
 
-#include "ASTException.h"
-#include "attribution/ASTNodeID.h"
-#include "attribution/EvaluatedType.h"
-
 namespace db {
 
 class VarDecl;
 
-struct PropertyExpressionData;
-struct NodeLabelExpressionData;
-struct LiteralExpressionData;
-struct SymbolData;
 struct NodePatternData;
 struct EdgePatternData;
 
@@ -24,20 +16,10 @@ public:
     using UniquePtr = std::unique_ptr<T, void (*)(T*)>;
 
     using Variant = std::variant<std::monostate,
-                                 UniquePtr<PropertyExpressionData>,
-                                 UniquePtr<NodeLabelExpressionData>,
-                                 UniquePtr<LiteralExpressionData>,
-                                 UniquePtr<SymbolData>,
                                  UniquePtr<NodePatternData>,
                                  UniquePtr<EdgePatternData>>;
     AnalysisData() = default;
     ~AnalysisData() = default;
-
-    AnalysisData(ASTNodeID id, EvaluatedType type)
-        : _id(id),
-          _type(type)
-    {
-    }
 
     AnalysisData(const AnalysisData&) = delete;
     AnalysisData(AnalysisData&&) = default;
@@ -64,18 +46,8 @@ public:
         return *_data.emplace<UniquePtr<T>>(T::create(std::forward<Args>(args)...));
     }
 
-    EvaluatedType type() const {
-        return _type;
-    }
-
-    ASTNodeID id() const {
-        return _id;
-    }
-
 private:
-    ASTNodeID _id;
     Variant _data;
-    EvaluatedType _type {};
 };
 
 

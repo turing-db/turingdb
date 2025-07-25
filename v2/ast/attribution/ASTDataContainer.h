@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "attribution/ASTNodeID.h"
 #include "attribution/EvaluatedType.h"
 #include "attribution/AnalysisData.h"
 
@@ -18,25 +17,14 @@ public:
     ASTDataContainer(ASTDataContainer&&) = delete;
     ASTDataContainer& operator=(ASTDataContainer&&) = delete;
 
-    AnalysisData& newAnalysisData(EvaluatedType type) {
-        auto id = _data.size();
-        auto data = std::make_unique<AnalysisData>(id, type);
-        auto* ptr = data.get();
-        _data.push_back(std::move(data));
-
-        return *ptr;
-    }
-
-    const AnalysisData& get(ASTNodeID id) const {
-        return *_data[id.value()];
-    }
-
-    AnalysisData& get(ASTNodeID id) {
-        return *_data[id.value()];
+    template <typename T, typename... Args>
+    T& newAnalysisData(EvaluatedType type, Args&&... args) {
+        auto& data = _data.emplace_back();
+        return data.emplace<T>(std::forward<Args>(args)...);
     }
 
 private:
-    std::vector<std::unique_ptr<AnalysisData>> _data;
+    std::vector<AnalysisData> _data;
 };
 
 }

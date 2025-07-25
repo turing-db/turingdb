@@ -10,6 +10,8 @@ namespace db {
 
 class MapLiteral;
 
+struct EdgePatternData;
+
 class EdgePattern : public EntityPattern {
 public:
     using EdgeTypeVector = std::vector<std::string_view>;
@@ -26,24 +28,50 @@ public:
         return std::make_unique<EdgePattern>();
     }
 
-    const std::vector<std::string_view>& types() const {
-        return _types.value();
-    }
-
-    std::vector<std::string_view>& types() {
-        return _types.value();
-    }
-
     bool hasTypes() const {
         return _types.has_value();
+    }
+
+    bool hasDecl() const {
+        return _decl != nullptr;
+    }
+
+    bool hasData() const {
+        return _data != nullptr;
+    }
+
+    const EdgeTypeVector& types() const {
+        return _types.value();
+    }
+
+    EdgeTypeVector& types() {
+        return _types.value();
+    }
+
+    const VarDecl& decl() const {
+        return *_decl;
+    }
+
+    const EdgePatternData& data() const {
+        return *_data;
     }
 
     void setTypes(std::optional<EdgeTypeVector>&& types) {
         _types = std::move(types);
     }
 
+    void setDecl(const VarDecl* decl) {
+        _decl = decl;
+    }
+
+    void setData(EdgePatternData* data) {
+        _data = data;
+    }
+
 private:
     std::optional<EdgeTypeVector> _types;
+    const VarDecl* _decl {nullptr};
+    EdgePatternData* _data {nullptr};
 };
 
 }

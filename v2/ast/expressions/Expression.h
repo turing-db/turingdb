@@ -1,6 +1,6 @@
 #pragma once
 
-#include "attribution/ASTNodeID.h"
+#include "attribution/EvaluatedType.h"
 
 namespace db {
 
@@ -10,14 +10,16 @@ enum class ExpressionType {
     String,
     NodeLabel,
     Property,
-    Atom,
     Path,
+    Symbol,
+    Literal,
+    Parameter,
 };
 
 class Expression {
 public:
     explicit Expression(ExpressionType type)
-        : _type(type)
+        : _exprKind(type)
     {
     }
 
@@ -29,7 +31,7 @@ public:
     Expression& operator=(const Expression&) = delete;
     Expression& operator=(Expression&&) = delete;
 
-    ExpressionType type() const { return _type; }
+    ExpressionType kind() const { return _exprKind; }
 
     template <typename T>
     T* as() {
@@ -41,13 +43,13 @@ public:
         return dynamic_cast<const T*>(this);
     }
 
-    ASTNodeID id() const { return _id; }
+    void setType(EvaluatedType type) { _valueType = type; }
 
-    void setID(ASTNodeID id) { _id = id; }
+    EvaluatedType type() const { return _valueType; }
 
 private:
-    ASTNodeID _id;
-    ExpressionType _type {};
+    ExpressionType _exprKind {};
+    EvaluatedType _valueType {};
 };
 
 inline Expression::~Expression() = default;

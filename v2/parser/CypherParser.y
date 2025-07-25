@@ -34,7 +34,7 @@
     #include "types/WhereClause.h"
     #include "types/Pattern.h"
     #include "types/NodePattern.h"
-    #include "types/PatternEdge.h"
+    #include "types/EdgePattern.h"
     #include "types/SinglePartQuery.h"
     #include "types/Projection.h"
 
@@ -612,8 +612,8 @@ propertyExpression
 
 atomExpression
     : pathExpression { $$ = $1; }
-    | literal { $$ = ast.newExpression<AtomExpression>($1); }
-    | symbol { $$ = ast.newExpression<AtomExpression>($1); }
+    | literal { $$ = ast.newExpression<LiteralExpression>($1); }
+    | symbol { $$ = ast.newExpression<SymbolExpression>($1); }
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpression { scanner.notImplemented(@$, "CASE"); }

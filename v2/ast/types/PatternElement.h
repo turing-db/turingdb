@@ -4,7 +4,7 @@
 
 #include "EntityPattern.h"
 #include "NodePattern.h"
-#include "PatternEdge.h"
+#include "EdgePattern.h"
 
 namespace db {
 

@@ -26,8 +26,8 @@ target_include_directories(turing_db_v2_parser_s
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
   PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(turing_db_v2_parser_s PUBLIC
-    turing_common_s
-    turing_db_v2_ast_s
-    range-v3)
+target_link_libraries(turing_db_v2_parser_s
+  PUBLIC turing_common_s
+         turing_db_v2_ast_s
+         range-v3)
 

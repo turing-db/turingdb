@@ -95,18 +95,6 @@ public:
         return _dataContainer;
     }
 
-    AnalysisData& newAnalysisData(EvaluatedType type) {
-        return _dataContainer.newAnalysisData(type);
-    }
-
-    const AnalysisData& getAnalysisData(ASTNodeID id) const {
-        return _dataContainer.get(id);
-    }
-
-    AnalysisData& getAnalysisData(ASTNodeID id) {
-        return _dataContainer.get(id);
-    }
-
     const VarDecl& getVarDecl(DeclID id) const {
         return _declContainer.getDecl(id);
     }
