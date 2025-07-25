@@ -4,7 +4,6 @@ set(ast_sources
     CypherError.cpp
     attribution/DeclContext.cpp
     attribution/DeclContainer.cpp
-    attribution/ASTDataContainer.cpp
     types/QueryCommand.cpp
     ASTException.cpp)
 

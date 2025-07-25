@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "SourceLocation.h"
-#include "attribution/ASTDataContainer.h"
+#include "attribution/AnalysisData.h"
 #include "attribution/DeclContainer.h"
 #include "statements/StatementContainer.h"
 #include "statements/SubStatement.h"
@@ -83,16 +83,14 @@ public:
         return ptr;
     }
 
+    template <typename T, typename... Args>
+    T& newAnalysisData(EvaluatedType type, Args&&... args) {
+        auto& data = _data.emplace_back();
+        return data.emplace<T>(std::forward<Args>(args)...);
+    }
+
     const std::vector<std::unique_ptr<QueryCommand>>& queries() const {
         return _queries;
-    }
-
-    ASTDataContainer& dataContainer() {
-        return _dataContainer;
-    }
-
-    const ASTDataContainer& dataContainer() const {
-        return _dataContainer;
     }
 
     const VarDecl& getVarDecl(DeclID id) const {
@@ -129,11 +127,11 @@ private:
     std::vector<std::unique_ptr<QueryCommand>> _queries;
     std::vector<std::unique_ptr<MapLiteral>> _mapLiterals;
     std::vector<std::unique_ptr<StatementContainer>> _statementContainers;
+    std::vector<AnalysisData> _data;
 
     std::unordered_map<std::uintptr_t, SourceLocation> _locationMap;
 
     StatementContainer* _currentStatements = nullptr;
-    ASTDataContainer _dataContainer;
     DeclContainer _declContainer;
 
     StatementContainer* newStatementContainer();

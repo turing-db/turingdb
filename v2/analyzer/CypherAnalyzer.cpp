@@ -143,10 +143,7 @@ void CypherAnalyzer::analyze(NodePattern& node) {
         node.setDecl(&decl);
     }
 
-    auto& dataContainer = _ast->dataContainer();
-    auto d = NodePatternData::create();
-
-    auto& data = dataContainer.newAnalysisData<NodePatternData>(EvaluatedType::NodePattern);
+    auto& data = _ast->newAnalysisData<NodePatternData>(EvaluatedType::NodePattern);
     node.setData(&data);
 
     if (node.hasLabels()) {
@@ -217,10 +214,7 @@ void CypherAnalyzer::analyze(EdgePattern& edge) {
         edge.setDecl(&decl);
     }
 
-    auto& dataContainer = _ast->dataContainer();
-    auto d = EdgePatternData::create();
-
-    auto& data = dataContainer.newAnalysisData<EdgePatternData>(EvaluatedType::EdgePattern);
+    auto& data = _ast->newAnalysisData<EdgePatternData>(EvaluatedType::EdgePattern);
     edge.setData(&data);
 
     if (edge.hasTypes()) {
