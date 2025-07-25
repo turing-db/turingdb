@@ -1,6 +1,6 @@
 #pragma once
 
-#include <memory>
+#include <string_view>
 
 namespace db {
 
@@ -8,8 +8,8 @@ class CypherAST;
 
 class CypherParser {
 public:
-    CypherParser();
-    ~CypherParser();
+    explicit CypherParser(CypherAST& ast);
+    ~CypherParser() = default;
 
     CypherParser(const CypherParser&) = delete;
     CypherParser(CypherParser&&) = default;
@@ -24,10 +24,8 @@ public:
         return *_ast;
     }
 
-    std::unique_ptr<CypherAST> takeAST();
-
 private:
-    std::unique_ptr<CypherAST> _ast;
+    CypherAST* _ast {nullptr};
     bool _allowNotImplemented = false;
 };
 

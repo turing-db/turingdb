@@ -40,8 +40,10 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
+    CypherAST ast(queryStr);
+
     {
-        CypherParser parser;
+        CypherParser parser(ast);
         parser.allowNotImplemented(false);
 
         try {
@@ -54,7 +56,7 @@ int main(int argc, char** argv) {
             return 0;
         }
 
-        CypherAnalyzer analyzer(parser.takeAST(), view);
+        CypherAnalyzer analyzer(ast, view);
 
         try {
             auto t0 = Clock::now();

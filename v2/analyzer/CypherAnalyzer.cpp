@@ -29,11 +29,12 @@
 
 using namespace db;
 
-CypherAnalyzer::CypherAnalyzer(std::unique_ptr<CypherAST> ast,
+CypherAnalyzer::CypherAnalyzer(CypherAST& ast,
                                GraphView graphView)
-    : _ast(std::move(ast)),
+    : _ast(&ast),
       _graphView(graphView),
-      _graphMetadata(graphView.metadata()) {
+      _graphMetadata(graphView.metadata())
+{
 }
 
 CypherAnalyzer::~CypherAnalyzer() = default;
@@ -67,6 +68,10 @@ void CypherAnalyzer::analyze(const Match& matchSt) {
         throw AnalyzeException("OPTIONAL MATCH not supported");
     }
 
+    if (!matchSt.hasPattern()) {
+        throw AnalyzeException("MATCH statement must have a pattern");
+    }
+
     const auto& pattern = matchSt.getPattern();
     analyze(pattern);
 
@@ -76,10 +81,6 @@ void CypherAnalyzer::analyze(const Match& matchSt) {
 
     if (matchSt.hasSkip()) {
         throw AnalyzeException("SKIP not supported");
-    }
-
-    if (!matchSt.hasPattern()) {
-        throw AnalyzeException("MATCH statement must have a pattern");
     }
 }
 

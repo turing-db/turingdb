@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "CypherAST.h"
 #include "CypherASTDumper.h"
 #include "CypherParser.h"
 #include "Time.h"
@@ -28,9 +29,11 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
+    CypherAST ast(queryStr);
+
     {
         // Try but allow not implemented to test the parser
-        CypherParser parser;
+        CypherParser parser(ast);
         parser.allowNotImplemented(true);
 
         try {
@@ -47,7 +50,7 @@ int main(int argc, char** argv) {
     {
         // Disallow not implemented.
         // This should print the AST if parsing was successful
-        CypherParser parser;
+        CypherParser parser(ast);
         parser.allowNotImplemented(false);
 
         try {

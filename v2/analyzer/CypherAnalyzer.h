@@ -32,7 +32,7 @@ class AnalysisData;
 
 class CypherAnalyzer {
 public:
-    CypherAnalyzer(std::unique_ptr<CypherAST> ast,
+    CypherAnalyzer(CypherAST& ast,
                    GraphView graphView);
     ~CypherAnalyzer();
 
@@ -48,7 +48,7 @@ public:
     }
 
 private:
-    std::unique_ptr<CypherAST> _ast;
+    CypherAST* _ast {nullptr};
     GraphView _graphView;
     const GraphMetadata& _graphMetadata;
 
