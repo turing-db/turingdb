@@ -833,7 +833,9 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
 
     using StrOpt = std::optional<types::String::Primitive>;
 
-    const std::string createQuery = "create (n:NewNode{poem=\"the cat jumped\", rating=5u})";
+    const std::string createQuery =
+        "create (n:NewNode{poem=\"the cat jumped\", rating=5u})";
+
     const auto change1Res = tester.query("change new")
                                 .expectVector<const Change*>({}, false)
                                 .execute()
@@ -847,10 +849,11 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
     tester.query("CHANGE SUBMIT").execute();
     tester.setChangeID(ChangeID::head());
 
-    
-    const std::string matchQuery = "match (n:NewNode{poem~=\"cat\", rating=5u}) return n.poem";
 
-    
+    const std::string matchQuery =
+        "match (n:NewNode{poem~=\"cat\", rating=5u}) return n.poem";
+
+
     tester.query(matchQuery)
         .expectVector<StrOpt>({"the cat jumped"})
         .execute();

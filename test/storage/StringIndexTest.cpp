@@ -25,13 +25,9 @@ using namespace db;
 class StringIndexTest : public TuringTest {
 public:
 protected:
-    void initialize() override {
-        _jobSystem = JobSystem::create();
-    }
+    void initialize() override { _jobSystem = JobSystem::create(); }
 
-    void terminate() override {
-        _jobSystem->terminate();
-    }
+    void terminate() override { _jobSystem->terminate(); }
 
     std::unique_ptr<db::JobSystem> _jobSystem;
 
@@ -99,7 +95,8 @@ protected:
 
         auto poliwrath = writer.addNode({"Pokemon"});
         writer.addNodeProperty<types::String>(poliwrath, "name", "Poliwrath");
-        writer.addNodeProperty<types::String>(poliwrath, "stage", "evolution stage three");
+        writer.addNodeProperty<types::String>(poliwrath, "stage",
+                                              "evolution stage three");
 
         writer.submit();
 
@@ -242,67 +239,72 @@ TEST_F(StringIndexTest, stringApproximation) {
 
 
 TEST_F(StringIndexTest, multiDataPartTest) {
-        auto db = createMultiDatapartGraph();
-        const FrozenCommitTx transaction = db->openTransaction();
-        GraphReader reader = transaction.readGraph();
-        auto parts = reader.dataparts();
+    auto db = createMultiDatapartGraph();
+    const FrozenCommitTx transaction = db->openTransaction();
+    GraphReader reader = transaction.readGraph();
+    auto parts = reader.dataparts();
 
-        ASSERT_EQ(parts.size(), 3);
+    ASSERT_EQ(parts.size(), 3);
 
-        const auto PWAGNODEID = NodeID(0);
-        const auto PWHIRLNODEID = NodeID(2);
-        const auto PWRATHNODEID = NodeID(4);
+    const auto PWAGNODEID = NodeID(0);
+    const auto PWHIRLNODEID = NodeID(2);
+    const auto PWRATHNODEID = NodeID(4);
 
-        const auto SANDSHREWNODEID = NodeID(1);
-        const auto SANDSLASHNODEID = NodeID(3);
+    const auto SANDSHREWNODEID = NodeID(1);
+    const auto SANDSLASHNODEID = NodeID(3);
 
-        auto datapartIterator = parts.begin();
+    auto datapartIterator = parts.begin();
 
-        // First stage/datapart
-        auto& firstStageIndex = datapartIterator->get()->getNodeStrPropIndex();
-        constexpr size_t NAMEPROPERTYOFFSET = 0;
-        auto& fstPropertyIndex = firstStageIndex.at(NAMEPROPERTYOFFSET);
+    // First stage/datapart
+    auto& firstStageIndex = datapartIterator->get()->getNodeStrPropIndex();
+    constexpr size_t NAMEPROPERTYOFFSET = 0;
+    auto& fstPropertyIndex = firstStageIndex.at(NAMEPROPERTYOFFSET);
 
-        {
-            std::vector<NodeID> owners {};
-            fstPropertyIndex->query<NodeID>(owners, "poli");
-            EXPECT_THAT(owners, UnorderedElementsAre(PWAGNODEID)) << "Query for 'poli' failed";
-        }
+    {
+        std::vector<NodeID> owners {};
+        fstPropertyIndex->query<NodeID>(owners, "poli");
+        EXPECT_THAT(owners, UnorderedElementsAre(PWAGNODEID))
+            << "Query for 'poli' failed";
+    }
 
-        {
-            std::vector<NodeID> owners {};
-            fstPropertyIndex->query<NodeID>(owners, "sand");
-            EXPECT_THAT(owners, UnorderedElementsAre(SANDSHREWNODEID)) << "Query for 'sand' failed";
-        }
+    {
+        std::vector<NodeID> owners {};
+        fstPropertyIndex->query<NodeID>(owners, "sand");
+        EXPECT_THAT(owners, UnorderedElementsAre(SANDSHREWNODEID))
+            << "Query for 'sand' failed";
+    }
 
-        datapartIterator++;
+    datapartIterator++;
 
-        // Second stage/datapart
-        auto& secondStageIndex = datapartIterator->get()->getNodeStrPropIndex();
-        auto& sndPropertyIndex = secondStageIndex.at(NAMEPROPERTYOFFSET);
+    // Second stage/datapart
+    auto& secondStageIndex = datapartIterator->get()->getNodeStrPropIndex();
+    auto& sndPropertyIndex = secondStageIndex.at(NAMEPROPERTYOFFSET);
 
-        
-        {
-            std::vector<NodeID> owners {};
-            sndPropertyIndex->query<NodeID>(owners, "poli");
-            EXPECT_THAT(owners, UnorderedElementsAre(PWHIRLNODEID)) << "Query for 'poli' failed";
-        }
 
-        {
-            std::vector<NodeID> owners {};
-            sndPropertyIndex->query<NodeID>(owners, "sand");
-            EXPECT_THAT(owners, UnorderedElementsAre(SANDSLASHNODEID)) << "Query for 'poli' failed";
-        }
+    {
+        std::vector<NodeID> owners {};
+        sndPropertyIndex->query<NodeID>(owners, "poli");
+        EXPECT_THAT(owners, UnorderedElementsAre(PWHIRLNODEID))
+            << "Query for 'poli' failed";
+    }
 
-        datapartIterator++;
+    {
+        std::vector<NodeID> owners {};
+        sndPropertyIndex->query<NodeID>(owners, "sand");
+        EXPECT_THAT(owners, UnorderedElementsAre(SANDSLASHNODEID))
+            << "Query for 'poli' failed";
+    }
 
-        // Third stage/datapart
-        auto& thirdStageIndex = datapartIterator->get()->getNodeStrPropIndex();
-        auto& thdPropertyIndex = thirdStageIndex.at(NAMEPROPERTYOFFSET);
-        
-        {
-            std::vector<NodeID> owners {};
-            thdPropertyIndex->query<NodeID>(owners, "poli");
-            EXPECT_THAT(owners, UnorderedElementsAre(PWRATHNODEID)) << "Query for 'poli' failed";
-        }
+    datapartIterator++;
+
+    // Third stage/datapart
+    auto& thirdStageIndex = datapartIterator->get()->getNodeStrPropIndex();
+    auto& thdPropertyIndex = thirdStageIndex.at(NAMEPROPERTYOFFSET);
+
+    {
+        std::vector<NodeID> owners {};
+        thdPropertyIndex->query<NodeID>(owners, "poli");
+        EXPECT_THAT(owners, UnorderedElementsAre(PWRATHNODEID))
+            << "Query for 'poli' failed";
+    }
 }
