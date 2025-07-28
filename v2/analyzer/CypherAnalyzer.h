@@ -48,14 +48,6 @@ public:
         return *_ast;
     }
 
-private:
-    CypherAST* _ast {nullptr};
-    GraphView _graphView;
-    const GraphMetadata& _graphMetadata;
-
-    std::unique_ptr<DeclContext> _rootCtxt;
-    DeclContext* _ctxt {nullptr};
-
     // Query types
     void analyze(const SinglePartQuery& query);
 
@@ -82,6 +74,14 @@ private:
     void analyze(StringExpression& expr);
     void analyze(NodeLabelExpression& expr);
     void analyze(PathExpression& expr);
+
+private:
+    CypherAST* _ast {nullptr};
+    GraphView _graphView;
+    const GraphMetadata& _graphMetadata;
+
+    std::unique_ptr<DeclContext> _rootCtxt;
+    DeclContext* _ctxt {nullptr};
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 

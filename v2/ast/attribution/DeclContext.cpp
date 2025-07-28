@@ -10,7 +10,8 @@ using namespace db;
 
 DeclContext::DeclContext(DeclContainer& container, DeclContext* parent)
     : _container(container),
-      _parent(parent) {
+      _parent(parent)
+{
 }
 
 DeclContext::~DeclContext() = default;

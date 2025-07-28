@@ -61,11 +61,12 @@ QueryPlanner::QueryPlanner(const GraphView& view,
                            LocalMemory* mem,
                            QueryCallback callback)
     : _view(view),
-      _mem(mem),
-      _queryCallback(std::move(callback)),
-      _pipeline(std::make_unique<Pipeline>()),
-      _output(std::make_unique<Block>()),
-      _transformData(std::make_unique<TransformData>(mem)) {
+    _mem(mem),
+    _queryCallback(std::move(callback)),
+    _pipeline(std::make_unique<Pipeline>()),
+    _output(std::make_unique<Block>()),
+    _transformData(std::make_unique<TransformData>(mem))
+{
 }
 
 QueryPlanner::~QueryPlanner() {

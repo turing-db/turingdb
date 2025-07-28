@@ -12,7 +12,8 @@ EntityPattern::EntityPattern(VarExpr* var,
     : _var(var),
     _typeConstr(typeConstr),
     _exprConstr(exprConstr),
-    _entityID(entityID) {
+    _entityID(entityID)
+{
 }
 
 EntityPattern::~EntityPattern() {

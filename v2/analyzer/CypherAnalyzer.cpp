@@ -27,7 +27,8 @@ CypherAnalyzer::CypherAnalyzer(CypherAST& ast,
                                GraphView graphView)
     : _ast(&ast),
       _graphView(graphView),
-      _graphMetadata(graphView.metadata()) {
+      _graphMetadata(graphView.metadata())
+{
 }
 
 CypherAnalyzer::~CypherAnalyzer() = default;
@@ -271,7 +272,7 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
 
     EvaluatedType type = EvaluatedType::Invalid;
 
-    const TypeBitSet pair = getTypeBitset(a, b);
+    const TypePairBitset pair {a, b};
 
     switch (expr.getBinaryOperator()) {
         case BinaryOperator::Or:
@@ -279,7 +280,7 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
         case BinaryOperator::And: {
             type = EvaluatedType::Bool;
 
-            if (pair == getTypeBitset(EvaluatedType::Bool, EvaluatedType::Bool)) {
+            if (pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)) {
                 break;
             }
 
@@ -293,11 +294,11 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
         case BinaryOperator::Equal: {
             type = EvaluatedType::Bool;
 
-            if (pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Integer)
-                || pair == getTypeBitset(EvaluatedType::String, EvaluatedType::String)
-                || pair == getTypeBitset(EvaluatedType::String, EvaluatedType::Char)
-                || pair == getTypeBitset(EvaluatedType::Char, EvaluatedType::Char)) {
-                // Valid pair
+            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
+                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
+                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)
+                || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Char)
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)) {
                 break;
             }
 
@@ -312,9 +313,9 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
         case BinaryOperator::GreaterThanOrEqual: {
             type = EvaluatedType::Bool;
 
-            if (pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Integer)
-                || pair == getTypeBitset(EvaluatedType::Double, EvaluatedType::Double)
-                || pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
+            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
+                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
+                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
                 // Valid pair
                 break;
             }
@@ -331,13 +332,13 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
         case BinaryOperator::Div:
         case BinaryOperator::Mod:
         case BinaryOperator::Pow: {
-            if (pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
+            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
                 type = EvaluatedType::Integer;
                 break;
             }
 
-            if (pair == getTypeBitset(EvaluatedType::Double, EvaluatedType::Double)
-                || pair == getTypeBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
+            if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
+                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -409,34 +410,31 @@ void CypherAnalyzer::analyze(SymbolExpression& expr) {
 }
 
 void CypherAnalyzer::analyze(LiteralExpression& expr) {
-    EvaluatedType type = EvaluatedType::Invalid;
     const auto& literal = expr.literal();
 
     switch (literal.type()) {
         case Literal::type<std::monostate>(): {
-            type = EvaluatedType::Null;
+            expr.setType(EvaluatedType::Null);
         } break;
         case Literal::type<bool>(): {
-            type = EvaluatedType::Bool;
+            expr.setType(EvaluatedType::Bool);
         } break;
         case Literal::type<int64_t>(): {
-            type = EvaluatedType::Integer;
+            expr.setType(EvaluatedType::Integer);
         } break;
         case Literal::type<double>(): {
-            type = EvaluatedType::Double;
+            expr.setType(EvaluatedType::Double);
         } break;
         case Literal::type<std::string_view>(): {
-            type = EvaluatedType::String;
+            expr.setType(EvaluatedType::String);
         } break;
         case Literal::type<char>(): {
-            type = EvaluatedType::Char;
+            expr.setType(EvaluatedType::Char);
         } break;
         case Literal::type<MapLiteral*>(): {
-            type = EvaluatedType::Map;
+            expr.setType(EvaluatedType::Map);
         } break;
     }
-
-    expr.setType(type);
 }
 
 void CypherAnalyzer::analyze(ParameterExpression& expr) {

@@ -15,7 +15,8 @@ using namespace db;
 ChangeStep::ChangeStep(ChangeOpType type,
                        ColumnVector<const Change*>* output)
     : _type(type),
-      _output(output) {
+    _output(output)
+{
 }
 
 ChangeStep::~ChangeStep() {

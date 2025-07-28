@@ -71,7 +71,6 @@ void CypherError::generate(std::string& errorOutput) {
     if (_query.empty()) {
         errorOutput += EMPTY_PREFIX;
         errorOutput += "Empty query\n";
-        return;
     }
 
     if (!_loc) {

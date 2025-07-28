@@ -13,7 +13,8 @@ namespace db {
 class GMLGraphSax {
 public:
     explicit GMLGraphSax(Graph* graph)
-        : _graph(graph) {
+        : _graph(graph)
+    {
     }
 
     bool prepare() {

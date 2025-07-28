@@ -1,7 +1,6 @@
 #pragma once
 
 #include "EnumToString.h"
-#include <bitset>
 
 namespace db {
 
@@ -23,15 +22,27 @@ enum class EvaluatedType : uint8_t {
     _SIZE,
 };
 
-using TypeBitSet = std::bitset<static_cast<size_t>(EvaluatedType::_SIZE)>;
+class TypePairBitset {
+public:
+    constexpr TypePairBitset() = default;
 
-constexpr TypeBitSet getTypeBitset(EvaluatedType a, EvaluatedType b) {
-    uint16_t bitset = 0;
-    bitset |= static_cast<uint16_t>(a);
-    bitset |= static_cast<uint16_t>(b);
+    constexpr TypePairBitset(EvaluatedType a, EvaluatedType b)
+    {
+        _bitset |= (static_cast<uint16_t>(1) << static_cast<uint16_t>(a));
+        _bitset |= (static_cast<uint16_t>(1) << static_cast<uint16_t>(b));
+    }
 
-    return TypeBitSet(bitset);
-}
+    constexpr bool operator==(const TypePairBitset& other) const {
+        return _bitset == other._bitset;
+    }
+
+    uint16_t bitset() const {
+        return _bitset;
+    }
+
+private:
+    uint16_t _bitset {0};
+};
 
 using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Invalid, "Invalid">,

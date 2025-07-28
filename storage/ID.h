@@ -19,7 +19,8 @@ public:
     ID() = default;
 
     ID(T id)
-        : _id(id) {
+        : _id(id)
+    {
     }
 
     ID& operator=(T id) {

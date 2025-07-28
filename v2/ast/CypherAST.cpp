@@ -17,7 +17,8 @@ using namespace db;
 
 CypherAST::CypherAST(std::string_view query)
     : _query(query),
-      _currentStatements(newStatementContainer()) {
+      _currentStatements(newStatementContainer())
+{
 }
 
 CypherAST::~CypherAST() = default;

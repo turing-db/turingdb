@@ -45,7 +45,8 @@ constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op, ColumnKind::Co
 }
 
 FilterStep::FilterStep(ColumnVector<size_t>* indices)
-    : _indices(indices) {
+    : _indices(indices)
+{
 }
 
 FilterStep::FilterStep() {
