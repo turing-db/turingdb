@@ -855,3 +855,60 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
         .expectVector<StrOpt>({"the cat jumped"})
         .execute();
 }
+
+TEST_F(QueryTest, PersonGraphAproxMatching) {
+    QueryTester tester{_mem, *_interp};
+
+    using StrOpt = std::optional<types::String::Primitive>;
+
+    // Start a new change
+    const auto changeRes = tester.query("change new")
+                              .expectVector<const Change*>({}, false)
+                              .execute()
+                              .outputColumnVector<const Change*>(0);
+
+    const ChangeID change = changeRes.value()->back()->id();
+    tester.setChangeID(change);
+
+    // Create nodes and edge
+    tester.query(R"(create (n:Person{name="Cyrus", hasPhD=false}))").execute();
+    tester.query(R"(create (n:Person{name="Sai", hasPhD=true}))").execute();
+    tester
+        .query(
+            R"(create (n:Person{name="Cyrus", hasPhD=false}) \
+            -[e:Edgey{name="Housemate"}]-(m:Person{name="Sai", hasPhD=true}))")
+        .execute();
+
+    // Commit the change
+    tester.query("commit").execute();
+    tester.setChangeID(ChangeID::head());
+
+    // Run the match queries
+    tester.query(R"(match (n:Person{name="Cyrus"}) return n.name)")
+        .expectVector<StrOpt>({"Cyrus"})
+        .execute();
+
+    tester.query(R"(match (n:Person{name~="Cyrus"}) return n.name)")
+        .expectVector<StrOpt>({"Cyrus"})
+        .execute();
+
+    tester.query(R"(match (n:Person{name~="Cyrus", hasPhD=false}) return n.name)")
+        .expectVector<StrOpt>({"Cyrus"})
+        .execute();
+
+    tester.query(R"(match (n{name="Cyrus"})-[e{name="Housemate"}]-(m{name="Sai"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+
+    tester.query(R"(match (n{name~="Cy"})-[e{name~="House"}]-(m{name~="Sa"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+
+    tester.query(R"(match (n{name~="Cy", hasPhD=false})-[e{name~="House"}]-(m{name~="Sa"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+
+    tester.query(R"(match (n:Person{name~="Cy", hasPhD=false})-[e:Edgey{name~="House"}]-(m:Person{name~="Sa"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+}

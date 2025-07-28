@@ -6,6 +6,7 @@
 #include <range/v3/view/chunk.hpp>
 #include <range/v3/all.hpp>
 
+#include "BioAssert.h"
 #include "DataPart.h"
 #include "Expr.h"
 #include "FilterStep.h"
@@ -449,7 +450,7 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
                 ._lhs = propValues,
                 ._rhs = filterConstVal});
             // Apply the mask in @ref filterMask to all nodes (stored in @ref
-            // scannedNodes), outputting to @ref outputNodes
+            // scannedNodes)
             filter.addOperand(FilterStep::Operand {
                 ._mask = filterMask,
                 ._src = scannedNodes,
@@ -478,6 +479,7 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
             throw PlannerException("Unsupported operator for type 'String'");
         break;
     }
+    msgbioassert(exprs.size() > 1, "Single expression case fell through");
     // If we are here then we have filtered the nodes based on the first property
     // constraint, but there are more to filter on (i.e. exprs.size() > 1)
 
