@@ -47,8 +47,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_GRAPH] = ACTIVATE_PTR(CreateGraphStep);
         _activateTbl[(uint64_t)PipelineOpcode::LIST_GRAPH] = ACTIVATE_PTR(ListGraphStep);
         _activateTbl[(uint64_t)PipelineOpcode::LOAD_GRAPH] = ACTIVATE_PTR(LoadGraphStep);
-        _activateTbl[(uint64_t)PipelineOpcode::QUERY_NODE_INDEX] = ACTIVATE_PTR(QueryNodeIndexStep);
-        _activateTbl[(uint64_t)PipelineOpcode::QUERY_EDGE_INDEX] = ACTIVATE_PTR(QueryEdgeIndexStep);
+        _activateTbl[(uint64_t)PipelineOpcode::QUERY_NODE_INDEX] = ACTIVATE_PTR(LookupNodeIndexStep);
+        _activateTbl[(uint64_t)PipelineOpcode::QUERY_EDGE_INDEX] = ACTIVATE_PTR(LookupEdgeIndexStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_INT64] = ACTIVATE_PTR(ScanNodesByPropertyInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_UINT64] = ACTIVATE_PTR(ScanNodesByPropertyUInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(ScanNodesByPropertyDoubleStep);
@@ -107,8 +107,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_GRAPH] = RETURN_PTR(CreateGraphStep);
         _returnTbl[(uint64_t)PipelineOpcode::LIST_GRAPH] = RETURN_PTR(ListGraphStep);
         _returnTbl[(uint64_t)PipelineOpcode::LOAD_GRAPH] = RETURN_PTR(LoadGraphStep);
-        _returnTbl[(uint64_t)PipelineOpcode::QUERY_NODE_INDEX] = RETURN_PTR(QueryNodeIndexStep);
-        _returnTbl[(uint64_t)PipelineOpcode::QUERY_EDGE_INDEX] = RETURN_PTR(QueryEdgeIndexStep);
+        _returnTbl[(uint64_t)PipelineOpcode::QUERY_NODE_INDEX] = RETURN_PTR(LookupNodeIndexStep);
+        _returnTbl[(uint64_t)PipelineOpcode::QUERY_EDGE_INDEX] = RETURN_PTR(LookupEdgeIndexStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_INT64] = RETURN_PTR(ScanNodesByPropertyInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_UINT64] = RETURN_PTR(ScanNodesByPropertyUInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = RETURN_PTR(ScanNodesByPropertyDoubleStep);
@@ -208,8 +208,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(CreateGraphStep)
     ACTIVATE_STEP(ListGraphStep)
     ACTIVATE_STEP(LoadGraphStep)
-    ACTIVATE_STEP(QueryNodeIndexStep)
-    ACTIVATE_STEP(QueryEdgeIndexStep)
+    ACTIVATE_STEP(LookupNodeIndexStep)
+    ACTIVATE_STEP(LookupEdgeIndexStep)
     ACTIVATE_STEP(ScanNodesByPropertyInt64Step)
     ACTIVATE_STEP(ScanNodesByPropertyUInt64Step)
     ACTIVATE_STEP(ScanNodesByPropertyDoubleStep)
@@ -267,8 +267,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(CreateGraphStep)
     RETURN_STEP(ListGraphStep)
     RETURN_STEP(LoadGraphStep)
-    RETURN_STEP(QueryNodeIndexStep)
-    RETURN_STEP(QueryEdgeIndexStep)
+    RETURN_STEP(LookupNodeIndexStep)
+    RETURN_STEP(LookupEdgeIndexStep)
     RETURN_STEP(ScanNodesByPropertyInt64Step)
     RETURN_STEP(ScanNodesByPropertyUInt64Step)
     RETURN_STEP(ScanNodesByPropertyDoubleStep)

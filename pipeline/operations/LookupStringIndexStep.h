@@ -14,11 +14,11 @@ class ExecutionContext;
 
 template <typename IDT>
     requires(Identifier<IDT>)
-class QueryIndexStep {
+class LookupStringIndexStep {
 public:
     struct Tag {};
 
-    QueryIndexStep(ColumnSet<IDT>* outSet, const GraphView& view, PropertyTypeID propID,
+    LookupStringIndexStep(ColumnSet<IDT>* outSet, const GraphView& view, PropertyTypeID propID,
                    const std::string& strQuery)
         : _set(outSet),
           _view(view),
@@ -27,9 +27,9 @@ public:
     {
     }
 
-    QueryIndexStep(QueryIndexStep<IDT>&& other) = default;
+    LookupStringIndexStep(LookupStringIndexStep<IDT>&& other) = default;
 
-    ~QueryIndexStep()
+    ~LookupStringIndexStep()
     {
     }
 
@@ -58,7 +58,7 @@ public:
 
     void describe(std::string& descr) const {
         std::stringstream ss;
-        ss << "QueryIndexStep";
+        ss << "LookupStringIndexStep";
         if constexpr (std::same_as<IDT, NodeID>) {
             ss << " type(IDT)= NodeID";
         }
@@ -78,6 +78,6 @@ private:
     bool _done {false};
 };
 
-using QueryNodeIndexStep = QueryIndexStep<NodeID>;
-using QueryEdgeIndexStep = QueryIndexStep<EdgeID>;
+using LookupNodeIndexStep = LookupStringIndexStep<NodeID>;
+using LookupEdgeIndexStep = LookupStringIndexStep<EdgeID>;
 }

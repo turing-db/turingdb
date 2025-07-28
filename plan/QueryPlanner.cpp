@@ -20,7 +20,7 @@
 #include "Pipeline.h"
 #include "Profiler.h"
 #include "QueryCommand.h"
-#include "QueryIndexStep.h"
+#include "LookupStringIndexStep.h"
 #include "ReturnField.h"
 #include "ASTContext.h"
 #include "ReturnProjection.h"
@@ -633,7 +633,7 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
             } else if (op == BinExpr::OP_STR_APPROX) {
                 const std::string& queryString = static_cast<StringExprConst*>(rightExpr)->getVal();
                 auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
-                _pipeline->add<QueryNodeIndexStep>(lookupSet, _view, propType._id, queryString);
+                _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id, queryString);
 
                 // Fill filtermask[i] with a mask for the Nodes that match approx
                 auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -672,7 +672,7 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                 const std::string& queryString = static_cast<StringExprConst*>(rightExpr)->getVal();
                 // Step to generate lookup set with Nodes that match
                 auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
-                _pipeline->add<QueryNodeIndexStep>(lookupSet, _view, propType._id, queryString);
+                _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id, queryString);
 
                 // Fill filtermask[i] with a mask for the Nodes that match approx
                 auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -728,7 +728,7 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
 
             // Step to generate lookup set with Node/EdgeIDs that match
             auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
-            _pipeline->add<QueryNodeIndexStep>(lookupSet, _view, propType._id, queryString);
+            _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id, queryString);
 
             // Fill filtermask[i] with a mask for the Nodes/Edges that match approx
             auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -800,7 +800,7 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
             auto* lookupSet = _mem->alloc<ColumnSet<EdgeID>>();
 
             // Step to generate lookup set with Node/EdgeIDs that match
-            _pipeline->add<QueryEdgeIndexStep>(lookupSet, _view, propType._id, queryString);
+            _pipeline->add<LookupEdgeIndexStep>(lookupSet, _view, propType._id, queryString);
 
             // Fill filtermask[i] with a mask for the Nodes/Edges that match approx
             auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();

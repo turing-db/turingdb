@@ -28,7 +28,7 @@
 #include "operations/ListGraphStep.h"
 #include "operations/GetLabelSetIDStep.h"
 #include "operations/LoadGraphStep.h"
-#include "operations/QueryIndexStep.h"
+#include "operations/LookupStringIndexStep.h"
 #include "operations/GetPropertyStep.h"
 #include "operations/GetFilteredPropertyStep.h"
 #include "operations/HistoryStep.h"
@@ -124,11 +124,11 @@ public:
                  ColumnVector<const Change*>*);
     PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
 
-    PipelineStep(QueryNodeIndexStep::Tag, ColumnSet<NodeID>* outSet,
+    PipelineStep(LookupNodeIndexStep::Tag, ColumnSet<NodeID>* outSet,
                  const GraphView& view, PropertyTypeID propID,
                  const std::string& strQuery);
 
-    PipelineStep(QueryEdgeIndexStep::Tag, ColumnSet<EdgeID>* outSet,
+    PipelineStep(LookupEdgeIndexStep::Tag, ColumnSet<EdgeID>* outSet,
                  const GraphView& view, PropertyTypeID propID,
                  const std::string& strQuery);
 
@@ -192,8 +192,8 @@ private:
                  CreateGraphStep,
                  ListGraphStep,
                  LoadGraphStep,
-                 QueryNodeIndexStep,
-                 QueryEdgeIndexStep,
+                 LookupNodeIndexStep,
+                 LookupEdgeIndexStep,
                  ScanNodesByPropertyInt64Step,
                  ScanNodesByPropertyUInt64Step,
                  ScanNodesByPropertyDoubleStep,
