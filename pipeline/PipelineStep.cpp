@@ -237,19 +237,19 @@ PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
 {
 }
 
-PipelineStep::PipelineStep(LookupNodeStringIndexStep::Tag, ColumnSet<NodeID>* outSet,
+PipelineStep::PipelineStep(QueryNodeIndexStep::Tag, ColumnSet<NodeID>* outSet,
                            const GraphView& view, PropertyTypeID propID,
                            const std::string& strQuery)
     : _opcode(PipelineOpcode::QUERY_NODE_INDEX),
-    _impl(std::in_place_type<LookupNodeStringIndexStep>, outSet, view, propID, strQuery)
+    _impl(std::in_place_type<QueryNodeIndexStep>, outSet, view, propID, strQuery)
 {
 }
 
-PipelineStep::PipelineStep(LookupEdgeStringIndexStep::Tag, ColumnSet<EdgeID>* outSet,
+PipelineStep::PipelineStep(QueryEdgeIndexStep::Tag, ColumnSet<EdgeID>* outSet,
                            const GraphView& view, PropertyTypeID propID,
                            const std::string& strQuery)
     : _opcode(PipelineOpcode::QUERY_EDGE_INDEX),
-    _impl(std::in_place_type<LookupEdgeStringIndexStep>, outSet, view, propID, strQuery)
+    _impl(std::in_place_type<QueryEdgeIndexStep>, outSet, view, propID, strQuery)
 {
 }
 

@@ -106,6 +106,7 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op, Lhs::staticKi
         break;                                    \
     }
 
+
 void FilterStep::compute() {
     for (const Expression& expr : _expressions) {
         switch (getOpCase(expr._op, expr._lhs->getKind(), expr._rhs->getKind())) {
@@ -169,6 +170,10 @@ void FilterStep::compute() {
             IN_CASE(ColumnVector<LabelSetID>, ColumnSet<LabelSetID>)
             IN_CASE(ColumnVector<LabelSet>, ColumnSet<LabelSet>)
             IN_CASE(ColumnVector<std::string>, ColumnSet<std::string>)
+            // XXX: Do we need these?
+            //IN_CASE(ColumnVector<std::string_view>, ColumnSet<std::string_view>)
+            //IN_CASE(ColumnVector<std::string_view>, ColumnSet<std::string>)
+            //IN_CASE(ColumnVector<std::string>, ColumnSet<std::string_view>)
             IN_CASE(ColumnVector<double>, ColumnSet<double>)
             IN_CASE(ColumnVector<int64_t>, ColumnSet<int64_t>)
 

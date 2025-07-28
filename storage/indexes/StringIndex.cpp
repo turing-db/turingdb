@@ -68,6 +68,7 @@ void StringIndex::split(std::vector<std::string>& res,
     res.push_back(std::string(str.substr(l, std::min(r, str.size()) - l + 1)));
 }
 
+
 void StringIndex::preprocess(std::vector<std::string>& res, const std::string_view in) {
     std::string cleaned {};
     StringIndex::alphaNumericise(in, cleaned);

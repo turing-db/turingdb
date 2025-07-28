@@ -124,11 +124,11 @@ public:
                  ColumnVector<const Change*>*);
     PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
 
-    PipelineStep(LookupNodeStringIndexStep::Tag, ColumnSet<NodeID>* outSet,
+    PipelineStep(QueryNodeIndexStep::Tag, ColumnSet<NodeID>* outSet,
                  const GraphView& view, PropertyTypeID propID,
                  const std::string& strQuery);
 
-    PipelineStep(LookupEdgeStringIndexStep::Tag, ColumnSet<EdgeID>* outSet,
+    PipelineStep(QueryEdgeIndexStep::Tag, ColumnSet<EdgeID>* outSet,
                  const GraphView& view, PropertyTypeID propID,
                  const std::string& strQuery);
 
@@ -192,8 +192,8 @@ private:
                  CreateGraphStep,
                  ListGraphStep,
                  LoadGraphStep,
-                 LookupNodeStringIndexStep,
-                 LookupEdgeIndexStep,
+                 QueryNodeIndexStep,
+                 QueryEdgeIndexStep,
                  ScanNodesByPropertyInt64Step,
                  ScanNodesByPropertyUInt64Step,
                  ScanNodesByPropertyDoubleStep,

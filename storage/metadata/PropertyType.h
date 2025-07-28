@@ -55,6 +55,7 @@ struct PropertyType {
     ValueType _valueType {};
 
     bool isValid() const { return _id.isValid(); }
+
     
     bool operator==(const PropertyType& other) const {
         return _id.getValue() == other._id.getValue() && _valueType == other._valueType ;
