@@ -20,6 +20,7 @@
 #include "Pipeline.h"
 #include "Profiler.h"
 #include "QueryCommand.h"
+#include "QueryIndexStep.h"
 #include "ReturnField.h"
 #include "ASTContext.h"
 #include "ReturnProjection.h"

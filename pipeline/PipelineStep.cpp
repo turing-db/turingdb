@@ -1,6 +1,7 @@
 #include "PipelineStep.h"
 #include "ID.h"
 #include "PipelineOpcode.h"
+#include "QueryIndexStep.h"
 
 #define GET_PROPERTY_STEP_IMPL(NodeOrEdge, Opcode, Type)                             \
     PipelineStep::PipelineStep(Get##NodeOrEdge##Property##Type##Step::Tag,           \
@@ -239,7 +240,7 @@ PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
 PipelineStep::PipelineStep(LookupNodeStringIndexStep::Tag, ColumnSet<NodeID>* outSet,
                            const GraphView& view, PropertyTypeID propID,
                            const std::string& strQuery)
-    : _opcode(PipelineOpcode::LOOKUP_NODE_STRING_INDEX),
+    : _opcode(PipelineOpcode::QUERY_NODE_INDEX),
     _impl(std::in_place_type<LookupNodeStringIndexStep>, outSet, view, propID, strQuery)
 {
 }
@@ -247,7 +248,7 @@ PipelineStep::PipelineStep(LookupNodeStringIndexStep::Tag, ColumnSet<NodeID>* ou
 PipelineStep::PipelineStep(LookupEdgeStringIndexStep::Tag, ColumnSet<EdgeID>* outSet,
                            const GraphView& view, PropertyTypeID propID,
                            const std::string& strQuery)
-    : _opcode(PipelineOpcode::LOOKUP_EDGE_STRING_INDEX),
+    : _opcode(PipelineOpcode::QUERY_EDGE_INDEX),
     _impl(std::in_place_type<LookupEdgeStringIndexStep>, outSet, view, propID, strQuery)
 {
 }
