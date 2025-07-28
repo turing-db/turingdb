@@ -136,5 +136,8 @@ private:
     bool planChange(const ChangeCommand* cmd);
     bool planCommit(const CommitCommand* commit);
     bool planCall(const CallCommand* call);
+
+    void caseScanNodesStringConstraint(const std::vector<const BinExpr*>& exprs,
+                                       PropertyType propType, ColumnNodeIDs* outNodes);
 };
 }
