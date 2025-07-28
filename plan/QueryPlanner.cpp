@@ -725,15 +725,12 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                 filter.addOperand(FilterStep::Operand {
                     ._mask = filterMask,
                     ._src = scannedNodes,
-                    ._dest = outputNodes});
+                    ._dest = scannedMatchingNodes});
             }
-            // If OP_EQUALS : we filter those with matching property values. If OP_STR_APPROX
-            const auto* nodesToFilter = op == BinExpr::OP_EQUAL ? scannedMatchingNodes : scannedNodes;
-
             generateNodePropertyFilterMasks(masks,
                                             std::span<const BinExpr* const>(expressions.data() + 1,
                                                                             expressions.size() - 1),
-                                            nodesToFilter);
+                                            scannedMatchingNodes);
 
             auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
             for (auto* mask : masks) {
@@ -745,7 +742,7 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
             }
             filter.addOperand(FilterStep::Operand {
                 ._mask = masks[0],
-                ._src = nodesToFilter,
+                ._src = scannedMatchingNodes,
                 ._dest = outputNodes});
         } else {
             // Special case: use string approx operator with single expression

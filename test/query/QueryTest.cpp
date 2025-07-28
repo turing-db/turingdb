@@ -861,7 +861,6 @@ TEST_F(QueryTest, PersonGraphAproxMatching) {
 
     using StrOpt = std::optional<types::String::Primitive>;
 
-    // Start a new change
     const auto changeRes = tester.query("change new")
                               .expectVector<const Change*>({}, false)
                               .execute()
@@ -870,17 +869,12 @@ TEST_F(QueryTest, PersonGraphAproxMatching) {
     const ChangeID change = changeRes.value()->back()->id();
     tester.setChangeID(change);
 
-    // Create nodes and edge
-    tester.query(R"(create (n:Person{name="Cyrus", hasPhD=false}))").execute();
-    tester.query(R"(create (n:Person{name="Sai", hasPhD=true}))").execute();
-    tester
-        .query(
-            R"(create (n:Person{name="Cyrus", hasPhD=false}) \
-            -[e:Edgey{name="Housemate"}]-(m:Person{name="Sai", hasPhD=true}))")
+    tester.query(
+            R"(create (n:Person{name="Cyrus", hasPhD=false})-[e:Edgey{name="Housemate"}]-(m:Person{name="Sai", hasPhD=true}))")
         .execute();
 
     // Commit the change
-    tester.query("commit").execute();
+    tester.query("change submit").execute();
     tester.setChangeID(ChangeID::head());
 
     // Run the match queries
