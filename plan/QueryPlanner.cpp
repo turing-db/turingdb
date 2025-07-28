@@ -410,7 +410,6 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
 void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr*>& exprs,
                                                  PropertyType propType,
                                                  ColumnNodeIDs* outNodes) {
-
     auto* filteredScannedNodes = _mem->alloc<ColumnNodeIDs>();
     // If there is a single constraint, the result of the first filter is the output.
     // Otherwise, we use the intermediary @ref filteredScannedNodes to pass to filter
@@ -423,7 +422,6 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
     // We examine the first expression
     BinExpr::OpType firstOperator = exprs[0]->getOpType();
     if (firstOperator == BinExpr::OP_EQUAL) {
-
         auto* scannedNodes = _mem->alloc<ColumnNodeIDs>();
         auto* propValues = _mem->alloc<ColumnVector<types::String::Primitive>>();
 
@@ -499,7 +497,7 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
     filter.addOperand(FilterStep::Operand {
         ._mask = masks[0],
         ._src = firstStageOutput,
-        ._dest = outNodes});
+        ._dest = outNodes}); // Final destination is output
 }
 
 void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& outputNodes,
