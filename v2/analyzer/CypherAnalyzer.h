@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "attribution/EvaluatedType.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -82,7 +83,9 @@ private:
     void analyze(NodeLabelExpression& expr);
     void analyze(PathExpression& expr);
 
-    void throwError(std::string_view msg, const void* obj = 0);
+    void throwError(std::string_view msg, const void* obj = 0) const;
+
+    bool propTypeCompatible(ValueType vt, EvaluatedType exprType) const;
 };
 
 }

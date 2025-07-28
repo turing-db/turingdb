@@ -160,32 +160,6 @@ void CypherAnalyzer::analyze(NodePattern& node) {
         }
     }
 
-    constexpr auto compatible = [](ValueType vt, EvaluatedType exprType) {
-        switch (exprType) {
-            case EvaluatedType::Null:
-            case EvaluatedType::NodePattern:
-            case EvaluatedType::EdgePattern:
-                return false;
-            case EvaluatedType::Integer:
-                return vt == ValueType::Int64 || vt == ValueType::UInt64 || vt == ValueType::Double;
-            case EvaluatedType::Double:
-                return vt == ValueType::Double;
-            case EvaluatedType::String:
-            case EvaluatedType::Char:
-                return vt == ValueType::String;
-            case EvaluatedType::Bool:
-                return vt == ValueType::Bool;
-            case EvaluatedType::List:
-            case EvaluatedType::Map:
-                return false;
-            case EvaluatedType::Invalid:
-            case EvaluatedType::_SIZE:
-                throw AnalyzeException("Invalid variable type");
-        }
-
-        return false;
-    };
-
     if (node.hasProperties()) {
         const auto& propTypeMap = _graphMetadata.propTypes();
 
@@ -198,7 +172,7 @@ void CypherAnalyzer::analyze(NodePattern& node) {
 
             data._exprConstraints.emplace_back(propType.value(), expr);
 
-            if (!compatible(propType->_valueType, expr->type())) {
+            if (!propTypeCompatible(propType->_valueType, expr->type())) {
                 throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
                                        EvaluatedTypeName::value(expr->type())),
@@ -231,32 +205,6 @@ void CypherAnalyzer::analyze(EdgePattern& edge) {
         }
     }
 
-    constexpr auto compatible = [](ValueType vt, EvaluatedType exprType) {
-        switch (exprType) {
-            case EvaluatedType::Null:
-            case EvaluatedType::NodePattern:
-            case EvaluatedType::EdgePattern:
-                return false;
-            case EvaluatedType::Integer:
-                return vt == ValueType::Int64 || vt == ValueType::UInt64 || vt == ValueType::Double;
-            case EvaluatedType::Double:
-                return vt == ValueType::Double;
-            case EvaluatedType::String:
-            case EvaluatedType::Char:
-                return vt == ValueType::String;
-            case EvaluatedType::Bool:
-                return vt == ValueType::Bool;
-            case EvaluatedType::List:
-            case EvaluatedType::Map:
-                return false;
-            case EvaluatedType::Invalid:
-            case EvaluatedType::_SIZE:
-                throw AnalyzeException("Invalid variable type");
-        }
-
-        return false;
-    };
-
     if (edge.hasProperties()) {
         const auto& propTypeMap = _graphMetadata.propTypes();
 
@@ -269,7 +217,7 @@ void CypherAnalyzer::analyze(EdgePattern& edge) {
 
             data._exprConstraints.emplace_back(propType.value(), expr);
 
-            if (!compatible(propType->_valueType, expr->type())) {
+            if (!propTypeCompatible(propType->_valueType, expr->type())) {
                 throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
                                        EvaluatedTypeName::value(expr->type())),
@@ -318,56 +266,63 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
     analyze(lhs);
     analyze(rhs);
 
-    const EvaluatedType lhsType = lhs.type();
-    const EvaluatedType rhsType = rhs.type();
+    const EvaluatedType a = lhs.type();
+    const EvaluatedType b = rhs.type();
 
     EvaluatedType type = EvaluatedType::Invalid;
 
-    constexpr auto listOrMap = [](EvaluatedType a, EvaluatedType b) {
-        return a == EvaluatedType::List
-            || a == EvaluatedType::Map
-            || b == EvaluatedType::List
-            || b == EvaluatedType::Map;
-    };
-
-    constexpr auto compatible = [](EvaluatedType a, EvaluatedType b) {
-        return a == b
-            || (a == EvaluatedType::Integer && b == EvaluatedType::Double)
-            || (a == EvaluatedType::Double && b == EvaluatedType::Integer)
-            || (a == EvaluatedType::String && b == EvaluatedType::Char)
-            || (a == EvaluatedType::Char && b == EvaluatedType::String);
-    };
+    const TypeBitSet pair = getTypeBitset(a, b);
 
     switch (expr.getBinaryOperator()) {
         case BinaryOperator::Or:
         case BinaryOperator::Xor:
         case BinaryOperator::And: {
-            // Binary operation
-            if (lhsType != EvaluatedType::Bool || rhsType != EvaluatedType::Bool) {
-                throw AnalyzeException("Operands must be booleans");
+            type = EvaluatedType::Bool;
+
+            if (pair == getTypeBitset(EvaluatedType::Bool, EvaluatedType::Bool)) {
+                break;
             }
 
-            type = EvaluatedType::Bool;
+            std::string error = fmt::format("Operands must be booleans, not '{}' and '{}'",
+                                            EvaluatedTypeName::value(a),
+                                            EvaluatedTypeName::value(b));
+            throwError(std::move(error), &expr);
         } break;
 
         case BinaryOperator::NotEqual:
-        case BinaryOperator::Equal:
+        case BinaryOperator::Equal: {
+            type = EvaluatedType::Bool;
+
+            if (pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Integer)
+                || pair == getTypeBitset(EvaluatedType::String, EvaluatedType::String)
+                || pair == getTypeBitset(EvaluatedType::String, EvaluatedType::Char)
+                || pair == getTypeBitset(EvaluatedType::Char, EvaluatedType::Char)) {
+                // Valid pair
+                break;
+            }
+
+            std::string error = fmt::format("Operands are not valid or compatible types: '{}' and '{}'",
+                                            EvaluatedTypeName::value(a),
+                                            EvaluatedTypeName::value(b));
+            throwError(std::move(error), &expr);
+        } break;
         case BinaryOperator::LessThan:
         case BinaryOperator::GreaterThan:
         case BinaryOperator::LessThanOrEqual:
         case BinaryOperator::GreaterThanOrEqual: {
-            if (listOrMap(lhsType, rhsType)) {
-                throw AnalyzeException("Lists and maps cannot be compared");
-            }
-
-            if (!compatible(lhsType, rhsType)) {
-                std::string error = fmt::format("Operands have incompatible types: '{}' and '{}'",
-                                                EvaluatedTypeName::value(lhsType),
-                                                EvaluatedTypeName::value(rhsType));
-                throwError(std::move(error), &expr);
-            }
-
             type = EvaluatedType::Bool;
+
+            if (pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Integer)
+                || pair == getTypeBitset(EvaluatedType::Double, EvaluatedType::Double)
+                || pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
+                // Valid pair
+                break;
+            }
+
+            std::string error = fmt::format("Operands are not valid or compatible numeric types: '{}' and '{}'",
+                                            EvaluatedTypeName::value(a),
+                                            EvaluatedTypeName::value(b));
+            throwError(std::move(error), &expr);
         } break;
 
         case BinaryOperator::Add:
@@ -376,33 +331,37 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
         case BinaryOperator::Div:
         case BinaryOperator::Mod:
         case BinaryOperator::Pow: {
-            if (!compatible(lhsType, rhsType)) {
-                std::string error = fmt::format("Operands have incompatible types: '{}' and '{}'",
-                                                EvaluatedTypeName::value(lhsType),
-                                                EvaluatedTypeName::value(rhsType));
-                throwError(std::move(error), &expr);
+            if (pair == getTypeBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
+                type = EvaluatedType::Integer;
+                break;
             }
 
-            if (lhsType == EvaluatedType::Double || rhsType == EvaluatedType::Double) {
+            if (pair == getTypeBitset(EvaluatedType::Double, EvaluatedType::Double)
+                || pair == getTypeBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
                 type = EvaluatedType::Double;
-            } else if (lhsType == EvaluatedType::String || rhsType == EvaluatedType::String) {
-                type = EvaluatedType::String;
-            } else {
-                type = lhsType;
+                break;
             }
 
+            std::string error = fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'",
+                                            EvaluatedTypeName::value(a),
+                                            EvaluatedTypeName::value(b));
+            throwError(std::move(error), &expr);
         } break;
 
         case BinaryOperator::In: {
-            if (rhsType != EvaluatedType::List) {
-                throw AnalyzeException("IN operand must be a list or map");
-            }
-
-            if (lhsType == EvaluatedType::List || lhsType == EvaluatedType::Map) {
-                throw AnalyzeException("Left operand must be a scalar");
-            }
-
             type = EvaluatedType::Bool;
+
+            if (b != EvaluatedType::List && b != EvaluatedType::Map) {
+                std::string error = fmt::format("IN operand must be a list or map, not '{}'",
+                                                EvaluatedTypeName::value(b));
+                throwError(std::move(error), &expr);
+            }
+
+            if (a == EvaluatedType::List || a == EvaluatedType::Map) {
+                std::string error = fmt::format("Left operand must be a scalar, not '{}'",
+                                                EvaluatedTypeName::value(a));
+                throwError(std::move(error), &expr);
+            }
         } break;
     }
 
@@ -418,7 +377,9 @@ void CypherAnalyzer::analyze(UnaryExpression& expr) {
     switch (expr.getUnaryOperator()) {
         case UnaryOperator::Not: {
             if (operand.type() != EvaluatedType::Bool) {
-                throw AnalyzeException("NOT operand must be a boolean");
+                std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
+                                                EvaluatedTypeName::value(operand.type()));
+                throwError(std::move(error), &expr);
             }
 
             type = EvaluatedType::Bool;
@@ -431,7 +392,9 @@ void CypherAnalyzer::analyze(UnaryExpression& expr) {
             } else if (operand.type() == EvaluatedType::Double) {
                 type = EvaluatedType::Double;
             } else {
-                throw AnalyzeException("Operand must be an integer or double");
+                std::string error = fmt::format("Operand must be an integer or double, not '{}'",
+                                                EvaluatedTypeName::value(operand.type()));
+                throwError(std::move(error), &expr);
             }
 
         } break;
@@ -451,6 +414,7 @@ void CypherAnalyzer::analyze(LiteralExpression& expr) {
 
     switch (literal.type()) {
         case Literal::type<std::monostate>(): {
+            type = EvaluatedType::Null;
         } break;
         case Literal::type<bool>(): {
             type = EvaluatedType::Bool;
@@ -476,14 +440,16 @@ void CypherAnalyzer::analyze(LiteralExpression& expr) {
 }
 
 void CypherAnalyzer::analyze(ParameterExpression& expr) {
-    throw AnalyzeException("Parameters not supported");
+    throwError("Parameters not supported", &expr);
 }
 
 void CypherAnalyzer::analyze(PropertyExpression& expr) {
     const auto& qualifiedName = expr.name();
 
     if (qualifiedName.size() != 2) {
-        throw AnalyzeException("Only length 2 property expressions are supported");
+        std::string error = fmt::format("Only length 2 property expressions are supported, not '{}'",
+                                        qualifiedName.size());
+        throwError(std::move(error), &expr);
     }
 
     std::string_view varName = qualifiedName.get(0);
@@ -492,7 +458,9 @@ void CypherAnalyzer::analyze(PropertyExpression& expr) {
     const VarDecl& var = _ctxt->getVariable(varName);
 
     if (var.type() != EvaluatedType::NodePattern && var.type() != EvaluatedType::EdgePattern) {
-        throw AnalyzeException(fmt::format("Variable '{}' is not a node or edge", varName));
+        std::string error = fmt::format("Variable '{}' is '{}' it must be a node or edge",
+                                        varName, EvaluatedTypeName::value(var.type()));
+        throwError(std::move(error), &expr);
     }
 
     expr.setDecl(&var);
@@ -500,7 +468,8 @@ void CypherAnalyzer::analyze(PropertyExpression& expr) {
     const std::optional<PropertyType> propType = _graphMetadata.propTypes().get(propName);
 
     if (!propType) {
-        throw AnalyzeException(fmt::format("Property '{}' not found", propName));
+        std::string error = fmt::format("Property type '{}' not found", propName);
+        throwError(std::move(error), &expr);
     }
 
     EvaluatedType type = EvaluatedType::Invalid;
@@ -520,8 +489,10 @@ void CypherAnalyzer::analyze(PropertyExpression& expr) {
             type = EvaluatedType::String;
         } break;
         case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw AnalyzeException("Invalid property type");
+        case ValueType::_SIZE: {
+            std::string error = fmt::format("Property type '{}' is invalid", propName);
+            throwError(std::move(error), &expr);
+        } break;
     }
 
     expr.setType(type);
@@ -535,7 +506,10 @@ void CypherAnalyzer::analyze(StringExpression& expr) {
     analyze(rhs);
 
     if (lhs.type() != EvaluatedType::String || rhs.type() != EvaluatedType::String) {
-        throw AnalyzeException("String expressions operands must be strings");
+        std::string error = fmt::format("String expressions operands must be strings, not '{}' and '{}'",
+                                        EvaluatedTypeName::value(lhs.type()),
+                                        EvaluatedTypeName::value(rhs.type()));
+        throwError(std::move(error), &expr);
     }
 
     expr.setType(EvaluatedType::Bool);
@@ -548,7 +522,9 @@ void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
     const auto& decl = _ctxt->getVariable(expr.symbol()._name);
 
     if (decl.type() != EvaluatedType::NodePattern) {
-        throw AnalyzeException(fmt::format("Variable '{}' is not a node", decl.name()));
+        std::string error = fmt::format("Variable '{}' is '{}' it must be a node",
+                                        decl.name(), EvaluatedTypeName::value(decl.type()));
+        throwError(std::move(error), &expr);
     }
 
     expr.setDecl(&decl);
@@ -558,7 +534,8 @@ void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
     for (const auto& label : expr.labelNames()) {
         const std::optional<LabelID> labelID = labelMap.get(label);
         if (!labelID) {
-            throw AnalyzeException(fmt::format("Unknown label: {}", label));
+            std::string error = fmt::format("Unknown label '{}'", label);
+            throwError(std::move(error), &expr);
         }
 
         labelset.set(labelID.value());
@@ -566,10 +543,10 @@ void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
 }
 
 void CypherAnalyzer::analyze(PathExpression& expr) {
-    throw AnalyzeException("Path expressions not supported");
+    throwError("Path expressions not supported", &expr);
 }
 
-void CypherAnalyzer::throwError(std::string_view msg, const void* obj) {
+void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {
     const auto* location = _ast->getLocation((uintptr_t)obj);
     std::string errorMsg;
 
@@ -584,4 +561,29 @@ void CypherAnalyzer::throwError(std::string_view msg, const void* obj) {
     err.generate(errorMsg);
 
     throw AnalyzeException(std::move(errorMsg));
+}
+
+bool CypherAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) const {
+    switch (exprType) {
+        case EvaluatedType::Null:
+        case EvaluatedType::NodePattern:
+        case EvaluatedType::EdgePattern:
+            return false;
+        case EvaluatedType::Integer:
+            return vt == ValueType::Int64 || vt == ValueType::UInt64 || vt == ValueType::Double;
+        case EvaluatedType::Double:
+            return vt == ValueType::Double;
+        case EvaluatedType::String:
+        case EvaluatedType::Char:
+            return vt == ValueType::String;
+        case EvaluatedType::Bool:
+            return vt == ValueType::Bool;
+        case EvaluatedType::List:
+        case EvaluatedType::Map:
+        case EvaluatedType::Invalid:
+        case EvaluatedType::_SIZE:
+            return false;
+    }
+
+    return false;
 }
