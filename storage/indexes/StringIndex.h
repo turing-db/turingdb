@@ -22,13 +22,11 @@ namespace db {
 class StringIndex {
 private:
     struct PrefixTreeNode {
-        using NodeOwners = std::vector<EntityID>;
-
-        std::array<std::unique_ptr<PrefixTreeNode>, SIGMA> _children{};
         char _val {'\0'};
-        // NOTE: Can we remove isComplete in favour of empty owners?
         bool _isComplete {false};
-        NodeOwners _owners;
+        // NOTE: Can we remove isComplete in favour of empty owners?
+        std::vector<EntityID> _owners;
+        std::array<std::unique_ptr<PrefixTreeNode>, SIGMA> _children{};
 
         PrefixTreeNode(char val)
             : _val{val}
