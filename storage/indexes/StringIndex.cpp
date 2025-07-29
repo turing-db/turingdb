@@ -74,17 +74,15 @@ void StringIndex::split(std::vector<std::string>& res,
 
 
 void StringIndex::preprocess(std::vector<std::string>& res, const std::string_view in) {
-    std::string cleaned {};
+    std::string cleaned;
     StringIndex::alphaNumericise(in, cleaned);
     split(res, cleaned, " ");
 }
 
 void StringIndex::insert(std::string_view str, EntityID owner) {
-    using Node = StringIndexNode;
-
     if (str.empty()) return;
 
-    Node* node = this->_root.get();
+    StringIndexNode* node = this->_root.get();
 
     if (!node) [[unlikely]] {
         throw TuringException("Could not get root of string indexer");
@@ -93,7 +91,7 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
     for (const char c : str) {
         const size_t idx = charToIndex(c);
         if (!node->_children[idx]) {
-            node->_children[idx] = std::make_unique<Node>(c);
+            node->_children[idx] = std::make_unique<StringIndexNode>(c);
         }
         node = node->_children[idx].get();
     }
@@ -107,14 +105,11 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
 
 const StringIndex::StringIndexIterator
 StringIndex::find(std::string_view sv) const {
-    using Iterator = StringIndexIterator;
-    using Node = StringIndexNode;
-
     if (sv.empty()) [[unlikely]] {
-        return Iterator {NOT_FOUND, nullptr};
+        return StringIndexIterator {NOT_FOUND, nullptr};
     }
 
-    Node* node = this->_root.get();
+    StringIndexNode* node = this->_root.get();
     if (!node) [[unlikely]] {
         throw TuringException("Could not get root of string indexer");
     }
@@ -122,12 +117,12 @@ StringIndex::find(std::string_view sv) const {
     for (const char c : sv) {
         const size_t idx = charToIndex(c);
         if (!node->_children[idx]) {
-            return Iterator {NOT_FOUND, nullptr};
+            return StringIndexIterator {NOT_FOUND, nullptr};
         }
         node = node->_children[idx].get();
     }
     const FindResult res = node->_isComplete ? FOUND : FOUND_PREFIX;
-    return Iterator{res, node};
+    return StringIndexIterator{res, node};
 }
 
 void StringIndex::print() const {
