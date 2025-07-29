@@ -103,8 +103,7 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
     node->_owners->push_back(owner);
 }
 
-const StringIndex::StringIndexIterator
-StringIndex::find(std::string_view sv) const {
+StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
     if (sv.empty()) [[unlikely]] {
         return StringIndexIterator {NOT_FOUND, nullptr};
     }

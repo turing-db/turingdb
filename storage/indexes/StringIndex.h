@@ -134,7 +134,7 @@ private:
      * @warning str must be preprocessed using @ref preprocess before calling this
      * function
      */
-    const StringIndexIterator find(std::string_view sv) const;
+    StringIndexIterator find(std::string_view sv) const;
 
     static size_t charToIndex(char c);
 
