@@ -20,12 +20,15 @@ int main(int argc, const char** argv) {
 
     bool noServer = false;
     unsigned port = 6666;
+    std::string address {"127.0.0.1"};
     bool nodemon = false;
     std::vector<std::string> graphsToLoad;
     argParser.add_argument("-cli")
              .store_into(noServer);
     argParser.add_argument("-p")
              .store_into(port);
+    argParser.add_argument("-i")
+             .store_into(address);
     argParser.add_argument("-nodemon")
              .store_into(nodemon);
     argParser.add_argument("-load")
@@ -60,6 +63,7 @@ int main(int argc, const char** argv) {
     } else {
         DBServerConfig config;
         config.setPort(port);
+        config.setAddress(address);
 
         TuringServer server(config, turingDB);
         server.start();
