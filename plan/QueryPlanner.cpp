@@ -455,11 +455,6 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
                 ._mask = filterMask,
                 ._src = scannedNodes,
                 ._dest = firstStageOutput}); // Output to @ref outNodes in the case of single expression
-
-            // Single expression case: we are done
-            if (exprs.size() == 1 ) {
-                return;
-            }
         break;
         }
 
@@ -467,11 +462,6 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
             // Only returns nodes which match (no need to filter after scan as above)
             _pipeline->add<ScanNodesStringApproxStep>(firstStageOutput, _view,
                                                      propType._id, queryString);
-
-            // Single expression case: we are done
-            if (exprs.size() == 1 ) {
-                return;
-            }
         break;
         }
 
@@ -479,7 +469,10 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
             throw PlannerException("Unsupported operator for type 'String'");
         break;
     }
-    msgbioassert(exprs.size() > 1, "Single expression case fell through");
+    // Single expression case: we are done
+    if (exprs.size() == 1 ) {
+        return;
+    }
     // If we are here then we have filtered the nodes based on the first property
     // constraint, but there are more to filter on (i.e. exprs.size() > 1)
 
