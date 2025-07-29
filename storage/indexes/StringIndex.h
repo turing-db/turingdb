@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <iostream>
 #include <unordered_set>
 
 #include "ID.h"
@@ -62,7 +63,7 @@ public:
      */
     void insert(std::string_view str, EntityID owner);
 
-    void print() const;
+    void print(std::ostream& out = std::cout) const;
 
     /**
      * @brief Get the EntityID owners which the query string @param sv matches against
@@ -138,9 +139,8 @@ private:
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
 
-    void printTree(PrefixTreeNode* node,
-                    const std::string& prefix,
-                    bool isLastChild) const;
+    void printTree(PrefixTreeNode* node, const std::string& prefix, bool isLastChild,
+                   std::ostream& out = std::cout) const;
 };
 
 }

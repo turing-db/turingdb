@@ -122,17 +122,17 @@ StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
     return StringIndexIterator{node, res};
 }
 
-void StringIndex::print() const {
-    printTree(this->_root.get(), "", false);
+void StringIndex::print(std::ostream& out) const {
+    printTree(this->_root.get(), "", false, out);
 }
 
 void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
                 const std::string& prefix,
-                bool isLastChild) const {
+                bool isLastChild, std::ostream& out) const {
     if (!node) return;
 
     if (node->_val != '\1') {
-        std::cout << prefix
+        out << prefix
                   << (isLastChild ? "└── " : "├── ")
                   << node->_val
                   << (node->_isComplete ? "*" : "")
