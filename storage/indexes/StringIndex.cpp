@@ -38,9 +38,13 @@ void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
 
     std::locale loc {"C"};  // NOTE: Only support ASCII, remove all else
     auto ppxChar = [&loc](char c) {
-        if (!std::isalnum(c, loc)) return ' ';
-        else if (std::isalpha(c)) return std::tolower(c, loc);
-        else return c;
+        if (!std::isalnum(c, loc)) {
+            return ' ';
+        } else if (std::isalpha(c)) {
+            return std::tolower(c, loc);
+        } else {
+            return c;
+        }
     };
 
     std::transform(std::begin(in), std::end(in), std::back_inserter(out), ppxChar);
