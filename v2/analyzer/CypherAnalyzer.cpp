@@ -169,6 +169,8 @@ void CypherAnalyzer::analyze(NodePattern& node) {
         const auto& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : node.properties()) {
+            analyze(*expr);
+
             const std::optional<PropertyType> propType = propTypeMap.get(propName);
 
             if (!propType) {
@@ -214,6 +216,8 @@ void CypherAnalyzer::analyze(EdgePattern& edge) {
         const auto& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : edge.properties()) {
+            analyze(*expr);
+
             const std::optional<PropertyType> propType = propTypeMap.get(propName);
 
             if (!propType) {

@@ -20,9 +20,9 @@ public:
         {
         }
 
-        std::pair<NodePattern*, EdgePattern*> operator*() const {
-            return std::make_pair(static_cast<NodePattern*>(*_it),
-                                  static_cast<EdgePattern*>(*(_it + 1)));
+        std::pair<EdgePattern*, NodePattern*> operator*() const {
+            return std::make_pair(static_cast<EdgePattern*>(*_it),
+                                  static_cast<NodePattern*>(*(_it + 1)));
         }
 
         ChainIterator& operator++() {
@@ -103,7 +103,11 @@ public:
     }
 
     ChainView getElementChain() const {
-        return ChainView(_entities.begin(), _entities.end());
+        if (_entities.size() <= 1) {
+            return ChainView(_entities.end(), _entities.end());
+        }
+
+        return ChainView(_entities.begin() + 1, _entities.end());
     }
 
 private:
