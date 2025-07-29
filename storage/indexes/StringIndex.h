@@ -44,8 +44,8 @@ public:
     };
 
     struct StringIndexIterator {
-        FindResult _result {NOT_FOUND};
         PrefixTreeNode* _nodePtr {nullptr};
+        FindResult _result {NOT_FOUND};    
     };
 
     StringIndex();
