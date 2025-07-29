@@ -28,7 +28,7 @@ private:
         char _val {'\0'};
         // NOTE: Can we remove isComplete in favour of empty owners?
         bool _isComplete {false};
-        std::unique_ptr<NodeOwners> _owners{};
+        NodeOwners _owners;
 
         PrefixTreeNode(char val)
             : _val{val}
@@ -43,10 +43,9 @@ public:
         NOT_FOUND
     };
 
-    using StringIndexNode = PrefixTreeNode;
     struct StringIndexIterator {
         FindResult _result {NOT_FOUND};
-        StringIndexNode* _nodePtr {nullptr};
+        PrefixTreeNode* _nodePtr {nullptr};
     };
 
     StringIndex();
@@ -75,8 +74,6 @@ public:
      */
     template <typename T>
     const void query(std::vector<T>& result, std::string_view queryString) const {
-        using Node = StringIndexNode;
-
         // Track owners in a set to avoid duplicates
         std::unordered_set<T> resSet;
 
@@ -92,24 +89,23 @@ public:
             }
 
             // Otherwise: match or partial match
-            Node* node = it._nodePtr;
-            std::deque<Node*> q {node};
+            PrefixTreeNode* node = it._nodePtr;
+            std::deque<PrefixTreeNode*> q {node};
             // BFS, collecting owners
             // TODO: Depth limit
             while (!q.empty()) {
-                const Node* n = q.front();
+                const PrefixTreeNode* n = q.front();
                 q.pop_front();
                 for (size_t i {0}; i < n->_children.size(); i++) {
-                    if (Node* child = n->_children[i].get()) {
+                    if (PrefixTreeNode* child = n->_children[i].get()) {
                         q.push_back(child);
                     }
                 }
                 // Collect owners to report back
                 if (n->_isComplete) {
-                    std::vector<EntityID>* owners = n->_owners.get();
-
                     // XXX: Need better option of conversion here
-                    for (const EntityID& id : *owners) {
+                    auto& owners = n->_owners;
+                    for (const EntityID& id : owners) {
                         resSet.emplace(T(id.getValue()));
                     }
                 }

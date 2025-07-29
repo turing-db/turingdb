@@ -97,10 +97,8 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
     }
 
     node->_isComplete = true;
-    if (!node->_owners) {
-        node->_owners = std::make_unique<std::vector<EntityID>>();
-    }
-    node->_owners->push_back(owner);
+    
+    node->_owners.push_back(owner);
 }
 
 StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
