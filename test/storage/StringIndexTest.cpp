@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <vector>
@@ -8,7 +7,6 @@
 #include "TuringTest.h"
 
 #include "Graph.h"
-#include "QueryInterpreter.h"
 #include "TuringDB.h"
 #include "SimpleGraph.h"
 #include "indexes/StringIndex.h"
