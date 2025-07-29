@@ -121,7 +121,7 @@ public:
     static void preprocess(std::vector<std::string>& res, std::string_view in);
 
 private:
-    std::unique_ptr<PrefixTreeNode> _root {};
+    std::unique_ptr<PrefixTreeNode> _root;
 
     /**
      * @brief Get an iterator to a preprocessed word existing in the index

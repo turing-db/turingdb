@@ -57,15 +57,15 @@ void DataPart::addStringPropertyToIndex(
 
     // Get [nodeID, stringValue] pairs
     const auto zipped = stringPropertyContainer.zipped();
+    std::vector<std::string> tokens;
     for (const auto&& [id, stringValue] : zipped) {
         // Preprocess and tokenise the string into alphanumeric subwords
-        // TODO: Extract this into public facing member function
-        std::vector<std::string> tokens;
         StringIndex::preprocess(tokens, stringValue);
         // Insert each subword
         for (const auto& token : tokens) {
             trie->insert(token, id.getValue());
         }
+        tokens.clear();
     }
 }
 
