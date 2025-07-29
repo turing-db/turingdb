@@ -81,9 +81,8 @@ struct EdgeWriteInfo;
 
 class PipelineStep {
 public:
-
-    PipelineStep(ScanNodesStringApproxStep::Tag, ColumnVector<NodeID>* nodes, const GraphView& view,
-                           PropertyTypeID propID, std::string_view strQuery);
+    PipelineStep(ScanNodesStringApproxStep::Tag, ColumnVector<NodeID>* nodes,
+                 const GraphView& view, PropertyTypeID propID, std::string_view strQuery);
     PipelineStep(ScanNodesStep::Tag, ColumnNodeIDs* nodes);
     PipelineStep(ScanNodesByLabelStep::Tag,
                  ColumnNodeIDs* nodes,

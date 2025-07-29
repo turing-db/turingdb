@@ -66,7 +66,7 @@ using namespace db;
 PipelineStep::PipelineStep(ScanNodesStringApproxStep::Tag, ColumnVector<NodeID>* nodes,
                            const GraphView& view, PropertyTypeID propID, std::string_view strQuery)
     : _opcode(PipelineOpcode::SCAN_NODE_PROPERTY_STRING_APPROX),
-      _impl(std::in_place_type<ScanNodesStringApproxStep>, nodes, view, propID, strQuery)
+    _impl(std::in_place_type<ScanNodesStringApproxStep>, nodes, view, propID, strQuery)
 {
 }
 

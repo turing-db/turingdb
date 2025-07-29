@@ -17,12 +17,12 @@ class LookupStringIndexStep {
 public:
     struct Tag {};
 
-    LookupStringIndexStep(ColumnSet<IDT>* outSet, const GraphView& view, PropertyTypeID propID,
-                   const std::string& strQuery)
+    LookupStringIndexStep(ColumnSet<IDT>* outSet, const GraphView& view,
+                          PropertyTypeID propID, const std::string& strQuery)
         : _set(outSet),
-          _view(view),
-          _pId(propID),
-          _strQuery(strQuery)
+        _view(view),
+        _pId(propID),
+        _strQuery(strQuery)
     {
     }
 
