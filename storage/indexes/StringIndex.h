@@ -23,14 +23,15 @@ namespace db {
 class StringIndex {
 private:
     struct PrefixTreeNode {
-        char _val {'\0'};
-        bool _isComplete {false};
         // NOTE: Can we remove isComplete in favour of empty owners?
         std::vector<EntityID> _owners;
-        std::array<std::unique_ptr<PrefixTreeNode>, SIGMA> _children{};
+        std::vector<std::unique_ptr<PrefixTreeNode>> _children;
+        char _val {'\0'};
+        bool _isComplete {false};
 
         PrefixTreeNode(char val)
-            : _val{val}
+            : _children(36),
+              _val(val)
         {
         }
     };
