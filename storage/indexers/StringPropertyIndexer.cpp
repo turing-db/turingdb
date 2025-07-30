@@ -12,9 +12,8 @@ void StringPropertyIndexer::initialiseIndexTrie(PropertyTypeID propertyID) {
     _indexer.try_emplace(propertyID, std::make_unique<StringIndex>());
 }
 
-void StringPropertyIndexer::addStringPropertyToIndex(
-    PropertyTypeID propertyID,
-    const TypedPropertyContainer<types::String>& stringPropertyContainer) {
+void StringPropertyIndexer::addStringPropertyToIndex(PropertyTypeID propertyID,
+                                                     const TypedPropertyContainer<types::String>& stringPropertyContainer) {
     // Get the index map for this property type
 
     StringIndex* trie = _indexer.at(propertyID).get();
