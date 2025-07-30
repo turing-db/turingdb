@@ -4,8 +4,6 @@ function(add_storage_tests exe_name cpp_file)
             turing_db_storage_s
             turing_common_s
             turing_db_jobs_s
-            turing_db_examples_s
-            turing_db_s
             turing_test_utils_s
             gtest_main)
 

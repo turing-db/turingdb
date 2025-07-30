@@ -7,8 +7,6 @@
 #include "TuringTest.h"
 
 #include "Graph.h"
-#include "TuringDB.h"
-#include "SimpleGraph.h"
 #include "indexes/StringIndex.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "metadata/PropertyType.h"
