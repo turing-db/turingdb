@@ -23,6 +23,8 @@ public:
      * @param view The graphview to retrieve dataparts from
      * @param propType The property type to query against
      * @param query The string to query against
+     * @throws TuringException if any datapart member of @ref view has an uninitialised
+     * string approximator index
      */
     template <TypedInternalID IDT>
     static void getMatches(std::vector<IDT>& output, const GraphView& view,
@@ -76,8 +78,7 @@ public:
     }
 private:
     inline static std::string _uninitialisedErrMsg =
-        "Approximate string index was not initialised."
-        "\nThis may be due to the graph having no string properties, "
-        "or if a graph was not loaded correctly.";
+        "Approximate string index was not initialised. "
+        "The current graph was likely loaded incorrectly.";
 };
 }

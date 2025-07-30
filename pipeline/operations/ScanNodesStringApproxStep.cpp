@@ -5,7 +5,9 @@
 #include "DataPart.h"
 #include "ID.h"
 #include "ExecutionContext.h"
+#include "PipelineException.h"
 #include "Profiler.h"
+#include "TuringException.h"
 #include "columns/ColumnVector.h"
 #include "indexes/StringIndexUtils.h"
 #include "views/GraphView.h"
@@ -45,6 +47,11 @@ void Step::reset() {
 void Step::execute() {
     Profile profile {"ScanNodesStringApproxStep::execute"};
     // Fill _nodes with the matches of all datapart's indexes
-    StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
+    try {
+        StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
+    } catch (TuringException& e) {
+        throw PipelineException(e.what());
+    }
+
     _done = true;
 }
