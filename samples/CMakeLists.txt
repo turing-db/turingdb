@@ -42,7 +42,6 @@ add_subdirectory(dist-vectors)
 add_subdirectory(plan2)
 add_subdirectory(parser2)
 add_subdirectory(analyzer2)
-add_subdirectory(index-serialisation)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
