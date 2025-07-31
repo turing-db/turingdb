@@ -276,7 +276,7 @@ void StringIndex::IndexIterator::next() {
         if (node->_isComplete) {
             _wordLen = sz;
             if (!node->_owners.empty()) {
-                _entry.buf = _buf;
+                _entry.word = _buf;
                 _entry.owners = node->_owners;
             }
             return;
