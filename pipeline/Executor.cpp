@@ -47,9 +47,12 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_GRAPH] = ACTIVATE_PTR(CreateGraphStep);
         _activateTbl[(uint64_t)PipelineOpcode::LIST_GRAPH] = ACTIVATE_PTR(ListGraphStep);
         _activateTbl[(uint64_t)PipelineOpcode::LOAD_GRAPH] = ACTIVATE_PTR(LoadGraphStep);
+        _activateTbl[(uint64_t)PipelineOpcode::QUERY_NODE_INDEX] = ACTIVATE_PTR(LookupNodeIndexStep);
+        _activateTbl[(uint64_t)PipelineOpcode::QUERY_EDGE_INDEX] = ACTIVATE_PTR(LookupEdgeIndexStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_INT64] = ACTIVATE_PTR(ScanNodesByPropertyInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_UINT64] = ACTIVATE_PTR(ScanNodesByPropertyUInt64Step);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = ACTIVATE_PTR(ScanNodesByPropertyDoubleStep);
+        _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING_APPROX] = ACTIVATE_PTR(ScanNodesStringApproxStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING] = ACTIVATE_PTR(ScanNodesByPropertyStringStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_BOOL] = ACTIVATE_PTR(ScanNodesByPropertyBoolStep);
         _activateTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_INT64] = ACTIVATE_PTR(ScanNodesByPropertyAndLabelInt64Step);
@@ -104,9 +107,12 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_GRAPH] = RETURN_PTR(CreateGraphStep);
         _returnTbl[(uint64_t)PipelineOpcode::LIST_GRAPH] = RETURN_PTR(ListGraphStep);
         _returnTbl[(uint64_t)PipelineOpcode::LOAD_GRAPH] = RETURN_PTR(LoadGraphStep);
+        _returnTbl[(uint64_t)PipelineOpcode::QUERY_NODE_INDEX] = RETURN_PTR(LookupNodeIndexStep);
+        _returnTbl[(uint64_t)PipelineOpcode::QUERY_EDGE_INDEX] = RETURN_PTR(LookupEdgeIndexStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_INT64] = RETURN_PTR(ScanNodesByPropertyInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_UINT64] = RETURN_PTR(ScanNodesByPropertyUInt64Step);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_DOUBLE] = RETURN_PTR(ScanNodesByPropertyDoubleStep);
+        _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING_APPROX] = RETURN_PTR(ScanNodesStringApproxStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_STRING] = RETURN_PTR(ScanNodesByPropertyStringStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_BOOL] = RETURN_PTR(ScanNodesByPropertyBoolStep);
         _returnTbl[(uint64_t)PipelineOpcode::SCAN_NODE_PROPERTY_AND_LABEL_INT64] = RETURN_PTR(ScanNodesByPropertyAndLabelInt64Step);
@@ -187,6 +193,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     })
 
     // ACTIVATE actions
+    ACTIVATE_STEP(ScanNodesStringApproxStep)
     ACTIVATE_STEP(ScanNodesStep)
     ACTIVATE_STEP(ScanNodesByLabelStep)
     ACTIVATE_STEP(ScanEdgesStep)
@@ -201,6 +208,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(CreateGraphStep)
     ACTIVATE_STEP(ListGraphStep)
     ACTIVATE_STEP(LoadGraphStep)
+    ACTIVATE_STEP(LookupNodeIndexStep)
+    ACTIVATE_STEP(LookupEdgeIndexStep)
     ACTIVATE_STEP(ScanNodesByPropertyInt64Step)
     ACTIVATE_STEP(ScanNodesByPropertyUInt64Step)
     ACTIVATE_STEP(ScanNodesByPropertyDoubleStep)
@@ -243,6 +252,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_END()
 
     // RETURN actions
+    RETURN_STEP(ScanNodesStringApproxStep)
     RETURN_STEP(ScanNodesStep)
     RETURN_STEP(ScanNodesByLabelStep)
     RETURN_STEP(ScanEdgesStep)
@@ -257,6 +267,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(CreateGraphStep)
     RETURN_STEP(ListGraphStep)
     RETURN_STEP(LoadGraphStep)
+    RETURN_STEP(LookupNodeIndexStep)
+    RETURN_STEP(LookupEdgeIndexStep)
     RETURN_STEP(ScanNodesByPropertyInt64Step)
     RETURN_STEP(ScanNodesByPropertyUInt64Step)
     RETURN_STEP(ScanNodesByPropertyDoubleStep)

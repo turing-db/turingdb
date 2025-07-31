@@ -52,6 +52,9 @@ public:
 
     bool loadGraph(const std::string& graphName, JobSystem& jobsystem);
 
+    bool loadGraph(const fs::Path graphPath, const std::string& graphName,
+                   JobSystem& jobSystem);
+
     bool isGraphLoading(const std::string& graphName) const;
 
     ChangeManager& getChangeManager() { return *_changes; }

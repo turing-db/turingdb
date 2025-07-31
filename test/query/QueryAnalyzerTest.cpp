@@ -285,8 +285,7 @@ TEST_F(QueryAnalyzerTest, testApproxStringOperator) {
     const std::string query2 = "MATCH (n:Typer{str~=2}) return n";
 
     tester.query(query1)
-        .expectError()
-        .expectErrorMessage("OPERATOR '~=' NOT SUPPORTED")
+        .expectVector<NodeID>({0})
         .execute();
 
     tester.query(query2)

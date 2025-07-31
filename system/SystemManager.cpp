@@ -173,6 +173,35 @@ bool SystemManager::loadGraph(const std::string& graphName, JobSystem& jobSystem
     }
 }
 
+// Load graph using non-default path
+bool SystemManager::loadGraph(const fs::Path graphPath, const std::string& graphName, JobSystem& jobSystem) {
+    // Check if graph was already loaded || is already loading
+    if (getGraph(graphName) || isGraphLoading(graphName)) {
+        return false;
+    }
+
+    if (!graphPath.exists()) {
+        return false;
+    }
+
+    const auto fileType = getGraphFileType(graphPath);
+    if (!fileType) {
+        // If we can not determine the file type, assume it is a Neo4j JSON graph
+        // to be changed in the future
+        return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
+    }
+
+    switch (*fileType) {
+        case GraphFileType::GML:
+            return loadGmlDB(graphName, graphPath, jobSystem);
+        case GraphFileType::NEO4J_JSON:
+            return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
+        case GraphFileType::BINARY:
+            return loadBinaryDB(graphName, graphPath, jobSystem);
+        default:
+            return false;
+    }
+}
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
     if (graphPath.extension() == ".gml") {
         return GraphFileType::GML;

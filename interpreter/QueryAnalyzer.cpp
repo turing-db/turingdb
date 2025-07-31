@@ -313,7 +313,6 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
                 throw AnalyzeException("Operator '~=' must be "
                                        "used with values of type 'String'.");
             }
-            throw AnalyzeException("OPERATOR '~=' NOT SUPPORTED");
         break;
 
         default:
@@ -337,7 +336,7 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
         // If this is a match query: error
         if (!isCreate) [[unlikely]] {
             throw AnalyzeException("Variable '" + lhsName +
-                                   "' has invalid property type");
+                                   "' does not exist.");
         } else { // If a create query: no need to type check
             return;
         }

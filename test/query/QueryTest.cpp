@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "LocalMemory.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
@@ -637,6 +638,7 @@ TEST_F(QueryTest, ChangeQueryErrors) {
         .expectError() // Requires edge type
         .execute();
 }
+
 TEST_F(QueryTest, CallGraphInfo) {
     QueryTester tester {_mem, *_interp};
 
@@ -730,5 +732,177 @@ TEST_F(QueryTest, InjectNodes) {
 
     tester.query("MATCH (m)--(n@0) RETURN n")
         .expectError()
+        .execute();
+}
+
+TEST_F(QueryTest, StringApproxTest) {
+    QueryTester tester {_mem, *_interp};
+    
+    auto change1Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+
+    const std::string createQuery = "create (n:NewNode{name=\"Norbert "
+                                    "Norman\"})-[e:NewEdge{name=\"Norbert->Micheal\"}]-("
+                                    "m:NewNode{name=\"Micheal Mann\"})";
+
+    const std::string sanityCheck = "match (n:NewNode{name=\"Norbert "
+                                    "Norman\"})-[e:NewEdge{name=\"Norbert->Micheal\"}]-("
+                                    "m:NewNode{name=\"Micheal Mann\"}) return e.name";
+
+    tester.query(createQuery).execute();
+    tester.query("CHANGE SUBMIT").execute();
+    tester.setChangeID(ChangeID::head());
+
+    using StrOpt = std::optional<types::String::Primitive>;
+
+    tester.query(sanityCheck)
+        .expectVector<StrOpt>({"Norbert->Micheal"}) // Ensure the edge is created
+        .execute();
+
+    // Strict node contraints, approx on edge name
+    const std::string approxEdgeNameNorbert =
+        "match (n:NewNode{name=\"Norbert "
+        "Norman\"})-[e:NewEdge{name~=\"Norbert\"}]-("
+        "m:NewNode{name=\"Micheal Mann\"}) return e.name";
+    const std::string approxEdgeNameMicheal =
+        "match (n:NewNode{name=\"Norbert "
+        "Norman\"})-[e:NewEdge{name~=\"Micheal\"}]-("
+        "m:NewNode{name=\"Micheal Mann\"}) return e.name";
+
+    tester.query(approxEdgeNameNorbert)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+    tester.query(approxEdgeNameMicheal)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+
+
+    // No name constraints on nodes
+    const std::string approxEdgeNameNorbertSlim =
+        "match (n:NewNode"
+        ")-[e:NewEdge{name~=\"Norbert\"}]-("
+        "m:NewNode) return e.name";
+    const std::string approxEdgeNameMichealSlim =
+        "match (n:NewNode"
+        ")-[e:NewEdge{name~=\"Micheal\"}]-("
+        "m:NewNode) return e.name";
+
+    tester.query(approxEdgeNameNorbertSlim)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+    tester.query(approxEdgeNameMichealSlim)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+
+    // Approximate constraints on nodes and edge
+    const std::string approxEdgeNameApproxNorbert =
+        "match (n:NewNode{name~=\"Norbert "
+        "\"})-[e:NewEdge{name~=\"Norbert\"}]-("
+        "m:NewNode) return e.name";
+
+    const std::string approxEdgeNameApproxMicheal =
+        "match (n:NewNode"
+        ")-[e:NewEdge{name~=\"Micheal\"}]-("
+        "m:NewNode{name~=\"Micheal\"}) return e.name";
+
+    tester.query(approxEdgeNameApproxNorbert)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+    tester.query(approxEdgeNameApproxMicheal)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+
+    const std::string allApproxNoLabels =
+        "match (n{name~=\"Norbert\"}"
+        ")-[e{name~=\"Micheal\"}]-("
+        "m{name~=\"Micheal\"}) return e.name";
+    
+    tester.query(allApproxNoLabels)
+        .expectVector<StrOpt>({"Norbert->Micheal"})
+        .execute();
+}
+
+TEST_F(QueryTest, StringAproxMultiExpr) {
+    QueryTester tester {_mem, *_interp};
+
+    using StrOpt = std::optional<types::String::Primitive>;
+
+    const std::string createQuery = "create (n:NewNode{poem=\"the cat jumped\", rating=5u})";
+    const auto change1Res = tester.query("change new")
+                                .expectVector<const Change*>({}, false)
+                                .execute()
+                                .outputColumnVector<const Change*>(0);
+
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+
+    tester.query(createQuery).execute();
+    tester.query("CHANGE SUBMIT").execute();
+    tester.setChangeID(ChangeID::head());
+
+    
+    const std::string matchQuery = "match (n:NewNode{poem~=\"cat\", rating=5u}) return n.poem";
+
+    
+    tester.query(matchQuery)
+        .expectVector<StrOpt>({"the cat jumped"})
+        .execute();
+}
+
+TEST_F(QueryTest, PersonGraphAproxMatching) {
+    QueryTester tester{_mem, *_interp};
+
+    using StrOpt = std::optional<types::String::Primitive>;
+
+    const auto changeRes = tester.query("change new")
+                              .expectVector<const Change*>({}, false)
+                              .execute()
+                              .outputColumnVector<const Change*>(0);
+
+    const ChangeID change = changeRes.value()->back()->id();
+    tester.setChangeID(change);
+
+    tester.query(
+            R"(create (n:Person{name="Cyrus", hasPhD=false})-[e:Edgey{name="Housemate"}]-(m:Person{name="Sai", hasPhD=true}))")
+        .execute();
+
+    // Commit the change
+    tester.query("change submit").execute();
+    tester.setChangeID(ChangeID::head());
+
+    // Run the match queries
+    tester.query(R"(match (n:Person{name="Cyrus"}) return n.name)")
+        .expectVector<StrOpt>({"Cyrus"})
+        .execute();
+
+    tester.query(R"(match (n:Person{name~="Cyrus"}) return n.name)")
+        .expectVector<StrOpt>({"Cyrus"})
+        .execute();
+
+    tester.query(R"(match (n:Person{name~="Cyrus", hasPhD=false}) return n.name)")
+        .expectVector<StrOpt>({"Cyrus"})
+        .execute();
+
+    tester.query(R"(match (n{name="Cyrus"})-[e{name="Housemate"}]-(m{name="Sai"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+
+    tester.query(R"(match (n{name~="Cy"})-[e{name~="House"}]-(m{name~="Sa"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+
+    tester.query(R"(match (n{name~="Cy", hasPhD=false})-[e{name~="House"}]-(m{name~="Sa"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
+        .execute();
+
+    tester.query(R"(match (n:Person{name~="Cy", hasPhD=false})-[e:Edgey{name~="House"}]-(m:Person{name~="Sa"}) return e.name)")
+        .expectVector<StrOpt>({"Housemate"})
         .execute();
 }

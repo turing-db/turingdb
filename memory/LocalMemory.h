@@ -6,6 +6,7 @@
 #include "MemoryPool.h"
 #include "TypeValueMap.h"
 
+#include "columns/ColumnSet.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
@@ -57,7 +58,11 @@ public:
         MakeMemoryPool<ColumnOptVector<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::String::Primitive>>::type,
-        MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type>;
+        MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type,
+
+        MakeMemoryPool<ColumnSet<NodeID>>::type,
+        MakeMemoryPool<ColumnSet<EdgeID>>::type
+        >;
 
     LocalMemory(const LocalMemory&) = delete;
     LocalMemory(LocalMemory&&) = delete;

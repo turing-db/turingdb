@@ -1,13 +1,18 @@
 #include "DataPart.h"
 
+#include <memory>
 #include <numeric>
 #include <range/v3/action/sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
 
+#include "ID.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
+#include "indexers/StringPropertyIndexer.h"
+#include "metadata/PropertyType.h"
+#include "properties/PropertyContainer.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
@@ -23,7 +28,10 @@ namespace rg = ranges;
 DataPart::DataPart(NodeID firstNodeID,
                    EdgeID firstEdgeID)
     : _firstNodeID(firstNodeID),
-    _firstEdgeID(firstEdgeID)
+    _firstEdgeID(firstEdgeID),
+    _nodeStrPropIdx(std::make_unique<StringPropertyIndexer>()),
+    _edgeStrPropIdx(std::make_unique<StringPropertyIndexer>())
+    
 {
 }
 
@@ -86,11 +94,21 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         }
     }
 
-    // Node properties
+    // Node properties: Add index*ers* and note properties to *index*
     _nodeProperties = std::move(nodeProperties);
+    std::vector<std::pair<PropertyTypeID, PropertyContainer*>> nodesToIndex {};
     for (const auto& [ptID, props] : *_nodeProperties) {
         _nodeProperties->addIndexer(ptID);
+
+        // If the property is string type, we want to index it
+        if (props->getValueType() == ValueType::String) {
+            nodesToIndex.emplace_back(ptID, props.get());
+        }
     }
+
+    // Build indexes for noted node properties.
+    _nodeStrPropIdx->buildIndex(nodesToIndex); // TODO: Async with jobs
+    _nodeStrPropIdx->setInitialised();
 
     for (const auto& [ptID, props] : *_nodeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
@@ -133,11 +151,21 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
                                    _firstEdgeID,
                                    std::move(outEdges));
 
-    // Edge properties
+    // Edge properties: Add index*ers* and note properties to *index*
     _edgeProperties = std::move(edgeProperties);
+    std::vector<std::pair<PropertyTypeID, PropertyContainer*>> edgesToIndex;
     for (const auto& [ptID, props] : *_edgeProperties) {
         _edgeProperties->addIndexer(ptID);
+
+        // If the property is string type, we want to index it
+        if (props->getValueType() == ValueType::String) {
+            edgesToIndex.emplace_back(ptID, props.get());
+        }
     }
+
+    // Build indexes for noted edge properties.
+    _edgeStrPropIdx->buildIndex(edgesToIndex); // TODO: Async with jobs
+    _edgeStrPropIdx->setInitialised();
 
     const auto& tmpToFinalEdgeIDs = _edges->getTmpToFinalEdgeIDs();
 

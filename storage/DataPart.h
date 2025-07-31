@@ -3,7 +3,9 @@
 #include <memory>
 
 #include "ID.h"
+#include "TuringException.h"
 #include "metadata/LabelSetHandle.h"
+#include "metadata/SupportedType.h"
 
 namespace db {
 
@@ -18,6 +20,11 @@ class EdgeIndexer;
 class DataPartLoader;
 class DataPartRebaser;
 class JobSystem;
+class StringIndex;
+template <SupportedType T>
+class TypedPropertyContainer;
+class PropertyContainer;
+class StringPropertyIndexer;
 
 class DataPart {
 public:
@@ -46,6 +53,18 @@ public:
     const PropertyManager& edgeProperties() const { return *_edgeProperties; }
     const EdgeContainer& edges() const { return *_edges; }
     const EdgeIndexer& edgeIndexer() const { return *_edgeIndexer; }
+    const StringPropertyIndexer& getNodeStrPropIndexer() const {
+        if (!_nodeStrPropIdx) {
+            throw TuringException("Node String Index was not initialised");
+        }
+        return *_nodeStrPropIdx;
+    }
+    const StringPropertyIndexer& getEdgeStrPropIndexer() const {
+        if (!_edgeStrPropIdx) {
+            throw TuringException("Edge String Index was not initialised");
+        }
+        return *_edgeStrPropIdx;
+    }
 
 private:
     friend DataPartInfoLoader;
@@ -65,6 +84,8 @@ private:
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
     std::unique_ptr<EdgeIndexer> _edgeIndexer;
+    std::unique_ptr<StringPropertyIndexer> _nodeStrPropIdx;
+    std::unique_ptr<StringPropertyIndexer> _edgeStrPropIdx;
 };
 
 }

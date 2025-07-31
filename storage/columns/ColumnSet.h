@@ -98,7 +98,9 @@ public:
 
     void dump() const override {
         DebugDump::dumpString("ColumnSet of size=" + std::to_string(size()));
-        std::ranges::for_each(_data, DebugDump::dump);
+        for (const auto& x : _data) {
+            DebugDump::dump(x);
+        }
     }
 
     std::unordered_set<T>& getRaw() { return _data; }

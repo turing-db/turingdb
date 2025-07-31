@@ -1,7 +1,10 @@
 #include "FilterStep.h"
 
 #include <sstream>
+#include <string>
+#include <string_view>
 
+#include "ID.h"
 #include "Profiler.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
@@ -94,6 +97,16 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op, Lhs::staticKi
         break;                                    \
     }
 
+#define IN_CASE(Lhs, Rhs)                         \
+    case OpCase<OP_IN, Lhs, Rhs>: {               \
+        ColumnOperators::inOp(                    \
+            *expr._mask,                          \
+            *static_cast<const Lhs*>(expr._lhs),  \
+            *static_cast<const Rhs*>(expr._rhs)); \
+        break;                                    \
+    }
+
+
 void FilterStep::compute() {
     for (const Expression& expr : _expressions) {
         switch (getOpCase(expr._op, expr._lhs->getKind(), expr._rhs->getKind())) {
@@ -149,6 +162,20 @@ void FilterStep::compute() {
 
             PROJECT_CASE(ColumnVector<size_t>, ColumnMask)
             PROJECT_CASE(ColumnMask, ColumnVector<size_t>)
+
+            IN_CASE(ColumnVector<size_t>, ColumnSet<size_t>)
+            IN_CASE(ColumnVector<EntityID>, ColumnSet<EntityID>)
+            IN_CASE(ColumnVector<NodeID>, ColumnSet<NodeID>)
+            IN_CASE(ColumnVector<EdgeID>, ColumnSet<EdgeID>)
+            IN_CASE(ColumnVector<LabelSetID>, ColumnSet<LabelSetID>)
+            IN_CASE(ColumnVector<LabelSet>, ColumnSet<LabelSet>)
+            IN_CASE(ColumnVector<std::string>, ColumnSet<std::string>)
+            // XXX: Do we need these?
+            //IN_CASE(ColumnVector<std::string_view>, ColumnSet<std::string_view>)
+            //IN_CASE(ColumnVector<std::string_view>, ColumnSet<std::string>)
+            //IN_CASE(ColumnVector<std::string>, ColumnSet<std::string_view>)
+            IN_CASE(ColumnVector<double>, ColumnSet<double>)
+            IN_CASE(ColumnVector<int64_t>, ColumnSet<int64_t>)
 
             default: {
                 panic("Operator not implemented (kinds: {} and {})",

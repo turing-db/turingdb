@@ -40,6 +40,11 @@ struct CustomBool {
         _boolean = v;
         return *this;
     }
+
+    bool operator==(const CustomBool& other) const {
+        return _boolean == other._boolean;
+    }
+
     operator bool() const { return _boolean; }
 
     bool _boolean;
@@ -50,6 +55,11 @@ struct PropertyType {
     ValueType _valueType {};
 
     bool isValid() const { return _id.isValid(); }
+
+    
+    bool operator==(const PropertyType& other) const {
+        return _id.getValue() == other._id.getValue() && _valueType == other._valueType ;
+    }
 };
 
 namespace types {
@@ -107,3 +117,20 @@ struct PropertyTypeInfo {
 using PropertyTypeInfos = std::map<PropertyTypeID, PropertyTypeInfo>;
 
 }
+
+template <>
+struct std::hash<db::CustomBool> {
+    std::size_t operator()(const db::CustomBool& cb) const noexcept {
+        return std::hash<bool> {}(cb._boolean);
+    }
+};
+
+// XXX TODO: Better hash function
+template <>
+struct std::hash<db::PropertyType> {
+    std::size_t operator()(const db::PropertyType& pt) const noexcept {
+        return std::hash<unsigned short> {}(pt._id.getValue())
+             + std::hash<uint8_t> {}(static_cast<uint8_t>(pt._valueType));
+    }
+};
+

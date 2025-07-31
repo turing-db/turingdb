@@ -12,7 +12,6 @@
 #include "metadata/LabelSet.h"
 #include "VectorHash.h"
 #include "QueryCallback.h"
-#include "metadata/LabelSetHandle.h"
 
 namespace db {
 
@@ -31,6 +30,7 @@ class ExplainCommand;
 class VarDecl;
 class ReturnField;
 class Block;
+
 
 class QueryPlanner {
 public:
@@ -134,5 +134,13 @@ private:
     bool planChange(const ChangeCommand* cmd);
     bool planCommit(const CommitCommand* commit);
     bool planCall(const CallCommand* call);
+
+    /*
+     * @brief Dispatches correct pipeline steps in the case where the first expression
+     * constraint is a String constraint. Uses the approx index where necessary. Also
+     * dispatches additional (possibly non-string) constraint filters.
+     */
+    void caseScanNodesStringConstraint(const std::vector<const BinExpr*>& exprs,
+                                       PropertyType propType, ColumnNodeIDs* outNodes);
 };
 }

@@ -4,6 +4,7 @@
 
 #include "LocalMemory.h"
 #include "QueryInterpreter.h"
+#include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
 #include "TuringDB.h"
 #include "Panic.h"
@@ -86,7 +87,9 @@ public:
                 [](const QueryCommand* cmd) {},
                 _commitHash,
                 _changeID);
+
             EXPECT_FALSE(res);
+
             if (_expectErrMsg.has_value()) {
                 EXPECT_EQ(res.getError(), _expectErrMsg.value());
             }
