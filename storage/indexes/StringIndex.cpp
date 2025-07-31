@@ -238,3 +238,49 @@ PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
     }
     return thresholdPoint;
 }
+
+void StringIndex::IndexIterator::next() {
+    // Stack first becomes empty on final leaf. If ++ called again then that is one past
+    // final leaf, which is the end() iterator. Declare this iterator as end() with
+    // ENDFLAG
+    if (_stack.empty()) {
+        _wordLen = ENDFLAG;
+        return;
+    }
+    // Depth First Search, keeping track of current string in _buf
+    while (!_stack.empty()) {
+        auto [node, sz] = _stack.top();
+        _stack.pop();
+
+        // Resize to adjust buffer to correct size
+        if (sz <= _buf.size() && sz != 0) {
+            _buf.resize(sz - 1); // Truncates to sz - 1
+        }
+
+        // Add new char to extend current word
+        char c = node->_val;
+        if ( c != '\1' ) [[likely]] {
+            _buf.push_back(c);
+        }
+
+        // Add children to stack backwards for lexographical ordering
+        const auto& chs = node->_children;
+        for (auto rit = chs.rbegin(); rit != chs.rend(); rit++) {
+            if (rit->get()) {
+                _stack.push({rit->get(), sz + 1});
+            }
+        }
+
+        // If terminal, break.
+        // @ref _buf holds word which was inserted into index
+        if (node->_isComplete) {
+            _wordLen = sz;
+            if (!node->_owners.empty()) {
+                _entry.buf = _buf;
+                _entry.owners = node->_owners;
+            }
+            return;
+        }
+        // If non-terminal, continue DFS as normal
+    }
+}
