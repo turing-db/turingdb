@@ -80,8 +80,9 @@ enum class DumpErrorType : uint8_t {
     COULD_NOT_READ_EDGE_INDEXER,
     COULD_NOT_READ_PROPS,
     COULD_NOT_READ_PROP_INDEXER,
+    COULD_NOT_READ_STR_PROP_INDEXER,
 
-    _SIZE,
+    _SIZE
 };
 
 using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
@@ -141,7 +142,8 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::COULD_NOT_READ_EDGES, "Could not read edges">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_EDGE_INDEXER, "Could not read edge indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_PROPS, "Could not read entity properties">,
-    EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_INDEXER, "Could not read entity property indexer">>;
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_INDEXER, "Could not read entity property indexer">,
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER, "Could not read entity string property indexer">>;
 
 class DumpError {
 public:
