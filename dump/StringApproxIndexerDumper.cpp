@@ -1,8 +1,10 @@
 #include "StringApproxIndexerDumper.h"
 
+#include "DumpConfig.h"
 #include "GraphDumpHelper.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
+#include "ID.h"
 #include "TuringException.h"
 
 using namespace db;
@@ -13,7 +15,7 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
     _writer.nextPage();
 
     // Write the number of string properties which are indexed
-    _writer.writeToCurrentPage(indexSize);
+    _writer.write(indexSize);
     const size_t pageCount = indexSize;
 
     for (const auto& [propID, idx] : idxer) {
@@ -26,17 +28,17 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
         // XXX: What happens if the below does not fit on a single page?
 
         // Declare what property we are now writing
-        _writer.writeToCurrentPage(propID.getValue());
+        _writer.write(propID.getValue());
         for (const auto& it : *idx) {
             // Note the size of the string we are writing
-            _writer.writeToCurrentPage(it.word.size());
+            _writer.write(it.word.size());
             // Write the value of the string property
-            _writer.writeToCurrentPage(it.word);
+            _writer.write(it.word);
             // Note the number of IDs which follows
-            _writer.writeToCurrentPage(it.owners.size());
+            _writer.write(it.owners.size());
             // Write the Nodes/Edges which have this property value
             for (const auto& id : it.owners) {
-                _writer.writeToCurrentPage(id.getValue());
+                _writer.write(id.getValue());
             }
 
         }

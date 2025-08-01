@@ -15,6 +15,7 @@
 #include "PropertyContainerDumper.h"
 #include "PropertyIndexerDumper.h"
 #include "Panic.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 

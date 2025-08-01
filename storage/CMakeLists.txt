@@ -61,7 +61,9 @@ set(storage_sources
         versioning/CommitHistory.cpp
 
         comparators/DataPartComparator.cpp
-        comparators/GraphComparator.cpp)
+        comparators/GraphComparator.cpp
+        comparators/StringApproxIndexerComparator.cpp
+)
 
 
 add_library(turing_db_storage_s STATIC ${storage_sources})
