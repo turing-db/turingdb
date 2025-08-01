@@ -17,6 +17,8 @@ public:
 
 private:
     fs::FilePageWriter& _writer;
+
+    bool ensureSpace(size_t requiredSpace);
 };
 
 }
