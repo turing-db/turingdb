@@ -1,7 +1,12 @@
 #include "DataPartDumper.h"
 
 #include "DataPart.h"
+#include "DumpConfig.h"
+#include "FilePageWriter.h"
+#include "Path.h"
 #include "Profiler.h"
+#include "StringApproxIndexerDumper.h"
+#include "indexers/StringPropertyIndexer.h"
 #include "properties/PropertyManager.h"
 #include "DataPartInfoDumper.h"
 #include "EdgeIndexerDumper.h"
@@ -205,6 +210,51 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
             }
 
             if (auto res = dumpProperties(writer.value(), container.get()); !res) {
+                return res.get_unexpected();
+            }
+        }
+    }
+
+    // Dumping node String approx property Indexer
+    {
+        Profile profile {"DataPartDumper::dump <node string prop indexer>"};
+        const auto& index = part.getNodeStrPropIndexer();
+
+        {
+            const fs::Path strIndexerPath = path / "node-string-prop-indexer";
+            auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
+            if (!writer) {
+                return DumpError::result(
+                    DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER,
+                    writer.error());
+            }
+
+            StringApproxIndexerDumper dumper {writer.value()};
+
+            if (auto res = dumper.dump(index); !res) {
+                return res.get_unexpected();
+            }
+        }
+    }
+
+
+    // Dumping edge String approx property Indexer
+    {
+        Profile profile {"DataPartDumper::dump <edge string prop indexer>"};
+        const auto& index = part.getEdgeStrPropIndexer();
+
+        {
+            const fs::Path strIndexerPath = path / "edge-string-prop-indexer";
+            auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
+            if (!writer) {
+                return DumpError::result(
+                    DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER,
+                    writer.error());
+            }
+
+            StringApproxIndexerDumper dumper {writer.value()};
+
+            if (auto res = dumper.dump(index); !res) {
                 return res.get_unexpected();
             }
         }
