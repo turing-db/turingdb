@@ -168,14 +168,6 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
     return {};
 }
 
-/* Loader algorithm:
-- Load all the IDs, initialiseIndexTrie for all of them
-- Load all the strings, associated by ID       (a)
-- Load all the owner vectors, associated by ID (b)
-- For each propID: insert into the index with (a), (b)
-*/
-
-
 bool StringApproxIndexerDumper::ensureSpace(size_t requiredSpace) {
     if (requiredSpace > DumpConfig::PAGE_SIZE) {
         return false;
