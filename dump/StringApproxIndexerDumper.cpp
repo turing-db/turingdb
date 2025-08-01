@@ -3,6 +3,7 @@
 #include "GraphDumpHelper.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
+#include "TuringException.h"
 
 using namespace db;
 
@@ -16,6 +17,9 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
     const size_t pageCount = indexSize;
 
     for (const auto& [propID, idx] : idxer) {
+        if (!idx) {
+            throw TuringException("nullptr string index");
+        }
         // XXX: Should use a better method of separating properties. Delimiter?
         _writer.nextPage();
 

@@ -247,6 +247,10 @@ void StringIndex::IndexIterator::next() {
         _wordLen = ENDFLAG;
         return;
     }
+    // Clear owners to prevent stale values in iterator
+    _entry.owners.clear();
+    _entry.owners.clear();
+
     // Depth First Search, keeping track of current string in _buf
     while (!_stack.empty()) {
         auto [node, sz] = _stack.top();
@@ -273,12 +277,10 @@ void StringIndex::IndexIterator::next() {
 
         // If terminal, break.
         // @ref _buf holds word which was inserted into index
-        if (node->_isComplete) {
+        if (node->_isComplete && !node->_owners.empty()) {
             _wordLen = sz;
-            if (!node->_owners.empty()) {
-                _entry.word = _buf;
-                _entry.owners = node->_owners;
-            }
+            _entry.word = _buf;
+            _entry.owners = node->_owners;
             return;
         }
         // If non-terminal, continue DFS as normal
