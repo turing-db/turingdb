@@ -3,7 +3,10 @@ set(dump_sources GraphLoader.cpp
                  DataPartLoader.cpp
                  CommitDumper.cpp
                  DataPartDumper.cpp
-                 DumpResult.cpp)
+                 DumpResult.cpp
+                 StringApproxIndexerDumper.cpp
+)
+
 
 add_library(turing_db_dump_s STATIC ${dump_sources})
 
