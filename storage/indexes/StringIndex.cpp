@@ -5,7 +5,6 @@
 #include <memory>
 #include <deque>
 #include <unordered_set>
-#include <iostream>
 
 using namespace db;
 
@@ -27,14 +26,19 @@ size_t StringIndex::charToIndex(char c) {
 
     // NOTE: Converts upper-case characters to lower to calculate index,
     // but the value of the node is still uppercase
-    if (isalpha(c)) return std::tolower(c, std::locale()) - 'a';
-    else if (isdigit(c)) return 26 + c - '0';
-    else throw TuringException("Invalid character: " + std::to_string(c));
+    if (isalpha(c))  {
+        return std::tolower(c, std::locale()) - 'a';
+    } else if (isdigit(c)) {
+        return 26 + c - '0';
+    } else
+        throw TuringException("Invalid character: " + std::to_string(c));
 }
 
 void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
-    out.clear();            // Does not deallocate space
-    if (in.empty()) return;
+    out.clear();
+    if (in.empty()) {
+        return;
+    }
 
     std::locale loc {"C"};  // NOTE: Only support ASCII, remove all else
     auto ppxChar = [&loc](char c) {
@@ -80,7 +84,9 @@ void StringIndex::preprocess(std::vector<std::string>& res, const std::string_vi
 }
 
 void StringIndex::insert(std::string_view str, EntityID owner) {
-    if (str.empty()) return;
+    if (str.empty()) {
+        return;
+    }
 
     PrefixTreeNode* node = this->_root.get();
 
@@ -96,19 +102,21 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
         node = node->_children[idx].get();
     }
 
-    node->_isComplete = true;
-    
+    if (!node) [[unlikely]] {
+        throw TuringException("Could not get root of string indexer");
+    }
     node->_owners.push_back(owner);
+    node->_isComplete = true;
 }
 
 StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
     if (sv.empty()) [[unlikely]] {
-        return StringIndexIterator {nullptr, NOT_FOUND};
+        return {nullptr, NOT_FOUND};
     }
 
-    PrefixTreeNode* node = this->_root.get();
+    PrefixTreeNode* node = _root.get();
     if (!node) [[unlikely]] {
-        throw TuringException("Could not get root of string indexer");
+        throw TuringException("Could not get root of string indexer in find");
     }
 
     for (const char c : sv) {
@@ -142,8 +150,11 @@ void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
     // Gather existing children so we know which one is the last
     std::vector<PrefixTreeNode*> kids;
     kids.reserve(SIGMA);
-    for (std::size_t i = 0; i < SIGMA; ++i)
-        if (node->_children[i]) kids.push_back(node->_children[i].get());
+    for (std::size_t i = 0; i < SIGMA; ++i) {
+        if (node->_children[i]) {
+            kids.push_back(node->_children[i].get());
+        }
+    }
 
     // Prefix extension: keep vertical bar if this isn’t last
     std::string nextPrefix = prefix;
@@ -154,4 +165,36 @@ void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
     for (std::size_t k = 0; k < kids.size(); ++k) {
         printTree(kids[k], nextPrefix, k + 1 == kids.size());
     }
+}
+
+StringIndex::PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
+    if (query.empty()) {
+        return nullptr;
+    }
+
+    PrefixTreeNode* node = _root.get();
+    if (!node) [[unlikely]] {
+        throw TuringException(
+            "Could not get root of string indexer in getPrefixThreshold");
+    }
+
+    // Calculate the minimum length property string we consider a match
+    const size_t minPrefixLength = _prefixThreshold * query.size();
+    PrefixTreeNode* thresholdPoint {nullptr};
+
+    for (size_t i = 0; const char c : query) {
+        const size_t idx = charToIndex(c);
+        if (!node->_children[idx]) {
+            return thresholdPoint;
+        }
+        // Return the earliest point in the tree at which we find a matching prefix of
+        // sufficient length
+        if (i >= minPrefixLength) {
+            thresholdPoint = node;
+            return thresholdPoint;
+        }
+        node = node->_children[idx].get();
+        i++;
+    }
+    return thresholdPoint;
 }

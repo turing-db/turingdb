@@ -5,10 +5,12 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
+#include <string>
 
 #include "ID.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
+#include "TuringException.h"
 #include "indexers/EdgeIndexer.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "metadata/PropertyType.h"
@@ -249,4 +251,18 @@ bool DataPart::hasNode(NodeID nodeID) const {
 
 bool DataPart::hasEdge(EdgeID edgeID) const {
     return (edgeID - _firstEdgeID) < _edges->size();
+}
+
+const StringPropertyIndexer& DataPart::getNodeStrPropIndexer() const {
+    if (!_nodeStrPropIdx) {
+        throw TuringException("Node String Index was not initialised");
+    }
+    return *_nodeStrPropIdx;
+}
+
+const StringPropertyIndexer& DataPart::getEdgeStrPropIndexer() const {
+    if (!_edgeStrPropIdx) {
+        throw TuringException("Edge String Index was not initialised");
+    }
+    return *_edgeStrPropIdx;
 }

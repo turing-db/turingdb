@@ -74,46 +74,7 @@ public:
      * @param str The string to query
      */
     template <TypedInternalID IDT>
-    void query(std::vector<IDT>& result, std::string_view queryString) const {
-        // Track owners in a set to avoid duplicates
-        std::unordered_set<IDT> resSet;
-
-        std::vector<std::string> tokens {};
-        preprocess(tokens, queryString);
-
-        for (const auto& tok : tokens) {
-            auto it = find(tok);
-
-            // Early exit if no match
-            if (it._result == NOT_FOUND || !it._nodePtr) {
-                continue;
-            }
-
-            // Otherwise: match or partial match
-            PrefixTreeNode* node = it._nodePtr;
-            std::deque<PrefixTreeNode*> q {node};
-            // BFS, collecting owners
-            // TODO: Depth limit
-            while (!q.empty()) {
-                const PrefixTreeNode* n = q.front();
-                q.pop_front();
-                for (size_t i {0}; i < n->_children.size(); i++) {
-                    if (PrefixTreeNode* child = n->_children[i].get()) {
-                        q.push_back(child);
-                    }
-                }
-                // Collect owners to report back
-                if (n->_isComplete) {
-                    // XXX: Need better option of conversion here
-                    auto& owners = n->_owners;
-                    for (const EntityID& id : owners) {
-                        resSet.emplace(IDT(id.getValue()));
-                    }
-                }
-            }
-        }
-        std::copy(resSet.begin(), resSet.end(), std::back_inserter(result));
-    }
+    void query(std::vector<IDT>& result, std::string_view queryString) const;
 
     /**
      * @brief Replaces punctuation with spaces and splits into words (separated by space)
@@ -124,6 +85,7 @@ public:
 
 private:
     std::unique_ptr<PrefixTreeNode> _root;
+    static constexpr float _prefixThreshold {0.75};
 
     /**
      * @brief Get an iterator to a preprocessed word existing in the index
@@ -135,6 +97,8 @@ private:
 
     static size_t charToIndex(char c);
 
+    PrefixTreeNode* getPrefixThreshold(std::string_view query) const;
+
     static void alphaNumericise(const std::string_view in, std::string& out);
 
     static void split(std::vector<std::string>& res, std::string_view str,
@@ -144,4 +108,44 @@ private:
                    std::ostream& out = std::cout) const;
 };
 
+template <TypedInternalID IDT>
+void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
+    // Track owners in a set to avoid duplicates
+    std::unordered_set<IDT> resSet;
+
+    std::vector<std::string> tokens {};
+    preprocess(tokens, queryString);
+
+    for (const auto& tok : tokens) {
+        // Find the point in the trie which is deemed a suitable length prefix
+        PrefixTreeNode* prefixThreshold = getPrefixThreshold(tok);
+
+        // Early exit if no match
+        if (!prefixThreshold) {
+            continue;
+        }
+
+        // Otherwise: match or partial match
+        std::deque<PrefixTreeNode*> q {prefixThreshold};
+        // BFS, collecting owners
+        // TODO: Depth limit
+        while (!q.empty()) {
+            const PrefixTreeNode* n = q.front();
+            q.pop_front();
+            for (size_t i {0}; i < n->_children.size(); i++) {
+                if (PrefixTreeNode* child = n->_children[i].get()) {
+                    q.push_back(child);
+                }
+            }
+            // Collect owners to report back
+            if (n->_isComplete) {
+                auto& owners = n->_owners;
+                for (const EntityID& id : owners) {
+                    resSet.emplace(IDT(id.getValue()));
+                }
+            }
+        }
+    }
+    std::copy(resSet.begin(), resSet.end(), std::back_inserter(result));
+}
 }

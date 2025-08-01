@@ -1,13 +1,11 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include <vector>
 
 #include "ID.h"
 #include "JobSystem.h"
 #include "TuringTest.h"
 
 #include "Graph.h"
-#include "indexes/StringIndex.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -102,7 +100,136 @@ protected:
 
         return graph;
     }
+
+    [[nodiscard]] std::unique_ptr<Graph> createPrefixTestDB() {
+        auto graph = Graph::create();
+        GraphWriter writer {graph.get()};
+
+        auto node1 = writer.addNode({"Word"});
+        writer.addNodeProperty<types::String>(node1, "name", "playful");
+        writer.submit();
+
+        return graph;
+    }
 };
+
+TEST_F(StringIndexTest, prefixSemanticsTest) {
+    auto db = createPrefixTestDB();
+    const FrozenCommitTx transaction1 = db->openTransaction();
+    GraphReader reader = transaction1.readGraph();
+    auto parts = reader.dataparts();
+
+    ASSERT_EQ(1, parts.size());
+    auto dpIt = parts.begin();
+    auto datapart = dpIt->get();
+
+    const auto& nodePropIdx = datapart->getNodeStrPropIndexer();
+    // We only have a single node string property
+    ASSERT_EQ(1, nodePropIdx.size());
+
+    // Get the prefix trie corresponding to the "name" property
+    auto& nameIdx = nodePropIdx.at(0);
+    ASSERT_TRUE(nameIdx);
+    nameIdx->print();
+
+    const std::string PLAYFULLY = "playfully";
+    const std::string PLAYFUL = "playful";
+    const std::string PLAY = "play";
+
+    std::vector<NodeID> owners {};
+    nameIdx->query(owners, PLAYFUL);
+    EXPECT_THAT(owners, UnorderedElementsAre(0)) << "Query for 'playful' failed";
+
+    owners.clear();
+
+    // Test that a query which is a prefix of an indexed string property is matched
+    nameIdx->query(owners, PLAY);
+    EXPECT_THAT(owners, UnorderedElementsAre(0)) << "Query for 'play' failed";
+
+    owners.clear();
+
+    // Test that a query which has, as a prefix, an indexed string property, is matched
+    // NOTE: The prefix is at least as long as query_size * _prefixThreshold
+    ASSERT_GT(PLAYFUL.size(), 0.75 * PLAYFULLY.size());
+    nameIdx->query(owners, PLAYFULLY);
+    EXPECT_THAT(owners, UnorderedElementsAre(0)) << "Query for 'playfully' failed";
+}
+
+TEST_F(StringIndexTest, simpleIndex) {
+    constexpr uint64_t FIRSTNODEID = 0;
+    constexpr uint64_t SECONDNODEID = 1;
+    constexpr uint64_t FIRSTEDGEID = 0;
+
+    auto db2 = createDB1();
+    const FrozenCommitTx transaction1 = db2->openTransaction();
+    GraphReader reader1 = transaction1.readGraph();
+    auto parts1 = reader1.dataparts();
+
+    ASSERT_EQ(1, parts1.size());
+    auto dpIt = parts1.begin();
+    auto datapart = dpIt->get();
+
+    const auto& nodePropIdx = datapart->getNodeStrPropIndexer();
+    // We only have a single node string property
+    ASSERT_EQ(1, nodePropIdx.size());
+
+    // Get the prefix trie corresponding to the "name" property
+    auto& [prop, nameIdx] = *nodePropIdx.begin();
+
+    std::vector<NodeID> owners1 {};
+    nameIdx->query(owners1, "Cyrus");
+    ASSERT_EQ(1, owners1.size());
+    EXPECT_EQ(FIRSTNODEID, owners1.at(0));
+
+    std::vector<NodeID> owners2 {};
+    nameIdx->query(owners2, "Suhas");
+    ASSERT_EQ(1, owners2.size());
+    EXPECT_EQ(SECONDNODEID, owners2.at(0));
+
+    std::vector<NodeID> owners3 {};
+    nameIdx->query(owners3, "Remy");
+    EXPECT_EQ(0, owners3.size());
+
+    std::vector<NodeID> owners4 {};
+    nameIdx->query(owners4, "Cy");
+    ASSERT_EQ(1, owners4.size());
+    EXPECT_EQ(FIRSTNODEID, owners4.at(0));
+
+    const auto& edgePropIdx = datapart->getEdgeStrPropIndexer();
+    ASSERT_EQ(1, edgePropIdx.size());
+
+    // Get the prefix trie corresponding to the "For" property
+    auto& [eprop, forIdx] = *edgePropIdx.begin();
+
+    std::vector<EdgeID> owners5 {};
+    forIdx->query(owners5, "2 weeks");
+    ASSERT_EQ(1, owners5.size());
+    EXPECT_EQ(FIRSTEDGEID, owners5.at(0));
+
+    std::vector<EdgeID> owners6 {};
+    forIdx->query(owners6, "2");
+    ASSERT_EQ(1, owners6.size());
+    EXPECT_EQ(FIRSTEDGEID, owners6.at(0));
+
+    std::vector<EdgeID> owners7 {};
+    forIdx->query(owners7, "weeks");
+    ASSERT_EQ(1, owners7.size());
+    EXPECT_EQ(FIRSTEDGEID, owners7.at(0));
+
+    std::vector<EdgeID> owners8 {};
+    forIdx->query(owners8, "we");
+    ASSERT_EQ(1, owners8.size());
+    EXPECT_EQ(FIRSTEDGEID, owners8.at(0));
+
+    std::vector<EdgeID> owners9 {};
+    forIdx->query(owners9, "eeks");
+    EXPECT_EQ(0, owners9.size());
+
+    std::vector<EdgeID> owners10 {};
+    forIdx->query(owners10, "10 years");
+    EXPECT_EQ(0, owners10.size());
+}
+
 
 TEST_F(StringIndexTest, stringApproximation) {
     auto db = createBioGraph();
@@ -137,7 +264,7 @@ TEST_F(StringIndexTest, stringApproximation) {
 
     owners.clear();
     nameIdx->query(owners, "APOE4");
-    EXPECT_THAT(owners, UnorderedElementsAre(1, 3)) << "Query for 'APOE4' failed";
+    EXPECT_THAT(owners, UnorderedElementsAre(0, 1, 2, 3)) << "Query for 'APOE4' failed";
 
     owners.clear();
     nameIdx->query(owners, "APOE 4");

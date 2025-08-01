@@ -27,6 +27,10 @@ public:
 
     bool isInitialised() const { return _initialised; }
 
+    auto begin() const { return _indexer.begin(); }
+
+    auto end() const { return _indexer.end(); }
+
 private:
     std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
     bool _initialised {false};
