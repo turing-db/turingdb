@@ -102,13 +102,12 @@ public:
     void query(std::vector<IDT>& result, std::string_view queryString) const;
 
     /**
-     * @brief Replaces punctuation with spaces and splits into words (separated by space)
+     * @brief Replaces punctuation with spaces and splits into words (separated by
+     * space)
      * @param in The string to preprocess
      * @param res The resultant tokens of preprocessing @param in
      */
     static void preprocess(std::vector<std::string>& res, std::string_view in);
-
-
 
 private:
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
@@ -142,7 +141,6 @@ template <TypedInternalID IDT>
 void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
     // Track owners in a set to avoid duplicates
     std::unordered_set<IDT> resSet;
-
     std::vector<std::string> tokens {};
     preprocess(tokens, queryString);
 
