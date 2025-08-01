@@ -10,6 +10,7 @@
 #include "TuringException.h"
 #include "spdlog/spdlog.h"
 #include <cstddef>
+#include <iterator>
 #include <string>
 
 using namespace db;
@@ -35,6 +36,7 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
             ids.emplace_back(id.getValue());
         }
 
+        spdlog::info("Dumping IDs");
         size_t offset {0};
         for (size_t i = 0; i < idPageCount; i++) {
             _writer.nextPage();
@@ -57,123 +59,58 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
         }
     }
 
-    std::vector<size_t> numStringsPerId;
-    numStringsPerId.reserve(ids.size());
-
-    std::vector<std::vector<EntityID>> owners; // Build now, use later
-    // NOTE: Is it worth using StringBuckets instead?
-    // String values
+    spdlog::info("Dumping string values");
     {
-        std::vector<std::string> strings;
-        std::vector<size_t> stringSizes;
 
-        msgbioassert(ids.size() == numStringsPerId.size(),
-                     "ID to string count calculation is wrong");
-
+        // Calculate the number of entries per propertyID: info for loader
+        std::vector<size_t> numEntries;
+        numEntries.reserve(ids.size());
         for (const auto& id : ids) {
-            size_t num_strings{0};
-            for (num_strings++; const auto& it : *idxer.at(id.getValue())) {
-                strings.emplace_back(it.word);
-                stringSizes.emplace_back(it.word.size());
-
-                // Populate the owners array
-                for (const auto& owner : it.owners) {
-                    owners.emplace_back(owner.getValue());
-                }
-            }
-            numStringsPerId.push_back(num_strings);
+            auto& thisIndex = *idxer.at(id.getValue());
+            size_t thisNumEntries {0};
+            for (thisNumEntries++; [[maybe_unused]] const auto& _ : thisIndex)
+                ;
+            numEntries.push_back(thisNumEntries);
         }
 
-        size_t i {0};
-        /* Format:
-         * # of strings for this ID
-         * [string size, string]
-         * [string size, string]
-         * ...
-         */
-        for (const auto& numStrings : numStringsPerId) {
-            // Ensure there is space to write the number of strings for this property ID
-            if (!ensureSpace(sizeof(size_t))) {
-                spdlog::error("Couldn't write num strings");
-                return DumpError::result(DumpErrorType::COULD_NOT_WRITE_DATAPART_INFO);
-            }
-            // Write the total number of strings for this property ID
-            _writer.writeToCurrentPage(numStrings);
+        msgbioassert(numEntries.size() == ids.size(),
+                     "Error in entry-per-propID calculation");
 
-            for (size_t j = i; j < i + numStrings; j++) {
-                size_t thisStringDataSize =
-                    sizeof(size_t) + (stringSizes.at(j) * sizeof(char));
+        for (size_t i = 0; i < ids.size(); i++) {
+            const auto& id = ids.at(i);
+            for (const auto& it : *idxer.at(id.getValue())) {
+                std::string string = it.word;
+                auto& owners = it.owners;
 
-                if (!ensureSpace(thisStringDataSize)) {
-                    spdlog::error("String data size for property {} with string {} is "
-                                  "too large to fit a single page");
+                // XXX: Will never work if thisData exceeds page size
+                // TODO: Split the checks up so that the data may span multiple pages
+                size_t thisData = sizeof(size_t) + sizeof(size_t) // Num entries, str size
+                                + sizeof(char) * string.size()    // string data
+                                + sizeof(size_t)                  // owners size
+                                + sizeof(size_t) * owners.size(); // owners data
+                if (!ensureSpace(thisData)) {
                     return DumpError::result(
                         DumpErrorType::COULD_NOT_WRITE_DATAPART_INFO);
                 }
-
-                // Write Size:String pair
-                _writer.writeToCurrentPage(stringSizes.at(j));
-                _writer.writeToCurrentPage(strings.at(j));
-            }
-            i += numStrings;
-        }
-    }
-
-    // Owner information
-    {
-        size_t i {0};
-        /* Format:
-         * # of strings for this ID
-         * [owners vector size, owners vector]
-         * [owners vector size, owners vector]
-         * ...
-         */
-        for (const auto& numStrings : numStringsPerId) {
-            // Ensure there is space to write the number of strings for this property ID
-            if (!ensureSpace(sizeof(size_t))) {
-                spdlog::error("Couldn't write num strings");
-                return DumpError::result(DumpErrorType::COULD_NOT_WRITE_DATAPART_INFO);
-            }
-            // Write the total number of strings for this property ID
-            _writer.writeToCurrentPage(numStrings);
-
-            // For each string entry
-            for (size_t j = i; j < i + numStrings; j++) {
-                // Ensure all the data for owner info can fit on this page
-                size_t thisOwnersDataSize =
-                    sizeof(size_t) + (owners.at(j).size() * sizeof(size_t));
-                if (!ensureSpace(thisOwnersDataSize)) {
-                    spdlog::error(
-                        "Owners size for property {} is too large to fit a single page");
-                    return DumpError::result(
-                        DumpErrorType::COULD_NOT_WRITE_DATAPART_INFO);
-                }
-
-                size_t before = _writer.getBytesWritten();
-
-                // Write Size:ownervec pair
-                _writer.writeToCurrentPage(owners.at(j).size());
-                for (const auto& owner : owners.at(j)) {
-                    _writer.writeToCurrentPage(owner.getValue());
-                }
-
-                size_t after = _writer.getBytesWritten();
-                if (after - before != thisOwnersDataSize) {
-                    throw TuringException("Incorrect calculation of owners size");
+                _writer.writeToCurrentPage(numEntries.at(i));
+                _writer.writeToCurrentPage(string.size());
+                _writer.writeToCurrentPage(string);
+                _writer.writeToCurrentPage(owners.size());
+                for (auto&& ownerID : owners) {
+                    _writer.writeToCurrentPage(ownerID.getValue());
                 }
             }
-            i += numStrings;
         }
     }
     return {};
 }
 
-bool StringApproxIndexerDumper::ensureSpace(size_t requiredSpace) {
-    if (requiredSpace > DumpConfig::PAGE_SIZE) {
-        return false;
+    bool StringApproxIndexerDumper::ensureSpace(size_t requiredSpace) {
+        if (requiredSpace > DumpConfig::PAGE_SIZE) {
+            return false;
+        }
+        if (_writer.buffer().avail() < requiredSpace) {
+            _writer.nextPage();
+        }
+        return true;
     }
-    if (_writer.buffer().avail() < requiredSpace) {
-        _writer.nextPage();
-    }
-    return true;
-}
