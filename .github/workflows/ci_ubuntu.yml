@@ -25,11 +25,11 @@ jobs:
       run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
     - name: Build
       shell: bash
-      run: cd ${{ github.workspace }}/build && make -j8
+      run: cd ${{ github.workspace }}/build && make -j8 && make install
     - name: Run unit tests
       shell: bash
       run: cd ${{ github.workspace }}/build && make test
     - name: Run samples
       shell: bash
-      run: cd ${{ github.workspace }}/build && make run_samples
+      run: cd ${{ github.workspace }}/build/samples && bash ./run_samples.sh
 
