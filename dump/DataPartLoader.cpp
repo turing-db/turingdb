@@ -2,6 +2,9 @@
 
 #include "DataPart.h"
 #include "Graph.h"
+#include "indexers/StringPropertyIndexer.h"
+#include "metadata/PropertyType.h"
+#include "properties/PropertyContainer.h"
 #include "properties/PropertyManager.h"
 #include "indexers/EdgeIndexer.h"
 #include "DataPartInfoLoader.h"
@@ -10,6 +13,7 @@
 #include "EdgeContainerLoader.h"
 #include "PropertyContainerLoader.h"
 #include "PropertyIndexerLoader.h"
+#include "spdlog/spdlog.h"
 #include "versioning/VersionController.h"
 
 using namespace db;
@@ -114,7 +118,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     part->_edgeProperties = std::make_unique<PropertyManager>();
 
     // Loading properties
-    const auto loadProperties = [&](PropertyManager& manager, std::string_view filename) -> DumpResult<void> {
+    const auto loadProperties = [&](PropertyManager& manager,
+                                    StringPropertyIndexer& idxer,
+                                    std::string_view filename) -> DumpResult<void> {
         const auto ptID = GraphDumpHelper::getIntegerSuffix(filename, PREFIX_SIZE);
         if (!ptID) {
             return DumpError::result(DumpErrorType::INCORRECT_PROPERTY_TYPE_ID);
@@ -158,7 +164,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         };
 
         // Lambda to store string properties
-        const auto storeStringContainer = [&](PropertyManager& manager) -> DumpResult<void> {
+        const auto storeStringContainer =
+            [&](PropertyManager& manager,
+                StringPropertyIndexer& idxer) -> DumpResult<void> {
             StringPropertyContainerLoader loader {reader.value()};
 
             auto props = loader.load();
@@ -170,6 +178,13 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
             manager._strings.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+
+            // Build string index
+            spdlog::info("Initialising tree at id : {}", pt->_id.getValue());
+            idxer.initialiseIndexTrie(pt->_id);
+            const auto& [id, container] = *manager.find(pt->_id);
+            spdlog::info("Adding strings at id : {}", pt->_id.getValue());
+            idxer.addStringPropertyToIndex(id, container->cast<types::String>());
 
             return {};
         };
@@ -194,7 +209,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
                 break;
             }
             case ValueType::String: {
-                if (auto res = storeStringContainer(manager); !res) {
+                if (auto res = storeStringContainer(manager, idxer); !res) {
                     return res.get_unexpected();
                 }
                 break;
@@ -258,13 +273,13 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             Profile profile {"DataPartLoader::load <node-props>"};
 
             // node properties
-            if (auto res = loadProperties(*part->_nodeProperties, childStr); !res) {
+            if (auto res = loadProperties(*part->_nodeProperties, *part->_nodeStrPropIdx, childStr); !res) {
                 return res.get_unexpected();
             }
         } else if (childStr.find(EDGE_PROPS_PREFIX) != std::string::npos) {
             Profile profile {"DataPartLoader::load <edge-props>"};
             // edge properties
-            if (auto res = loadProperties(*part->_edgeProperties, childStr); !res) {
+            if (auto res = loadProperties(*part->_edgeProperties, *part->_edgeStrPropIdx, childStr); !res) {
                 return res.get_unexpected();
             }
         }

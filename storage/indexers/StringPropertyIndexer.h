@@ -9,6 +9,7 @@
 
 namespace db {
 
+class DataPartLoader;
 class PropertyContainer;
 
 class StringPropertyIndexer {
@@ -31,13 +32,15 @@ public:
 
     auto end() const { return _indexer.end(); }
 
-private:
-    std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
-    bool _initialised {false};
+    auto find(PropertyTypeID propId) const { return _indexer.find(propId); }
 
     void initialiseIndexTrie(PropertyTypeID propertyID);
     void addStringPropertyToIndex(
         PropertyTypeID propertyID,
         const TypedPropertyContainer<types::String>& stringPropertyContainer);
+
+private:
+    std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
+    bool _initialised {false};
 };
 }
