@@ -31,5 +31,5 @@ jobs:
       run: cd ${{ github.workspace }}/build && make test
     - name: Run samples
       shell: bash
-      run: cd ${{ github.workspace }}/build/samples && bash ./run_samples.sh
+      run: cd ${{ github.workspace }}/build/turing_install/samples && bash ./run_samples.sh
 
