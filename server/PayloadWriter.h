@@ -4,6 +4,7 @@
 
 #include "ID.h"
 #include "metadata/GraphMetadata.h"
+#include "versioning/Change.h"
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
 #include "metadata/PropertyType.h"
@@ -170,6 +171,10 @@ public:
         } else {
             nullValue();
         }
+    }
+
+    void value(const Change* v) {
+        value(v->id().get());
     }
 
     void finish() {

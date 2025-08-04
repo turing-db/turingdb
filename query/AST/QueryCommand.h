@@ -4,6 +4,8 @@
 #include <vector>
 #include <memory>
 
+#include "metadata/PropertyType.h"
+
 namespace db {
 
 class ASTContext;
@@ -163,8 +165,18 @@ public:
         LABELS = 0,
         LABELSETS,
         PROPERTIES,
-        EDGETYPES
+        EDGETYPES,
+
+        SIZE
     };
+
+    constexpr std::span<const std::string_view> getColNames() const {
+        return colNameTable[static_cast<size_t>(Type::SIZE)];
+    }
+
+    constexpr std::span<const ValueType> getColTypes() const {
+        return colTypeTable[static_cast<size_t>(Type::SIZE)];
+    }
 
     static CallCommand* create(ASTContext* ctx, Type);
 
@@ -177,5 +189,29 @@ private:
     CallCommand() = delete;
     CallCommand(Type type);
     //~CallCommand() override = default;
+
+    static constexpr std::array<std::string_view, 2> labelsColNames = {"LabelID", "LabelName"};
+    static constexpr std::array<std::string_view, 2> labelSetsColNames = {"LabelSetID", "LabelName"};
+    static constexpr std::array<std::string_view, 2> edgeTypesColNames = {"EdgeTypeID", "EdgeTypeName"};
+    static constexpr std::array<std::string_view, 3> propertiesColNames = {"PropertyID", "PropertyName", "PropertyType"};
+
+    static constexpr std::array<std::span<const std::string_view>, static_cast<size_t>(Type::SIZE)> colNameTable = {
+        {std::span {labelsColNames},
+         std::span {labelSetsColNames},
+         std::span {propertiesColNames},
+         std::span {edgeTypesColNames}}
+    };
+
+    static constexpr std::array<ValueType, 2> labelsColTypes = {ValueType::UInt64, ValueType::String};
+    static constexpr std::array<ValueType, 2> labelSetsColTypes = {ValueType::UInt64, ValueType::String};
+    static constexpr std::array<ValueType, 2> edgeTypesColTypes = {ValueType::UInt64, ValueType::String};
+    static constexpr std::array<ValueType, 3> propertiesColTypes = {ValueType::UInt64, ValueType::String, ValueType::String};
+
+    static constexpr std::array<std::span<const ValueType>, static_cast<size_t>(Type::SIZE)> colTypeTable = {
+        {std::span {labelsColTypes},
+         std::span {labelSetsColTypes},
+         std::span {propertiesColTypes},
+         std::span {edgeTypesColTypes}}
+    };
 };
 }

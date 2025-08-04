@@ -47,6 +47,7 @@ private:
 
     void query();
     void load_graph();
+    void history();
     void get_graph_status();
     void is_graph_loaded();
     void is_graph_loading();
