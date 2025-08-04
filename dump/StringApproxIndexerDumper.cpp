@@ -33,8 +33,11 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
         for (const auto& [id, _] : idxer) {
             ids.emplace_back(id.getValue());
         }
+        // Header metadata
+        _writer.write(ids.size());
+        _writer.write(idPageCount);
+        _writer.nextPage();
 
-        spdlog::info("Dumping IDs");
         size_t offset {0};
         for (size_t i = 0; i < idPageCount; i++) {
             _writer.nextPage();
@@ -57,7 +60,6 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
         }
     }
 
-    spdlog::info("Dumping string values");
     {
 
         // Calculate the number of entries per propertyID: info for loader

@@ -215,6 +215,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         }
     }
 
+    /*
     // Dumping node String approx property Indexer
     {
         Profile profile {"DataPartDumper::dump <node string prop indexer>"};
@@ -259,6 +260,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
             }
         }
     }
+    */
 
     return {};
 }

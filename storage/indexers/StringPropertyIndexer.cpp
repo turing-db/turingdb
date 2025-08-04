@@ -4,6 +4,7 @@
 #include "metadata/PropertyType.h"
 #include "properties/PropertyContainer.h"
 #include "ID.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -26,6 +27,7 @@ void StringPropertyIndexer::addStringPropertyToIndex(PropertyTypeID propertyID,
     const auto zipped = stringPropertyContainer.zipped();
     std::vector<std::string> tokens;
     for (const auto&& [id, stringValue] : zipped) {
+        spdlog::info("Adding {} for ID {}", stringValue, id.getValue());
         // Preprocess and tokenise the string into alphanumeric subwords
         StringIndex::preprocess(tokens, stringValue);
         // Insert each subword
