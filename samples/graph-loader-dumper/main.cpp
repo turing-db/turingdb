@@ -4,7 +4,7 @@
 #include "comparators/GraphComparator.h"
 #include "GraphLoader.h"
 #include "LogUtils.h"
-#include "Time.h"
+#include "TuringTime.h"
 #include "SimpleGraph.h"
 #include "JobSystem.h"
 #include "versioning/CommitBuilder.h"

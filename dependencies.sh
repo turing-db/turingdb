@@ -18,6 +18,12 @@ mkdir -p $DEPENDENCIES_DIR
 mkdir -p $BUILD_DIR
 
 
+# Update apt cache if linux
+if command -v apt-get &> /dev/null; then
+    echo "Updating apt cache..."
+    sudo apt-get update
+fi
+
 # Install curl
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew
@@ -36,7 +42,6 @@ else
     # Linux - use apt
     if command -v apt-get &> /dev/null; then
         echo "Installing curl via apt..."
-        sudo apt-get update
         sudo apt-get install -qqy curl libcurl4-openssl-dev zlib1g-dev libssl-dev
     else
         echo "apt-get not found. Please install curl manually."
@@ -69,7 +74,6 @@ else
     # Linux - use apt
     if command -v apt-get &> /dev/null; then
         echo "Installing bison and flex via apt..."
-        sudo apt-get update
         sudo apt-get install -qqy bison flex
     else
         echo "apt-get not found. Please install bison and flex manually."
@@ -81,9 +85,19 @@ fi
 if [[ "$(uname)" != "Darwin" ]]; then
     if command -v apt-get &> /dev/null; then
         echo "Install boost"
-        sudo apt install -qqy libboost1.83-all-dev
+
+        # Try to install boost 1.83
+        set +e
+        sudo apt-get install -qqy libboost1.83-all-dev
+        boost_install_status=$?
+        set -e
+
+        # If not found, try to install boost 1.74
+        if [ $boost_install_status -ne 0 ]; then
+            sudo apt-get install -qqy libboost1.74-all-dev
+        fi
     else
-        echo "apt-get not found. Please install bison and flex manually."
+        echo "apt-get not found. Please install boost manually."
         exit 1
     fi
 fi

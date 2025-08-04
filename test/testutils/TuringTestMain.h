@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/fmt/bundled/core.h>
 
-#include "Time.h"
+#include "TuringTime.h"
 
 namespace turing::test {
 

@@ -15,7 +15,7 @@
 #include "FileUtils.h"
 #include "LogSetup.h"
 #include "PerfStat.h"
-#include "Time.h"
+#include "TuringTime.h"
 
 using namespace db;
 
@@ -112,8 +112,7 @@ TEST_F(Neo4jImporterTest, General) {
     auto t0 = Clock::now();
     auto t1 = Clock::now();
 
-    const std::string turingHome = std::getenv("TURING_HOME");
-    const FileUtils::Path jsonDir = FileUtils::Path {turingHome} / "neo4j" / "cyber-security-db";
+    const FileUtils::Path jsonDir = FileUtils::Path {NEO4J_DIR} / "cyber-security-db";
 
     ASSERT_TRUE(FileUtils::exists(jsonDir));
 

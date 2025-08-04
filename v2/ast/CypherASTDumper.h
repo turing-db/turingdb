@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iterator>
 #include <ostream>
 #include <unordered_set>
 
@@ -56,29 +55,29 @@ private:
     const CypherAST& _ast;
     std::unordered_set<DeclID> _dumpedVariables;
 
-    void dump(const SinglePartQuery& query);
-    void dump(const Match& match);
-    void dump(const Limit& lim);
-    void dump(const Skip& skip);
-    void dump(const Return& ret);
-    void dump(const Projection& projection);
-    void dump(const Pattern& pattern);
-    void dump(const PatternElement& elem);
-    void dump(const WhereClause& where);
-    void dump(const NodePattern& node);
-    void dump(const EdgePattern& edge);
-    void dump(const MapLiteral& map);
-    void dump(const Expression& expr);
-    void dump(const BinaryExpression& expr);
-    void dump(const UnaryExpression& expr);
-    void dump(const SymbolExpression& expr);
-    void dump(const LiteralExpression& expr);
-    void dump(const ParameterExpression& expr);
-    void dump(const PathExpression& expr);
-    void dump(const NodeLabelExpression& expr);
-    void dump(const StringExpression& expr);
-    void dump(const PropertyExpression& expr);
-    void dump(const VarDecl& decl);
+    void dump(std::ostream& out, const SinglePartQuery& query);
+    void dump(std::ostream& out, const Match& match);
+    void dump(std::ostream& out, const Limit& lim);
+    void dump(std::ostream& out, const Skip& skip);
+    void dump(std::ostream& out, const Return& ret);
+    void dump(std::ostream& out, const Projection& projection);
+    void dump(std::ostream& out, const Pattern& pattern);
+    void dump(std::ostream& out, const PatternElement& elem);
+    void dump(std::ostream& out, const WhereClause& where);
+    void dump(std::ostream& out, const NodePattern& node);
+    void dump(std::ostream& out, const EdgePattern& edge);
+    void dump(std::ostream& out, const MapLiteral& map);
+    void dump(std::ostream& out, const Expression& expr);
+    void dump(std::ostream& out, const BinaryExpression& expr);
+    void dump(std::ostream& out, const UnaryExpression& expr);
+    void dump(std::ostream& out, const SymbolExpression& expr);
+    void dump(std::ostream& out, const LiteralExpression& expr);
+    void dump(std::ostream& out, const ParameterExpression& expr);
+    void dump(std::ostream& out, const PathExpression& expr);
+    void dump(std::ostream& out, const NodeLabelExpression& expr);
+    void dump(std::ostream& out, const StringExpression& expr);
+    void dump(std::ostream& out, const PropertyExpression& expr);
+    void dump(std::ostream& out, const VarDecl& decl);
 };
 
 }

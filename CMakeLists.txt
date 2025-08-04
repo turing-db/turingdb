@@ -84,6 +84,8 @@ execute_process(
         ${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
 )
 
+set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
+
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies)
 
 # Threads
