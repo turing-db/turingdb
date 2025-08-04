@@ -625,7 +625,7 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
                          edges.getInEdgeCount());
 
             ASSERT_TRUE(v.isValid());
-            ASSERT_EQ(it->first, v.nodeID());
+            ASSERT_EQ(NodeID(it->first), v.nodeID());
             ASSERT_EQ(it->second._tmpID, props.getProperty<types::UInt64>(0));
             ASSERT_EQ(it->second._props, props.getCount());
             ASSERT_EQ(it->second._outs, edges.getOutEdgeCount());
