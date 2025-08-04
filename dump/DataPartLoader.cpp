@@ -13,7 +13,6 @@
 #include "EdgeContainerLoader.h"
 #include "PropertyContainerLoader.h"
 #include "PropertyIndexerLoader.h"
-#include "spdlog/spdlog.h"
 #include "versioning/VersionController.h"
 
 using namespace db;
@@ -178,13 +177,6 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
             manager._strings.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
-
-            // Build string index
-            spdlog::info("Initialising tree at id : {}", pt->_id.getValue());
-            idxer.initialiseIndexTrie(pt->_id);
-            const auto& [id, container] = *manager.find(pt->_id);
-            spdlog::info("Adding strings at id : {}", pt->_id.getValue());
-            idxer.addStringPropertyToIndex(id, container->cast<types::String>());
 
             return {};
         };
