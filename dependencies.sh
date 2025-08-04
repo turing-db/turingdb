@@ -74,7 +74,7 @@ else
     # Linux - use apt
     if command -v apt-get &> /dev/null; then
         echo "Installing bison and flex via apt..."
-        sudo apt-get install -qqy bison flex
+        sudo apt-get install -qqy bison flex libfl-dev
     else
         echo "apt-get not found. Please install bison and flex manually."
         exit 1
