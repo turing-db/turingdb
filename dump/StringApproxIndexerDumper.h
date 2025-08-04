@@ -8,8 +8,10 @@ namespace db {
 
 class StringApproxIndexerDumper {
 public:
-    explicit StringApproxIndexerDumper (fs::FilePageWriter& writer)
-        : _writer(writer)
+    explicit StringApproxIndexerDumper(fs::FilePageWriter& writer,
+                                       fs::FilePageWriter& auxWriter)
+        : _writer(writer),
+          _auxWriter(auxWriter)
     {
     }
 
@@ -17,8 +19,13 @@ public:
 
 private:
     fs::FilePageWriter& _writer;
+    fs::FilePageWriter& _auxWriter;
 
     bool ensureSpace(size_t requiredSpace);
+
+    DumpResult<void> dumpNode(const StringIndex::PrefixTreeNode* node);
+    DumpResult<void> dumpOwners(const std::vector<EntityID>& owners);
+
 };
 
 }
