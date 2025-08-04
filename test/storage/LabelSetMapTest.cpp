@@ -17,7 +17,7 @@ TEST_F(LabelSetMapTest, createOne) {
     ASSERT_TRUE(handle.isValid());
     ASSERT_TRUE(handle.isStored());
     ASSERT_EQ(handle.getID(), 0);
-    ASSERT_EQ(labelset, handle);
+    ASSERT_EQ(handle, labelset);
 }
 
 TEST_F(LabelSetMapTest, get) {
@@ -41,9 +41,9 @@ TEST_F(LabelSetMapTest, different) {
     ASSERT_TRUE(handle1.isValid());
     ASSERT_TRUE(handle1.isStored());
     ASSERT_EQ(handle1.getID(), 0);
-    ASSERT_EQ(labelset1, handle1);
+    ASSERT_EQ(handle1, labelset1);
     ASSERT_TRUE(handle2.isValid());
     ASSERT_TRUE(handle2.isStored());
     ASSERT_EQ(handle2.getID(), 1);
-    ASSERT_EQ(labelset2, handle2);
+    ASSERT_EQ(handle2, labelset2);
 }
