@@ -156,9 +156,9 @@ TEST_F(StringIndexTest, prefixSemanticsTest) {
 }
 
 TEST_F(StringIndexTest, simpleIndex) {
-    constexpr uint64_t FIRSTNODEID = 0;
-    constexpr uint64_t SECONDNODEID = 1;
-    constexpr uint64_t FIRSTEDGEID = 0;
+    const NodeID FIRSTNODEID = NodeID(0);
+    const NodeID SECONDNODEID = NodeID(1);
+    const EdgeID FIRSTEDGEID = EdgeID(0);
 
     auto db2 = createDB1();
     const FrozenCommitTx transaction1 = db2->openTransaction();

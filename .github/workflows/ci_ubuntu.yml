@@ -9,7 +9,7 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m
 
     steps:
     - uses: actions/checkout@v4
@@ -25,4 +25,4 @@ jobs:
       run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
     - name: Build
       shell: bash
-      run: cd ${{ github.workspace }}/build && make
+      run: cd ${{ github.workspace }}/build && make -j8
