@@ -63,9 +63,11 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
         // Calculate the number of entries per propertyID: info for loader
         std::vector<size_t> numEntries;
         numEntries.reserve(ids.size());
+
         for (const auto& id : ids) {
             auto& thisIndex = *idxer.at(id.getValue());
             size_t thisNumEntries {0};
+            // TODO: Add distance support to prefix trie iterator
             for (thisNumEntries++; [[maybe_unused]] const auto& _ : thisIndex)
                 ;
             numEntries.push_back(thisNumEntries);
@@ -94,7 +96,7 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
                 _writer.writeToCurrentPage(string.size());
                 _writer.writeToCurrentPage(string);
                 _writer.writeToCurrentPage(owners.size());
-                for (auto&& ownerID : owners) {
+                for (const auto& ownerID : owners) {
                     _writer.writeToCurrentPage(ownerID.getValue());
                 }
             }
@@ -103,12 +105,12 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
     return {};
 }
 
-    bool StringApproxIndexerDumper::ensureSpace(size_t requiredSpace) {
-        if (requiredSpace > DumpConfig::PAGE_SIZE) {
-            return false;
-        }
-        if (_writer.buffer().avail() < requiredSpace) {
-            _writer.nextPage();
-        }
-        return true;
+bool StringApproxIndexerDumper::ensureSpace(size_t requiredSpace) {
+    if (requiredSpace > DumpConfig::PAGE_SIZE) {
+        return false;
     }
+    if (_writer.buffer().avail() < requiredSpace) {
+        _writer.nextPage();
+    }
+    return true;
+}
