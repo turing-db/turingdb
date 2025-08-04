@@ -31,13 +31,16 @@ public:
     static constexpr size_t BitCount = IntegerSize * TCount;
 
     TemplateLabelSet() = default;
+
     TemplateLabelSet(const TemplateLabelSet&) = default;
+
     TemplateLabelSet(TemplateLabelSet&& other) noexcept
         : _integers(other._integers)
     {
     }
 
     TemplateLabelSet& operator=(const TemplateLabelSet&) = default;
+
     TemplateLabelSet& operator=(TemplateLabelSet&& other) noexcept {
         _integers = other._integers;
         return *this;
@@ -85,11 +88,11 @@ public:
 
     bool operator==(const TemplateLabelSet& other) const {
         return _integers == other._integers;
-    };
+    }
 
     bool operator!=(const TemplateLabelSet& other) const {
         return _integers != other._integers;
-    };
+    }
 
     bool operator>(const TemplateLabelSet& other) const {
         for (size_t i = 0; i < TCount; i++) {
@@ -179,6 +182,7 @@ public:
     Handle handle() const {
         return Handle {*this};
     }
+
 private:
     friend std::hash<TemplateLabelSet>;
     std::array<TType, TCount> _integers {};
