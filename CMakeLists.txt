@@ -84,6 +84,8 @@ execute_process(
         ${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
 )
 
+set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
+
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies)
 
 # Threads
@@ -95,6 +97,10 @@ find_package(CURL REQUIRED)
 # Bison and Flex
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
+
+# Boost
+set(Boost_USE_STATIC_LIBS ON)
+find_package(Boost REQUIRED COMPONENTS system)
 
 # Use Homebrew for Flex and Bison on macOS
 if(APPLE)

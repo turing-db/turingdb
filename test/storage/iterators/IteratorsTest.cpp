@@ -1,4 +1,8 @@
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/ranges.h>
+
 #include "TuringTest.h"
+
 #include "Graph.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -10,8 +14,6 @@
 #include "FileUtils.h"
 #include "JobSystem.h"
 #include "writers/MetadataBuilder.h"
-
-#include <spdlog/spdlog.h>
 
 using namespace db;
 using namespace turing::test;

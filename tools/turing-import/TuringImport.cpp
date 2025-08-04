@@ -13,7 +13,7 @@
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
 
-#include "Time.h"
+#include "TuringTime.h"
 #include "BioAssert.h"
 #include "ToolInit.h"
 

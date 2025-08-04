@@ -51,6 +51,10 @@ public:
     LabelSetID getID() const { return _id; };
 
     bool operator==(const BaseType& other) const {
+        return equal(other);
+    }
+
+    bool equal(const BaseType& other) const {
         const std::span otherIntegers = other.integers();
         const auto* integers = _labelset->data();
         for (size_t i = 0; i < IntegerCount; i++) {
@@ -59,9 +63,13 @@ public:
             }
         }
         return true;
-    };
+    }
 
     bool operator==(const TemplateLabelSetHandle& other) const {
+        return equal(other);
+    }
+
+    bool equal(const TemplateLabelSetHandle& other) const {
         if (!other._labelset || !_labelset) {
             return false;
         }
@@ -74,7 +82,7 @@ public:
             }
         }
         return true;
-    };
+    }
 
     bool operator!=(const BaseType& other) const {
         const std::span otherIntegers = other.integers();
@@ -85,7 +93,7 @@ public:
             }
         }
         return false;
-    };
+    }
 
     bool operator!=(const TemplateLabelSetHandle& other) const {
         if (!other._labelset || !_labelset) {
@@ -101,7 +109,7 @@ public:
             }
         }
         return false;
-    };
+    }
 
     bool operator>(const TemplateLabelSetHandle& other) const {
         if (!other._labelset || !_labelset) {
@@ -247,19 +255,19 @@ public:
         using is_transparent = void; // Enable overload resolution during comparison
 
         bool operator()(const BaseType& lhs, const BaseType& rhs) const {
-            return lhs == rhs;
+            return lhs.equal(rhs);
         }
 
         bool operator()(const BaseType& lhs, const TemplateLabelSetHandle& rhs) const {
-            return lhs == rhs;
+            return rhs.equal(lhs);
         }
 
         bool operator()(const TemplateLabelSetHandle& lhs, const BaseType& rhs) const {
-            return lhs == rhs;
+            return lhs.equal(rhs);
         }
 
         bool operator()(const TemplateLabelSetHandle& lhs, const TemplateLabelSetHandle& rhs) const {
-            return lhs == rhs;
+            return lhs.equal(rhs);
         }
     };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <stdint.h>
 
 namespace db {
 
@@ -16,13 +17,13 @@ public:
 
     bool exec();
 
-    void setStatement(std::string statement) { _statement = std::move(statement); }
-    void setUrl(std::string url) { _url = std::move(url); }
-    void setUrlSuffix(std::string urlSuffix) { _urlSuffix = std::move(urlSuffix); }
+    void setStatement(const std::string& statement) { _statement = statement; }
+    void setUrl(const std::string& url) { _url = url; }
+    void setUrlSuffix(const std::string& urlSuffix) { _urlSuffix = urlSuffix; }
     void setPort(uint64_t port) { _port = port; }
-    void setUsername(std::string username) { _username = std::move(username); }
-    void setPassword(std::string password) { _password = std::move(password); }
-    void setMethod(std::string method) { _method = std::move(method); }
+    void setUsername(const std::string& username) { _username = username; }
+    void setPassword(const std::string& password) { _password = password; }
+    void setMethod(const std::string& method) { _method = method; }
 
     [[nodiscard]] const std::string& getResponse() const { return _response; }
     [[nodiscard]] std::string consumeResponse() { return std::move(_response); }

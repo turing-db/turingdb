@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include <unordered_map>
 
 #include "SourceLocation.h"
 #include "attribution/AnalysisData.h"

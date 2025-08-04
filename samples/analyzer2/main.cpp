@@ -4,7 +4,7 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "Graph.h"
-#include "Time.h"
+#include "TuringTime.h"
 #include "ParserException.h"
 #include "FileReader.h"
 #include "SimpleGraph.h"

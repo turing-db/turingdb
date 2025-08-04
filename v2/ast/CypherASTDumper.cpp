@@ -1,9 +1,8 @@
 #include "CypherASTDumper.h"
 
-#include <spdlog/fmt/bundled/format.h>
-
 #include "CypherAST.h"
 #include "ASTException.h"
+#include "attribution/DeclContainer.h"
 #include "expressions/All.h"
 #include "types/Literal.h"
 #include "types/Projection.h"
@@ -37,21 +36,19 @@ CypherASTDumper::CypherASTDumper(const CypherAST& ast)
 {
 }
 
-void CypherASTDumper::dump(std::ostream& output) {
-    _o = std::ostream_iterator<char>(output);
+void CypherASTDumper::dump(std::ostream& out) {
+    out << "---\n";
+    out << "config:\n";
+    out << "  layout: elk\n";
 
-    fmt::format_to(_o, "---\n");
-    fmt::format_to(_o, "config:\n");
-    fmt::format_to(_o, "  layout: elk\n");
+    out << "---\n";
+    out << "erDiagram\n";
 
-    fmt::format_to(_o, "---\n");
-    fmt::format_to(_o, "erDiagram\n");
-
-    fmt::format_to(_o, "    script {{ }} \n");
+    out << "    script {{ }} \n";
 
     for (const auto& query : _ast.queries()) {
         if (const auto* q = dynamic_cast<const SinglePartQuery*>(query.get())) {
-            dump(*q);
+            dump(out, *q);
             continue;
         }
 
@@ -59,28 +56,24 @@ void CypherASTDumper::dump(std::ostream& output) {
     }
 }
 
-void CypherASTDumper::dump(const SinglePartQuery& query) {
-    fmt::format_to(_o, "    script ||--o{{ _{} : _\n", fmt::ptr(&query));
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&query));
-    fmt::format_to(_o, "        ASTType SinglePartQuery\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery& query) {
+    out << "    script ||--o{{ _" << std::hex << &query << " : _\n";
+    out << "    _" << std::hex << &query << " {{\n";
+    out << "        ASTType SinglePartQuery\n";
+    out << "    }}\n";
 
     for (const auto& st : query.getStatements()) {
         if (const auto* matchSt = dynamic_cast<const Match*>(st)) {
-            fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                           fmt::ptr(&query),
-                           fmt::ptr(matchSt));
+            out << "    _" << std::hex << &query << " ||--o{{ _" << std::hex << matchSt << " : _\n";
 
-            dump(*matchSt);
+            dump(out, *matchSt);
             continue;
         }
 
         if (const auto* retSt = dynamic_cast<const Return*>(st)) {
-            fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                           fmt::ptr(&query),
-                           fmt::ptr(retSt));
+            out << "    _" << std::hex << &query << " ||--o{{ _" << std::hex << retSt << " : _\n";
 
-            dump(*retSt);
+            dump(out, *retSt);
             continue;
         }
 
@@ -88,128 +81,112 @@ void CypherASTDumper::dump(const SinglePartQuery& query) {
     }
 }
 
-void CypherASTDumper::dump(const Match& match) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&match));
+void CypherASTDumper::dump(std::ostream& out, const Match& match) {
+    out << "    _" << std::hex << &match << " {{\n";
 
     if (match.isOptional()) {
-        fmt::format_to(_o, "        ASTType OPTIONAL_MATCH\n");
+        out << "        ASTType OPTIONAL_MATCH\n";
     } else {
-        fmt::format_to(_o, "        ASTType MATCH\n");
+        out << "        ASTType MATCH\n";
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     const auto& pattern = match.getPattern();
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&match),
-                   fmt::ptr(&pattern));
+    out << "    _" << std::hex << &match << " ||--o{{ _" << std::hex << &pattern << " : _\n";
 
-    dump(pattern);
+    dump(out, pattern);
 
     if (match.hasLimit()) {
         const auto& lim = match.getLimit();
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&match),
-                       fmt::ptr(&lim));
-        dump(lim);
+        out << "    _" << std::hex << &match << " ||--o{{ _" << std::hex << &lim << " : _\n";
+        dump(out, lim);
     }
 
     if (match.hasSkip()) {
         const auto& skip = match.getSkip();
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&match),
-                       fmt::ptr(&skip));
-        dump(skip);
+        out << "    _" << std::hex << &match << " ||--o{{ _" << std::hex << &skip << " : _\n";
+        dump(out, skip);
     }
 }
 
-void CypherASTDumper::dump(const Limit& lim) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&lim));
-    fmt::format_to(_o, "        ASTType LIMIT\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const Limit& lim) {
+    out << "    _" << std::hex << &lim << " {{\n";
+    out << "        ASTType LIMIT\n";
+    out << "    }}\n";
 
     const auto& expr = lim.getExpression();
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&lim),
-                   fmt::ptr(&expr));
+    out << "    _" << std::hex << &lim << " ||--o{{ _" << std::hex << &expr << " : _\n";
 
-    dump(expr);
+    dump(out, expr);
 }
 
-void CypherASTDumper::dump(const Skip& skip) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&skip));
-    fmt::format_to(_o, "        ASTType SKIP\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const Skip& skip) {
+    out << "    _" << std::hex << &skip << " {{\n";
+    out << "        ASTType SKIP\n";
+    out << "    }}\n";
 
     const auto& expr = skip.getExpression();
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&skip),
-                   fmt::ptr(&expr));
+    out << "    _" << std::hex << &skip << " ||--o{{ _" << std::hex << &expr << " : _\n";
 
-    dump(expr);
+    dump(out, expr);
 }
 
-void CypherASTDumper::dump(const Return& ret) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&ret));
-    fmt::format_to(_o, "        ASTType RETURN\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const Return& ret) {
+    out << "    _" << std::hex << &ret << " {{\n";
+    out << "        ASTType RETURN\n";
+    out << "    }}\n";
 
     const auto& projection = ret.getProjection();
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&ret),
-                   fmt::ptr(&projection));
+    out << "    _" << std::hex << &ret << " ||--o{{ _" << std::hex << &projection << " : _\n";
 
-    dump(projection);
+    dump(out, projection);
 }
 
-void CypherASTDumper::dump(const Projection& projection) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&projection));
-    fmt::format_to(_o, "        ASTType Projection\n");
+void CypherASTDumper::dump(std::ostream& out, const Projection& projection) {
+    out << "    _" << std::hex << &projection << " {{\n";
+    out << "        ASTType Projection\n";
 
     if (projection.isDistinct()) {
-        fmt::format_to(_o, "        Distinct true\n");
+        out << "        Distinct true\n";
     }
 
     if (projection.hasLimit()) {
         const auto& limit = projection.limit();
-        fmt::format_to(_o, "        Limit _{}\n", fmt::ptr(&limit));
+        out << "        Limit _" << std::hex << &limit << "\n";
     }
 
     if (projection.hasSkip()) {
         const auto& skip = projection.skip();
-        fmt::format_to(_o, "        Skip _{}\n", fmt::ptr(&skip));
+        out << "        Skip _" << std::hex << &skip << "\n";
     }
 
 
     if (projection.isAll()) {
-        fmt::format_to(_o, "        ProjectAll true\n");
+        out << "        ProjectAll true\n";
     } else {
 
         const auto& items = projection.items();
         for (const auto& item : items) {
-            fmt::format_to(_o, "        Item _{}\n", fmt::ptr(item));
+            out << "        Item _" << std::hex << item << "\n";
         }
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     if (projection.hasLimit()) {
         const auto& limit = projection.limit();
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&projection),
-                       fmt::ptr(&limit));
-        dump(limit);
+        out << "    _" << std::hex << &projection << " ||--o{{ _" << std::hex << &limit << " : _\n";
+        dump(out, limit);
     }
 
     if (projection.hasSkip()) {
         const auto& skip = projection.skip();
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&projection),
-                       fmt::ptr(&skip));
-        dump(skip);
+        out << "    _" << std::hex << &projection << " ||--o{{ _" << std::hex << &skip << " : _\n";
+        dump(out, skip);
     }
 
     if (projection.isAll()) {
@@ -218,442 +195,424 @@ void CypherASTDumper::dump(const Projection& projection) {
 
     const auto& items = projection.items();
     for (const auto& item : items) {
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&projection),
-                       fmt::ptr(item));
-        dump(*item);
+        out << "    _" << std::hex << &projection << " ||--o{{ _" << std::hex << item << " : _\n";
+        dump(out, *item);
     }
 }
 
-void CypherASTDumper::dump(const Pattern& pattern) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&pattern));
-    fmt::format_to(_o, "        ASTType Pattern\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const Pattern& pattern) {
+    out << "    _" << std::hex << &pattern << " {{\n";
+    out << "        ASTType Pattern\n";
+    out << "    }}\n";
 
     for (const auto& part : pattern.elements()) {
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&pattern),
-                       fmt::ptr(part));
-        dump(*part);
+        out << "    _" << std::hex << &pattern << " ||--o{{ _" << std::hex << part << " : _\n";
+        dump(out, *part);
     }
 
     if (pattern.hasWhere()) {
         const auto& where = pattern.getWhere();
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&pattern),
-                       fmt::ptr(&where));
-        dump(where);
+        out << "    _" << std::hex << &pattern << " ||--o{{ _" << std::hex << &where << " : _\n";
+        dump(out, where);
     }
 }
 
-void CypherASTDumper::dump(const PatternElement& elem) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&elem));
-    fmt::format_to(_o, "        ASTType PatternElement\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const PatternElement& elem) {
+    out << "    _" << std::hex << &elem << " {{\n";
+    out << "        ASTType PatternElement\n";
+    out << "    }}\n";
 
     for (const auto& entity : elem.getEntities()) {
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&elem),
-                       fmt::ptr(entity));
+        out << "    _" << std::hex << &elem << " ||--o{{ _" << std::hex << entity << " : _\n";
         if (auto* node = dynamic_cast<NodePattern*>(entity)) {
-            dump(*node);
+            dump(out, *node);
         }
 
         else if (auto* edge = dynamic_cast<EdgePattern*>(entity)) {
-            dump(*edge);
+            dump(out, *edge);
         }
     }
 }
 
-void CypherASTDumper::dump(const WhereClause& where) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&where));
-    fmt::format_to(_o, "        ASTType WHERE\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const WhereClause& where) {
+    out << "    _" << std::hex << &where << " {{\n";
+    out << "        ASTType WHERE\n";
+    out << "    }}\n";
 
     const auto& expr = where.getExpression();
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&where),
-                   fmt::ptr(&expr));
-    dump(expr);
+    out << "    _" << std::hex << &where << " ||--o{{ _" << std::hex << &expr << " : _\n";
+    dump(out, expr);
 }
 
-void CypherASTDumper::dump(const NodePattern& node) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&node));
-    fmt::format_to(_o, "        ASTType NodePattern\n");
+void CypherASTDumper::dump(std::ostream& out, const NodePattern& node) {
+    out << "    _" << std::hex << &node << " {{\n";
+    out << "        ASTType NodePattern\n";
 
     if (node.hasSymbol()) {
-        fmt::format_to(_o, "        Symbol {}\n", node.symbol()._name);
+        out << "        Symbol " << node.symbol()._name << "\n";
     }
 
     if (node.hasLabels()) {
         for (const auto& type : node.labels()) {
-            fmt::format_to(_o, "        Label {}\n", type);
+            out << "        Label " << type << "\n";
         }
     }
 
     if (node.hasProperties()) {
         const auto& properties = node.properties();
         for (const auto& [k, v] : properties) {
-            fmt::format_to(_o, "        prop_{} _{}\n", sanitizeString(k), fmt::ptr(v));
+            out << "        prop_" << sanitizeString(k) << " _" << std::hex << v << "\n";
         }
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     if (!node.hasDecl()) {
         return;
     }
 
     const auto& decl = node.decl();
-    fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                   fmt::ptr(&node),
-                   decl.id());
-    dump(decl);
+    out << "    _" << std::hex << &node << " ||--o{{ VAR_" << decl.id() << " : _\n";
+    dump(out, decl);
 }
 
-void CypherASTDumper::dump(const EdgePattern& edge) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&edge));
-    fmt::format_to(_o, "        ASTType EdgePattern\n");
+void CypherASTDumper::dump(std::ostream& out, const EdgePattern& edge) {
+    out << "    _" << std::hex << &edge << " {{\n";
+    out << "        ASTType EdgePattern\n";
 
     if (edge.hasSymbol()) {
         const auto& symbol = edge.symbol();
-        fmt::format_to(_o, "        Name {}\n", symbol._name);
+        out << "        Name " << symbol._name << "\n";
     }
 
     if (edge.hasTypes()) {
         for (const auto& type : edge.types()) {
-            fmt::format_to(_o, "        EdgeType {}\n", type);
+            out << "        EdgeType " << type << "\n";
         }
     }
 
     if (edge.hasProperties()) {
         const auto& properties = edge.properties();
         for (const auto& [k, v] : properties) {
-            fmt::format_to(_o, "        prop_{} _{}\n", sanitizeString(k), fmt::ptr(v));
+            out << "        prop_" << sanitizeString(k) << " _" << std::hex << v << "\n";
         }
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     if (!edge.hasDecl()) {
         return;
     }
 
     const auto& decl = edge.decl();
-    fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                   fmt::ptr(&edge),
-                   decl.id());
-    dump(decl);
+    out << "    _" << std::hex << &edge << " ||--o{{ VAR_" << decl.id() << " : _\n";
+    dump(out, decl);
 }
 
-void CypherASTDumper::dump(const MapLiteral& map) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&map));
-    fmt::format_to(_o, "        ASTType MapLiteral\n");
+void CypherASTDumper::dump(std::ostream& out, const MapLiteral& map) {
+    out << "    _" << std::hex << &map << " {{\n";
+    out << "        ASTType MapLiteral\n";
 
     for (const auto& [k, v] : map) {
-        fmt::format_to(_o, "        prop_{} _{}\n", sanitizeString(k), fmt::ptr(v));
+        out << "        prop_" << sanitizeString(k) << " _" << std::hex << v << "\n";
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
 
     for (const auto& [k, v] : map) {
-        fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                       fmt::ptr(&map),
-                       fmt::ptr(v));
-        dump(*v);
+        out << "    _" << std::hex << &map << " ||--o{{ _" << std::hex << v << " : _\n";
+        dump(out, *v);
     }
 }
 
-void CypherASTDumper::dump(const Expression& expr) {
+void CypherASTDumper::dump(std::ostream& out, const Expression& expr) {
     switch (expr.kind()) {
         case ExpressionType::Binary:
-            dump(*expr.as<BinaryExpression>());
+            dump(out, *expr.as<BinaryExpression>());
             break;
         case ExpressionType::Unary:
-            dump(*expr.as<UnaryExpression>());
+            dump(out, *expr.as<UnaryExpression>());
             break;
         case ExpressionType::String:
-            dump(*expr.as<StringExpression>());
+            dump(out, *expr.as<StringExpression>());
             break;
         case ExpressionType::NodeLabel:
-            dump(*expr.as<NodeLabelExpression>());
+            dump(out, *expr.as<NodeLabelExpression>());
             break;
         case ExpressionType::Property:
-            dump(*expr.as<PropertyExpression>());
+            dump(out, *expr.as<PropertyExpression>());
             break;
         case ExpressionType::Path:
-            dump(*expr.as<PathExpression>());
+            dump(out, *expr.as<PathExpression>());
             break;
         case ExpressionType::Symbol:
-            dump(*expr.as<SymbolExpression>());
+            dump(out, *expr.as<SymbolExpression>());
             break;
         case ExpressionType::Literal:
-            dump(*expr.as<LiteralExpression>());
+            dump(out, *expr.as<LiteralExpression>());
             break;
         case ExpressionType::Parameter:
-            dump(*expr.as<ParameterExpression>());
+            dump(out, *expr.as<ParameterExpression>());
+            break;
+
+        default:
+            throw ASTException("Unknown expression type");
             break;
     }
 }
 
-void CypherASTDumper::dump(const BinaryExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType BinaryExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(expr.type()));
+void CypherASTDumper::dump(std::ostream& out, const BinaryExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType BinaryExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr.type()) << "\n";
 
     switch (expr.getBinaryOperator()) {
         case BinaryOperator::And:
-            fmt::format_to(_o, "        Operator AND\n");
+            out << "        Operator AND\n";
             break;
         case BinaryOperator::Xor:
-            fmt::format_to(_o, "        Operator XOR\n");
+            out << "        Operator XOR\n";
             break;
         case BinaryOperator::Or:
-            fmt::format_to(_o, "        Operator OR\n");
+            out << "        Operator OR\n";
             break;
         case BinaryOperator::NotEqual:
-            fmt::format_to(_o, "        Operator NOT_EQUAL\n");
+            out << "        Operator NOT_EQUAL\n";
             break;
         case BinaryOperator::Equal:
-            fmt::format_to(_o, "        Operator EQUAL\n");
+            out << "        Operator EQUAL\n";
             break;
         case BinaryOperator::LessThan:
-            fmt::format_to(_o, "        Operator LESS_THAN\n");
+            out << "        Operator LESS_THAN\n";
             break;
         case BinaryOperator::GreaterThan:
-            fmt::format_to(_o, "        Operator GREATER_THAN\n");
+            out << "        Operator GREATER_THAN\n";
             break;
         case BinaryOperator::LessThanOrEqual:
-            fmt::format_to(_o, "        Operator LESS_THAN_OR_EQUAL\n");
+            out << "        Operator LESS_THAN_OR_EQUAL\n";
             break;
         case BinaryOperator::GreaterThanOrEqual:
-            fmt::format_to(_o, "        Operator GREATER_THAN_OR_EQUAL\n");
+            out << "        Operator GREATER_THAN_OR_EQUAL\n";
             break;
         case BinaryOperator::Add:
-            fmt::format_to(_o, "        Operator ADD\n");
+            out << "        Operator ADD\n";
             break;
         case BinaryOperator::Sub:
-            fmt::format_to(_o, "        Operator SUB\n");
+            out << "        Operator SUB\n";
             break;
         case BinaryOperator::Mult:
-            fmt::format_to(_o, "        Operator MULT\n");
+            out << "        Operator MULT\n";
             break;
         case BinaryOperator::Div:
-            fmt::format_to(_o, "        Operator DIV\n");
+            out << "        Operator DIV\n";
             break;
         case BinaryOperator::Mod:
-            fmt::format_to(_o, "        Operator MOD\n");
+            out << "        Operator MOD\n";
             break;
         case BinaryOperator::Pow:
-            fmt::format_to(_o, "        Operator POW\n");
+            out << "        Operator POW\n";
             break;
         case BinaryOperator::In:
-            fmt::format_to(_o, "        Operator IN\n");
+            out << "        Operator IN\n";
+            break;
+        default:
+            throw ASTException("Unknown binary operator");
             break;
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     const auto& left = expr.left();
     const auto& right = expr.right();
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&expr),
-                   fmt::ptr(&left));
+    out << "    _" << std::hex << &expr << " ||--o{{ _" << std::hex << &left << " : _\n";
 
-    dump(left);
+    dump(out, left);
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&expr),
-                   fmt::ptr(&right));
+    out << "    _" << std::hex << &expr << " ||--o{{ _" << std::hex << &right << " : _\n";
 
-    dump(right);
+    dump(out, right);
 }
 
-void CypherASTDumper::dump(const UnaryExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType UnaryExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(expr.type()));
+void CypherASTDumper::dump(std::ostream& out, const UnaryExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType UnaryExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr.type()) << "\n";
 
     switch (expr.getUnaryOperator()) {
         case UnaryOperator::Not:
-            fmt::format_to(_o, "        Operator NOT\n");
+            out << "        Operator NOT\n";
             break;
         case UnaryOperator::Minus:
-            fmt::format_to(_o, "        Operator MINUS\n");
+            out << "        Operator MINUS\n";
             break;
         case UnaryOperator::Plus:
-            fmt::format_to(_o, "        Operator PLUS\n");
+            out << "        Operator PLUS\n";
+            break;
+        default:
+            throw ASTException("Unknown unary operator");
             break;
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     const auto& right = expr.right();
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&expr),
-                   fmt::ptr(&right));
+    out << "    _" << std::hex << &expr << " ||--o{{ _" << std::hex << &right << " : _\n";
 
-    dump(right);
+    dump(out, right);
 }
 
-void CypherASTDumper::dump(const SymbolExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType SymbolExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(expr.type()));
-    fmt::format_to(_o, "        Symbol {}\n", expr.symbol()._name);
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const SymbolExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType SymbolExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr.type()) << "\n";
+    out << "        Symbol " << expr.symbol()._name << "\n";
+    out << "    }}\n";
 
     if (expr.hasVar()) {
         const auto& decl = expr.var();
-        fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                       fmt::ptr(&expr),
-                       decl.id());
+        out << "    _" << std::hex << &expr << " ||--o{{ VAR_" << decl.id() << " : _\n";
     }
 }
 
-void CypherASTDumper::dump(const LiteralExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType LiteralExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(expr.type()));
+void CypherASTDumper::dump(std::ostream& out, const LiteralExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType LiteralExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr.type()) << "\n";
 
     const auto& literal = expr.literal();
 
     const auto& l = literal.value();
     if (std::holds_alternative<std::monostate>(l)) {
-        fmt::format_to(_o, "        NullLiteral _\n");
+        out << "        NullLiteral _\n";
     } else if (const auto* v = std::get_if<bool>(&l)) {
-        fmt::format_to(_o, "        BoolLiteral {}\n", *v);
+        out << "        BoolLiteral " << *v << "\n";
     } else if (const auto* v = std::get_if<int64_t>(&l)) {
-        fmt::format_to(_o, "        IntLiteral _{}\n", *v);
+        out << "        IntLiteral _" << *v << "\n";
     } else if (const auto* v = std::get_if<double>(&l)) {
-        fmt::format_to(_o, "        DoubleLiteral _{}\n", *v);
+        out << "        DoubleLiteral _" << *v << "\n";
     } else if (const auto* v = std::get_if<std::string_view>(&l)) {
-        fmt::format_to(_o, "        StringLiteral {}\n", sanitizeString(*v));
+        out << "        StringLiteral " << sanitizeString(*v) << "\n";
     } else if (const auto* v = std::get_if<char>(&l)) {
-        fmt::format_to(_o, "        CharLiteral _{}\n", *v);
+        out << "        CharLiteral _" << *v << "\n";
     } else if (const auto* v = std::get_if<MapLiteral*>(&l)) {
-        fmt::format_to(_o, "        MapLiteral _{}\n", fmt::ptr(*v));
+        out << "        MapLiteral _" << std::hex << v << "\n";
+    } else {
+        throw ASTException("Unknown literal type");
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 }
 
-
-void CypherASTDumper::dump(const ParameterExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType ParameterExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(expr.type()));
-    fmt::format_to(_o, "        Parameter {}\n", sanitizeString(expr.param()._name));
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const ParameterExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType ParameterExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr.type()) << "\n";
+    out << "        Parameter " << sanitizeString(expr.param()._name) << "\n";
+    out << "    }}\n";
 }
 
-void CypherASTDumper::dump(const PathExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType PathExpression\n");
-    fmt::format_to(_o, "    }}\n");
+void CypherASTDumper::dump(std::ostream& out, const PathExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType PathExpression\n";
+    out << "    }}\n";
 }
 
-void CypherASTDumper::dump(const NodeLabelExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType NodeLabelExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(EvaluatedType::Bool));
+void CypherASTDumper::dump(std::ostream& out, const NodeLabelExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType NodeLabelExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
     const auto& label = expr.labelNames();
     for (const auto& l : label) {
-        fmt::format_to(_o, "        Label {}\n", l);
+        out << "        Label " << l << "\n";
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     if (!expr.hasDecl()) {
         return;
     }
 
-    fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                   fmt::ptr(&expr),
-                   expr.decl().id());
+    out << "    _" << std::hex << &expr << " ||--o{{ VAR_" << expr.decl().id() << " : _\n";
 }
 
-void CypherASTDumper::dump(const StringExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType StringExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(EvaluatedType::Bool));
+void CypherASTDumper::dump(std::ostream& out, const StringExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType StringExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
     switch (expr.getStringOperator()) {
         case StringOperator::StartsWith:
-            fmt::format_to(_o, "        Operator STARTS_WITH\n");
+            out << "        Operator STARTS_WITH\n";
             break;
         case StringOperator::EndsWith:
-            fmt::format_to(_o, "        Operator ENDS_WITH\n");
+            out << "        Operator ENDS_WITH\n";
             break;
         case StringOperator::Contains:
-            fmt::format_to(_o, "        Operator CONTAINS\n");
+            out << "        Operator CONTAINS\n";
+            break;
+        default:
+            throw ASTException("Unknown string operator");
             break;
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 
     const auto& left = expr.left();
     const auto& right = expr.right();
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&expr),
-                   fmt::ptr(&right));
+    out << "    _" << std::hex << &expr << " ||--o{{ _" << std::hex << &right << " : _\n";
 
-    fmt::format_to(_o, "    _{} ||--o{{ _{} : _\n",
-                   fmt::ptr(&expr),
-                   fmt::ptr(&left));
+    out << "    _" << std::hex << &expr << " ||--o{{ _" << std::hex << &left << " : _\n";
 
-    dump(left);
-    dump(right);
+    dump(out, left);
+    dump(out, right);
 }
 
-void CypherASTDumper::dump(const PropertyExpression& expr) {
-    fmt::format_to(_o, "    _{} {{\n", fmt::ptr(&expr));
-    fmt::format_to(_o, "        ASTType PropertyExpression\n");
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(expr.type()));
+void CypherASTDumper::dump(std::ostream& out, const PropertyExpression& expr) {
+    out << "    _" << std::hex << &expr << " {{\n";
+    out << "        ASTType PropertyExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr.type()) << "\n";
 
-    fmt::format_to(_o, "        QualifiedName ");
+    out << "        QualifiedName ";
 
     size_t i = 0;
     for (const auto& name : expr.name()) {
         if (i != 0) {
-            fmt::format_to(_o, "_");
+            out << "_";
         }
 
-        fmt::format_to(_o, "{}", name);
+        out << name;
         i++;
     }
 
-    fmt::format_to(_o, "\n    }}\n");
+    out << "\n    }}\n";
 
     if (!expr.hasDecl()) {
         return;
     }
 
-    fmt::format_to(_o, "    _{} ||--o{{ VAR_{} : _\n",
-                   fmt::ptr(&expr),
-                   expr.decl().id());
+    out << "    _" << std::hex << &expr << " ||--o{{ VAR_" << expr.decl().id() << " : _\n";
 }
 
-void CypherASTDumper::dump(const VarDecl& decl) {
+void CypherASTDumper::dump(std::ostream& out, const VarDecl& decl) {
     if (_dumpedVariables.contains(decl.id())) {
         return;
     }
 
     _dumpedVariables.insert(decl.id());
 
-    fmt::format_to(_o, "    VAR_{} {{\n", decl.id());
-    fmt::format_to(_o, "        ValueType {}\n", EvaluatedTypeName::value(decl.type()));
+    out << "    VAR_" << decl.id() << " {{\n";
+    out << "        ValueType " << EvaluatedTypeName::value(decl.type()) << "\n";
 
     const auto& name = decl.name();
 
     if (!name.empty()) {
-        fmt::format_to(_o, "        Name {}\n", name);
+        out << "        Name " << name << "\n";
     }
 
-    fmt::format_to(_o, "    }}\n");
+    out << "    }}\n";
 }

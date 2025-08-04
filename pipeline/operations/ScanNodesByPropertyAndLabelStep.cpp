@@ -1,6 +1,7 @@
 #include "ScanNodesByPropertyAndLabelStep.h"
 
 #include <sstream>
+#include <spdlog/fmt/ranges.h>
 
 using namespace db;
 

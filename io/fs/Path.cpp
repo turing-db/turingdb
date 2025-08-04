@@ -87,7 +87,7 @@ Result<std::vector<Path>> Path::listDir() const {
     auto info = getFileInfo();
 
     if (!info) {
-        return info.get_unexpected();
+        return BadResult(info.error());
     }
 
     if (info->_type != FileType::Directory) {

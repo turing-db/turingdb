@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string_view>
+#include <stdint.h>
+#include <array>
 
 #include "EnumToString.h"
 

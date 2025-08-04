@@ -1,6 +1,7 @@
 #include "ScanInEdgesByLabelStep.h"
 
 #include <sstream>
+#include <spdlog/fmt/ranges.h>
 
 using namespace db;
 

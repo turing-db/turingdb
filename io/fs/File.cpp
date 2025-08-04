@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "BioAssert.h"
 
@@ -27,7 +28,7 @@ Result<File> File::createAndOpen(const Path& path) {
     const auto info = path.getFileInfo();
 
     if (!info) {
-        return info.get_unexpected();
+        return BadResult(info.error());
     }
 
     File file;
@@ -50,7 +51,7 @@ Result<File> File::open(const Path& path) {
     const auto info = path.getFileInfo();
 
     if (!info) {
-        return info.get_unexpected();
+        return BadResult(info.error());
     }
 
     File file;

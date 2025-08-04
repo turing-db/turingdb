@@ -3,7 +3,7 @@
 #include <time.h>
 #include <iostream>
 
-#include "Time.h"
+#include "TuringTime.h"
 
 struct EVector {
     static constexpr size_t DIM = 128;
