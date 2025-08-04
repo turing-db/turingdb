@@ -3,6 +3,7 @@
 #include <cctype>
 #include <iterator>
 #include <locale>
+#include <algorithm>
 
 void split(std::vector<std::string>& res, std::string_view str, std::string_view delim) {
     res.clear();
