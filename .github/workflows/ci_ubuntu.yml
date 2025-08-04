@@ -26,3 +26,10 @@ jobs:
     - name: Build
       shell: bash
       run: cd ${{ github.workspace }}/build && make -j8
+    - name: Run unit tests
+      shell: bash
+      run: cd ${{ github.workspace }}/build && make test
+    - name: Run samples
+      shell: bash
+      run: cd ${{ github.workspace }}/build && make run_samples
+
