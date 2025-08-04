@@ -34,31 +34,89 @@ public:
     JsonEncoder() = delete;
 
     static void writeHeader(PayloadWriter& writer, const QueryCommand* cmd) {
-        const auto& fields = static_cast<const MatchCommand*>(cmd)->getProjection()->returnFields();
-
         writer.key("header");
         writer.obj();
         writer.key("column_names");
         writer.arr();
 
-        for (const auto& field : fields) {
-            if (field->getMemberType().isValid()) {
-                writer.value(field->getName() + "." + field->getMemberName());
-            } else {
-                writer.value(field->getName() + field->getMemberName());
+        switch (cmd->getKind()) {
+            case QueryCommand::Kind::MATCH_COMMAND: {
+                const auto& fields = static_cast<const MatchCommand*>(cmd)->getProjection()->returnFields();
+
+                for (const auto& field : fields) {
+                    if (field->getMemberType().isValid()) {
+                        writer.value(field->getName() + "." + field->getMemberName());
+                    } else {
+                        writer.value(field->getName() + field->getMemberName());
+                    }
+                }
+                writer.end();
+
+                writer.key("column_types");
+                writer.arr();
+
+                for (const auto& field : fields) {
+                    if (field->getMemberType().isValid()) {
+                        writer.value(ValueTypeName::value(field->getMemberType()._valueType));
+                    } else {
+                        writer.value(ValueTypeName::value(ValueType::UInt64));
+                    }
+                }
+                break;
             }
-        }
-        writer.end();
+            case QueryCommand::Kind::EXPLAIN_COMMAND: {
+                writer.value("Plan Explanation");
+                writer.end();
 
-        writer.key("column_types");
-        writer.arr();
+                writer.key("column_types");
+                writer.arr();
+                writer.value(ValueTypeName::value(ValueType::String));
+                break;
+            }
+            case QueryCommand::Kind::HISTORY_COMMAND: {
+                // JSON doesn't support the single escaped
+                // newline character
+                writer.end();
 
-        for (const auto& field : fields) {
-            if (field->getMemberType().isValid()) {
-                writer.value(ValueTypeName::value(field->getMemberType()._valueType));
-            } else {
+                writer.key("column_types");
+                writer.arr();
+                break;
+            }
+            case QueryCommand::Kind::CHANGE_COMMAND: {
+                writer.value("Change ID");
+                writer.end();
+
+                writer.key("column_types");
+                writer.arr();
                 writer.value(ValueTypeName::value(ValueType::UInt64));
+                break;
             }
+            case QueryCommand::Kind::CALL_COMMAND: {
+                const auto& callCmd = static_cast<const CallCommand*>(cmd);
+
+                for (const auto& name : callCmd->getColNames()) {
+                    writer.value(name);
+                }
+                writer.end();
+
+                writer.key("column_types");
+                writer.arr();
+
+                for (const auto& type : callCmd->getColTypes()) {
+                    writer.value(ValueTypeName::value(type));
+                }
+                break;
+            }
+            case QueryCommand::Kind::CREATE_COMMAND:
+            case QueryCommand::Kind::COMMIT_COMMAND:
+            case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
+            case QueryCommand::Kind::LIST_GRAPH_COMMAND:
+            case QueryCommand::Kind::LOAD_GRAPH_COMMAND: {
+                writer.end();
+                writer.key("column_types");
+                writer.arr();
+                break;
+            } break;
         }
         writer.end();
         writer.end();
@@ -80,6 +138,8 @@ public:
             JSON_ENCODE_COL_CASE(ColumnVector<EntityID>)
             JSON_ENCODE_COL_CASE(ColumnVector<NodeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<EdgeID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<const Change*>)
+            JSON_ENCODE_COL_CASE(ColumnVector<std::string>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::UInt64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Int64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Double::Primitive>)
