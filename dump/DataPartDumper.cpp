@@ -215,7 +215,6 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         }
     }
 
-    /*
     // Dumping node String approx property Indexer
     {
         Profile profile {"DataPartDumper::dump <node string prop indexer>"};
@@ -223,14 +222,16 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
         {
             const fs::Path strIndexerPath = path / "node-string-prop-indexer";
+            const fs::Path strIndexerPathAlt = path / "node-string-prop-indexer-owners";
             auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
-            if (!writer) {
+            auto auxWriter = fs::FilePageWriter::open(strIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            if (!writer || !auxWriter) {
                 return DumpError::result(
                     DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER,
                     writer.error());
             }
 
-            StringApproxIndexerDumper dumper {writer.value()};
+            StringApproxIndexerDumper dumper {writer.value(), auxWriter.value()};
 
             if (auto res = dumper.dump(index); !res) {
                 return res.get_unexpected();
@@ -246,21 +247,22 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
         {
             const fs::Path strIndexerPath = path / "edge-string-prop-indexer";
+            const fs::Path strIndexerPathAlt = path / "edge-string-prop-indexer-owners";
             auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
-            if (!writer) {
+            auto auxWriter = fs::FilePageWriter::open(strIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            if (!writer || !auxWriter) {
                 return DumpError::result(
                     DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER,
                     writer.error());
             }
 
-            StringApproxIndexerDumper dumper {writer.value()};
+            StringApproxIndexerDumper dumper {writer.value(), auxWriter.value()};
 
             if (auto res = dumper.dump(index); !res) {
                 return res.get_unexpected();
             }
         }
     }
-    */
 
     return {};
 }

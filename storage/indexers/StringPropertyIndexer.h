@@ -34,6 +34,10 @@ public:
 
     auto find(PropertyTypeID propId) const { return _indexer.find(propId); }
 
+    bool try_emplace(PropertyTypeID id, std::unique_ptr<StringIndex>& idx) {
+        return _indexer.try_emplace(id, std::move(idx)).second;
+    }
+
     void initialiseIndexTrie(PropertyTypeID propertyID);
     void addStringPropertyToIndex(
         PropertyTypeID propertyID,
