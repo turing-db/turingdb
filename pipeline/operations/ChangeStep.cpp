@@ -27,6 +27,7 @@ void ChangeStep::prepare(ExecutionContext* ctxt) {
     _jobSystem = ctxt->getJobSystem();
     _view = ctxt->getGraphView();
     _tx = ctxt->getTransaction();
+    _graph = _sysMan->getGraph(std::string(ctxt->getGraphName()));
 
     switch (_type) {
         case ChangeOpType::NEW: {
@@ -136,5 +137,5 @@ void ChangeStep::listChanges() const {
         throw PipelineException("ChangeStep: List changes requires an allocated column of changes");
     }
 
-    _sysMan->getChangeManager().listChanges(_output->getRaw());
+    _sysMan->getChangeManager().listChanges(_output->getRaw(), _graph);
 }

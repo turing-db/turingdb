@@ -46,7 +46,7 @@ public:
     ChangeResult<void> acceptChange(ChangeAccessor& access, JobSystem&);
     ChangeResult<void> deleteChange(ChangeAccessor& access, ChangeID changeID);
 
-    void listChanges(std::vector<const Change*>& list) const;
+    void listChanges(std::vector<const Change*>& list, const Graph* graph) const;
 
 private:
     mutable RWSpinLock _changesLock;

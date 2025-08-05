@@ -67,11 +67,13 @@ ChangeResult<void> ChangeManager::deleteChange(ChangeAccessor& access, ChangeID 
     return {};
 }
 
-void ChangeManager::listChanges(std::vector<const Change*>& list) const {
+void ChangeManager::listChanges(std::vector<const Change*>& list, const Graph* graph) const {
     std::shared_lock guard(_changesLock);
 
     list.clear();
     for (const auto& [pair, change] : _changes) {
-        list.emplace_back(change.get());
+        if (graph == pair._graph) {
+            list.emplace_back(change.get());
+        }
     }
 }
