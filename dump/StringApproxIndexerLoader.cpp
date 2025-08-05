@@ -105,7 +105,7 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
     bool isComplete = it.get<uint8_t>() != 0;
     size_t numOwners = it.get<size_t>();
     // TODO: Cleanup hacky overload of .get
-    std::span<const uint8_t> bitspan = it.get(CHILDMASKSIZE);
+    auto bitspan = it.get(CHILDMASKSIZE);
     spdlog::info("Read node: c={}, compl={}, owners={}", c, isComplete, numOwners);
 
     auto node = std::make_unique<StringIndex::PrefixTreeNode>(c);
@@ -121,7 +121,8 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
 
     for (size_t i = 0; i < SIGMA; i++) {
         if (bitspan[i / 8] & 1 << (i % 8)) {
-            spdlog::info("Recursively loading {}th child ({})", i, (char)('a' + i));
+            char c = i > 25 ? '0' + i - 26 : 'a' + i;
+            spdlog::info("Recursively loading {}th child ({})", i, c);
             node->_children[i] = loadNode(it, auxIt);
         }
     }
