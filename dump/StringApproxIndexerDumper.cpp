@@ -1,12 +1,12 @@
 #include "StringApproxIndexerDumper.h"
 
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 
 #include "DumpConfig.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
+#include "GraphDumpHelper.h"
 #include "ID.h"
 #include "indexes/StringIndex.h"
 #include "StringIndexerDumpConstants.h"
@@ -15,14 +15,14 @@
 
 using namespace db;
 
-DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& idxer) {
-    // Header metadata
+DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& idxer) { GraphDumpHelper::writeFileHeader(_writer);
+    // Metadata
     _writer.writeToCurrentPage(idxer.size());
     _writer.nextPage();
 
     for (const auto& [propId, idx] : idxer) {
-        ensureSpace(sizeof(PropertyTypeID::Type));
-        _writer.writeToCurrentPage(propId.getValue());
+        ensureSpace(sizeof(uint16_t));
+        _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpNode(idx->getRootRef().get());
     }
 
@@ -46,22 +46,19 @@ DumpResult<void> StringApproxIndexerDumper::dumpNode(const StringIndex::PrefixTr
         bitmap[i / 8] |= (1 << (i % 8));
     }
     auto bitspan = std::span(bitmap);
-    // for (uint8_t byte : bitspan) {
-    //     std::printf("%02x ", byte);
-    // }
-    // std::printf("\n");
+    for (uint8_t byte : bitspan) {
+        std::printf("%02x ", byte);
+    }
+    std::printf("\n");
 
-    _writer.writeToCurrentPage(node->_val);
-    _writer.writeToCurrentPage(node->_isComplete);
-
-    _writer.writeToCurrentPage(node->_owners.size());
+    _writer.writeToCurrentPage(static_cast<uint8_t>(node->_val));
+    _writer.writeToCurrentPage(static_cast<uint8_t>(node->_isComplete));
+    _writer.writeToCurrentPage(static_cast<size_t>(node->_owners.size()));
+    _writer.writeToCurrentPage(std::span(bitmap));
     spdlog::info("wrote node: c={}, compl={}, owners={}", node->_val, node->_isComplete,
               node->_owners.size());
 
-    // dumpOwners(node->_owners); // Writes into different file
-
-    _writer.writeToCurrentPage(bitspan);
-
+    dumpOwners(node->_owners); // Writes into different file
 
     for (size_t i = 0; i < SIGMA; i++) {
         if (node->_children[i]) {
@@ -79,13 +76,11 @@ DumpResult<void> StringApproxIndexerDumper::dumpOwners(const std::vector<EntityI
 
     // NOTE: Consider converting to span and chunk writing instead of one at a time
     for (const auto& id : owners) {
+        spdlog::warn("Writing Owner: {}", id.getValue());
         _auxWriter.writeToCurrentPage(id.getValue());
     }
 
     return {};
-}
-
-void dumpTrie() {
 }
 
 bool StringApproxIndexerDumper::ensureSpace(size_t requiredSpace) {

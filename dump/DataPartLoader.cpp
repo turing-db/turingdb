@@ -282,38 +282,78 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         }
     }
 
-    const fs::Path nodeStrIndexerPath = path / "node-string-prop-indexer";
-    const fs::Path nodeStrIndexerPathAlt = path / "node-string-prop-indexer-owners";
+    {
+        const fs::Path nodeStrIndexerPath = path / "node-string-prop-indexer";
+        const fs::Path nodeStrIndexerPathAlt = path / "node-string-prop-indexer-owners";
 
-    if (!nodeStrIndexerPath.exists() || !nodeStrIndexerPathAlt.exists()) {
-        return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
+        if (!nodeStrIndexerPath.exists() || !nodeStrIndexerPathAlt.exists()) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
+        }
+
+        auto reader = fs::FilePageReader::open(nodeStrIndexerPath, DumpConfig::PAGE_SIZE);
+        auto auxReader =
+            fs::FilePageReader::open(nodeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
+        if (!reader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, reader.error());
+        }
+        if (!auxReader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, auxReader.error());
+        }
+
+        auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
+        auto res = l.load();
+        if (!res) {
+            spdlog::error(res.error().fmtMessage());
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
+        }
+
+        part->_nodeStrPropIdx = std::move(res.value());
+        for (const auto& [prop, idx] : part->getNodeStrPropIndexer()) {
+            for (const auto& it : *idx) {
+                spdlog::info(it.word);
+            }
+        }
+        part->_nodeStrPropIdx->setInitialised();
     }
 
-    auto reader = fs::FilePageReader::open(nodeStrIndexerPath, DumpConfig::PAGE_SIZE);
-    auto auxReader = fs::FilePageReader::open(nodeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
-    if (!reader) {
-        return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER,
-                                 reader.error());
-    }
-    if (!auxReader) {
-        return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER,
-                                 auxReader.error());
-    }
+    /*
+    {
+        const fs::Path edgeStrIndexerPath = path / "edge-string-prop-indexer";
+        const fs::Path edgeStrIndexerPathAlt = path / "edge-string-prop-indexer-owners";
 
-    auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
-    auto res = l.load();
-    if (!res) {
-        spdlog::error(res.error().fmtMessage());
-        return DumpError::result(
-            DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
+        if (!edgeStrIndexerPath.exists() || !edgeStrIndexerPathAlt.exists()) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER);
+        }
+
+        auto reader = fs::FilePageReader::open(edgeStrIndexerPath, DumpConfig::PAGE_SIZE);
+        auto auxReader =
+            fs::FilePageReader::open(edgeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
+        if (!reader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, reader.error());
+        }
+        if (!auxReader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, auxReader.error());
+        }
+
+        auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
+        auto res = l.load();
+        if (!res) {
+            spdlog::error(res.error().fmtMessage());
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER);
+        }
+
+        part->_edgeStrPropIdx = std::move(res.value());
+        part->_edgeStrPropIdx->setInitialised();
     }
-
-    part->_nodeStrPropIdx = std::move(res.value());
-    part->_nodeStrPropIdx->setInitialised();
-
-    // for (const auto& [pid, tree] : *part->_nodeStrPropIdx) {
-        // tree->print(); // XXX Does not print anything
-    // }
+    */
 
     part->_edgeStrPropIdx->setInitialised();
 
