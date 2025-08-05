@@ -23,8 +23,7 @@
 
 using namespace db;
 
-DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
-                                                   const GraphMetadata& metadata,
+DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const GraphMetadata& metadata,
                                                    VersionController& versionController) {
     Profile profile {"DataPartLoader::load"};
 
@@ -300,8 +299,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER,
                                  auxReader.error());
     }
-    auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
 
+    auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
     auto res = l.load();
     if (!res) {
         spdlog::error(res.error().fmtMessage());
@@ -312,9 +311,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     part->_nodeStrPropIdx = std::move(res.value());
     part->_nodeStrPropIdx->setInitialised();
 
-    for (const auto& [pid, tree] : *part->_nodeStrPropIdx) {
-        tree->print(); // XXX Does not print anything
-    }
+    // for (const auto& [pid, tree] : *part->_nodeStrPropIdx) {
+        // tree->print(); // XXX Does not print anything
+    // }
 
     part->_edgeStrPropIdx->setInitialised();
 

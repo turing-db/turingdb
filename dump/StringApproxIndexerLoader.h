@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AlignedBuffer.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"
 #include "indexers/StringPropertyIndexer.h"
@@ -20,8 +21,9 @@ private:
     fs::FilePageReader& _reader;
     fs::FilePageReader& _auxReader;
 
-    std::unique_ptr<StringIndex::PrefixTreeNode> loadNode();
-    void loadOwners(std::vector<EntityID>& owners, fs::AlignedBufferIterator it,
+    std::unique_ptr<StringIndex::PrefixTreeNode> loadNode(fs::AlignedBufferIterator& it, fs::AlignedBufferIterator& auxIt);
+
+    void loadOwners(std::vector<EntityID>& owners, fs::AlignedBufferIterator& it,
                     size_t sz);
 };
 }
