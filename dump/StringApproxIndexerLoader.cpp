@@ -1,5 +1,8 @@
 #include "StringApproxIndexerLoader.h"
 
+#include <memory>
+#include <stdexcept>
+
 #include "AlignedBuffer.h"
 #include "BioAssert.h"
 #include "DumpResult.h"
@@ -8,15 +11,14 @@
 #include "indexers/StringPropertyIndexer.h"
 #include "StringIndexerDumpConstants.h"
 #include "indexes/StringIndex.h"
+#include "GraphDumpHelper.h"
 #include "spdlog/spdlog.h"
-#include <memory>
-#include <stdexcept>
 
 using namespace db;
 
 namespace {
     void managePagesForNodes(fs::FilePageReader& rd, fs::AlignedBufferIterator& it) {
-        if (rd.getBuffer().avail() < NODESIZE) {
+        if (it.remainingBytes() < NODESIZE) {
             spdlog::info("{} space left in buffer yet node is size {}",
                          rd.getBuffer().avail(), NODESIZE);
 
@@ -27,9 +29,10 @@ namespace {
 
             it = rd.begin();
             if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-                throw std::runtime_error("it did not get full page");
+                spdlog::error("It got {} but it should have {}", it.remainingBytes(),
+                              DumpConfig::PAGE_SIZE);
+                // throw std::runtime_error("it did not get full page");
             }
-
             spdlog::warn("Started new page to read node");
         }
     }
@@ -55,6 +58,12 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringApproxIndexerLoader::lo
     if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
         return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
     }
+
+    // Check file header
+    if (auto res = GraphDumpHelper::checkFileHeader(it); !res) {
+        return res.get_unexpected();
+    }
+
     size_t numIdxs = it.get<size_t>();
     _reader.nextPage();
     if (_reader.errorOccured()) {
@@ -66,13 +75,15 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringApproxIndexerLoader::lo
     // Check if we received a full page
     if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
         spdlog::error("Iterator did not get full page prior to loading nodes");
+        spdlog::error("Got {} bytes but needed {} bytes", it.remainingBytes(),
+                      DumpConfig::PAGE_SIZE);
         return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
     }
 
     auto idxer = std::make_unique<StringPropertyIndexer>();
 
     for (size_t i = 0; i < numIdxs; i++) {
-        auto propId = it.get<PropertyTypeID::Type>();
+        auto propId = it.get<uint16_t>();
         spdlog::info("Read propid {}", propId);
         auto newIdx = std::make_unique<StringIndex>(loadNode(it, auxIt).get());
         bool res = idxer->try_emplace(propId, newIdx);
@@ -90,27 +101,27 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
                                     fs::AlignedBufferIterator& auxIt) {
     managePagesForNodes(_reader, it);
 
-    char c = it.get<char>();
-
-    auto node = std::make_unique<StringIndex::PrefixTreeNode>(c);
-
-    bool isComplete = it.get<bool>();
-    node->_isComplete = isComplete;
-
+    char c = static_cast<char>(it.get<uint8_t>());
+    bool isComplete = it.get<uint8_t>() != 0;
     size_t numOwners = it.get<size_t>();
-    spdlog::info("Read node: c={}, compl={}, owners={}", c, isComplete, numOwners);
-    // loadOwners(node->_owners, auxIt, numOwners);
-
     // TODO: Cleanup hacky overload of .get
     std::span<const uint8_t> bitspan = it.get(CHILDMASKSIZE);
+    spdlog::info("Read node: c={}, compl={}, owners={}", c, isComplete, numOwners);
+
+    auto node = std::make_unique<StringIndex::PrefixTreeNode>(c);
+    node->_isComplete = isComplete;
+
+    loadOwners(node->_owners, auxIt, numOwners);
+
     msgbioassert(bitspan.size() == CHILDMASKSIZE, "Loaded span was incorrect size");
-    // for (uint8_t byte : bitspan) {
-    //     std::printf("%02x ", byte);
-    // }
-    // std::printf("\n");
+    for (uint8_t byte : bitspan) {
+        std::printf("%02x ", byte);
+    }
+    std::printf("\n");
 
     for (size_t i = 0; i < SIGMA; i++) {
         if (bitspan[i / 8] & 1 << (i % 8)) {
+            spdlog::info("Recursively loading {}th child ({})", i, (char)('a' + i));
             node->_children[i] = loadNode(it, auxIt);
         }
     }
