@@ -18,9 +18,9 @@ using namespace db;
 
 namespace {
     void managePagesForNodes(fs::FilePageReader& rd, fs::AlignedBufferIterator& it) {
-        if (it.remainingBytes() < NODESIZE) {
+        if (it.remainingBytes() < StringIndexDumpConstants::NODESIZE) {
             spdlog::info("{} space left in buffer yet node is size {}",
-                         rd.getBuffer().avail(), NODESIZE);
+                         rd.getBuffer().avail(), StringIndexDumpConstants::NODESIZE);
 
             rd.nextPage();
             if (rd.errorOccured()) {
@@ -101,11 +101,11 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
                                     fs::AlignedBufferIterator& auxIt) {
     managePagesForNodes(_reader, it);
 
-    char c = static_cast<char>(it.get<uint8_t>());
+    char c = it.get<char>();
     bool isComplete = it.get<uint8_t>() != 0;
     size_t numOwners = it.get<size_t>();
     // TODO: Cleanup hacky overload of .get
-    auto bitspan = it.get(CHILDMASKSIZE);
+    auto bitspan = it.get(StringIndexDumpConstants::CHILDMASKSIZE);
     spdlog::info("Read node: c={}, compl={}, owners={}", c, isComplete, numOwners);
 
     auto node = std::make_unique<StringIndex::PrefixTreeNode>(c);
@@ -113,13 +113,14 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
 
     loadOwners(node->_owners, auxIt, numOwners);
 
-    msgbioassert(bitspan.size() == CHILDMASKSIZE, "Loaded span was incorrect size");
+    msgbioassert(bitspan.size() == StringIndexDumpConstants::CHILDMASKSIZE,
+                 "Loaded span was incorrect size");
     for (uint8_t byte : bitspan) {
         std::printf("%02x ", byte);
     }
     std::printf("\n");
 
-    for (size_t i = 0; i < SIGMA; i++) {
+    for (size_t i = 0; i < StringIndex::ALPHABET_SIZE; i++) {
         if (bitspan[i / 8] & 1 << (i % 8)) {
             char c = i > 25 ? '0' + i - 26 : 'a' + i;
             spdlog::info("Recursively loading {}th child ({})", i, c);

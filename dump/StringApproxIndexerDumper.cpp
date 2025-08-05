@@ -30,15 +30,15 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
 }
 
 DumpResult<void> StringApproxIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
-    if (_writer.buffer().avail() < NODESIZE) {
+    if (_writer.buffer().avail() < StringIndexDumpConstants::NODESIZE) {
         _writer.nextPage();
         spdlog::warn("Started new page to write node");
     }
 
     // Map which children exist
-    uint8_t bitmap[CHILDMASKSIZE] = {0};
+    uint8_t bitmap[StringIndexDumpConstants::CHILDMASKSIZE] = {0};
 
-    for (size_t i = 0; i < SIGMA; i++) {
+    for (size_t i = 0; i < StringIndex::ALPHABET_SIZE; i++) {
         if (!node->_children[i]) {
             continue;
         }
@@ -51,16 +51,16 @@ DumpResult<void> StringApproxIndexerDumper::dumpNode(const StringIndex::PrefixTr
     }
     std::printf("\n");
 
-    _writer.writeToCurrentPage(static_cast<uint8_t>(node->_val));
+    _writer.writeToCurrentPage(static_cast<char>(node->_val));
     _writer.writeToCurrentPage(static_cast<uint8_t>(node->_isComplete));
     _writer.writeToCurrentPage(static_cast<size_t>(node->_owners.size()));
-    _writer.writeToCurrentPage(std::span(bitmap));
+    _writer.writeToCurrentPage(bitspan);
     spdlog::info("wrote node: c={}, compl={}, owners={}", node->_val, node->_isComplete,
               node->_owners.size());
 
     dumpOwners(node->_owners); // Writes into different file
 
-    for (size_t i = 0; i < SIGMA; i++) {
+    for (size_t i = 0; i < StringIndex::ALPHABET_SIZE; i++) {
         if (node->_children[i]) {
             dumpNode(node->_children[i].get());
         }

@@ -9,7 +9,6 @@
 #include "ID.h"
 
 namespace db {
-class StringApproxIndexerDumper;
 
 /*
  * @brief Approximate string indexing using prefix trees (tries)
@@ -24,7 +23,6 @@ public:
     public:
         PrefixTreeNode()
             : _children(ALPHABET_SIZE)
-
         {
         }
 
@@ -117,11 +115,12 @@ public:
 
     auto& getRootRef() const { return _root; }
 
+
+
 private:
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
     PrefixTreeNode* _root {nullptr};
     static constexpr float _prefixThreshold {0.75};
-
 
     /**
      * @brief Get an iterator to a preprocessed word existing in the index
