@@ -100,9 +100,8 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringApproxIndexerLoader::lo
     return {std::move(idxer)};
 }
 
-std::unique_ptr<StringIndex::PrefixTreeNode>
-StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
-                                    fs::AlignedBufferIterator& auxIt) {
+std::unique_ptr<StringIndex::PrefixTreeNode> StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
+                                                                                 fs::AlignedBufferIterator& auxIt) {
     managePagesForNodes(_reader, it);
 
     char c = it.get<char>();
@@ -136,7 +135,7 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
 
 void StringApproxIndexerLoader::loadOwners(std::vector<EntityID>& owners,
                                            fs::AlignedBufferIterator& it, size_t sz) {
-    if (_auxReader.getBuffer().avail() < sz * sizeof(uint64_t)) {
+    if (it.remainingBytes() < sz * sizeof(uint64_t)) {
         _auxReader.nextPage();
         it = _auxReader.begin();
     }

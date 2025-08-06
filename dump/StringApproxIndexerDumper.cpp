@@ -12,7 +12,6 @@
 #include "StringIndexerDumpConstants.h"
 #include "spdlog/spdlog.h"
 
-
 using namespace db;
 
 DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& idxer) {
