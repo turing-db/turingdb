@@ -74,11 +74,8 @@ public:
     };
 
     StringIndex();
-    StringIndex(PrefixTreeNode* root)
-        : _root(root)
-    {
-    }
-     StringIndex(std::unique_ptr<PrefixTreeNode> root)
+
+    StringIndex(std::unique_ptr<PrefixTreeNode>&& root)
         : _root(std::move(root))
     {
     }

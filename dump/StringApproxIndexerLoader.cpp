@@ -14,6 +14,8 @@
 #include "GraphDumpHelper.h"
 #include "spdlog/spdlog.h"
 
+// TODO: Add new error type for this
+
 using namespace db;
 
 namespace {
@@ -86,8 +88,7 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringApproxIndexerLoader::lo
         auto propId = it.get<uint16_t>();
         spdlog::info("Read propid {}", propId);
 
-        auto root = loadNode(it, auxIt);
-        auto newIdx = std::make_unique<StringIndex>(std::move(root));
+        auto newIdx = std::make_unique<StringIndex>(loadNode(it, auxIt));
 
         bool res = idxer->try_emplace(propId, newIdx);
         if (!res) {
@@ -130,7 +131,6 @@ StringApproxIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
             node->_children[i] = loadNode(it, auxIt);
         }
     }
-
     return node;
 }
 

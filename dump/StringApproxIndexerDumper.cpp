@@ -15,7 +15,8 @@
 
 using namespace db;
 
-DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& idxer) { GraphDumpHelper::writeFileHeader(_writer);
+DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& idxer) {
+    GraphDumpHelper::writeFileHeader(_writer);
     // Metadata
     _writer.writeToCurrentPage(idxer.size());
     _writer.nextPage();
@@ -24,6 +25,12 @@ DumpResult<void> StringApproxIndexerDumper::dump(const StringPropertyIndexer& id
         ensureSpace(sizeof(uint16_t));
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpNode(idx->getRootRef().get());
+    }
+
+    _writer.finish();
+
+    if (_writer.errorOccured()) {
+            return DumpError::result(DumpErrorType::COULD_NOT_WRITE_PROPS, _writer.error().value());
     }
 
     return {};
