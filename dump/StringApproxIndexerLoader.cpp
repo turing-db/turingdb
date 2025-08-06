@@ -31,7 +31,7 @@ namespace {
             if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
                 spdlog::error("It got {} but it should have {}", it.remainingBytes(),
                               DumpConfig::PAGE_SIZE);
-                // throw std::runtime_error("it did not get full page");
+                throw std::runtime_error("it did not get full page");
             }
             spdlog::warn("Started new page to read node");
         }
@@ -85,7 +85,10 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringApproxIndexerLoader::lo
     for (size_t i = 0; i < numIdxs; i++) {
         auto propId = it.get<uint16_t>();
         spdlog::info("Read propid {}", propId);
-        auto newIdx = std::make_unique<StringIndex>(loadNode(it, auxIt).get());
+
+        auto root = loadNode(it, auxIt);
+        auto newIdx = std::make_unique<StringIndex>(std::move(root));
+
         bool res = idxer->try_emplace(propId, newIdx);
         if (!res) {
             spdlog::error("Could not emplace index at property id {}", propId);

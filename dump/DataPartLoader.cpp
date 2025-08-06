@@ -320,7 +320,6 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         part->_nodeStrPropIdx->setInitialised();
     }
 
-    /*
     {
         const fs::Path edgeStrIndexerPath = path / "edge-string-prop-indexer";
         const fs::Path edgeStrIndexerPathAlt = path / "edge-string-prop-indexer-owners";
@@ -353,7 +352,6 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         part->_edgeStrPropIdx = std::move(res.value());
         part->_edgeStrPropIdx->setInitialised();
     }
-    */
 
     part->_edgeStrPropIdx->setInitialised();
 

@@ -78,6 +78,10 @@ public:
         : _root(root)
     {
     }
+     StringIndex(std::unique_ptr<PrefixTreeNode> root)
+        : _root(std::move(root))
+    {
+    }
 
     StringIndex(const StringIndex&) = delete;
     StringIndex& operator=(const StringIndex&) = delete;
