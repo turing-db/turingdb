@@ -9,29 +9,25 @@
 using namespace db;
 
 StringIndex::StringIndex()
-    : _root(std::make_unique<PrefixTreeNode>('\1'))
+    : _root(PrefixTreeNode::create(*this))
 {
 }
 
-// NOTE: Better to do lookup table?
-size_t StringIndex::charToIndex(char c) {
-    // Children array layout:
-    // INDEX CHARACTER VALUE
-    // 0     a
-    // ...  ...
-    // 25    z
-    // 26    0
-    // ...  ...
-    // 36    9
+void PrefixTreeNode::setChild(PrefixTreeNode* child, char c) {
+    _children[StringIndexUtils::charToIndex(c)] = child;
+}
 
-    // NOTE: Converts upper-case characters to lower to calculate index,
-    // but the value of the node is still uppercase
-    if (isalpha(c))  {
-        return std::tolower(c, std::locale()) - 'a';
-    } else if (isdigit(c)) {
-        return 26 + c - '0';
-    } else
-        throw TuringException("Invalid character: " + std::to_string(c));
+PrefixTreeNode* PrefixTreeNode::getChild(char c) const {
+    return _children[StringIndexUtils::charToIndex(c)];
+}
+
+PrefixTreeNode* PrefixTreeNode::create(StringIndex& idx) {
+    auto node = std::make_unique<PrefixTreeNode>();
+    PrefixTreeNode* raw = node.get();
+
+    idx.addNode(std::move(node));
+
+    return raw;
 }
 
 void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
@@ -57,10 +53,7 @@ void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
 void StringIndex::split(std::vector<std::string>& res,
                         std::string_view str,
                         std::string_view delim) {
-    res.clear();
-    if (str.empty()) {
-        return;
-    }
+    res.clear(); if (str.empty()) { return; }
     size_t l {0};
     size_t r = str.find(delim);
 
@@ -95,18 +88,17 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
     }
 
     for (const char c : str) {
-        const size_t idx = charToIndex(c);
-        if (!node->_children[idx]) {
-            node->_children[idx] = std::make_unique<PrefixTreeNode>(c);
+        if (!node->getChild(c)) {
+            PrefixTreeNode* newChild = PrefixTreeNode::create(*this);
+            node->setChild(newChild,c);
         }
-        node = node->_children[idx].get();
+        node = node->getChild(c);
     }
 
     if (!node) [[unlikely]] {
         throw TuringException("Could not get root of string indexer");
     }
-    node->_owners.push_back(owner);
-    node->_isComplete = true;
+    node->addOwner(owner);
 }
 
 StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
@@ -120,13 +112,12 @@ StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
     }
 
     for (const char c : sv) {
-        const size_t idx = charToIndex(c);
-        if (!node->_children[idx]) {
+        if (!node->getChild(c)) {
             return StringIndexIterator {nullptr, NOT_FOUND};
         }
-        node = node->_children[idx].get();
+        node = node->getChild(c);
     }
-    const FindResult res = node->_isComplete ? FOUND : FOUND_PREFIX;
+    const FindResult res = node->isComplete() ? FOUND : FOUND_PREFIX;
     return StringIndexIterator{node, res};
 }
 
@@ -134,7 +125,7 @@ void StringIndex::print(std::ostream& out) const {
     printTree(this->_root.get(), "", false, out);
 }
 
-void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
+void StringIndex::printTree(PrefixTreeNode* node,
                 const std::string& prefix,
                 bool isLastChild, std::ostream& out) const {
     if (!node) return;
@@ -143,7 +134,7 @@ void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
         out << prefix
                   << (isLastChild ? "└── " : "├── ")
                   << node->_val
-                  << (node->_isComplete ? "*" : "")
+                  << (node->isComplete() ? "*" : "")
                   << '\n';
     }
 
@@ -151,8 +142,8 @@ void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
     std::vector<PrefixTreeNode*> kids;
     kids.reserve(SIGMA);
     for (std::size_t i = 0; i < SIGMA; ++i) {
-        if (node->_children[i]) {
-            kids.push_back(node->_children[i].get());
+        if (node->getChildren()[i]) {
+            kids.push_back(node->getChildren()[i]);
         }
     }
 
@@ -167,7 +158,7 @@ void StringIndex::printTree(StringIndex::PrefixTreeNode* node,
     }
 }
 
-StringIndex::PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
+PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
     if (query.empty()) {
         return nullptr;
     }
@@ -183,8 +174,7 @@ StringIndex::PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view qu
     PrefixTreeNode* thresholdPoint {nullptr};
 
     for (size_t i = 0; const char c : query) {
-        const size_t idx = charToIndex(c);
-        if (!node->_children[idx]) {
+        if (!node->getChild(c)) {
             return thresholdPoint;
         }
         // Return the earliest point in the tree at which we find a matching prefix of
@@ -193,7 +183,7 @@ StringIndex::PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view qu
             thresholdPoint = node;
             return thresholdPoint;
         }
-        node = node->_children[idx].get();
+        node = node->getChild(c);
         i++;
     }
     return thresholdPoint;

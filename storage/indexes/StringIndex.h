@@ -3,15 +3,19 @@
 #include <cstddef>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <unordered_set>
 
 #include "ID.h"
+#include "indexes/StringIndexUtils.h"
 
 // Size of our alphabet: assumes some preprocessing,
 // so only a-z and 1-9
 constexpr size_t SIGMA = 26 + 10;
 
 namespace db {
+
+class PrefixTreeNode;
 
 /*
  * @brief Approximate string indexing using prefix trees (tries)
@@ -21,22 +25,9 @@ namespace db {
  * (NodeID/EdgeID) which has that property value.
  */
 class StringIndex {
-private:
-    struct PrefixTreeNode {
-        // NOTE: Can we remove isComplete in favour of empty owners?
-        std::vector<EntityID> _owners;
-        std::vector<std::unique_ptr<PrefixTreeNode>> _children;
-        char _val {'\0'};
-        bool _isComplete {false};
-
-        PrefixTreeNode(char val)
-            : _children(36),
-              _val(val)
-        {
-        }
-    };
-    
 public:
+    friend PrefixTreeNode;
+
     enum FindResult {
         FOUND,
         FOUND_PREFIX,
@@ -84,6 +75,7 @@ public:
     static void preprocess(std::vector<std::string>& res, std::string_view in);
 
 private:
+    std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
     std::unique_ptr<PrefixTreeNode> _root;
     static constexpr float _prefixThreshold {0.75};
 
@@ -95,8 +87,6 @@ private:
      */
     StringIndexIterator find(std::string_view sv) const;
 
-    static size_t charToIndex(char c);
-
     PrefixTreeNode* getPrefixThreshold(std::string_view query) const;
 
     static void alphaNumericise(const std::string_view in, std::string& out);
@@ -106,7 +96,43 @@ private:
 
     void printTree(PrefixTreeNode* node, const std::string& prefix, bool isLastChild,
                    std::ostream& out = std::cout) const;
+
+    void addNode(std::unique_ptr<PrefixTreeNode>&& node) {
+        _nodeManager.emplace_back(std::move(node));
+    }
 };
+
+class PrefixTreeNode {
+public:
+    PrefixTreeNode()
+        : _children(SIGMA),
+          _val()
+    {
+    }
+          
+    const std::vector<PrefixTreeNode*> getChildren() const { return _children; }
+
+    PrefixTreeNode* getChild(char c) const;
+
+    const std::vector<EntityID> getOwners() const { return _owners; }
+
+    bool isComplete() const { return !_owners.empty(); }
+
+    void setChild(PrefixTreeNode* child, char c);
+
+    void addOwner(EntityID o) { _owners.push_back(o); }
+
+    static PrefixTreeNode* create(StringIndex& idx);
+
+private:
+    // NOTE: Can we remove isComplete in favour of empty owners?
+    std::vector<EntityID> _owners;
+    std::vector<PrefixTreeNode*> _children;
+    char _val {'\0'};
+
+    
+};
+
 
 template <TypedInternalID IDT>
 void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
@@ -132,14 +158,14 @@ void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) 
         while (!q.empty()) {
             const PrefixTreeNode* n = q.front();
             q.pop_front();
-            for (size_t i {0}; i < n->_children.size(); i++) {
-                if (PrefixTreeNode* child = n->_children[i].get()) {
+            for (size_t i {0}; i < n->getChildren().size(); i++) {
+                if (PrefixTreeNode* child = n->getChildren()[i]) {
                     q.push_back(child);
                 }
             }
             // Collect owners to report back
-            if (n->_isComplete) {
-                auto& owners = n->_owners;
+            if (n->isComplete()) {
+                auto& owners = n->getOwners();
                 for (const EntityID& id : owners) {
                     resSet.emplace(IDT(id.getValue()));
                 }
@@ -148,4 +174,5 @@ void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) 
     }
     std::copy(resSet.begin(), resSet.end(), std::back_inserter(result));
 }
+
 }
