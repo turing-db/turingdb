@@ -9,6 +9,8 @@
 
 using namespace db;
 
+using PrefixTreeNode = StringIndex::PrefixTreeNode;
+
 StringIndex::StringIndex()
     : _root(PrefixTreeNode::create(*this))
 {
@@ -82,7 +84,7 @@ void StringIndex::insert(std::string_view str, EntityID owner) {
         return;
     }
 
-    PrefixTreeNode* node = this->_root.get();
+    PrefixTreeNode* node = _root;
 
     if (!node) [[unlikely]] {
         throw TuringException("Could not get root of string indexer");
@@ -107,7 +109,7 @@ StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
         return {nullptr, NOT_FOUND};
     }
 
-    PrefixTreeNode* node = _root.get();
+    PrefixTreeNode* node = _root;
     if (!node) [[unlikely]] {
         throw TuringException("Could not get root of string indexer in find");
     }
@@ -123,10 +125,10 @@ StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
 }
 
 void StringIndex::print(std::ostream& out) const {
-    printTree(this->_root.get(), -1, "", false, out);
+    printTree(_root, -1, "", false, out);
 }
 
-void StringIndex::printTree(PrefixTreeNode* node, size_t idx, const std::string& prefix,
+void StringIndex::printTree(PrefixTreeNode* node, ssize_t idx, const std::string& prefix,
                             bool isLastChild, std::ostream& out) const {
     if (!node) return;
 
@@ -164,7 +166,7 @@ PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
         return nullptr;
     }
 
-    PrefixTreeNode* node = _root.get();
+    PrefixTreeNode* node = _root;
     if (!node) [[unlikely]] {
         throw TuringException(
             "Could not get root of string indexer in getPrefixThreshold");
