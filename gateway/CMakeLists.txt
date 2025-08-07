@@ -1,7 +1,8 @@
 
 set(gateway_sources HttpProxy.cpp
                     TokenValidator.cpp
-                    AddressRouter.cpp)
+                    AddressRouter.cpp
+                    AESGCMEncryptor.cpp)
 
 add_library(turing_gateway_s STATIC ${gateway_sources})
 
