@@ -121,6 +121,7 @@ protected:
         writer.addNodeProperty<types::String>(node1, "name", "Zebraz");
         auto node2 = writer.addNode({"LastNumber"});
         writer.addNodeProperty<types::String>(node2, "name", "999");
+
         auto edge = writer.addEdge({"Bridge"}, node1, node2);
         writer.addEdgeProperty<types::String>(edge, "desc", "999 zebraz");
 
@@ -129,6 +130,7 @@ protected:
         return graph;
     }
 };
+
 
 TEST_F(StringIndexTest, prefixSemanticsTest) {
     auto db = createPrefixTestDB();
@@ -147,7 +149,6 @@ TEST_F(StringIndexTest, prefixSemanticsTest) {
     // Get the prefix trie corresponding to the "name" property
     auto& nameIdx = nodePropIdx.at(0);
     ASSERT_TRUE(nameIdx);
-    nameIdx->print();
 
     const std::string PLAYFULLY = "playfully";
     const std::string PLAYFUL = "playful";
@@ -370,4 +371,44 @@ TEST_F(StringIndexTest, multiDataPartTest) {
         EXPECT_THAT(owners, UnorderedElementsAre(PWRATHNODEID))
             << "Query for 'poli' failed";
     }
+}
+
+// Check outer limits of the alphabet to check constants are caluclated correctly
+TEST_F(StringIndexTest, edgeCaseTrie) {
+    auto db = createEdgeCaseGraph();
+    const FrozenCommitTx transaction1 = db->openTransaction();
+    GraphReader reader = transaction1.readGraph();
+    auto parts = reader.dataparts();
+
+    ASSERT_EQ(1, parts.size());
+    auto dpIt = parts.begin();
+    auto datapart = dpIt->get();
+
+    const auto& nodePropIdx = datapart->getNodeStrPropIndexer();
+    ASSERT_EQ(1, nodePropIdx.size());
+
+    auto& nameIdx = nodePropIdx.at(0);
+    ASSERT_TRUE(nameIdx);
+
+    std::vector<NodeID> owners;
+    nameIdx->query(owners, "zebraz");
+    EXPECT_THAT(owners, UnorderedElementsAre(0))
+            << "Query for 'zebraz' failed";
+
+    owners.clear();
+    nameIdx->query(owners, "999");
+    EXPECT_THAT(owners, UnorderedElementsAre(1))
+            << "Query for '999' failed";
+
+    const auto& edgePropIdx = datapart->getEdgeStrPropIndexer();
+    ASSERT_EQ(1, edgePropIdx.size());
+    auto& edgeIdx = edgePropIdx.at(1);
+
+    ASSERT_TRUE(nameIdx);
+    std::vector<EdgeID> edgeOwners;
+    edgeIdx->query(edgeOwners, "zebraz");
+    EXPECT_THAT(edgeOwners, UnorderedElementsAre(0)) << "Query for 'zeb' on edge failed";
+    edgeOwners.clear();
+    edgeIdx->query(edgeOwners, "999");
+    EXPECT_THAT(edgeOwners, UnorderedElementsAre(0)) << "Query for '99' on edge failed";
 }
