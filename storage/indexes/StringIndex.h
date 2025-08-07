@@ -110,7 +110,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
-    PrefixTreeNode* _root;
+    PrefixTreeNode* _root {nullptr};
     static constexpr float _prefixThreshold {0.75};
 
     /**
