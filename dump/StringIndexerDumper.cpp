@@ -102,7 +102,6 @@ bool StringIndexerDumper::ensureSpace(size_t requiredSpace, fs::FilePageWriter& 
         throw TuringException("Illegal write.");
     }
     if (wr.buffer().avail() < requiredSpace) {
-        // spdlog::warn("Writing a new page because of ensureSpace({})", requiredSpace);
         wr.nextPage();
     }
     return true;

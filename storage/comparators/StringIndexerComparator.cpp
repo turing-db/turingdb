@@ -95,7 +95,7 @@ bool StringIndexerComparator::same(const StringPropertyIndexer& a,
     auto ita = a.begin();
     auto itb = b.begin();
 
-    for (size_t i {0}; ita != a.end(); ita++, i++) {
+    for (size_t i {0}; ita != a.end(); ita++, itb++, i++) {
         if (ita->first != itb->first) {
             spdlog::error("A has index for propID {} whilst B has {}", ita->first, itb->first);
             if (b.find(ita->first) == b.end()) {
