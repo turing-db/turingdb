@@ -5,7 +5,7 @@
 #include "FilePageWriter.h"
 #include "Path.h"
 #include "Profiler.h"
-#include "StringApproxIndexerDumper.h"
+#include "StringIndexerDumper.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "properties/PropertyManager.h"
 #include "DataPartInfoDumper.h"
@@ -231,7 +231,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
                     writer.error());
             }
 
-            StringApproxIndexerDumper dumper {writer.value(), auxWriter.value()};
+            StringIndexerDumper dumper {writer.value(), auxWriter.value()};
 
             if (auto res = dumper.dump(index); !res) {
                 return res.get_unexpected();
@@ -256,7 +256,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
                     writer.error());
             }
 
-            StringApproxIndexerDumper dumper {writer.value(), auxWriter.value()};
+            StringIndexerDumper dumper {writer.value(), auxWriter.value()};
 
             if (auto res = dumper.dump(index); !res) {
                 return res.get_unexpected();
