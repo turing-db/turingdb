@@ -21,7 +21,7 @@ using namespace db;
 using namespace turing::test;
 
 
-class StringApproxIndexSerialisationTest : public TuringTest {
+class StringIndexSerialisationTest : public TuringTest {
 public:
     void initialize()  {
         SystemManager& sysMan = _db.getSystemManager();
@@ -63,7 +63,7 @@ private:
     }
 };
 
-TEST_F(StringApproxIndexSerialisationTest, indexInitialisation) {
+TEST_F(StringIndexSerialisationTest, indexInitialisation) {
     auto tx = _builtGraph->openTransaction();
     auto reader = tx.readGraph();
     auto builtDps = reader.dataparts();
