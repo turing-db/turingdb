@@ -16,6 +16,26 @@ StringIndex::StringIndex()
 {
 }
 
+StringIndex::StringIndex(size_t sz)
+    : _root(PrefixTreeNode::create((*this)))
+{
+    _nodeManager.reserve(sz - 1);
+    // sz - 1 nodes since we have root already.
+    for (size_t i = 0 ; i < sz - 1; i++) {
+        PrefixTreeNode::create(*this);
+    }
+}
+
+void PrefixTreeNode::setChild(PrefixTreeNode* child, size_t idx) {
+    // @ref charToIndex handles bounds checking
+    if (idx > ALPHABET_SIZE) [[unlikely]] {
+        throw TuringException("Queried child at index" + std::to_string(idx)
+                              + " which is out of range (max: "
+                              + std::to_string(ALPHABET_SIZE) + ")");
+    }
+    _children[idx] = child;
+}
+
 void PrefixTreeNode::setChild(PrefixTreeNode* child, char c) {
     // @ref charToIndex handles bounds checking
     _children[PrefixTreeNode::charToIndex(c)] = child;
@@ -36,7 +56,7 @@ PrefixTreeNode* PrefixTreeNode::getChild(size_t idx) const {
 }
 
 PrefixTreeNode* PrefixTreeNode::create(StringIndex& idx) {
-    auto node = std::make_unique<PrefixTreeNode>();
+    auto node = std::make_unique<PrefixTreeNode>(idx.allocateID());
     PrefixTreeNode* raw = node.get();
 
     idx.addNode(std::move(node));
@@ -237,4 +257,14 @@ PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
         i++;
     }
     return thresholdPoint;
+}
+
+size_t StringIndex::allocateID() {
+    const size_t id = _nextFreeID;
+    _nextFreeID++;
+    return id;
+}
+
+void StringIndex::addNode(std::unique_ptr<PrefixTreeNode>&& node) {
+    _nodeManager.emplace_back(std::move(node));
 }

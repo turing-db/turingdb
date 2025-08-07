@@ -9,13 +9,16 @@
 
 namespace db {
 
-class DataPartLoader;
 class PropertyContainer;
 
 class StringPropertyIndexer {
 public:
     StringPropertyIndexer() = default;
-    
+
+    bool addIndex(PropertyTypeID id, std::unique_ptr<StringIndex>&& idx) {
+        return _indexer.try_emplace(id, std::move(idx)).second;
+    }
+
     void buildIndex(std::vector<std::pair<PropertyTypeID, PropertyContainer*>>& toIndex);
 
     bool contains(PropertyTypeID propID) const { return _indexer.contains(propID); }
@@ -32,19 +35,15 @@ public:
 
     auto end() const { return _indexer.end(); }
 
-    auto find(PropertyTypeID propId) const { return _indexer.find(propId); }
+    const auto find(PropertyTypeID id) const { return _indexer.find(id); }
 
-    bool try_emplace(PropertyTypeID id, std::unique_ptr<StringIndex>& idx) {
-        return _indexer.try_emplace(id, std::move(idx)).second;
-    }
+private:
+    std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
+    bool _initialised {false};
 
     void initialiseIndexTrie(PropertyTypeID propertyID);
     void addStringPropertyToIndex(
         PropertyTypeID propertyID,
         const TypedPropertyContainer<types::String>& stringPropertyContainer);
-
-private:
-    std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
-    bool _initialised {false};
 };
 }

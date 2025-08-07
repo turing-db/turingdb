@@ -21,9 +21,15 @@ private:
     fs::FilePageReader& _reader;
     fs::FilePageReader& _auxReader;
 
-    std::unique_ptr<StringIndex::PrefixTreeNode> loadNode(fs::AlignedBufferIterator& it, fs::AlignedBufferIterator& auxIt);
+    DumpResult<std::unique_ptr<StringIndex>> loadIndex(fs::AlignedBufferIterator& it,
+                                                       fs::AlignedBufferIterator& auxIt);
 
-    void loadOwners(std::vector<EntityID>& owners, fs::AlignedBufferIterator& it,
-                    size_t sz);
+
+    DumpResult<void> loadNode(std::unique_ptr<StringIndex>& index,
+                              fs::AlignedBufferIterator& it,
+                              fs::AlignedBufferIterator& auxIt);
+
+    DumpResult<void> loadOwners(StringIndex::PrefixTreeNode* node, size_t sz,
+                                fs::AlignedBufferIterator& auxIt);
 };
 }

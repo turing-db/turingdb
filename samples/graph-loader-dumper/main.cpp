@@ -68,7 +68,6 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
 }
 
 int main() {
-    /*
     {
         // Load & dump simple graph
         const fs::Path path {SAMPLE_DIR "/simple-graph"};
@@ -88,8 +87,8 @@ int main() {
             return 1;
         }
     }
-    */
 
+    /*
     {
         // Dump pole
         const fs::Path path {SAMPLE_DIR "/pole"};
@@ -123,6 +122,7 @@ int main() {
             return 1;
         }
     }
+    */
 
     // {
     //     // Dump reactome

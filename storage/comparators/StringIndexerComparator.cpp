@@ -3,36 +3,52 @@
 
 using namespace db;
 
-bool StringIndexerComparator::index_same(const StringIndex& a,
-                                               const StringIndex& b) {
-    auto ita = a.begin();
-    auto itb = b.begin();
+bool StringIndexerComparator::indexSame(const StringIndex& a, const StringIndex& b) {
 
-    // For each entry
-    for (; ita != a.end() || itb != b.end(); ++ita, ++itb) {
-        // The word must be the same
-        if (ita->word != itb->word) {
-            spdlog::error("A has {} whilst B has {}", ita->word, itb->word);
+    if (a.getNodeCount() != b.getNodeCount()) {
+        spdlog::error("Index a has size {} whilst b has {}", a.getNodeCount(),
+                      b.getNodeCount());
+        return false;
+    }
+
+    for (size_t i = 0; i < a.getNodeCount(); i++) {
+        if (!nodeSame(a.getNode(i), b.getNode(i))) {
             return false;
         }
+    }
 
-        auto oa = ita->owners;
-        auto ob = itb->owners;
-        if (oa.size() != ob.size()) {
-            spdlog::info("A has {} owners for word {} whilst B has {}", oa.size(),
-                         ita->word, ob.size());
+    return true;
+}
+
+bool StringIndexerComparator::nodeSame(StringIndex::PrefixTreeNode* a,
+                                       StringIndex::PrefixTreeNode* b) {
+    if (a->getID() != b->getID()) {
+        spdlog::error("Index a has ID {} whilst b has {}", a->getID(), b->getID());
+        return false;
+    }
+
+    if (a->getChildren().size() != b->getChildren().size()) {
+        spdlog::error("Index a has {} children whilst b has {}", a->getChildren().size(),
+                      b->getChildren().size());
+        return false;
+    }
+
+    if (a->getOwners().size() != b->getOwners().size()) {
+        spdlog::error("Index a has {} owners whilst b has {}", a->getOwners().size(),
+                      b->getOwners().size());
+        return false;
+    }
+
+    for (size_t i = 0 ; i < a->getOwners().size(); i ++) {
+        if (a->getOwners()[i] != b->getOwners()[i]) {
+            spdlog::error("Mismatching owners vector");
             return false;
         }
+    }
 
-        auto itoa = oa.begin();
-        auto itob = ob.begin();
-
-        // They must have the same owners
-        for (; itoa != oa.end() || itob != ob.end(); ++itoa, ++itob) {
-            if (itoa->getValue() != itob->getValue()) {
-                spdlog::error("A has owner {}  for {} whilst B has ", itoa->getValue(),ita->word, itob->getValue());
-                return false;
-            }
+    for (size_t i = 0 ; i < a->getChildren().size(); i ++) {
+        if (a->getChild(i)->getID(), b->getChild(i)->getID()) {
+            return false;
         }
     }
 
@@ -57,7 +73,7 @@ bool StringIndexerComparator::same(const StringPropertyIndexer& a,
         }
 
         // Same strings-owners stored
-        if (!index_same(*ita->second, *itb->second)) {
+        if (!indexSame(*ita->second, *itb->second)) {
             return false;
         }
     }

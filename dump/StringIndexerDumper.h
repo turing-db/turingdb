@@ -3,6 +3,7 @@
 #include "DumpResult.h"
 #include "FilePageWriter.h"
 #include "indexers/StringPropertyIndexer.h"
+#include <memory>
 
 namespace db {
 
@@ -22,6 +23,8 @@ private:
     fs::FilePageWriter& _auxWriter;
 
     bool ensureSpace(size_t requiredSpace);
+
+    DumpResult<void> dumpIndex(const std::unique_ptr<StringIndex>& idx);
 
     DumpResult<void> dumpNode(const StringIndex::PrefixTreeNode* node);
     DumpResult<void> dumpOwners(const std::vector<EntityID>& owners);

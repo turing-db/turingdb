@@ -3,13 +3,13 @@
 #include <cstddef>
 #include <deque>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <unordered_set>
 
 #include "ID.h"
 
 namespace db {
-
 /*
  * @brief Approximate string indexing using prefix trees (tries)
  * @detail String properties are preprocesed, replacing any non-alphanumeric characters
@@ -21,10 +21,13 @@ class StringIndex {
 public:
     class PrefixTreeNode {
     public:
-        PrefixTreeNode()
-            : _children(ALPHABET_SIZE)
+        PrefixTreeNode(size_t id)
+            : _children(ALPHABET_SIZE),
+            _id {id}
         {
         }
+
+        size_t getID() const { return _id; }
 
         const std::vector<PrefixTreeNode*>& getChildren() const { return _children; }
 
@@ -35,6 +38,8 @@ public:
         const std::vector<EntityID>& getOwners() const { return _owners; }
 
         bool isComplete() const { return !_owners.empty(); }
+
+        void setChild(PrefixTreeNode* child, size_t idx);
 
         void setChild(PrefixTreeNode* child, char c);
 
@@ -48,6 +53,7 @@ public:
     private:
         std::vector<EntityID> _owners;
         std::vector<PrefixTreeNode*> _children;
+        size_t _id {std::numeric_limits<size_t>::max()};
 
         static constexpr char FIRST_ALPHA_CHAR = 'a';
         static constexpr char LAST_ALPHA_CHAR = 'z';
@@ -74,11 +80,7 @@ public:
     };
 
     StringIndex();
-
-    StringIndex(std::unique_ptr<PrefixTreeNode>&& root)
-        : _root(std::move(root))
-    {
-    }
+    StringIndex(size_t sz);
 
     StringIndex(const StringIndex&) = delete;
     StringIndex& operator=(const StringIndex&) = delete;
@@ -107,20 +109,22 @@ public:
     void query(std::vector<IDT>& result, std::string_view queryString) const;
 
     /**
-     * @brief Replaces punctuation with spaces and splits into words (separated by
-     * space)
+     * @brief Replaces punctuation with spaces and splits into words (separated by space)
      * @param in The string to preprocess
      * @param res The resultant tokens of preprocessing @param in
      */
     static void preprocess(std::vector<std::string>& res, std::string_view in);
 
-    auto& getRootRef() const { return _root; }
+    PrefixTreeNode* getRoot() const { return _root; }
+    PrefixTreeNode* getNode(size_t index) const { return _nodeManager.at(index).get(); }
 
-
+    size_t getNodeCount() const { return _nodeManager.size(); }
 
 private:
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
     PrefixTreeNode* _root {nullptr};
+
+    size_t _nextFreeID {0};
     static constexpr float _prefixThreshold {0.75};
 
     /**
@@ -146,15 +150,16 @@ private:
     void printTree(PrefixTreeNode* node, ssize_t idx, const std::string& prefix,
                    bool isLastChild, std::ostream& out = std::cout) const;
 
-    void addNode(std::unique_ptr<PrefixTreeNode>&& node) {
-        _nodeManager.emplace_back(std::move(node));
-    }
+    size_t allocateID();
+
+    void addNode(std::unique_ptr<PrefixTreeNode>&& node);
 };
 
 template <TypedInternalID IDT>
 void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
     // Track owners in a set to avoid duplicates
     std::unordered_set<IDT> resSet;
+
     std::vector<std::string> tokens {};
     preprocess(tokens, queryString);
 

@@ -9,7 +9,8 @@ public:
                                    const StringPropertyIndexer& b);
 
 private:
-    [[nodiscard]] static bool index_same(const StringIndex& a, const StringIndex& b);
+    [[nodiscard]] static bool indexSame(const StringIndex& a, const StringIndex& b);
+    [[nodiscard]] static bool nodeSame(StringIndex::PrefixTreeNode* a,
+                                       StringIndex::PrefixTreeNode* b);
 };
-
 }

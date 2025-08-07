@@ -1,5 +1,6 @@
 #include "StringIndexerLoader.h"
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 
@@ -20,7 +21,7 @@
 using namespace db;
 
 namespace {
-    void managePagesForNodes(fs::FilePageReader& rd, fs::AlignedBufferIterator& it) {
+    [[maybe_unused]] void managePagesForNodes(fs::FilePageReader& rd, fs::AlignedBufferIterator& it) {
         if (it.remainingBytes() < StringIndexDumpConstants::NODESIZE) {
             spdlog::info("{} space left in buffer yet node is size {}",
                          it.remainingBytes(), StringIndexDumpConstants::NODESIZE);
@@ -45,58 +46,33 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     _reader.nextPage();
     _auxReader.nextPage();
 
-    if (_reader.errorOccured()) {
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS,
-                                 _reader.error().value());
-    }
-
-    if (_auxReader.errorOccured()) {
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS,
-                                 _auxReader.error().value());
-    }
-
     auto it = _reader.begin();
-    auto auxIt = _auxReader.begin();
-    // Check if we received a full page
-    if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-    }
-
-    // Check file header
     if (auto res = GraphDumpHelper::checkFileHeader(it); !res) {
+        spdlog::error("Failed to read header");
         return res.get_unexpected();
     }
-
-    size_t numIdxs = it.get<size_t>();
+    size_t numIndexes = it.get<size_t>();
     _reader.nextPage();
-    if (_reader.errorOccured()) {
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS,
-                                 _reader.error().value());
-    }
 
     auto idxer = std::make_unique<StringPropertyIndexer>();
     // If no indexes, nothing more to read, return empty index
-    if (numIdxs == 0) {
+    if (numIndexes == 0) {
         idxer->setInitialised();
         return {std::move(idxer)};
     }
-
     it = _reader.begin();
-    // Check if we received a full page
-    if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-        spdlog::error("Iterator did not get full page prior to loading nodes");
-        spdlog::error("Got {} bytes but needed {} bytes", it.remainingBytes(),
-                      DumpConfig::PAGE_SIZE);
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-    }
+    auto auxIt = _auxReader.begin();
 
-
-    for (size_t i = 0; i < numIdxs; i++) {
+    for (size_t i = 0; i < numIndexes; i++) {
         auto propId = it.get<uint16_t>();
 
-        auto newIdx = std::make_unique<StringIndex>(loadNode(it, auxIt));
+        auto loadResult = loadIndex(it, auxIt);
+        if (!loadResult) {
+            spdlog::error("Could not load index at property id {}", propId);
+            return loadResult.get_unexpected();
+        }
 
-        bool res = idxer->try_emplace(propId, newIdx);
+        bool res = idxer->addIndex(propId, std::move(loadResult.value()));
         if (!res) {
             spdlog::error("Could not emplace index at property id {}", propId);
             return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
@@ -104,51 +80,54 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     }
 
     idxer->setInitialised();
+
     return {std::move(idxer)};
 }
 
-std::unique_ptr<StringIndex::PrefixTreeNode> StringIndexerLoader::loadNode(fs::AlignedBufferIterator& it,
-                                                                                 fs::AlignedBufferIterator& auxIt) {
-    managePagesForNodes(_reader, it);
+DumpResult<std::unique_ptr<StringIndex>>
+StringIndexerLoader::loadIndex(fs::AlignedBufferIterator& it,
+                               fs::AlignedBufferIterator& auxIt) {
 
-    char c = it.get<char>();
-    bool isComplete = it.get<uint8_t>() != 0;
-    size_t numOwners = it.get<size_t>();
-    std::cout << c << isComplete << numOwners <<std::endl;
+    // Number of nodes in this index prefix tree
+    const size_t sz = it.get<size_t>();
 
-    // TODO: Cleanup hacky overload of .get
-    auto bitspan = it.get(StringIndexDumpConstants::CHILDMASKSIZE);
+    // Create the managing vector of @ref sz unique_pointers to nodes
+    auto index = std::make_unique<StringIndex>(sz);
 
-    auto node = std::make_unique<StringIndex::PrefixTreeNode>(c);
-    node->_isComplete = isComplete;
-
-    loadOwners(node->_owners, auxIt, numOwners);
-
-    msgbioassert(bitspan.size() == StringIndexDumpConstants::CHILDMASKSIZE,
-                 "Loaded span was incorrect size");
-
-    for (size_t i = 0; i < StringIndex::ALPHABET_SIZE; i++) {
-        if (bitspan[i / 8] & 1 << (i % 8)) {
-            node->_children[i] = loadNode(it, auxIt);
-        }
+    // Load each node
+    for (size_t i = 0; i < sz; i++) {
+        loadNode(index, it, auxIt);
     }
-    return node;
+
+    return {std::move(index)};
 }
 
-void StringIndexerLoader::loadOwners(std::vector<EntityID>& owners,
-                                           fs::AlignedBufferIterator& it, size_t sz) {
-    if (it.remainingBytes() < sz * sizeof(uint64_t)) {
-        _auxReader.nextPage();
-        it = _auxReader.begin();
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-        spdlog::error("Iterator did not get full page prior to loading nodes");
-        spdlog::error("Got {} bytes but needed {} bytes", it.remainingBytes(),
-                      DumpConfig::PAGE_SIZE);
-        throw TuringException("Did not read full page. Aborting.");
-        }
+DumpResult<void> StringIndexerLoader::loadNode(std::unique_ptr<StringIndex>& index,
+                                               fs::AlignedBufferIterator& it,
+                                               fs::AlignedBufferIterator& auxIt) {
+    const size_t nodeID = it.get<size_t>();
+    StringIndex::PrefixTreeNode* node = index->getNode(nodeID);
+
+    const size_t numChildren = it.get<size_t>();
+
+    for (size_t i = 0; i < numChildren; i++) {
+        const size_t childIndex = it.get<size_t>(); // Index in @ref node's child vector
+        const size_t childID = it.get<size_t>();    // Index in @ref index's node vector
+        node->setChild(index->getNode(childID), childIndex);
     }
-    owners.reserve(sz);
+
+    const size_t numOwners = it.get<size_t>();
+    loadOwners(node, numOwners, auxIt);
+
+    return {};
+}
+
+DumpResult<void> StringIndexerLoader::loadOwners(StringIndex::PrefixTreeNode* node,
+                                                 size_t sz,
+                                                 fs::AlignedBufferIterator& auxIt) {
     for (size_t i = 0; i < sz; i++) {
-        owners.emplace_back(it.get<uint64_t>());
+        const uint64_t id = auxIt.get<uint64_t>();
+        node->addOwner(id);
     }
+    return {};
 }

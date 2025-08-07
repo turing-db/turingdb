@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
+#include "AlignedBuffer.h"
 #include "DumpConfig.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
@@ -24,7 +26,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
     for (const auto& [propId, idx] : idxer) {
         ensureSpace(sizeof(uint16_t));
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
-        dumpNode(idx->getRootRef().get());
+        dumpIndex(idx);
     }
 
     _writer.finish();
@@ -36,55 +38,43 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
     return {};
 }
 
-DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
-    if (_writer.buffer().avail() < StringIndexDumpConstants::NODESIZE) {
-        _writer.nextPage();
-        spdlog::warn("Started new page to write node");
-    }
-
-    // Map which children exist
-    uint8_t bitmap[StringIndexDumpConstants::CHILDMASKSIZE] = {0};
-
-    for (size_t i = 0; i < StringIndex::ALPHABET_SIZE; i++) {
-        if (!node->_children[i]) {
-            continue;
-        }
-        // OR the bit in the byte array which corresponds to this child
-        bitmap[i / 8] |= (1 << (i % 8));
-    }
-    auto bitspan = std::span(bitmap);
-
-    _writer.writeToCurrentPage(static_cast<char>(node->_val));
-    _writer.writeToCurrentPage(static_cast<uint8_t>(node->_isComplete));
-    _writer.writeToCurrentPage(static_cast<size_t>(node->_owners.size()));
-    _writer.writeToCurrentPage(bitspan);
-
-    dumpOwners(node->_owners); // Writes into different file
-
-    for (size_t i = 0; i < StringIndex::ALPHABET_SIZE; i++) {
-        if (node->_children[i]) {
-            dumpNode(node->_children[i].get());
-        }
+DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringIndex>& idx) {
+    _writer.writeToCurrentPage(idx->getNodeCount());
+    for (size_t i = 0; i < idx->getNodeCount(); i++) {
+        dumpNode(idx->getNode(i));
     }
 
     return {};
 }
 
+DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
+    _writer.writeToCurrentPage(node->getID());
+
+    auto& children = node->getChildren();
+
+    size_t nonNullChildren =
+        std::ranges::count_if(children, [](auto ptr) { return ptr != nullptr; });
+    _writer.writeToCurrentPage(nonNullChildren);
+
+    // Write existing children IDs and their index into the child array
+    for (size_t i = 0; i < StringIndex::PrefixTreeNode::ALPHABET_SIZE; i++) {
+        StringIndex::PrefixTreeNode* child = node->getChild(i);
+        if (child) {
+            _writer.writeToCurrentPage(i);
+            _writer.writeToCurrentPage(child->getID());
+        }
+    }
+
+    _writer.writeToCurrentPage(node->getOwners().size());
+    dumpOwners(node->getOwners());
+    return {};
+}
+
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
-    if (DumpConfig::PAGE_SIZE < owners.size() * sizeof(uint64_t)) {
-        throw TuringException("Owners array exceeds page size");
+    for (size_t i = 0; i < owners.size(); i++) {
+        uint64_t id = owners[i].getValue();
+        _auxWriter.writeToCurrentPage(id);
     }
-
-    // Start new page if we cannot fit all owners on current page
-    if (_auxWriter.buffer().avail() < owners.size() * sizeof(uint64_t)) {
-        _auxWriter.nextPage();
-    }
-
-    // NOTE: Consider converting to span and chunk writing instead of one at a time
-    for (const auto& id : owners) {
-        _auxWriter.writeToCurrentPage(id.getValue());
-    }
-
     return {};
 }
 

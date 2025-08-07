@@ -5,7 +5,7 @@
 #include "EdgeContainerComparator.h"
 #include "EdgeIndexerComparator.h"
 #include "PropertyManagerComparator.h"
-#include "StringIndexerComparator.h"
+#include "comparators/StringIndexerComparator.h"
 
 using namespace db;
 
@@ -39,12 +39,13 @@ bool DataPartComparator::same(const DataPart& a, const DataPart& b) {
     }
 
     if (!StringIndexerComparator::same(a.getNodeStrPropIndexer(),
-                                             b.getNodeStrPropIndexer())) {
+                                       b.getNodeStrPropIndexer())) {
         return false;
     }
 
+
     if (!StringIndexerComparator::same(a.getEdgeStrPropIndexer(),
-                                             b.getEdgeStrPropIndexer())) {
+                                       b.getEdgeStrPropIndexer())) {
         return false;
     }
 
