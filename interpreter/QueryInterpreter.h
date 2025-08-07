@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string_view>
-#include <memory>
 
 #include "QueryStatus.h"
 #include "QueryCallback.h"
@@ -14,7 +13,6 @@ class SystemManager;
 class JobSystem;
 class LocalMemory;
 class Executor;
-class Transaction;
 
 class QueryInterpreter {
 public:
@@ -32,7 +30,6 @@ public:
 private:
     SystemManager* _sysMan {nullptr};
     JobSystem* _jobSystem {nullptr};
-    std::unique_ptr<Executor> _executor;
 };
 
 }

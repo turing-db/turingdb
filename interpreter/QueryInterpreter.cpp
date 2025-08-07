@@ -1,7 +1,6 @@
 #include "QueryInterpreter.h"
 
 #include "ChangeManager.h"
-#include "QueryStatus.h"
 #include "SystemManager.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
@@ -24,8 +23,7 @@ using namespace db;
 
 QueryInterpreter::QueryInterpreter(SystemManager* sysMan, JobSystem* jobSystem)
     : _sysMan(sysMan),
-    _jobSystem(jobSystem),
-    _executor(std::make_unique<Executor>())
+    _jobSystem(jobSystem)
 {
 }
 
@@ -111,7 +109,8 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     // Execute
     ExecutionContext execCtxt(_sysMan, _jobSystem, view, graphName, commitHash, changeID, &txRes.value());
     try {
-        _executor->run(&execCtxt, planner.getPipeline());
+        Executor executor;
+        executor->run(&execCtxt, planner.getPipeline());
     } catch (const PipelineException& e) {
         return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
     } catch (const std::exception& e) {
