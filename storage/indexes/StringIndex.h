@@ -94,8 +94,8 @@ private:
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
 
-    void printTree(PrefixTreeNode* node, const std::string& prefix, bool isLastChild,
-                   std::ostream& out = std::cout) const;
+    void printTree(PrefixTreeNode* node, size_t idx, const std::string& prefix,
+                   bool isLastChild, std::ostream& out = std::cout) const;
 
     void addNode(std::unique_ptr<PrefixTreeNode>&& node) {
         _nodeManager.emplace_back(std::move(node));

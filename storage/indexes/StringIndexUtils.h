@@ -36,7 +36,10 @@ public:
         } else
             throw TuringException("Invalid character: " + std::to_string(c));
     }
-
+    static inline char indexToChar(size_t idx) {
+        char c = idx < 26 ? 'a' + idx : '0' + idx - 26;
+        return c;
+    }
 
     /*
      * @brief Fills @param ouput with matches on the query @param query in the indexes for

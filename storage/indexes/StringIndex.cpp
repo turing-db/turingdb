@@ -1,6 +1,7 @@
 #include "StringIndex.h"
 #include "ID.h"
 #include "TuringException.h"
+#include "indexes/StringIndexUtils.h"
 
 #include <memory>
 #include <deque>
@@ -122,39 +123,39 @@ StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
 }
 
 void StringIndex::print(std::ostream& out) const {
-    printTree(this->_root.get(), "", false, out);
+    printTree(this->_root.get(), -1, "", false, out);
 }
 
-void StringIndex::printTree(PrefixTreeNode* node,
-                const std::string& prefix,
-                bool isLastChild, std::ostream& out) const {
+void StringIndex::printTree(PrefixTreeNode* node, size_t idx, const std::string& prefix,
+                            bool isLastChild, std::ostream& out) const {
     if (!node) return;
 
-    if (node->_val != '\1') {
+    if (idx != -1) {
         out << prefix
                   << (isLastChild ? "└── " : "├── ")
-                  << node->_val
+                  << StringIndexUtils::indexToChar(idx)
                   << (node->isComplete() ? "*" : "")
                   << '\n';
     }
 
     // Gather existing children so we know which one is the last
-    std::vector<PrefixTreeNode*> kids;
+    std::vector<std::pair<PrefixTreeNode*, size_t>> kids;
     kids.reserve(SIGMA);
     for (std::size_t i = 0; i < SIGMA; ++i) {
-        if (node->getChildren()[i]) {
-            kids.push_back(node->getChildren()[i]);
+        if (auto child = node->getChild(StringIndexUtils::indexToChar(i))) {
+            kids.push_back({child, i});
         }
     }
 
     // Prefix extension: keep vertical bar if this isn’t last
     std::string nextPrefix = prefix;
-    if (node->_val != '\1')          // don’t add for sentinel root
+    if (idx != -1)          // don’t add for sentinel root
         nextPrefix += (isLastChild ? "    " : "│   ");
 
     // Recurse over children
     for (std::size_t k = 0; k < kids.size(); ++k) {
-        printTree(kids[k], nextPrefix, k + 1 == kids.size());
+        auto [pointer, index] = kids[k];
+        printTree(pointer, index, nextPrefix, k + 1 == kids.size());
     }
 }
 
