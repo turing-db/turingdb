@@ -17,15 +17,22 @@ StringIndex::StringIndex()
 }
 
 void PrefixTreeNode::setChild(PrefixTreeNode* child, char c) {
+    // @ref charToIndex handles bounds checking
     _children[PrefixTreeNode::charToIndex(c)] = child;
 }
 
 PrefixTreeNode* PrefixTreeNode::getChild(char c) const {
+    // @ref charToIndex handles bounds checking
     return _children[PrefixTreeNode::charToIndex(c)];
 }
 
 PrefixTreeNode* PrefixTreeNode::getChild(size_t idx) const {
-    return _children.at(idx);
+    if (idx > ALPHABET_SIZE) [[unlikely]] {
+        throw TuringException("Queried child at index" + std::to_string(idx)
+                              + " which is out of range (max: "
+                              + std::to_string(ALPHABET_SIZE) + ")");
+    }
+    return _children[idx];
 }
 
 PrefixTreeNode* PrefixTreeNode::create(StringIndex& idx) {
@@ -89,10 +96,12 @@ void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
     std::transform(std::begin(in), std::end(in), std::back_inserter(out), ppxChar);
 }
 
-void StringIndex::split(std::vector<std::string>& res,
-                        std::string_view str,
+void StringIndex::split(std::vector<std::string>& res, std::string_view str,
                         std::string_view delim) {
-    res.clear(); if (str.empty()) { return; }
+    res.clear();
+    if (str.empty()) {
+        return;
+    }
     size_t l {0};
     size_t r = str.find(delim);
 
