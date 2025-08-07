@@ -62,12 +62,14 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
         return false;
     }
 
+    fmt::print("Loaded graph is the same as the one dumped\n");
     return true;
 }
 
 }
 
 int main() {
+    /*
     {
         // Load & dump simple graph
         const fs::Path path {SAMPLE_DIR "/simple-graph"};
@@ -87,8 +89,8 @@ int main() {
             return 1;
         }
     }
+    */
 
-    /*
     {
         // Dump pole
         const fs::Path path {SAMPLE_DIR "/pole"};
@@ -122,7 +124,6 @@ int main() {
             return 1;
         }
     }
-    */
 
     // {
     //     // Dump reactome

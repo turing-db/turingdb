@@ -6,6 +6,7 @@
 #include "EdgeIndexerComparator.h"
 #include "PropertyManagerComparator.h"
 #include "comparators/StringIndexerComparator.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -40,12 +41,14 @@ bool DataPartComparator::same(const DataPart& a, const DataPart& b) {
 
     if (!StringIndexerComparator::same(a.getNodeStrPropIndexer(),
                                        b.getNodeStrPropIndexer())) {
+        spdlog::error("Error occured comparing node string indexers");
         return false;
     }
 
 
     if (!StringIndexerComparator::same(a.getEdgeStrPropIndexer(),
                                        b.getEdgeStrPropIndexer())) {
+        spdlog::error("Error occured comparing edge string indexers");
         return false;
     }
 
