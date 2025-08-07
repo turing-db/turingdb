@@ -8,6 +8,7 @@
 #include "LoadBalancer.h"
 #include "TokenValidator.h"
 #include "AddressRouter.h"
+#include "AESGCMEncryptor.h"
 
 
 template <typename T>
@@ -74,6 +75,7 @@ public:
 
 private:
     Server _server;
+    AESGCMEncryptor _encryptor;
     mutable TokenValidator _tokenValidator;
     mutable AddressRouter _addressRouter;
     mutable LoadBalancer _loadBalancer;
@@ -83,14 +85,24 @@ private:
     // Extract Bearer token from Authorization header
     std::string extractBearerToken(const httplib::Request& req) const;
 
+    std::string extractSessionFromCookie(const httplib::Request& req) const;
+
     std::string extractInstanceId(const httplib::Request& req) const;
+    std::string extractInstanceIdFromDomain(const httplib::Request& req) const;
 
     // Validate request authentication
     bool validateAuth(const std::string& token, httplib::Response& res) const;
 
-    bool validateRoute(const std::string& token, const std::string& instance, httplib::Response& res) const;
+    bool validateRoute(const std::string& token,
+                       const std::string& instanceId,
+                       httplib::Response& res) const;
 
     // Forward request to backend server
-    bool forwardRequest(const httplib::Request& req, httplib::Response& res,
-                        const std::string& method, const std::string& path, const std::string& token) const;
+    bool forwardRequest(const httplib::Request& req,
+                        const std::string& method,
+                        const std::string& path,
+                        const std::string& token,
+                        const std::string& instanceId,
+                        int portNumber,
+                        httplib::Response& res) const;
 };
