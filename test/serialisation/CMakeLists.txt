@@ -10,4 +10,6 @@ function(add_db_serialisation_gtest exe_name cpp_file)
                 )
 endfunction()
 
-add_db_serialisation_gtest(test_stringindexserialisation StringIndexSerialisationTest.cpp)
+add_db_serialisation_gtest(
+    test_stringindexserialisation StringIndexSerialisationTest.cpp
+    test_simplegraphserialisation SimpleGraphSerialisationTest.cpp)

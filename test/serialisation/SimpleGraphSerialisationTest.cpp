@@ -6,22 +6,22 @@
 #include "TuringException.h"
 #include "TuringTest.h"
 
+#include "SimpleGraph.h"
+#include "GraphLoader.h"
 #include "TuringDB.h"
 #include "LocalMemory.h"
 #include "Graph.h"
-#include "SystemManager.h"
+#include "comparators/GraphComparator.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
-#include "GraphLoader.h"
-#include "SimpleGraph.h"
 
 using namespace db;
 using namespace turing::test;
 
 
-class StringIndexSerialisationTest : public TuringTest {
+class SimpleGraphSerialisationTest : public TuringTest {
 public:
     void initialize()  {
         SystemManager& sysMan = _db.getSystemManager();
@@ -34,7 +34,6 @@ public:
         if (FileUtils::exists(_workingPath.filename())) {
             FileUtils::removeDirectory(_workingPath.filename());
         }
-
         loadDumpLoadSimpleDb();
     }
 
@@ -44,6 +43,7 @@ protected:
     std::unique_ptr<Graph> _loadedGraph;
     LocalMemory _mem;
     fs::Path _workingPath;
+
 
 private:
     void loadDumpLoadSimpleDb() {
@@ -62,24 +62,9 @@ private:
     }
 };
 
-TEST_F(StringIndexSerialisationTest, indexInitialisation) {
-    auto tx = _builtGraph->openTransaction();
-    auto reader = tx.readGraph();
-    auto builtDps = reader.dataparts();
 
-    for (const auto& dp : builtDps) {
-        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
-        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
-    }
-
-    auto txl = _loadedGraph->openTransaction();
-    auto readerl = txl.readGraph();
-    auto loadedDps = readerl.dataparts();
-
-    for (const auto& dp : loadedDps) {
-        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
-        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
-    }
+TEST_F(SimpleGraphSerialisationTest, indexInitialisation) {
+    ASSERT_TRUE(GraphComparator::same(*_builtGraph, *_loadedGraph));
 }
 
 int main(int argc, char** argv) {
