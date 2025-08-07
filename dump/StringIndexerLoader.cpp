@@ -84,10 +84,8 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     return {std::move(idxer)};
 }
 
-DumpResult<std::unique_ptr<StringIndex>>
-StringIndexerLoader::loadIndex(fs::AlignedBufferIterator& it,
-                               fs::AlignedBufferIterator& auxIt) {
-
+DumpResult<std::unique_ptr<StringIndex>> StringIndexerLoader::loadIndex(fs::AlignedBufferIterator& it,
+                                                                        fs::AlignedBufferIterator& auxIt) {
     // Number of nodes in this index prefix tree
     const size_t sz = it.get<size_t>();
 

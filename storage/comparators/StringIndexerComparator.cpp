@@ -4,7 +4,6 @@
 using namespace db;
 
 bool StringIndexerComparator::indexSame(const StringIndex& a, const StringIndex& b) {
-
     if (a.getNodeCount() != b.getNodeCount()) {
         spdlog::error("Index a has size {} whilst b has {}", a.getNodeCount(),
                       b.getNodeCount());
@@ -46,8 +45,37 @@ bool StringIndexerComparator::nodeSame(StringIndex::PrefixTreeNode* a,
         }
     }
 
-    for (size_t i = 0 ; i < a->getChildren().size(); i ++) {
-        if (a->getChild(i)->getID(), b->getChild(i)->getID()) {
+    for (size_t i = 0; i < a->getChildren().size(); i++) {
+        if ((!a->getChild(i) && b->getChild(i)) || (a->getChild(i) && !b->getChild(i))) {
+            spdlog::error("Null and non-null children at index {}", i);
+            return false;
+        }
+
+        if (!a->getChild(i) && !b->getChild(i)) {
+            continue;
+        }
+
+        if (a->getChild(i)->getID() != b->getChild(i)->getID()) {
+            spdlog::error("Mismatching child IDs: {} and {}", a->getChild(i)->getID(),
+                          b->getChild(i)->getID());
+
+            spdlog::error("Child arrays in question:");
+            std::cout << "a: ";
+            for (size_t j = 0; j < a->getChildren().size(); j++) {
+                if (auto child = a->getChild(j)) {
+                    std::cout << "(" << j << ", " << child->getID() << "," << child
+                              << ") ";
+                }
+            }
+            std::cout << std::endl;
+            std::cout << "b: ";
+            for (size_t j = 0; j < b->getChildren().size(); j++) {
+                if (auto child = b->getChild(j)) {
+                    std::cout << "(" << j << ", " << child->getID() << "," << child
+                              << ") ";
+                }
+            }
+            std::cout << std::endl;
             return false;
         }
     }

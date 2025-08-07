@@ -12,12 +12,14 @@ using namespace db;
 using PrefixTreeNode = StringIndex::PrefixTreeNode;
 
 StringIndex::StringIndex()
-    : _root(PrefixTreeNode::create(*this))
+    : _root(PrefixTreeNode::create(*this)),
+    _nextFreeID(1)
 {
 }
 
 StringIndex::StringIndex(size_t sz)
-    : _root(PrefixTreeNode::create((*this)))
+    : _root(PrefixTreeNode::create((*this))),
+    _nextFreeID(1)
 {
     _nodeManager.reserve(sz - 1);
     // sz - 1 nodes since we have root already.

@@ -24,7 +24,6 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
     _writer.nextPage();
 
     for (const auto& [propId, idx] : idxer) {
-        ensureSpace(sizeof(uint16_t));
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpIndex(idx);
     }

@@ -118,13 +118,18 @@ public:
     PrefixTreeNode* getRoot() const { return _root; }
     PrefixTreeNode* getNode(size_t index) const { return _nodeManager.at(index).get(); }
 
+    const std::vector<std::unique_ptr<PrefixTreeNode>>& getNodes() {
+        return _nodeManager;
+    }
+
     size_t getNodeCount() const { return _nodeManager.size(); }
 
 private:
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
     PrefixTreeNode* _root {nullptr};
 
-    size_t _nextFreeID {0};
+    size_t _nextFreeID {std::numeric_limits<size_t>::max()};
+
     static constexpr float _prefixThreshold {0.75};
 
     /**
