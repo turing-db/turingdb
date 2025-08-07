@@ -22,7 +22,7 @@ private:
     fs::FilePageWriter& _writer;
     fs::FilePageWriter& _auxWriter;
 
-    bool ensureSpace(size_t requiredSpace);
+    bool ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr);
 
     DumpResult<void> dumpIndex(const std::unique_ptr<StringIndex>& idx);
 

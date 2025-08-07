@@ -26,7 +26,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 
     // 3. Write each index
     for (const auto& [propId, idx] : idxer) {
-        ensureSpace(sizeof(uint16_t));
+        ensureSpace(sizeof(uint16_t), _writer);
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpIndex(idx);
     }
@@ -41,7 +41,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 }
 
 DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringIndex>& idx) {
-    ensureSpace(sizeof(size_t));
+    ensureSpace(sizeof(size_t), _writer);
     size_t sz = idx->getNodeCount();
 
     // 1.  Number of nodes in this index prefix tree
@@ -58,7 +58,7 @@ DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringInde
 }
 
 DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
-    ensureSpace(StringIndexDumpConstants::MAXNODESIZE);
+    ensureSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
     // 1. Write internal node data
     { // Space written in this block is accounted for by above call to @ref ensureSpace
         auto& children = node->getChildren();
@@ -87,7 +87,7 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
 }
 
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
-    ensureSpace(owners.size() * sizeof(EntityID::Type));
+    ensureSpace(owners.size() * sizeof(uint64_t), _auxWriter);
     for (size_t i = 0; i < owners.size(); i++) {
         uint64_t id = owners[i].getValue();
         _auxWriter.writeToCurrentPage(id);
@@ -95,15 +95,15 @@ DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& ow
     return {};
 }
 
-bool StringIndexerDumper::ensureSpace(size_t requiredSpace) {
+bool StringIndexerDumper::ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr) {
     if (requiredSpace > DumpConfig::PAGE_SIZE) {
         spdlog::error("Attempting to write {} bytes which exceedes page size of {}",
                      requiredSpace, DumpConfig::PAGE_SIZE);
         throw TuringException("Illegal write.");
     }
-    if (_writer.buffer().avail() < requiredSpace) {
-        spdlog::warn("Writing a new page because of ensureSpace({})", requiredSpace);
-        _writer.nextPage();
+    if (wr.buffer().avail() < requiredSpace) {
+        // spdlog::warn("Writing a new page because of ensureSpace({})", requiredSpace);
+        wr.nextPage();
     }
     return true;
 }

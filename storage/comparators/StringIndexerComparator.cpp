@@ -12,6 +12,7 @@ bool StringIndexerComparator::indexSame(const StringIndex& a, const StringIndex&
 
     for (size_t i = 0; i < a.getNodeCount(); i++) {
         if (!nodeSame(a.getNode(i), b.getNode(i))) {
+            spdlog::error("Node mismatch occurs at index {}", i);
             return false;
         }
     }
@@ -22,18 +23,18 @@ bool StringIndexerComparator::indexSame(const StringIndex& a, const StringIndex&
 bool StringIndexerComparator::nodeSame(StringIndex::PrefixTreeNode* a,
                                        StringIndex::PrefixTreeNode* b) {
     if (a->getID() != b->getID()) {
-        spdlog::error("Index a has ID {} whilst b has {}", a->getID(), b->getID());
+        spdlog::error("Node a has ID {} whilst b has {}", a->getID(), b->getID());
         return false;
     }
 
     if (a->getChildren().size() != b->getChildren().size()) {
-        spdlog::error("Index a has {} children whilst b has {}", a->getChildren().size(),
+        spdlog::error("Node a has {} children whilst b has {}", a->getChildren().size(),
                       b->getChildren().size());
         return false;
     }
 
     if (a->getOwners().size() != b->getOwners().size()) {
-        spdlog::error("Index a has {} owners whilst b has {}", a->getOwners().size(),
+        spdlog::error("Node a has {} owners whilst b has {}", a->getOwners().size(),
                       b->getOwners().size());
         return false;
     }
@@ -92,16 +93,20 @@ bool StringIndexerComparator::same(const StringPropertyIndexer& a,
     }
 
     auto ita = a.begin();
+    auto itb = b.begin();
 
-    for (; ita != a.end(); ita++) {
-        auto itb = b.find(ita->first);
-        if (itb == b.end()) {
-            spdlog::error("A has index for propID {} whilst B does not", ita->first);
+    for (size_t i {0}; ita != a.end(); ita++, i++) {
+        if (ita->first != itb->first) {
+            spdlog::error("A has index for propID {} whilst B has {}", ita->first, itb->first);
+            if (b.find(ita->first) == b.end()) {
+                spdlog::error("B does not have property ID {}", ita->first);
+            }
             return false;
         }
 
         // Same strings-owners stored
         if (!indexSame(*ita->second, *itb->second)) {
+            spdlog::error("Index mismatch occurs at index {}", i);
             return false;
         }
     }

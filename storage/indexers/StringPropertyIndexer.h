@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
 
 #include "ID.h"
 #include "properties/PropertyContainer.h"
@@ -38,7 +37,7 @@ public:
     const auto find(PropertyTypeID id) const { return _indexer.find(id); }
 
 private:
-    std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
+    std::map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
     bool _initialised {false};
 
     void initialiseIndexTrie(PropertyTypeID propertyID);

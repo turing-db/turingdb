@@ -36,7 +36,7 @@ void StringIndexerLoader::ensureSpace(size_t requiredReadSpace,
                                       fs::AlignedBufferIterator& it,
                                       fs::FilePageReader& rd) {
     if (it.remainingBytes() < requiredReadSpace) {
-        spdlog::warn("Reading a new page because of ensureSpace({})", requiredReadSpace);
+        // spdlog::warn("Reading a new page because of ensureSpace({})", requiredReadSpace);
         rd.nextPage();
         it = rd.begin();
         ensureIteratorReadPage(it);
@@ -72,6 +72,9 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     // Refresh the main iterator as we just turned the page from header page
     it = _reader.begin();
     ensureIteratorReadPage(it);
+
+    // Only start the secondary reader after we check that the index is non-empty,
+    // otherwise there is no owners page and this throws an error
     auto auxIt = _auxReader.begin();
     ensureIteratorReadPage(auxIt);
 
