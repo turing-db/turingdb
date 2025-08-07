@@ -22,16 +22,17 @@ public:
     class PrefixTreeNode {
     public:
         PrefixTreeNode()
-            : _children(ALPHABET_SIZE),
-              _val() {}
+            : _children(ALPHABET_SIZE)
+        {
+        }
 
-        const std::vector<PrefixTreeNode*> getChildren() const { return _children; }
+        const std::vector<PrefixTreeNode*>& getChildren() const { return _children; }
 
         PrefixTreeNode* getChild(char c) const;
 
         PrefixTreeNode* getChild(size_t idx) const;
 
-        const std::vector<EntityID> getOwners() const { return _owners; }
+        const std::vector<EntityID>& getOwners() const { return _owners; }
 
         bool isComplete() const { return !_owners.empty(); }
 
@@ -47,7 +48,6 @@ public:
     private:
         std::vector<EntityID> _owners;
         std::vector<PrefixTreeNode*> _children;
-        char _val {'\0'};
 
         static constexpr char FIRST_ALPHA_CHAR = 'a';
         static constexpr char LAST_ALPHA_CHAR = 'z';
