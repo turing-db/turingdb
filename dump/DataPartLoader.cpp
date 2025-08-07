@@ -6,7 +6,7 @@
 #include "FilePageReader.h"
 #include "FileResult.h"
 #include "Graph.h"
-#include "StringApproxIndexerLoader.h"
+#include "StringIndexerLoader.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyContainer.h"
@@ -303,7 +303,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
                 DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, auxReader.error());
         }
 
-        auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
+        auto l = StringIndexerLoader(reader.value(), auxReader.value());
         auto res = l.load();
         if (!res) {
             spdlog::error(res.error().fmtMessage());
@@ -341,7 +341,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
                 DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, auxReader.error());
         }
 
-        auto l = StringApproxIndexerLoader(reader.value(), auxReader.value());
+        auto l = StringIndexerLoader(reader.value(), auxReader.value());
         auto res = l.load();
         if (!res) {
             spdlog::error(res.error().fmtMessage());

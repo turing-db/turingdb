@@ -62,7 +62,7 @@ set(storage_sources
 
         comparators/DataPartComparator.cpp
         comparators/GraphComparator.cpp
-        comparators/StringApproxIndexerComparator.cpp
+        comparators/StringIndexerComparator.cpp
 )
 
 
