@@ -8,11 +8,11 @@
 #include "TuringException.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "views/GraphView.h"
+#include "indexes/StringIndex.h"
 
 namespace db {
 
 class GraphView;
-class StringIndex;
 
 class StringIndexUtils {
 public:

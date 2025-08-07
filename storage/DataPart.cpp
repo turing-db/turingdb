@@ -13,6 +13,7 @@
 #include "TuringException.h"
 #include "indexers/EdgeIndexer.h"
 #include "indexers/StringPropertyIndexer.h"
+#include "indexes/StringIndex.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyContainer.h"
 #include "views/GraphView.h"

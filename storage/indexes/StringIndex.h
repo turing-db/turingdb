@@ -7,15 +7,13 @@
 #include <unordered_set>
 
 #include "ID.h"
-#include "indexes/StringIndexUtils.h"
+#include "TuringException.h"
 
 // Size of our alphabet: assumes some preprocessing,
 // so only a-z and 1-9
 constexpr size_t SIGMA = 26 + 10;
 
 namespace db {
-
-class PrefixTreeNode;
 
 /*
  * @brief Approximate string indexing using prefix trees (tries)
@@ -26,7 +24,58 @@ class PrefixTreeNode;
  */
 class StringIndex {
 public:
-    friend PrefixTreeNode;
+    class PrefixTreeNode {
+    public:
+        PrefixTreeNode()
+            : _children(SIGMA),
+              _val() {}
+
+        const std::vector<PrefixTreeNode*> getChildren() const { return _children; }
+
+        PrefixTreeNode* getChild(char c) const;
+
+        const std::vector<EntityID> getOwners() const { return _owners; }
+
+        bool isComplete() const { return !_owners.empty(); }
+
+        void setChild(PrefixTreeNode* child, char c);
+
+        void addOwner(EntityID o) { _owners.push_back(o); }
+
+        static PrefixTreeNode* create(StringIndex& idx);
+
+    private:
+        // NOTE: Better to do lookup table?
+        static size_t charToIndex(char c) {
+            // Children array layout:
+            // INDEX CHARACTER VALUE
+            // 0     a
+            // ...  ...
+            // 25    z
+            // 26    0
+            // ...  ...
+            // 36    9
+
+            // NOTE: Converts upper-case characters to lower to calculate index,
+            // but the value of the node is still uppercase
+            if (isalpha(c)) {
+                return std::tolower(c, std::locale()) - 'a';
+            } else if (isdigit(c)) {
+                return 26 + c - '0';
+            } else {
+                throw TuringException("Invalid character: " + std::to_string(c));
+            }
+        }
+        static inline char indexToChar(size_t idx) {
+            char c = idx < 26 ? 'a' + idx : '0' + idx - 26;
+            return c;
+        }
+
+        // NOTE: Can we remove isComplete in favour of empty owners?
+        std::vector<EntityID> _owners;
+        std::vector<PrefixTreeNode*> _children;
+        char _val {'\0'};
+    };
 
     enum FindResult {
         FOUND,
@@ -76,7 +125,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
-    std::unique_ptr<PrefixTreeNode> _root;
+    PrefixTreeNode* _root;
     static constexpr float _prefixThreshold {0.75};
 
     /**
@@ -94,43 +143,13 @@ private:
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
 
-    void printTree(PrefixTreeNode* node, size_t idx, const std::string& prefix,
+    void printTree(PrefixTreeNode* node, ssize_t idx, const std::string& prefix,
                    bool isLastChild, std::ostream& out = std::cout) const;
 
     void addNode(std::unique_ptr<PrefixTreeNode>&& node) {
         _nodeManager.emplace_back(std::move(node));
     }
 };
-
-class PrefixTreeNode {
-public:
-    PrefixTreeNode()
-        : _children(SIGMA),
-          _val()
-    {
-    }
-
-    const std::vector<PrefixTreeNode*> getChildren() const { return _children; }
-
-    PrefixTreeNode* getChild(char c) const;
-
-    const std::vector<EntityID> getOwners() const { return _owners; }
-
-    bool isComplete() const { return !_owners.empty(); }
-
-    void setChild(PrefixTreeNode* child, char c);
-
-    void addOwner(EntityID o) { _owners.push_back(o); }
-
-    static PrefixTreeNode* create(StringIndex& idx);
-
-private:
-    // NOTE: Can we remove isComplete in favour of empty owners?
-    std::vector<EntityID> _owners;
-    std::vector<PrefixTreeNode*> _children;
-    char _val {'\0'};
-};
-
 
 template <TypedInternalID IDT>
 void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
