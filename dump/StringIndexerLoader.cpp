@@ -36,7 +36,6 @@ void StringIndexerLoader::ensureSpace(size_t requiredReadSpace,
                                       fs::AlignedBufferIterator& it,
                                       fs::FilePageReader& rd) {
     if (it.remainingBytes() < requiredReadSpace) {
-        // spdlog::warn("Reading a new page because of ensureSpace({})", requiredReadSpace);
         rd.nextPage();
         it = rd.begin();
         ensureIteratorReadPage(it);

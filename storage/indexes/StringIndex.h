@@ -125,10 +125,9 @@ public:
     size_t getNodeCount() const { return _nodeManager.size(); }
 
 private:
+    size_t _nextFreeID {std::numeric_limits<size_t>::max()};
     std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
     PrefixTreeNode* _root {nullptr};
-
-    size_t _nextFreeID {std::numeric_limits<size_t>::max()};
 
     static constexpr float _prefixThreshold {0.75};
 
