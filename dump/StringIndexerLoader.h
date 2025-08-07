@@ -31,5 +31,8 @@ private:
 
     DumpResult<void> loadOwners(StringIndex::PrefixTreeNode* node, size_t sz,
                                 fs::AlignedBufferIterator& auxIt);
+
+    void ensureSpace(size_t requiredReadSpace, fs::AlignedBufferIterator& it,
+                     fs::FilePageReader& rd);
 };
 }

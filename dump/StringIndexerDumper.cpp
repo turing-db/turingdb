@@ -18,12 +18,15 @@
 using namespace db;
 
 DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
+    // 1. Header
     GraphDumpHelper::writeFileHeader(_writer);
-    // Metadata
+    // 2. Metadata
     _writer.writeToCurrentPage(idxer.size());
     _writer.nextPage();
 
+    // 3. Write each index
     for (const auto& [propId, idx] : idxer) {
+        ensureSpace(sizeof(uint16_t));
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpIndex(idx);
     }
@@ -38,38 +41,53 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 }
 
 DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringIndex>& idx) {
-    _writer.writeToCurrentPage(idx->getNodeCount());
-    for (size_t i = 0; i < idx->getNodeCount(); i++) {
-        dumpNode(idx->getNode(i));
+    ensureSpace(sizeof(size_t));
+    size_t sz = idx->getNodeCount();
+
+    // 1.  Number of nodes in this index prefix tree
+    _writer.writeToCurrentPage(sz);
+
+    // 2. Load each node
+    for (size_t i = 0; i < sz; i++) {
+        if (auto nodeResult = dumpNode(idx->getNode(i)); !nodeResult ) {
+            return nodeResult.get_unexpected();
+        }
     }
 
     return {};
 }
 
 DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
-    _writer.writeToCurrentPage(node->getID());
+    ensureSpace(StringIndexDumpConstants::MAXNODESIZE);
+    // 1. Write internal node data
+    { // Space written in this block is accounted for by above call to @ref ensureSpace
+        auto& children = node->getChildren();
+        size_t nonNullChildren =
+            std::ranges::count_if(children, [](auto ptr) { return ptr != nullptr; });
 
-    auto& children = node->getChildren();
+        _writer.writeToCurrentPage(node->getID());
+        _writer.writeToCurrentPage(nonNullChildren);
 
-    size_t nonNullChildren =
-        std::ranges::count_if(children, [](auto ptr) { return ptr != nullptr; });
-    _writer.writeToCurrentPage(nonNullChildren);
-
-    // Write existing children IDs and their index into the child array
-    for (size_t i = 0; i < StringIndex::PrefixTreeNode::ALPHABET_SIZE; i++) {
-        StringIndex::PrefixTreeNode* child = node->getChild(i);
-        if (child) {
-            _writer.writeToCurrentPage(i);
-            _writer.writeToCurrentPage(child->getID());
+        // Write existing children IDs and their index into the child array
+        for (size_t i = 0; i < StringIndex::PrefixTreeNode::ALPHABET_SIZE; i++) {
+            if (auto child = node->getChild(i)) {
+                _writer.writeToCurrentPage(i);
+                _writer.writeToCurrentPage(child->getID());
+            }
         }
+        _writer.writeToCurrentPage(node->getOwners().size());
     }
 
-    _writer.writeToCurrentPage(node->getOwners().size());
-    dumpOwners(node->getOwners());
+    // 2. Write owners to external file
+    if (auto ownersResult = dumpOwners(node->getOwners()); !ownersResult) {
+        return ownersResult.get_unexpected();
+    }
+
     return {};
 }
 
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
+    ensureSpace(owners.size() * sizeof(EntityID::Type));
     for (size_t i = 0; i < owners.size(); i++) {
         uint64_t id = owners[i].getValue();
         _auxWriter.writeToCurrentPage(id);
@@ -79,10 +97,12 @@ DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& ow
 
 bool StringIndexerDumper::ensureSpace(size_t requiredSpace) {
     if (requiredSpace > DumpConfig::PAGE_SIZE) {
-        return false;
+        spdlog::error("Attempting to write {} bytes which exceedes page size of {}",
+                     requiredSpace, DumpConfig::PAGE_SIZE);
+        throw TuringException("Illegal write.");
     }
     if (_writer.buffer().avail() < requiredSpace) {
-        spdlog::warn("Starting a new page because of ensureSpace({})", requiredSpace);
+        spdlog::warn("Writing a new page because of ensureSpace({})", requiredSpace);
         _writer.nextPage();
     }
     return true;
