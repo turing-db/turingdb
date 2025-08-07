@@ -8,6 +8,7 @@
 #include "DumpResult.h"
 #include "DumpConfig.h"
 #include "FilePageReader.h"
+#include "TuringException.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "StringIndexerDumpConstants.h"
 #include "indexes/StringIndex.h"
@@ -22,7 +23,7 @@ namespace {
     void managePagesForNodes(fs::FilePageReader& rd, fs::AlignedBufferIterator& it) {
         if (it.remainingBytes() < StringIndexDumpConstants::NODESIZE) {
             spdlog::info("{} space left in buffer yet node is size {}",
-                         rd.getBuffer().avail(), StringIndexDumpConstants::NODESIZE);
+                         it.remainingBytes(), StringIndexDumpConstants::NODESIZE);
 
             rd.nextPage();
             if (rd.errorOccured()) {
@@ -113,6 +114,8 @@ std::unique_ptr<StringIndex::PrefixTreeNode> StringIndexerLoader::loadNode(fs::A
     char c = it.get<char>();
     bool isComplete = it.get<uint8_t>() != 0;
     size_t numOwners = it.get<size_t>();
+    std::cout << c << isComplete << numOwners <<std::endl;
+
     // TODO: Cleanup hacky overload of .get
     auto bitspan = it.get(StringIndexDumpConstants::CHILDMASKSIZE);
 
@@ -137,6 +140,12 @@ void StringIndexerLoader::loadOwners(std::vector<EntityID>& owners,
     if (it.remainingBytes() < sz * sizeof(uint64_t)) {
         _auxReader.nextPage();
         it = _auxReader.begin();
+        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
+        spdlog::error("Iterator did not get full page prior to loading nodes");
+        spdlog::error("Got {} bytes but needed {} bytes", it.remainingBytes(),
+                      DumpConfig::PAGE_SIZE);
+        throw TuringException("Did not read full page. Aborting.");
+        }
     }
     owners.reserve(sz);
     for (size_t i = 0; i < sz; i++) {

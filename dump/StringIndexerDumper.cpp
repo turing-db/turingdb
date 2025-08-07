@@ -8,6 +8,7 @@
 #include "FilePageWriter.h"
 #include "GraphDumpHelper.h"
 #include "ID.h"
+#include "TuringException.h"
 #include "indexes/StringIndex.h"
 #include "StringIndexerDumpConstants.h"
 #include "spdlog/spdlog.h"
@@ -48,7 +49,7 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
         if (!node->_children[i]) {
             continue;
         }
-        // OR the bit in the byte which corresponds to this child
+        // OR the bit in the byte array which corresponds to this child
         bitmap[i / 8] |= (1 << (i % 8));
     }
     auto bitspan = std::span(bitmap);
@@ -70,6 +71,11 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
 }
 
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
+    if (DumpConfig::PAGE_SIZE < owners.size() * sizeof(uint64_t)) {
+        throw TuringException("Owners array exceeds page size");
+    }
+
+    // Start new page if we cannot fit all owners on current page
     if (_auxWriter.buffer().avail() < owners.size() * sizeof(uint64_t)) {
         _auxWriter.nextPage();
     }
