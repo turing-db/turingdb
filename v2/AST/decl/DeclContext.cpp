@@ -3,8 +3,8 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "ASTException.h"
-#include "attribution/DeclContainer.h"
-#include "attribution/VarDecl.h"
+#include "decl/DeclContainer.h"
+#include "decl/VarDecl.h"
 
 using namespace db;
 

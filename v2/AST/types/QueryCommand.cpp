@@ -1,6 +1,6 @@
 #include "QueryCommand.h"
 
-#include "attribution/DeclContext.h"
+#include "decl/DeclContext.h"
 
 using namespace db;
 

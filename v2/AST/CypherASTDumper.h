@@ -3,7 +3,7 @@
 #include <ostream>
 #include <unordered_set>
 
-#include "attribution/DeclID.h"
+#include "decl/DeclID.h"
 
 namespace db {
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "attribution/DeclID.h"
-#include "attribution/EvaluatedType.h"
+#include "decl/DeclID.h"
+#include "decl/EvaluatedType.h"
 
 namespace db {
 

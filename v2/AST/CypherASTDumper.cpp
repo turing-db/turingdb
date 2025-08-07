@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 #include "ASTException.h"
-#include "attribution/DeclContainer.h"
+#include "decl/DeclContainer.h"
 #include "expressions/All.h"
 #include "types/Literal.h"
 #include "types/Projection.h"
@@ -10,7 +10,7 @@
 #include "statements/StatementContainer.h"
 #include "statements/Match.h"
 #include "statements/Return.h"
-#include "attribution/VarDecl.h"
+#include "decl/VarDecl.h"
 
 using namespace db;
 

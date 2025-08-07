@@ -1,6 +1,6 @@
 #pragma once
 
-#include "attribution/EvaluatedType.h"
+#include "decl/EvaluatedType.h"
 
 namespace db {
 

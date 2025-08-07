@@ -4,9 +4,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "attribution/DeclID.h"
-#include "attribution/EvaluatedType.h"
-#include "attribution/VarDecl.h"
+#include "decl/DeclID.h"
+#include "decl/EvaluatedType.h"
+#include "decl/VarDecl.h"
 
 namespace db {
 

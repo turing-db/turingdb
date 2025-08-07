@@ -1,6 +1,6 @@
 #pragma once
 
-#include "attribution/VarDecl.h"
+#include "decl/VarDecl.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
 #include "types/Literal.h"

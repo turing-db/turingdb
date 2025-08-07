@@ -2,8 +2,8 @@ set(ast_sources
     CypherAST.cpp
     CypherASTDumper.cpp
     CypherError.cpp
-    attribution/DeclContext.cpp
-    attribution/DeclContainer.cpp
+    decl/DeclContext.cpp
+    decl/DeclContainer.cpp
     types/QueryCommand.cpp
     ASTException.cpp)
 

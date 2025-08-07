@@ -6,10 +6,10 @@
 #include "CypherError.h"
 #include "CypherAST.h"
 
-#include "attribution/PatternData.h"
-#include "attribution/DeclContext.h"
-#include "attribution/VarDecl.h"
-#include "attribution/EvaluatedType.h"
+#include "decl/PatternData.h"
+#include "decl/DeclContext.h"
+#include "decl/VarDecl.h"
+#include "decl/EvaluatedType.h"
 
 #include "expressions/All.h"
 
@@ -23,9 +23,8 @@
 
 using namespace db;
 
-CypherAnalyzer::CypherAnalyzer(CypherAST& ast,
-                               GraphView graphView)
-    : _ast(&ast),
+CypherAnalyzer::CypherAnalyzer(CypherAST& ast, GraphView graphView)
+    : _ast(ast),
     _graphView(graphView),
     _graphMetadata(graphView.metadata())
 {
@@ -34,7 +33,7 @@ CypherAnalyzer::CypherAnalyzer(CypherAST& ast,
 CypherAnalyzer::~CypherAnalyzer() = default;
 
 void CypherAnalyzer::analyze() {
-    for (const auto& query : _ast->queries()) {
+    for (const auto& query : _ast.queries()) {
         _ctxt = &query->getRootContext();
 
         if (const auto* q = dynamic_cast<SinglePartQuery*>(query.get())) {
@@ -148,7 +147,7 @@ void CypherAnalyzer::analyze(NodePattern& node) {
         node.setDecl(&decl);
     }
 
-    auto& data = _ast->newAnalysisData<NodePatternData>(EvaluatedType::NodePattern);
+    auto& data = _ast.newAnalysisData<NodePatternData>(EvaluatedType::NodePattern);
     node.setData(&data);
 
     if (node.hasLabels()) {
@@ -195,7 +194,7 @@ void CypherAnalyzer::analyze(EdgePattern& edge) {
         edge.setDecl(&decl);
     }
 
-    auto& data = _ast->newAnalysisData<EdgePatternData>(EvaluatedType::EdgePattern);
+    auto& data = _ast.newAnalysisData<EdgePatternData>(EvaluatedType::EdgePattern);
     edge.setData(&data);
 
     if (edge.hasTypes()) {
@@ -553,10 +552,10 @@ void CypherAnalyzer::analyze(PathExpression& expr) {
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    const auto* location = _ast->getLocation((uintptr_t)obj);
+    const auto* location = _ast.getLocation((uintptr_t)obj);
     std::string errorMsg;
 
-    CypherError err {_ast->query()};
+    CypherError err {_ast.query()};
     err.setTitle("Query analysis error");
     err.setErrorMsg(msg);
 

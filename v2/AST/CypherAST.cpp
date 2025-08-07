@@ -47,7 +47,6 @@ NodePattern* CypherAST::nodeFromExpression(Expression* e) {
     return nullptr;
 }
 
-
 Pattern* CypherAST::newPattern() {
     auto& pattern = _patterns.emplace_back(Pattern::create());
     return pattern.get();

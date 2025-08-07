@@ -6,8 +6,8 @@
 #include <unordered_map>
 
 #include "SourceLocation.h"
-#include "attribution/AnalysisData.h"
-#include "attribution/DeclContainer.h"
+#include "decl/AnalysisData.h"
+#include "decl/DeclContainer.h"
 #include "statements/StatementContainer.h"
 #include "statements/SubStatement.h"
 
@@ -39,6 +39,10 @@ public:
     CypherAST(CypherAST&&) = delete;
     CypherAST& operator=(const CypherAST&) = delete;
     CypherAST& operator=(CypherAST&&) = delete;
+
+    const std::string_view& query() const {
+        return _query;
+    }
 
     NodePattern* nodeFromExpression(Expression* e);
     Pattern* newPattern();
@@ -116,10 +120,6 @@ public:
             return &it->second;
         }
         return nullptr;
-    }
-
-    const std::string_view& query() const {
-        return _query;
     }
 
     void setDebugLocation(bool debug) {

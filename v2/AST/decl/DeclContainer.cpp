@@ -1,11 +1,15 @@
-#include "attribution/DeclContainer.h"
-#include "attribution/VarDecl.h"
+#include "decl/DeclContainer.h"
+
+#include "decl/VarDecl.h"
 
 using namespace db;
 
-DeclContainer::DeclContainer() = default;
+DeclContainer::DeclContainer()
+{
+}
 
-DeclContainer::~DeclContainer() = default;
+DeclContainer::~DeclContainer() {
+}
 
 VarDecl& DeclContainer::newDecl(EvaluatedType type) {
     const auto id = _nextID++;

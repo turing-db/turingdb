@@ -1,8 +1,6 @@
 #pragma once
 
-#include <memory>
-
-#include "attribution/EvaluatedType.h"
+#include "decl/EvaluatedType.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -33,8 +31,7 @@ class AnalysisData;
 
 class CypherAnalyzer {
 public:
-    CypherAnalyzer(CypherAST& ast,
-                   GraphView graphView);
+    CypherAnalyzer(CypherAST& ast, GraphView graphView);
     ~CypherAnalyzer();
 
     CypherAnalyzer(const CypherAnalyzer&) = delete;
@@ -42,11 +39,9 @@ public:
     CypherAnalyzer& operator=(const CypherAnalyzer&) = delete;
     CypherAnalyzer& operator=(CypherAnalyzer&&) = delete;
 
-    void analyze();
+    const CypherAST& getAST() const { return _ast; }
 
-    const CypherAST& getAST() const {
-        return *_ast;
-    }
+    void analyze();
 
     // Query types
     void analyze(const SinglePartQuery& query);
@@ -76,11 +71,10 @@ public:
     void analyze(PathExpression& expr);
 
 private:
-    CypherAST* _ast {nullptr};
+    CypherAST& _ast;
     GraphView _graphView;
     const GraphMetadata& _graphMetadata;
-
-    std::unique_ptr<DeclContext> _rootCtxt;
+    DeclContext* _rootCtxt {nullptr};
     DeclContext* _ctxt {nullptr};
 
     void throwError(std::string_view msg, const void* obj = 0) const;
