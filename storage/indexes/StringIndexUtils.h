@@ -16,31 +16,6 @@ class GraphView;
 
 class StringIndexUtils {
 public:
-    // NOTE: Better to do lookup table?
-    static size_t charToIndex(char c) {
-        // Children array layout:
-        // INDEX CHARACTER VALUE
-        // 0     a
-        // ...  ...
-        // 25    z
-        // 26    0
-        // ...  ...
-        // 36    9
-
-        // NOTE: Converts upper-case characters to lower to calculate index,
-        // but the value of the node is still uppercase
-        if (isalpha(c)) {
-            return std::tolower(c, std::locale()) - 'a';
-        } else if (isdigit(c)) {
-            return 26 + c - '0';
-        } else
-            throw TuringException("Invalid character: " + std::to_string(c));
-    }
-    static inline char indexToChar(size_t idx) {
-        char c = idx < 26 ? 'a' + idx : '0' + idx - 26;
-        return c;
-    }
-
     /*
      * @brief Fills @param ouput with matches on the query @param query in the indexes for
      * all dataparts

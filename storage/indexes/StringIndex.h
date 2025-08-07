@@ -7,11 +7,6 @@
 #include <unordered_set>
 
 #include "ID.h"
-#include "TuringException.h"
-
-// Size of our alphabet: assumes some preprocessing,
-// so only a-z and 1-9
-constexpr size_t SIGMA = 26 + 10;
 
 namespace db {
 
@@ -27,12 +22,14 @@ public:
     class PrefixTreeNode {
     public:
         PrefixTreeNode()
-            : _children(SIGMA),
+            : _children(ALPHABET_SIZE),
               _val() {}
 
         const std::vector<PrefixTreeNode*> getChildren() const { return _children; }
 
         PrefixTreeNode* getChild(char c) const;
+
+        PrefixTreeNode* getChild(size_t idx) const;
 
         const std::vector<EntityID> getOwners() const { return _owners; }
 
@@ -44,37 +41,25 @@ public:
 
         static PrefixTreeNode* create(StringIndex& idx);
 
+        static inline size_t charToIndex(char c);
+        static inline char indexToChar(size_t idx);
+
     private:
-        // NOTE: Better to do lookup table?
-        static size_t charToIndex(char c) {
-            // Children array layout:
-            // INDEX CHARACTER VALUE
-            // 0     a
-            // ...  ...
-            // 25    z
-            // 26    0
-            // ...  ...
-            // 36    9
-
-            // NOTE: Converts upper-case characters to lower to calculate index,
-            // but the value of the node is still uppercase
-            if (isalpha(c)) {
-                return std::tolower(c, std::locale()) - 'a';
-            } else if (isdigit(c)) {
-                return 26 + c - '0';
-            } else {
-                throw TuringException("Invalid character: " + std::to_string(c));
-            }
-        }
-        static inline char indexToChar(size_t idx) {
-            char c = idx < 26 ? 'a' + idx : '0' + idx - 26;
-            return c;
-        }
-
-        // NOTE: Can we remove isComplete in favour of empty owners?
         std::vector<EntityID> _owners;
         std::vector<PrefixTreeNode*> _children;
         char _val {'\0'};
+
+        static constexpr char FIRST_ALPHA_CHAR = 'a';
+        static constexpr char LAST_ALPHA_CHAR = 'z';
+        static constexpr char FIRST_NUMERAL = '0';
+        static constexpr char LAST_NUMERAL = '9';
+        static constexpr size_t NUM_ALPHABETICAL_CHARS =
+            LAST_ALPHA_CHAR - FIRST_ALPHA_CHAR + 1;
+        static constexpr size_t NUM_NUMERICAL_CHARS = LAST_NUMERAL - FIRST_NUMERAL + 1;
+
+    public:
+        static constexpr size_t ALPHABET_SIZE =
+            NUM_ALPHABETICAL_CHARS + NUM_NUMERICAL_CHARS;
     };
 
     enum FindResult {

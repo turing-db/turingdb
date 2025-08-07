@@ -1,10 +1,10 @@
 #include "StringIndex.h"
 #include "ID.h"
 #include "TuringException.h"
-#include "indexes/StringIndexUtils.h"
 
 #include <memory>
 #include <deque>
+#include <string>
 #include <unordered_set>
 
 using namespace db;
@@ -17,11 +17,15 @@ StringIndex::StringIndex()
 }
 
 void PrefixTreeNode::setChild(PrefixTreeNode* child, char c) {
-    _children[StringIndexUtils::charToIndex(c)] = child;
+    _children[PrefixTreeNode::charToIndex(c)] = child;
 }
 
 PrefixTreeNode* PrefixTreeNode::getChild(char c) const {
-    return _children[StringIndexUtils::charToIndex(c)];
+    return _children[PrefixTreeNode::charToIndex(c)];
+}
+
+PrefixTreeNode* PrefixTreeNode::getChild(size_t idx) const {
+    return _children.at(idx);
 }
 
 PrefixTreeNode* PrefixTreeNode::create(StringIndex& idx) {
@@ -31,6 +35,38 @@ PrefixTreeNode* PrefixTreeNode::create(StringIndex& idx) {
     idx.addNode(std::move(node));
 
     return raw;
+}
+
+// NOTE: Better to do lookup table?
+size_t PrefixTreeNode::charToIndex(char c) {
+    // Children array layout:
+    // INDEX CHARACTER VALUE
+    // 0     a
+    // ...  ...
+    // 25    z
+    // 26    0
+    // ...  ...
+    // 36    9
+
+    // NOTE: Converts upper-case characters to lower to calculate index,
+    // but the value of the node is still uppercase
+    if (isalpha(c)) {
+        return std::tolower(c, std::locale()) - FIRST_ALPHA_CHAR;
+    } else if (isdigit(c)) {
+        return NUM_ALPHABETICAL_CHARS + c - FIRST_NUMERAL;
+    } else {
+        throw TuringException("Invalid character: '" + std::string(1, c) + "' ("
+                              + std::to_string(static_cast<int>(c)) + ")");
+    }
+}
+
+inline char PrefixTreeNode::indexToChar(size_t idx) {
+    if (idx > ALPHABET_SIZE) [[unlikely]] {
+        throw TuringException("Invalid index: " + std::to_string(idx));
+    }
+    char c = idx < NUM_ALPHABETICAL_CHARS ? FIRST_ALPHA_CHAR + idx
+                                          : FIRST_NUMERAL + (idx - NUM_NUMERICAL_CHARS);
+    return c;
 }
 
 void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
@@ -135,16 +171,16 @@ void StringIndex::printTree(PrefixTreeNode* node, ssize_t idx, const std::string
     if (idx != -1) {
         out << prefix
                   << (isLastChild ? "└── " : "├── ")
-                  << StringIndexUtils::indexToChar(idx)
+                  << PrefixTreeNode::indexToChar(idx)
                   << (node->isComplete() ? "*" : "")
                   << '\n';
     }
 
     // Gather existing children so we know which one is the last
     std::vector<std::pair<PrefixTreeNode*, size_t>> kids;
-    kids.reserve(SIGMA);
-    for (std::size_t i = 0; i < SIGMA; ++i) {
-        if (auto child = node->getChild(StringIndexUtils::indexToChar(i))) {
+    kids.reserve(PrefixTreeNode::ALPHABET_SIZE);
+    for (std::size_t i = 0; i < PrefixTreeNode::ALPHABET_SIZE; i++) {
+        if (auto child = node->getChild(i)) {
             kids.push_back({child, i});
         }
     }
@@ -155,9 +191,9 @@ void StringIndex::printTree(PrefixTreeNode* node, ssize_t idx, const std::string
         nextPrefix += (isLastChild ? "    " : "│   ");
 
     // Recurse over children
-    for (std::size_t k = 0; k < kids.size(); ++k) {
+    for (std::size_t k = 0; k < kids.size(); k++) {
         auto [pointer, index] = kids[k];
-        printTree(pointer, index, nextPrefix, k + 1 == kids.size());
+        printTree(pointer, index, nextPrefix, k + 1 == kids.size(), out);
     }
 }
 

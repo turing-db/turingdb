@@ -1,3 +1,4 @@
+#include "indexes/StringIndex.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
@@ -107,6 +108,22 @@ protected:
 
         auto node1 = writer.addNode({"Word"});
         writer.addNodeProperty<types::String>(node1, "name", "playful");
+        writer.submit();
+
+        return graph;
+    }
+
+    [[nodiscard]] std::unique_ptr<Graph> createEdgeCaseGraph() {
+        auto graph = Graph::create();
+        GraphWriter writer {graph.get()};
+
+        auto node1 = writer.addNode({"LastLetter"});
+        writer.addNodeProperty<types::String>(node1, "name", "Zebraz");
+        auto node2 = writer.addNode({"LastNumber"});
+        writer.addNodeProperty<types::String>(node2, "name", "999");
+        auto edge = writer.addEdge({"Bridge"}, node1, node2);
+        writer.addEdgeProperty<types::String>(edge, "desc", "999 zebraz");
+
         writer.submit();
 
         return graph;
