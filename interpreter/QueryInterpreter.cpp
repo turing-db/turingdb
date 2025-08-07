@@ -83,10 +83,10 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     } catch (const AnalyzeException& e) {
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR, e.what());
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
+        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR,
                            std::string("Unexpected exception: ") + e.what());
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
+        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR,
                            "Unknown exception occurred");
     }
 
@@ -99,10 +99,10 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     } catch (const PlannerException& e) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
                            std::string("Unexpected exception: ") + e.what());
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
                            "Unknown exception occurred");
     }
 
@@ -115,10 +115,10 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     } catch (const PipelineException& e) {
         return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
                            std::string("Unexpected exception: ") + e.what());
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
                            "Unknown exception occurred");
     }
 
