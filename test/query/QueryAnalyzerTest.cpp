@@ -1,14 +1,15 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include "ID.h"
-#include "LocalMemory.h"
-#include "QueryInterpreter.h"
-#include "QueryTester.h"
 #include "TuringDB.h"
+#include "QueryInterpreter.h"
+#include "SystemManager.h"
+#include "LocalMemory.h"
+#include "views/GraphView.h"
+#include "ID.h"
+#include "QueryTester.h"
 #include "TypingGraph.h"
 #include "TuringTest.h"
-#include "views/GraphView.h"
 
 using namespace db;
 

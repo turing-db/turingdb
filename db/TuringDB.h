@@ -2,7 +2,6 @@
 
 #include <string_view>
 
-#include "SystemManager.h"
 #include "QueryStatus.h"
 #include "QueryCallback.h"
 #include "versioning/CommitHash.h"
@@ -10,6 +9,7 @@
 
 namespace db {
 
+class SystemManager;
 class LocalMemory;
 class JobSystem;
 class Block;
@@ -20,7 +20,7 @@ public:
     ~TuringDB();
 
     SystemManager& getSystemManager() {
-        return _systemManager;
+        return *_systemManager;
     }
 
     JobSystem& getJobSystem() {
@@ -50,7 +50,7 @@ public:
                       ChangeID change = ChangeID::head());
 
 private:
-    SystemManager _systemManager;
+    std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
 };
 

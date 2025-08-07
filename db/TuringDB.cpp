@@ -1,12 +1,14 @@
 #include "TuringDB.h"
 
+#include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "JobSystem.h"
 
 using namespace db;
 
 TuringDB::TuringDB()
-    : _jobSystem(JobSystem::create())
+    : _systemManager(std::make_unique<SystemManager>()),
+    _jobSystem(JobSystem::create())
 {
 }
 
@@ -20,7 +22,7 @@ QueryStatus TuringDB::query(std::string_view query,
                             QueryCallback callback,
                             CommitHash commit,
                             ChangeID change) {
-    QueryInterpreter interp(&_systemManager, _jobSystem.get());
+    QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
     return interp.execute(query, graphName, mem, callback, [](const auto) {}, commit, change);
 }
 
@@ -31,7 +33,7 @@ QueryStatus TuringDB::query(std::string_view query,
                             QueryHeaderCallback headerCallback,
                             CommitHash commit,
                             ChangeID change) {
-    QueryInterpreter interp(&_systemManager, _jobSystem.get());
+    QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
     return interp.execute(query, graphName, mem, callback, headerCallback, commit, change);
 }
 
@@ -40,6 +42,6 @@ QueryStatus TuringDB::query(std::string_view query,
                             LocalMemory* mem,
                             CommitHash commit,
                             ChangeID change) {
-    QueryInterpreter interp(&_systemManager, _jobSystem.get());
+    QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
     return interp.execute(query, graphName, mem, [](const auto&) {}, [](const auto) {}, commit, change);
 }

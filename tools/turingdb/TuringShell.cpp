@@ -6,9 +6,10 @@
 #include <spdlog/spdlog.h>
 #include <termcolor/termcolor.hpp>
 
-#include "ChangeManager.h"
-#include "Graph.h"
 #include "TuringDB.h"
+#include "Graph.h"
+#include "SystemManager.h"
+#include "ChangeManager.h"
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"

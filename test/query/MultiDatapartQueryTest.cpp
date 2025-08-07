@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "LocalMemory.h"
+#include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
 #include "SimpleGraph.h"

@@ -6,15 +6,16 @@
 #include "TuringException.h"
 #include "TuringTest.h"
 
-#include "SimpleGraph.h"
-#include "GraphLoader.h"
 #include "TuringDB.h"
 #include "LocalMemory.h"
 #include "Graph.h"
+#include "SystemManager.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
+#include "GraphLoader.h"
+#include "SimpleGraph.h"
 
 using namespace db;
 using namespace turing::test;
@@ -33,6 +34,7 @@ public:
         if (FileUtils::exists(_workingPath.filename())) {
             FileUtils::removeDirectory(_workingPath.filename());
         }
+
         loadDumpLoadSimpleDb();
     }
 

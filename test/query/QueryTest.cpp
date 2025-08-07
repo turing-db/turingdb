@@ -3,6 +3,7 @@
 #include "LocalMemory.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Change.h"
+#include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
 #include "SimpleGraph.h"

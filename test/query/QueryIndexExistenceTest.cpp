@@ -1,15 +1,16 @@
 #include <gtest/gtest.h>
 
-#include "LocalMemory.h"
-#include "Path.h"
-#include "QueryInterpreter.h"
 #include "TuringDB.h"
-#include "SimpleGraph.h"
-#include "QueryTester.h"
+#include "SystemManager.h"
+#include "QueryInterpreter.h"
+#include "LocalMemory.h"
 #include "TuringTest.h"
 #include "GraphDumper.h"
 #include "GraphLoader.h"
 #include "Graph.h"
+#include "SimpleGraph.h"
+#include "Path.h"
+#include "QueryTester.h"
 
 using namespace db;
 
