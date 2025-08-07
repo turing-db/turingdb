@@ -47,7 +47,7 @@ protected:
 
 // Dump graph, load it: index should not be present
 // TODO: This test should fail when index dumping is implemented.
-TEST_F(QueryIndexExistenceTest, noStringApproxIndex) {
+TEST_F(QueryIndexExistenceTest, noStringIndex) {
     GraphDumper dumper;
     auto res = dumper.dump(*_builtGraph, _workingPath);
     if (!res) {
