@@ -17,13 +17,13 @@ StringIndex::StringIndex()
 {
 }
 
-StringIndex::StringIndex(size_t sz)
+StringIndex::StringIndex(size_t nodeCount)
     : _nextFreeID(0),
     _root(PrefixTreeNode::create((*this)))
 {
-    _nodeManager.reserve(sz - 1);
+    _nodeManager.reserve(nodeCount - 1);
     // sz - 1 nodes since we have root already.
-    for (size_t i = 0 ; i < sz - 1; i++) {
+    for (size_t i = 0 ; i < nodeCount - 1; i++) {
         PrefixTreeNode::create(*this);
     }
 }

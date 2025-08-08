@@ -90,7 +90,7 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
     ensureSpace(owners.size() * sizeof(uint64_t), _auxWriter);
     for (size_t i = 0; i < owners.size(); i++) {
-        uint64_t id = owners[i].getValue();
+        const uint64_t id = owners[i].getValue();
         _auxWriter.writeToCurrentPage(id);
     }
     return {};
