@@ -1,6 +1,7 @@
 #include "StringIndexerLoader.h"
 
 #include <cstdint>
+#include "spdlog/spdlog.h"
 #include <memory>
 
 #include "AlignedBuffer.h"
@@ -12,7 +13,6 @@
 #include "StringIndexerDumpConstants.h"
 #include "indexes/StringIndex.h"
 #include "GraphDumpHelper.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -79,7 +79,7 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     for (size_t i = 0; i < numIndexes; i++) {
         // PropertyID that this index is indexing
         ensureSpace(sizeof(uint16_t), it, _reader);
-        auto propId = it.get<uint16_t>();
+        const auto propId = it.get<uint16_t>();
 
         auto loadResult = loadIndex(it, auxIt);
         if (!loadResult) {
@@ -87,7 +87,7 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
             return loadResult.get_unexpected();
         }
 
-        bool res = idxer->addIndex(propId, std::move(loadResult.value()));
+        const bool res = idxer->addIndex(propId, std::move(loadResult.value()));
         if (!res) {
             spdlog::error("Could not emplace index at property id {}", propId);
             return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);

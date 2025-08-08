@@ -13,7 +13,7 @@ public:
     explicit StringIndexerLoader(fs::FilePageReader& reader,
                                  fs::FilePageReader& auxReader)
         : _reader(reader),
-          _auxReader(auxReader)
+        _auxReader(auxReader)
     {
     }
 

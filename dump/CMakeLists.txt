@@ -5,8 +5,7 @@ set(dump_sources GraphLoader.cpp
                  DataPartDumper.cpp
                  DumpResult.cpp
                  StringIndexerDumper.cpp
-                 StringIndexerLoader.cpp
-)
+                 StringIndexerLoader.cpp)
 
 
 add_library(turing_db_dump_s STATIC ${dump_sources})

@@ -23,7 +23,8 @@
 
 using namespace db;
 
-DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const GraphMetadata& metadata,
+DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
+                                                   const GraphMetadata& metadata,
                                                    VersionController& versionController) {
     Profile profile {"DataPartLoader::load"};
 
@@ -282,6 +283,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         }
     }
 
+    // Dump node StringIndexer
     {
         const fs::Path nodeStrIndexerPath = path / "node-string-prop-indexer";
         const fs::Path nodeStrIndexerPathAlt = path / "node-string-prop-indexer-owners";
@@ -303,8 +305,10 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
                 DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, auxReader.error());
         }
 
-        auto l = StringIndexerLoader(reader.value(), auxReader.value());
-        auto res = l.load();
+        auto nodeStringIndexLoader =
+            StringIndexerLoader(reader.value(), auxReader.value());
+
+        auto res = nodeStringIndexLoader.load();
         if (!res) {
             spdlog::error(res.error().fmtMessage());
             return DumpError::result(
@@ -314,6 +318,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         part->_nodeStrPropIdx = std::move(res.value());
     }
 
+    // Dump edge StringIndexer
     {
         const fs::Path edgeStrIndexerPath = path / "edge-string-prop-indexer";
         const fs::Path edgeStrIndexerPathAlt = path / "edge-string-prop-indexer-owners";
@@ -335,8 +340,10 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
                 DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, auxReader.error());
         }
 
-        auto l = StringIndexerLoader(reader.value(), auxReader.value());
-        auto res = l.load();
+        auto edgeStringIndexLoader =
+            StringIndexerLoader(reader.value(), auxReader.value());
+
+        auto res = edgeStringIndexLoader.load();
         if (!res) {
             spdlog::error(res.error().fmtMessage());
             return DumpError::result(

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include "spdlog/spdlog.h"
 
 #include "AlignedBuffer.h"
 #include "DumpConfig.h"
@@ -13,7 +14,6 @@
 #include "TuringException.h"
 #include "indexes/StringIndex.h"
 #include "StringIndexerDumpConstants.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -34,7 +34,8 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
     _writer.finish();
 
     if (_writer.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_WRITE_PROPS, _writer.error().value());
+        return DumpError::result(DumpErrorType::COULD_NOT_WRITE_PROPS,
+                                 _writer.error().value());
     }
 
     return {};
@@ -42,13 +43,13 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 
 DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringIndex>& idx) {
     ensureSpace(sizeof(size_t), _writer);
-    size_t sz = idx->getNodeCount();
+    const size_t size = idx->getNodeCount();
 
     // 1.  Number of nodes in this index prefix tree
-    _writer.writeToCurrentPage(sz);
+    _writer.writeToCurrentPage(size);
 
     // 2. Dump each node
-    for (size_t i = 0; i < sz; i++) {
+    for (size_t i = 0; i < size; i++) {
         if (auto nodeResult = dumpNode(idx->getNode(i)); !nodeResult ) {
             return nodeResult.get_unexpected();
         }
@@ -61,8 +62,8 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
     ensureSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
     // 1. Write internal node data
     { // Space written in this block is accounted for by above call to @ref ensureSpace
-        auto& children = node->getChildren();
-        size_t nonNullChildren =
+        const auto& children = node->getChildren();
+        const size_t nonNullChildren =
             std::ranges::count_if(children, [](auto ptr) { return ptr != nullptr; });
 
         _writer.writeToCurrentPage(node->getID());
@@ -79,7 +80,7 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
     }
 
     // 2. Write owners to external file
-    if (auto ownersResult = dumpOwners(node->getOwners()); !ownersResult) {
+    if (const auto ownersResult = dumpOwners(node->getOwners()); !ownersResult) {
         return ownersResult.get_unexpected();
     }
 

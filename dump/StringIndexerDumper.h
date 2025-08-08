@@ -1,9 +1,10 @@
 #pragma once
 
+#include <memory>
+
 #include "DumpResult.h"
 #include "FilePageWriter.h"
 #include "indexers/StringPropertyIndexer.h"
-#include <memory>
 
 namespace db {
 
@@ -12,7 +13,7 @@ public:
     explicit StringIndexerDumper(fs::FilePageWriter& writer,
                                  fs::FilePageWriter& auxWriter)
         : _writer(writer),
-          _auxWriter(auxWriter)
+        _auxWriter(auxWriter)
     {
     }
 

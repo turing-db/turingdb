@@ -215,7 +215,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         }
     }
 
-    // Dumping node String approx property Indexer
+    // Dump node StringIndexer
     {
         Profile profile {"DataPartDumper::dump <node string prop indexer>"};
         const auto& index = part.getNodeStrPropIndexer();
@@ -239,8 +239,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         }
     }
 
-
-    // Dumping edge String approx property Indexer
+    // Dump edge StringIndexer
     {
         Profile profile {"DataPartDumper::dump <edge string prop indexer>"};
         const auto& index = part.getEdgeStrPropIndexer();

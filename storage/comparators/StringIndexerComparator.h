@@ -3,6 +3,7 @@
 #include "indexers/StringPropertyIndexer.h"
 
 namespace db {
+
 class StringIndexerComparator {
 public:
     [[nodiscard]] static bool same(const StringPropertyIndexer& a,
@@ -13,4 +14,5 @@ private:
     [[nodiscard]] static bool nodeSame(StringIndex::PrefixTreeNode* a,
                                        StringIndex::PrefixTreeNode* b);
 };
+
 }

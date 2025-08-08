@@ -80,7 +80,7 @@ public:
     };
 
     StringIndex();
-    StringIndex(size_t sz);
+    StringIndex(size_t size);
 
     StringIndex(const StringIndex&) = delete;
     StringIndex& operator=(const StringIndex&) = delete;
