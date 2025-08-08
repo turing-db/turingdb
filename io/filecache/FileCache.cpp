@@ -1,13 +1,16 @@
 #include "FileCache.h"
-#include "AwsS3ClientWrapper.h"
-#include "MockS3Client.h"
 
 #include <spdlog/spdlog.h>
+
+#include "AwsS3ClientWrapper.h"
+#include "MockS3Client.h"
 
 using namespace db;
 
 template <typename ClientType>
-FileCache<ClientType>::FileCache(const fs::Path& graphDir, const fs::Path& dataDir, ClientType& clientWrapper)
+FileCache<ClientType>::FileCache(const fs::Path& graphDir,
+                                 const fs::Path& dataDir,
+                                 ClientType& clientWrapper)
     :_graphsDir(graphDir),
     _dataDir(dataDir),
     _s3Client(clientWrapper)
@@ -18,7 +21,6 @@ template <typename ClientType>
 FileCacheResult<void> FileCache<ClientType>::listLocalGraphs(std::vector<fs::Path>& graphs) {
     const auto list = fs::Path(_graphsDir).listDir();
     if (!list) {
-
         return FileCacheError::result(FileCacheErrorType::LIST_LOCAL_GRAPHS_FAILED);
     }
 
@@ -31,7 +33,7 @@ FileCacheResult<void> FileCache<ClientType>::listLocalGraphs(std::vector<fs::Pat
 
 template <typename ClientType>
 FileCacheResult<void> FileCache<ClientType>::listGraphs(std::vector<std::string>& graphs) {
-    auto prefix = fmt::format("{}/graphs/", _userId);
+    const auto prefix = fmt::format("{}/graphs/", _userId);
     if (auto res = _s3Client.listFolders(_bucketName, prefix, graphs); !res) {
         return FileCacheError::result(FileCacheErrorType::LIST_GRAPHS_FAILED, res.error());
     }

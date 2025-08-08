@@ -13,7 +13,9 @@ class Graph;
 template <typename ClientType>
 class FileCache {
 public:
-    FileCache(const fs::Path& graphDir, const fs::Path& dataDir, ClientType& clientWrapper);
+    FileCache(const fs::Path& graphDir,
+              const fs::Path& dataDir,
+              ClientType& clientWrapper);
 
     FileCacheResult<void> saveGraph(std::string_view graphName);
     FileCacheResult<void> loadGraph(std::string_view graphName);
