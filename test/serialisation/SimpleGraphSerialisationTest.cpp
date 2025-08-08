@@ -12,18 +12,14 @@
 #include "LocalMemory.h"
 #include "Graph.h"
 #include "comparators/GraphComparator.h"
-#include "indexers/StringPropertyIndexer.h"
-#include "reader/GraphReader.h"
-#include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
 using namespace db;
 using namespace turing::test;
 
-
 class SimpleGraphSerialisationTest : public TuringTest {
 public:
-    void initialize()  {
+    void initialize() {
         SystemManager& sysMan = _db.getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
@@ -44,7 +40,6 @@ protected:
     LocalMemory _mem;
     fs::Path _workingPath;
 
-
 private:
     void loadDumpLoadSimpleDb() {
         GraphDumper dumper;
@@ -62,13 +57,10 @@ private:
     }
 };
 
-
 TEST_F(SimpleGraphSerialisationTest, indexInitialisation) {
     ASSERT_TRUE(GraphComparator::same(*_builtGraph, *_loadedGraph));
 }
 
 int main(int argc, char** argv) {
-    return turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 3;
-    });
+    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 3; });
 }

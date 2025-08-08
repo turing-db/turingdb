@@ -14,8 +14,6 @@
 #include "GraphDumpHelper.h"
 #include "spdlog/spdlog.h"
 
-// TODO: Add new error type for this
-
 using namespace db;
 
 namespace {
@@ -155,7 +153,7 @@ DumpResult<void> StringIndexerLoader::loadNode(std::unique_ptr<StringIndex>& ind
     // 2. Read owners from external file
     if (auto ownersResult = loadOwners(node, numOwners, auxIt); !ownersResult) {
         return ownersResult.get_unexpected();
-    };
+    }
 
     if (_reader.errorOccured()) {
         return DumpError::result(DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER,

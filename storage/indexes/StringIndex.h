@@ -139,7 +139,6 @@ private:
      */
     StringIndexIterator find(std::string_view sv) const;
 
-
     /**
      * @brief Implements
      * https://www.notion.so/turingbio/Approximate-String-Matching-21e3aad664c880dba168d3f65a3dac73?source=copy_link#2313aad664c880c78884e97e8da3eed1

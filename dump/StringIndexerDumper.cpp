@@ -47,7 +47,7 @@ DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringInde
     // 1.  Number of nodes in this index prefix tree
     _writer.writeToCurrentPage(sz);
 
-    // 2. Load each node
+    // 2. Dump each node
     for (size_t i = 0; i < sz; i++) {
         if (auto nodeResult = dumpNode(idx->getNode(i)); !nodeResult ) {
             return nodeResult.get_unexpected();
@@ -95,7 +95,7 @@ DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& ow
     return {};
 }
 
-bool StringIndexerDumper::ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr) {
+void StringIndexerDumper::ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr) {
     if (requiredSpace > DumpConfig::PAGE_SIZE) {
         spdlog::error("Attempting to write {} bytes which exceedes page size of {}",
                      requiredSpace, DumpConfig::PAGE_SIZE);
@@ -104,5 +104,4 @@ bool StringIndexerDumper::ensureSpace(size_t requiredSpace, fs::FilePageWriter& 
     if (wr.buffer().avail() < requiredSpace) {
         wr.nextPage();
     }
-    return true;
 }

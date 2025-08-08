@@ -39,7 +39,7 @@ bool StringIndexerComparator::nodeSame(StringIndex::PrefixTreeNode* a,
         return false;
     }
 
-    for (size_t i = 0 ; i < a->getOwners().size(); i ++) {
+    for (size_t i = 0; i < a->getOwners().size(); i++) {
         if (a->getOwners()[i] != b->getOwners()[i]) {
             spdlog::error("Mismatching owners vector");
             return false;
@@ -85,7 +85,7 @@ bool StringIndexerComparator::nodeSame(StringIndex::PrefixTreeNode* a,
 }
 
 bool StringIndexerComparator::same(const StringPropertyIndexer& a,
-                                         const StringPropertyIndexer& b) {
+                                   const StringPropertyIndexer& b) {
     // Same number of properties indexed
     if (a.size() != b.size()) {
         spdlog::error("Indexers are not same size");
@@ -97,7 +97,8 @@ bool StringIndexerComparator::same(const StringPropertyIndexer& a,
 
     for (size_t i {0}; ita != a.end(); ita++, itb++, i++) {
         if (ita->first != itb->first) {
-            spdlog::error("A has index for propID {} whilst B has {}", ita->first, itb->first);
+            spdlog::error("A has index for propID {} whilst B has {}", ita->first,
+                          itb->first);
             if (b.find(ita->first) == b.end()) {
                 spdlog::error("B does not have property ID {}", ita->first);
             }
