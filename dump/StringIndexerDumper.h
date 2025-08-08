@@ -10,7 +10,7 @@ namespace db {
 class StringIndexerDumper {
 public:
     explicit StringIndexerDumper(fs::FilePageWriter& writer,
-                                       fs::FilePageWriter& auxWriter)
+                                 fs::FilePageWriter& auxWriter)
         : _writer(writer),
           _auxWriter(auxWriter)
     {
@@ -22,13 +22,12 @@ private:
     fs::FilePageWriter& _writer;
     fs::FilePageWriter& _auxWriter;
 
-    bool ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr);
+    void ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr);
 
     DumpResult<void> dumpIndex(const std::unique_ptr<StringIndex>& idx);
 
     DumpResult<void> dumpNode(const StringIndex::PrefixTreeNode* node);
     DumpResult<void> dumpOwners(const std::vector<EntityID>& owners);
-
 };
 
 }

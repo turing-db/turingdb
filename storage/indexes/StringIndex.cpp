@@ -29,7 +29,6 @@ StringIndex::StringIndex(size_t sz)
 }
 
 void PrefixTreeNode::setChild(PrefixTreeNode* child, size_t idx) {
-    // @ref charToIndex handles bounds checking
     if (idx > ALPHABET_SIZE) [[unlikely]] {
         throw TuringException("Queried child at index" + std::to_string(idx)
                               + " which is out of range (max: "

@@ -188,7 +188,6 @@ public:
         return std::span<const uint8_t> {ptr, count};
     }
 
-
     template <CharPrimitive T>
     std::basic_string_view<T> get(size_t charCount) {
         const auto* ptr = reinterpret_cast<const T*>(_data);

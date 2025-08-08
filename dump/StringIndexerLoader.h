@@ -11,9 +11,11 @@ namespace db {
 class StringIndexerLoader {
 public:
     explicit StringIndexerLoader(fs::FilePageReader& reader,
-                                       fs::FilePageReader& auxReader)
+                                 fs::FilePageReader& auxReader)
         : _reader(reader),
-          _auxReader(auxReader) {}
+          _auxReader(auxReader)
+    {
+    }
 
     [[nodiscard]] DumpResult<std::unique_ptr<StringPropertyIndexer>> load();
 
@@ -23,7 +25,6 @@ private:
 
     DumpResult<std::unique_ptr<StringIndex>> loadIndex(fs::AlignedBufferIterator& it,
                                                        fs::AlignedBufferIterator& auxIt);
-
 
     DumpResult<void> loadNode(std::unique_ptr<StringIndex>& index,
                               fs::AlignedBufferIterator& it,
