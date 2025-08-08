@@ -7,7 +7,6 @@ set(dump_sources GraphLoader.cpp
                  StringIndexerDumper.cpp
                  StringIndexerLoader.cpp)
 
-
 add_library(turing_db_dump_s STATIC ${dump_sources})
 
 target_include_directories(turing_db_dump_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
