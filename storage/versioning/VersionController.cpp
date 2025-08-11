@@ -49,9 +49,7 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
 }
 
 CommitHash VersionController::getHeadHash() const {
-    std::scoped_lock lock {_mutex};
-    const auto* head = _head.load();
-
+    const Commit* head = _head.load();
     if (!head) {
         return CommitHash::head();
     }
