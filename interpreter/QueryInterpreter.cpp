@@ -110,7 +110,7 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     ExecutionContext execCtxt(_sysMan, _jobSystem, view, graphName, commitHash, changeID, &txRes.value());
     try {
         Executor executor;
-        executor->run(&execCtxt, planner.getPipeline());
+        executor.run(&execCtxt, planner.getPipeline());
     } catch (const PipelineException& e) {
         return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
     } catch (const std::exception& e) {
