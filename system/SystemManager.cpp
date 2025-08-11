@@ -315,7 +315,7 @@ ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, Com
         return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
     }
 
-    auto* graph = it->second.get();
+    Graph* graph = it->second.get();
     auto change = graph->newChange(baseHash);
 
     return _changes->storeChange(graph, std::move(change));
