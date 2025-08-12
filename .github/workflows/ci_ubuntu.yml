@@ -18,6 +18,8 @@ jobs:
             submodules: recursive
             # Ensure credentials are set for submodule fetches
             persist-credentials: true
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
     - name: Install dependencies
       run: ./dependencies.sh
     - name: Configure cmake
