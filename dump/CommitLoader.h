@@ -10,6 +10,7 @@
 #include "Path.h"
 #include "GraphDumpHelper.h"
 #include "DumpResult.h"
+#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/VersionController.h"

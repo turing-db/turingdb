@@ -312,12 +312,6 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         }
 
         part->_nodeStrPropIdx = std::move(res.value());
-        for (const auto& [prop, idx] : part->getNodeStrPropIndexer()) {
-            for (const auto& it : *idx) {
-                spdlog::info(it.word);
-            }
-        }
-        part->_nodeStrPropIdx->setInitialised();
     }
 
     {
@@ -350,10 +344,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path, const G
         }
 
         part->_edgeStrPropIdx = std::move(res.value());
-        part->_edgeStrPropIdx->setInitialised();
     }
-
-    part->_edgeStrPropIdx->setInitialised();
 
     part->_initialized = true;
 
