@@ -16,7 +16,6 @@ class StringIndex;
 
 class StringIndexUtils {
 public:
-    
     // NOTE: Better to do lookup table?
     static size_t charToIndex(char c) {
         // Children array layout:

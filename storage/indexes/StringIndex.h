@@ -109,7 +109,7 @@ public:
           _val()
     {
     }
-          
+
     const std::vector<PrefixTreeNode*> getChildren() const { return _children; }
 
     PrefixTreeNode* getChild(char c) const;
@@ -129,8 +129,6 @@ private:
     std::vector<EntityID> _owners;
     std::vector<PrefixTreeNode*> _children;
     char _val {'\0'};
-
-    
 };
 
 
