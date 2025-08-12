@@ -392,13 +392,11 @@ TEST_F(StringIndexTest, edgeCaseTrie) {
 
     std::vector<NodeID> owners;
     nameIdx->query(owners, "zebraz");
-    EXPECT_THAT(owners, UnorderedElementsAre(0))
-            << "Query for 'zebraz' failed";
+    EXPECT_THAT(owners, UnorderedElementsAre(0)) << "Query for 'zebraz' failed";
 
     owners.clear();
     nameIdx->query(owners, "999");
-    EXPECT_THAT(owners, UnorderedElementsAre(1))
-            << "Query for '999' failed";
+    EXPECT_THAT(owners, UnorderedElementsAre(1)) << "Query for '999' failed";
 
     const auto& edgePropIdx = datapart->getEdgeStrPropIndexer();
     ASSERT_EQ(1, edgePropIdx.size());

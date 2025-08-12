@@ -160,8 +160,8 @@ void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) 
         while (!q.empty()) {
             const PrefixTreeNode* n = q.front();
             q.pop_front();
-            for (size_t i {0}; i < n->getChildren().size(); i++) {
-                if (PrefixTreeNode* child = n->getChildren()[i]) {
+            for (size_t i = 0; i < PrefixTreeNode::ALPHABET_SIZE; i++) {
+                if (PrefixTreeNode* child = n->getChild(i)) {
                     q.push_back(child);
                 }
             }

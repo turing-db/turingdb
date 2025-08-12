@@ -160,10 +160,11 @@ StringIndex::StringIndexIterator StringIndex::find(std::string_view sv) const {
     }
 
     for (const char c : sv) {
-        if (!node->getChild(c)) {
+        const size_t idx = PrefixTreeNode::charToIndex(c);
+        if (!node->getChild(idx)) {
             return StringIndexIterator {nullptr, NOT_FOUND};
         }
-        node = node->getChild(c);
+        node = node->getChild(idx);
     }
     const FindResult res = node->isComplete() ? FOUND : FOUND_PREFIX;
     return StringIndexIterator{node, res};
@@ -222,7 +223,8 @@ PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
     PrefixTreeNode* thresholdPoint {nullptr};
 
     for (size_t i = 0; const char c : query) {
-        if (!node->getChild(c)) {
+        const size_t idx = PrefixTreeNode::charToIndex(c);
+        if (!node->getChild(idx)) {
             return thresholdPoint;
         }
         // Return the earliest point in the tree at which we find a matching prefix of
@@ -231,7 +233,7 @@ PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
             thresholdPoint = node;
             return thresholdPoint;
         }
-        node = node->getChild(c);
+        node = node->getChild(idx);
         i++;
     }
     return thresholdPoint;
