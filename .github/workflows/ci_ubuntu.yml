@@ -36,5 +36,8 @@ jobs:
       run: cd ${{ github.workspace }}/build/turing_install/samples && source ${{ github.workspace }}/setup.sh && bash ./run-samples.sh
     - name: Run regress
       shell: bash
-      run: cd ${{ github.workspace }}/build/ && source ${{ github.workspace }}/setup.sh && make run_regress
+      run: |
+        cd ${{ github.workspace }}/build
+        source /home/runner/work/turingdb/turingdb/setup.sh
+        make run_regress || exit $?
 
