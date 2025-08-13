@@ -1,6 +1,7 @@
 #include "TuringShell.h"
 
 #include <linenoise.h>
+#include <regex>
 #include <tabulate/table.hpp>
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
@@ -252,6 +253,14 @@ std::string TuringShell::composePrompt() {
 
 template <typename T>
 void tabulateWrite(tabulate::RowStream& rs, const T& value) {
+    // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
+    // if the `/query -d "history"` endpoint is hit. When writing to CLI we replace double
+    // escaped with single escape so that it is rendered in terminal correctly.
+    if constexpr (std::same_as<T, std::string>) {
+        std::regex re(R"(\\n)");  
+        rs << std::regex_replace(value, re, "\n");
+        return;
+    }
     rs << value;
 }
 
