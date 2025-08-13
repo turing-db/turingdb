@@ -25,10 +25,11 @@ void HistoryStep::execute() {
         if (commit.isHead()) {
             str += " (HEAD)";
         }
+        str += "\\n";
 
         size_t i = 0;
         for (const auto& part : commit.dataparts()) {
-            str += fmt::format(" - Part {}: {} nodes, {} edges",
+            str += fmt::format(" - Part {}: {} nodes, {} edges\\n",
                                i + 1, part->getNodeCount(), part->getEdgeCount());
             i++;
         }
