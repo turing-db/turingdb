@@ -12,5 +12,8 @@ uv init
 uv add turingdb
 
 uv run create_turingdb.py
+testres=$?
 
 pkill turingdb
+
+exit $testres

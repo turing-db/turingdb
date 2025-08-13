@@ -19,9 +19,10 @@ endmacro()
 # subdirectories
 add_subdirectory(create_turingdb_object)
 add_subdirectory(list_graphs)
+add_subdirectory(change_submit_alice)
 
 # write run_regress target
-set(RUN_REGRESS_CONTENT "#!/bin/bash\n\n")
+set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")
 foreach(test IN ITEMS ${REGRESS_LIST})
     set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}bash ${test}\n")
 endforeach()
