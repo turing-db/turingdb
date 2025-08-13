@@ -1,6 +1,7 @@
 #include "DBServerProcessor.h"
 
 #include <nlohmann/json.hpp>
+#include <regex>
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -150,7 +151,14 @@ void DBServerProcessor::query() {
             payload.end();
         }
         payload.key("error");
-        payload.value(QueryStatusDescription::value(res.getStatus()));
+        const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
+        // For valid JSON, need double escape characters
+        const std::regex newLine(R"(\n)");
+        const std::regex tab(R"(\t)");
+        std::string errorMsg = res.getError();
+        errorMsg = std::regex_replace(errorMsg, newLine, R"(\\n)");
+        errorMsg = std::regex_replace(errorMsg, tab, R"(\\t)");
+        payload.value(errorType + errorMsg);
         return;
     }
 
