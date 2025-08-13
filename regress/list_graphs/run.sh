@@ -11,6 +11,6 @@ rm -f pyproject.toml
 uv init
 uv add turingdb
 
-uv run create_turingdb.py
+uv run main.py
 
 pkill turingdb
