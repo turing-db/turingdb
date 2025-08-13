@@ -39,5 +39,5 @@ jobs:
       run: |
         cd ${{ github.workspace }}/build
         source /home/runner/work/turingdb/turingdb/setup.sh
-        make run_regress || exit $?
-
+        make run_regress 2> regress_error
+        if [ ! -f ./regress_error ]; then exit 1; fi
