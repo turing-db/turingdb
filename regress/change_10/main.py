@@ -7,7 +7,7 @@ client.set_graph(graph)
 
 for i in range(11):
     change = client.query("CHANGE NEW")["Change ID"][0]
-    client.checkout(change=str(change))
+    client.checkout(change=int(change))
     print(f"Submitting change {change}")
     client.query("CHANGE SUBMIT")
     client.checkout()
