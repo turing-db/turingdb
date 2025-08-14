@@ -8,7 +8,7 @@ void HttpProxy<server>::setBackendServers(const std::vector<std::pair<std::strin
 }
 
 void add_cors_headers(httplib::Response& res) {
-    res.set_header("Access-Control-Allow-Origin", "https://www.turing.bio");
+    res.set_header("Access-Control-Allow-Origin", "https://console.turingdb.ai");
     res.set_header("Access-Control-Allow-Credentials", "true");
     res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
@@ -17,33 +17,10 @@ void add_cors_headers(httplib::Response& res) {
 
 template <ServerType server>
 void HttpProxy<server>::setupRoutes() {
-    _server.Options(".*", [](const httplib::Request& req, httplib::Response& res) {
+    _server.Options(R"(.*)", [](const httplib::Request& req, httplib::Response& res) {
         add_cors_headers(res);
         res.status = 204;  // No Content
         return;
-    });
-
-    _server.Post(R"(/sdk/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
-        _requestCount++;
-
-        const std::string instanceId = extractInstanceId(req);
-        std::string token;
-
-        if (token = extractBearerToken(req); token.empty()) {
-            const std::string session = extractSessionFromCookie(req);
-            token = _encryptor.decrypt(session);
-        }
-
-        if (!validateAuth(token, res)) {
-            return;
-        }
-        forwardRequest(req, "POST", req.target, token, instanceId, 6666, res);
-
-#ifdef TURING_PROFILE
-        std::string profileLogs;
-        Profiler::dump(profileLogs);
-        std::cout << profileLogs << std::endl;
-#endif
     });
 
     _server.Get("/auth", [this](const httplib::Request& req, httplib::Response& res) {
@@ -57,18 +34,38 @@ void HttpProxy<server>::setupRoutes() {
 
         const std::string encryptedToken = _encryptor.encrypt(token);
         std::string cookie = "session=" + encryptedToken + "; HttpOnly" + // Prevent JS access
-                             "; Secure" +                                 // HTTPS only
-                             "; SameSite=Lax" +                           // CSRF protection
-                             "; Max-Age=3600" +                           // 1 hour expiration
-                             "; Path=/" +                                 // Available site-wide
-                             "; Domain=.turing.bio";                   // Available site-wide
+            "; Secure" +                                 // HTTPS only
+            "; SameSite=Lax" +                           // CSRF protection
+            "; Max-Age=3600" +                           // 1 hour expiration
+            "; Path=/" +                                 // Available site-wide
+            "; Domain=.turingdb.ai";                   // Available site-wide
 
         res.set_header("Set-Cookie", cookie);
 
         res.set_content("Authentication successful", "text/plain");
     });
 
-    _server.Get("/(.*)", [this](const httplib::Request& req, httplib::Response& res) {
+    _server.Post(R"(/sdk/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
+        _requestCount++;
+
+        const std::string instanceId = extractInstanceId(req);
+        std::string token;
+
+        token = extractBearerToken(req);
+
+        if (!validateAuth(token, res)) {
+            return;
+        }
+        forwardRequest(req, "POST", req.target.substr(4), token, instanceId, 6666, res);
+
+#ifdef TURING_PROFILE
+        std::string profileLogs;
+        Profiler::dump(profileLogs);
+        std::cout << profileLogs << std::endl;
+#endif
+    });
+
+    _server.Get(R"(/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
         _requestCount++;
         add_cors_headers(res);
 
@@ -80,10 +77,9 @@ void HttpProxy<server>::setupRoutes() {
 
         const std::string instanceId = extractInstanceIdFromDomain(req);
         forwardRequest(req, "GET", req.target, token, instanceId, 5001, res);
-        // res.set_content("decryption successful", "text/plain");
     });
 
-    _server.Post("/(.*)", [this](const httplib::Request& req, httplib::Response& res) {
+    _server.Post(R"(/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
         _requestCount++;
         add_cors_headers(res);
 
@@ -94,7 +90,7 @@ void HttpProxy<server>::setupRoutes() {
         }
 
         const std::string instanceId = extractInstanceIdFromDomain(req);
-        forwardRequest(req, "GET", req.target, token, instanceId, 6666, res);
+        forwardRequest(req, "POST", req.target, token, instanceId, 5001, res);
         // res.set_content("decryption successful", "text/plain");
     });
 

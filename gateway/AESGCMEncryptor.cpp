@@ -69,19 +69,23 @@ std::string AESGCMEncryptor::encrypt(const std::string& plaintext) {
     result.insert(result.end(), ciphertext.begin(), ciphertext.end());
     result.insert(result.end(), tag.begin(), tag.end());
 
-    return Base64::encode(result);
+    std::string ret;
+
+    Base64::encode(result,ret);
+    return ret;
 }
 std::string AESGCMEncryptor::decrypt(const std::string& encrypted_data) {
-    auto data = Base64::decode(encrypted_data);
+    std::vector<uint8_t>bytes;
+    Base64::decode(encrypted_data, bytes);
 
-    if (data.size() < IV_SIZE + TAG_SIZE) {
+    if (bytes.size() < IV_SIZE + TAG_SIZE) {
         throw std::runtime_error("Invalid encrypted data");
     }
 
     // Extract components
-    std::vector<unsigned char> iv(data.begin(), data.begin() + IV_SIZE);
-    std::vector<unsigned char> tag(data.end() - TAG_SIZE, data.end());
-    std::vector<unsigned char> ciphertext(data.begin() + IV_SIZE, data.end() - TAG_SIZE);
+    std::vector<unsigned char> iv(bytes.begin(), bytes.begin() + IV_SIZE);
+    std::vector<unsigned char> tag(bytes.end() - TAG_SIZE, bytes.end());
+    std::vector<unsigned char> ciphertext(bytes.begin() + IV_SIZE, bytes.end() - TAG_SIZE);
     std::vector<unsigned char> plaintext(ciphertext.size());
 
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
