@@ -1,6 +1,7 @@
 #include "TuringShell.h"
 
 #include <linenoise.h>
+#include <regex>
 #include <tabulate/table.hpp>
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
@@ -285,6 +286,14 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
     } break;
 
 
+// Cleans double-escaped characters to single-escaped characters
+void TuringShell::formatMessage(std::string& msg) {
+        const std::regex newLine(R"(\\n)");
+        const std::regex tab(R"(\\t)");
+        msg = std::regex_replace(msg, newLine, "\n");
+        msg = std::regex_replace(msg, tab, "\t");
+}
+
 void TuringShell::processLine(std::string& line) {
 
     {
@@ -368,7 +377,10 @@ void TuringShell::processLine(std::string& line) {
 
     if (!res.isOk()) {
         if (res.hasErrorMessage()) {
-            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError());
+            std::string errorMsg = res.getError();
+            formatMessage(errorMsg);
+            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()),
+                          errorMsg);
         } else {
             spdlog::error("{}", QueryStatusDescription::value(res.getStatus()));
         }
