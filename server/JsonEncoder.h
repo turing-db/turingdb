@@ -62,8 +62,9 @@ public:
                         writer.value(ValueTypeName::value(ValueType::UInt64));
                     }
                 }
-                break;
             }
+            break;
+
             case QueryCommand::Kind::EXPLAIN_COMMAND: {
                 writer.value("Plan Explanation");
                 writer.end();
@@ -71,8 +72,9 @@ public:
                 writer.key("column_types");
                 writer.arr();
                 writer.value(ValueTypeName::value(ValueType::String));
-                break;
             }
+            break;
+
             case QueryCommand::Kind::HISTORY_COMMAND: {
                 // JSON doesn't support the single escaped
                 // newline character
@@ -80,8 +82,9 @@ public:
 
                 writer.key("column_types");
                 writer.arr();
-                break;
             }
+            break;
+
             case QueryCommand::Kind::CHANGE_COMMAND: {
                 writer.value("Change ID");
                 writer.end();
@@ -89,8 +92,9 @@ public:
                 writer.key("column_types");
                 writer.arr();
                 writer.value(ValueTypeName::value(ValueType::UInt64));
-                break;
             }
+            break;
+
             case QueryCommand::Kind::CALL_COMMAND: {
                 const auto& callCmd = static_cast<const CallCommand*>(cmd);
 
@@ -105,18 +109,28 @@ public:
                 for (const auto& type : callCmd->getColTypes()) {
                     writer.value(ValueTypeName::value(type));
                 }
-                break;
             }
+            break;
+
+            case QueryCommand::Kind::LIST_GRAPH_COMMAND: {
+                writer.value("graph");
+                writer.end();
+
+                writer.key("column_types");
+                writer.arr();
+                writer.value(ValueTypeName::value(ValueType::String));
+            }
+            break;
+
             case QueryCommand::Kind::CREATE_COMMAND:
             case QueryCommand::Kind::COMMIT_COMMAND:
             case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
-            case QueryCommand::Kind::LIST_GRAPH_COMMAND:
             case QueryCommand::Kind::LOAD_GRAPH_COMMAND: {
                 writer.end();
                 writer.key("column_types");
                 writer.arr();
-                break;
-            } break;
+            }
+            break;
         }
         writer.end();
         writer.end();
