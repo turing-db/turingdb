@@ -152,13 +152,14 @@ void DBServerProcessor::query() {
         }
         payload.key("error");
         const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
-        // For valid JSON, need double escape characters
-        const std::regex newLine(R"(\n)");
-        const std::regex tab(R"(\t)");
-        std::string errorMsg = res.getError();
-        errorMsg = std::regex_replace(errorMsg, newLine, R"(\\n)");
-        errorMsg = std::regex_replace(errorMsg, tab, R"(\\t)");
-        payload.value(errorType + errorMsg);
+        payload.value(errorType);
+
+        const std::string& errorMsg =
+            res.getError().empty() ? "No error message available." : res.getError();
+
+        payload.key("error_details");
+        payload.value(errorMsg);
+
         return;
     }
 
