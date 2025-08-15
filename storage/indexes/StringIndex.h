@@ -3,16 +3,13 @@
 #include <cstddef>
 #include <deque>
 #include <iostream>
+#include <limits>
+#include <memory>
 #include <unordered_set>
 
 #include "ID.h"
 
-// Size of our alphabet: assumes some preprocessing,
-// so only a-z and 1-9
-constexpr size_t SIGMA = 26 + 10;
-
 namespace db {
-
 /*
  * @brief Approximate string indexing using prefix trees (tries)
  * @detail String properties are preprocesed, replacing any non-alphanumeric characters
@@ -21,22 +18,56 @@ namespace db {
  * (NodeID/EdgeID) which has that property value.
  */
 class StringIndex {
-private:
-    struct PrefixTreeNode {
-        // NOTE: Can we remove isComplete in favour of empty owners?
-        std::vector<EntityID> _owners;
-        std::vector<std::unique_ptr<PrefixTreeNode>> _children;
-        char _val {'\0'};
-        bool _isComplete {false};
-
-        PrefixTreeNode(char val)
-            : _children(36),
-              _val(val)
+public:
+    class PrefixTreeNode {
+    public:
+        PrefixTreeNode(size_t id)
+            : _children(ALPHABET_SIZE),
+            _id {id}
         {
         }
+
+        size_t getID() const { return _id; }
+
+        const std::vector<PrefixTreeNode*>& getChildren() const { return _children; }
+
+        PrefixTreeNode* getChild(char c) const;
+
+        PrefixTreeNode* getChild(size_t idx) const;
+
+        const std::vector<EntityID>& getOwners() const { return _owners; }
+
+        bool isComplete() const { return !_owners.empty(); }
+
+        void setChild(PrefixTreeNode* child, size_t idx);
+
+        void setChild(PrefixTreeNode* child, char c);
+
+        void addOwner(EntityID o) { _owners.push_back(o); }
+
+        static PrefixTreeNode* create(StringIndex& idx);
+
+        static inline size_t charToIndex(char c);
+        static inline char indexToChar(size_t idx);
+
+    private:
+        std::vector<EntityID> _owners;
+        std::vector<PrefixTreeNode*> _children;
+        size_t _id {std::numeric_limits<size_t>::max()};
+
+        static constexpr char FIRST_ALPHA_CHAR = 'a';
+        static constexpr char LAST_ALPHA_CHAR = 'z';
+        static constexpr char FIRST_NUMERAL = '0';
+        static constexpr char LAST_NUMERAL = '9';
+        static constexpr size_t NUM_ALPHABETICAL_CHARS =
+            LAST_ALPHA_CHAR - FIRST_ALPHA_CHAR + 1;
+        static constexpr size_t NUM_NUMERICAL_CHARS = LAST_NUMERAL - FIRST_NUMERAL + 1;
+
+    public:
+        static constexpr size_t ALPHABET_SIZE =
+            NUM_ALPHABETICAL_CHARS + NUM_NUMERICAL_CHARS;
     };
-    
-public:
+
     enum FindResult {
         FOUND,
         FOUND_PREFIX,
@@ -49,6 +80,7 @@ public:
     };
 
     StringIndex();
+    StringIndex(size_t nodeCount);
 
     StringIndex(const StringIndex&) = delete;
     StringIndex& operator=(const StringIndex&) = delete;
@@ -83,8 +115,20 @@ public:
      */
     static void preprocess(std::vector<std::string>& res, std::string_view in);
 
+    PrefixTreeNode* getRoot() const { return _root; }
+    PrefixTreeNode* getNode(size_t index) const { return _nodeManager.at(index).get(); }
+
+    const std::vector<std::unique_ptr<PrefixTreeNode>>& getNodes() {
+        return _nodeManager;
+    }
+
+    size_t getNodeCount() const { return _nodeManager.size(); }
+
 private:
-    std::unique_ptr<PrefixTreeNode> _root;
+    size_t _nextFreeID {std::numeric_limits<size_t>::max()};
+    std::vector<std::unique_ptr<PrefixTreeNode>> _nodeManager;
+    PrefixTreeNode* _root {nullptr};
+
     static constexpr float _prefixThreshold {0.75};
 
     /**
@@ -95,8 +139,10 @@ private:
      */
     StringIndexIterator find(std::string_view sv) const;
 
-    static size_t charToIndex(char c);
-
+    /**
+     * @brief Implements
+     * https://www.notion.so/turingbio/Approximate-String-Matching-21e3aad664c880dba168d3f65a3dac73?source=copy_link#2313aad664c880c78884e97e8da3eed1
+     */
     PrefixTreeNode* getPrefixThreshold(std::string_view query) const;
 
     static void alphaNumericise(const std::string_view in, std::string& out);
@@ -104,8 +150,12 @@ private:
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
 
-    void printTree(PrefixTreeNode* node, const std::string& prefix, bool isLastChild,
-                   std::ostream& out = std::cout) const;
+    void printTree(PrefixTreeNode* node, ssize_t idx, const std::string& prefix,
+                   bool isLastChild, std::ostream& out = std::cout) const;
+
+    size_t allocateID();
+
+    void addNode(std::unique_ptr<PrefixTreeNode>&& node);
 };
 
 template <TypedInternalID IDT>
@@ -132,14 +182,14 @@ void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) 
         while (!q.empty()) {
             const PrefixTreeNode* n = q.front();
             q.pop_front();
-            for (size_t i {0}; i < n->_children.size(); i++) {
-                if (PrefixTreeNode* child = n->_children[i].get()) {
+            for (size_t i = 0; i < PrefixTreeNode::ALPHABET_SIZE; i++) {
+                if (PrefixTreeNode* child = n->getChild(i)) {
                     q.push_back(child);
                 }
             }
             // Collect owners to report back
-            if (n->_isComplete) {
-                auto& owners = n->_owners;
+            if (n->isComplete()) {
+                auto& owners = n->getOwners();
                 for (const EntityID& id : owners) {
                     resSet.emplace(IDT(id.getValue()));
                 }
@@ -148,4 +198,5 @@ void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) 
     }
     std::copy(resSet.begin(), resSet.end(), std::back_inserter(result));
 }
+
 }

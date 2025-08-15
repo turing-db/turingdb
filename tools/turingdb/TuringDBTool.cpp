@@ -47,7 +47,7 @@ int main(int argc, const char** argv) {
     for (const auto& graphName : graphsToLoad) {
         const auto res = turingDB.query("load graph " + graphName, "", &mem);
         if (!res.isOk()) {
-            spdlog::error("Failed to load graph {}", graphName);
+            spdlog::error("Failed to load graph {}: {}", graphName, res.getError());
             return EXIT_FAILURE;
         }
     }

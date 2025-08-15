@@ -1,6 +1,7 @@
 #include "DBServerProcessor.h"
 
 #include <nlohmann/json.hpp>
+#include <regex>
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -150,7 +151,15 @@ void DBServerProcessor::query() {
             payload.end();
         }
         payload.key("error");
-        payload.value(QueryStatusDescription::value(res.getStatus()));
+        const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
+        payload.value(errorType);
+
+        const std::string& errorMsg =
+            res.getError().empty() ? "No error message available." : res.getError();
+
+        payload.key("error_details");
+        payload.value(errorMsg);
+
         return;
     }
 

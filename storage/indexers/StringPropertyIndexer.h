@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
 
 #include "ID.h"
 #include "properties/PropertyContainer.h"
@@ -14,7 +13,11 @@ class PropertyContainer;
 class StringPropertyIndexer {
 public:
     StringPropertyIndexer() = default;
-    
+
+    bool addIndex(PropertyTypeID id, std::unique_ptr<StringIndex>&& idx) {
+        return _indexer.try_emplace(id, std::move(idx)).second;
+    }
+
     void buildIndex(std::vector<std::pair<PropertyTypeID, PropertyContainer*>>& toIndex);
 
     bool contains(PropertyTypeID propID) const { return _indexer.contains(propID); }
@@ -31,8 +34,10 @@ public:
 
     auto end() const { return _indexer.end(); }
 
+    const auto find(PropertyTypeID id) const { return _indexer.find(id); }
+
 private:
-    std::unordered_map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer {};
+    std::map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer;
     bool _initialised {false};
 
     void initialiseIndexTrie(PropertyTypeID propertyID);

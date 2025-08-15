@@ -52,6 +52,9 @@ enum class DumpErrorType : uint8_t {
     CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER,
     CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER,
 
+    CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER,
+    CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER,
+
     INCORRECT_PROPERTY_TYPE_ID,
 
     COULD_NOT_WRITE_GRAPH_INFO,
@@ -77,8 +80,9 @@ enum class DumpErrorType : uint8_t {
     COULD_NOT_READ_EDGE_INDEXER,
     COULD_NOT_READ_PROPS,
     COULD_NOT_READ_PROP_INDEXER,
+    COULD_NOT_READ_STR_PROP_INDEXER,
 
-    _SIZE,
+    _SIZE
 };
 
 using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
@@ -114,6 +118,8 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROPS, "Cannot open datapart edge properties">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, "Cannot open datapart node property indexer">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, "Cannot open datapart edge property indexer">,
+    EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER, "Cannot open datapart node string property indexer">,
+    EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER, "Cannot open datapart edge string property indexer">,
     EnumStringPair<DumpErrorType::INCORRECT_PROPERTY_TYPE_ID, "Incorrect property type id">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_GRAPH_INFO, "Could not write graph info">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_DATAPART_INFO, "Could not write datapart info">,
@@ -136,7 +142,8 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::COULD_NOT_READ_EDGES, "Could not read edges">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_EDGE_INDEXER, "Could not read edge indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_PROPS, "Could not read entity properties">,
-    EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_INDEXER, "Could not read entity property indexer">>;
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_INDEXER, "Could not read entity property indexer">,
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER, "Could not read entity string property indexer">>;
 
 class DumpError {
 public:

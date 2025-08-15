@@ -62,6 +62,7 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
         return false;
     }
 
+    fmt::print("Loaded graph is the same as the one dumped\n");
     return true;
 }
 

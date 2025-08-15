@@ -45,9 +45,8 @@ protected:
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
 
-// Dump graph, load it: index should not be present
-// TODO: This test should fail when index dumping is implemented.
-TEST_F(QueryIndexExistenceTest, noStringApproxIndex) {
+// Dump graph, load it: index should be present
+TEST_F(QueryIndexExistenceTest, noStringIndex) {
     GraphDumper dumper;
     auto res = dumper.dump(*_builtGraph, _workingPath);
     if (!res) {
@@ -75,8 +74,7 @@ TEST_F(QueryIndexExistenceTest, noStringApproxIndex) {
         .execute();
 
     tester.query("MATCH (n{name~=\"Remy\"}) return n")
-        .expectError()
-        .expectErrorMessage("Approximate string index was not initialised. The current graph was likely loaded incorrectly.")
+        .expectVector<NodeID>({0})
         .execute();
 }
 

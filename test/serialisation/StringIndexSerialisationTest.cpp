@@ -21,7 +21,7 @@ using namespace db;
 using namespace turing::test;
 
 
-class StringApproxIndexSerialisationTest : public TuringTest {
+class StringIndexSerialisationTest : public TuringTest {
 public:
     void initialize()  {
         SystemManager& sysMan = _db.getSystemManager();
@@ -45,7 +45,6 @@ protected:
     LocalMemory _mem;
     fs::Path _workingPath;
 
-
 private:
     void loadDumpLoadSimpleDb() {
         GraphDumper dumper;
@@ -63,7 +62,7 @@ private:
     }
 };
 
-TEST_F(StringApproxIndexSerialisationTest, indexInitialisation) {
+TEST_F(StringIndexSerialisationTest, indexInitialisation) {
     auto tx = _builtGraph->openTransaction();
     auto reader = tx.readGraph();
     auto builtDps = reader.dataparts();
@@ -78,8 +77,8 @@ TEST_F(StringApproxIndexSerialisationTest, indexInitialisation) {
     auto loadedDps = readerl.dataparts();
 
     for (const auto& dp : loadedDps) {
-        EXPECT_FALSE(dp->getEdgeStrPropIndexer().isInitialised());
-        EXPECT_FALSE(dp->getNodeStrPropIndexer().isInitialised());
+        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
+        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
     }
 }
 

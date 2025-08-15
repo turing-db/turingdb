@@ -1,7 +1,15 @@
 #include "DataPartLoader.h"
 
 #include "DataPart.h"
+#include "DumpConfig.h"
+#include "DumpResult.h"
+#include "FilePageReader.h"
+#include "FileResult.h"
 #include "Graph.h"
+#include "StringIndexerLoader.h"
+#include "indexers/StringPropertyIndexer.h"
+#include "metadata/PropertyType.h"
+#include "properties/PropertyContainer.h"
 #include "properties/PropertyManager.h"
 #include "indexers/EdgeIndexer.h"
 #include "DataPartInfoLoader.h"
@@ -10,6 +18,7 @@
 #include "EdgeContainerLoader.h"
 #include "PropertyContainerLoader.h"
 #include "PropertyIndexerLoader.h"
+#include "spdlog/spdlog.h"
 #include "versioning/VersionController.h"
 
 using namespace db;
@@ -114,7 +123,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     part->_edgeProperties = std::make_unique<PropertyManager>();
 
     // Loading properties
-    const auto loadProperties = [&](PropertyManager& manager, std::string_view filename) -> DumpResult<void> {
+    const auto loadProperties = [&](PropertyManager& manager,
+                                    StringPropertyIndexer& idxer,
+                                    std::string_view filename) -> DumpResult<void> {
         const auto ptID = GraphDumpHelper::getIntegerSuffix(filename, PREFIX_SIZE);
         if (!ptID) {
             return DumpError::result(DumpErrorType::INCORRECT_PROPERTY_TYPE_ID);
@@ -158,7 +169,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         };
 
         // Lambda to store string properties
-        const auto storeStringContainer = [&](PropertyManager& manager) -> DumpResult<void> {
+        const auto storeStringContainer =
+            [&](PropertyManager& manager,
+                StringPropertyIndexer& idxer) -> DumpResult<void> {
             StringPropertyContainerLoader loader {reader.value()};
 
             auto props = loader.load();
@@ -194,7 +207,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
                 break;
             }
             case ValueType::String: {
-                if (auto res = storeStringContainer(manager); !res) {
+                if (auto res = storeStringContainer(manager, idxer); !res) {
                     return res.get_unexpected();
                 }
                 break;
@@ -258,16 +271,86 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             Profile profile {"DataPartLoader::load <node-props>"};
 
             // node properties
-            if (auto res = loadProperties(*part->_nodeProperties, childStr); !res) {
+            if (auto res = loadProperties(*part->_nodeProperties, *part->_nodeStrPropIdx, childStr); !res) {
                 return res.get_unexpected();
             }
         } else if (childStr.find(EDGE_PROPS_PREFIX) != std::string::npos) {
             Profile profile {"DataPartLoader::load <edge-props>"};
             // edge properties
-            if (auto res = loadProperties(*part->_edgeProperties, childStr); !res) {
+            if (auto res = loadProperties(*part->_edgeProperties, *part->_edgeStrPropIdx, childStr); !res) {
                 return res.get_unexpected();
             }
         }
+    }
+
+    // Dump node StringIndexer
+    {
+        const fs::Path nodeStrIndexerPath = path / "node-string-prop-indexer";
+        const fs::Path nodeStrIndexerPathAlt = path / "node-string-prop-indexer-owners";
+
+        if (!nodeStrIndexerPath.exists() || !nodeStrIndexerPathAlt.exists()) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
+        }
+
+        auto reader = fs::FilePageReader::open(nodeStrIndexerPath, DumpConfig::PAGE_SIZE);
+        auto auxReader =
+            fs::FilePageReader::open(nodeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
+        if (!reader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, reader.error());
+        }
+        if (!auxReader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, auxReader.error());
+        }
+
+        auto nodeStringIndexLoader =
+            StringIndexerLoader(reader.value(), auxReader.value());
+
+        auto res = nodeStringIndexLoader.load();
+        if (!res) {
+            spdlog::error(res.error().fmtMessage());
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
+        }
+
+        part->_nodeStrPropIdx = std::move(res.value());
+    }
+
+    // Dump edge StringIndexer
+    {
+        const fs::Path edgeStrIndexerPath = path / "edge-string-prop-indexer";
+        const fs::Path edgeStrIndexerPathAlt = path / "edge-string-prop-indexer-owners";
+
+        if (!edgeStrIndexerPath.exists() || !edgeStrIndexerPathAlt.exists()) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER);
+        }
+
+        auto reader = fs::FilePageReader::open(edgeStrIndexerPath, DumpConfig::PAGE_SIZE);
+        auto auxReader =
+            fs::FilePageReader::open(edgeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
+        if (!reader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, reader.error());
+        }
+        if (!auxReader) {
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, auxReader.error());
+        }
+
+        auto edgeStringIndexLoader =
+            StringIndexerLoader(reader.value(), auxReader.value());
+
+        auto res = edgeStringIndexLoader.load();
+        if (!res) {
+            spdlog::error(res.error().fmtMessage());
+            return DumpError::result(
+                DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER);
+        }
+
+        part->_edgeStrPropIdx = std::move(res.value());
     }
 
     part->_initialized = true;

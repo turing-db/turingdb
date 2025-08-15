@@ -1,6 +1,7 @@
 #include "TuringShell.h"
 
 #include <linenoise.h>
+#include <regex>
 #include <tabulate/table.hpp>
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
@@ -252,6 +253,14 @@ std::string TuringShell::composePrompt() {
 
 template <typename T>
 void tabulateWrite(tabulate::RowStream& rs, const T& value) {
+    // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
+    // if the `/query -d "history"` endpoint is hit. When writing to CLI we replace double
+    // escaped with single escape so that it is rendered in terminal correctly.
+    if constexpr (std::same_as<T, std::string>) {
+        std::regex re(R"(\\n)");  
+        rs << std::regex_replace(value, re, "\n");
+        return;
+    }
     rs << value;
 }
 
@@ -284,6 +293,14 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
         tabulateWrite(rs, src.getRaw());                  \
     } break;
 
+
+// Cleans double-escaped characters to single-escaped characters
+void TuringShell::formatMessage(std::string& msg) {
+        const std::regex newLine(R"(\\n)");
+        const std::regex tab(R"(\\t)");
+        msg = std::regex_replace(msg, newLine, "\n");
+        msg = std::regex_replace(msg, tab, "\t");
+}
 
 void TuringShell::processLine(std::string& line) {
 
@@ -368,7 +385,10 @@ void TuringShell::processLine(std::string& line) {
 
     if (!res.isOk()) {
         if (res.hasErrorMessage()) {
-            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError());
+            std::string errorMsg = res.getError();
+            formatMessage(errorMsg);
+            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()),
+                          errorMsg);
         } else {
             spdlog::error("{}", QueryStatusDescription::value(res.getStatus()));
         }

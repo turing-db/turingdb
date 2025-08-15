@@ -57,14 +57,14 @@ void QueryParser::generateErrorMsg(std::string& msg,
     const std::string errorBars(errLen, '^');
     const std::string blank(loc.begin.column - 1, ' ');
 
-    out << '\n' << " |" << '\n';
-    out << errLineNo << "|\t" << errLine << '\n';
-    out << " |\t" << blank << errorBars << '\t';
-    out << "\t"<< excptMsg << "\n\n";
+    out << "\\n" << " |" << "\\n";
+    out << errLineNo << "|\\t" << errLine << "\\n";
+    out << " |\\t" << blank << errorBars << "\\t";
+    out << "\\t"<< excptMsg << "\\n\\n";
 
     out << "Parse error on line " << loc.begin.line 
         << ", from column " << loc.begin.column 
-        << ", to column " << loc.end.column << std::endl;
+        << ", to column " << loc.end.column;
 
     msg = out.str();
 }
