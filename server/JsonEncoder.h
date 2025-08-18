@@ -87,8 +87,6 @@ public:
             break;
 
             case QueryCommand::Kind::CHANGE_COMMAND: {
-                
-
                 const auto& changeCmd = static_cast<const ChangeCommand*>(cmd);
                 const auto changeOp = changeCmd->getChangeOpType();
                 if (changeOp == ChangeOpType::NEW) {
