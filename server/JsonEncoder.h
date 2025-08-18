@@ -9,6 +9,7 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
+#include "ChangeCommand.h"
 #include "ID.h"
 
 namespace db {
@@ -86,12 +87,22 @@ public:
             break;
 
             case QueryCommand::Kind::CHANGE_COMMAND: {
-                writer.value("Change ID");
-                writer.end();
+                
 
-                writer.key("column_types");
-                writer.arr();
-                writer.value(ValueTypeName::value(ValueType::UInt64));
+                const auto& changeCmd = static_cast<const ChangeCommand*>(cmd);
+                const auto changeOp = changeCmd->getChangeOpType();
+                if (changeOp == ChangeOpType::NEW) {
+                    writer.value("Change ID");
+                    writer.end();
+
+                    writer.key("column_types");
+                    writer.arr();
+                    writer.value(ValueTypeName::value(ValueType::UInt64));
+                } else {
+                    writer.end();
+                    writer.key("column_types");
+                    writer.arr();
+                }
             }
             break;
 

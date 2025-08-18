@@ -87,7 +87,7 @@ ChangeResult<Change*> ChangeStep::createChange() const {
 
     const auto& graphName = std::get<std::string>(_changeInfo);
 
-    auto res = _sysMan->newChange(graphName);
+    const auto res = _sysMan->newChange(graphName);
     if (!res) {
         return res;
     }
@@ -110,7 +110,9 @@ ChangeResult<void> ChangeStep::acceptChange() const {
         throw PipelineException("ChangeStep: Change info must contain the change hash");
     }
 
-    return _sysMan->getChangeManager().acceptChange(tx.changeAccessor(), *_jobSystem);
+    ChangeManager& changeMan = _sysMan->getChangeManager();
+    
+    return changeMan.acceptChange(tx.changeAccessor(), *_jobSystem);
 }
 
 ChangeResult<void> ChangeStep::deleteChange() const {
