@@ -52,7 +52,8 @@ public:
 
     bool loadGraph(const std::string& graphName, JobSystem& jobsystem);
 
-    bool loadGraph(const fs::Path graphPath, const std::string& graphName,
+    bool loadGraph(const fs::Path graphPath,
+                   const std::string& graphName,
                    JobSystem& jobSystem);
 
     bool isGraphLoading(const std::string& graphName) const;
@@ -60,7 +61,8 @@ public:
     ChangeManager& getChangeManager() { return *_changes; }
     const ChangeManager& getChangeManager() const { return *_changes; }
 
-    ChangeResult<Change*> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
+    ChangeResult<Change*> newChange(const std::string& graphName,
+                                    CommitHash baseHash = CommitHash::head());
 
     ChangeResult<Transaction> openTransaction(std::string_view graphName,
                                               CommitHash commitHash,

@@ -48,12 +48,13 @@ protected:
 // Dump graph, load it: index should be present
 TEST_F(QueryIndexExistenceTest, noStringIndex) {
     GraphDumper dumper;
-    auto res = dumper.dump(*_builtGraph, _workingPath);
+    const auto res = dumper.dump(*_builtGraph, _workingPath);
     if (!res) {
         throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
     }
 
-    const std::string& newName = "newSimple";
+    const std::string newName = "newSimple";
+
     TuringDB newDB;
     LocalMemory newMem;
     std::unique_ptr<QueryInterpreter> newInterp =
@@ -61,7 +62,7 @@ TEST_F(QueryIndexExistenceTest, noStringIndex) {
 
     auto graphDir = newDB.getSystemManager().getGraphsDir();
 
-    bool loadRes =
+    const bool loadRes =
         newDB.getSystemManager().loadGraph(_workingPath, newName, newDB.getJobSystem());
     ASSERT_TRUE(loadRes);
 
