@@ -46,13 +46,13 @@ void tokenRefreshThread(TokenValidator* const validator, const SupabaseConfig* c
                        const std::atomic<bool>* const running) {
     // Initial fetch on startup
     validator->fetchTokensFromSupabase(*config);
-    
+
     while (running->load()) {
-        // Wait for 5 minutes before refreshing tokens
-        for (int i = 0; i < 300 && running->load(); i++) {
+        // Wait for 1 minute before refreshing tokens
+        for (int i = 0; i < 60 && running->load(); i++) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
-        
+
         if (running->load()) {
             std::cout << "Refreshing tokens from Supabase..." << std::endl;
             if (!validator->fetchTokensFromSupabase(*config)) {
@@ -68,8 +68,8 @@ void routesRefreshThread(AddressRouter* const router, const SupabaseConfig* cons
     router->fetchRoutesFromSupabase(*config);
 
     while (running->load()) {
-        // Wait for 5 minutes before refreshing tokens
-        for (int i = 0; i < 300 && running->load(); i++) {
+        // Wait for 1 minute before refreshing tokens
+        for (int i = 0; i < 60 && running->load(); i++) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
 
