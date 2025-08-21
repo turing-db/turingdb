@@ -13,16 +13,16 @@
 
 namespace db {
 
+class SystemConfig;
 class Graph;
 class ChangeManager;
 class JobSystem;
-class FrozenCommitTx;
 class Transaction;
 class Change;
 
 class SystemManager {
 public:
-    SystemManager();
+    SystemManager(const SystemConfig& config);
     ~SystemManager();
 
     SystemManager(const SystemManager&) = delete;
@@ -30,25 +30,21 @@ public:
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
 
-    fs::Path createTuringConfigDirectories(const char* homeDir);
-    fs::Path& getGraphsDir() { return _graphsDir; };
-    fs::Path& getTuringDir() { return _turingDir; };
+    const SystemConfig& getConfig() const { return _config; }
 
-    Graph* createGraph(const std::string& graphName);
+    void init();
 
     void listAvailableGraphs(std::vector<fs::Path>& names);
-
     void listGraphs(std::vector<std::string_view>& names);
 
     Graph* getDefaultGraph() const;
+    void setDefaultGraph(const std::string& name);
 
     Graph* getGraph(const std::string& graphName) const;
 
     size_t getGraphCount() const { return _graphs.size(); };
 
-    void setDefaultGraph(const std::string& name);
-
-    void setGraphsDir(const fs::Path& dir);
+    Graph* createGraph(const std::string& graphName);
 
     bool loadGraph(const std::string& graphName, JobSystem& jobsystem);
 
@@ -70,8 +66,7 @@ public:
 
 private:
     mutable RWSpinLock _graphsLock;
-    fs::Path _graphsDir;
-    fs::Path _turingDir;
+    const SystemConfig& _config;
     Graph* _defaultGraph {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;

@@ -1,4 +1,5 @@
 set(system_sources
+    SystemConfig.cpp
     GraphLoadStatus.cpp
     ChangeManager.cpp
     SystemManager.cpp)
