@@ -4,6 +4,7 @@
 #include "TuringTest.h"
 
 #include "Graph.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
@@ -13,6 +14,7 @@
 #include "writers/DataPartBuilder.h"
 #include "FileUtils.h"
 #include "JobSystem.h"
+#include "writers/GraphWriter.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
@@ -50,6 +52,19 @@ struct GraphUpdate {
 
 class IteratorsTest : public TuringTest {
 protected:
+    /**
+    * @warn This test originally added properties to nodes/edges which were created in an
+    * older datapart to the change which added the properties. This is not possible
+    * currently in TuringDB and so it felt strange to test it.
+    *
+    * It also resulted in the StringIndex not working correctly, since the index builder
+    * requires the mapping of temporary IDs to permenant IDs. If the node/edge to which we
+    * are adding a new property to was created in a different datapart, the
+    * _tmpToFinalNodeIDs map would not contain the mapping for the node created created in
+    * a previous datapart, and hence would fail (throw exception). @Cyrus has changed the
+    * test so that it does not apply these "patch" updates (but the properties added are still
+    * named as "TmpId<x> patch" to note those which were changed).
+    */
     void initialize() override {
         _jobSystem = JobSystem::create();
         _graph = Graph::create();
@@ -94,6 +109,8 @@ protected:
             const NodeID tmpID = builder1.addNode(LabelSet::fromList({1}));
             builder1.addNodeProperty<types::UInt64>(
                 tmpID, uint64ID, tmpID.getValue());
+            builder1.addNodeProperty<types::String>(
+                2, stringID, "TmpID2 patch");
         }
 
         {
@@ -168,8 +185,9 @@ protected:
         {
             // Edge 234
             const EdgeRecord& edge = builder2.addEdge(0, 4, 3);
-            builder2.addEdgeProperty<types::UInt64>(
-                edge, uint64ID, edge._edgeID.getValue());
+            builder2.addEdgeProperty<types::UInt64>(edge, uint64ID,
+                                                    edge._edgeID.getValue());
+            builder2.addEdgeProperty<types::String>(edge, stringID, "TmpEdgeID2 patch");
         }
 
         spdlog::info(" -- Pushing 2");
@@ -256,13 +274,15 @@ protected:
                 edge, stringID, "TmpEdgeID" + std::to_string(edge._edgeID));
         }
 
-        builder4.addNodeProperty<types::String>(
-            2, stringID, "TmpID2 patch");
+        // XXX: Updates a node property for a node in a different datapart
+        // builder4.addNodeProperty<types::String>(
+            // 2, stringID, "TmpID2 patch");
 
-        const auto readTransaction = _graph->openTransaction();
-        const EdgeRecord* edgeToPatch = readTransaction.viewGraph().read().getEdge(2);
-        builder4.addEdgeProperty<types::String>(
-            *edgeToPatch, stringID, "TmpEdgeID2 patch");
+        // const auto readTransaction = _graph->openTransaction();
+        // const EdgeRecord* edgeToPatch = readTransaction.viewGraph().read().getEdge(2);
+        // XXX: Updates an edge property for an edge in a different datapart
+        // builder4.addEdgeProperty<types::String>(
+            // *edgeToPatch, stringID, "TmpEdgeID2 patch");
 
         spdlog::info(" -- Pushing 4");
         ASSERT_TRUE(update4.submit(*_jobSystem));
@@ -490,8 +510,8 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
             "TmpID0",
             "TmpID1",
             // "TmpID4", This property is not set for this node
-            "TmpID3",
             "TmpID2 patch",
+            "TmpID3",
             "TmpID6",
             "TmpID7",
             "TmpID8",
@@ -529,9 +549,9 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
         std::vector<std::string_view> compareSet {
             "TmpEdgeID0",
             "TmpEdgeID1",
+            "TmpEdgeID2 patch",
             "TmpEdgeID2",
             "TmpEdgeID3",
-            "TmpEdgeID2 patch",
             "TmpEdgeID8",
             "TmpEdgeID5",
             "TmpEdgeID6",
@@ -569,9 +589,9 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
 
     {
         std::vector<std::string_view> compareSet {
+            "TmpID2 patch",
             "TmpID3",
             // "TmpID4", This property is not set for this node
-            "TmpID2 patch",
             "TmpID7",
             "TmpID8",
             "TmpID5",
