@@ -88,15 +88,6 @@ size_t PrefixTreeNode::charToIndex(char c) {
     }
 }
 
-inline char PrefixTreeNode::indexToChar(size_t idx) {
-    if (idx > ALPHABET_SIZE) [[unlikely]] {
-        throw TuringException("Invalid index: " + std::to_string(idx));
-    }
-    char c = idx < NUM_ALPHABETICAL_CHARS ? FIRST_ALPHA_CHAR + idx
-                                          : FIRST_NUMERAL + (idx - NUM_NUMERICAL_CHARS);
-    return c;
-}
-
 void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
     out.clear();
     if (in.empty()) {

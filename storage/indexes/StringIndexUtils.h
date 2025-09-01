@@ -44,7 +44,6 @@ public:
                         "was likely loaded incorrectly.");
                 }
 
-
                 // Check if the datapart contains an index of this property ID
                 if (!nodeStringIndex.contains(propID)) {
                     continue;

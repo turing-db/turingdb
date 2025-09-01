@@ -8,6 +8,7 @@
 #include <unordered_set>
 
 #include "ID.h"
+#include "TuringException.h"
 
 namespace db {
 /*
@@ -48,7 +49,16 @@ public:
         static PrefixTreeNode* create(StringIndex& idx);
 
         static inline size_t charToIndex(char c);
-        static inline char indexToChar(size_t idx);
+
+        static inline char indexToChar(size_t idx) {
+            if (idx > ALPHABET_SIZE) [[unlikely]] {
+                throw TuringException("Invalid index: " + std::to_string(idx));
+            }
+            char c = idx < NUM_ALPHABETICAL_CHARS
+                       ? FIRST_ALPHA_CHAR + idx
+                       : FIRST_NUMERAL + (idx - NUM_NUMERICAL_CHARS);
+            return c;
+        }
 
     private:
         std::vector<EntityID> _owners;
@@ -106,7 +116,7 @@ public:
      * @param str The string to query
      */
     template <TypedInternalID IDT>
-    void query(std::vector<IDT>& result, std::string_view queryString) const;
+    void query(std::vector<IDT>& result, const std::string& queryString) const;
 
     /**
      * @brief Replaces punctuation with spaces and splits into words (separated by space)
@@ -159,11 +169,11 @@ private:
 };
 
 template <TypedInternalID IDT>
-void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
+void StringIndex::query(std::vector<IDT>& result, const std::string& queryString) const {
     // Track owners in a set to avoid duplicates
     std::unordered_set<IDT> resSet;
 
-    std::vector<std::string> tokens {};
+    std::vector<std::string> tokens;
     preprocess(tokens, queryString);
 
     for (const auto& tok : tokens) {
