@@ -19,7 +19,6 @@ using namespace ::testing;
 using namespace db;
 
 class StringIndexTest : public TuringTest {
-public:
 protected:
     void initialize() override {
         _jobSystem = JobSystem::create();

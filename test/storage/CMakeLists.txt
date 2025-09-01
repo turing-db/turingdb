@@ -23,6 +23,7 @@ add_storage_tests(test_storage_edgecontainer EdgeContainerTest.cpp)
 #add_storage_tests(test_storage_edgeindexer EdgeIndexerTest.cpp)
 add_storage_tests(test_storage_comparator ComparatorTest.cpp)
 add_storage_tests(test_storage_arcmanager ArcManagerTest.cpp)
+add_storage_tests(test_storage_graphwriter GraphWriterTest.cpp)
 
 add_storage_tests(test_storage_iterator iterators/IteratorsTest.cpp)
 add_storage_tests(test_storage_scan_nodes_iterator iterators/ScanNodesIteratorTest.cpp)
