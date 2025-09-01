@@ -2,6 +2,7 @@
 
 #include "JobSystem.h"
 #include "Graph.h"
+#include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "gtest/gtest.h"
@@ -23,8 +24,9 @@ protected:
         auto graph = Graph::create();
         GraphWriter writer {graph.get()};
 
-        auto p1 = writer.addNode({"Object"});
-        writer.addNodeProperty<types::String>(p1, "Value", "1");
+        auto node = writer.addNode({"Object"});
+        writer.addNodeProperty<types::String>(node, "Value", "1");
+        writer.addNodeProperty<types::Int64>(node, "intValue", 1);
 
         writer.submit();
 
