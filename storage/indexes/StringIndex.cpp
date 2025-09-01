@@ -88,7 +88,7 @@ size_t PrefixTreeNode::charToIndex(char c) {
     }
 }
 
-void StringIndex::alphaNumericise(const std::string_view in, std::string& out) {
+void StringIndex::alphaNumericise(std::string_view in, std::string& out) {
     out.clear();
     if (in.empty()) {
         return;

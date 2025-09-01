@@ -116,7 +116,7 @@ public:
      * @param str The string to query
      */
     template <TypedInternalID IDT>
-    void query(std::vector<IDT>& result, const std::string& queryString) const;
+    void query(std::vector<IDT>& result, std::string_view queryString) const;
 
     /**
      * @brief Replaces punctuation with spaces and splits into words (separated by space)
@@ -155,7 +155,7 @@ private:
      */
     PrefixTreeNode* getPrefixThreshold(std::string_view query) const;
 
-    static void alphaNumericise(const std::string_view in, std::string& out);
+    static void alphaNumericise(std::string_view in, std::string& out);
 
     static void split(std::vector<std::string>& res, std::string_view str,
                       std::string_view delim);
@@ -169,7 +169,7 @@ private:
 };
 
 template <TypedInternalID IDT>
-void StringIndex::query(std::vector<IDT>& result, const std::string& queryString) const {
+void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) const {
     // Track owners in a set to avoid duplicates
     std::unordered_set<IDT> resSet;
 
