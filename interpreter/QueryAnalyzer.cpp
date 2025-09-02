@@ -1,5 +1,6 @@
 #include "QueryAnalyzer.h"
 
+#include <cstdint>
 #include <optional>
 #include <range/v3/view.hpp>
 #include <range/v3/action/sort.hpp>
@@ -251,7 +252,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
 void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
     bool isCreate {true}; // Flag to distinguish create and match commands
-                         //
+
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -261,6 +262,13 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
         EntityPattern* entityPattern = elements[0];
         if (elements.empty()) {
             throw AnalyzeException("Entity pattern has no elements.");
+        }
+
+        // When creating a node, you should not be able to inject IDs
+        if (elements.size() == 1) {
+            if (elements[0]->getInjectedIDs()) {
+                throw AnalyzeException("Cannot create a node with a specific ID");
+            }
         }
 
         analyzeEntityPattern(declContext, entityPattern, isCreate);
@@ -359,8 +367,8 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
     }
 }
 
-void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
-                                         EntityPattern* entity,bool isCreate) {
+void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern* entity,
+                                         bool isCreate) {
     VarExpr* var = entity->getVar();
     // Handle the case where the entity is unlabeled edge (--)
     if (!var) {
@@ -368,12 +376,39 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext,
         entity->setVar(var);
     }
 
+    uint64_t idToSet = entity->getEntityID();
+
+    // If attempting to inject IDs in a CREATE, ensure they are all valid
+    // NOTE: The case for creating a single node whilst injecting IDs is handled
+    // in @ref analyzeCreate
+    if (isCreate && entity->getInjectedIDs()) {
+        auto& injectedIDs = entity->getInjectedIDs()->getIDs();
+        // Since we already check for creating a single node with injected nodes, if we
+        // are here, we must be creating an edge where at least one of its nodes is an
+        // injected ID. We only can support this if a single ID is provided, otherwise it
+        // requires creating multiple edges from/to each of the injected nodes.
+
+        if (injectedIDs.size() != 1) {
+            throw AnalyzeException(
+                "Edges may only be created between nodes with at most one specified ID");
+        }
+        // We have a single injected node: set this VarDecl to have the injected ID
+        idToSet = injectedIDs.at(0).getValue();
+
+        for (const auto& node : injectedIDs) {
+            if (!_view.read().graphHasNode(node)) {
+                throw AnalyzeException("No such node with ID: \""
+                                       + std::to_string(node.getValue()) + "\"");
+            }
+        }
+    }
+
     // Create the variable declaration in the scope of the command
     VarDecl* decl = VarDecl::create(_ctxt,
                                     declContext,
                                     var->getName(),
                                     entity->getKind(),
-                                    entity->getEntityID());
+                                    idToSet);
 
     if (!decl) {
         // decl already exists from prev targets
