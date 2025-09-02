@@ -11,6 +11,10 @@
 namespace db {
 
 class StringPropertyIndexer {
+private:
+    template <TypedInternalID IDT>
+    using TempIDMap = std::unordered_map<IDT, IDT>;
+
 public:
     StringPropertyIndexer() = default;
 
@@ -20,7 +24,7 @@ public:
 
     template <TypedInternalID IDT>
     void buildIndex(std::vector<std::pair<PropertyTypeID, PropertyContainer*>>& toIndex,
-                    const std::unordered_map<IDT, IDT>& tempIDMap);
+                    const TempIDMap<IDT>& tempIDMap);
 
     bool contains(PropertyTypeID propID) const { return _indexer.contains(propID); }
 
@@ -39,9 +43,6 @@ public:
     const auto find(PropertyTypeID id) const { return _indexer.find(id); }
 
 private:
-    template <TypedInternalID IDT>
-    using TempIDMap = std::unordered_map<IDT, IDT>;
-
     std::map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer;
     bool _initialised {false};
 
@@ -51,7 +52,7 @@ private:
     void addStringPropertyToIndex(
         PropertyTypeID propertyID,
         const TypedPropertyContainer<types::String>& stringPropertyContainer,
-        const std::unordered_map<IDT, IDT>& tempIDMap);
+        const TempIDMap<IDT>& tempIDMap);
 };
 
 template <TypedInternalID IDT>
