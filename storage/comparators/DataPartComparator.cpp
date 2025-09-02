@@ -54,3 +54,19 @@ bool DataPartComparator::same(const DataPart& a, const DataPart& b) {
 
     return true;
 }
+
+bool DataPartComparator::correctlyMerged(const DataPart& merged,
+                                         const std::vector<DataPart>& elements) {
+    {
+        std::vector<const NodeContainer*> nodes;
+        nodes.reserve(elements.size());
+        std::transform(elements.begin(), elements.end(), std::back_inserter(nodes),
+                       [](const DataPart& dp) { return &dp.nodes(); });
+
+        if (!NodeContainerComparator::correctlyMerged(merged.nodes(), nodes)) {
+            spdlog::error("Node containers were not correctly merged");
+            return false;
+        }
+    }
+    return false;
+}
