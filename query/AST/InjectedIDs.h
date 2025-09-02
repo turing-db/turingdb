@@ -18,6 +18,10 @@ public:
     void addID(NodeID id);
     std::vector<NodeID>& getIDs() { return _nodeIDs; };
 
+    size_t size() { return _nodeIDs.size(); }
+
+    bool empty() { return _nodeIDs.empty(); }
+
 private:
     std::vector<NodeID> _nodeIDs;
 

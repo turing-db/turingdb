@@ -50,7 +50,6 @@ void CreateEdgeStep::execute() {
         CreateNodeStep::createNode(_builder, _tgt);
     }
 
-
     const TypeConstraint* type = _edge->getTypeConstraint();
     const ExprConstraint* expr = _edge->getExprConstraint();
 
