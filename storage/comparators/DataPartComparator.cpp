@@ -57,7 +57,10 @@ bool DataPartComparator::same(const DataPart& a, const DataPart& b) {
 
 bool DataPartComparator::correctlyMerged(const DataPart& merged,
                                          const std::vector<DataPart>& elements) {
-    {
+
+    // TODO: Check for firstNodeID
+    
+    { // Check NodeContainer
         std::vector<const NodeContainer*> nodes;
         nodes.reserve(elements.size());
         std::transform(elements.begin(), elements.end(), std::back_inserter(nodes),
@@ -68,5 +71,6 @@ bool DataPartComparator::correctlyMerged(const DataPart& merged,
             return false;
         }
     }
+
     return false;
 }
