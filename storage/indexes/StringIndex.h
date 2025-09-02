@@ -54,7 +54,7 @@ public:
             if (idx > ALPHABET_SIZE) [[unlikely]] {
                 throw TuringException("Invalid index: " + std::to_string(idx));
             }
-            char c = idx < NUM_ALPHABETICAL_CHARS
+            const char c = idx < NUM_ALPHABETICAL_CHARS
                        ? FIRST_ALPHA_CHAR + idx
                        : FIRST_NUMERAL + (idx - NUM_NUMERICAL_CHARS);
             return c;

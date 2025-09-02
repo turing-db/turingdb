@@ -39,6 +39,9 @@ public:
     const auto find(PropertyTypeID id) const { return _indexer.find(id); }
 
 private:
+    template <TypedInternalID IDT>
+    using TempIDMap = std::unordered_map<IDT, IDT>;
+
     std::map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer;
     bool _initialised {false};
 
@@ -54,7 +57,7 @@ private:
 template <TypedInternalID IDT>
 void StringPropertyIndexer::buildIndex(
     std::vector<std::pair<PropertyTypeID, PropertyContainer*>>& toIndex,
-    const std::unordered_map<IDT, IDT>& tempIDMap) {
+    const TempIDMap<IDT>& tempIDMap) {
     // Initialise tries for all present string property IDs
     for (const auto& [ptID, _] : toIndex) {
         initialiseIndexTrie(ptID);
@@ -71,7 +74,7 @@ template <TypedInternalID IDT>
 void StringPropertyIndexer::addStringPropertyToIndex(
     PropertyTypeID propertyID,
     const TypedPropertyContainer<types::String>& stringPropertyContainer,
-    const std::unordered_map<IDT, IDT>& tempIDMap) {
+    const TempIDMap<IDT>& tempIDMap) {
     // Get the index map for this property type
     StringIndex* trie = _indexer.at(propertyID).get();
     if (!trie) {
