@@ -3,8 +3,8 @@
 #include "HTTPParsingInfo.h"
 #include "AbstractHTTPParser.h"
 #include "UriParser.h"
+#include "Endpoints.h"
 #include "NetBuffer.h"
-#include "HTTPParsingInfo.h"
 
 namespace net {
 
@@ -36,7 +36,7 @@ public:
                 return res.get_unexpected();
             }
 
-            if (auto res = parseContentLengthAndJump(); !res) {
+            if (auto res = parseRequiredHeadersAndJump(); !res) {
                 return res.get_unexpected();
             }
 
@@ -57,6 +57,10 @@ public:
         return finished;
     }
 
+    const std::string& getPayLoadType() {
+        return _payloadType;
+    }
+
     void reset() override {
         AbstractHTTPParser::reset();
         _currentPtr = _reader.getData();
@@ -70,6 +74,7 @@ private:
     char* _currentPtr {nullptr};
     char* _payloadBegin {nullptr};
     uint64_t _payloadSize {};
+    std::string _payloadType;
     bool _parsedHeader = false;
 
     size_t getSize() { return getEndPtr() - _currentPtr; }
@@ -163,6 +168,81 @@ private:
         }
 
         return URIParserT::parseURI(_info, uri);
+    }
+
+    [[nodiscard]] HTTP::Result<void> parseRequiredHeadersAndJump() {
+        const char* endPtr = getEndPtr();
+        const std::string_view contentLengthKey = "content-length:";
+        const std::string_view contentTypeKey = "content-type:";
+        uint8_t headerFlags = 0;
+        std::string_view contentLengthWindow;
+        std::string_view contentTypeWindow;
+
+        char* contentLenPtr = nullptr;
+        char* contentTypePtr = nullptr;
+
+        for (; headerFlags != 3 && _currentPtr != endPtr; _currentPtr++) {
+            if (getSize() < contentLengthKey.size()) {
+                return jumpToPayload();
+            }
+
+            contentLengthWindow = {_currentPtr, _currentPtr + contentLengthKey.size()};
+            contentTypeWindow = {_currentPtr, _currentPtr + contentTypeKey.size()};
+
+            if (std::equal(contentLengthKey.begin(), contentLengthKey.end(),
+                           contentLengthWindow.begin(), contentLengthWindow.end(),
+                           [](char a, char b) {
+                               return a == tolower(b);
+                           })) {
+                headerFlags |= 1;
+                contentLenPtr = _currentPtr;
+            }
+
+            if (std::equal(contentTypeKey.begin(), contentTypeKey.end(),
+                           contentTypeWindow.begin(), contentTypeWindow.end(),
+                           [](char a, char b) {
+                               return a == tolower(b);
+                           })) {
+                headerFlags |= 2;
+                contentTypePtr = _currentPtr;
+            }
+
+            const bool isEmptyLine = (_currentPtr[0] == '\r'
+                                      && _currentPtr[1] == '\n'
+                                      && _currentPtr[2] == '\r'
+                                      && _currentPtr[3] == '\n');
+            if (isEmptyLine) {
+                return jumpToPayload();
+            }
+        }
+
+        contentLenPtr += contentLengthKey.size();
+        const char* lengthBegin = contentLenPtr;
+
+        for (; contentLenPtr != endPtr; contentLenPtr++) {
+            if (isdigit(*contentLenPtr)) {
+                lengthBegin = contentLenPtr;
+                break;
+            }
+        }
+        _payloadSize = std::strtoull(lengthBegin, &_currentPtr, 10);
+
+        contentTypePtr += contentTypeKey.size();
+        const char* typeBegin = contentTypePtr;
+
+        for (; contentTypePtr != endPtr; contentLenPtr++) {
+            if (!isBlank(*contentTypePtr)) {
+                typeBegin = contentTypePtr;
+                break;
+            }
+        }
+
+        while (contentTypePtr != endPtr && *contentTypePtr != '\r') {
+            contentTypePtr++;
+        }
+        _payloadType = std::string(typeBegin, (contentTypePtr - typeBegin));
+
+        return jumpToPayload();
     }
 
     [[nodiscard]] HTTP::Result<void> parseContentLengthAndJump() {

@@ -103,7 +103,9 @@ private:
     static constexpr std::string_view STR_EXPLORE_NODE_EDGES = "/explore_node_edges";
     static constexpr std::string_view HISTORY = "/history";
 
-    static constexpr std::string_view HEALTH_CHECK= "/health_check";
+    static constexpr std::string_view UPLOAD = "/upload";
+
+    static constexpr std::string_view HEALTH_CHECK = "/health_check";
 
     static net::HTTP::Result<net::HTTP::EndpointIndex> getEndpointIndex(std::string_view path) {
         using EndpointMap = std::unordered_map<net::HTTP::Path, net::HTTP::EndpointIndex>;
@@ -126,7 +128,8 @@ private:
             {STR_GET_EDGES,           (size_t)Endpoint::GET_EDGES          },
             {STR_EXPLORE_NODE_EDGES,  (size_t)Endpoint::EXPLORE_NODE_EDGES },
             {HISTORY,                 (size_t)Endpoint::HISTORY            },
-            {HEALTH_CHECK,                 (size_t)Endpoint::HEALTH_CHECK},
+            {UPLOAD,                  (size_t)Endpoint::UPLOAD             },
+            {HEALTH_CHECK,            (size_t)Endpoint::HEALTH_CHECK       },
         };
 
         auto endpointIt = endpoints.find(path);

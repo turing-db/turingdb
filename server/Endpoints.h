@@ -53,7 +53,8 @@ enum class Endpoint : int64_t {
     EXPLORE_NODE_EDGES,
     HISTORY,
 
+    UPLOAD,
+
     HEALTH_CHECK,
 };
-
 }

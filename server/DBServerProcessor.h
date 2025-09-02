@@ -64,6 +64,8 @@ private:
     void get_edges();
     void explore_node_edges();
 
+    void upload();
+
     struct TransactionInfo {
         std::string graphName;
         CommitHash commit;
