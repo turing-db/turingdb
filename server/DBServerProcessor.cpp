@@ -44,7 +44,13 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
 
     const auto& httpInfo = parser.getHttpInfo();
     if (httpInfo._method != net::HTTP::Method::POST) {
-        _writer.writeHttpError(net::HTTP::Status::METHOD_NOT_ALLOWED);
+        if(httpInfo._method == net::HTTP::Method::GET) {
+            if((Endpoint)httpInfo._endpoint == Endpoint::HEALTH_CHECK) {
+            _writer.writeHeader(net::HTTP::Status::OK).flush();
+            return;
+            }
+        }
+        _writer.writeHttpError(net::HTTP::Status::METHOD_NOT_ALLOWED);  
         return;
     }
 
