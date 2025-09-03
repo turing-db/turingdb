@@ -12,6 +12,11 @@ using namespace db;
 
 DataPartBuilder::~DataPartBuilder() = default;
 
+std::unique_ptr<DataPartBuilder> DataPartBuilder::createEmptyBuilder() {
+    return std::unique_ptr<DataPartBuilder>();
+}
+
+
 std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metadata,
                                                           const GraphView& view,
                                                           size_t partIndex) {

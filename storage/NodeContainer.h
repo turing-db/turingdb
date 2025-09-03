@@ -12,6 +12,7 @@ namespace db {
 class NodeContainerLoader;
 class DataPartLoader;
 class DataPartRebaser;
+class NodeContainerModifier;
 
 class NodeContainer {
 public:
@@ -77,11 +78,14 @@ public:
 
     static std::unique_ptr<NodeContainer> create(NodeID firstID,
                                                  const std::vector<LabelSetHandle>& nodeLabelSets);
+    static std::unique_ptr<NodeContainer> create(NodeID firstID,
+                                                 const std::vector<NodeRecord>& nodeLabelSets);
 
 private:
     friend NodeContainerLoader;
     friend DataPartLoader;
     friend DataPartRebaser;
+    friend NodeContainerModifier;
 
     NodeID _firstID {0};
     size_t _nodeCount {0};

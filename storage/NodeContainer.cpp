@@ -3,6 +3,7 @@
 #include <range/v3/algorithm/is_sorted.hpp>
 #include <range/v3/view/enumerate.hpp>
 
+#include "NodeRecord.h"
 #include "Profiler.h"
 
 namespace rv = ranges::views;
@@ -55,6 +56,44 @@ std::unique_ptr<NodeContainer> NodeContainer::create(NodeID firstID,
     return container;
 }
 
+std::unique_ptr<NodeContainer> NodeContainer::create(NodeID firstID,
+                                                     const std::vector<NodeRecord>& nodeLabelSets) {
+    Profile profile {"NodeContainer::create"};
+
+    auto* ptr = new NodeContainer(firstID, nodeLabelSets.size());
+    std::unique_ptr<NodeContainer> container(ptr);
+
+    const bool isSorted = ranges::is_sorted(nodeLabelSets, [](const NodeRecord& a,
+                                                              const NodeRecord& b) {
+            return a._labelset.getID() < b._labelset.getID();
+        });
+
+    if (!isSorted) {
+        return nullptr;
+    }
+
+    auto& containerRanges = container->_ranges;
+    auto& containerNodes = container->_nodes;
+    const auto containerFirstID = container->_firstID;
+
+    containerNodes.resize(nodeLabelSets.size());
+
+    NodeRange* range = nullptr;
+    for (const auto& [offset, record] : nodeLabelSets | rv::enumerate) {
+        NodeRange& newRange = containerRanges[record._labelset];
+        if (range != &newRange) {
+            range = &newRange;
+            range->_first = containerFirstID + offset;
+        }
+        range->_count++;
+        containerNodes[offset]._labelset = record._labelset;
+    }
+
+    return container;
+}
+
 NodeID NodeContainer::getFirstNodeID(const LabelSetHandle& labelset) const {
     return NodeID {_firstID + _ranges.at(labelset)._first};
 }
+
+

@@ -33,6 +33,8 @@ public:
         const GraphView& view,
         size_t partIndex);
 
+    [[nodiscard]] static std::unique_ptr<DataPartBuilder> createEmptyBuilder();
+
     NodeID addNode(const LabelSetHandle& labelset);
     NodeID addNode(const LabelSet& labelset);
 
