@@ -14,9 +14,18 @@ int main() {
     SimpleGraph::createSimpleGraph(g.get());
 
     auto dps = g->openTransaction().readGraph().dataparts();
-    spdlog::info("Old size: {}", dps[0]->nodes().size());
+    auto dp = dps[0];
+    spdlog::info("Old size: {}", dp->nodes().size());
+    for (const auto& [lblSetHdl, ndRng]: dp->nodes().getLabelSetIndexer()) {
+        spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
+                     ndRng._first + ndRng._count - 1);
+    }
 
     std::set<NodeID> toDel{0};
-    auto newContainer = NodeContainerModifier::deleteNode(dps[0]->nodes(), toDel);
+    auto newContainer = NodeContainerModifier::deleteNode(dp->nodes(), toDel);
     spdlog::info("New size: {}", newContainer->size());
+    for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
+        spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
+                     ndRng._first + ndRng._count - 1);
+    }
 }

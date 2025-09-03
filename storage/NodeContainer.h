@@ -93,8 +93,16 @@ private:
     LabelSetIndexer<NodeRange> _ranges;
     NodeRecords _nodes;
 
-    NodeContainer(NodeID firstID,
-                  size_t nodeCount);
+    NodeContainer(NodeID firstID, size_t nodeCount);
+
+    NodeContainer(NodeID firstID, size_t nodeCount, LabelSetIndexer<NodeRange>& ranges,
+                  NodeRecords& nodes)
+        : _firstID(firstID),
+        _nodeCount(nodeCount),
+        _ranges(ranges),
+        _nodes(nodes)
+    {
+    }
 };
 
 }
