@@ -8,6 +8,7 @@
 namespace db {
 
 class DataPartModifier {
+public:
     /**
      * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
      * @ref toDelete
@@ -16,6 +17,6 @@ class DataPartModifier {
      */
     static void deleteNodes(const WeakArc<DataPart> oldDP, WeakArc<DataPart> newDP,
                      const std::set<NodeID> toDelete);
+private:
 };
-
 }
