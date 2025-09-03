@@ -192,11 +192,18 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
 
             const NodeID srcID = src->getEntityID();
 
-            if (!srcID.isValid()) {
-                // Create first node
+            // If there is no previous decl, and no injected ID, create src node
+            if (!srcID.isValid() && !src->getInjectedIDs()) {
                 _pipeline->add<CreateNodeStep>(src);
-            } else {
+            } else if (srcID.isValid()) { // If there is previous decl, use that
                 nodeID->set(srcID);
+            } else if (src->getInjectedIDs()){ // If there is injected ID, use that
+                // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
+                // injected ID (if any), set this node to have that injected ID
+                nodeID->set(src->getInjectedIDs()->getIDs().at(0));
+            } else {
+                throw PlannerException(
+                    "Could not find previous declaration nor injected ID for node.");
             }
         }
 
@@ -210,15 +217,24 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             EntityPattern* tgt = step[1];
             VarDecl* edgeDecl = edge->getVar()->getDecl();
             VarDecl* tgtDecl = tgt->getVar()->getDecl();
+            if (!tgt) {
+                spdlog::info("No target");
+                throw PlannerException("No Target");
+            }
 
             auto edgeID = _mem->alloc<ColumnEdgeID>();
             edgeDecl->setColumn(edgeID);
 
             if (!tgtDecl->getColumn()) {
-                auto* tgtID = _mem->alloc<ColumnEdgeID>();
+                auto* tgtID = _mem->alloc<ColumnNodeID>();
 
-                // If target ID is invalid, it will be created
-                tgtID->set(tgt->getEntityID());
+                // NOTE: As above, @ref QueryPlanner::analyzeEntityPattern ensures that
+                // there is exactly 1 or 0 injected IDs
+                if (tgt->getInjectedIDs()) { // If injected ID for target, set that
+                    tgtID->set(tgt->getInjectedIDs()->getIDs().at(0));
+                } else { // If target ID is invalid, it will be created
+                    tgtID->set(tgt->getEntityID());
+                }
 
                 tgtDecl->setColumn(tgtID);
             }

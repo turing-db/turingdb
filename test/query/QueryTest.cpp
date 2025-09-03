@@ -440,7 +440,7 @@ TEST_F(QueryTest, ChangeQuery) {
                         (p:Interest { name: "Interest 3" }))")
         .execute();
 
-    tester.query("CREATE (n:9)-[e:INTERESTED_IN { name: \"Luc -> Video games\" }]-(m:Interest { name: \"Video games\" })")
+    tester.query("CREATE (n @ 9)-[e:INTERESTED_IN { name: \"Luc -> Video games\" }]-(m:Interest { name: \"Video games\" })")
         .execute();
 
     tester.query("COMMIT").execute();
@@ -736,7 +736,116 @@ TEST_F(QueryTest, InjectNodes) {
         .execute();
 }
 
-TEST_F(QueryTest, StringApproxTest) {
+TEST_F(QueryTest, injectNodesCreate) {
+    QueryTester tester {_mem, *_interp};
+
+    const auto change0res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+    const ChangeID change0 = change0res.value()->back()->id();
+    tester.setChangeID(change0);
+
+    // Ensure nodes cannot be create with a specifc ID
+    // Non-existant ID
+    tester.query("create (n @ 333)")
+        .expectError()
+        .expectErrorMessage("Cannot create a node with a specific ID")
+        .execute();
+
+    // Existant ID
+    tester.query("create (n @ 0)")
+        .expectError()
+        .expectErrorMessage("Cannot create a node with a specific ID")
+        .execute();
+
+    tester.query("change submit").execute();
+    tester.setChangeID(ChangeID::head());
+
+    const auto change1res = tester.query("CHANGE NEW")
+                                .expectVector<const Change*>({}, false)
+                                .execute()
+                                .outputColumnVector<const Change*>(0);
+    const ChangeID change1 = change1res.value()->back()->id();
+    tester.setChangeID(change1);
+
+    tester.query("create (a @ 0, 1)-[:BADEDGE]-(b @ 2)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+    tester.query("create (a @ 0)-[:BADEDGE]-(b @ 1, 2)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+
+    tester.query("create (a @ 0,1)-[:BADEDGE]-(b @ 2, 3)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+    tester.query("create (a @ 0,1)-[:BADEDGE]-(b @ 2)-[:GOODEDGE]-(c @ 3)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+    tester.query("create (a @ 0)-[:BADEDGE]-(b @ 2, 3)-[:BADEDGE]-(c @ 3)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)-[:BADEDGE]-(c @ 2, 3)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+    tester.query("create (a @ 0, 1)-[:BADEDGE]-(b @ 2)-[:BADEDGE]-(c @ 3, 4)")
+        .expectError()
+        .expectErrorMessage(
+            "Edges may only be created between nodes with at most one specified ID")
+        .execute();
+
+    // Standard simpledb Edges
+    tester.query("match (n)-[e]-(m) return e")
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .execute();
+    tester.query("CALL EDGETYPES()")
+        .expectVector<EdgeTypeID>({0, 1})
+        .expectVector<std::string_view>({"KNOWS_WELL", "INTERESTED_IN"})
+        .execute();
+
+    // 1 hop valid edge
+    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)").execute();
+    // 2 hop valid edge
+    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)-[:GOODEDGE]-(c @ 2)").execute();
+
+    tester.query("change submit").execute();
+    tester.setChangeID(ChangeID::head());
+
+    // Standard simpledb Edges + GOODEDGE
+    tester.query("match (n)-[e]-(m) return e")
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14})
+        .execute();
+
+    tester.query("CALL EDGETYPES()")
+        .expectVector<EdgeTypeID>({0, 1, 2})
+        .expectVector<std::string_view>({"KNOWS_WELL", "INTERESTED_IN", "GOODEDGE"})
+        .execute();
+
+    // Standard simpledb Nodes
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .execute();
+}
+
+TEST_F(QueryTest, stringApproxTest) {
     QueryTester tester {_mem, *_interp};
     
     auto change1Res = tester.query("CHANGE NEW")
@@ -857,7 +966,7 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
         .execute();
 }
 
-TEST_F(QueryTest, PersonGraphAproxMatching) {
+TEST_F(QueryTest, personGraphApproxMatching) {
     QueryTester tester{_mem, *_interp};
 
     using StrOpt = std::optional<types::String::Primitive>;

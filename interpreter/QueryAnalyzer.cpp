@@ -6,6 +6,7 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/algorithm/adjacent_find.hpp>
 
+#include "spdlog/spdlog.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "AnalyzeException.h"
@@ -252,7 +253,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
 void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
     bool isCreate {true}; // Flag to distinguish create and match commands
-
+                         
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -272,7 +273,7 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
         }
 
         analyzeEntityPattern(declContext, entityPattern, isCreate);
-
+        
         if (elements.size() >= 2) {
             bioassert(elements.size() >= 3);
             for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
@@ -281,6 +282,7 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
 
                 analyzeEntityPattern(declContext, edge, isCreate);
 
+                spdlog::info("Analyzing target");
                 analyzeEntityPattern(declContext, target, isCreate);
             }
         }
@@ -377,9 +379,10 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
     }
 
     uint64_t idToSet = entity->getEntityID();
+    spdlog::info("Got id {}", idToSet);
 
     // If attempting to inject IDs in a CREATE, ensure they are all valid
-    // NOTE: The case for creating a single node whilst injecting IDs is handled
+    // NOTE: Attempts to create a node whilst injecting IDs is prevented
     // in @ref analyzeCreate
     if (isCreate && entity->getInjectedIDs()) {
         auto& injectedIDs = entity->getInjectedIDs()->getIDs();
@@ -387,19 +390,16 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
         // are here, we must be creating an edge where at least one of its nodes is an
         // injected ID. We only can support this if a single ID is provided, otherwise it
         // requires creating multiple edges from/to each of the injected nodes.
-
         if (injectedIDs.size() != 1) {
             throw AnalyzeException(
                 "Edges may only be created between nodes with at most one specified ID");
         }
         // We have a single injected node: set this VarDecl to have the injected ID
         idToSet = injectedIDs.at(0).getValue();
-
-        for (const auto& node : injectedIDs) {
-            if (!_view.read().graphHasNode(node)) {
-                throw AnalyzeException("No such node with ID: \""
-                                       + std::to_string(node.getValue()) + "\"");
-            }
+        spdlog::info("Updated ID to {}", idToSet);
+        if (!_view.read().graphHasNode(idToSet)) {
+            throw AnalyzeException("No such node with ID: \""
+                                   + std::to_string(idToSet) + "\"");
         }
     }
 
@@ -409,8 +409,10 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
                                     var->getName(),
                                     entity->getKind(),
                                     idToSet);
+    spdlog::info("Created decl with id {}", idToSet);
 
     if (!decl) {
+        spdlog::info("Decl already existed");
         // decl already exists from prev targets
         decl = declContext->getDecl(var->getName());
         decl->setUsed(true);
