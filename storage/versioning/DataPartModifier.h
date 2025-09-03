@@ -17,6 +17,5 @@ public:
      */
     static void deleteNodes(const WeakArc<DataPart> oldDP, WeakArc<DataPart> newDP,
                      const std::set<NodeID> toDelete);
-private:
 };
 }
