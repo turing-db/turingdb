@@ -34,6 +34,17 @@ int main() {
     }
 
     {
+        spdlog::info("After deleting 0,1,2,3:");
+        std::set<NodeID> toDel {0, 1, 2, 3};
+        auto newContainer = NodeContainerModifier::deleteNode(dp->nodes(), toDel);
+        spdlog::info("New size: {}", newContainer->size());
+        for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
+            spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
+                         ndRng._first + ndRng._count - 1);
+        }
+    }
+
+    {
         spdlog::info("After deleting all nodes:");
         std::set<NodeID> toDel {0, 1, 2, 3, 4, 5, 6};
         auto newContainer = NodeContainerModifier::deleteNode(dp->nodes(), toDel);

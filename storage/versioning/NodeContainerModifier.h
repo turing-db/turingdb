@@ -10,12 +10,13 @@
 #include <set>
 
 #include "NodeContainer.h"
+#include "spdlog/fmt/bundled/format.h"
 
 namespace rg = ranges;
 namespace rv = rg::views;
 
 namespace {
-    // Enumerate from a starting value @ref start (inclusive)
+    // Enumerate from starting value @ref start (inclusive)
     template <typename Rng>
     auto enumerate_from(std::ptrdiff_t start, Rng&& rng) {
         return rv::zip(rv::iota(start), std::forward<Rng>(rng));
@@ -29,11 +30,23 @@ class NodeContainerModifier {
 public:
     [[nodiscard]] static std::unique_ptr<NodeContainer> deleteNode(const NodeContainer& original,
                                                                    const std::set<NodeID> toDelete) {
-        for (const NodeID id : toDelete) {
-            if (!original.hasEntity(id)) {
-                throw TuringException(fmt::format(
-                    "Node {} to delete does not exist in NodeContainer", id));
-            }
+
+        uint64_t ogFstID = original.getFirstNodeID().getValue();
+        size_t ogSize = original.size();
+
+        // Bounds check to ensure all nodes that are to be deleted are in this DP
+        NodeID smallestNodeToDelete = *toDelete.cbegin();
+        NodeID largestNodeToDelete = *toDelete.rbegin();
+        if (smallestNodeToDelete < ogFstID ) {
+            throw TuringException(fmt::format("Node with ID {} is not in this datapart; "
+                                              "smallest ID in this datapart is {}",
+                                              smallestNodeToDelete, ogFstID));
+        }
+        if (largestNodeToDelete > ogFstID + ogSize - 1) {
+            throw TuringException(fmt::format("Node with ID {} is not in this datapart; "
+                                              "largest ID in this datapart is {}",
+                                              largestNodeToDelete,
+                                              ogFstID + ogSize - 1));
         }
 
         // If entire NodeContainer was deleted, exit early
@@ -43,29 +56,26 @@ public:
             return std::unique_ptr<NodeContainer>(emptyContainer);
         }
 
-        // TODO: NodeRange based solution: delete ranges to reduce ID shuffling
+        // TODO?: NodeRange based solution: delete ranges to reduce ID shuffling
 
-        uint64_t ogFstID = original.getFirstNodeID().getValue();
-        auto ogRecords = original.records();
+        uint64_t newFstID = UINT64_MAX;
+        auto smallestDeleted = toDelete.cbegin();
 
         // Calculate the new first ID
         // The new first ID is the smallest ID in the original container which is not
         // deleted
          
-        uint64_t newFstID = UINT64_MAX;
-        auto smallestDeleted = toDelete.cbegin();
-
         // If the smallest ID is not deleted, then the smallest ID remains the same
         if (*smallestDeleted != ogFstID) {
             newFstID = ogFstID;
-        } else {
+        } else { // Otherwise, find the smallest ID which is not deleted
             // Never risk of @ref smallestDeleted > end() since in that case all nodes are
             // deleted, which is explicitly checked above
-            while (*smallestDeleted++ == newFstID++)
+            while (*++smallestDeleted == ++newFstID)
                 ;
         }
 
-
+        auto ogRecords = original.records();
         // Create the new NodeRecords vector
         std::vector<NodeRecord> newRecords;
         newRecords.reserve(ogRecords.size() - toDelete.size());
