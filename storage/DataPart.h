@@ -14,6 +14,7 @@ class EdgeContainer;
 class NodeContainer;
 class PropertyManager;
 class DataPartBuilder;
+class DataPartModifier;
 class GraphView;
 class GraphReader;
 class EdgeIndexer;
@@ -63,6 +64,7 @@ private:
     friend GraphReader;
     friend DataPartLoader;
     friend DataPartRebaser;
+    friend DataPartModifier;
 
     bool _initialized {false};
     NodeID _firstNodeID {0};

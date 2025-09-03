@@ -25,7 +25,7 @@ int main() {
     {
         spdlog::info("After deleting 0:");
         std::set<NodeID> toDel {0};
-        auto newContainer = NodeContainerModifier::deleteNode(dp->nodes(), toDel);
+        auto newContainer = NodeContainerModifier::deleteNodes(dp->nodes(), toDel);
         spdlog::info("New size: {}", newContainer->size());
         for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
             spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
@@ -36,7 +36,7 @@ int main() {
     {
         spdlog::info("After deleting 0,1,2,3:");
         std::set<NodeID> toDel {0, 1, 2, 3};
-        auto newContainer = NodeContainerModifier::deleteNode(dp->nodes(), toDel);
+        auto newContainer = NodeContainerModifier::deleteNodes(dp->nodes(), toDel);
         spdlog::info("New size: {}", newContainer->size());
         for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
             spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
@@ -47,7 +47,7 @@ int main() {
     {
         spdlog::info("After deleting all nodes:");
         std::set<NodeID> toDel {0, 1, 2, 3, 4, 5, 6};
-        auto newContainer = NodeContainerModifier::deleteNode(dp->nodes(), toDel);
+        auto newContainer = NodeContainerModifier::deleteNodes(dp->nodes(), toDel);
         spdlog::info("New size: {}", newContainer->size());
         for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
             spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
