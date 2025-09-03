@@ -6,6 +6,8 @@
 
 namespace db {
 
+class NodeContainerModifier;
+
 template <typename T>
 class LabelSetIndexer {
 public:

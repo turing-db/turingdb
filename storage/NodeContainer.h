@@ -95,8 +95,8 @@ private:
 
     NodeContainer(NodeID firstID, size_t nodeCount);
 
-    NodeContainer(NodeID firstID, size_t nodeCount, LabelSetIndexer<NodeRange>& ranges,
-                  NodeRecords& nodes)
+    NodeContainer(NodeID firstID, size_t nodeCount, LabelSetIndexer<NodeRange> ranges,
+                  NodeRecords nodes)
         : _firstID(firstID),
         _nodeCount(nodeCount),
         _ranges(ranges),

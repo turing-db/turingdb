@@ -31,16 +31,18 @@ public:
                                                                    const std::set<NodeID> toDelete) {
         for (const NodeID id : toDelete) {
             if (!original.hasEntity(id)) {
-                throw TuringException(
-                    "Node {} to delete does not exist in NodeContainer");
+                throw TuringException(fmt::format(
+                    "Node {} to delete does not exist in NodeContainer", id));
             }
         }
 
         // If entire NodeContainer was deleted, exit early
         if (original.size() == toDelete.size()) {
-            return {};
+            NodeContainer* emptyContainer = new NodeContainer(
+                0, 0, LabelSetIndexer<NodeRange> {}, std::vector<NodeRecord> {});
+            return std::unique_ptr<NodeContainer>(emptyContainer);
         }
-        
+
         // TODO: NodeRange based solution: delete ranges to reduce ID shuffling
 
         uint64_t ogFstID = original.getFirstNodeID().getValue();
@@ -57,12 +59,10 @@ public:
         if (*smallestDeleted != ogFstID) {
             newFstID = ogFstID;
         } else {
-            while (*smallestDeleted++ == newFstID++) {
-                // If all IDs are deleted NodeContainer has been deleted: return nullptr
-                if (smallestDeleted == toDelete.end()) {
-                    return {};
-                }
-            }
+            // Never risk of @ref smallestDeleted > end() since in that case all nodes are
+            // deleted, which is explicitly checked above
+            while (*smallestDeleted++ == newFstID++)
+                ;
         }
 
 
