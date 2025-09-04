@@ -48,6 +48,7 @@ private:
     friend GraphInfoLoader;
     friend PartIterator;
     friend DataPartBuilder;
+    friend DataPartModifier;
     friend GraphDumper;
     friend ConcurrentWriter;
     friend CommitLoader;

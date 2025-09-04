@@ -8,6 +8,7 @@
 #include "DataPart.h"
 #include "EdgeContainer.h"
 #include "versioning/NodeContainerModifier.h"
+#include "NodeContainer.h"
 
 using namespace db;
 

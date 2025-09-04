@@ -4,6 +4,8 @@
 
 #include "ArcManager.h"
 #include "DataPart.h"
+#include "Graph.h"
+#include "VersionController.h"
 #include "ID.h"
 #include "TuringException.h"
 
@@ -18,15 +20,24 @@ public:
 
     ~DataPartModifier() = default;
 
+    // this is for the purpose of testing in a sample - will integrate into commit
+    // modifier later
+    [[nodiscard]] static WeakArc<DataPart> newDPinGraph(Graph* g) {
+        return g->_versionController->createDataPart(0, 0);
+    }
+
     void applyDeletions();
 
-    /**
-     * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
-     * @ref toDelete
-     * @detail TODO: Also updates other datastructures in DataParts to handle the updated
-     * IDs of the nodes as a result of reassigning NodeIDs after deletion
-     */
-    void deleteNodes();
+    // this is for the purpose of testing in a sample - will integrate into commit
+    // modifier later
+    [[nodiscard]] static std::unique_ptr<DataPartModifier> create(const WeakArc<DataPart> oldDP,
+                                                  WeakArc<DataPart> newDP,
+                                                  std::set<NodeID> nodesToDelete,
+                                                  std::set<EdgeID> edgesToDelete) {
+        // private constructor so make raw then make unique
+        auto raw = new DataPartModifier {oldDP, newDP, nodesToDelete, edgesToDelete};
+        return std::unique_ptr<DataPartModifier>(raw);
+    }
 
 private:
     const WeakArc<DataPart> _oldDP {}; // nullptr
@@ -44,6 +55,14 @@ private:
     }};
 
     void prepare();
+
+    /**
+     * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
+     * @ref toDelete
+     * @detail TODO: Also updates other datastructures in DataParts to handle the updated
+     * IDs of the nodes as a result of reassigning NodeIDs after deletion
+     */
+    void deleteNodes();
 
     /**
      * @brief Identifies edges that must be deleted due to one of their incident nodes

@@ -61,6 +61,7 @@ set(storage_sources
         versioning/CommitHistory.cpp
 
         versioning/NodeContainerModifier.cpp
+        versioning/DataPartModifier.cpp
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp
