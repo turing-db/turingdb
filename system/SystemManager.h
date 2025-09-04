@@ -13,7 +13,7 @@
 
 namespace db {
 
-class SystemConfig;
+class TuringConfig;
 class Graph;
 class ChangeManager;
 class JobSystem;
@@ -23,7 +23,7 @@ class Change;
 
 class SystemManager {
 public:
-    explicit SystemManager(const SystemConfig& config);
+    explicit SystemManager(const TuringConfig& config);
     ~SystemManager();
 
     SystemManager(const SystemManager&) = delete;
@@ -31,7 +31,7 @@ public:
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
 
-    const SystemConfig& getConfig() const { return _config; }
+    const TuringConfig& getConfig() const { return _config; }
 
     Graph* createGraph(const std::string& graphName);
 
@@ -66,7 +66,7 @@ public:
                                               ChangeID changeID);
 
 private:
-    const SystemConfig& _config;
+    const TuringConfig& _config;
     mutable RWSpinLock _graphsLock;
     Graph* _defaultGraph {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;

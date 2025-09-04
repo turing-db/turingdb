@@ -1,4 +1,4 @@
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 
 #include <stdlib.h>
 
@@ -8,15 +8,15 @@
 
 using namespace db;
 
-SystemConfig::SystemConfig()
+TuringConfig::TuringConfig()
 {
     init();
 }
 
-SystemConfig::~SystemConfig() {
+TuringConfig::~TuringConfig() {
 }
 
-void SystemConfig::init() {
+void TuringConfig::init() {
     const char* homeEnv = getenv("HOME");
     if (!homeEnv || !*homeEnv) {
         panic("Environment variable $HOME undefined");
@@ -55,7 +55,7 @@ void SystemConfig::init() {
     _dataDir = dataDir;
 }
 
-void SystemConfig::setTuringDirectory(const fs::Path& turingDir) {
+void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _turingDir = turingDir;
     _graphsDir = _turingDir/"graphs";
     _dataDir = _turingDir/"data";
