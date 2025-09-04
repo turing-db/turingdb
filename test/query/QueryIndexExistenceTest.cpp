@@ -10,7 +10,7 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "Path.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 #include "QueryTester.h"
 
 using namespace db;
@@ -18,7 +18,7 @@ using namespace db;
 class QueryIndexExistenceTest : public turing::test::TuringTest {
 public:
     QueryIndexExistenceTest()
-        : _db(_sysConfig)
+        : _db(_config)
     {
     }
 
@@ -44,7 +44,7 @@ public:
         }
     }
 protected:
-    SystemConfig _sysConfig;
+    TuringConfig _config;
     TuringDB _db;
     LocalMemory _mem;
     fs::Path _workingPath;
@@ -61,7 +61,7 @@ TEST_F(QueryIndexExistenceTest, noStringIndex) {
     }
 
     const std::string& newName = "newSimple";
-    TuringDB newDB(_sysConfig);
+    TuringDB newDB(_config);
     LocalMemory newMem;
     std::unique_ptr<QueryInterpreter> newInterp =
         std::make_unique<QueryInterpreter>(&newDB.getSystemManager(), &newDB.getJobSystem());

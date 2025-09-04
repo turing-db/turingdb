@@ -4,10 +4,10 @@
 
 namespace db {
 
-class SystemConfig {
+class TuringConfig {
 public:
-    SystemConfig();
-    ~SystemConfig();
+    TuringConfig();
+    ~TuringConfig();
 
     const fs::Path& getTuringDir() const { return _turingDir; }
     const fs::Path& getGraphsDir() const { return _graphsDir; }

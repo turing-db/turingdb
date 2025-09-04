@@ -14,14 +14,14 @@
 #include "QueryAnalyzer.h"
 #include "PlanGraphTester.h"
 #include "PlanOptimizer.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 
 using namespace db;
 
 class PlanGenTest : public ::testing::Test {
 public:
     PlanGenTest()
-        : _sysMan(_sysConfig)
+        : _sysMan(_config)
     {
     }
 
@@ -34,7 +34,7 @@ public:
     }
 
 protected:
-    SystemConfig _sysConfig;
+    TuringConfig _config;
     SystemManager _sysMan;
     Graph* _graph {nullptr};
 };

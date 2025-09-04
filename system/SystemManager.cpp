@@ -14,12 +14,12 @@
 #include "JobSystem.h"
 #include "GraphLoader.h"
 #include "FileUtils.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 #include "TuringException.h"
 
 using namespace db;
 
-SystemManager::SystemManager(const SystemConfig& config)
+SystemManager::SystemManager(const TuringConfig& config)
     : _config(config),
     _changes(std::make_unique<ChangeManager>())
 {

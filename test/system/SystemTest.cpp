@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "SystemManager.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 #include "Graph.h"
 
 using namespace db;
@@ -10,8 +10,8 @@ class SystemManagerTest : public ::testing::Test {
 };
 
 TEST_F(SystemManagerTest, createGraph) {
-    SystemConfig sysConfig;
-    SystemManager sysMan(sysConfig);
+    TuringConfig config;
+    SystemManager sysMan(config);
 
     // The default graph exists
     Graph* defaultGraph = sysMan.getDefaultGraph();

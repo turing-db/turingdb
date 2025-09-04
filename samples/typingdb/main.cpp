@@ -13,7 +13,7 @@
 #include "GraphDumper.h"
 #include "GraphReport.h"
 #include "versioning/Transaction.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 
 #include "ToolInit.h"
 
@@ -25,8 +25,8 @@ int main(int argc, const char** argv) {
 
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "typingdb";
 
-    SystemConfig sysConfig;
-    TuringDB db(sysConfig);
+    TuringConfig config;
+    TuringDB db(config);
 
     {
         spdlog::info("Create company graph");

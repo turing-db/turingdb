@@ -9,7 +9,7 @@
 #include "ID.h"
 #include "QueryTester.h"
 #include "TypingGraph.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -17,7 +17,7 @@ using namespace db;
 class QueryAnalyzerTest : public turing::test::TuringTest {
 public:
     QueryAnalyzerTest()
-        : _db(_sysConfig)
+        : _db(_config)
     {
     }
 
@@ -31,7 +31,7 @@ public:
     }
     
 protected:
-    SystemConfig _sysConfig;
+    TuringConfig _config;
     TuringDB _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};

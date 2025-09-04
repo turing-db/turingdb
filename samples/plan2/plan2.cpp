@@ -18,7 +18,7 @@
 #include "ParserException.h"
 #include "AnalyzeException.h"
 #include "FileReader.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 
 using namespace db;
 
@@ -50,8 +50,8 @@ int main(int argc, char** argv) {
 }
 
 void runPlan2(std::string_view query) {
-    SystemConfig sysConfig;
-    SystemManager sysMan(sysConfig);
+    TuringConfig config;
+    SystemManager sysMan(config);
     Graph* graph = sysMan.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 

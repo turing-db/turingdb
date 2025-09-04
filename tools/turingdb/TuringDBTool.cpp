@@ -7,7 +7,7 @@
 #include "TuringShell.h"
 #include "TuringServer.h"
 #include "DBServerConfig.h"
-#include "SystemConfig.h"
+#include "TuringConfig.h"
 #include "Demonology.h"
 
 #include "ToolInit.h"
@@ -42,8 +42,8 @@ int main(int argc, const char** argv) {
         Demonology::demonize();
     }
 
-    SystemConfig sysConfig;
-    TuringDB turingDB(sysConfig);
+    TuringConfig config;
+    TuringDB turingDB(config);
     LocalMemory mem;
 
     for (const auto& graphName : graphsToLoad) {
