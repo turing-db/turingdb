@@ -2,7 +2,6 @@
 #include "ExecutionContext.h"
 #include "Expr.h"
 #include "ExprConstraint.h"
-#include "InjectedIDs.h"
 #include "PathPattern.h"
 #include "Profiler.h"
 #include "TypeConstraint.h"
@@ -47,9 +46,6 @@ void CreateNodeStep::describe(std::string& descr) const {
 }
 
 void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* data) {
-    // if (data->getInjectedIDs()) {
-    //     throw PipelineException("Cannot create a node with an injected ID");
-    // }
     auto& metadata = builder->getMetadata();
 
     const TypeConstraint* type = data->getTypeConstraint();
