@@ -24,8 +24,14 @@ namespace {
 }
 
 void DataPartModifier::applyDeletions() {
+    if (_nodesToDelete.empty() && _edgesToDelete.empty()) {
+        return;
+    }
+
     prepare();
+
     deleteNodes();
+    // deleteEdges();
 }
 
 void DataPartModifier::prepare() {
@@ -65,8 +71,22 @@ void DataPartModifier::detectHangingEdges() {
     // Get [edgeId, edgeRecord] pairs starting from the first edgeID, check the record to
     // see if the source or target node of the edge is to be deleted. If it is, this edge
     // also needs to be deleted.
+
+    // In edges
     for (const auto& [edgeID, edgeRecord] :
          enumerate_from(oldFirstEdgeID, oldEdgeContainer.getIns())) {
+
+        if (_nodesToDelete.contains(edgeRecord._nodeID)) {
+            _edgesToDelete.emplace(edgeID);
+        }
+        if (_nodesToDelete.contains(edgeRecord._otherID)) {
+            _edgesToDelete.emplace(edgeID);
+        }
+    }
+
+    // Out edges
+    for (const auto& [edgeID, edgeRecord] :
+         enumerate_from(oldFirstEdgeID, oldEdgeContainer.getOuts())) {
 
         if (_nodesToDelete.contains(edgeRecord._nodeID)) {
             _edgesToDelete.emplace(edgeID);
