@@ -253,7 +253,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
 void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
     bool isCreate {true}; // Flag to distinguish create and match commands
-                         
+
     DeclContext* declContext = cmd->getDeclContext();
     const auto& targets = cmd->createTargets();
     for (const CreateTarget* target : targets) {
@@ -273,7 +273,7 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
         }
 
         analyzeEntityPattern(declContext, entityPattern, isCreate);
-        
+
         if (elements.size() >= 2) {
             bioassert(elements.size() >= 3);
             for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
