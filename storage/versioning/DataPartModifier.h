@@ -36,14 +36,20 @@ private:
     std::set<EdgeID> _edgesToDelete;
 
     std::function<NodeID(NodeID)> _nodeIDMapping {[](NodeID x) -> NodeID {
-        throw TuringException("Attempted to use uninitialised _nodeIDMapping");
+        throw TuringException("Attempted to use uninitialised _nodeIDMapping.");
     }};
 
     std::function<EdgeID(EdgeID)> _edgeIDMapping {[](EdgeID x) -> EdgeID {
-        throw TuringException("Attempted to use uninitialised _edgeIDMapping");
+        throw TuringException("Attempted to use uninitialised _edgeIDMapping.");
     }};
 
     void prepare();
+
+    /**
+     * @brief Identifies edges that must be deleted due to one of their incident nodes
+     *        being deleted, and appends those EdgeIDs to @ref _edgesToDelete.
+     */
+    void detectHangingEdges();
 
     // Copy constructor WeakArc to the old datapart so the old referee still holds a
     // reference, but take ownership of WeakArc of the new datapart
