@@ -6,7 +6,6 @@
 #include <range/v3/view/chunk.hpp>
 #include <range/v3/all.hpp>
 
-#include "BioAssert.h"
 #include "DataPart.h"
 #include "Expr.h"
 #include "FilterStep.h"
@@ -36,7 +35,6 @@
 #include "columns/ColumnMask.h"
 
 #include "columns/ColumnSet.h"
-#include "iterators/GetPropertiesIterator.h"
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "reader/GraphReader.h"
@@ -176,7 +174,7 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
     // This is necessary by convention for Executor
     _pipeline->add<StopStep>();
 
-    for (const auto& target : targets) {
+    for (const CreateTarget* target : targets) {
         const PathPattern* path = target->getPattern();
         std::span pathElements {path->elements()};
 
@@ -185,8 +183,8 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             return false;
         }
 
-        auto* src = pathElements[0];
-        auto* srcDcl = src->getVar()->getDecl();
+        EntityPattern* src = pathElements[0];
+        VarDecl* srcDcl = src->getVar()->getDecl();
 
         if (!srcDcl->getColumn()) {
             auto* nodeID = _mem->alloc<ColumnNodeID>();
@@ -208,12 +206,12 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
 
         for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
             // Create the target + the edge (the source is already created)
-            const auto* edge = step[0];
-            auto* tgt = step[1];
-            auto* edgeDecl = edge->getVar()->getDecl();
-            auto* tgtDecl = tgt->getVar()->getDecl();
+            const EntityPattern* edge = step[0];
+            EntityPattern* tgt = step[1];
+            VarDecl* edgeDecl = edge->getVar()->getDecl();
+            VarDecl* tgtDecl = tgt->getVar()->getDecl();
 
-            auto* edgeID = _mem->alloc<ColumnEdgeID>();
+            auto edgeID = _mem->alloc<ColumnEdgeID>();
             edgeDecl->setColumn(edgeID);
 
             if (!tgtDecl->getColumn()) {
