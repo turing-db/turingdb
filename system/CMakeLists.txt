@@ -1,5 +1,5 @@
 set(system_sources
-    SystemConfig.cpp
+    TuringConfig.cpp
     GraphLoadStatus.cpp
     ChangeManager.cpp
     SystemManager.cpp)
