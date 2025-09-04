@@ -9,6 +9,7 @@
 
 namespace db {
 
+class SystemConfig;
 class SystemManager;
 class LocalMemory;
 class JobSystem;
@@ -16,7 +17,7 @@ class Block;
 
 class TuringDB {
 public:
-    TuringDB();
+    TuringDB(const SystemConfig& config);
     ~TuringDB();
 
     SystemManager& getSystemManager() {

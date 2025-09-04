@@ -237,7 +237,6 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
 }
 
 void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
-
     const auto& injectedNodes = path[0]->getInjectedIDs();
     _result = _mem->alloc<ColumnNodeIDs>(injectedNodes->getIDs());
 

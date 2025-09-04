@@ -14,10 +14,17 @@
 #include "QueryAnalyzer.h"
 #include "PlanGraphTester.h"
 #include "PlanOptimizer.h"
+#include "SystemConfig.h"
 
 using namespace db;
 
 class PlanGenTest : public ::testing::Test {
+public:
+    PlanGenTest()
+        : _sysMan(_sysConfig)
+    {
+    }
+
     void SetUp() override {
         _graph = _sysMan.createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
@@ -27,6 +34,7 @@ class PlanGenTest : public ::testing::Test {
     }
 
 protected:
+    SystemConfig _sysConfig;
     SystemManager _sysMan;
     Graph* _graph {nullptr};
 };

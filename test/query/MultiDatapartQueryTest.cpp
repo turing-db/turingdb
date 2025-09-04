@@ -7,6 +7,7 @@
 #include "SimpleGraph.h"
 #include "QueryTester.h"
 #include "writers/GraphWriter.h"
+#include "SystemConfig.h"
 #include "TuringTest.h"
 
 #define EDGEID(edgeName) \
@@ -21,7 +22,13 @@ using namespace db;
 // In this class we try and touch edge cases that might not be commonly seen
 class MultiDatapartQueryTest : public turing::test::TuringTest {
 public:
+    MultiDatapartQueryTest()
+        : _db(_sysConfig)
+    {
+    }
+
 protected:
+    SystemConfig _sysConfig;
     TuringDB _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};

@@ -10,6 +10,7 @@
 #include "AwsS3ClientWrapper.h"
 #include "FileCache.h"
 #include "SystemManager.h"
+#include "SystemConfig.h"
 
 void splitString(std::string& string, std::vector<std::string>& result) {
     std::istringstream iss(string);
@@ -23,8 +24,11 @@ int main() {
     linenoiseHistoryLoad("history.txt");
 
     auto awsClient = S3::AwsS3ClientWrapper<>();
-    db::SystemManager sysMan;
-    db::FileCache cache = db::FileCache(sysMan.getTuringDir() / "graphs", sysMan.getTuringDir() / "data", awsClient);
+    db::SystemConfig sysConfig;
+    db::SystemManager sysMan(sysConfig);
+    const auto& turingDir = sysConfig.getTuringDir();
+    
+    db::FileCache cache = db::FileCache(turingDir/"graphs", turingDir/"data", awsClient);
     // Main input loop
     char* line = nullptr;
     while ((line = linenoise("prompt> ")) != nullptr) {
