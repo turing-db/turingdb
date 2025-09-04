@@ -14,75 +14,19 @@
 #include "JobSystem.h"
 #include "GraphLoader.h"
 #include "FileUtils.h"
-#include "Panic.h"
+#include "SystemConfig.h"
+#include "TuringException.h"
 
 using namespace db;
 
-SystemManager::SystemManager()
-    : _changes(std::make_unique<ChangeManager>())
+SystemManager::SystemManager(const SystemConfig& config)
+    : _config(config),
+    _changes(std::make_unique<ChangeManager>())
 {
-    const char* home = std::getenv("HOME");
-    if (!home) {
-        panic("HOME environment variable not set");
-    }
-
-    _turingDir = createTuringConfigDirectories(home);
-
-    _graphsDir = fs::Path(home) / "graphs_v2";
-    if (!_graphsDir.exists()) {
-        panic("graphs_v2 directory not found at {}", _graphsDir.get());
-    }
-
     _defaultGraph = createGraph("default");
 }
 
 SystemManager::~SystemManager() {
-}
-
-void SystemManager::setGraphsDir(const fs::Path& dir) {
-    _graphsDir = dir;
-}
-
-fs::Path SystemManager::createTuringConfigDirectories(const char* homeDir) {
-    const fs::Path configBase = fs::Path(homeDir) / ".turing";
-    const fs::Path graphsDir = configBase / "graphs";
-    const fs::Path dataDir = configBase / "data";
-
-    const bool configExists = configBase.exists();
-
-    if (!configExists) {
-        spdlog::info("Creating main config directory: {}", configBase.c_str());
-        if(auto res = configBase.mkdir(); !res){
-            spdlog::error(res.error().fmtMessage());
-            panic("Could not create .turing directory");
-        }
-    }
-
-    const bool graphsExists = graphsDir.exists();
-
-    if (!graphsExists) {
-        spdlog::info("Creating graphs directory: {}", graphsDir.c_str());
-        if(auto res = graphsDir.mkdir(); !res){
-            spdlog::error(res.error().fmtMessage());
-            panic("Could not create .turing/graphs/ directory");
-        }
-    }
-
-    const bool dataExists = dataDir.exists();
-
-    if (!dataExists) {
-        spdlog::info("Creating data directory: {}", dataDir.c_str());
-        if(auto res = dataDir.mkdir(); !res){
-            spdlog::error(res.error().fmtMessage());
-            panic("Could not create .turing/data/ directory");
-        }
-    }
-
-    if (configExists && graphsExists && dataExists) {
-        spdlog::info("Turing Directories Detected");
-    }
-    
-    return configBase;
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {
@@ -143,7 +87,7 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
 }
 
 bool SystemManager::loadGraph(const std::string& graphName, JobSystem& jobSystem) {
-    const fs::Path graphPath = fs::Path(_graphsDir) / graphName;
+    const fs::Path graphPath = _config.getGraphsDir()/graphName;
 
     // Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
@@ -202,6 +146,7 @@ bool SystemManager::loadGraph(const fs::Path graphPath, const std::string& graph
             return false;
     }
 }
+
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
     if (graphPath.extension() == ".gml") {
         return GraphFileType::GML;
@@ -296,10 +241,9 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
 }
 
 void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
-    const auto list = fs::Path(_graphsDir).listDir();
+    const auto list = _config.getGraphsDir().listDir();
     if (!list) {
-        spdlog::error("Failed to list available graphs in {}", _graphsDir.get());
-        return;
+        throw TuringException("Can not list graphs in turing directory");
     }
 
     for (const auto& path : list.value()) {

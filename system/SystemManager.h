@@ -13,6 +13,7 @@
 
 namespace db {
 
+class SystemConfig;
 class Graph;
 class ChangeManager;
 class JobSystem;
@@ -22,7 +23,7 @@ class Change;
 
 class SystemManager {
 public:
-    SystemManager();
+    explicit SystemManager(const SystemConfig& config);
     ~SystemManager();
 
     SystemManager(const SystemManager&) = delete;
@@ -30,9 +31,7 @@ public:
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
 
-    fs::Path createTuringConfigDirectories(const char* homeDir);
-    fs::Path& getGraphsDir() { return _graphsDir; };
-    fs::Path& getTuringDir() { return _turingDir; };
+    const SystemConfig& getConfig() const { return _config; }
 
     Graph* createGraph(const std::string& graphName);
 
@@ -67,9 +66,8 @@ public:
                                               ChangeID changeID);
 
 private:
+    const SystemConfig& _config;
     mutable RWSpinLock _graphsLock;
-    fs::Path _graphsDir;
-    fs::Path _turingDir;
     Graph* _defaultGraph {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;

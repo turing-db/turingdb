@@ -9,12 +9,18 @@
 #include "ID.h"
 #include "QueryTester.h"
 #include "TypingGraph.h"
+#include "SystemConfig.h"
 #include "TuringTest.h"
 
 using namespace db;
 
 class QueryAnalyzerTest : public turing::test::TuringTest {
 public:
+    QueryAnalyzerTest()
+        : _db(_sysConfig)
+    {
+    }
+
     void initialize() override {
         SystemManager& sysMan = _db.getSystemManager();
         // XXX: Bug (I think), does not work unless set to "simple"
@@ -25,6 +31,7 @@ public:
     }
     
 protected:
+    SystemConfig _sysConfig;
     TuringDB _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};

@@ -6,6 +6,7 @@
 #include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
+#include "SystemConfig.h"
 #include "SimpleGraph.h"
 #include "QueryTester.h"
 #include "TuringTest.h"
@@ -14,6 +15,11 @@ using namespace db;
 
 class QueryTest : public turing::test::TuringTest {
 public:
+    QueryTest()
+        : _db(_sysConfig)
+    {
+    }
+
     void initialize() override {
         SystemManager& sysMan = _db.getSystemManager();
         Graph* graph = sysMan.createGraph("simple");
@@ -23,6 +29,7 @@ public:
     }
 
 protected:
+    SystemConfig _sysConfig;
     TuringDB _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};

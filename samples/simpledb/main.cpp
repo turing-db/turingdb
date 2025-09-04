@@ -12,9 +12,10 @@
 #include "SimpleGraph.h"
 #include "GraphDumper.h"
 #include "GraphReport.h"
+#include "versioning/Transaction.h"
+#include "SystemConfig.h"
 
 #include "ToolInit.h"
-#include "versioning/Transaction.h"
 
 using namespace db;
 
@@ -24,7 +25,8 @@ int main(int argc, const char** argv) {
 
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "simpledb";
 
-    TuringDB db;
+    SystemConfig sysConfig;
+    TuringDB db(sysConfig);
 
     {
         spdlog::info("Create company graph");

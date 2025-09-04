@@ -15,6 +15,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "GraphLoader.h"
+#include "SystemConfig.h"
 #include "SimpleGraph.h"
 
 using namespace db;
@@ -23,6 +24,11 @@ using namespace turing::test;
 
 class StringIndexSerialisationTest : public TuringTest {
 public:
+    StringIndexSerialisationTest()
+        : _db(_sysConfig)
+    {
+    }
+
     void initialize()  {
         SystemManager& sysMan = _db.getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
@@ -39,6 +45,7 @@ public:
     }
 
 protected:
+    SystemConfig _sysConfig;
     TuringDB _db;
     Graph* _builtGraph;
     std::unique_ptr<Graph> _loadedGraph;

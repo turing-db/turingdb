@@ -6,8 +6,8 @@
 
 using namespace db;
 
-TuringDB::TuringDB()
-    : _systemManager(std::make_unique<SystemManager>()),
+TuringDB::TuringDB(const SystemConfig& config)
+    : _systemManager(std::make_unique<SystemManager>(config)),
     _jobSystem(JobSystem::create())
 {
 }

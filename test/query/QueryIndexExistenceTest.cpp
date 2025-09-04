@@ -10,12 +10,18 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "Path.h"
+#include "SystemConfig.h"
 #include "QueryTester.h"
 
 using namespace db;
 
 class QueryIndexExistenceTest : public turing::test::TuringTest {
 public:
+    QueryIndexExistenceTest()
+        : _db(_sysConfig)
+    {
+    }
+
     void initialize() override {
         SystemManager& sysMan = _db.getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
@@ -23,7 +29,7 @@ public:
         _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
                                                      &_db.getJobSystem());
 
-        auto graphDir = sysMan.getGraphsDir();
+        auto graphDir = sysMan.getConfig().getGraphsDir();
         std::string x = std::string(graphDir.filename());
         _workingPath = fs::Path("newSimple");
 
@@ -38,6 +44,7 @@ public:
         }
     }
 protected:
+    SystemConfig _sysConfig;
     TuringDB _db;
     LocalMemory _mem;
     fs::Path _workingPath;
@@ -54,12 +61,12 @@ TEST_F(QueryIndexExistenceTest, noStringIndex) {
     }
 
     const std::string& newName = "newSimple";
-    TuringDB newDB;
+    TuringDB newDB(_sysConfig);
     LocalMemory newMem;
     std::unique_ptr<QueryInterpreter> newInterp =
         std::make_unique<QueryInterpreter>(&newDB.getSystemManager(), &newDB.getJobSystem());
 
-    auto graphDir = newDB.getSystemManager().getGraphsDir();
+    auto graphDir = newDB.getSystemManager().getConfig().getGraphsDir();
 
     bool loadRes =
         newDB.getSystemManager().loadGraph(_workingPath, newName, newDB.getJobSystem());
