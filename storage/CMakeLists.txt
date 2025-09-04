@@ -60,8 +60,9 @@ set(storage_sources
         versioning/Transaction.cpp
         versioning/CommitHistory.cpp
 
-        versioning/NodeContainerModifier.cpp
         versioning/DataPartModifier.cpp
+        versioning/NodeContainerModifier.cpp
+        versioning/EdgeContainerModifier.cpp
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp

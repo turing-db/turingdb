@@ -16,6 +16,6 @@ public:
      * with the nodes with NodeIDs specified in @ref toDelete removed
      */
     [[nodiscard]] static std::unique_ptr<NodeContainer> deleteNodes(const NodeContainer& original,
-                                                                    const std::set<NodeID> toDelete);
+                                                                    const std::set<NodeID>& toDelete);
 };
 }

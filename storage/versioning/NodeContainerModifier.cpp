@@ -27,14 +27,13 @@ namespace {
 using namespace db;
 
 std::unique_ptr<NodeContainer> NodeContainerModifier::deleteNodes(const NodeContainer& original,
-                                   const std::set<NodeID> toDelete) {
-    
+                                                                  const std::set<NodeID>& toDelete) {
         uint64_t ogFstID = original.getFirstNodeID().getValue();
         size_t ogSize = original.size();
 
         // Bounds check to ensure all nodes that are to be deleted are in this DP
         NodeID smallestNodeToDelete = *toDelete.cbegin();
-        NodeID largestNodeToDelete = *toDelete.rbegin();
+        NodeID largestNodeToDelete = *toDelete.crbegin();
         if (smallestNodeToDelete < ogFstID ) {
             throw TuringException(fmt::format("Node with ID {} is not in this datapart; "
                                               "smallest ID in this datapart is {}",
@@ -53,8 +52,6 @@ std::unique_ptr<NodeContainer> NodeContainerModifier::deleteNodes(const NodeCont
                 0, 0, LabelSetIndexer<NodeRange> {}, std::vector<NodeRecord> {});
             return std::unique_ptr<NodeContainer>(emptyContainer);
         }
-
-        // TODO?: NodeRange based solution: delete ranges to reduce ID shuffling
 
         uint64_t newFstID = UINT64_MAX;
         auto smallestDeleted = toDelete.cbegin();
