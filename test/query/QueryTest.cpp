@@ -907,3 +907,63 @@ TEST_F(QueryTest, PersonGraphAproxMatching) {
         .expectVector<StrOpt>({"Housemate"})
         .execute();
 }
+
+TEST_F(QueryTest, createChunkingTest) {
+    QueryTester tester {_mem, *_interp};
+
+    auto change1Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+    ASSERT_TRUE(change1Res);
+
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+
+    tester.query("create (n:Z1)")
+        .execute();
+
+    tester.query("create (n:A1)-[:AE1]-(m:A2)")
+        .execute();
+
+    tester.query("create (n:B1)-[:BE1]-(m:B2)-[:BE2]-(o:B3)")
+        .execute();
+
+    tester.query("create (n:C1)-[:CE1]-(m:C2)-[:CE2]-(o:C3)-[:CE3]-(p:C4)")
+        .execute();
+
+    tester.query("create (n:D1)-[:DE1]-(m:D2)-[:DE2]-(o:D3)-[:DE3]-(p:D4)-[:DE4]-(q:D5)")
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n:Z1) return n")
+        .expectVector<NodeID>({13})
+        .execute();
+
+    tester.query("match (:A1)-[e:AE1]-(:A2) return e")
+        .expectVector<EdgeID>({13})
+        .execute();
+
+    tester.query("match (:B1)-[e:BE1]-(:B2)-[f:BE2]-(:B3) return e, f")
+        .expectVector<EdgeID>({14})
+        .expectVector<EdgeID>({15})
+        .execute();
+
+    tester.query("match (:C1)-[e:CE1]-(:C2)-[f:CE2]-(:C3)-[g:CE3]-(:C4) return e, f, g")
+        .expectVector<EdgeID>({16})
+        .expectVector<EdgeID>({17})
+        .expectVector<EdgeID>({18})
+        .execute();
+
+    tester.query("match (:D1)-[e:DE1]-(:D2)-[f:DE2]-(:D3)-[g:DE3]-(:D4)-[h:DE4]-(:D5) return e, f, g, h")
+        .expectVector<EdgeID>({19})
+        .expectVector<EdgeID>({20})
+        .expectVector<EdgeID>({21})
+        .expectVector<EdgeID>({22})
+        .execute();
+}

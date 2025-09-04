@@ -206,11 +206,10 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             continue;
         }
 
-        for (auto step : pathElements | rv::chunk(3)) {
+        for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
             // Create the target + the edge (the source is already created)
-            const auto* src = step[0];
-            const auto* edge = step[1];
-            const auto* tgt = step[2];
+            const auto* edge = step[0];
+            auto* tgt = step[1];
             auto* edgeDecl = edge->getVar()->getDecl();
             auto* tgtDecl = tgt->getVar()->getDecl();
 
@@ -227,6 +226,7 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             }
 
             _pipeline->add<CreateEdgeStep>(src, edge, tgt);
+            src = tgt; // Assign the current target as the source for the next edge
         }
     }
 
