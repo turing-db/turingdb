@@ -822,16 +822,18 @@ TEST_F(QueryTest, injectNodesCreate) {
         .execute();
 
     // 1 hop valid edge
-    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)").execute();
+    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)")
+        .execute();
     // 2 hop valid edge
-    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)-[:GOODEDGE]-(c @ 2)").execute();
+    tester.query("create (a @ 0)-[:GOODEDGE]-(b @ 1)-[:GOODEDGE]-(c @ 2)")
+        .execute();
 
     tester.query("change submit").execute();
     tester.setChangeID(ChangeID::head());
 
     // Standard simpledb Edges + GOODEDGE
-    tester.query("match (n)-[e]-(m) return e")
-        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14})
+    tester.query("match (n)-[e]-(m) return e") // We created edges ID 13-15
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15})
         .execute();
 
     tester.query("CALL EDGETYPES()")
