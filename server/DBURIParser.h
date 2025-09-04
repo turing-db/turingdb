@@ -20,7 +20,7 @@ public:
             }
         }
 
-        info._path = std::string_view(pathBegin, pathPtr - pathBegin);
+        info._path = std::string(pathBegin, pathPtr - pathBegin);
 
         const auto res = getEndpointIndex(info._path);
         if (!res) {
@@ -108,7 +108,7 @@ private:
     static constexpr std::string_view HEALTH_CHECK = "/health_check";
 
     static net::HTTP::Result<net::HTTP::EndpointIndex> getEndpointIndex(std::string_view path) {
-        using EndpointMap = std::unordered_map<net::HTTP::Path, net::HTTP::EndpointIndex>;
+        using EndpointMap = std::unordered_map<std::string_view, net::HTTP::EndpointIndex>;
         static const EndpointMap endpoints = {
             {STR_QUERY,               (size_t)Endpoint::QUERY              },
             {STR_LOAD_GRAPH,          (size_t)Endpoint::LOAD_GRAPH         },

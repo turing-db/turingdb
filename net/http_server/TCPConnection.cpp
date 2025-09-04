@@ -16,6 +16,7 @@ void TCPConnection::close() {
     ::close(_socket);
     _socket = 0;
     _parser->reset();
+    cleanUpPipe();
     dealloc();
 }
 

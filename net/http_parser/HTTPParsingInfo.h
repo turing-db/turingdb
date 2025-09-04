@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string_view>
 #include <array>
 
 #include "BasicResult.h"
@@ -9,11 +8,12 @@ namespace net::HTTP {
 
 static inline constexpr size_t MAX_PARAM_COUNT = 8;
 
-using Uri = std::string_view;
-using Path = std::string_view;
+using Uri = std::string;
+using Path = std::string;
 using Payload = std::string_view;
-using Params = std::array<std::string_view, (size_t)MAX_PARAM_COUNT>;
+using Params = std::array<std::string, (size_t)MAX_PARAM_COUNT>;
 using EndpointIndex = int64_t;
+using Bytes = uint64_t;
 
 enum class Error {
     UNKNOWN = 0,
@@ -43,6 +43,9 @@ struct Info {
     Uri _uri;
     Path _path;
     Payload _payload;
+    uint64_t _payloadsize {};
+    Bytes _bytesRead;
+
     EndpointIndex _endpoint = -1;
     Params _params;
 
@@ -52,6 +55,7 @@ struct Info {
         _path = "";
         _payload = "";
         _endpoint = -1;
+        _bytesRead = 0;
 
         for (auto& p : _params) {
             p = "";

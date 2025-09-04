@@ -85,12 +85,34 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
             return;
         }
 
-        const bool finished = analyzeRes.value();
+        const uint8_t finished = analyzeRes.value();
 
-        if (finished) {
+        while (finished & 1) {
             // Process with stored callback
-            _ctxt._process(threadContext, connection);
+            // how does writing here work?
+            // nothing should be written until the whole message has been received?
 
+            _ctxt._process(threadContext, connection);
+            if (finished == 3) {
+                // can probably move the connection close here;
+                break;
+            }
+
+            inputWriter.reset();
+
+            const ssize_t bytesRead = ::recv(s, inputWriter.getBuffer(), inputWriter.getBufferSize(), 0);
+            if (bytesRead <= 0) {
+                if (errno == EAGAIN || EWOULDBLOCK) {
+                    break;
+                }
+                connection.close();
+                return;
+            }
+            inputWriter.setWrittenBytes(bytesRead);
+            parser->setHttpBody(connection.getInputBuffer().getReader().getData(), bytesRead);
+        }
+
+        if (finished == 3) {
             if (writer.getBytesWritten() != 0) {
                 writer.flush(); // Make sure we sent everything
             }
@@ -111,6 +133,7 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
             // Reset for next query
             parser->reset();
             inputWriter.reset();
+            connection.cleanUpPipe();
 
             if (connection.isCloseRequired()) {
                 connection.close();

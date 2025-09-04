@@ -24,10 +24,14 @@ public:
      * */
     [[nodiscard]] HTTP::Result<Finished> analyze() override {
         if (getSize() == 0) {
-            return true;
+            return 3;
         }
 
         if (!_parsedHeader) {
+            if (!memmem(_currentPtr, _reader.getSize(), "\r\n\r\n", 4)) {
+                return 0;
+            }
+
             if (auto res = parseMethod(); !res) {
                 return res.get_unexpected();
             };
@@ -43,18 +47,28 @@ public:
             _parsedHeader = true;
         }
 
-        if (!_payloadBegin) {
-            _payloadBegin = _currentPtr;
+        _info._payload = std::string_view {_currentPtr, getSize()};
+        _info._bytesRead += _info._payload.size();
+
+
+        const auto finished = _info._bytesRead == _info._payloadsize;
+        if (!finished) {
+            if ((db::Endpoint)_info._endpoint == db::Endpoint::UPLOAD) { // if it is a streaming endpoint
+                _currentPtr = _reader.getData();                         // reset the _currentPtr
+                return 1;
+            }
+
+            // should this have info about the endpoint - why not
+            if (_reader.getSize() == NetBuffer::BUFFER_SIZE) {
+                return BadResult(HTTP::Error::REQUEST_TOO_BIG);
+            }
+
+            // Buffering Endpoint But Not Complete
+            return 2;
         }
 
-        _info._payload = std::string_view {_payloadBegin, getSize()};
-        const bool finished = _info._payload.size() == _payloadSize;
-
-        if (!finished && _reader.getSize() == NetBuffer::BUFFER_SIZE) {
-            return BadResult(HTTP::Error::REQUEST_TOO_BIG);
-        }
-
-        return finished;
+        // Buffering/Streaming Endpoint That Is Complete
+        return 3;
     }
 
     const std::string& getPayLoadType() {
@@ -161,7 +175,7 @@ private:
             return BadResult(HTTP::Error::HEADER_INCOMPLETE);
         }
 
-        uri = std::string_view(beginPtr, _currentPtr);
+        uri = std::string(beginPtr, _currentPtr - beginPtr);
 
         if (uri.empty()) {
             return BadResult(HTTP::Error::INVALID_URI);
@@ -225,7 +239,7 @@ private:
                 break;
             }
         }
-        _payloadSize = std::strtoull(lengthBegin, &_currentPtr, 10);
+        _info._payloadsize = std::strtoull(lengthBegin, &_currentPtr, 10);
 
         contentTypePtr += contentTypeKey.size();
         const char* typeBegin = contentTypePtr;

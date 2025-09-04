@@ -292,113 +292,40 @@ void DBServerProcessor::history() {
 }
 
 void DBServerProcessor::upload() {
-    auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
-    const std::string_view payLoadType = (parser.getPayLoadType());
-    const auto seperatorIndex = payLoadType.find(';');
-    const auto type = payLoadType.substr(1, seperatorIndex - 1);
+    int* pipefd = _connection.getPipeFd();
 
-    if (type == "multipart/form-data") {
-        spdlog::info("true");
+    if (pipefd[1] == -1) {
+        if (pipe(pipefd) == -1) {
+            spdlog::error("pipe() failed: {}", strerror(errno));
+            _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
+            return;
+        }
+
+        pid_t pid = fork();
+
+        if (pid == 0) {
+            close(pipefd[1]);
+            dup2(pipefd[0], STDIN_FILENO);
+            close(pipefd[0]);
+            // execlp("cat", "cat", nullptr);
+            execlp("tar", "tar", "-xzf", "-", "-C", "/home/dev/.turing/data", nullptr);
+            exit(1);
+        }
+
+        close(pipefd[0]);
+    }
+    const auto& httpInfo = getHttpInfo();
+    if (httpInfo._bytesRead == 0) {
+        return;
+    }
+    if (::write(pipefd[1], httpInfo._payload.data(), httpInfo._payload.length()) < 0) {
+        spdlog::error("write() failed: {}", strerror(errno));
+        _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
+        return;
     }
 
-    const auto& turingDir = std::filesystem::path((_db.getSystemManager().getTuringDir() / "data").c_str());
-
-    const auto equalityIndex = payLoadType.find('=');
-    const auto delimiter = payLoadType.substr(equalityIndex + 1);
-
-    spdlog::info("type is {}", type);
-    spdlog::info("delimiter is {}", delimiter);
-
-    const auto& httpInfo = getHttpInfo();
-
-    const std::string_view payLoad = httpInfo._payload;
-    auto pos = payLoad.find(delimiter) + delimiter.length();
-    while (true) {
-        auto nextPos = payLoad.find(delimiter, pos);
-
-        // this if vs a substr(nextPos,2) != "==" in the while
-        if (nextPos == std::string_view::npos) {
-            break;
-        }
-        // spdlog::info("pos {}, nextPos {}, len {}", pos, nextPos, payLoad.length());
-
-        const auto& content = payLoad.substr(pos, nextPos - pos - 2);
-
-        const auto nameOpeningQuote = content.find("name=\"/") + 7;
-        const auto nameClosingQuote = content.find('\"', nameOpeningQuote);
-        const auto& name = content.substr(nameOpeningQuote, nameClosingQuote - nameOpeningQuote);
-
-        const auto fileNameOpeningQuote = content.find("filename=\"") + 10;
-        const auto fileNameClosingQuote = content.find('\"', fileNameOpeningQuote);
-        const auto& fileName = content.substr(fileNameOpeningQuote, fileNameClosingQuote - fileNameOpeningQuote);
-
-        spdlog::info("name: {}, fileName: {}", name, fileName);
-
-        const auto openingBlankLine = content.find("\r\n\r\n") + 4;
-        const auto closingBlankLine = content.rfind("\r\n");
-        const auto subcontent = content.substr(openingBlankLine, closingBlankLine - openingBlankLine);
-        for (size_t i = 0; i < subcontent.length(); i++) {
-            switch (subcontent.at(i)) {
-                case '\n': {
-                    std::cout << "\\n"
-                              << std::endl;
-                    break;
-                }
-                case '\r': {
-                    std::cout << "\\r";
-                    break;
-                }
-                case '\t': {
-                    std::cout << "\\t";
-                    break;
-                }
-                default:
-                    std::cout << subcontent.at(i);
-            }
-        }
-
-        // spdlog::info("opening pos = {}, closing pos = {}, content len = {}",openingBlankLine, closingBlankLine, content.length());
-        // spdlog::info("after closing line = {}", content.substr(closingBlankLine));
-        // spdlog::info(content.substr(openingBlankLine,closingBlankLine - openingBlankLine));
-        // spdlog::info("check");
-        // spdlog::info(content);
-
-        const auto& dirPath = turingDir / std::filesystem::path(name);
-        spdlog::info("turingDir is {}, and dirPath is {}", turingDir.c_str(), dirPath.c_str());
-        std::error_code ec;
-        std::filesystem::create_directories(dirPath, ec);
-        if (ec) {
-            spdlog::info(ec.message());
-        }
-        const int access = O_RDWR | O_CREAT | O_APPEND;
-        const int permissions = S_IRUSR | S_IWUSR;
-
-        spdlog::info("writing {}", (dirPath / fileName).c_str());
-        int fd = ::open((dirPath / fileName).c_str(), access, permissions);
-        if (fd < 0) {
-            spdlog::info("Failed to open: {}", strerror(errno));
-            _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
-            return;
-        }
-
-        int nbytes = ::write(fd, subcontent.data(), subcontent.length());
-        if (nbytes < 0) {
-            spdlog::info("Failed to write: {}", strerror(errno));
-            _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
-            return;
-        }
-
-        nbytes = close(fd);
-        if (nbytes < 0) {
-            spdlog::info("Failed to close: {}", strerror(errno));
-            _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
-            return;
-        }
-
-        spdlog::info("Written file {}", fileName);
-
-
-        pos = nextPos + delimiter.length();
+    // check if full message has been received.
+    if (httpInfo._bytesRead == httpInfo._payloadsize) {
         _writer.writeHeader(net::HTTP::Status::OK).flush();
     }
 }

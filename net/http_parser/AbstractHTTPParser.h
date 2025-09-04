@@ -8,7 +8,7 @@ class NetBuffer;
 
 class AbstractHTTPParser {
 public:
-    using Finished = bool;
+    using Finished = uint8_t;
 
     virtual ~AbstractHTTPParser() = default;
 
@@ -20,6 +20,11 @@ public:
     virtual void reset() {
         _info.reset();
     };
+
+    void setHttpBody(char* begin, size_t size) {
+        _info._payload = std::string_view {begin, size};
+        _info._bytesRead += size;
+    }
 
     [[nodiscard]] virtual HTTP::Result<Finished> analyze() = 0;
 

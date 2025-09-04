@@ -48,14 +48,24 @@ public:
     template <std::derived_from<AbstractHTTPParser> ParserT>
     ParserT& getParser() { return *static_cast<ParserT*>(_parser.get()); }
 
+    // ThreadSafe??
+    int* getPipeFd() { return pipefd; }
+    void cleanUpPipe() {
+        // error handling?
+        ::close(pipefd[1]);
+
+        pipefd[0] = -1;
+        pipefd[1] = -1;
+    }
+
 private:
     utils::DataSocket _socket {};
     TCPConnectionStorage* _storage {nullptr};
     size_t _storageIndex {};
     NetBuffer _inputBuffer;
     NetWriter _writer {_socket};
+    int pipefd[2] = {-1, -1};
     std::unique_ptr<AbstractHTTPParser> _parser {nullptr};
     bool _closeRequired {false};
 };
-
 }
