@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <set>
 
 #include "ID.h"
@@ -15,7 +14,7 @@ public:
      * @brief Creates and returns a new NodeContainer which is equivalent to @ref original
      * with the nodes with NodeIDs specified in @ref toDelete removed
      */
-    [[nodiscard]] static std::unique_ptr<NodeContainer> deleteNodes(const NodeContainer& original,
-                                                                    const std::set<NodeID>& toDelete);
+    static size_t deleteNodes(const NodeContainer& original, NodeContainer& newContainer,
+                              const std::set<NodeID>& toDelete);
 };
 }

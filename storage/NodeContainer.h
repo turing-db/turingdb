@@ -12,6 +12,7 @@ namespace db {
 class NodeContainerLoader;
 class DataPartLoader;
 class DataPartRebaser;
+class DataPartModifier;
 class NodeContainerModifier;
 
 class NodeContainer {
@@ -85,6 +86,7 @@ private:
     friend NodeContainerLoader;
     friend DataPartLoader;
     friend DataPartRebaser;
+    friend DataPartModifier;
     friend NodeContainerModifier;
 
     NodeID _firstID {0};

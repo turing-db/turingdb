@@ -1,15 +1,77 @@
+#include "spdlog/spdlog.h"
+#include "tabulate/table.hpp"
+
 #include "ArcManager.h"
 #include "NodeContainer.h"
-
 #include "Graph.h"
 #include "reader/GraphReader.h"
 #include "SimpleGraph.h"
-#include "spdlog/spdlog.h"
 #include "versioning/DataPartModifier.h"
 #include "versioning/Transaction.h"
 #include "versioning/NodeContainerModifier.h"
+#include <string>
 
 using namespace db;
+
+namespace {
+    // Assuming LabelSetID and NodeID are integer types
+    [[maybe_unused]] void prettyPrintNodeContainer(const NodeContainer& cont) {
+        using namespace tabulate;
+        auto& indexer = cont.getLabelSetIndexer();
+
+        Table table;
+        table.add_row({"LabelSetID", "NodeIDs"});
+
+        for (const auto& [handle, range] : indexer) {
+            std::ostringstream oss;
+
+            for (size_t i = 0; i < range._count; ++i) {
+                if (i > 0) {
+                    oss << ", ";
+                }
+                oss << (range._first + i);
+            }
+
+            table.add_row({std::to_string(handle.getID()), oss.str()});
+        }
+
+        // Optional styling
+        table.format()
+            .font_align(FontAlign::center)
+            .border_top("─")
+            .border_bottom("─")
+            .border_left("│")
+            .border_right("│")
+            .corner("┼");
+
+        std::cout << table << std::endl << std::endl << std::endl;
+    }
+
+    [[maybe_unused]] void prettyPrintEdgeContainer(const EdgeContainer& cont) {
+        using namespace tabulate;
+        auto outEdges = cont.getOuts();
+
+        Table table;
+        table.add_row({"EdgeID", "SrcID", "TgtID"});
+
+        for (const EdgeRecord& r : outEdges) {
+            table.add_row({std::to_string(r._edgeID),
+                           std::to_string(r._nodeID),
+                           std::to_string(r._otherID)});
+        }
+
+        // Optional styling
+        table.format()
+            .font_align(FontAlign::center)
+            .border_top("─")
+            .border_bottom("─")
+            .border_left("│")
+            .border_right("│")
+            .corner("┼");
+
+        std::cout << table << std::endl << std::endl << std::endl;
+    }
+}
 
 void nodeContainerTest() {
     auto g = Graph::create();
@@ -19,42 +81,36 @@ void nodeContainerTest() {
     auto dps = g->openTransaction().readGraph().dataparts();
     auto dp = dps[0];
     spdlog::info("Orignal num nodes: {}", dp->nodes().size());
-    for (const auto& [lblSetHdl, ndRng]: dp->nodes().getLabelSetIndexer()) {
-        spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
-                     ndRng._first + ndRng._count - 1);
-    }
+    prettyPrintNodeContainer(dp->nodes());
 
     {
         spdlog::info("After deleting 0:");
         std::set<NodeID> toDel {0};
-        auto newContainer = NodeContainerModifier::deleteNodes(dp->nodes(), toDel);
+
+        auto newContainer = NodeContainer::create(0, std::vector<LabelSetHandle> {});
+        NodeContainerModifier::deleteNodes(dp->nodes(), *newContainer, toDel);
+
         spdlog::info("New num nodes: {}", newContainer->size());
-        for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
-            spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
-                         ndRng._first + ndRng._count - 1);
-        }
+        prettyPrintNodeContainer(*newContainer);
+        
     }
 
     {
         spdlog::info("After deleting 0,1,2,3:");
         std::set<NodeID> toDel {0, 1, 2, 3};
-        auto newContainer = NodeContainerModifier::deleteNodes(dp->nodes(), toDel);
+        auto newContainer = NodeContainer::create(0, std::vector<LabelSetHandle> {});
+        NodeContainerModifier::deleteNodes(dp->nodes(), *newContainer, toDel);
         spdlog::info("New num nodes: {}", newContainer->size());
-        for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
-            spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
-                         ndRng._first + ndRng._count - 1);
-        }
+        prettyPrintNodeContainer(*newContainer);
     }
 
     {
         spdlog::info("After deleting all nodes:");
         std::set<NodeID> toDel {0, 1, 2, 3, 4, 5, 6};
-        auto newContainer = NodeContainerModifier::deleteNodes(dp->nodes(), toDel);
+        auto newContainer = NodeContainer::create(0, std::vector<LabelSetHandle> {});
+        NodeContainerModifier::deleteNodes(dp->nodes(), *newContainer, toDel);
         spdlog::info("New num nodes: {}", newContainer->size());
-        for (const auto& [lblSetHdl, ndRng] : newContainer->getLabelSetIndexer()) {
-            spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
-                         ndRng._first + ndRng._count - 1);
-        }
+        prettyPrintNodeContainer(*newContainer);
     }
 }
 
@@ -66,10 +122,8 @@ void datapartTest() {
     const WeakArc<DataPart> oldDP = g->openTransaction().readGraph().dataparts()[0];
 
     spdlog::info("Orignal size: {}", oldDP->nodes().size());
-    for (const auto& [lblSetHdl, ndRng] : oldDP->nodes().getLabelSetIndexer()) {
-        spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
-                     ndRng._first + ndRng._count - 1);
-    }
+    prettyPrintNodeContainer(oldDP->nodes());
+    prettyPrintEdgeContainer(oldDP->edges());
 
     // TODO: modularise
     {
@@ -82,10 +136,8 @@ void datapartTest() {
         modifier->applyDeletions();
 
         spdlog::info("New num nodes: {}", newDP->nodes().size());
-        for (const auto& [lblSetHdl, ndRng] : newDP->nodes().getLabelSetIndexer()) {
-            spdlog::info("Label set: {}, Range: {}-{}", lblSetHdl.getID(), ndRng._first,
-                         ndRng._first + ndRng._count - 1);
-        }
+        prettyPrintNodeContainer(newDP->nodes());
+        prettyPrintEdgeContainer(newDP->edges());
     }
 }
 

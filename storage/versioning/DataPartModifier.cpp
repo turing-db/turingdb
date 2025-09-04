@@ -1,12 +1,14 @@
 #include "DataPartModifier.h"
 
 #include <cstdint>
+#include <memory>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/iota.hpp>
 
 #include "ArcManager.h"
 #include "DataPart.h"
 #include "EdgeContainer.h"
+#include "versioning/EdgeContainerModifier.h"
 #include "versioning/NodeContainerModifier.h"
 #include "NodeContainer.h"
 
@@ -31,7 +33,12 @@ void DataPartModifier::applyDeletions() {
     prepare();
 
     deleteNodes();
-    // deleteEdges();
+    deleteEdges();
+    
+    // TODO: Update PropertyManager
+    // TODO: Update StringIndex}
+
+    assembleNewPart();
 }
 
 void DataPartModifier::prepare() {
@@ -62,6 +69,13 @@ void DataPartModifier::prepare() {
             std::distance(smallerDeletedEdgesIt, _edgesToDelete.cbegin());
         return x - numSmallerDeletedEdges;
     };
+
+    // Construct new datastructures for the new datapart
+    auto* rawNewNodeCont = new NodeContainer(0, 0, LabelSetIndexer<NodeRange> {}, {});
+    _newNodeCont = std::unique_ptr<NodeContainer>(rawNewNodeCont);
+
+    auto* rawNewEdgeCont = new EdgeContainer(0, 0, {}, {});
+    _newEdgeCont = std::unique_ptr<EdgeContainer>(rawNewEdgeCont);
 }
 
 void DataPartModifier::detectHangingEdges() {
@@ -98,9 +112,14 @@ void DataPartModifier::detectHangingEdges() {
 }
 
 void DataPartModifier::deleteNodes() {
-    _newDP->_nodes = NodeContainerModifier::deleteNodes(_oldDP->nodes(), _nodesToDelete);
+    NodeContainerModifier::deleteNodes(_oldDP->nodes(), *_newNodeCont, _nodesToDelete);
+}
 
-    // TODO: Update EdgeContainer (delete edges where an incident node has been deleted)
-    // TODO: Update PropertyManager
-    // TODO: Update StringIndex
+void DataPartModifier::deleteEdges() {
+    EdgeContainerModifier::deleteEdges(_oldDP->edges(), *_newEdgeCont, _edgesToDelete);
+}
+
+void DataPartModifier::assembleNewPart() {
+    _newDP->_nodes = std::move(_newNodeCont);
+    _newDP->_edges = std::move(_newEdgeCont);
 }

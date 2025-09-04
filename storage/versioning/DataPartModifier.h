@@ -8,6 +8,7 @@
 #include "VersionController.h"
 #include "ID.h"
 #include "TuringException.h"
+#include "EdgeContainer.h"
 
 namespace db {
 
@@ -43,6 +44,9 @@ private:
     const WeakArc<DataPart> _oldDP {}; // nullptr
     WeakArc<DataPart> _newDP {};       // nullptr
 
+    std::unique_ptr<NodeContainer> _newNodeCont {};
+    std::unique_ptr<EdgeContainer> _newEdgeCont {};
+
     std::set<NodeID> _nodesToDelete;
     std::set<EdgeID> _edgesToDelete;
 
@@ -58,11 +62,17 @@ private:
 
     /**
      * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
-     * @ref toDelete
-     * @detail TODO: Also updates other datastructures in DataParts to handle the updated
-     * IDs of the nodes as a result of reassigning NodeIDs after deletion
+     * @ref _nodesToDelete
      */
     void deleteNodes();
+
+    /**
+     * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
+     * @ref _edgesToDelete
+     */
+    void deleteEdges();
+
+    void assembleNewPart();
 
     /**
      * @brief Identifies edges that must be deleted due to one of their incident nodes

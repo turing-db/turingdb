@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <set>
 
 #include "ID.h"
@@ -15,7 +14,8 @@ public:
      * @brief Creates and returns a new EdgeContainer which is equivalent to @ref original,
      * but with edges which are incident to a node in @ref deletedNodes removed.
      */
-    [[nodiscard]] static std::unique_ptr<EdgeContainer> deleteEdges(const EdgeContainer& original,
-                                                                    const std::set<EdgeID>& toDelete);
+    static size_t deleteEdges(const EdgeContainer& original,
+                                            EdgeContainer& newContainer,
+                                            const std::set<EdgeID>& toDelete);
 };
 }

@@ -10,4 +10,5 @@ target_link_libraries(${SAMPLE_NAME} PRIVATE
     turing_db_examples_s
     turing_db_report_s
     turing_db_s
-    turing_db_tools_common_s)
+    turing_db_tools_common_s
+    tabulate)

@@ -80,7 +80,7 @@ private:
 
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-    explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
+    explicit CommitBuilder(VersionController&, Change* change, const GraphView& view);
 
     void initialize();
 };

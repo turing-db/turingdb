@@ -28,6 +28,7 @@ public:
 
     ~DataPartBuilder();
 
+    // This should be "create new datapart"
     [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(
         MetadataBuilder& metadata,
         const GraphView& view,

@@ -55,7 +55,8 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
-        auto part = _controller->createDataPart(_firstNodeID, _firstEdgeID);
+        // Create Empty DataPart
+        WeakArc<DataPart> part = _controller->createDataPart(_firstNodeID, _firstEdgeID);
 
         _firstNodeID += builder->nodeCount();
         _firstEdgeID += builder->edgeCount();

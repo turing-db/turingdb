@@ -109,11 +109,12 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         }
     }
 
-    // Build indexes for noted node properties.
+    // Build indexes for noted node string properties.
     // TODO: Async with jobs
     _nodeStrPropIdx->buildIndex(nodesToIndex, _tmpToFinalNodeIDs); 
     _nodeStrPropIdx->setInitialised();
 
+    // Create Indexers
     for (const auto& [ptID, props] : *_nodeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
