@@ -6,7 +6,6 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/algorithm/adjacent_find.hpp>
 
-#include "spdlog/spdlog.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "AnalyzeException.h"
@@ -282,7 +281,6 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
 
                 analyzeEntityPattern(declContext, edge, isCreate);
 
-                spdlog::info("Analyzing target");
                 analyzeEntityPattern(declContext, target, isCreate);
             }
         }
@@ -379,7 +377,6 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
     }
 
     uint64_t idToSet = entity->getEntityID();
-    spdlog::info("Got id {}", idToSet);
 
     // If attempting to inject IDs in a CREATE, ensure they are all valid
     // NOTE: Attempts to create a node whilst injecting IDs is prevented
@@ -396,7 +393,6 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
         }
         // We have a single injected node: set this VarDecl to have the injected ID
         idToSet = injectedIDs.at(0).getValue();
-        spdlog::info("Updated ID to {}", idToSet);
         if (!_view.read().graphHasNode(idToSet)) {
             throw AnalyzeException("No such node with ID: \""
                                    + std::to_string(idToSet) + "\"");
@@ -409,10 +405,8 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
                                     var->getName(),
                                     entity->getKind(),
                                     idToSet);
-    spdlog::info("Created decl with id {}", idToSet);
 
     if (!decl) {
-        spdlog::info("Decl already existed");
         // decl already exists from prev targets
         decl = declContext->getDecl(var->getName());
         decl->setUsed(true);

@@ -217,10 +217,6 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             EntityPattern* tgt = step[1];
             VarDecl* edgeDecl = edge->getVar()->getDecl();
             VarDecl* tgtDecl = tgt->getVar()->getDecl();
-            if (!tgt) {
-                spdlog::info("No target");
-                throw PlannerException("No Target");
-            }
 
             auto edgeID = _mem->alloc<ColumnEdgeID>();
             edgeDecl->setColumn(edgeID);
