@@ -3,8 +3,6 @@
 #include "ChangeManager.h"
 #include "SystemManager.h"
 #include "versioning/Transaction.h"
-#include "versioning/CommitBuilder.h"
-#include "views/GraphView.h"
 #include "ASTContext.h"
 #include "QueryParser.h"
 #include "QueryAnalyzer.h"
@@ -15,6 +13,9 @@
 #include "PlannerException.h"
 #include "ParserException.h"
 #include "PipelineException.h"
+
+#include "InterpreterContext.h"
+#include "QueryInterpreterV2.h"
 
 #include "Profiler.h"
 #include "TuringTime.h"
@@ -37,6 +38,21 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
                                       QueryHeaderCallback headerCallback,
                                       CommitHash commitHash,
                                       ChangeID changeID) {
+    // We activate the v2 interpreter if the query starts with "#v2\n"
+    if (query.starts_with("#v2")) {
+        return executeV2(query.substr(4), graphName, mem, callback, headerCallback, commitHash, changeID);
+    } else {
+        return executeV1(query, graphName, mem, callback, headerCallback, commitHash, changeID);
+    }
+}
+
+QueryStatus QueryInterpreter::executeV1(std::string_view query,
+                                        std::string_view graphName,
+                                        LocalMemory* mem,
+                                        QueryCallback callback,
+                                        QueryHeaderCallback headerCallback,
+                                        CommitHash commitHash,
+                                        ChangeID changeID) {
     Profile profile {"QueryInterpreter::execute"};
 
     const auto start = Clock::now();
@@ -126,4 +142,17 @@ QueryStatus QueryInterpreter::execute(std::string_view query,
     auto res = QueryStatus(QueryStatus::Status::OK);
     res.setTotalTime(end - start);
     return res;
+}
+
+QueryStatus QueryInterpreter::executeV2(std::string_view query,
+                                        std::string_view graphName,
+                                        LocalMemory* mem,
+                                        QueryCallback callback,
+                                        QueryHeaderCallback headerCallback,
+                                        CommitHash commitHash,
+                                        ChangeID changeID) {
+    InterpreterContext interpCtxt(mem, callback, headerCallback, commitHash, changeID);
+
+    QueryInterpreterV2 interp(_sysMan, _jobSystem);
+    return interp.execute(interpCtxt, query, graphName);
 }

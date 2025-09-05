@@ -30,6 +30,22 @@ public:
 private:
     SystemManager* _sysMan {nullptr};
     JobSystem* _jobSystem {nullptr};
+
+    QueryStatus executeV1(std::string_view query,
+                          std::string_view graphName,
+                          LocalMemory* mem,
+                          QueryCallback callback,
+                          QueryHeaderCallback headerCallback,
+                          CommitHash commitHash,
+                          ChangeID changeID);
+
+    QueryStatus executeV2(std::string_view query,
+                          std::string_view graphName,
+                          LocalMemory* mem,
+                          QueryCallback callback,
+                          QueryHeaderCallback headerCallback,
+                          CommitHash commitHash,
+                          ChangeID changeID);
 };
 
 }
