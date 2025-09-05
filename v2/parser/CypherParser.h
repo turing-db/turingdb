@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace db {
+namespace db::v2 {
 
 class CypherAST;
 

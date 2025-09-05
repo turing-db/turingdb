@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <variant>
 
-namespace db {
+namespace db::v2 {
 
 class Expression;
 

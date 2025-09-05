@@ -4,7 +4,7 @@
 
 #include "QueryCommand.h"
 
-namespace db {
+namespace db::v2 {
 
 class StatementContainer;
 

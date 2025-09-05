@@ -8,13 +8,17 @@ namespace db {
 
 class LocalMemory;
 
+}
+
+namespace db::v2 {
+
 class InterpreterContext {
 public:
-    InterpreterContext(LocalMemory* mem,
-                       QueryCallback callback,
-                       QueryHeaderCallback headerCallback,
-                       CommitHash commitHash = CommitHash::head(),
-                       ChangeID changeID = ChangeID::head())
+    InterpreterContext(db::LocalMemory* mem,
+                       db::QueryCallback callback,
+                       db::QueryHeaderCallback headerCallback,
+                       db::CommitHash commitHash = CommitHash::head(),
+                       db::ChangeID changeID = ChangeID::head())
         : _mem(mem),
         _callback(callback),
         _headerCallback(headerCallback),
@@ -25,18 +29,18 @@ public:
 
     ~InterpreterContext() = default;
 
-    LocalMemory* getLocalMemory() const { return _mem; }
-    QueryCallback getQueryCallback() const { return _callback; }
-    QueryHeaderCallback getQueryHeaderCallback() const { return _headerCallback; }
-    CommitHash getCommitHash() const { return _commitHash; }
-    ChangeID getChangeID() const { return _changeID; }
+    db::LocalMemory* getLocalMemory() const { return _mem; }
+    db::QueryCallback getQueryCallback() const { return _callback; }
+    db::QueryHeaderCallback getQueryHeaderCallback() const { return _headerCallback; }
+    db::CommitHash getCommitHash() const { return _commitHash; }
+    db::ChangeID getChangeID() const { return _changeID; }
 
 private:
-    LocalMemory* _mem {nullptr};
-    QueryCallback _callback;
-    QueryHeaderCallback _headerCallback;
-    CommitHash _commitHash;
-    ChangeID _changeID;
+    db::LocalMemory* _mem {nullptr};
+    db::QueryCallback _callback;
+    db::QueryHeaderCallback _headerCallback;
+    db::CommitHash _commitHash;
+    db::ChangeID _changeID;
 };
 
 }

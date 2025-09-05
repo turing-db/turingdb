@@ -6,7 +6,7 @@
 #include "types/Literal.h"
 #include "types/Symbol.h"
 
-namespace db {
+namespace db::v2 {
 
 class VarDecl;
 

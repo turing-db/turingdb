@@ -5,7 +5,7 @@
 #include "Expression.h"
 #include "types/Literal.h"
 
-namespace db {
+namespace db::v2 {
 
 class LiteralExpression : public Expression {
 public:

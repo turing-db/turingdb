@@ -3,7 +3,7 @@
 #include "decl/DeclID.h"
 #include "decl/EvaluatedType.h"
 
-namespace db {
+namespace db::v2 {
 
 class VarDecl {
 public:

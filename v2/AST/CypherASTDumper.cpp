@@ -12,7 +12,7 @@
 #include "statements/Return.h"
 #include "decl/VarDecl.h"
 
-using namespace db;
+using namespace db::v2;
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include "types/PatternElement.h"
 #include "types/WhereClause.h"
 
-namespace db {
+namespace db::v2 {
 
 class Pattern {
 public:

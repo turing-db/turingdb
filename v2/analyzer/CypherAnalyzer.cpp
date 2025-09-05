@@ -11,17 +11,17 @@
 #include "decl/VarDecl.h"
 #include "decl/EvaluatedType.h"
 
-#include "expressions/All.h"
-
 #include "types/SinglePartQuery.h"
 #include "types/Projection.h"
+
+#include "expressions/All.h"
 
 #include "statements/Match.h"
 #include "statements/Skip.h"
 #include "statements/Limit.h"
 #include "statements/Return.h"
 
-using namespace db;
+using namespace db::v2;
 
 CypherAnalyzer::CypherAnalyzer(CypherAST& ast, GraphView graphView)
     : _ast(ast),

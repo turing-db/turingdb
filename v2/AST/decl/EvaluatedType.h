@@ -4,7 +4,7 @@
 
 #include "EnumToString.h"
 
-namespace db {
+namespace db::v2 {
 
 enum class EvaluatedType : uint8_t {
     Invalid = 0,

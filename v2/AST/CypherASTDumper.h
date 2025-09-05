@@ -5,7 +5,7 @@
 
 #include "decl/DeclID.h"
 
-namespace db {
+namespace db::v2 {
 
 class CypherAST;
 class SinglePartQuery;

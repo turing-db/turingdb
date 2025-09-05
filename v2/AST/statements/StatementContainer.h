@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-namespace db {
+namespace db::v2 {
 
 class Statement;
 

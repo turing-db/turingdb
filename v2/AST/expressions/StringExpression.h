@@ -5,7 +5,7 @@
 #include "Expression.h"
 #include "Operators.h"
 
-namespace db {
+namespace db::v2 {
 
 class StringExpression : public Expression {
 public:

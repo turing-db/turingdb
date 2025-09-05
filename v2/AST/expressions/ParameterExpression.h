@@ -6,7 +6,7 @@
 #include "types/Literal.h"
 #include "types/Parameter.h"
 
-namespace db {
+namespace db::v2 {
 
 class ParameterExpression : public Expression {
 public:

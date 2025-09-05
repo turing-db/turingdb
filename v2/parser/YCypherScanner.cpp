@@ -3,8 +3,10 @@
 #include "ParserException.h"
 #include "CypherError.h"
 
-void db::YCypherScanner::syntaxError(const SourceLocation& loc,
-                                     const std::string& msg) {
+using namespace db::v2;
+
+void YCypherScanner::syntaxError(const SourceLocation& loc,
+                                 const std::string& msg) {
     std::string errorMsg;
 
     CypherError err {_query};
@@ -16,8 +18,8 @@ void db::YCypherScanner::syntaxError(const SourceLocation& loc,
     throw ParserException(std::move(errorMsg));
 }
 
-void db::YCypherScanner::notImplemented(const SourceLocation& loc,
-                                        std::string_view rawMsg) {
+void YCypherScanner::notImplemented(const SourceLocation& loc,
+                                    std::string_view rawMsg) {
     if (_allowNotImplemented) {
         return;
     }

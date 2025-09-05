@@ -3,7 +3,7 @@
 #include <vector>
 #include <string_view>
 
-namespace db {
+namespace db::v2 {
 
 class QualifiedName {
 public:

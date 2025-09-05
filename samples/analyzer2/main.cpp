@@ -13,6 +13,7 @@
 #include "versioning/Transaction.h"
 
 using namespace db;
+using namespace db::v2;
 
 int main(int argc, char** argv) {
     std::string queryStr;

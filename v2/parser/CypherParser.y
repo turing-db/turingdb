@@ -5,9 +5,9 @@
 %define api.value.type variant
 %define parse.assert
 %define parse.error detailed
-%define api.namespace { db }
-%parse-param {db::YCypherScanner& scanner}
-%parse-param {db::CypherAST& ast}
+%define api.namespace { db::v2 }
+%parse-param {db::v2::YCypherScanner& scanner}
+%parse-param {db::v2::CypherAST& ast}
 %define api.location.type { SourceLocation }
 %locations
 
@@ -38,7 +38,7 @@
     #include "types/SinglePartQuery.h"
     #include "types/Projection.h"
 
-    namespace db {
+    namespace db::v2 {
         class YCypherScanner;
         class CypherAST;
         class QualifiedName;
@@ -167,72 +167,72 @@
 
 %token UNKNOWN
 
-%type<db::Literal> numLit boolLit charLit literal stringLit mapLit
-%type<std::pair<std::string_view, db::Expression*>> mapPair
-%type<db::MapLiteral*> mapPairChain
-%type<db::Symbol> symbol
-%type<db::QualifiedName> qualifiedName
-%type<db::QualifiedName> invocationName
+%type<db::v2::Literal> numLit boolLit charLit literal stringLit mapLit
+%type<std::pair<std::string_view, db::v2::Expression*>> mapPair
+%type<db::v2::MapLiteral*> mapPairChain
+%type<db::v2::Symbol> symbol
+%type<db::v2::QualifiedName> qualifiedName
+%type<db::v2::QualifiedName> invocationName
 %type<std::string_view> name
 %type<std::string_view> reservedWord
 
 %type<std::vector<std::string_view>> nodeLabels
 %type<std::vector<std::string_view>> edgeTypes
-%type<db::MapLiteral*> properties
+%type<db::v2::MapLiteral*> properties
 
 %type<std::optional<Symbol>> opt_symbol
 %type<std::optional<std::vector<std::string_view>>> opt_nodeLabels
-%type<db::MapLiteral*> opt_properties
+%type<db::v2::MapLiteral*> opt_properties
 %type<std::optional<std::vector<std::string_view>>> opt_edgeTypes
 
-%type<db::Expression*> expression
-%type<db::Expression*> xorExpression
-%type<db::Expression*> andExpression
-%type<db::Expression*> notExpression
-%type<db::Expression*> comparisonExpression
-%type<db::Expression*> addSubExpression
-%type<db::Expression*> multDivExpression
-%type<db::Expression*> powerExpression
-%type<db::Expression*> unaryAddSubExpression
-%type<db::Expression*> atomicExpression
-%type<db::Expression*> listExpression
-%type<db::Expression*> stringExpression
-%type<db::Expression*> propertyOrLabelExpression
-%type<db::Expression*> propertyExpression
-%type<db::Expression*> atomExpression
-%type<db::Expression*> collectExpression
-%type<db::Expression*> pathExpression
-%type<db::Expression*> parenthesizedExpression
+%type<db::v2::Expression*> expression
+%type<db::v2::Expression*> xorExpression
+%type<db::v2::Expression*> andExpression
+%type<db::v2::Expression*> notExpression
+%type<db::v2::Expression*> comparisonExpression
+%type<db::v2::Expression*> addSubExpression
+%type<db::v2::Expression*> multDivExpression
+%type<db::v2::Expression*> powerExpression
+%type<db::v2::Expression*> unaryAddSubExpression
+%type<db::v2::Expression*> atomicExpression
+%type<db::v2::Expression*> listExpression
+%type<db::v2::Expression*> stringExpression
+%type<db::v2::Expression*> propertyOrLabelExpression
+%type<db::v2::Expression*> propertyExpression
+%type<db::v2::Expression*> atomExpression
+%type<db::v2::Expression*> collectExpression
+%type<db::v2::Expression*> pathExpression
+%type<db::v2::Expression*> parenthesizedExpression
 
-%type<db::Expression*> projectionItem
-%type<db::Projection*> projectionItems
-%type<db::Projection*> projectionBody
+%type<db::v2::Expression*> projectionItem
+%type<db::v2::Projection*> projectionItems
+%type<db::v2::Projection*> projectionBody
 
-%type<BinaryOperator> comparisonSign
-%type<StringOperator> stringExpPrefix
+%type<db::v2::BinaryOperator> comparisonSign
+%type<db::v2::StringOperator> stringExpPrefix
 
-%type<db::Pattern*> pattern
-%type<db::Pattern*> patternWhere
-%type<db::PatternElement*> patternPart
-%type<db::PatternElement*> patternElem
-%type<db::PatternElement*> pathExpressionElem
-%type<db::NodePattern*> nodePattern
-%type<db::EdgePattern*> edgePattern
-%type<std::tuple<std::optional<db::Symbol>, std::optional<std::vector<std::string_view>>, db::MapLiteral*>> edgeDetail
-%type<std::pair<db::EdgePattern*, db::NodePattern*>> patternElemChain
-%type<db::WhereClause> where
+%type<db::v2::Pattern*> pattern
+%type<db::v2::Pattern*> patternWhere
+%type<db::v2::PatternElement*> patternPart
+%type<db::v2::PatternElement*> patternElem
+%type<db::v2::PatternElement*> pathExpressionElem
+%type<db::v2::NodePattern*> nodePattern
+%type<db::v2::EdgePattern*> edgePattern
+%type<std::tuple<std::optional<db::v2::Symbol>, std::optional<std::vector<std::string_view>>, db::v2::MapLiteral*>> edgeDetail
+%type<std::pair<db::v2::EdgePattern*, db::v2::NodePattern*>> patternElemChain
+%type<db::v2::WhereClause> where
 
-%type<db::SinglePartQuery*> singlePartQ
-%type<db::QueryCommand*> singleQuery
-%type<db::QueryCommand*> query
-%type<db::Statement*> readingStatement
-%type<db::Match*> matchSt
-%type<db::Skip*> skipSSt
-%type<db::Limit*> limitSSt
-%type<db::Return*> returnSt
+%type<db::v2::SinglePartQuery*> singlePartQ
+%type<db::v2::QueryCommand*> singleQuery
+%type<db::v2::QueryCommand*> query
+%type<db::v2::Statement*> readingStatement
+%type<db::v2::Match*> matchSt
+%type<db::v2::Skip*> skipSSt
+%type<db::v2::Limit*> limitSSt
+%type<db::v2::Return*> returnSt
 
-%type<db::Skip*> opt_skipSSt
-%type<db::Limit*> opt_limitSSt
+%type<db::v2::Skip*> opt_skipSSt
+%type<db::v2::Limit*> opt_limitSSt
 %type<bool> opt_distinct
 
 %expect 0
@@ -1034,7 +1034,7 @@ reservedWord
 
 %%
 
-void db::YCypherParser::error(const location_type& l, const std::string& m) {
+void db::v2::YCypherParser::error(const location_type& l, const std::string& m) {
     scanner.syntaxError(l, m);
 }
 

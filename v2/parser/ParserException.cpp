@@ -1,6 +1,6 @@
 #include "ParserException.h"
 
-using namespace db;
+using namespace db::v2;
 
 ParserException::ParserException(std::string&& msg)
     : TuringException(std::move(msg))

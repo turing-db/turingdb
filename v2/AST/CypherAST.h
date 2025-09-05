@@ -11,7 +11,7 @@
 #include "statements/StatementContainer.h"
 #include "statements/SubStatement.h"
 
-namespace db {
+namespace db::v2 {
 
 class NodePattern;
 class EdgePattern;

@@ -14,10 +14,10 @@
 
 #include "Profiler.h"
 
-using namespace db;
+using namespace db::v2;
 
-QueryInterpreterV2::QueryInterpreterV2(SystemManager* sysMan,
-                                       JobSystem* jobSystem)
+QueryInterpreterV2::QueryInterpreterV2(db::SystemManager* sysMan,
+                                       db::JobSystem* jobSystem)
     : _sysMan(sysMan),
     _jobSystem(jobSystem)
 {
@@ -26,9 +26,9 @@ QueryInterpreterV2::QueryInterpreterV2(SystemManager* sysMan,
 QueryInterpreterV2::~QueryInterpreterV2() {
 }
 
-QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
-                                        std::string_view query,
-                                        std::string_view graphName) {
+db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
+                                            std::string_view query,
+                                            std::string_view graphName) {
     Profile profile {"QueryInterpreterV2::execute"};
 
     const auto start = Clock::now();

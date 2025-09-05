@@ -5,7 +5,7 @@
 
 #include "SourceLocation.h"
 
-namespace db {
+namespace db::v2 {
 
 class CypherError {
 public:

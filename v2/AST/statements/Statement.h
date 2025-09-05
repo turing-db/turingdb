@@ -1,6 +1,6 @@
 #pragma once
 
-namespace db {
+namespace db::v2 {
 
 class Statement {
 public:

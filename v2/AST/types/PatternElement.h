@@ -6,7 +6,7 @@
 #include "NodePattern.h"
 #include "EdgePattern.h"
 
-namespace db {
+namespace db::v2 {
 
 class NodePattern;
 class EdgePattern;

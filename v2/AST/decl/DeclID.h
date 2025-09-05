@@ -3,7 +3,7 @@
 #include <spdlog/fmt/bundled/ostream.h>
 #include <cstdint>
 
-namespace db {
+namespace db::v2 {
 
 class DeclID {
 public:
@@ -58,21 +58,21 @@ private:
 namespace std {
 
 template <>
-struct hash<db::DeclID> {
-    size_t operator()(const db::DeclID& id) const {
+struct hash<db::v2::DeclID> {
+    size_t operator()(const db::v2::DeclID& id) const {
         return id.value();
     }
 };
 
-inline string to_string(db::DeclID id) {
+inline string to_string(db::v2::DeclID id) {
     return to_string(id.value());
 }
 
-inline ostream& operator<<(ostream& os, db::DeclID id) {
+inline ostream& operator<<(ostream& os, db::v2::DeclID id) {
     return os << id.value();
 }
 
 }
 
 template <>
-struct fmt::formatter<db::DeclID> : ostream_formatter {};
+struct fmt::formatter<db::v2::DeclID> : ostream_formatter {};

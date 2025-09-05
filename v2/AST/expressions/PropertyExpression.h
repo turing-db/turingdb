@@ -5,7 +5,7 @@
 #include "Expression.h"
 #include "types/QualifiedName.h"
 
-namespace db {
+namespace db::v2 {
 
 class VarDecl;
 

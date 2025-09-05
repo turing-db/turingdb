@@ -1,6 +1,6 @@
 #include "CypherError.h"
 
-using namespace db;
+using namespace db::v2;
 
 namespace {
 

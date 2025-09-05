@@ -5,7 +5,7 @@
 
 #include "Symbol.h"
 
-namespace db {
+namespace db::v2 {
 
 class MapLiteral;
 class VarDecl;

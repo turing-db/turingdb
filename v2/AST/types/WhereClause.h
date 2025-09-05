@@ -2,7 +2,7 @@
 
 #include "expressions/Expression.h"
 
-namespace db {
+namespace db::v2 {
 
 class WhereClause {
 public:

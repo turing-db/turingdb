@@ -5,7 +5,7 @@
 #include "Expression.h"
 #include "types/PatternElement.h"
 
-namespace db {
+namespace db::v2 {
 
 class PathExpression : public Expression {
 public:

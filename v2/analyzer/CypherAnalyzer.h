@@ -3,7 +3,7 @@
 #include "decl/EvaluatedType.h"
 #include "views/GraphView.h"
 
-namespace db {
+namespace db::v2 {
 
 class CypherAST;
 class SinglePartQuery;

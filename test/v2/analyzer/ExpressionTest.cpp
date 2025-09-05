@@ -9,6 +9,7 @@
 #include "versioning/Transaction.h"
 
 using namespace db;
+using namespace db::v2;
 
 class ExpressionTest : public turing::test::TuringTest {
 public:

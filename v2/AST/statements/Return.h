@@ -4,7 +4,7 @@
 
 #include "Statement.h"
 
-namespace db {
+namespace db::v2 {
 
 class Projection;
 

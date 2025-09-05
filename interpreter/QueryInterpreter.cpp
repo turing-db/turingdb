@@ -151,8 +151,8 @@ QueryStatus QueryInterpreter::executeV2(std::string_view query,
                                         QueryHeaderCallback headerCallback,
                                         CommitHash commitHash,
                                         ChangeID changeID) {
-    InterpreterContext interpCtxt(mem, callback, headerCallback, commitHash, changeID);
+    v2::InterpreterContext interpCtxt(mem, callback, headerCallback, commitHash, changeID);
 
-    QueryInterpreterV2 interp(_sysMan, _jobSystem);
+    v2::QueryInterpreterV2 interp(_sysMan, _jobSystem);
     return interp.execute(interpCtxt, query, graphName);
 }

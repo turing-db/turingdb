@@ -6,7 +6,7 @@
 
 #include "types/EntityPattern.h"
 
-namespace db {
+namespace db::v2 {
 
 class MapLiteral;
 

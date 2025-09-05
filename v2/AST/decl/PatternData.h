@@ -1,11 +1,10 @@
 #pragma once
 
-#include "decl/VarDecl.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
 #include "types/Literal.h"
 
-namespace db {
+namespace db::v2 {
 
 struct NodePatternData {
     LabelSet _labelConstraints;

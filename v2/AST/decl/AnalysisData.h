@@ -3,7 +3,7 @@
 #include <variant>
 #include <memory>
 
-namespace db {
+namespace db::v2 {
 
 class VarDecl;
 

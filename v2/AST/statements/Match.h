@@ -7,7 +7,7 @@
 #include "Statement.h"
 #include "Limit.h"
 
-namespace db {
+namespace db::v2 {
 
 class Expression;
 

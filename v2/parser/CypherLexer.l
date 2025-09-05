@@ -5,12 +5,12 @@
 #include "YCypherScanner.h"
 #include "GeneratedCypherParser.h"
 
-using namespace db;
+using namespace db::v2;
 
-#define yyterminate() return db::YCypherParser::token::PROG_END
+#define yyterminate() return db::v2::YCypherParser::token::PROG_END
 #define YY_USER_ACTION advanceLocation(*yylloc, yyleng);
 
-using Token = db::YCypherParser::token;
+using Token = db::v2::YCypherParser::token;
 
 #define STORE_STRING(start, length) yylval->emplace<std::string_view>(getStringView(start, length))
 

@@ -6,7 +6,7 @@
 #include "decl/DeclContainer.h"
 #include "decl/VarDecl.h"
 
-using namespace db;
+using namespace db::v2;
 
 DeclContext::DeclContext(DeclContainer& container, DeclContext* parent)
     : _container(container),

@@ -2,7 +2,7 @@
 
 #include "decl/EvaluatedType.h"
 
-namespace db {
+namespace db::v2 {
 
 enum class ExpressionType {
     Binary = 0,

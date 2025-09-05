@@ -8,7 +8,7 @@
 #include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 
-namespace db {
+namespace db::v2 {
 
 class DeclContainer;
 

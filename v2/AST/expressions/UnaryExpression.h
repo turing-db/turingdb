@@ -5,7 +5,7 @@
 #include "Operators.h"
 #include "Expression.h"
 
-namespace db {
+namespace db::v2 {
 
 class UnaryExpression : public Expression {
 public:
