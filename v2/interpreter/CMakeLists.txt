@@ -8,5 +8,8 @@ target_link_libraries(turing_db_v2_interpreter_s PUBLIC
     turing_common_s)
 
 target_link_libraries(turing_db_v2_interpreter_s PRIVATE
+    turing_db_v2_parser_s
+    turing_db_v2_analyzer_s
+    turing_db_v2_plan_s
     turing_db_system_s
     turing_db_jobs_s)
