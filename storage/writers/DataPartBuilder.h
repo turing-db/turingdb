@@ -1,11 +1,11 @@
 #pragma once
 
 #include <memory>
-#include <unordered_set>
 
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "properties/PropertyManager.h"
+#include "versioning/DataPartModifier.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -65,6 +65,7 @@ public:
 private:
     friend ConcurrentWriter;
     friend DataPart;
+    friend DataPartModifier;
     friend CommitBuilder;
 
     NodeID _firstNodeID {0};
@@ -80,7 +81,6 @@ private:
     std::vector<LabelSetHandle> _coreNodeLabelSets;
     std::vector<EdgeRecord> _edges;
     std::unordered_map<EdgeID, const EdgeRecord*> _patchedEdges;
-    std::unordered_set<NodeID> _nodeHasPatchEdges;
     std::map<NodeID, LabelSetHandle> _patchNodeLabelSets;
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
@@ -92,7 +92,7 @@ private:
     std::map<NodeID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
     std::unordered_map<EdgeID, const EdgeRecord*>& patchedEdges() { return _patchedEdges; }
     size_t patchNodeEdgeDataCount() const {
-        return _nodeHasPatchEdges.size();
+        return _patchNodeLabelSets.size();
     }
 
     DataPartBuilder() = default;

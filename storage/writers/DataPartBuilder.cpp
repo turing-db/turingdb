@@ -92,13 +92,11 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
 
 
     if (edge._nodeID < _firstNodeID) {
-        _nodeHasPatchEdges.emplace(edge._nodeID);
         _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
         _outPatchEdgeCount += 1;
     }
 
     if (edge._otherID < _firstNodeID) {
-        _nodeHasPatchEdges.emplace(edge._otherID);
         _patchNodeLabelSets.emplace(edge._otherID, LabelSetHandle {});
         _inPatchEdgeCount += 1;
     }

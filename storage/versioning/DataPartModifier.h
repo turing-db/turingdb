@@ -9,6 +9,7 @@
 #include "ID.h"
 #include "TuringException.h"
 #include "EdgeContainer.h"
+#include "writers/DataPartBuilder.h"
 
 namespace db {
 
@@ -36,16 +37,13 @@ public:
                                                   std::set<NodeID> nodesToDelete,
                                                   std::set<EdgeID> edgesToDelete) {
         // private constructor so make raw then make unique
-        auto raw = new DataPartModifier {oldDP, newDP, nodesToDelete, edgesToDelete};
+        auto raw = new DataPartModifier {oldDP, nodesToDelete, edgesToDelete};
         return std::unique_ptr<DataPartModifier>(raw);
     }
 
 private:
     const WeakArc<DataPart> _oldDP {}; // nullptr
-    WeakArc<DataPart> _newDP {};       // nullptr
-
-    std::unique_ptr<NodeContainer> _newNodeCont {};
-    std::unique_ptr<EdgeContainer> _newEdgeCont {};
+    std::unique_ptr<DataPartBuilder> _builder;
 
     std::set<NodeID> _nodesToDelete;
     std::set<EdgeID> _edgesToDelete;
@@ -60,6 +58,10 @@ private:
 
     void prepare();
 
+    void reconstruct();
+
+    void getCoreNodeLabelSets();
+
     /**
      * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
      * @ref _nodesToDelete
@@ -72,24 +74,22 @@ private:
      */
     void deleteEdges();
 
-    void assembleNewPart();
+    void addNodeProperties(const PropertyTypeID& propID, const PropertyContainer& cont);
+    void addEdgeProperties(const PropertyTypeID& propID, const PropertyContainer& cont);
 
-    /**
-     * @brief Identifies edges that must be deleted due to one of their incident nodes
-     *        being deleted, and appends those EdgeIDs to @ref _edgesToDelete.
-     */
-    void detectHangingEdges();
+        void assembleNewPart();
 
-    // Copy constructor WeakArc to the old datapart so the old referee still holds a
-    // reference, but take ownership of WeakArc of the new datapart
-    DataPartModifier(const WeakArc<DataPart> oldDP, WeakArc<DataPart> newDP,
-                     std::set<NodeID> nodesToDelete, std::set<EdgeID> edgesToDelete)
-        : _oldDP(oldDP),
-          _newDP(std::move(newDP)),
-          _nodesToDelete(nodesToDelete),
-          _edgesToDelete(edgesToDelete)
-      {
+        /**
+         * @brief Identifies edges that must be deleted due to one of their incident nodes
+         *        being deleted, and appends those EdgeIDs to @ref _edgesToDelete.
+         */
+        void detectHangingEdges();
 
-      }
-};
+        DataPartModifier(const WeakArc<DataPart> oldDP, std::set<NodeID> nodesToDelete,
+                         std::set<EdgeID> edgesToDelete)
+            : _oldDP(oldDP),
+              _nodesToDelete(nodesToDelete),
+              _edgesToDelete(edgesToDelete) {
+        }
+    };
 }
