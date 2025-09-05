@@ -20,6 +20,7 @@ t.query("CHANGE SUBMIT")
 # Create edge by injecting node IDs
 t.checkout('head')
 change = t.query('CHANGE NEW')['Change ID'][0]
+t.checkout(change=str(change))
 t.query('create (n @ 0)-[:GOODEDGE]-(m @ 1)-[:GOODEDGE]-(o @ 2)')
 t.query('change submit')
 
