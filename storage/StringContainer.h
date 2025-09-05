@@ -7,6 +7,7 @@
 
 #include "BioAssert.h"
 #include "StringBucket.h"
+#include "spdlog/spdlog.h"
 
 namespace db {
 
@@ -90,6 +91,9 @@ public:
     }
 
     const std::string_view& getView(size_t index) const {
+        if (!(index < _views.size())) {
+            spdlog::error("Tried to access index {} but _views is of size {}", index, _views.size());
+        }
         msgbioassert(index < _views.size(), "String index invalid");
         return _views[index];
     }

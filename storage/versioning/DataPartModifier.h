@@ -30,6 +30,13 @@ public:
 
     void applyDeletions();
 
+    void applyModifications() {
+        prepare();
+        reconstruct();
+    }
+
+    DataPartBuilder& builder() { return *_builder; }
+
     // this is for the purpose of testing in a sample - will integrate into commit
     // modifier later
     [[nodiscard]] static std::unique_ptr<DataPartModifier> create(const WeakArc<DataPart> oldDP,
@@ -88,8 +95,9 @@ private:
         DataPartModifier(const WeakArc<DataPart> oldDP, std::set<NodeID> nodesToDelete,
                          std::set<EdgeID> edgesToDelete)
             : _oldDP(oldDP),
-              _nodesToDelete(nodesToDelete),
-              _edgesToDelete(edgesToDelete) {
+            _nodesToDelete(nodesToDelete),
+            _edgesToDelete(edgesToDelete)
+        {
         }
     };
 }

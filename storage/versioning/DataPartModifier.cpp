@@ -9,6 +9,7 @@
 #include "DataPart.h"
 #include "EdgeContainer.h"
 #include "ID.h"
+#include "TuringException.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyContainer.h"
 #include "versioning/EdgeContainerModifier.h"
@@ -61,9 +62,13 @@ void DataPartModifier::prepare() {
     // ID of a node, x, is equal to the number of deleted nodes which have an ID
     // smaller than x.
     _nodeIDMapping = [this](NodeID x) {
+        if (_nodesToDelete.contains(x)) {
+            throw TuringException(fmt::format(
+                "Node {} is being deleted. Should not to attempt to get a new ID.", x));
+        }
         auto smallerDeletedNodesIt = std::ranges::lower_bound(_nodesToDelete, x);
         size_t numSmallerDeletedNodes =
-            std::distance(smallerDeletedNodesIt, _nodesToDelete.cbegin());
+            std::distance(_nodesToDelete.cbegin(), smallerDeletedNodesIt);
         return x - numSmallerDeletedNodes;
     };
 
@@ -71,9 +76,13 @@ void DataPartModifier::prepare() {
 
     // Same logic as nodes above
     _edgeIDMapping = [this](EdgeID x) {
+        if (_edgesToDelete.contains(x)) {
+            throw TuringException(fmt::format(
+                "Edge {} is being deleted. Should not to attempt to get a new ID.", x));
+        }
         auto smallerDeletedEdgesIt = std::ranges::lower_bound(_edgesToDelete, x);
         size_t numSmallerDeletedEdges =
-            std::distance(smallerDeletedEdgesIt, _edgesToDelete.cbegin());
+            std::distance(_edgesToDelete.cbegin(), smallerDeletedEdgesIt);
         return x - numSmallerDeletedEdges;
     };
 }
@@ -92,6 +101,7 @@ void DataPartModifier::addNodeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addNodeProperty<types::Int64>(newID, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::UInt64: {
@@ -105,6 +115,7 @@ void DataPartModifier::addNodeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addNodeProperty<types::UInt64>(newID, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::Double: {
@@ -118,6 +129,7 @@ void DataPartModifier::addNodeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addNodeProperty<types::Double>(newID, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::String: {
@@ -144,15 +156,18 @@ void DataPartModifier::addNodeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addNodeProperty<types::Bool>(newID, propID, value);
                 }
             }
+        break;
         }
 
         default: {
-            throw TuringException("Invalid node property container type");
+            throw TuringException(fmt::format("Invalid node property container type: {}",
+                                              ValueTypeName::value(cont.getValueType())));
         }
     }
 }
 
-void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const PropertyContainer& cont) {
+void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID,
+                                         const PropertyContainer& cont) {
     switch (cont.getValueType()) {
 
         case ValueType::Int64: {
@@ -172,6 +187,7 @@ void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addEdgeProperty<types::Int64>(record, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::UInt64: {
@@ -191,6 +207,7 @@ void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addEdgeProperty<types::UInt64>(record, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::Double: {
@@ -210,6 +227,7 @@ void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addEdgeProperty<types::Double>(record, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::String: {
@@ -219,7 +237,7 @@ void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const Pro
                 // ID in the old datapart: what we need to check is deleted
                 EdgeID oldID(id.getValue());
                 if (!_edgesToDelete.contains(oldID)) {
-                    // The edges' new ID in the newdatapart
+                    // The edges' new ID in the new datapart
                     EdgeID newID(_edgeIDMapping(oldID));
 
                     // Get the associated edgeRecord that was populated in @ref reconstruct
@@ -229,6 +247,7 @@ void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addEdgeProperty<types::String>(record, propID, value);
                 }
             }
+        break;
         }
 
         case ValueType::Bool: {
@@ -248,6 +267,7 @@ void DataPartModifier::addEdgeProperties(const PropertyTypeID& propID, const Pro
                     _builder->addEdgeProperty<types::Bool>(record, propID, value);
                 }
             }
+        break;
         }
 
         default: {
@@ -274,9 +294,7 @@ void DataPartModifier::reconstruct() {
     // Nodes
     for (const auto& [nodeID, nodeRecord] :
          enumerate_from(oldFirstNodeID.getValue(), oldNodeRecords)) {
-             if (_nodesToDelete.contains(nodeID)) {
-                 continue;
-             } else {
+             if (!_nodesToDelete.contains(nodeID)) {
                  _builder->addNode(nodeRecord._labelset);
              }
     }
@@ -284,9 +302,7 @@ void DataPartModifier::reconstruct() {
     // Edges
     for (const auto& [edgeID, edgeRecord] :
          enumerate_from(oldFirstEdgeID.getValue(), oldOutEdgeRecords)) {
-        if (_nodesToDelete.contains(edgeID)) {
-            continue;
-        } else {
+        if (!_edgesToDelete.contains(edgeID)) {
             EdgeTypeID typeID = edgeRecord._edgeTypeID;
             NodeID src = _nodeIDMapping(edgeRecord._nodeID);
             NodeID tgt = _nodeIDMapping(edgeRecord._otherID);
@@ -294,11 +310,7 @@ void DataPartModifier::reconstruct() {
         }
     }
 
-    // Node Properties
-    auto& oldNodeProps = _oldDP->nodeProperties();
-    for (const auto& [propID, container] : oldNodeProps) {
-        addNodeProperties(propID, *container);
-    }
+    // Node & Edge properties are registered in @ref DataPart::load
 }
 
 void DataPartModifier::getCoreNodeLabelSets() {

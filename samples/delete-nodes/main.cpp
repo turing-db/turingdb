@@ -1,6 +1,10 @@
+#include "properties/PropertyContainer.h"
 #include "spdlog/spdlog.h"
 #include "tabulate/table.hpp"
 
+#include "DataPart.h"
+#include "SystemManager.h"
+#include "TuringDB.h"
 #include "ArcManager.h"
 #include "NodeContainer.h"
 #include "Graph.h"
@@ -9,7 +13,7 @@
 #include "versioning/DataPartModifier.h"
 #include "versioning/Transaction.h"
 #include "versioning/NodeContainerModifier.h"
-#include <string>
+#include "LocalMemory.h"
 
 using namespace db;
 
@@ -33,6 +37,31 @@ namespace {
             }
 
             table.add_row({std::to_string(handle.getID()), oss.str()});
+        }
+
+        // Optional styling
+        table.format()
+            .font_align(FontAlign::center)
+            .border_top("─")
+            .border_bottom("─")
+            .border_left("│")
+            .border_right("│")
+            .corner("┼");
+
+        std::cout << table << std::endl << std::endl << std::endl;
+    }
+
+    using StrPropContainer = TypedPropertyContainer<types::String>;
+    // Assuming LabelSetID and NodeID are integer types
+    [[maybe_unused]] void prettyPrintStrPropContainer(const StrPropContainer& cont) {
+        using namespace tabulate;
+
+        Table table;
+        table.add_row({"EdgeID", "NodeIDs"});
+
+        for (const auto& [id, val] : cont.zipped()) {
+            std::ostringstream oss;
+            table.add_row({std::to_string(id.getValue()), val});
         }
 
         // Optional styling
@@ -139,9 +168,47 @@ void datapartTest() {
         prettyPrintNodeContainer(newDP->nodes());
         prettyPrintEdgeContainer(newDP->edges());
     }
+
+}
+
+
+void reconstructTest() {
+    spdlog::info("Testing deletion using DataPartModifier::reconstruct");
+
+    TuringDB db;
+    LocalMemory mem;
+
+    db.getSystemManager().loadGraph("simpledb", db.getJobSystem());
+    Graph* g = db.getSystemManager().getGraph("simpledb");
+
+    const WeakArc<DataPart> oldDP = g->openTransaction().readGraph().dataparts()[0];
+    spdlog::info("Orignal size: {}", oldDP->nodes().size());
+    prettyPrintNodeContainer(oldDP->nodes());
+    prettyPrintEdgeContainer(oldDP->edges());
+
+    const StrPropContainer& oldSPC =
+        oldDP->edgeProperties().getContainer<types::String>(0);
+    prettyPrintStrPropContainer(oldSPC);
+
+    db.query("CALL properties ()", "simpledb", &mem);
+
+    {
+        spdlog::info("Attempting to delete nodes: {0}, and edges: {}");
+        std::set<NodeID> nodesToDelete {0};
+
+        auto modifier = DataPartModifier::create(oldDP, {}, nodesToDelete, {});
+        modifier->applyModifications();
+
+        DataPart newDP = DataPart(0, 0);
+        newDP.load(g->openTransaction().viewGraph(), db.getJobSystem(), modifier->builder());
+
+        prettyPrintNodeContainer(newDP.nodes());
+        prettyPrintEdgeContainer(newDP.edges());
+    }
 }
 
 int main() {
     // nodeContainerTest();
-    datapartTest();
+    // datapartTest();
+    reconstructTest();
 }

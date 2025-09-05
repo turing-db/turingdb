@@ -1,5 +1,6 @@
 #include "DataPartBuilder.h"
 
+#include <memory>
 #include <range/v3/view/enumerate.hpp>
 
 #include "Graph.h"
@@ -13,9 +14,10 @@ using namespace db;
 DataPartBuilder::~DataPartBuilder() = default;
 
 std::unique_ptr<DataPartBuilder> DataPartBuilder::createEmptyBuilder() {
-    return std::unique_ptr<DataPartBuilder>();
+    // Private constructor: raw with new and then wrap in uptr
+    DataPartBuilder* raw = new DataPartBuilder;
+    return std::unique_ptr<DataPartBuilder>(raw);
 }
-
 
 std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metadata,
                                                           const GraphView& view,

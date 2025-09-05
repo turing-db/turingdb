@@ -5,7 +5,6 @@
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "properties/PropertyManager.h"
-#include "versioning/DataPartModifier.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -14,6 +13,7 @@ class ConcurrentWriter;
 class EdgeContainer;
 class PropertyManager;
 class DataPart;
+class DataPartModifier;
 class CommitBuilder;
 class Graph;
 class JobSystem;
