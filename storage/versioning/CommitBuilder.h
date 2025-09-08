@@ -44,6 +44,8 @@ public:
     [[nodiscard]] DataPartBuilder& getCurrentBuilder() { return *_builders.back(); }
 
     DataPartBuilder& newBuilder();
+    // Create a new builder with a specific DataPart index
+    DataPartBuilder& newBuilder(size_t partIndex);
 
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
@@ -56,6 +58,7 @@ public:
     bool isEmpty() const {
         return _datapartCount == 0;
     }
+
 
 private:
     friend VersionController;

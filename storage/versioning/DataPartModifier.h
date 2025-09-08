@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <set>
 
 #include "ArcManager.h"
@@ -15,6 +16,14 @@ namespace db {
 
 class DataPartModifier {
 public:
+    DataPartModifier(const WeakArc<DataPart> oldDP, DataPartBuilder& builder,
+                         std::set<NodeID> nodesToDelete, std::set<EdgeID> edgesToDelete)
+        : _oldDP(oldDP),
+        _builder(&builder),
+        _nodesToDelete(nodesToDelete),
+        _edgesToDelete(edgesToDelete)
+    {
+    }
     DataPartModifier(const DataPartModifier&) = delete;
     DataPartModifier& operator=(const DataPartModifier&) = delete;
     DataPartModifier(DataPartModifier&&) = delete;
@@ -22,35 +31,16 @@ public:
 
     ~DataPartModifier() = default;
 
-    // this is for the purpose of testing in a sample - will integrate into commit
-    // modifier later
-    [[nodiscard]] static WeakArc<DataPart> newDPinGraph(Graph* g) {
-        return g->_versionController->createDataPart(0, 0);
-    }
-
-    void applyDeletions();
-
     void applyModifications() {
         prepare();
-        reconstruct();
+        fillBuilder();
     }
 
-    DataPartBuilder& builder() { return *_builder; }
-
-    // this is for the purpose of testing in a sample - will integrate into commit
-    // modifier later
-    [[nodiscard]] static std::unique_ptr<DataPartModifier> create(const WeakArc<DataPart> oldDP,
-                                                  WeakArc<DataPart> newDP,
-                                                  std::set<NodeID> nodesToDelete,
-                                                  std::set<EdgeID> edgesToDelete) {
-        // private constructor so make raw then make unique
-        auto raw = new DataPartModifier {oldDP, nodesToDelete, edgesToDelete};
-        return std::unique_ptr<DataPartModifier>(raw);
-    }
+    DataPartBuilder* builder() { return _builder; }
 
 private:
     const WeakArc<DataPart> _oldDP {}; // nullptr
-    std::unique_ptr<DataPartBuilder> _builder;
+    DataPartBuilder* _builder {nullptr};
 
     std::set<NodeID> _nodesToDelete;
     std::set<EdgeID> _edgesToDelete;
@@ -65,39 +55,6 @@ private:
 
     void prepare();
 
-    void reconstruct();
-
-    void getCoreNodeLabelSets();
-
-    /**
-     * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
-     * @ref _nodesToDelete
-     */
-    void deleteNodes();
-
-    /**
-     * @brief Modifies @ref newDP in place to remove all nodes with NodeIDs specified in
-     * @ref _edgesToDelete
-     */
-    void deleteEdges();
-
-    void addNodeProperties(const PropertyTypeID& propID, const PropertyContainer& cont);
-    void addEdgeProperties(const PropertyTypeID& propID, const PropertyContainer& cont);
-
-        void assembleNewPart();
-
-        /**
-         * @brief Identifies edges that must be deleted due to one of their incident nodes
-         *        being deleted, and appends those EdgeIDs to @ref _edgesToDelete.
-         */
-        void detectHangingEdges();
-
-        DataPartModifier(const WeakArc<DataPart> oldDP, std::set<NodeID> nodesToDelete,
-                         std::set<EdgeID> edgesToDelete)
-            : _oldDP(oldDP),
-            _nodesToDelete(nodesToDelete),
-            _edgesToDelete(edgesToDelete)
-        {
-        }
+    void fillBuilder();
     };
 }

@@ -59,6 +59,8 @@ public:
     size_t getInPatchEdgeCount() const { return _inPatchEdgeCount; };
     size_t getPartIndex() const { return _partIndex; };
 
+    void setPartIndex(size_t idx) { _partIndex = idx; };
+
     const GraphView& getView() const { return _view; }
     MetadataBuilder& getMetadata() { return *_metadata; }
 

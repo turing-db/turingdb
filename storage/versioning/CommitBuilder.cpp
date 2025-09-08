@@ -48,6 +48,14 @@ DataPartBuilder& CommitBuilder::newBuilder() {
     return *builder;
 }
 
+DataPartBuilder& CommitBuilder::newBuilder(size_t partIndex) {
+    std::scoped_lock lock {_mutex};
+    GraphView view {*_commitData};
+    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder, view, partIndex));
+
+    return *builder;
+}
+
 CommitResult<void> CommitBuilder::buildNewDataPart(DataPartBuilder* builder,
                                                    JobSystem& jobsystem,
                                                    const GraphView& view,

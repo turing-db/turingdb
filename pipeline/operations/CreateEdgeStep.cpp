@@ -29,7 +29,7 @@ CreateEdgeStep::~CreateEdgeStep() {
 void CreateEdgeStep::prepare(ExecutionContext* ctxt) {
     Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx->writingPendingCommit()) {
-        throw PipelineException("CreateEdgeStep: Cannot create node outside of a write transaction");
+        throw PipelineException("CreateEdgeStep: Cannot create edge outside of a write transaction");
     }
 
     auto& tx = rawTx->get<PendingCommitWriteTx>();
@@ -49,7 +49,6 @@ void CreateEdgeStep::execute() {
     if (!tgtID->getRaw().isValid()) {
         CreateNodeStep::createNode(_builder, _tgt);
     }
-
 
     const TypeConstraint* type = _edge->getTypeConstraint();
     const ExprConstraint* expr = _edge->getExprConstraint();
