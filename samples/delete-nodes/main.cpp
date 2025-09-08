@@ -143,6 +143,7 @@ void nodeContainerTest() {
     }
 }
 
+/*
 void datapartTest() {
     spdlog::info("Testing deletion using DataPartModifier");
     auto g = Graph::create();
@@ -170,8 +171,10 @@ void datapartTest() {
     }
 
 }
+*/
 
 
+/*
 void reconstructTest() {
     spdlog::info("Testing deletion using DataPartModifier::reconstruct");
 
@@ -206,9 +209,10 @@ void reconstructTest() {
         prettyPrintEdgeContainer(newDP.edges());
     }
 }
+*/
 
 int main() {
     // nodeContainerTest();
     // datapartTest();
-    reconstructTest();
+    // reconstructTest();
 }

@@ -32,8 +32,7 @@ CommitHash CommitBuilder::hash() const {
 }
 
 GraphView CommitBuilder::viewGraph() const {
-    return GraphView {*_commitData};
-}
+    return GraphView {*_commitData}; }
 
 GraphReader CommitBuilder::readGraph() const {
     return viewGraph().read();
@@ -96,9 +95,14 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
             if (!buildRes) {
                 return buildRes.get_unexpected();
             }
+        } else {
+            // TODO: If the index is an existing datapart, then this is a modification,
+            // build and set the correct index datapart
         }
     }
 
+    // XXX: This needs to be changed, currently just sets the dataparts to the @ref
+    // _datapartCount most recently added dataparts
     historyBuilder.setCommitDatapartCount(_datapartCount);
 
     _builders.clear();
