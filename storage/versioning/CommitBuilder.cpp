@@ -1,9 +1,11 @@
 #include "CommitBuilder.h"
 
+#include "JobSystem.h"
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
+#include "versioning/CommitHistory.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -46,6 +48,28 @@ DataPartBuilder& CommitBuilder::newBuilder() {
     return *builder;
 }
 
+CommitResult<void> CommitBuilder::buildNewDataPart(DataPartBuilder* builder,
+                                                   JobSystem& jobsystem,
+                                                   const GraphView& view,
+                                                   CommitHistoryBuilder& historyBuilder) {
+    // Create Empty DataPart
+    WeakArc<DataPart> part =
+        _controller->createDataPart(_nextDataPartFirstNodeID, _nextDataPartFirstEdgeID);
+
+    if (!part->load(view, jobsystem, *builder)) {
+        return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
+    }
+
+    // Update these so the next builder gets the right _firstNodeID
+    _nextDataPartFirstNodeID += builder->nodeCount();
+    _nextDataPartFirstEdgeID += builder->edgeCount();
+
+    historyBuilder.addDatapart(part);
+    _datapartCount++;
+
+    return {};
+}
+
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile {"CommitBuilder::buildAllPending"};
 
@@ -54,23 +78,20 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     GraphView view {*_commitData};
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
+    size_t numExistingDataparts = _commitData->_history.allDataparts().size();
+
     for (const auto& builder : _builders) {
-        // Create Empty DataPart
-        WeakArc<DataPart> part = _controller->createDataPart(_firstNodeID, _firstEdgeID);
-
-        _firstNodeID += builder->nodeCount();
-        _firstEdgeID += builder->edgeCount();
-
-        if (!part->load(view, jobsystem, *builder)) {
-            return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
+        // Build a new datapart: result of CREATE query
+        if (builder->_partIndex >= numExistingDataparts) {
+            auto buildRes =
+                buildNewDataPart(builder.get(), jobsystem, view, historyBuilder);
+            if (!buildRes) {
+                return buildRes.get_unexpected();
+            }
         }
-
-        historyBuilder.addDatapart(part);
     }
 
-    _datapartCount += _builders.size();
     historyBuilder.setCommitDatapartCount(_datapartCount);
-
 
     _builders.clear();
 
@@ -96,8 +117,8 @@ void CommitBuilder::initialize() {
     Profile profile {"CommitBuilder::initialize"};
 
     auto reader = _view.read();
-    _firstNodeID = reader.getNodeCount();
-    _firstEdgeID = reader.getEdgeCount();
+    _nextDataPartFirstNodeID = reader.getNodeCount();
+    _nextDataPartFirstEdgeID = reader.getEdgeCount();
 
     const CommitView prevCommit = reader.commits().back();
 

@@ -48,9 +48,9 @@ public:
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
 
-    void setEntityIDs(NodeID firstNodeID, EdgeID firstEdgeID) {
-        _firstNodeID = firstNodeID;
-        _firstEdgeID = firstEdgeID;
+    void setEntityIDs(NodeID nextDPFirstNodeID, EdgeID nextDPFirstEdgeID) {
+        _nextDataPartFirstNodeID = nextDPFirstNodeID;
+        _nextDataPartFirstEdgeID = nextDPFirstEdgeID;
     }
 
     bool isEmpty() const {
@@ -67,10 +67,8 @@ private:
     Change* _change {nullptr};
     GraphView _view;
 
-    NodeID _firstNodeID;
-    EdgeID _firstEdgeID;
-    NodeID _nextNodeID;
-    EdgeID _nextEdgeID;
+    NodeID _nextDataPartFirstNodeID;
+    EdgeID _nextDataPartFirstEdgeID;
 
     WeakArc<CommitData> _commitData;
     std::unique_ptr<MetadataBuilder> _metadataBuilder;
@@ -81,6 +79,10 @@ private:
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
     explicit CommitBuilder(VersionController&, Change* change, const GraphView& view);
+
+    CommitResult<void> buildNewDataPart(DataPartBuilder* builder, JobSystem& jobsystem,
+                                        const GraphView& view,
+                                        CommitHistoryBuilder& historyBuilder);
 
     void initialize();
 };
