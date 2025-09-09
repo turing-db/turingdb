@@ -9,9 +9,6 @@
 
 using namespace db;
 
-namespace rg = ranges;
-namespace rv = rg::views;
-
 void DeleteStep::prepare(ExecutionContext* ctxt) {
     Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx->writingPendingCommit()) {
@@ -22,11 +19,10 @@ void DeleteStep::prepare(ExecutionContext* ctxt) {
     auto& tx = rawTx->get<PendingCommitWriteTx>();
 
     // Get the dataparts of the most recent commit
-    _dps = tx.viewGraph().commitDataparts();
+    _dps = tx.viewGraph().dataparts();
     // Get the CommitBuilder for this transaction
     _commitBuilder = tx.commitBuilder();
 }
-
 
 void DeleteStep::detectHangingEdges(const WeakArc<DataPart>& oldDP,
                                     const NodeSet&& nodesToDelete,
