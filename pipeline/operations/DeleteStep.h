@@ -39,7 +39,7 @@ private:
     EdgeSet& _delEdges;
 
     CommitBuilder* _commitBuilder {nullptr};
-    std::span<const WeakArc<DataPart>> _dps {}; // Nullptr
+    std::span<const WeakArc<DataPart>> _dps {}; // nullptr, size 0
 
     /**
      * @brief Identifies edges that must be deleted due to one of their incident nodes

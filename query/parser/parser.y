@@ -396,7 +396,7 @@ entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBR
                     auto* pattern = EntityPattern::create(ctxt, nullptr, $2, nullptr, nullptr);
                     $$ = pattern;
               }
-              |entity_var COLON type_constraint AT injected_nodes OBRACK prop_expr_constraint CBRACK
+              | entity_var COLON type_constraint AT injected_nodes OBRACK prop_expr_constraint CBRACK
               {
                     auto* pattern = EntityPattern::create(ctxt, $1, $3, $7, $5);
                     $$=pattern;
