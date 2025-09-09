@@ -42,7 +42,7 @@ private:
     /// Stores all the data parts that are part of the commit history.
     std::vector<WeakArc<DataPart>> _allDataparts;
 
-    /// Stores the data parts that belong to the last commit.
+    /// Stores the data parts that were created by last commit.
     std::vector<WeakArc<DataPart>> _commitDataparts;
 
     /// Stores the whole history up to (including) this commit.
