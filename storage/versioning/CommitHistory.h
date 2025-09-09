@@ -43,7 +43,7 @@ private:
     std::vector<WeakArc<DataPart>> _allDataparts;
 
     /// Stores the data parts that were created by last commit.
-    std::vector<WeakArc<DataPart>> _commitDataparts;
+    std::span<WeakArc<DataPart>> _commitDataparts;
 
     /// Stores the whole history up to (including) this commit.
     std::vector<CommitView> _commits;
@@ -60,13 +60,16 @@ public:
         _history._allDataparts.push_back(datapart);
     }
 
-    void setCommitNLastDataParts(size_t count) {
-        auto firstDPIt = _history._allDataparts.begin();
+    void setCommitDatapartCount(size_t count) {
+        auto* begin = _history._allDataparts.data();
         const size_t totalCount = _history._allDataparts.size();
         const size_t offset = totalCount - count;
-        auto thisFirstDPIt = firstDPIt + offset;
+        auto* ptr = begin + offset;
 
-        _history._commitDataparts.assign(thisFirstDPIt, thisFirstDPIt + count);
+        _history._commitDataparts = {
+            ptr,
+            count,
+        };
     }
 
 private:
