@@ -37,10 +37,10 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
               newDataparts.begin() + prevHistory._allDataparts.size());
 
     _history._allDataparts = std::move(newDataparts);
-    _history._commitDataparts = {
-        _history._allDataparts.data() + _history._allDataparts.size() - commitDatapartCount,
-        commitDatapartCount,
-    };
+
+    auto thisFirstDPIt = _history._allDataparts.begin() + _history._allDataparts.size()
+                     - commitDatapartCount;
+    _history._commitDataparts.assign(thisFirstDPIt, thisFirstDPIt + commitDatapartCount);
 
     const auto& prevDataParts = prevHistory._allDataparts;
 

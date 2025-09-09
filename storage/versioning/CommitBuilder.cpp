@@ -103,7 +103,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     // XXX: This needs to be changed, currently just sets the dataparts to the @ref
     // _datapartCount most recently added dataparts
-    historyBuilder.setCommitDatapartCount(_datapartCount);
+    historyBuilder.setCommitNLastDataParts(_datapartCount);
 
     _builders.clear();
 

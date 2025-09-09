@@ -93,7 +93,7 @@ public:
             historyBuilder.addDatapart(res.value());
         }
 
-        historyBuilder.setCommitDatapartCount(datapartPaths.size());
+        historyBuilder.setCommitNLastDataParts(datapartPaths.size());
 
         return std::move(commit);
     }
