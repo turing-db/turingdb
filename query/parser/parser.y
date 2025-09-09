@@ -16,6 +16,7 @@
 #include <string>
 #include <sstream>
 #include <memory>
+#include <iostream>
 
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
@@ -115,6 +116,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token LABELS       "'LABELS'"
 %token EDGETYPES    "'EDGETYPES'" 
 %token LABELSETS    "'LABELSETS'"
+%token NODES        "'NODES'"
+%token EDGES        "'EDGES'"
 
 // Operators
 %token PLUS         "'+'"
@@ -147,6 +150,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> match_cmd
 %type<db::QueryCommand*> create_cmd
+%type<db::QueryCommand*> delete_cmd
 %type<db::ReturnProjection*> return_fields
 %type<db::ReturnField*> return_field
 %type<db::MatchTarget*> match_target
@@ -198,6 +202,7 @@ query_unit: cmd { $$ = $1; }
           
 cmd: match_cmd { ctxt->setRoot($1); }
    | create_cmd { ctxt->setRoot($1); }
+   | delete_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
@@ -247,6 +252,10 @@ create_cmd: CREATE create_targets
               $$ = CreateCommand::create(ctxt, $2);
           }
           ;
+
+delete_cmd: DELETE NODES injected_nodes { std::cout << "delete nodes command" << std::endl; }
+          | DELETE EDGES injected_nodes { std::cout << "delete edges command" << std::endl; }
+		  ;
 
 return_field: STAR {
                         auto field = ReturnField::create(ctxt);
