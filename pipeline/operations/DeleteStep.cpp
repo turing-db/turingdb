@@ -101,7 +101,9 @@ void DeleteStep::execute() {
             continue;
         }
 
-        // Create a new DataPartBuilder in the CommitBuilder
+        // Create a new @ref DataPartBuilder in the CommitBuilder. The initialisation of
+        // the builder sets the the _firstNode/EdgeID as if this is a new datapart,
+        // however these are overwritten in @ref DataPartModifer
         DataPartBuilder& newBuilder = _commitBuilder->newBuilder(idx);
 
         // Construct a DataPartModifier to fill the new DataPartBuilder

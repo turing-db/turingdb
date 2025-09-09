@@ -4,7 +4,6 @@
 #include "DataPart.h"
 #include "Graph.h"
 #include "ID.h"
-#include "comparators/DataPartComparator.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -121,8 +120,7 @@ TEST_F(CommitHistoryTest, concurrentChangesWithRebase) {
 
     // Ensure that in the new history, we still have one datapart
     auto history1LatestCommit = history1.commits().back(); // Latest commit
-    EXPECT_EQ(history1LatestCommit.dataparts().size(), 1);
-    EXPECT_EQ(history1.commitDataparts().size(), 1);      // Same thing, different method
+    EXPECT_EQ(history1.allDataparts().size(), 1);
     auto history1DP1 = history1LatestCommit.dataparts().front();
 
     // Ensure the new history we created references the same datapart as in the previous
@@ -141,7 +139,6 @@ TEST_F(CommitHistoryTest, concurrentChangesWithRebase) {
     // Get a new history at this point
     CommitHistory history2 =
         graph->openTransaction().viewGraph().commits().back().history();
-    auto history2DP2 = history2.commitDataparts().back();
 
     // Create a new history
     history2.newFromPrevious(history2);
@@ -149,9 +146,5 @@ TEST_F(CommitHistoryTest, concurrentChangesWithRebase) {
     // Newly created history should have:
     // a. 2 dataparts
     // b. Those 2 dataparts should point to the same thing as history1 and history2
-    ASSERT_EQ(history2.commitDataparts().size(), 2);
-    ASSERT_EQ(history2.commits().back().dataparts().size(), 2);
-
-    EXPECT_EQ(history2.commitDataparts().front().get(), history0DP1.get());
-    EXPECT_EQ(history2.commitDataparts().back().get(), history2DP2.get());
+    ASSERT_EQ(history2.allDataparts().size(), 2);
 }

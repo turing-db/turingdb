@@ -72,6 +72,10 @@ public:
         };
     }
 
+    void replaceDataPartAtIndex(const WeakArc<DataPart>& newDP, size_t index) {
+        _history._allDataparts.at(index) = newDP;
+    }
+
 private:
     CommitHistory& _history;
 };

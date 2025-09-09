@@ -87,6 +87,9 @@ private:
                                         const GraphView& view,
                                         CommitHistoryBuilder& historyBuilder);
 
+    CommitResult<void> buildModifiedDataPart(DataPartBuilder* builder,
+                                             JobSystem& jobsystem, const GraphView& view,
+                                             CommitHistoryBuilder& historyBuilder);
     void initialize();
 };
 

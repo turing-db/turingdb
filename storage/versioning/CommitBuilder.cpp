@@ -6,6 +6,7 @@
 #include "Graph.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHistory.h"
+#include "versioning/CommitResult.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -77,6 +78,30 @@ CommitResult<void> CommitBuilder::buildNewDataPart(DataPartBuilder* builder,
     return {};
 }
 
+CommitResult<void> CommitBuilder::buildModifiedDataPart(DataPartBuilder* builder,
+                                                        JobSystem& jobsystem,
+                                                        const GraphView& view,
+                                                        CommitHistoryBuilder& historyBuilder) {
+    // The builder knows what ID space it is building in: provide the first node/edge IDs
+    // from the builder. Do not use members _nextDataPartFirstNode/EdgeID, as these are
+    // for completely new dataparts
+    WeakArc<DataPart> part =
+        _controller->createDataPart(builder->firstNodeID(), builder->firstEdgeID());
+
+    if (!part->load(view,jobsystem, *builder)) {
+        return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
+    }
+
+    // Replace the unmodified datapart (copied from previous commit in historyBuilder),
+    // with the modified version
+    historyBuilder.replaceDataPartAtIndex(part, builder->getPartIndex());
+
+    // Do not increment datapart count, as this is a replacement of an existing datapart,
+    // and not an additional datapart
+
+    return {};
+}
+
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile {"CommitBuilder::buildAllPending"};
 
@@ -92,17 +117,20 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
         if (builder->_partIndex >= numExistingDataparts) {
             auto buildRes =
                 buildNewDataPart(builder.get(), jobsystem, view, historyBuilder);
+
             if (!buildRes) {
                 return buildRes.get_unexpected();
             }
         } else {
-            // TODO: If the index is an existing datapart, then this is a modification,
-            // build and set the correct index datapart
+            auto buildRes =
+                buildModifiedDataPart(builder.get(), jobsystem, view, historyBuilder);
+
+            if (!buildRes) {
+                return buildRes.get_unexpected();
+            }
         }
     }
 
-    // XXX: This needs to be changed, currently just sets the dataparts to the @ref
-    // _datapartCount most recently added dataparts
     historyBuilder.setCommitDatapartCount(_datapartCount);
 
     _builders.clear();
