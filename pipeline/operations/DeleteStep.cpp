@@ -87,9 +87,10 @@ void DeleteStep::execute() {
         // Create a set containing all EdgeIDs in [smallestEdgeID, largestEdgeID]
         EdgeSet thisDPDeletedEdges(elb, eub);
 
-        // We also may have edges created which have nodes in previous dataparts as source
-        // or target. Add these to @ref thisDPDeletedEdges. We only need to check nodes to
-        // be deleted whose ID is less than the ID of the first node in this DataPart.
+        // We also may have edges in this datapart which have nodes which exist in
+        // previous dataparts as source or target. Add these to @ref thisDPDeletedEdges.
+        // We only need to check nodes to be deleted whose ID is less than the ID of the
+        // first node in this DataPart.
         detectHangingEdges(dp, NodeSet(_delNodes.begin(), nlb), thisDPDeletedEdges);
 
         // If there is nothing to delete in this datapart, do not create a builder.
