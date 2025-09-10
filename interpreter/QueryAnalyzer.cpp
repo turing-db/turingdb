@@ -79,29 +79,26 @@ void QueryAnalyzer::analyze(QueryCommand* cmd) {
             analyzeCreateGraph(static_cast<CreateGraphCommand*>(cmd));
         break;
 
-        case QueryCommand::Kind::LIST_GRAPH_COMMAND:
-            return;
-        break;
-
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
             analyzeLoadGraph(static_cast<LoadGraphCommand*>(cmd));
         break;
 
         case QueryCommand::Kind::EXPLAIN_COMMAND:
             analyzeExplain(static_cast<ExplainCommand*>(cmd));
-            break;
+        break;
 
         case QueryCommand::Kind::S3TRANSFER_COMMAND:
             analyzeS3Transfer(static_cast<S3TransferCommand*>(cmd));
-            break;
+        break;
 
+        case QueryCommand::Kind::LIST_GRAPH_COMMAND:
         case QueryCommand::Kind::HISTORY_COMMAND:
         case QueryCommand::Kind::CHANGE_COMMAND:
         case QueryCommand::Kind::COMMIT_COMMAND:
         case QueryCommand::Kind::CALL_COMMAND:
         case QueryCommand::Kind::S3CONNECT_COMMAND:
             return;
-            break;
+        break;
 
         default:
             return;
