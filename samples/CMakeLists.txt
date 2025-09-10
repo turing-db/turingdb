@@ -43,6 +43,7 @@ add_subdirectory(plan2)
 add_subdirectory(parser2)
 add_subdirectory(analyzer2)
 add_subdirectory(delete-nodes)
+add_subdirectory(delete-step)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
