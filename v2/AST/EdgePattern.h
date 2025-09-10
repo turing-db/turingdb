@@ -4,7 +4,7 @@
 #include <optional>
 #include <vector>
 
-#include "types/EntityPattern.h"
+#include "EntityPattern.h"
 
 namespace db::v2 {
 

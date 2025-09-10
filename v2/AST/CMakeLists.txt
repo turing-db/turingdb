@@ -1,10 +1,34 @@
 set(ast_sources
     CypherAST.cpp
-    CypherASTDumper.cpp
+    #CypherASTDumper.cpp
     CypherError.cpp
+
     decl/DeclContext.cpp
     decl/DeclContainer.cpp
-    types/QueryCommand.cpp
+    
+    expr/BinaryExpr.cpp
+    expr/LiteralExpr.cpp
+    expr/NodeLabelExpr.cpp
+    expr/ParameterExpr.cpp
+    expr/PathExpr.cpp
+    expr/PropertyExpr.cpp
+    expr/StringExpr.cpp
+    expr/SymbolExpr.cpp
+    expr/UnaryExpr.cpp
+
+    stmt/Stmt.cpp
+    stmt/CompoundStmt.cpp
+    stmt/MatchStmt.cpp
+
+    Pattern.cpp
+    PatternElement.cpp
+    EntityPattern.cpp
+    Projection.cpp
+    #EdgePattern.cpp
+    #NodePattern.cpp
+    QueryCommand.cpp
+    SinglePartQuery.cpp
+
     ASTException.cpp)
 
 add_library(turing_db_v2_ast_s STATIC ${ast_sources})
