@@ -38,7 +38,7 @@ public:
         return _bitset == other._bitset;
     }
 
-    uint16_t bitset() const {
+    uint16_t getBitset() const {
         return _bitset;
     }
 
