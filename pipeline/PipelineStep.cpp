@@ -258,6 +258,34 @@ PipelineStep::PipelineStep(CreateNodeStep::Tag, const EntityPattern* data)
 {
 }
 
+PipelineStep::PipelineStep(S3ConnectStep::Tag,
+                           const std::string& accessId,
+                           const std::string& secretKey,
+                           const std::string& region)
+    :_opcode(PipelineOpcode::S3CONNECT),
+    _impl(std::in_place_type<S3ConnectStep>, accessId, secretKey, region)
+{
+}
+PipelineStep::PipelineStep(S3PushStep::Tag,
+                           std::string_view s3Bucket,
+                           std::string_view s3Prefix,
+                           std::string_view s3File,
+                           const std::string& localPath)
+    :_opcode(PipelineOpcode::S3PUSH),
+    _impl(std::in_place_type<S3PushStep>, s3Bucket, s3Prefix, s3File, localPath)
+{
+}
+
+PipelineStep::PipelineStep(S3PullStep::Tag,
+                           std::string_view s3Bucket,
+                           std::string_view s3Prefix,
+                           std::string_view s3File,
+                           const std::string& localPath)
+    :_opcode(PipelineOpcode::S3PULL),
+    _impl(std::in_place_type<S3PullStep>, s3Bucket, s3Prefix, s3File, localPath)
+{
+}
+
 PipelineStep::PipelineStep(CreateEdgeStep::Tag,
                            const EntityPattern* src,
                            const EntityPattern* edge,

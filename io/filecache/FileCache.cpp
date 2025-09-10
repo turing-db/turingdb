@@ -10,10 +10,10 @@ using namespace db;
 template <typename ClientType>
 FileCache<ClientType>::FileCache(const fs::Path& graphDir,
                                  const fs::Path& dataDir,
-                                 ClientType& clientWrapper)
+                                 ClientType&& clientWrapper)
     :_graphsDir(graphDir),
     _dataDir(dataDir),
-    _s3Client(clientWrapper)
+    _s3Client(std::move(clientWrapper))
 {
 }
 

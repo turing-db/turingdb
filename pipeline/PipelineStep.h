@@ -37,6 +37,9 @@
 #include "operations/CreateEdgeStep.h"
 #include "operations/CommitStep.h"
 #include "operations/CallPropertyStep.h"
+#include "operations/S3ConnectStep.h"
+#include "operations/S3PushStep.h"
+#include "operations/S3PullStep.h"
 
 #include "FastGet.h"
 
@@ -150,6 +153,21 @@ public:
     PipelineStep(CallLabelSetStep::Tag,
                  ColumnVector<LabelSetID>* id,
                  ColumnVector<std::string_view>* name);
+    PipelineStep(S3ConnectStep::Tag,
+                 const std::string& accessId,
+                 const std::string& secretKey,
+                 const std::string& region);
+    PipelineStep(S3PushStep::Tag,
+                 std::string_view s3Bucket,
+                 std::string_view s3Prefix,
+                 std::string_view s3File,
+                 const std::string& localPath);
+    PipelineStep(S3PullStep::Tag,
+                 std::string_view s3Bucket,
+                 std::string_view s3Prefix,
+                 std::string_view s3File,
+                 const std::string& localPath);
+
 
     PROPERTY_STEPS(Int64)
     PROPERTY_STEPS(UInt64)
@@ -232,8 +250,10 @@ private:
                  CallPropertyStep,
                  CallLabelStep,
                  CallLabelSetStep,
-                 CallEdgeTypeStep>
+                 CallEdgeTypeStep,
+                 S3ConnectStep,
+                 S3PushStep,
+                 S3PullStep>
         _impl;
 };
-
 }

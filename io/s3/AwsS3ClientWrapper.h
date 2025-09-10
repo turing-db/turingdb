@@ -9,6 +9,8 @@
 #include <aws/s3-crt/model/ListObjectsV2Request.h>
 #include <aws/core/Aws.h>
 
+#include "AwsManager.h"
+
 namespace S3 {
 
 template <typename ClientType = Aws::S3Crt::S3CrtClient>
@@ -17,6 +19,18 @@ public:
     AwsS3ClientWrapper() {
         init();
     }
+
+    AwsS3ClientWrapper(const std::string& accessKey, const std::string& secretKey, const std::string& region) {
+        init(accessKey, secretKey, region);
+    }
+
+    AwsS3ClientWrapper(AwsS3ClientWrapper&&) = default;
+    AwsS3ClientWrapper& operator=(AwsS3ClientWrapper&&) = default;
+
+    // Don't allow object to be copied so we don't get
+    // into undefined states
+    AwsS3ClientWrapper(AwsS3ClientWrapper&) = delete;
+    AwsS3ClientWrapper& operator=(AwsS3ClientWrapper&) = delete;
 
     Aws::S3Crt::Model::PutObjectOutcome PutObject(Aws::S3Crt::Model::PutObjectRequest& request) {
         return _client->PutObject(request);
@@ -31,9 +45,7 @@ public:
 
 private:
     void init() {
-        _options = std::make_unique<Aws::SDKOptions>();
-        _options->loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
-        Aws::InitAPI(*_options);
+        AWSManager::getInstance();
 
         _clientConfig = std::make_unique<Aws::S3Crt::ClientConfiguration>();
         _clientConfig->region = "eu-west-2";
@@ -42,7 +54,18 @@ private:
         _client = Aws::MakeUnique<ClientType>("S3Client", *_clientConfig);
     }
 
-    std::unique_ptr<Aws::SDKOptions> _options;
+    void init(const std::string& accessKey, const std::string& secretKey, const std::string& region) {
+        AWSManager::getInstance();
+
+        _clientConfig = std::make_unique<Aws::S3Crt::ClientConfiguration>();
+        _clientConfig->region = region;
+
+        const auto auth = Aws::Auth::AWSCredentials(accessKey, secretKey);
+
+        // All client config options need to changed before here
+        _client = Aws::MakeUnique<ClientType>("S3Client", auth, *_clientConfig);
+    }
+
     Aws::UniquePtr<ClientType> _client;
     std::unique_ptr<Aws::S3Crt::ClientConfiguration> _clientConfig;
 };

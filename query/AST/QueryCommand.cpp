@@ -145,3 +145,35 @@ CallCommand* CallCommand::create(ASTContext* ctxt, Type type) {
     cmd->registerCmd(ctxt);
     return cmd;
 }
+
+S3ConnectCommand::S3ConnectCommand(std::string& accessId, std::string& secretKey, std::string& region)
+    :_accessId(accessId),
+    _secretKey(secretKey),
+    _region(region)
+{
+}
+
+S3ConnectCommand* S3ConnectCommand::create(ASTContext* ctxt, std::string& accessId, std::string& secretKey, std::string& region) {
+    S3ConnectCommand* cmd = new S3ConnectCommand(accessId, secretKey, region);
+    cmd->registerCmd(ctxt);
+    return cmd;
+}
+
+S3ConnectCommand* S3ConnectCommand::create(ASTContext* ctxt) {
+    S3ConnectCommand* cmd = new S3ConnectCommand();
+    cmd->registerCmd(ctxt);
+    return cmd;
+}
+
+S3TransferCommand::S3TransferCommand(Dir transferDir,const std::string& s3URL, const std::string& localDir) 
+    :_transferDir(transferDir),
+    _s3URL(s3URL),
+    _localDir(localDir)
+{
+}
+
+S3TransferCommand* S3TransferCommand::create(ASTContext* ctxt, Dir transferDir, const std::string& s3URL, const std::string& localDir) {
+    S3TransferCommand* cmd = new S3TransferCommand(transferDir, s3URL, localDir);
+    cmd->registerCmd(ctxt);
+    return cmd;
+}

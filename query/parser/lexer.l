@@ -43,6 +43,10 @@ using namespace db;
 "call"|"CALL" { return YParser::make_CALL(getLocation()); }
 "@"|"at"|"AT" { return YParser::make_AT(getLocation()); }
 
+"S3_CONNECT"|"s3_connect" { return YParser::make_S3_CONNECT(getLocation()); }
+"S3_PUSH"|"s3_push" {  return YParser::make_S3_PUSH(getLocation()); }
+"S3_PULL"|"s3_pull" {  return YParser::make_S3_PULL(getLocation()); }
+
 "properties"|"PROPERTIES" { return YParser::make_PROPERTIES(getLocation()); }
 "labels"|"LABELS" { return YParser::make_LABELS(getLocation()); }
 "edgetypes"|"EDGETYPES" { return YParser::make_EDGETYPES(getLocation()); }

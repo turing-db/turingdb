@@ -116,6 +116,10 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token EDGETYPES    "'EDGETYPES'" 
 %token LABELSETS    "'LABELSETS'"
 
+%token S3_CONNECT "'S3_CONNECT'"
+%token S3_PUSH "'S3_PUSH'"
+%token S3_PULL "'S3_PULL'"
+
 // Operators
 %token PLUS         "'+'"
 %token MINUS        "'-'"
@@ -187,6 +191,9 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> call_cmd
 
+%type<db::QueryCommand*> s3connect_cmd
+%type<db::QueryCommand*> s3transfer_cmd
+
 %start query_unit
 
 %%
@@ -205,6 +212,8 @@ cmd: match_cmd { ctxt->setRoot($1); }
    | change_cmd { ctxt->setRoot($1); }
    | commit_cmd { ctxt->setRoot($1); }
    | call_cmd { ctxt->setRoot($1); }
+   | s3connect_cmd { ctxt->setRoot($1); }
+   | s3transfer_cmd { ctxt->setRoot($1); }
    ;
 
 match_cmd: MATCH match_targets RETURN return_fields {
@@ -576,6 +585,15 @@ change_cmd: CHANGE change_subcmd {
 
 // COMMIT
 commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
+          ;
+
+s3connect_cmd : S3_CONNECT STRING_CONSTANT STRING_CONSTANT STRING_CONSTANT{ $$ = S3ConnectCommand::create(ctxt,$2,$3,$4); }
+          ;
+
+//                       <LOCAL_DIR>     <S3URL>
+s3transfer_cmd : S3_PUSH STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PUSH,$3,$2); }
+//                       <S3URL>         <LOCAL_DIR>
+               | S3_PULL STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PULL,$2,$3); }
           ;
 
 %%

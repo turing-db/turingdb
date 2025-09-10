@@ -89,14 +89,19 @@ void QueryAnalyzer::analyze(QueryCommand* cmd) {
 
         case QueryCommand::Kind::EXPLAIN_COMMAND:
             analyzeExplain(static_cast<ExplainCommand*>(cmd));
-        break;
+            break;
+
+        case QueryCommand::Kind::S3TRANSFER_COMMAND:
+            analyzeS3Transfer(static_cast<S3TransferCommand*>(cmd));
+            break;
 
         case QueryCommand::Kind::HISTORY_COMMAND:
         case QueryCommand::Kind::CHANGE_COMMAND:
         case QueryCommand::Kind::COMMIT_COMMAND:
         case QueryCommand::Kind::CALL_COMMAND:
+        case QueryCommand::Kind::S3CONNECT_COMMAND:
             return;
-        break;
+            break;
 
         default:
             return;
@@ -452,3 +457,35 @@ void QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
     }
 }
 
+void parseS3Url(std::string_view s3URL, std::string_view& bucket, std::string_view& prefix, std::string_view& fileName) {
+    if (s3URL.substr(0, 5) != "s3://") {
+        throw AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
+    }
+    s3URL.remove_prefix(5);
+    const auto bucketEnd = s3URL.find('/');
+
+    if (bucketEnd == std::string_view::npos) {
+        throw AnalyzeException(fmt::format("S3 Bucket Not Found: {}", s3URL));
+    }
+
+    bucket = s3URL.substr(0, bucketEnd);
+    s3URL.remove_prefix(bucketEnd + 1);
+
+    if (s3URL.empty()) {
+        throw AnalyzeException(fmt::format("S3 Prefix/Folder not found: {}", s3URL));
+    }
+
+    if (s3URL.back() != '/') {
+        // S3 'file' resource
+        fileName = s3URL;
+        return;
+    }
+
+    // S3 Directory Resource
+    prefix = s3URL;
+}
+
+void QueryAnalyzer::analyzeS3Transfer(S3TransferCommand* cmd) {
+    parseS3Url(cmd->getS3URL(), cmd->getBucket(), cmd->getPrefix(), cmd->getFile());
+    // For now we let user write/read to/from anywhere on the system
+}

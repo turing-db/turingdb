@@ -151,6 +151,8 @@ if(APPLE)
     message(STATUS "Using Homebrew Bison include directory: ${BISON_INCLUDE_DIRS}")
 endif()
 
+find_package(ZLIB REQUIRED)
+
 # aws-sdk-cpp
 find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt ec2
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies/

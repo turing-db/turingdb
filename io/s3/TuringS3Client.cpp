@@ -16,12 +16,14 @@
 #include <aws/core/platform/FileSystem.h>
 
 #include "AwsS3ClientWrapper.h"
+#include "spdlog/spdlog.h"
 
 using namespace S3;
 
 template <typename ClientType>
-TuringS3Client<ClientType>::TuringS3Client(ClientType& client)
-    : _client(client) {
+TuringS3Client<ClientType>::TuringS3Client(ClientType&& client)
+    : _client(std::move(client))
+{
 }
 
 template <typename T>
@@ -48,6 +50,8 @@ S3ClientResult<void> TuringS3Client<T>::listKeys(const std::string& bucketName,
         if (!outcome.IsSuccess()) {
             switch (outcome.GetError().GetErrorType()) {
                 case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
+                case Aws::S3Crt::S3CrtErrors::SIGNATURE_DOES_NOT_MATCH:
+                case Aws::S3Crt::S3CrtErrors::INVALID_ACCESS_KEY_ID:
                     return S3ClientError::result(S3ClientErrorType::ACCESS_DENIED);
                 case Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET:
                     return S3ClientError::result(S3ClientErrorType::INVALID_BUCKET_NAME);
@@ -100,6 +104,8 @@ S3ClientResult<void> TuringS3Client<T>::listFiles(const std::string& bucketName,
         if (!outcome.IsSuccess()) {
             switch (outcome.GetError().GetErrorType()) {
                 case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
+                case Aws::S3Crt::S3CrtErrors::SIGNATURE_DOES_NOT_MATCH:
+                case Aws::S3Crt::S3CrtErrors::INVALID_ACCESS_KEY_ID:
                     return S3ClientError::result(S3ClientErrorType::ACCESS_DENIED);
                 case Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET:
                     return S3ClientError::result(S3ClientErrorType::INVALID_BUCKET_NAME);
@@ -153,6 +159,8 @@ S3ClientResult<void> TuringS3Client<T>::listFolders(const std::string& bucketNam
         if (!outcome.IsSuccess()) {
             switch (outcome.GetError().GetErrorType()) {
                 case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
+                case Aws::S3Crt::S3CrtErrors::SIGNATURE_DOES_NOT_MATCH:
+                case Aws::S3Crt::S3CrtErrors::INVALID_ACCESS_KEY_ID:
                     return S3ClientError::result(S3ClientErrorType::ACCESS_DENIED);
                 case Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET:
                     return S3ClientError::result(S3ClientErrorType::INVALID_BUCKET_NAME);
@@ -188,6 +196,7 @@ S3ClientResult<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath,
     }
 
     Aws::S3Crt::Model::PutObjectRequest request;
+    // SetIfNoneMatch("*") makes the upload fail if the resource exists in the bucket
     request.WithBucket(bucketName).WithKey(keyName).SetIfNoneMatch("*");
     std::shared_ptr<Aws::IOStream> inputData = Aws::MakeShared<Aws::FStream>("TuringS3Client", filePath.c_str(), std::ios_base::in | std::ios_base::binary);
 
@@ -202,6 +211,8 @@ S3ClientResult<void> TuringS3Client<T>::uploadFile(const Aws::String& filePath,
     if (!outcome.IsSuccess()) {
         switch (outcome.GetError().GetErrorType()) {
             case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
+            case Aws::S3Crt::S3CrtErrors::SIGNATURE_DOES_NOT_MATCH:
+            case Aws::S3Crt::S3CrtErrors::INVALID_ACCESS_KEY_ID:
                 return S3ClientError::result(S3ClientErrorType::ACCESS_DENIED);
             case Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET:
                 return S3ClientError::result(S3ClientErrorType::INVALID_BUCKET_NAME);
@@ -228,6 +239,8 @@ S3ClientResult<void> TuringS3Client<T>::downloadFile(const Aws::String& fileName
     if (!outcome.IsSuccess()) {
         switch (outcome.GetError().GetErrorType()) {
             case Aws::S3Crt::S3CrtErrors::ACCESS_DENIED:
+            case Aws::S3Crt::S3CrtErrors::SIGNATURE_DOES_NOT_MATCH:
+            case Aws::S3Crt::S3CrtErrors::INVALID_ACCESS_KEY_ID:
                 return S3ClientError::result(S3ClientErrorType::ACCESS_DENIED);
             case Aws::S3Crt::S3CrtErrors::NO_SUCH_KEY:
                 return S3ClientError::result(S3ClientErrorType::INVALID_KEY_NAME);

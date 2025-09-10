@@ -119,6 +119,12 @@ bool QueryPlanner::plan(const QueryCommand* query) {
         case QueryCommand::Kind::CALL_COMMAND:
             return planCall(static_cast<const CallCommand*>(query));
 
+        case QueryCommand::Kind::S3CONNECT_COMMAND:
+            return planS3Connect(static_cast<const S3ConnectCommand*>(query));
+
+        case QueryCommand::Kind::S3TRANSFER_COMMAND:
+            return planS3Transfer(static_cast<const S3TransferCommand*>(query));
+
         default:
             spdlog::error("Unsupported query of kind {}", (unsigned)kind);
             return false;
@@ -1794,5 +1800,30 @@ bool QueryPlanner::planCall(const CallCommand* call) {
     planOutputLambda();
     _pipeline->add<EndStep>();
 
+    return true;
+}
+
+bool QueryPlanner::planS3Connect(const S3ConnectCommand* s3Connect) {
+    spdlog::info(s3Connect->getRegion());
+    _pipeline->add<StopStep>();
+    _pipeline->add<S3ConnectStep>(s3Connect->getAccessId(), s3Connect->getSecretKey(), s3Connect->getRegion());
+    _pipeline->add<EndStep>();
+    return true;
+}
+
+bool QueryPlanner::planS3Transfer(const S3TransferCommand* s3Transfer) {
+    _pipeline->add<StopStep>();
+    if (s3Transfer->getTransferDir() == S3TransferCommand::Dir::PUSH) {
+        _pipeline->add<S3PushStep>(s3Transfer->getBucket(),
+                                   s3Transfer->getPrefix(),
+                                   s3Transfer->getFile(),
+                                   s3Transfer->getLocalDir());
+    } else {
+        _pipeline->add<S3PullStep>(s3Transfer->getBucket(),
+                                   s3Transfer->getPrefix(),
+                                   s3Transfer->getFile(),
+                                   s3Transfer->getLocalDir());
+    }
+    _pipeline->add<EndStep>();
     return true;
 }

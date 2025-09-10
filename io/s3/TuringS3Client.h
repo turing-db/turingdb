@@ -9,7 +9,12 @@ namespace S3 {
 template <typename ClientType>
 class TuringS3Client {
 public:
-    explicit TuringS3Client(ClientType& client);
+    explicit TuringS3Client(ClientType&& client);
+    explicit TuringS3Client(ClientType& client) = delete;
+    TuringS3Client& operator=(const ClientType&) = delete;
+    TuringS3Client() = delete;
+
+
     ~TuringS3Client() = default;
 
     S3ClientResult<void> listKeys(const std::string& bucketName,
@@ -37,9 +42,6 @@ public:
                                            const std::string& prefix);
 
 private:
-    ClientType& _client;
+    ClientType _client;
 };
-
-
-
 }

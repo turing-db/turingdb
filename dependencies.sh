@@ -105,7 +105,7 @@ fi
 # Build aws-sdk-cpp
 mkdir -p $BUILD_DIR/aws-sdk-cpp
 cd $BUILD_DIR/aws-sdk-cpp
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR -DBUILD_ONLY="s3;s3-crt;ec2" -DENABLE_TESTING=OFF $SOURCE_DIR/external/aws-sdk-cpp
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR -DBUILD_ONLY="s3;s3-crt;ec2" -DENABLE_TESTING=OFF -DBUILD_SHARED_LIBS=OFF $SOURCE_DIR/external/aws-sdk-cpp
 make -j$NUM_JOBS
 make install
 
