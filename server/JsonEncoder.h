@@ -140,7 +140,8 @@ public:
                 writer.end();
                 writer.key("column_types");
                 writer.arr();
-            } break;
+            }
+            break;
         }
         writer.end();
         writer.end();
