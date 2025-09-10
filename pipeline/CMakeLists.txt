@@ -25,6 +25,9 @@ set(pipeline_sources
         operations/CallLabelStep.cpp
         operations/CallEdgeTypeStep.cpp
         operations/CallLabelSetStep.cpp
+        operations/S3ConnectStep.cpp
+        operations/S3PushStep.cpp
+        operations/S3PullStep.cpp
         
         PipelineStep.cpp
         Pipeline.cpp

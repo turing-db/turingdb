@@ -30,6 +30,8 @@ public:
         HISTORY_COMMAND,
         CHANGE_COMMAND,
         CALL_COMMAND,
+        S3CONNECT_COMMAND,
+        S3TRANSFER_COMMAND,
     };
 
     virtual Kind getKind() const = 0;
@@ -213,5 +215,98 @@ private:
          std::span {propertiesColTypes},
          std::span {edgeTypesColTypes}}
     };
+};
+
+class S3ConnectCommand : public QueryCommand {
+public:
+    const std::string& getAccessId() const {
+        return _accessId;
+    }
+
+    const std::string& getSecretKey() const {
+        return _secretKey;
+    }
+
+    const std::string& getRegion() const {
+        return _region;
+    }
+
+    static S3ConnectCommand* create(ASTContext* ctx, std::string& accessId, std::string& secretKey, std::string& region);
+    static S3ConnectCommand* create(ASTContext* ctx);
+
+    Kind getKind() const override {
+        return QueryCommand::Kind::S3CONNECT_COMMAND;
+    }
+
+private:
+    S3ConnectCommand(std::string& accessId, std::string& secretKey, std::string& region);
+    S3ConnectCommand() = default;
+
+    std::string _accessId;
+    std::string _secretKey;
+    std::string _region;
+};
+
+class S3TransferCommand : public QueryCommand {
+public:
+    enum class Dir : uint8_t {
+        PULL = 0,
+        PUSH
+    };
+
+    std::string_view getS3URL() const {
+        return _s3URL;
+    }
+
+    const std::string& getLocalDir() const {
+        return _localDir;
+    }
+
+    Dir getTransferDir() const {
+        return _transferDir;
+    }
+
+    std::string_view& getBucket() {
+        return _s3Bucket;
+    }
+
+    std::string_view& getPrefix() {
+        return _s3Prefix;
+    }
+
+    std::string_view& getFile() {
+        return _s3File;
+    }
+
+    const std::string_view& getBucket() const {
+        return _s3Bucket;
+    }
+
+    const std::string_view& getPrefix() const {
+        return _s3Prefix;
+    }
+
+    const std::string_view& getFile() const {
+        return _s3File;
+    }
+
+    static S3TransferCommand* create(ASTContext* ctx, Dir _transferDir, const std::string& s3URL, const std::string& localDir);
+
+    Kind getKind() const override {
+        return QueryCommand::Kind::S3TRANSFER_COMMAND;
+    }
+
+private:
+    S3TransferCommand(Dir _transferDir, const std::string& s3URL, const std::string& localDir);
+    S3TransferCommand() = delete;
+
+    Dir _transferDir;
+
+    std::string _s3URL;
+    std::string _localDir;
+
+    std::string_view _s3Bucket;
+    std::string_view _s3Prefix;
+    std::string_view _s3File;
 };
 }

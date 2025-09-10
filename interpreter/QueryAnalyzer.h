@@ -19,6 +19,7 @@ class DeclContext;
 class EntityPattern;
 class LoadGraphCommand;
 class ExplainCommand;
+class S3TransferCommand;
 class GraphView;
 class Expr;
 class BinExpr;
@@ -47,6 +48,7 @@ private:
     void analyzeBinExprConstraint(const BinExpr* constraint, bool isCreate);
     void typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
     void analyzeExplain(ExplainCommand* cmd);
+    void analyzeS3Transfer(S3TransferCommand* cmd);
     std::string createVarName();
 };
 }

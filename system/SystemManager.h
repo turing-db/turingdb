@@ -6,6 +6,8 @@
 
 #include "RWSpinLock.h"
 #include "GraphLoadStatus.h"
+#include "TuringS3Client.h"
+#include "AwsS3ClientWrapper.h"
 #include "Path.h"
 #include "GraphFileType.h"
 #include "versioning/ChangeID.h"
@@ -65,10 +67,21 @@ public:
                                               CommitHash commitHash,
                                               ChangeID changeID);
 
+    void setS3Client(std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> newClient) {
+        // Move assignment
+        _s3Client = std::move(newClient);
+    }
+
+    S3::TuringS3Client<S3::AwsS3ClientWrapper<>>* getS3Client() {
+        return _s3Client.get();
+    }
+
+
 private:
     const TuringConfig& _config;
     mutable RWSpinLock _graphsLock;
     Graph* _defaultGraph {nullptr};
+    std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client;
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
     GraphLoadStatus _graphLoadStatus;

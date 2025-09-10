@@ -63,6 +63,9 @@ enum class PipelineOpcode : uint64_t {
     CALL_LABELS,
     CALL_EDGETYPES,
     CALL_LABELSETS,
+    S3CONNECT,
+    S3PUSH,
+    S3PULL,
     MAX
 };
 }

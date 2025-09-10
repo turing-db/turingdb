@@ -27,8 +27,8 @@ int main() {
     db::TuringConfig config;
     db::SystemManager sysMan(config);
     const auto& turingDir = config.getTuringDir();
-    
-    db::FileCache cache = db::FileCache(turingDir/"graphs", turingDir/"data", awsClient);
+
+    db::FileCache cache = db::FileCache(turingDir / "graphs", turingDir / "data", std::move(awsClient));
     // Main input loop
     char* line = nullptr;
     while ((line = linenoise("prompt> ")) != nullptr) {
@@ -39,7 +39,7 @@ int main() {
 
         // Process the line
         std::string input(line);
-        std::cout << "You entered: " << input << std::endl;
+        std::cout << "You entered:" << input << std::endl;
 
         splitString(input, tokens);
 
