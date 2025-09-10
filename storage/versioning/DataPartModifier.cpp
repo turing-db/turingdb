@@ -77,11 +77,17 @@ void DataPartModifier::fillBuilder() {
     // Edges
     for (const auto& [edgeID, edgeRecord] :
          EnumerateFrom(oldFirstEdgeID.getValue(), oldOutEdgeRecords)) {
-        if (!_edgesToDelete.contains(edgeID)) {
+        // Get the original IDs of the source and target nodes
+        NodeID src = edgeRecord._nodeID;
+        NodeID tgt = edgeRecord._otherID;
+        // If this edge is not deleted, and neither its source nor target is deleted, include it
+        if (!_edgesToDelete.contains(edgeID) && !_nodesToDelete.contains(src)
+            && !_nodesToDelete.contains(tgt)) {
             EdgeTypeID typeID = edgeRecord._edgeTypeID;
-            NodeID src = _nodeIDMapping(edgeRecord._nodeID);
-            NodeID tgt = _nodeIDMapping(edgeRecord._otherID);
-            _builder->addEdge(typeID, src, tgt);
+            // Update source and target nodes to their new ID
+            NodeID newSrc = _nodeIDMapping(edgeRecord._nodeID);
+            NodeID newTgt = _nodeIDMapping(edgeRecord._otherID);
+            _builder->addEdge(typeID, newSrc, newTgt);
         }
     }
 

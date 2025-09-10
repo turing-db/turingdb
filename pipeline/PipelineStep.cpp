@@ -1,4 +1,5 @@
 #include "PipelineStep.h"
+#include "DeleteStep.h"
 #include "ID.h"
 #include "PipelineOpcode.h"
 
@@ -267,10 +268,16 @@ PipelineStep::PipelineStep(CreateEdgeStep::Tag,
 {
 }
 
+PipelineStep::PipelineStep(DeleteStep::Tag, std::set<NodeID> nodes,
+                         std::set<EdgeID> edges)
+    : _opcode(PipelineOpcode::DELETE),
+    _impl(std::in_place_type<DeleteStep>, nodes, edges)
+{
+}
+
 PipelineStep::PipelineStep(CommitStep::Tag)
     : _opcode(PipelineOpcode::COMMIT),
-    _impl(std::in_place_type<CommitStep>)
-{
+      _impl(std::in_place_type<CommitStep>) {
 }
 
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_INT64, Int64)

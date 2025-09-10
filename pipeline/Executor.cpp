@@ -84,6 +84,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::CHANGE] = ACTIVATE_PTR(ChangeStep);
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_NODE] = ACTIVATE_PTR(CreateNodeStep);
         _activateTbl[(uint64_t)PipelineOpcode::CREATE_EDGE] = ACTIVATE_PTR(CreateEdgeStep);
+        _activateTbl[(uint64_t)PipelineOpcode::DELETE] = ACTIVATE_PTR(DeleteStep);
         _activateTbl[(uint64_t)PipelineOpcode::COMMIT] = ACTIVATE_PTR(CommitStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = ACTIVATE_PTR(CallPropertyStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_LABELS] = ACTIVATE_PTR(CallLabelStep);
@@ -144,6 +145,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::CHANGE] = RETURN_PTR(ChangeStep);
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_NODE] = RETURN_PTR(CreateNodeStep);
         _returnTbl[(uint64_t)PipelineOpcode::CREATE_EDGE] = RETURN_PTR(CreateEdgeStep);
+        _returnTbl[(uint64_t)PipelineOpcode::DELETE] = RETURN_PTR(DeleteStep);
         _returnTbl[(uint64_t)PipelineOpcode::COMMIT] = RETURN_PTR(CommitStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = RETURN_PTR(CallPropertyStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_LABELS] = RETURN_PTR(CallLabelStep);
@@ -244,6 +246,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(ChangeStep)
     ACTIVATE_STEP(CreateNodeStep)
     ACTIVATE_STEP(CreateEdgeStep)
+    ACTIVATE_STEP(DeleteStep)
     ACTIVATE_STEP(CommitStep)
     ACTIVATE_STEP(CallPropertyStep)
     ACTIVATE_STEP(CallLabelStep)
@@ -303,6 +306,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(ChangeStep)
     RETURN_STEP(CreateNodeStep)
     RETURN_STEP(CreateEdgeStep)
+    RETURN_STEP(DeleteStep)
     RETURN_STEP(CommitStep)
     RETURN_STEP(CallPropertyStep)
     RETURN_STEP(CallLabelStep)

@@ -1,12 +1,10 @@
 #pragma once
 
-#include <memory>
 #include <set>
 
 #include "ArcManager.h"
 #include "DataPart.h"
 #include "Graph.h"
-#include "VersionController.h"
 #include "ID.h"
 #include "TuringException.h"
 #include "EdgeContainer.h"

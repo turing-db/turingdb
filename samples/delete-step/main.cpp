@@ -38,39 +38,50 @@ int main() {
     }
     ChangeID id = changeIDRes.value();
 
-    auto txRes = db.getSystemManager().openTransaction(GRAPHNAME, CommitHash::head(), id);
-    if (!txRes) {
-        spdlog::error("Failed to open a transaction");
+    // Scope this to prevent deadlock
+    {
+        auto txRes =
+            db.getSystemManager().openTransaction(GRAPHNAME, CommitHash::head(), id);
+        if (!txRes) {
+            spdlog::error("Failed to open a transaction");
+            return -1;
+        }
+        auto& tx = txRes.value();
+
+        [[maybe_unused]] auto ctxt =
+            ExecutionContext(&db.getSystemManager(), &db.getJobSystem(), view, GRAPHNAME,
+                             CommitHash::head(), id, &tx);
+
+        auto reader = tx.readGraph();
+        auto nodes = reader.dataparts().front()->getNodeCount();
+        auto edges = reader.dataparts().front()->getEdgeCount();
+        spdlog::info("DP1 has {} nodes and {} edges post deletion.", nodes, edges);
+        Pipeline pipe;
+
+        pipe.add<StopStep>();
+        pipe.add<DeleteStep>(std::set<NodeID> {0}, std::set<EdgeID> {});
+        pipe.add<EndStep>();
+
+        Executor ex;
+
+        ex.run(&ctxt, &pipe);
+    }
+
+    auto res = change->access().submit(db.getJobSystem());
+    if (!res) {
+        spdlog::info("Failed to submit change");
         return -1;
     }
-    auto& tx = txRes.value();
 
-    [[maybe_unused]] auto ctxt =
-        ExecutionContext(&db.getSystemManager(), &db.getJobSystem(), view, GRAPHNAME,
-                         CommitHash::head(), id, &tx);
-
-    GraphReader reader = tx.readGraph();
-    spdlog::info("Graph has {} nodes and {} edges prior to deletion.",
-                 reader.getNodeCount(), reader.getEdgeCount());
-
-    Pipeline pipe;
-
-    pipe.add<StopStep>();
-    pipe.add<DeleteStep>(std::set<NodeID> {0}, std::set<EdgeID> {});
-    pipe.add<EndStep>();
-
-    Executor ex;
-
-    ex.run(&ctxt, &pipe);
-
-    auto readRes = db.getSystemManager().openTransaction(GRAPHNAME, CommitHash::head(), id);
+    auto readRes = db.getSystemManager().openTransaction(GRAPHNAME, CommitHash::head(), ChangeID::head());
     if (!readRes) {
         spdlog::error("Failed to read graph after deletion");
         return -1;
     }
 
     auto& readTx = readRes.value();
-    GraphReader readerNew = readTx.readGraph();
-    spdlog::info("Graph has {} nodes and {} edges prior to deletion.",
-                 readerNew.getNodeCount(), readerNew.getEdgeCount());
+    auto reader = readTx.readGraph();
+    auto nodes = reader.dataparts().front()->getNodeCount();
+    auto edges = reader.dataparts().front()->getEdgeCount();
+    spdlog::info("DP1 has {} nodes and {} edges post deletion.", nodes, edges);
 }

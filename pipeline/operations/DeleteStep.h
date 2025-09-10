@@ -15,7 +15,7 @@ public:
 
     struct Tag {};
 
-    explicit DeleteStep(NodeSet& nodesToDelete, EdgeSet& edgesToDelete)
+    explicit DeleteStep(NodeSet nodesToDelete, EdgeSet edgesToDelete)
         : _delNodes(nodesToDelete),
         _delEdges(edgesToDelete)
     {
@@ -35,8 +35,8 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    NodeSet& _delNodes;
-    EdgeSet& _delEdges;
+    NodeSet _delNodes;
+    EdgeSet _delEdges;
 
     CommitBuilder* _commitBuilder {nullptr};
     std::span<const WeakArc<DataPart>> _dps {}; // nullptr, size 0

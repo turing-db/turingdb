@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <variant>
 
 #include "ChangeOpType.h"
@@ -34,6 +35,7 @@
 #include "operations/HistoryStep.h"
 #include "operations/ChangeStep.h"
 #include "operations/CreateNodeStep.h"
+#include "operations/DeleteStep.h"
 #include "operations/CreateEdgeStep.h"
 #include "operations/CommitStep.h"
 #include "operations/CallPropertyStep.h"
@@ -136,6 +138,7 @@ public:
                  const EntityPattern*,
                  const EntityPattern*,
                  const EntityPattern*);
+    PipelineStep(DeleteStep::Tag, std::set<NodeID>, std::set<EdgeID>);
     PipelineStep(CommitStep::Tag);
     PipelineStep(CallPropertyStep::Tag,
                  ColumnVector<PropertyTypeID>* id,
@@ -228,6 +231,7 @@ private:
                  ChangeStep,
                  CreateNodeStep,
                  CreateEdgeStep,
+                 DeleteStep,
                  CommitStep,
                  CallPropertyStep,
                  CallLabelStep,

@@ -1,6 +1,7 @@
 #include "DeleteStep.h"
 
 #include "DataPart.h"
+#include "SystemManager.h"
 #include "versioning/DataPartModifier.h"
 #include "PipelineException.h"
 #include "versioning/Transaction.h"
@@ -110,4 +111,9 @@ void DeleteStep::execute() {
         // Apply the deletions
         modifier.applyModifications();
     }
+}
+
+void DeleteStep::describe(std::string& descr) const {
+    descr.clear();
+    descr += "DeleteStep";
 }
