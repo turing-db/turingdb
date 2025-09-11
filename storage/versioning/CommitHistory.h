@@ -90,6 +90,9 @@ public:
     {
     }
 
+    /**
+     * @param prevHistory : The history of the current state of main
+     */
     void rebase(const MetadataRebaser& metadataRebaser,
                 DataPartRebaser& dataPartRebaser,
                 const CommitHistory& prevHistory);

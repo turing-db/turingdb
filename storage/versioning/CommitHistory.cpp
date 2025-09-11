@@ -22,6 +22,12 @@ void CommitHistory::newFromPrevious(const CommitHistory& base) {
 void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
                                   DataPartRebaser& dataPartRebaser,
                                   const CommitHistory& prevHistory) {
+    // @ref _history : The history (possibly modified) which belongs to this commit. It was
+    // created using @ref createFromPrevious at the instantiation of this commit's @ref
+    // CommitBuilder, but it may have since been modified
+
+    // @ref prevHistory : The history of the current state of main
+
     // Commits
     const CommitView tip = _history._commits.back();
     _history._commits = prevHistory._commits;

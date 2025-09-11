@@ -68,6 +68,7 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
+    // Get the current state of main
     _base = _versionController->openTransaction().commitData();
 
     MetadataRebaser metadataRebaser;
