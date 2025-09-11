@@ -55,14 +55,26 @@ private:
         TypeVariant value;
     };
 
-    struct PendingNode{
+    struct PendingNode {
         std::vector<std::string> labelNames;
         std::vector<UntypedProperty> properties;
     };
 
-public:
+    // A node: either exists in previous commit (materialised as NodeID),
+    // or to be created in this commit (materialised as PendingNode)
+    using ContingentNode = std::variant<NodeID, PendingNode>;
 
-    void createNode(std::vector<std::string> labels, std::vector<UntypedProperty> properties) {
+    struct PendingEdge {
+        ContingentNode src;
+        ContingentNode tgt;
+        std::vector<std::string> edgeLabelTypeNames;
+        std::vector<UntypedProperty> properties;
+    };
+
+
+public:
+    void addPendingNode(std::vector<std::string> labels,
+                        std::vector<UntypedProperty> properties) {
         _pendingNodes.emplace_back(labels, properties);
     }
 
@@ -71,35 +83,19 @@ public:
         std::visit(AddNodeProperty {_builder, 0, 0}, x);
     }
     
-
-    /*
-    void func() {
-
-
-        std::visit(
-            [this](const auto& propertyValue) {
-                using T = std::decay_t<decltype(propertyValue)>;
-                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
-                    _builder.addNodeProperty<types::Int64>(0, 0, propertyValue);
-                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
-                    _builder.addNodeProperty<types::UInt64>(0, 0, propertyValue);
-                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
-                    _builder.addNodeProperty<types::Double>(0, 0, propertyValue);
-                } else if constexpr (std::is_same_v<T, types::String::Primitive>) {
-                    _builder.addNodeProperty<types::String>(0, 0, propertyValue);
-                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
-                    _builder.addNodeProperty<types::Bool>(0, 0, propertyValue);
-                } else {
-                    throw TuringException("Property had unknown type");
-                }
-            },
-            x);
-    }
-    */
-
 private:
     DataPartBuilder _builder;
+    // Nodes to be created
     std::vector<PendingNode> _pendingNodes;
+
+    // Edges to be created between two nodes that are created in this commit
+    std::vector<PendingEdge> _pendingEdges;
+    
+    // Edges to be created whose source exists in a previous commit, but whose target is created in this commit
+     
+    // Edges to be created whose target exists in a previous commit, but whose source is created in this commit
+    
+    // Edges to be created whose source and target exist in a previous commit
 };
     
 }
