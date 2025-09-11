@@ -209,7 +209,7 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             } else if (src->getInjectedIDs()){ // If there is injected ID, use that
                 // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
                 // injected ID (if any), set this node to have that injected ID
-                nodeID->set(src->getInjectedIDs()->getIDs().at(0));
+                nodeID->set(src->getInjectedIDs()->getIDs().front());
             } else {
                 throw PlannerException(
                     "Could not find previous declaration nor injected ID for node.");
