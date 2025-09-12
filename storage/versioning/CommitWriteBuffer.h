@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -64,7 +63,8 @@ public:
 
      // A node: either exists in previous commit (materialised as NodeID),
      // or to be created in this commit (materialised as PendingNode)
-     using ContingentNode = std::variant<NodeID, PendingNode>;
+     using PendingNodeOffset = size_t;
+     using ContingentNode = std::variant<NodeID, PendingNodeOffset>;
  private:
      struct PendingEdge {
          ContingentNode src;
@@ -75,6 +75,8 @@ public:
 
 public:
     CommitWriteBuffer() = default;
+
+    PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
 
     void addPendingNode(std::vector<std::string>& labels,
                         std::vector<UntypedProperty>& properties) {
@@ -99,26 +101,22 @@ public:
                              newDeletedNodes.begin(),
                              newDeletedNodes.end());
     }
+
+    std::unordered_map<std::string, PendingNodeOffset> _varNodeMap;
     
 private:
-
     // Nodes to be created
     std::vector<PendingNode> _pendingNodes;
 
     // Edges to be created between two nodes that are created in this commit
     std::vector<PendingEdge> _pendingEdges;
     
-    // Edges to be created whose source exists in a previous commit, but whose target is created in this commit
-     
-    // Edges to be created whose target exists in a previous commit, but whose source is created in this commit
-    
-    // Edges to be created whose source and target exist in a previous commit
-
     // Nodes to be deleted
     std::vector<NodeID> _deletedNodes;
 
     // Edges to be deleted
     std::vector<EdgeID> _deletedEdges;
+
 };
 
 }
