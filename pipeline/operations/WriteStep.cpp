@@ -1,6 +1,10 @@
 #include "WriteStep.h"
 
+#include <range/v3/view/drop.hpp>
+#include <range/v3/view/chunk.hpp>
+
 #include "Expr.h"
+#include "ID.h"
 #include "InjectedIDs.h"
 #include "PathPattern.h"
 #include "PipelineException.h"
@@ -10,6 +14,8 @@
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
+
+namespace rv = ranges::views;
 
 void WriteStep::prepare(ExecutionContext* ctxt) {
     Transaction* rawTx = ctxt->getTransaction();
@@ -48,8 +54,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
             throw PipelineException("Node property expression must be an assignment");
         }
 
-        const auto& propertyName =
-            static_cast<const VarExpr*>(e->getLeftExpr())->getName();
+        const std::string& propertyName = left->getName();
 
         const ValueType valueType = right->getType();
         switch (valueType) {
@@ -95,7 +100,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     return thisNodeOffset;
 }
 
-CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(EntityPattern* nodePattern) {
+CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern* nodePattern) {
     const std::string& nodeVarName = nodePattern->getVar()->getName();
 
     // Check to see if this node has been written already by searching its variable name
@@ -105,11 +110,11 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(EntityPattern* nodeP
         return pendingNodeIt->second; // PendingNodeOffset to the PendingNode of this node
     }
 
-    // Check to see if @ref nodePattern has injected ID
+    // Check to see if @ref nodePattern has injected ID, return that ID if so
     auto injectedIDs = nodePattern->getInjectedIDs();
     if (injectedIDs) {
         // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
-        // injected ID (if any), set this node to have that injected ID
+        // injected ID (if any)
         return NodeID {injectedIDs->getIDs().front()};
     }
 
@@ -119,8 +124,90 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(EntityPattern* nodeP
     return newOffset;
 }
 
+void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
+                          const EntityPattern* edgePattern) {
+    // Get the labels for PendingEdge
+    const TypeConstraint* patternLabels = edgePattern->getTypeConstraint();
+    std::vector<std::string> edgeLabels;
+    if (patternLabels) {
+        for (const auto& name : patternLabels->getTypeNames()) {
+            edgeLabels.emplace_back(name->getName());
+        }
+    } else {
+        throw PipelineException("Edges must have at least one label");
+    }
+
+    const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
+    if (!patternProperties) {
+        return;
+    }
+
+    // Formulate the properties for PendingEdge
+    UntypedProperties edgeProperties;
+
+    for (const auto& e : patternProperties->getExpressions()) {
+        const auto& left = static_cast<const VarExpr*>(e->getLeftExpr());
+        const auto& right = static_cast<const ExprConst*>(e->getRightExpr());
+
+        if (left->getKind() != Expr::EK_VAR_EXPR) {
+            throw PipelineException("Node property expression must be an assignment");
+        }
+
+        const std::string& propertyName = left->getName();
+
+        const ValueType valueType = right->getType();
+
+        switch (valueType) {
+            case ValueType::Int64: {
+                const auto* casted = static_cast<const Int64ExprConst*>(right);
+                edgeProperties.emplace_back(propertyName, casted->getVal());
+                break;
+            }
+            case ValueType::UInt64: {
+                const auto* casted = static_cast<const UInt64ExprConst*>(right);
+                edgeProperties.emplace_back(propertyName, casted->getVal());
+                break;
+            }
+            case ValueType::Double: {
+                const auto* casted = static_cast<const DoubleExprConst*>(right);
+                edgeProperties.emplace_back(propertyName, casted->getVal());
+                break;
+            }
+            case ValueType::String: {
+                const auto* casted = static_cast<const StringExprConst*>(right);
+                edgeProperties.emplace_back(propertyName, casted->getVal());
+                break;
+            }
+            case ValueType::Bool: {
+                const auto* casted = static_cast<const BoolExprConst*>(right);
+                edgeProperties.emplace_back(propertyName, casted->getVal());
+                break;
+            }
+            default: {
+                throw std::runtime_error("Unsupported value type");
+            }
+        }
+    }
+    _writeBuffer->addPendingEdge(src, tgt, edgeLabels, edgeProperties);
+}
+
 
 void WriteStep::writeEdges(const PathPattern* pathPattern) {
+    std::span pathElements {pathPattern->elements()};
+
+    const EntityPattern* srcPattern = pathElements.front();
+
+    ContingentNode srcNode = getOrWriteNode(srcPattern);
+
+    for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
+        const EntityPattern* edgePattern = step.front();
+        const EntityPattern* tgtPattern = step.back();
+        ContingentNode tgtNode = getOrWriteNode(tgtPattern);
+
+        writeEdge(srcNode, tgtNode, edgePattern);
+
+        srcNode = tgtNode; // Assign the current target as the source for the next edge
+    }
 }
 
 void WriteStep::execute() {

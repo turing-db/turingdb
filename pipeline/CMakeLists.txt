@@ -29,6 +29,7 @@ set(pipeline_sources
         operations/S3ConnectStep.cpp
         operations/S3PushStep.cpp
         operations/S3PullStep.cpp
+        operations/WriteStep.cpp
         
         PipelineStep.cpp
         Pipeline.cpp
@@ -46,4 +47,5 @@ target_link_libraries(turing_db_pipeline_s PRIVATE
     turing_db_memory_s
     turing_db_storage_s
     turing_db_system_s
-    turing_common_s)
+    turing_common_s
+    range-v3)

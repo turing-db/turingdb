@@ -65,7 +65,6 @@ struct PropertyTypeDispatcher {
     }
 };
 
-
 namespace rv = ranges::views;
 
 QueryPlanner::QueryPlanner(const GraphView& view,

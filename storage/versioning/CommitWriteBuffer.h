@@ -84,9 +84,9 @@ public:
     }
 
     void addPendingEdge(ContingentNode src, ContingentNode tgt,
-                        std::vector<std::string> edgeLabels,
-                        std::vector<UntypedProperty> edgeProperties) {
-        _pendingEdges.emplace_back();
+                        std::vector<std::string>& edgeLabels,
+                        std::vector<UntypedProperty>& edgeProperties) {
+        _pendingEdges.emplace_back(src, tgt, edgeLabels, edgeProperties);
     }
 
     /**
@@ -108,7 +108,7 @@ private:
     // Nodes to be created
     std::vector<PendingNode> _pendingNodes;
 
-    // Edges to be created between two nodes that are created in this commit
+    // Edges to be created
     std::vector<PendingEdge> _pendingEdges;
     
     // Nodes to be deleted

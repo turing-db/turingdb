@@ -34,6 +34,7 @@ public:
 
 private:
     using UntypedProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
+    using ContingentNode = CommitWriteBuffer::ContingentNode;
 
     const CreateTargets* _targets {nullptr};
     CommitWriteBuffer* _writeBuffer {nullptr};
@@ -54,13 +55,16 @@ private:
      * vector where it may be found; otherwise writes the node and returns its offset.
      * @detail Calls @ref writeNode if a node need be written.
      */
-    CommitWriteBuffer::ContingentNode getOrWriteNode(EntityPattern* nodePattern);
+    ContingentNode getOrWriteNode(const EntityPattern* nodePattern);
 
     /**
      * @brief Writes a node to @ref _writeBuffer according to @param nodePattern to @ref
      * _writeBuffer, and returns the offset at which it can be found.
      */
     CommitWriteBuffer::PendingNodeOffset writeNode(const EntityPattern* nodePattern);
+
+    void writeEdge(const ContingentNode src, const ContingentNode tgt,
+                   const EntityPattern* edgePattern);
 
     void writeEdges(const PathPattern* pathPattern);
 };
