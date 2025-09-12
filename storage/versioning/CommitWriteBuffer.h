@@ -55,24 +55,23 @@ public:
      struct UntypedProperty {
         std::string propertyName;
         SupportedTypeVariant value;
-    };
-private:
-    struct PendingNode {
-        std::vector<std::string> labelNames;
-        std::vector<UntypedProperty> properties;
-    };
+     };
 
-    // A node: either exists in previous commit (materialised as NodeID),
-    // or to be created in this commit (materialised as PendingNode)
-    using ContingentNode = std::variant<NodeID, PendingNode>;
+     struct PendingNode {
+         std::vector<std::string> labelNames;
+         std::vector<UntypedProperty> properties;
+     };
 
-    struct PendingEdge {
-        ContingentNode src;
-        ContingentNode tgt;
-        std::vector<std::string> edgeLabelTypeNames;
-        std::vector<UntypedProperty> properties;
+     // A node: either exists in previous commit (materialised as NodeID),
+     // or to be created in this commit (materialised as PendingNode)
+     using ContingentNode = std::variant<NodeID, PendingNode>;
+ private:
+     struct PendingEdge {
+         ContingentNode src;
+         ContingentNode tgt;
+         std::vector<std::string> edgeLabelTypeNames;
+         std::vector<UntypedProperty> properties;
     };
-
 
 public:
     CommitWriteBuffer() = default;
@@ -82,10 +81,9 @@ public:
         _pendingNodes.emplace_back(labels, properties);
     }
 
-
-    void addPendingEdge(std::optional<NodeID> src, std::optional<NodeID> tgt,
-                        std::vector<std::string> labels,
-                        std::vector<UntypedProperty> properties) {
+    void addPendingEdge(ContingentNode src, ContingentNode tgt,
+                        std::vector<std::string> edgeLabels,
+                        std::vector<UntypedProperty> edgeProperties) {
         _pendingEdges.emplace_back();
     }
 
