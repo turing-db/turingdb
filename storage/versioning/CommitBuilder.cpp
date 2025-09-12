@@ -4,6 +4,7 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -106,6 +107,9 @@ void CommitBuilder::initialize() {
 
     // Create metadata builder
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
+
+    // Create the write buffer for this commit
+    _writeBuffer = std::make_unique<CommitWriteBuffer>();
 
     // Create datapart builder
     this->newBuilder();

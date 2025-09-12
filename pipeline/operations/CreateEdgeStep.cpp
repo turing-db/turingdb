@@ -34,6 +34,7 @@ void CreateEdgeStep::prepare(ExecutionContext* ctxt) {
 
     auto& tx = rawTx->get<PendingCommitWriteTx>();
 
+    _writeBuffer = &tx.commitBuilder()->writeBuffer();
     _builder = &tx.commitBuilder()->getCurrentBuilder();
 }
 
@@ -47,7 +48,7 @@ void CreateEdgeStep::execute() {
     auto* tgtID = static_cast<ColumnNodeID*>(_tgt->getVar()->getDecl()->getColumn());
 
     if (!tgtID->getRaw().isValid()) {
-        CreateNodeStep::createNode(_builder, _tgt);
+        CreateNodeStep::createNode(_builder, _tgt, _writeBuffer);
     }
 
     const TypeConstraint* type = _edge->getTypeConstraint();

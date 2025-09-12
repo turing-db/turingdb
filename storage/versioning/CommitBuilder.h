@@ -6,6 +6,7 @@
 
 #include "ID.h"
 #include "versioning/CommitResult.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -39,6 +40,7 @@ public:
     [[nodiscard]] size_t pendingCount() const { return _builders.size(); }
 
     [[nodiscard]] CommitData& commitData() { return *_commitData; }
+    [[nodiscard]] CommitWriteBuffer& writeBuffer() const { return *_writeBuffer; }
     [[nodiscard]] const CommitData& commitData() const { return *_commitData; }
     [[nodiscard]] MetadataBuilder& metadata() { return *_metadataBuilder; }
     [[nodiscard]] DataPartBuilder& getCurrentBuilder() { return *_builders.back(); }
@@ -58,10 +60,12 @@ public:
     }
 
 private:
+    friend CommitWriteBuffer;
     friend VersionController;
     friend Change;
 
     mutable std::mutex _mutex;
+    std::unique_ptr<CommitWriteBuffer> _writeBuffer;
 
     VersionController* _controller {nullptr};
     Change* _change {nullptr};

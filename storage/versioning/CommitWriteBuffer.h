@@ -5,6 +5,7 @@
 #include <variant>
 #include <vector>
 
+#include "DataPart.h"
 #include "ID.h"
 #include "writers/DataPartBuilder.h"
 #include "metadata/PropertyType.h"
@@ -12,8 +13,8 @@
 namespace {
 
 using namespace db;
-struct AddNodeProperty {
-    AddNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
+struct BuildNodeProperty {
+    BuildNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
         : _builder(builder),
           _nid(nid),
           _pid(pid) {}
@@ -46,15 +47,16 @@ namespace db {
 
 class CommitWriteBuffer {
 public:
-    using TypeVariant = std::variant<types::Int64::Primitive, types::UInt64::Primitive,
-                                     types::Double::Primitive, types::String::Primitive,
-                                     types::Bool::Primitive>;
-private:
-    struct UntypedProperty {
-        std::string propertyName;
-        TypeVariant value;
-    };
+    using SupportedTypeVariant =
+        std::variant<types::Int64::Primitive, types::UInt64::Primitive,
+                     types::Double::Primitive, types::String::Primitive,
+                     types::Bool::Primitive>;
 
+     struct UntypedProperty {
+        std::string propertyName;
+        SupportedTypeVariant value;
+    };
+private:
     struct PendingNode {
         std::vector<std::string> labelNames;
         std::vector<UntypedProperty> properties;
@@ -73,18 +75,58 @@ private:
 
 
 public:
-    void addPendingNode(std::vector<std::string> labels,
-                        std::vector<UntypedProperty> properties) {
+    CommitWriteBuffer() = default;
+
+    void addPendingNode(std::vector<std::string>& labels,
+                        std::vector<UntypedProperty>& properties) {
         _pendingNodes.emplace_back(labels, properties);
     }
 
-    void func() {
-        TypeVariant x {std::in_place_type<types::Bool::Primitive>, false};
-        std::visit(AddNodeProperty {_builder, 0, 0}, x);
+    template <typename... Props>
+    void addPendingNode(std::vector<std::string>& labels, Props&&... props) {
+        // The number of properties on this node
+        const size_t numProps = sizeof...(props);
+
+        // We store properties internally in the write buffer as @ref UntypedProperty
+        std::vector<UntypedProperty> internalProperties;
+        internalProperties.reserve(numProps);
+
+        // Construct the vector of @ref UntypedProperty using a fold expression:
+        // 1. Unpack an element of @ref props into the property name and value
+        // 2. Construct our internal @ref UntypedProperty representation in place in our
+        // vector of properties
+        // 3. Do this over all elements of @ref props (with the ...). 
+        (...,
+            [&]() {
+                auto&& [propertyName, propertyValue] = std::forward<Props>(props);
+                internalProperties.emplace_back(
+                    UntypedProperty {propertyName, propertyValue});
+            }()
+        );
+
+        _pendingNodes.emplace_back(std::move(labels), std::move(internalProperties));
+    }
+
+    void addPendingEdge(std::vector<std::string> labels,
+                        std::vector<UntypedProperty> properties) {
+        _pendingEdges.emplace_back();
+    }
+
+    /**
+     * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
+     * _deletedNodes
+     * @detail Calls std::vector::reserve for the additional space before calling
+     * std::vector::insert
+     */
+    void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
+        _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
+        _deletedNodes.insert(_deletedNodes.end(),
+                             newDeletedNodes.begin(),
+                             newDeletedNodes.end());
     }
     
 private:
-    DataPartBuilder _builder;
+
     // Nodes to be created
     std::vector<PendingNode> _pendingNodes;
 
@@ -96,6 +138,12 @@ private:
     // Edges to be created whose target exists in a previous commit, but whose source is created in this commit
     
     // Edges to be created whose source and target exist in a previous commit
+
+    // Nodes to be deleted
+    std::vector<NodeID> _deletedNodes;
+
+    // Edges to be deleted
+    std::vector<EdgeID> _deletedEdges;
 };
-    
+
 }
