@@ -107,7 +107,8 @@ public:
         _pendingNodes.emplace_back(std::move(labels), std::move(internalProperties));
     }
 
-    void addPendingEdge(std::vector<std::string> labels,
+    void addPendingEdge(std::optional<NodeID> src, std::optional<NodeID> tgt,
+                        std::vector<std::string> labels,
                         std::vector<UntypedProperty> properties) {
         _pendingEdges.emplace_back();
     }

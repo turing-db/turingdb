@@ -172,6 +172,14 @@ bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
     return true;
 }
 
+bool planCreateNode() {
+    return false;
+}
+
+bool planCreateEdges() {
+    return false;
+}
+
 bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
     const auto& targets = createCmd->createTargets();
     if (targets.size() == 0) {
