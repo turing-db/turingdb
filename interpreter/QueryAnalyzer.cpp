@@ -404,7 +404,8 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
 void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern* entity,
                                          bool isCreate) {
     VarExpr* var = entity->getVar();
-    // Handle the case where the entity is unlabeled edge (--)
+    // Handle the case where the entity is unnamed edge (i.e. (n)--(m) or
+    // (n)-[:LABEL]-(m)) or node (i.e. (:LABEL))
     if (!var) {
         var = VarExpr::create(_ctxt, createVarName());
         entity->setVar(var);

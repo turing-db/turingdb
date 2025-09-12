@@ -127,5 +127,7 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
             }
         }
     }
+
+    // Add this node to the write buffer
     writeBuffer->addPendingNode(labels, pendingProperties);
 }
