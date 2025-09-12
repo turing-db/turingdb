@@ -14,7 +14,7 @@ public:
 protected:
     DeclContext* _declContext {nullptr};
 
-    QueryCommand();
+    QueryCommand(DeclContext* declContext);
     virtual ~QueryCommand();
 };
 

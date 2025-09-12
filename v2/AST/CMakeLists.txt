@@ -1,6 +1,6 @@
 set(ast_sources
     CypherAST.cpp
-    #CypherASTDumper.cpp
+    CypherASTDumper.cpp
     CypherError.cpp
 
     decl/DeclContext.cpp
@@ -10,7 +10,6 @@ set(ast_sources
     expr/BinaryExpr.cpp
     expr/LiteralExpr.cpp
     expr/NodeLabelExpr.cpp
-    expr/ParameterExpr.cpp
     expr/PathExpr.cpp
     expr/PropertyExpr.cpp
     expr/StringExpr.cpp

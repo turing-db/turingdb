@@ -6,6 +6,7 @@ namespace db::v2 {
 
 class CypherAST;
 class Symbol;
+class VarDecl;
 
 class SymbolExpr : public Expr {
 public:
@@ -13,10 +14,15 @@ public:
 
     Symbol* getSymbol() const { return _symbol; }
 
+    VarDecl* getDecl() const { return _decl; }
+
     void setSymbol(Symbol* symbol) { _symbol = symbol; }
+
+    void setDecl(VarDecl* decl) { _decl = decl; }
 
 private:
     Symbol* _symbol {nullptr};
+    VarDecl* _decl {nullptr};
 
     explicit SymbolExpr(Symbol* symbol)
         : Expr(Kind::SYMBOL),

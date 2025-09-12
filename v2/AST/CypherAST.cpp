@@ -95,6 +95,10 @@ CypherAST::~CypherAST() {
 }
 
 void CypherAST::setLocation(uintptr_t obj, const SourceLocation& loc) {
+    if (!_debugLocations) {
+        return;
+    }
+
     _locations[obj] = loc;
 }
 

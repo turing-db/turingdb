@@ -7,6 +7,7 @@ namespace db::v2 {
 class CypherAST;
 class StmtContainer;
 class ReturnStmt;
+class DeclContext;
 
 class SinglePartQuery : public QueryCommand {
 public:
@@ -25,7 +26,7 @@ private:
     StmtContainer* _updateStmts {nullptr};
     ReturnStmt* _returnStmt {nullptr};
 
-    SinglePartQuery();
+    SinglePartQuery(DeclContext* declContext);
     ~SinglePartQuery() override;
 };
 

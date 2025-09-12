@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 
     {
         // Try but allow not implemented to test the parser
-        CypherParser parser(ast);
+        CypherParser parser(&ast);
         parser.allowNotImplemented(true);
 
         try {
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     {
         // Disallow not implemented.
         // This should print the AST if parsing was successful
-        CypherParser parser(ast);
+        CypherParser parser(&ast);
         parser.allowNotImplemented(false);
 
         try {

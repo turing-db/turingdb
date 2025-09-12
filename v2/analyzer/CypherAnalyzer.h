@@ -64,7 +64,6 @@ public:
     void analyze(UnaryExpr* expr);
     void analyze(SymbolExpr* expr);
     void analyze(LiteralExpr* expr);
-    void analyze(ParameterExpr* expr);
     void analyze(PropertyExpr* expr);
     void analyze(StringExpr* expr);
     void analyze(NodeLabelExpr* expr);

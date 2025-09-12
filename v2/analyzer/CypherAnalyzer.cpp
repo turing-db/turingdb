@@ -271,9 +271,6 @@ void CypherAnalyzer::analyze(Expr* expr) {
         case Expr::Kind::LITERAL:
             analyze(dynamic_cast<LiteralExpr*>(expr));
             break;
-        case Expr::Kind::PARAMETER:
-            analyze(dynamic_cast<ParameterExpr*>(expr));
-            break;
     }
 }
 
@@ -453,10 +450,6 @@ void CypherAnalyzer::analyze(LiteralExpr* expr) {
             expr->setType(EvaluatedType::Map);
         } break;
     }
-}
-
-void CypherAnalyzer::analyze(ParameterExpr* expr) {
-    throwError("Parameters not supported", &expr);
 }
 
 void CypherAnalyzer::analyze(PropertyExpr* expr) {

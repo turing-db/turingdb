@@ -1,4 +1,5 @@
 #include <iostream>
+#include <memory>
 
 #include "CypherASTDumper.h"
 #include "CypherAnalyzer.h"
@@ -42,10 +43,10 @@ int main(int argc, char** argv) {
     }
 
     CypherAST ast(queryStr);
-    ast.setDebugLocation(true);
+    ast.setDebugLocations(true);
 
     {
-        CypherParser parser(ast);
+        CypherParser parser(&ast);
         parser.allowNotImplemented(false);
 
         try {
@@ -58,7 +59,7 @@ int main(int argc, char** argv) {
             return 0;
         }
 
-        CypherAnalyzer analyzer(ast, view);
+        CypherAnalyzer analyzer(&ast, view);
 
         try {
             auto t0 = Clock::now();

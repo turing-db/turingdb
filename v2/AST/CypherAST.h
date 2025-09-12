@@ -104,6 +104,8 @@ public:
 
     const QueryCommands& queries() const { return _queries; }
 
+    void setDebugLocations(bool debugLocations) { _debugLocations = debugLocations; }
+
     template <typename T>
     const SourceLocation* getLocation(T* obj) const {
         return getLocation((uintptr_t)obj);
@@ -111,6 +113,7 @@ public:
 
 private:
     std::string_view _queryStr;
+    bool _debugLocations {false};
     std::vector<Symbol*> _symbols;
     std::vector<QualifiedName*> _qualifiedNames;
     std::vector<Literal*> _literals;

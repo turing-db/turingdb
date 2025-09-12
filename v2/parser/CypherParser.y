@@ -663,7 +663,15 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = NodePattern::create(ast); $$->setSymbol($2); $$->setLabels(std::move($3.value())); $$->setProperties($4); LOC($$, @$); }
+    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN {
+        $$ = NodePattern::create(ast);
+        $$->setSymbol($2);
+        if ($3.has_value()) {
+            $$->setLabels(std::move($3.value()));
+        }
+        $$->setProperties($4);
+        LOC($$, @$);
+    }
     ;
 
 opt_symbol

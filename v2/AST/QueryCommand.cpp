@@ -2,7 +2,8 @@
 
 using namespace db::v2;
 
-QueryCommand::QueryCommand()
+QueryCommand::QueryCommand(DeclContext* declContext)
+    : _declContext(declContext)
 {
 }
 

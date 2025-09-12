@@ -18,8 +18,7 @@ public:
         PROPERTY,
         PATH,
         SYMBOL,
-        LITERAL,
-        PARAMETER,
+        LITERAL
     };
 
     Kind getKind() const { return _exprKind; }
