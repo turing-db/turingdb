@@ -82,30 +82,6 @@ public:
         _pendingNodes.emplace_back(labels, properties);
     }
 
-    template <typename... Props>
-    void addPendingNode(std::vector<std::string>& labels, Props&&... props) {
-        // The number of properties on this node
-        const size_t numProps = sizeof...(props);
-
-        // We store properties internally in the write buffer as @ref UntypedProperty
-        std::vector<UntypedProperty> internalProperties;
-        internalProperties.reserve(numProps);
-
-        // Construct the vector of @ref UntypedProperty using a fold expression:
-        // 1. Unpack an element of @ref props into the property name and value
-        // 2. Construct our internal @ref UntypedProperty representation in place in our
-        // vector of properties
-        // 3. Do this over all elements of @ref props (with the ...). 
-        (...,
-            [&]() {
-                auto&& [propertyName, propertyValue] = std::forward<Props>(props);
-                internalProperties.emplace_back(
-                    UntypedProperty {propertyName, propertyValue});
-            }()
-        );
-
-        _pendingNodes.emplace_back(std::move(labels), std::move(internalProperties));
-    }
 
     void addPendingEdge(std::optional<NodeID> src, std::optional<NodeID> tgt,
                         std::vector<std::string> labels,

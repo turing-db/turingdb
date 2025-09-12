@@ -29,6 +29,7 @@ class LoadGraphCommand;
 class ExplainCommand;
 class ImportGraphCommand;
 class VarDecl;
+class PathPattern;
 class ReturnField;
 class Block;
 
@@ -84,6 +85,9 @@ private:
     // Planning functions
     bool planMatch(const MatchCommand* matchCmd);
     bool planCreate(const CreateCommand* createCmd);
+    void planCreateNode(const EntityPattern* nodePattern);
+    void planCreateEdges(const PathPattern* pathPattern);
+
     void planInjectNodes(const std::vector<EntityPattern*>& path);
     void planPath(const std::vector<EntityPattern*>& path);
 
