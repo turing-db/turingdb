@@ -172,12 +172,85 @@ bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
     return true;
 }
 
-bool planCreateNode() {
-    return false;
+void QueryPlanner::planCreateNode(const EntityPattern* nodePattern) {
+    VarDecl* nodeDcl = nodePattern->getVar()->getDecl();
+
+    if (!nodeDcl->getColumn()) {
+        auto* nodeIDCol = _mem->alloc<ColumnNodeID>();
+        nodeDcl->setColumn(nodeIDCol);
+
+        const NodeID nodeID = nodePattern->getEntityID();
+
+        // If there is no previous decl, and no injected ID, create node node
+        if (!nodeID.isValid() && !nodePattern->getInjectedIDs()) {
+            _pipeline->add<CreateNodeStep>(nodePattern);
+        } else if (nodeID.isValid()) { // If there is previous decl, use that
+            nodeIDCol->set(nodeID);
+        } else if (nodePattern->getInjectedIDs()) { // If there is injected ID, use that
+            // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
+            // injected ID (if any), set this node to have that injected ID
+            nodeIDCol->set(nodePattern->getInjectedIDs()->getIDs().front());
+        } else {
+            throw PlannerException(
+                "Could not find previous declaration nor injected ID for node.");
+        }
+    }
 }
 
-bool planCreateEdges() {
-    return false;
+void QueryPlanner::planCreateEdges(const PathPattern* pathPattern) {
+    std::span pathElements {pathPattern->elements()};
+
+    EntityPattern* src = pathElements[0];
+    VarDecl* srcDcl = src->getVar()->getDecl();
+
+    if (!srcDcl->getColumn()) {
+        auto* nodeID = _mem->alloc<ColumnNodeID>();
+        srcDcl->setColumn(nodeID);
+
+        const NodeID srcID = src->getEntityID();
+
+        // If there is no previous decl, and no injected ID, create src node
+        if (!srcID.isValid() && !src->getInjectedIDs()) {
+            _pipeline->add<CreateNodeStep>(src);
+        } else if (srcID.isValid()) { // If there is previous decl, use that
+            nodeID->set(srcID);
+        } else if (src->getInjectedIDs()) { // If there is injected ID, use that
+            // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
+            // injected ID (if any), set this node to have that injected ID
+            nodeID->set(src->getInjectedIDs()->getIDs().front());
+        } else {
+            throw PlannerException(
+                "Could not find previous declaration nor injected ID for node.");
+        }
+    }
+
+    for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
+        // Create the target + the edge (the source is already created)
+        const EntityPattern* edge = step[0];
+        EntityPattern* tgt = step[1];
+        VarDecl* edgeDecl = edge->getVar()->getDecl();
+        VarDecl* tgtDecl = tgt->getVar()->getDecl();
+
+        auto edgeID = _mem->alloc<ColumnEdgeID>();
+        edgeDecl->setColumn(edgeID);
+
+        if (!tgtDecl->getColumn()) {
+            auto* tgtID = _mem->alloc<ColumnNodeID>();
+
+            // NOTE: As above, @ref QueryPlanner::analyzeEntityPattern ensures that
+            // there is exactly 1 or 0 injected IDs
+            if (tgt->getInjectedIDs()) { // If injected ID for target, set that
+                tgtID->set(tgt->getInjectedIDs()->getIDs().at(0));
+            } else { // If target ID is invalid, it will be created
+                tgtID->set(tgt->getEntityID());
+            }
+
+            tgtDecl->setColumn(tgtID);
+        }
+
+        _pipeline->add<CreateEdgeStep>(src, edge, tgt);
+        src = tgt; // Assign the current target as the source for the next edge
+    }
 }
 
 bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
@@ -200,66 +273,15 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             return false;
         }
 
-        EntityPattern* src = pathElements[0];
-        VarDecl* srcDcl = src->getVar()->getDecl();
-
-        if (!srcDcl->getColumn()) {
-            auto* nodeID = _mem->alloc<ColumnNodeID>();
-            srcDcl->setColumn(nodeID);
-
-            const NodeID srcID = src->getEntityID();
-
-            // If there is no previous decl, and no injected ID, create src node
-            if (!srcID.isValid() && !src->getInjectedIDs()) {
-                _pipeline->add<CreateNodeStep>(src);
-            } else if (srcID.isValid()) { // If there is previous decl, use that
-                nodeID->set(srcID);
-            } else if (src->getInjectedIDs()){ // If there is injected ID, use that
-                // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
-                // injected ID (if any), set this node to have that injected ID
-                nodeID->set(src->getInjectedIDs()->getIDs().front());
-            } else {
-                throw PlannerException(
-                    "Could not find previous declaration nor injected ID for node.");
-            }
-        }
-
         if (pathElements.size() == 1) {
-            continue;
-        }
-
-        for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
-            // Create the target + the edge (the source is already created)
-            const EntityPattern* edge = step[0];
-            EntityPattern* tgt = step[1];
-            VarDecl* edgeDecl = edge->getVar()->getDecl();
-            VarDecl* tgtDecl = tgt->getVar()->getDecl();
-
-            auto edgeID = _mem->alloc<ColumnEdgeID>();
-            edgeDecl->setColumn(edgeID);
-
-            if (!tgtDecl->getColumn()) {
-                auto* tgtID = _mem->alloc<ColumnNodeID>();
-
-                // NOTE: As above, @ref QueryPlanner::analyzeEntityPattern ensures that
-                // there is exactly 1 or 0 injected IDs
-                if (tgt->getInjectedIDs()) { // If injected ID for target, set that
-                    tgtID->set(tgt->getInjectedIDs()->getIDs().at(0));
-                } else { // If target ID is invalid, it will be created
-                    tgtID->set(tgt->getEntityID());
-                }
-
-                tgtDecl->setColumn(tgtID);
-            }
-
-            _pipeline->add<CreateEdgeStep>(src, edge, tgt);
-            src = tgt; // Assign the current target as the source for the next edge
+            planCreateNode(pathElements.front());
+        } else {
+            planCreateEdges(path);
         }
     }
 
     // Add END step
     _pipeline->add<EndStep>();
-
     return true;
 }
 
