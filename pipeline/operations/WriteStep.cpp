@@ -95,7 +95,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     const std::string& nodeVarName = nodePattern->getVar()->getName();
 
     _writeBuffer->addPendingNode(nodeLabels, nodeProperties);
-    _writeBuffer->_varNodeMap[nodeVarName] = thisNodeOffset;
+    _varOffsetMap[nodeVarName] = thisNodeOffset;
 
     return thisNodeOffset;
 }
@@ -104,9 +104,9 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern*
     const std::string& nodeVarName = nodePattern->getVar()->getName();
 
     // Check to see if this node has been written already by searching its variable name
-    auto pendingNodeIt = _writeBuffer->_varNodeMap.find(nodeVarName);
+    auto pendingNodeIt = _varOffsetMap.find(nodeVarName);
 
-    if (pendingNodeIt != _writeBuffer->_varNodeMap.end()) {
+    if (pendingNodeIt != _varOffsetMap.end()) {
         return pendingNodeIt->second; // PendingNodeOffset to the PendingNode of this node
     }
 

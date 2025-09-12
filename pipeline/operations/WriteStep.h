@@ -41,10 +41,10 @@ private:
 
     /**
      * @brief Mapping from variable names to offsets in @ref _writeBuffer 's @ref
-     * _pendingNodes vector
+     * _pendingNodes vector.
      * @detail Allows nodes which may be referred to by edges in the same or a different
      * CreateTarget to be correctly referred to when creating PendingEdges in the
-     * CommitWriteBuffer
+     * CommitWriteBuffer.
      */
     std::unordered_map<std::string, CommitWriteBuffer::PendingNodeOffset> _varOffsetMap;
 
