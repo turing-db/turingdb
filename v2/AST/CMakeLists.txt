@@ -4,8 +4,9 @@ set(ast_sources
     CypherError.cpp
 
     decl/DeclContext.cpp
-    decl/DeclContainer.cpp
-    
+    decl/PatternData.cpp
+    decl/VarDecl.cpp
+
     expr/BinaryExpr.cpp
     expr/LiteralExpr.cpp
     expr/NodeLabelExpr.cpp
@@ -15,19 +16,26 @@ set(ast_sources
     expr/StringExpr.cpp
     expr/SymbolExpr.cpp
     expr/UnaryExpr.cpp
+    expr/Literal.cpp
 
     stmt/Stmt.cpp
-    stmt/CompoundStmt.cpp
+    stmt/StmtContainer.cpp
     stmt/MatchStmt.cpp
+    stmt/ReturnStmt.cpp
+    stmt/Limit.cpp
+    stmt/Skip.cpp
 
     Pattern.cpp
     PatternElement.cpp
     EntityPattern.cpp
     Projection.cpp
-    #EdgePattern.cpp
-    #NodePattern.cpp
     QueryCommand.cpp
     SinglePartQuery.cpp
+    NodePattern.cpp
+    EdgePattern.cpp
+    Symbol.cpp
+    QualifiedName.cpp
+    WhereClause.cpp
 
     ASTException.cpp)
 

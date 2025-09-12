@@ -2,32 +2,23 @@
 
 #include "Expr.h"
 
-#include "Symbol.h"
-
 namespace db::v2 {
 
-class VarDecl;
 class CypherAST;
+class Symbol;
 
 class SymbolExpr : public Expr {
 public:
-    static SymbolExpr* create(CypherAST* ast, const Symbol& symbol);
+    static SymbolExpr* create(CypherAST* ast, Symbol* symbol);
 
-    bool hasVar() const { return _var != nullptr; }
+    Symbol* getSymbol() const { return _symbol; }
 
-    const Symbol& symbol() const { return _symbol; }
-
-    const VarDecl& var() const { return *_var; }
-
-    VarDecl& var() { return *_var; }
-
-    void setDecl(VarDecl& var) { _var = &var; }
+    void setSymbol(Symbol* symbol) { _symbol = symbol; }
 
 private:
-    Symbol _symbol;
-    VarDecl* _var {nullptr};
+    Symbol* _symbol {nullptr};
 
-    explicit SymbolExpr(const Symbol& symbol)
+    explicit SymbolExpr(Symbol* symbol)
         : Expr(Kind::SYMBOL),
         _symbol(symbol)
     {

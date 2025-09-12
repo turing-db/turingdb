@@ -15,19 +15,17 @@ public:
 
     static Pattern* create(CypherAST* ast);
 
-    void setWhere(WhereClause* where) { _where = where; }
-
+    const PatternElements& elements() const { return _elems; }
     WhereClause* getWhere() const { return _where; }
 
+    void setWhere(WhereClause* where) { _where = where; }
     void addElement(PatternElement* element) { _elems.push_back(element); }
-
-    const PatternElements& elements() const { return _elems; }
 
 private:
     PatternElements _elems;
     WhereClause* _where {nullptr};
 
-    Pattern() = default;
+    Pattern();
     ~Pattern();
 };
 

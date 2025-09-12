@@ -1,34 +1,29 @@
 #pragma once
 
-#include "expressions/Expression.h"
-
 namespace db::v2 {
+
+class CypherAST;
+class Expr;
 
 class WhereClause {
 public:
-    WhereClause() = default;
-    ~WhereClause() = default;
+    friend CypherAST;
 
-    WhereClause(const WhereClause&) = default;
-    WhereClause(WhereClause&&) = default;
-    WhereClause& operator=(const WhereClause&) = default;
-    WhereClause& operator=(WhereClause&&) = default;
+    static WhereClause* create(CypherAST* ast, Expr* expr);
 
-    WhereClause(Expression* expression)
-        : _expression(expression)
+    Expr* getExpr() const { return _expr; }
+
+    void setExpr(Expr* expr) { _expr = expr; }
+
+private:
+    Expr* _expr {nullptr};
+
+    WhereClause(Expr* expr)
+        : _expr(expr)
     {
     }
 
-    Expression& getExpression() const {
-        return *_expression;
-    }
-
-    void setExpression(Expression* expression) {
-        _expression = expression;
-    }
-
-private:
-    Expression* _expression {nullptr};
+    ~WhereClause() = default;
 };
 
 }

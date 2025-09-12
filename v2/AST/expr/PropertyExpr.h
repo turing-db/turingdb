@@ -2,29 +2,27 @@
 
 #include "Expr.h"
 
-#include "QualifiedName.h"
-
 namespace db::v2 {
 
-class VarDecl;
+class QualifiedName;
 class CypherAST;
+class VarDecl;
 
 class PropertyExpr : public Expr {
 public:
-    bool hasDecl() const { return _decl != nullptr; }
+    const QualifiedName* getName() const { return _name; }
 
-    const VarDecl& decl() const { return *_decl; }
-    const QualifiedName& name() const { return _name; }
+    static PropertyExpr* create(CypherAST* ast, QualifiedName* name);
 
-    void setDecl(const VarDecl* decl) { _decl = decl; }
+    VarDecl* getDecl() const { return _decl; }
 
-    static PropertyExpr* create(CypherAST* ast, const QualifiedName& name);
+    void setDecl(VarDecl* decl) { _decl = decl; }
 
 private:
-    QualifiedName _name;
-    const VarDecl* _decl {nullptr};
+    QualifiedName* _name {nullptr};
+    VarDecl* _decl {nullptr};
 
-    PropertyExpr(const QualifiedName& name)
+    PropertyExpr(QualifiedName* name)
         : Expr(Kind::PROPERTY),
         _name(name)
     {

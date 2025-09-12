@@ -8,11 +8,8 @@ MatchStmt::~MatchStmt() {
 }
 
 MatchStmt* MatchStmt::create(CypherAST* ast,
-                             Pattern* pattern,
-                             Skip* skip,
-                             Limit* limit,
-                             bool optional) {
-    MatchStmt* stmt = new MatchStmt(pattern, skip, limit, optional);
+                             Pattern* pattern) {
+    MatchStmt* stmt = new MatchStmt(pattern);
     ast->addStmt(stmt);
     return stmt;
 }

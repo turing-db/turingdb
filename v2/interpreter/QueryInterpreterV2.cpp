@@ -45,11 +45,11 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
         }
     }
 
-    auto view = txRes->viewGraph();
+    const GraphView view = txRes->viewGraph();
 
     // Parsing query
     CypherAST ast(query);
-    CypherParser parser(ast);
+    CypherParser parser(&ast);
     try {
         parser.parse(query);
     } catch (const ParserException& e) {
@@ -63,7 +63,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     }
 
     // Analyze query
-    CypherAnalyzer analyzer(ast, view);
+    CypherAnalyzer analyzer(&ast, view);
     try {
         analyzer.analyze();
     } catch (const AnalyzeException& e) {

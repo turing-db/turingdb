@@ -11,13 +11,7 @@ class CypherAST;
 
 class MatchStmt : public Stmt {
 public:
-    static MatchStmt* create(CypherAST* ast,
-                             Pattern* pattern,
-                             Skip* skip = nullptr,
-                             Limit* limit = nullptr,
-                             bool optional = false);
-
-    bool hasPattern() const { return _pattern != nullptr; }
+    static MatchStmt* create(CypherAST* ast, Pattern* pattern);
 
     bool isOptional() const { return _optional; }
 
@@ -31,20 +25,18 @@ public:
 
     const Pattern* getPattern() const { return _pattern; }
 
+    void setLimit(Limit* limit) { _limit = limit; }
+    void setSkip(Skip* skip) { _skip = skip; }
+    void setOptional(bool optional) { _optional = optional; }
+
 private:
     Pattern* _pattern {nullptr};
     Limit* _limit {nullptr};
     Skip* _skip {nullptr};
     bool _optional {false};
 
-    MatchStmt(Pattern* pattern,
-              Skip* skip = nullptr,
-              Limit* limit = nullptr,
-              bool optional = false)
-        : _pattern(pattern),
-        _limit(limit),
-        _skip(skip),
-        _optional(optional)
+    MatchStmt(Pattern* pattern)
+        : _pattern(pattern)
     {
     }
 

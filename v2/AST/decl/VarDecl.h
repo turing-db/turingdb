@@ -1,49 +1,37 @@
 #pragma once
 
-#include "decl/DeclID.h"
+#include <string_view>
+
 #include "decl/EvaluatedType.h"
 
 namespace db::v2 {
 
+class CypherAST;
+class DeclContext;
+
 class VarDecl {
 public:
-    ~VarDecl() = default;
+    friend CypherAST;
 
-    VarDecl(EvaluatedType type = EvaluatedType::Invalid, DeclID id = -1)
-        : _id(id),
-          _type(type)
+    static VarDecl* create(CypherAST* ast,
+                           DeclContext* declContext,
+                           std::string_view name,
+                           EvaluatedType type);
+
+    EvaluatedType getType() const { return _type; }
+    const std::string_view& getName() const { return _name; }
+
+private:
+    EvaluatedType _type {EvaluatedType::Invalid};
+    std::string_view _name;
+
+    VarDecl(EvaluatedType type, std::string_view name)
+        : _type(type),
+        _name(name)
     {
     }
 
-    VarDecl(const VarDecl&) = delete;
-    VarDecl(VarDecl&&) = delete;
-    VarDecl& operator=(const VarDecl&) = delete;
-    VarDecl& operator=(VarDecl&&) = delete;
-
-    DeclID id() const {
-        return _id;
-    }
-
-    bool valid() const {
-        return _id.valid();
-    }
-
-    EvaluatedType type() const {
-        return _type;
-    }
-
-    const std::string_view& name() const {
-        return _name;
-    }
-
-    void setName(std::string_view name) {
-        _name = name;
-    }
-
-private:
-    DeclID _id;
-    EvaluatedType _type {EvaluatedType::Invalid};
-    std::string_view _name;
+    ~VarDecl() = default;
 };
 
 }

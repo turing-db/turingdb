@@ -6,8 +6,7 @@ namespace db::v2 {
 
 class CypherAST;
 class PatternElement;
-class NodePattern;
-class EdgePattern;
+class EntityPattern;
 
 class PathExpr : public Expr {
 public:
@@ -15,9 +14,7 @@ public:
 
     PatternElement* pattern() const { return _pattern; }
 
-    void addNode(NodePattern* node);
-
-    void addEdge(EdgePattern* edge);
+    void addEntity(EntityPattern* entity);
 
 private:
     PatternElement* _pattern {nullptr};

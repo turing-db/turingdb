@@ -9,7 +9,7 @@ namespace db::v2 {
 
 class Limit;
 class Skip;
-class Expression;
+class Expr;
 class CypherAST;
 
 class Projection {
@@ -17,7 +17,7 @@ public:
     friend CypherAST;
     struct All {};
 
-    using ItemVector = std::vector<Expression*>;
+    using ItemVector = std::vector<Expr*>;
 
     static Projection* create(CypherAST* ast);
 
@@ -57,17 +57,17 @@ public:
         return *_skip;
     }
 
-    const std::vector<Expression*>& items() const {
-        return std::get<std::vector<Expression*>>(_items);
+    const std::vector<Expr*>& items() const {
+        return std::get<std::vector<Expr*>>(_items);
     }
 
-    void add(Expression* expression) {
+    void add(Expr* Expr) {
         auto* items = std::get_if<ItemVector>(&_items);
         if (!items) {
             throw ASTException("Cannot add item to a projection that already holds '*'");
         }
 
-        items->emplace_back(expression);
+        items->emplace_back(Expr);
     }
 
     void setAll() {
@@ -82,7 +82,7 @@ private:
 
     std::variant<ItemVector, All> _items;
 
-    Projection() = default;
+    Projection();
     ~Projection();
 };
 

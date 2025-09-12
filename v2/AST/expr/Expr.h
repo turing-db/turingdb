@@ -24,9 +24,9 @@ public:
 
     Kind getKind() const { return _exprKind; }
 
-    EvaluatedType getValueType() const { return _valueType; }
+    virtual EvaluatedType getType() const { return _type; }
 
-    void setValueType(EvaluatedType valueType) { _valueType = valueType; }
+    void setType(EvaluatedType type) { _type = type; }
 
 protected:
     explicit Expr(Kind kind)
@@ -43,7 +43,7 @@ protected:
 
 private:
     Kind _exprKind;
-    EvaluatedType _valueType {EvaluatedType::Invalid};
+    EvaluatedType _type {EvaluatedType::Invalid};
 };
 
 }

@@ -4,6 +4,10 @@
 
 using namespace db::v2;
 
+Projection::Projection()
+{
+}
+
 Projection::~Projection() {
 }
 

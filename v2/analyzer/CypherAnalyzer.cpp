@@ -3,285 +3,295 @@
 #include <spdlog/fmt/bundled/core.h>
 
 #include "AnalyzeException.h"
-#include "CypherError.h"
+
 #include "CypherAST.h"
-
+#include "QueryCommand.h"
+#include "SinglePartQuery.h"
+#include "stmt/MatchStmt.h"
+#include "stmt/ReturnStmt.h"
+#include "stmt/StmtContainer.h"
+#include "Projection.h"
+#include "WhereClause.h"
+#include "Pattern.h"
+#include "PatternElement.h"
+#include "expr/Expr.h"
+#include "Symbol.h"
+#include "NodePattern.h"
+#include "EdgePattern.h"
 #include "decl/PatternData.h"
-#include "decl/DeclContext.h"
+#include "expr/Literal.h"
 #include "decl/VarDecl.h"
-#include "decl/EvaluatedType.h"
+#include "decl/DeclContext.h"
+#include "QualifiedName.h"
+#include "CypherError.h"
 
-#include "types/SinglePartQuery.h"
-#include "types/Projection.h"
-
-#include "expressions/All.h"
-
-#include "statements/Match.h"
-#include "statements/Skip.h"
-#include "statements/Limit.h"
-#include "statements/Return.h"
+#include "expr/All.h"
 
 using namespace db::v2;
 
-CypherAnalyzer::CypherAnalyzer(CypherAST& ast, GraphView graphView)
+CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
     _graphView(graphView),
     _graphMetadata(graphView.metadata())
 {
 }
 
-CypherAnalyzer::~CypherAnalyzer() = default;
+CypherAnalyzer::~CypherAnalyzer() {
+}
 
 void CypherAnalyzer::analyze() {
-    for (const auto& query : _ast.queries()) {
-        _ctxt = &query->getRootContext();
+    for (const QueryCommand* query : _ast->queries()) {
+        _ctxt = query->getDeclContext();
 
-        if (const auto* q = dynamic_cast<SinglePartQuery*>(query.get())) {
-            analyze(*q);
+        if (const SinglePartQuery* q = dynamic_cast<const SinglePartQuery*>(query)) {
+            analyze(q);
         } else {
-            throwError("Unsupported query type", query.get());
+            throwError("Unsupported query type", query);
         }
     }
 }
 
-void CypherAnalyzer::analyze(const SinglePartQuery& query) {
-    for (const auto* statement : query.getStatements()) {
-        if (const auto* s = dynamic_cast<const Match*>(statement)) {
-            analyze(*s);
-        } else if (const auto* s = dynamic_cast<const Return*>(statement)) {
-            analyze(*s);
+void CypherAnalyzer::analyze(const SinglePartQuery* query) {
+    // Read statements
+    for (const Stmt* statement : query->getReadStmts()->stmts()) {
+        if (const MatchStmt* s = dynamic_cast<const MatchStmt*>(statement)) {
+            analyze(s);
         } else {
             throwError("Unsupported statement type", statement);
         }
     }
+    
+    if (const ReturnStmt* returnStmt = query->getReturnStmt()) {
+        analyze(returnStmt);
+    }
 }
 
-void CypherAnalyzer::analyze(const Match& matchSt) {
-    if (matchSt.isOptional()) {
+void CypherAnalyzer::analyze(const MatchStmt* matchSt) {
+    if (matchSt->isOptional()) {
         throwError("OPTIONAL MATCH not supported", &matchSt);
     }
 
-    if (!matchSt.hasPattern()) {
+    const Pattern* pattern = matchSt->getPattern();
+    if (!pattern) {
         throwError("MATCH statement must have a pattern", &matchSt);
     }
 
-    const auto& pattern = matchSt.getPattern();
     analyze(pattern);
 
-    if (matchSt.hasLimit()) {
+    if (matchSt->hasLimit()) {
         throwError("LIMIT not supported", &matchSt);
     }
 
-    if (matchSt.hasSkip()) {
+    if (matchSt->hasSkip()) {
         throwError("SKIP not supported", &matchSt);
     }
 }
 
-void CypherAnalyzer::analyze(const Skip& skipSt) {
-    throwError("SKIP not supported", &skipSt);
+void CypherAnalyzer::analyze(const Skip* skip) {
+    throwError("SKIP not supported", skip);
 }
 
-void CypherAnalyzer::analyze(const Limit& limitSt) {
-    throwError("LIMIT not supported", &limitSt);
+void CypherAnalyzer::analyze(const Limit* limit) {
+    throwError("LIMIT not supported", limit);
 }
 
-void CypherAnalyzer::analyze(const Return& returnSt) {
-    const auto& projection = returnSt.getProjection();
-    if (projection.isDistinct()) {
+void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
+    const Projection* projection = returnSt->getProjection();
+    if (projection->isDistinct()) {
         throwError("DISTINCT not supported", &returnSt);
     }
 
-    if (projection.hasSkip()) {
+    if (projection->hasSkip()) {
         throwError("SKIP not supported", &returnSt);
     }
 
-    if (projection.hasLimit()) {
+    if (projection->hasLimit()) {
         throwError("LIMIT not supported", &returnSt);
     }
 
-    if (projection.isAll()) {
+    if (projection->isAll()) {
         return;
     }
 
-    for (Expression* item : projection.items()) {
-        analyze(*item);
+    for (Expr* item : projection->items()) {
+        analyze(item);
     }
 }
 
-void CypherAnalyzer::analyze(const Pattern& pattern) {
-    if (pattern.elements().empty()) {
+void CypherAnalyzer::analyze(const Pattern* pattern) {
+    if (pattern->elements().empty()) {
         throwError("Empty pattern", &pattern);
     }
 
-    for (const auto& element : pattern.elements()) {
-        analyze(*element);
+    for (const PatternElement* element : pattern->elements()) {
+        analyze(element);
     }
 
-    if (pattern.hasWhere()) {
-        auto& whereExpr = pattern.getWhere().getExpression();
+    if (const WhereClause* where = pattern->getWhere()) {
+        Expr* whereExpr = where->getExpr();
         analyze(whereExpr);
 
-        if (whereExpr.type() != EvaluatedType::Bool) {
-            throwError("WHERE expression must be a boolean", &pattern);
+        if (whereExpr->getType() != EvaluatedType::Bool) {
+            throwError("WHERE expression must be a boolean", pattern);
         }
     }
 }
 
-void CypherAnalyzer::analyze(const PatternElement& element) {
-    const auto& entities = element.getEntities();
+void CypherAnalyzer::analyze(const PatternElement* element) {
+    const auto& entities = element->getEntities();
 
-    for (const auto& entity : entities) {
-        if (auto* node = dynamic_cast<NodePattern*>(entity)) {
-            analyze(*node);
-        } else if (auto* edge = dynamic_cast<EdgePattern*>(entity)) {
-            analyze(*edge);
+    for (EntityPattern* entity : entities) {
+        if (NodePattern* node = dynamic_cast<NodePattern*>(entity)) {
+            analyze(node);
+        } else if (EdgePattern* edge = dynamic_cast<EdgePattern*>(entity)) {
+            analyze(edge);
         } else {
             throwError("Unsupported pattern entity type", entity);
         }
     }
 }
 
-void CypherAnalyzer::analyze(NodePattern& node) {
-    if (node.hasSymbol()) {
-        VarDecl& decl = _ctxt->getOrCreateNamedVariable(EvaluatedType::NodePattern, node.symbol()._name);
-        node.setDecl(&decl);
+void CypherAnalyzer::analyze(NodePattern* nodePattern) {
+    if (Symbol* symbol = nodePattern->getSymbol()) {
+        VarDecl* decl = getOrCreateNamedVariable(EvaluatedType::NodePattern, symbol->getName());
+        nodePattern->setDecl(decl);
     }
 
-    auto& data = _ast.newAnalysisData<NodePatternData>(EvaluatedType::NodePattern);
-    node.setData(&data);
+    NodePatternData* data = NodePatternData::create(_ast);
+    nodePattern->setData(data);
 
-    if (node.hasLabels()) {
-        const auto& labelMap = _graphMetadata.labels();
+    const auto& labels = nodePattern->labels();
+    if (!labels.empty()) {
+        const LabelMap& labelMap = _graphMetadata.labels();
 
-        for (const auto& label : node.labels()) {
-            const std::optional<LabelID> labelID = labelMap.get(label);
-
+        for (const Symbol* label : labels) {
+            const std::optional<LabelID> labelID = labelMap.get(label->getName());
             if (!labelID) {
-                throwError(fmt::format("Unknown label: {}", label), &node);
+                throwError(fmt::format("Unknown label: {}", label->getName()), &nodePattern);
             }
 
-            data._labelConstraints.set(labelID.value());
+            data->addLabelConstraint(labelID.value());
         }
     }
 
-    if (node.hasProperties()) {
-        const auto& propTypeMap = _graphMetadata.propTypes();
+    const MapLiteral* properties = nodePattern->getProperties();
+    if (properties) {
+        const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
-        for (const auto& [propName, expr] : node.properties()) {
-            analyze(*expr);
+        for (const auto& [propName, expr] : *properties) {
+            analyze(expr);
 
-            const std::optional<PropertyType> propType = propTypeMap.get(propName);
-
+            const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (!propType) {
-                throwError(fmt::format("Unknown property: {}", propName), &node);
+                throwError(fmt::format("Unknown property: {}", propName->getName()), nodePattern);
             }
 
-            data._exprConstraints.emplace_back(propType.value(), expr);
+            data->addExprConstraint(propType.value(), expr);
 
-            if (!propTypeCompatible(propType->_valueType, expr->type())) {
+            if (!propTypeCompatible(propType->_valueType, expr->getType())) {
                 throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
-                                       EvaluatedTypeName::value(expr->type())),
-                           &node);
+                                       EvaluatedTypeName::value(expr->getType())),
+                           nodePattern);
             }
         }
     }
 }
 
-void CypherAnalyzer::analyze(EdgePattern& edge) {
-    if (edge.hasSymbol()) {
-        VarDecl& decl = _ctxt->getOrCreateNamedVariable(EvaluatedType::EdgePattern, edge.symbol()._name);
-        edge.setDecl(&decl);
+void CypherAnalyzer::analyze(EdgePattern* edgePattern) {
+    if (Symbol* symbol = edgePattern->getSymbol()) {
+        VarDecl* decl = getOrCreateNamedVariable(EvaluatedType::EdgePattern, symbol->getName());
+        edgePattern->setDecl(decl);
     }
 
-    auto& data = _ast.newAnalysisData<EdgePatternData>(EvaluatedType::EdgePattern);
-    edge.setData(&data);
+    EdgePatternData* data = EdgePatternData::create(_ast);
+    edgePattern->setData(data);
 
-    if (edge.hasTypes()) {
-        const auto& edgeTypeMap = _graphMetadata.edgeTypes();
+    const auto& types = edgePattern->types();
+    if (!types.empty()) {
+        const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
 
-        for (const auto& et : edge.types()) {
-            const std::optional<EdgeTypeID> etID = edgeTypeMap.get(et);
-
+        for (const Symbol* edgeTypeSymbol : types) {
+            const std::optional<EdgeTypeID> etID = edgeTypeMap.get(edgeTypeSymbol->getName());
             if (!etID) {
-                throwError(fmt::format("Unknown edge type: {}", et), &edge);
+                throwError(fmt::format("Unknown edge type: {}", edgeTypeSymbol->getName()), edgePattern);
             }
 
-            data._edgeTypeConstraints.push_back(etID.value());
+            data->addEdgeTypeConstraint(etID.value());
         }
     }
 
-    if (edge.hasProperties()) {
-        const auto& propTypeMap = _graphMetadata.propTypes();
+    const MapLiteral* properties = edgePattern->getProperties();
+    if (properties) {
+        const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
-        for (const auto& [propName, expr] : edge.properties()) {
-            analyze(*expr);
+        for (const auto& [propName, expr] : *properties) {
+            analyze(expr);
 
-            const std::optional<PropertyType> propType = propTypeMap.get(propName);
-
+            const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (!propType) {
-                throwError(fmt::format("Unknown property: {}", propName), &edge);
+                throwError(fmt::format("Unknown property: {}", propName->getName()), edgePattern);
             }
 
-            data._exprConstraints.emplace_back(propType.value(), expr);
+            data->addExprConstraint(propType.value(), expr);
 
-            if (!propTypeCompatible(propType->_valueType, expr->type())) {
+            if (!propTypeCompatible(propType->_valueType, expr->getType())) {
                 throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
-                                       EvaluatedTypeName::value(expr->type())),
-                           &edge);
+                                       EvaluatedTypeName::value(expr->getType())),
+                           edgePattern);
             }
         }
     }
 }
 
-void CypherAnalyzer::analyze(Expression& expr) {
-    switch (expr.kind()) {
-        case ExpressionType::Binary:
-            analyze(*expr.as<BinaryExpression>());
+void CypherAnalyzer::analyze(Expr* expr) {
+    switch (expr->getKind()) {
+        case Expr::Kind::BINARY:
+            analyze(dynamic_cast<BinaryExpr*>(expr));
             break;
-        case ExpressionType::Unary:
-            analyze(*expr.as<UnaryExpression>());
+        case Expr::Kind::UNARY:
+            analyze(dynamic_cast<UnaryExpr*>(expr));
             break;
-        case ExpressionType::String:
-            analyze(*expr.as<StringExpression>());
+        case Expr::Kind::STRING:
+            analyze(dynamic_cast<StringExpr*>(expr));
             break;
-        case ExpressionType::NodeLabel:
-            analyze(*expr.as<NodeLabelExpression>());
+        case Expr::Kind::NODE_LABEL:
+            analyze(dynamic_cast<NodeLabelExpr*>(expr));
             break;
-        case ExpressionType::Property:
-            analyze(*expr.as<PropertyExpression>());
+        case Expr::Kind::PROPERTY:
+            analyze(dynamic_cast<PropertyExpr*>(expr));
             break;
-        case ExpressionType::Path:
-            analyze(*expr.as<PathExpression>());
+        case Expr::Kind::PATH:
+            analyze(dynamic_cast<PathExpr*>(expr));
             break;
-        case ExpressionType::Symbol:
-            analyze(*expr.as<SymbolExpression>());
+        case Expr::Kind::SYMBOL:
+            analyze(dynamic_cast<SymbolExpr*>(expr));
             break;
-        case ExpressionType::Literal:
-            analyze(*expr.as<LiteralExpression>());
+        case Expr::Kind::LITERAL:
+            analyze(dynamic_cast<LiteralExpr*>(expr));
             break;
-        case ExpressionType::Parameter:
-            analyze(*expr.as<ParameterExpression>());
+        case Expr::Kind::PARAMETER:
+            analyze(dynamic_cast<ParameterExpr*>(expr));
             break;
     }
 }
 
-void CypherAnalyzer::analyze(BinaryExpression& expr) {
-    auto& lhs = expr.left();
-    auto& rhs = expr.right();
+void CypherAnalyzer::analyze(BinaryExpr* expr) {
+    Expr* lhs = expr->getLHS();
+    Expr* rhs = expr->getRHS();
 
     analyze(lhs);
     analyze(rhs);
 
-    const EvaluatedType a = lhs.type();
-    const EvaluatedType b = rhs.type();
+    const EvaluatedType a = lhs->getType();
+    const EvaluatedType b = rhs->getType();
 
     EvaluatedType type = EvaluatedType::Invalid;
 
     const TypePairBitset pair {a, b};
 
-    switch (expr.getBinaryOperator()) {
+    switch (expr->getOperator()) {
         case BinaryOperator::Or:
         case BinaryOperator::Xor:
         case BinaryOperator::And: {
@@ -294,7 +304,7 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
             const std::string error = fmt::format("Operands must be booleans, not '{}' and '{}'",
                                                   EvaluatedTypeName::value(a),
                                                   EvaluatedTypeName::value(b));
-            throwError(std::move(error), &expr);
+            throwError(std::move(error), expr);
         } break;
 
         case BinaryOperator::NotEqual:
@@ -312,7 +322,7 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
             const std::string error = fmt::format("Operands are not valid or compatible types: '{}' and '{}'",
                                                   EvaluatedTypeName::value(a),
                                                   EvaluatedTypeName::value(b));
-            throwError(std::move(error), &expr);
+            throwError(std::move(error), expr);
         } break;
         case BinaryOperator::LessThan:
         case BinaryOperator::GreaterThan:
@@ -330,7 +340,7 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
             const std::string error = fmt::format("Operands are not valid or compatible numeric types: '{}' and '{}'",
                                                   EvaluatedTypeName::value(a),
                                                   EvaluatedTypeName::value(b));
-            throwError(std::move(error), &expr);
+            throwError(std::move(error), expr);
         } break;
 
         case BinaryOperator::Add:
@@ -353,7 +363,7 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
             const std::string error = fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'",
                                                   EvaluatedTypeName::value(a),
                                                   EvaluatedTypeName::value(b));
-            throwError(std::move(error), &expr);
+            throwError(std::move(error), expr);
         } break;
 
         case BinaryOperator::In: {
@@ -362,32 +372,32 @@ void CypherAnalyzer::analyze(BinaryExpression& expr) {
             if (b != EvaluatedType::List && b != EvaluatedType::Map) {
                 const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
                                                       EvaluatedTypeName::value(b));
-                throwError(std::move(error), &expr);
+                throwError(std::move(error), expr);
             }
 
             if (a == EvaluatedType::List || a == EvaluatedType::Map) {
                 const std::string error = fmt::format("Left operand must be a scalar, not '{}'",
                                                       EvaluatedTypeName::value(a));
-                throwError(std::move(error), &expr);
+                throwError(std::move(error), expr);
             }
         } break;
     }
 
-    expr.setType(type);
+    expr->setType(type);
 }
 
-void CypherAnalyzer::analyze(UnaryExpression& expr) {
-    auto& operand = expr.right();
+void CypherAnalyzer::analyze(UnaryExpr* expr) {
+    Expr* operand = expr->getSubExpr();
     analyze(operand);
 
     EvaluatedType type = EvaluatedType::Invalid;
 
-    switch (expr.getUnaryOperator()) {
+    switch (expr->getOperator()) {
         case UnaryOperator::Not: {
-            if (operand.type() != EvaluatedType::Bool) {
+            if (operand->getType() != EvaluatedType::Bool) {
                 const std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
-                                                      EvaluatedTypeName::value(operand.type()));
-                throwError(std::move(error), &expr);
+                                                      EvaluatedTypeName::value(operand->getType()));
+                throwError(std::move(error), expr);
             }
 
             type = EvaluatedType::Bool;
@@ -395,86 +405,86 @@ void CypherAnalyzer::analyze(UnaryExpression& expr) {
 
         case UnaryOperator::Minus:
         case UnaryOperator::Plus: {
-            if (operand.type() == EvaluatedType::Integer) {
+            const EvaluatedType operandType = operand->getType();
+            if (operandType == EvaluatedType::Integer) {
                 type = EvaluatedType::Integer;
-            } else if (operand.type() == EvaluatedType::Double) {
+            } else if (operandType == EvaluatedType::Double) {
                 type = EvaluatedType::Double;
             } else {
                 const std::string error = fmt::format("Operand must be an integer or double, not '{}'",
-                                                      EvaluatedTypeName::value(operand.type()));
-                throwError(std::move(error), &expr);
+                                                      EvaluatedTypeName::value(operandType));
+                throwError(std::move(error), expr);
             }
 
         } break;
     }
 
-    expr.setType(type);
+    expr->setType(type);
 }
 
-void CypherAnalyzer::analyze(SymbolExpression& expr) {
-    VarDecl& var = _ctxt->getVariable(expr.symbol()._name);
-    expr.setType(var.type());
+void CypherAnalyzer::analyze(SymbolExpr* expr) {
+    VarDecl* varDecl = _ctxt->getDecl(expr->getSymbol()->getName());
+    expr->setType(varDecl->getType());
 }
 
-void CypherAnalyzer::analyze(LiteralExpression& expr) {
-    const auto& literal = expr.literal();
+void CypherAnalyzer::analyze(LiteralExpr* expr) {
+    const Literal* literal = expr->getLiteral();
 
-    switch (literal.type()) {
-        case Literal::type<std::monostate>(): {
-            expr.setType(EvaluatedType::Null);
+    switch (literal->getKind()) {
+        case Literal::Kind::NULL_LITERAL: {
+            expr->setType(EvaluatedType::Null);
         } break;
-        case Literal::type<bool>(): {
-            expr.setType(EvaluatedType::Bool);
+        case Literal::Kind::BOOL: {
+            expr->setType(EvaluatedType::Bool);
         } break;
-        case Literal::type<int64_t>(): {
-            expr.setType(EvaluatedType::Integer);
+        case Literal::Kind::INTEGER: {
+            expr->setType(EvaluatedType::Integer);
         } break;
-        case Literal::type<double>(): {
-            expr.setType(EvaluatedType::Double);
+        case Literal::Kind::DOUBLE: {
+            expr->setType(EvaluatedType::Double);
         } break;
-        case Literal::type<std::string_view>(): {
-            expr.setType(EvaluatedType::String);
+        case Literal::Kind::STRING: {
+            expr->setType(EvaluatedType::String);
         } break;
-        case Literal::type<char>(): {
-            expr.setType(EvaluatedType::Char);
+        case Literal::Kind::CHAR: {
+            expr->setType(EvaluatedType::Char);
         } break;
-        case Literal::type<MapLiteral*>(): {
-            expr.setType(EvaluatedType::Map);
+        case Literal::Kind::MAP: {
+            expr->setType(EvaluatedType::Map);
         } break;
     }
 }
 
-void CypherAnalyzer::analyze(ParameterExpression& expr) {
+void CypherAnalyzer::analyze(ParameterExpr* expr) {
     throwError("Parameters not supported", &expr);
 }
 
-void CypherAnalyzer::analyze(PropertyExpression& expr) {
-    const auto& qualifiedName = expr.name();
+void CypherAnalyzer::analyze(PropertyExpr* expr) {
+    const QualifiedName* qualifiedName = expr->getName();
 
-    if (qualifiedName.size() != 2) {
+    if (qualifiedName->size() != 2) {
         const std::string error = fmt::format("Only length 2 property expressions are supported, not '{}'",
-                                              qualifiedName.size());
-        throwError(std::move(error), &expr);
+                                              qualifiedName->size());
+        throwError(std::move(error), expr);
     }
 
-    std::string_view varName = qualifiedName.get(0);
-    std::string_view propName = qualifiedName.get(1);
+    const Symbol* varName = qualifiedName->get(0);
+    const Symbol* propName = qualifiedName->get(1);
 
-    const VarDecl& var = _ctxt->getVariable(varName);
+    VarDecl* varDecl = _ctxt->getDecl(varName->getName());
 
-    if (var.type() != EvaluatedType::NodePattern && var.type() != EvaluatedType::EdgePattern) {
+    if (varDecl->getType() != EvaluatedType::NodePattern && varDecl->getType() != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format("Variable '{}' is '{}' it must be a node or edge",
-                                              varName, EvaluatedTypeName::value(var.type()));
-        throwError(std::move(error), &expr);
+                                              varName->getName(), EvaluatedTypeName::value(varDecl->getType()));
+        throwError(std::move(error), expr);
     }
 
-    expr.setDecl(&var);
+    expr->setDecl(varDecl);
 
-    const std::optional<PropertyType> propType = _graphMetadata.propTypes().get(propName);
-
+    const std::optional<PropertyType> propType = _graphMetadata.propTypes().get(propName->getName());
     if (!propType) {
-        const std::string error = fmt::format("Property type '{}' not found", propName);
-        throwError(std::move(error), &expr);
+        const std::string error = fmt::format("Property type '{}' not found", propName->getName());
+        throwError(std::move(error), expr);
     }
 
     EvaluatedType type = EvaluatedType::Invalid;
@@ -495,67 +505,65 @@ void CypherAnalyzer::analyze(PropertyExpression& expr) {
         } break;
         case ValueType::Invalid:
         case ValueType::_SIZE: {
-            const std::string error = fmt::format("Property type '{}' is invalid", propName);
-            throwError(std::move(error), &expr);
+            const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
+            throwError(std::move(error), expr);
         } break;
     }
 
-    expr.setType(type);
+    expr->setType(type);
 }
 
-void CypherAnalyzer::analyze(StringExpression& expr) {
-    auto& lhs = expr.left();
-    auto& rhs = expr.right();
+void CypherAnalyzer::analyze(StringExpr* expr) {
+    Expr* lhs = expr->getLHS();
+    Expr* rhs = expr->getRHS();
 
     analyze(lhs);
     analyze(rhs);
 
-    if (lhs.type() != EvaluatedType::String || rhs.type() != EvaluatedType::String) {
+    if (lhs->getType() != EvaluatedType::String || rhs->getType() != EvaluatedType::String) {
         const std::string error = fmt::format("String expressions operands must be strings, not '{}' and '{}'",
-                                              EvaluatedTypeName::value(lhs.type()),
-                                              EvaluatedTypeName::value(rhs.type()));
-        throwError(std::move(error), &expr);
+                                              EvaluatedTypeName::value(lhs->getType()),
+                                              EvaluatedTypeName::value(rhs->getType()));
+        throwError(std::move(error), expr);
     }
 
-    expr.setType(EvaluatedType::Bool);
+    expr->setType(EvaluatedType::Bool);
 }
 
-void CypherAnalyzer::analyze(NodeLabelExpression& expr) {
-    const auto& labelMap = _graphMetadata.labels();
-    expr.setType(EvaluatedType::Bool);
+void CypherAnalyzer::analyze(NodeLabelExpr* expr) {
+    const LabelMap& labelMap = _graphMetadata.labels();
+    expr->setType(EvaluatedType::Bool);
 
-    const auto& decl = _ctxt->getVariable(expr.symbol()._name);
+    VarDecl* decl = _ctxt->getDecl(expr->getSymbol()->getName());
 
-    if (decl.type() != EvaluatedType::NodePattern) {
+    if (decl->getType() != EvaluatedType::NodePattern) {
         const std::string error = fmt::format("Variable '{}' is '{}' it must be a node",
-                                              decl.name(), EvaluatedTypeName::value(decl.type()));
-        throwError(std::move(error), &expr);
+                                              decl->getName(), EvaluatedTypeName::value(decl->getType()));
+        throwError(std::move(error), expr);
     }
 
-    expr.setDecl(&decl);
+    expr->setDecl(decl);
 
-    LabelSet& labelset = expr.labels();
-
-    for (const auto& label : expr.labelNames()) {
-        const std::optional<LabelID> labelID = labelMap.get(label);
+    for (const Symbol* label : expr->labels()) {
+        const std::optional<LabelID> labelID = labelMap.get(label->getName());
         if (!labelID) {
-            const std::string error = fmt::format("Unknown label '{}'", label);
-            throwError(std::move(error), &expr);
+            const std::string error = fmt::format("Unknown label '{}'", label->getName());
+            throwError(std::move(error), expr);
         }
 
-        labelset.set(labelID.value());
+        expr->setLabelID(labelID.value());
     }
 }
 
-void CypherAnalyzer::analyze(PathExpression& expr) {
-    throwError("Path expressions not supported", &expr);
+void CypherAnalyzer::analyze(PathExpr* expr) {
+    throwError("Path expressions not supported", expr);
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    const auto* location = _ast.getLocation((uintptr_t)obj);
+    const SourceLocation* location = _ast->getLocation(obj);
     std::string errorMsg;
 
-    CypherError err {_ast.query()};
+    CypherError err {_ast->getQueryString()};
     err.setTitle("Query analysis error");
     err.setErrorMsg(msg);
 
@@ -591,4 +599,20 @@ bool CypherAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) co
     }
 
     return false;
+}
+
+VarDecl* CypherAnalyzer::getOrCreateNamedVariable(EvaluatedType type, std::string_view name) {
+    VarDecl* decl = _ctxt->getDecl(name);
+    if (!decl) {
+        decl = VarDecl::create(_ast, _ctxt, name, type);
+    }
+
+    if (decl->getType() != type) {
+        throwError(fmt::format("Variable '{}' is already declared with type '{}'",
+                   name,
+                   EvaluatedTypeName::value(decl->getType())), 
+                   decl);
+    }
+
+    return decl;
 }

@@ -1,39 +1,57 @@
 #pragma once
 
+#include <vector>
+#include <utility>
+
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
-#include "types/Literal.h"
 
 namespace db::v2 {
 
-struct NodePatternData {
+class CypherAST;
+class Expr;
+
+class NodePatternData {
+public:
+    using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
+    friend CypherAST;
+
+    static NodePatternData* create(CypherAST* ast);
+
+    const LabelSet& labelConstraints() const { return _labelConstraints; }
+    const ExprConstraints& exprConstraints() { return _exprConstraints; }
+
+    void addLabelConstraint(LabelID labelID);
+    void addExprConstraint(PropertyType propType, Expr* expr);
+
+private:
     LabelSet _labelConstraints;
-    std::vector<std::pair<PropertyType, Expression*>> _exprConstraints;
+    ExprConstraints _exprConstraints;
 
-    using UniquePtr = std::unique_ptr<NodePatternData, void (*)(NodePatternData*)>;
-
-    static UniquePtr create() {
-        return UniquePtr {new NodePatternData, &cleanUp};
-    }
-
-    static void cleanUp(NodePatternData* ptr) {
-        delete ptr;
-    }
+    NodePatternData();
+    ~NodePatternData();
 };
 
-struct EdgePatternData {
-    std::vector<EdgeTypeID> _edgeTypeConstraints;
-    std::vector<std::pair<PropertyType, Expression*>> _exprConstraints;
+class EdgePatternData {
+public:
+    using EdgeTypes = std::vector<EdgeTypeID>;
+    using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
+    friend CypherAST;
 
-    using UniquePtr = std::unique_ptr<EdgePatternData, void (*)(EdgePatternData*)>;
+    static EdgePatternData* create(CypherAST* ast);
 
-    static UniquePtr create() {
-        return UniquePtr {new EdgePatternData, &cleanUp};
-    }
+    const EdgeTypes& edgeTypeConstraints() const { return _edgeTypeConstraints; }
+    const ExprConstraints& exprConstraints() { return _exprConstraints; }
 
-    static void cleanUp(EdgePatternData* ptr) {
-        delete ptr;
-    }
+    void addEdgeTypeConstraint(EdgeTypeID edgeTypeID);
+    void addExprConstraint(PropertyType propType, Expr* expr);
+
+private:
+    EdgeTypes _edgeTypeConstraints;
+    ExprConstraints _exprConstraints;
+
+    EdgePatternData();
+    ~EdgePatternData();
 };
 
 }

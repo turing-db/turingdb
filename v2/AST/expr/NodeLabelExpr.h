@@ -1,47 +1,41 @@
 #pragma once
 
+#include "Expr.h"
+
 #include <vector>
 
-#include "Expr.h"
 #include "metadata/LabelSet.h"
-#include "Symbol.h"
 
 namespace db::v2 {
 
-class VarDecl;
 class CypherAST;
+class Symbol;
+class VarDecl;
 
 class NodeLabelExpr : public Expr {
 public:
-    using LabelVector = std::vector<std::string_view>;
+    using Labels = std::vector<Symbol*>;
 
-    bool hasDecl() const { return _decl != nullptr; }
-
-    const VarDecl& decl() const { return *_decl; }
-    const Symbol& symbol() const { return _symbol; }
-    const LabelVector& labelNames() const { return _labelVector; }
-    const LabelSet& labels() const { return _labelset; }
-    LabelSet& labels() { return _labelset; }
-
-    void setDecl(const VarDecl* decl) { _decl = decl; }
+    Symbol* getSymbol() const { return _symbol; }
+    const Labels& labels() const { return _labels; }
 
     static NodeLabelExpr* create(CypherAST* ast, 
-                                 const Symbol& symbol,
-                                 LabelVector&& labels);
+                                 Symbol* symbol,
+                                 Labels&& labels);
+
+    VarDecl* getDecl() const { return _decl; }
+    const LabelSet& labelSet() const { return _labelSet; }
+
+    void setDecl(VarDecl* decl) { _decl = decl; }
+    void setLabelID(LabelID labelID) { _labelSet.set(labelID); }
 
 private:
-    Symbol _symbol;
-    LabelVector _labelVector;
-    LabelSet _labelset;
-    const VarDecl* _decl {nullptr};
+    Symbol* _symbol {nullptr};
+    Labels _labels;
+    VarDecl* _decl {nullptr};
+    LabelSet _labelSet;
 
-    NodeLabelExpr(const Symbol& symbol, LabelVector&& labels)
-        : Expr(Kind::NODE_LABEL),
-        _symbol(symbol),
-        _labelVector(std::move(labels))
-    {
-    }
-
+    NodeLabelExpr(Symbol* symbol, Labels&& labels);
     ~NodeLabelExpr() override;
 };
 

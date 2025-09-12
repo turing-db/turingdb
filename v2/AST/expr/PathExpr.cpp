@@ -2,20 +2,14 @@
 
 #include "CypherAST.h"
 #include "PatternElement.h"
-#include "NodePattern.h"
-#include "EdgePattern.h"
 
 using namespace db::v2;
 
 PathExpr::~PathExpr() {
 }
 
-void PathExpr::addNode(NodePattern* node) {
-    _pattern->addNode(node);
-}
-
-void PathExpr::addEdge(EdgePattern* edge) {
-    _pattern->addEdge(edge);
+void PathExpr::addEntity(EntityPattern* entity) {
+    _pattern->addEntity(entity);
 }
 
 PathExpr* PathExpr::create(CypherAST* ast, PatternElement* pattern) {

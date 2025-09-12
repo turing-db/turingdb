@@ -1,42 +1,24 @@
 #pragma once
 
-#include <memory>
-
-#include "SubStatement.h"
+#include "SubStmt.h"
 
 namespace db::v2 {
 
-class Expression;
+class Expr;
 
-class Skip : public SubStatement {
+class Skip : public SubStmt {
 public:
-    Skip() = default;
-    ~Skip() override = default;
+    static Skip* create(CypherAST* ast, Expr* expr);
 
-    explicit Skip(Expression* expression)
-        : _expression(expression)
-    {
-    }
+    const Expr* getExpr() const { return _expr; }
 
-    Skip(const Skip&) = default;
-    Skip& operator=(const Skip&) = default;
-    Skip(Skip&&) = default;
-    Skip& operator=(Skip&&) = default;
-
-    static std::unique_ptr<Skip> create(Expression* expression) {
-        return std::make_unique<Skip>(expression);
-    }
-
-    const Expression& getExpression() const {
-        return *_expression;
-    }
-
-    void setExpression(Expression* expression) {
-        _expression = expression;
-    }
+    void setExpr(Expr* expr) { _expr = expr; }
 
 private:
-    Expression* _expression {nullptr};
+    Expr* _expr {nullptr};
+
+    Skip(Expr* expr);
+    ~Skip() override;
 };
 
 }

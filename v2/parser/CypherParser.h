@@ -8,7 +8,7 @@ class CypherAST;
 
 class CypherParser {
 public:
-    explicit CypherParser(CypherAST& ast);
+    explicit CypherParser(CypherAST* ast);
     ~CypherParser() = default;
 
     CypherParser(const CypherParser&) = delete;
@@ -20,9 +20,7 @@ public:
 
     void allowNotImplemented(bool allow) { _allowNotImplemented = allow; }
 
-    const CypherAST& getAST() const {
-        return *_ast;
-    }
+    CypherAST* getAST() const { return _ast; }
 
 private:
     CypherAST* _ast {nullptr};

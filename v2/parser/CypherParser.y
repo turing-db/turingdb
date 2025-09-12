@@ -7,7 +7,7 @@
 %define parse.error detailed
 %define api.namespace { db::v2 }
 %parse-param {db::v2::YCypherScanner& scanner}
-%parse-param {db::v2::CypherAST& ast}
+%parse-param {db::v2::CypherAST* ast}
 %define api.location.type { SourceLocation }
 %locations
 
@@ -15,28 +15,30 @@
 %verbose
 
 %code requires {
+
+    #include <optional>
+
     // Inspired by https://github.com/antlr/grammars-v4/blob/master/cypher/CypherParser.g4
 
-    #define LOC(obj, loc) ast.setLocation(obj, loc);
-
-    #include <spdlog/fmt/bundled/core.h>
-    #include <optional>
-    #include <vector>
+    #define LOC(obj, loc) ast->setLocation(obj, loc)
 
     #include "SourceLocation.h"
 
-    #include "statements/StatementContainer.h"
-    #include "statements/Return.h"
-    #include "statements/Match.h"
-    #include "expressions/All.h"
-    #include "types/Literal.h"
-    #include "types/Symbol.h"
-    #include "types/WhereClause.h"
-    #include "types/Pattern.h"
-    #include "types/NodePattern.h"
-    #include "types/EdgePattern.h"
-    #include "types/SinglePartQuery.h"
-    #include "types/Projection.h"
+    #include "stmt/StmtContainer.h"
+    #include "stmt/ReturnStmt.h"
+    #include "stmt/MatchStmt.h"
+    #include "expr/All.h"
+    #include "expr/Literal.h"
+    #include "Symbol.h"
+    #include "WhereClause.h"
+    #include "Pattern.h"
+    #include "NodePattern.h"
+    #include "EdgePattern.h"
+    #include "SinglePartQuery.h"
+    #include "Projection.h"
+    #include "PatternElement.h"
+    #include "stmt/Skip.h"
+    #include "stmt/Limit.h"
 
     namespace db::v2 {
         class YCypherScanner;
@@ -49,7 +51,7 @@
     #include "YCypherScanner.h"
     #include "GeneratedCypherParser.h"
     #include "CypherAST.h"
-    #include "types/QualifiedName.h"
+    #include "QualifiedName.h"
 
     #undef yylex
     #define yylex scanner.lex
@@ -167,44 +169,48 @@
 
 %token UNKNOWN
 
-%type<db::v2::Literal> numLit boolLit charLit literal stringLit mapLit
-%type<std::pair<std::string_view, db::v2::Expression*>> mapPair
+%type<db::v2::Literal*> numLit literal
+%type<db::v2::BoolLiteral*> boolLit
+%type<db::v2::CharLiteral*> charLit
+%type<db::v2::StringLiteral*> stringLit
+%type<db::v2::MapLiteral*> mapLit
+%type<std::pair<db::v2::Symbol*, db::v2::Expr*>> mapPair
 %type<db::v2::MapLiteral*> mapPairChain
-%type<db::v2::Symbol> symbol
-%type<db::v2::QualifiedName> qualifiedName
-%type<db::v2::QualifiedName> invocationName
-%type<std::string_view> name
-%type<std::string_view> reservedWord
+%type<db::v2::Symbol*> symbol
+%type<db::v2::QualifiedName*> qualifiedName
+%type<db::v2::QualifiedName*> invocationName
+%type<db::v2::Symbol*> name
+%type<db::v2::Symbol*> reservedWord
 
-%type<std::vector<std::string_view>> nodeLabels
-%type<std::vector<std::string_view>> edgeTypes
+%type<std::vector<db::v2::Symbol*>> nodeLabels
+%type<std::vector<db::v2::Symbol*>> edgeTypes
 %type<db::v2::MapLiteral*> properties
 
-%type<std::optional<Symbol>> opt_symbol
-%type<std::optional<std::vector<std::string_view>>> opt_nodeLabels
+%type<db::v2::Symbol*> opt_symbol
+%type<std::optional<std::vector<db::v2::Symbol*>>> opt_nodeLabels
 %type<db::v2::MapLiteral*> opt_properties
-%type<std::optional<std::vector<std::string_view>>> opt_edgeTypes
+%type<std::optional<std::vector<db::v2::Symbol*>>> opt_edgeTypes
 
-%type<db::v2::Expression*> expression
-%type<db::v2::Expression*> xorExpression
-%type<db::v2::Expression*> andExpression
-%type<db::v2::Expression*> notExpression
-%type<db::v2::Expression*> comparisonExpression
-%type<db::v2::Expression*> addSubExpression
-%type<db::v2::Expression*> multDivExpression
-%type<db::v2::Expression*> powerExpression
-%type<db::v2::Expression*> unaryAddSubExpression
-%type<db::v2::Expression*> atomicExpression
-%type<db::v2::Expression*> listExpression
-%type<db::v2::Expression*> stringExpression
-%type<db::v2::Expression*> propertyOrLabelExpression
-%type<db::v2::Expression*> propertyExpression
-%type<db::v2::Expression*> atomExpression
-%type<db::v2::Expression*> collectExpression
-%type<db::v2::Expression*> pathExpression
-%type<db::v2::Expression*> parenthesizedExpression
+%type<db::v2::Expr*> Expr
+%type<db::v2::Expr*> xorExpr
+%type<db::v2::Expr*> andExpr
+%type<db::v2::Expr*> notExpr
+%type<db::v2::Expr*> comparisonExpr
+%type<db::v2::Expr*> addSubExpr
+%type<db::v2::Expr*> multDivExpr
+%type<db::v2::Expr*> powerExpr
+%type<db::v2::Expr*> unaryAddSubExpr
+%type<db::v2::Expr*> atomicExpr
+%type<db::v2::Expr*> listExpr
+%type<db::v2::Expr*> stringExpr
+%type<db::v2::Expr*> propertyOrLabelExpr
+%type<db::v2::Expr*> propertyExpr
+%type<db::v2::Expr*> atomExpr
+%type<db::v2::Expr*> collectExpr
+%type<db::v2::Expr*> pathExpr
+%type<db::v2::Expr*> parenthesizedExpr
 
-%type<db::v2::Expression*> projectionItem
+%type<db::v2::Expr*> projectionItem
 %type<db::v2::Projection*> projectionItems
 %type<db::v2::Projection*> projectionBody
 
@@ -215,21 +221,24 @@
 %type<db::v2::Pattern*> patternWhere
 %type<db::v2::PatternElement*> patternPart
 %type<db::v2::PatternElement*> patternElem
-%type<db::v2::PatternElement*> pathExpressionElem
+%type<db::v2::PatternElement*> pathExprElem
 %type<db::v2::NodePattern*> nodePattern
 %type<db::v2::EdgePattern*> edgePattern
-%type<std::tuple<std::optional<db::v2::Symbol>, std::optional<std::vector<std::string_view>>, db::v2::MapLiteral*>> edgeDetail
+%type<db::v2::EdgePattern*> edgeDetail
 %type<std::pair<db::v2::EdgePattern*, db::v2::NodePattern*>> patternElemChain
-%type<db::v2::WhereClause> where
+%type<db::v2::WhereClause*> where
 
-%type<db::v2::SinglePartQuery*> singlePartQ
+%type<db::v2::SinglePartQuery*> singlePartQuery
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
-%type<db::v2::Statement*> readingStatement
-%type<db::v2::Match*> matchSt
+%type<db::v2::Stmt*> readingStatement
+%type<db::v2::Stmt*> updatingStatement
+%type<db::v2::StmtContainer*> readingStatements
+%type<db::v2::StmtContainer*> updatingStatements
+%type<db::v2::MatchStmt*> matchSt
 %type<db::v2::Skip*> skipSSt
 %type<db::v2::Limit*> limitSSt
-%type<db::v2::Return*> returnSt
+%type<db::v2::ReturnStmt*> returnSt
 
 %type<db::v2::Skip*> opt_skipSSt
 %type<db::v2::Limit*> opt_limitSSt
@@ -262,14 +271,14 @@ unionList
     ;
 
 singleQuery
-    : singlePartQ { $$ = $1; }
-    | multiPartQ { scanner.notImplemented(@$, "Multi-part queries"); }
+    : singlePartQuery { $$ = $1; }
+    | multiPartQuery { scanner.notImplemented(@$, "Multi-part queries"); }
     | createConstraint { scanner.notImplemented(@$, "CREATE CONSTRAINT"); }
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
     ;
 
 returnSt
-    : RETURN projectionBody { $$ = ast.newStatement<Return>($2); LOC($$, @$);}
+    : RETURN projectionBody { $$ = ReturnStmt::create(ast, $2); LOC($$, @$); }
     ;
 
 withSt
@@ -278,11 +287,11 @@ withSt
     ;
 
 skipSSt
-    : SKIP expression { $$ = ast.newSubStatement<Skip>($2); LOC($$, @$);}
+    : SKIP Expr { $$ = Skip::create(ast, $2); LOC($$, @$); }
     ;
 
 limitSSt
-    : LIMIT expression { $$ = ast.newSubStatement<Limit>($2); LOC($$, @$); }
+    : LIMIT Expr { $$ = Limit::create(ast, $2); LOC($$, @$); }
     ;
 
 projectionBody
@@ -315,22 +324,22 @@ opt_limitSSt
     ;
 
 projectionItems
-    : MULT { $$ = ast.newProjection(); $$->setAll(); LOC($$, @$); }
-    | projectionItem { $$ = ast.newProjection(); $$->add($1); LOC($$, @$); }
+    : MULT { $$ = Projection::create(ast); $$->setAll(); LOC($$, @$); }
+    | projectionItem { $$ = Projection::create(ast); $$->add($1); LOC($$, @$); }
     | projectionItems COMMA projectionItem { $$ = $1; $$->add($3); }
     ;
 
 projectionItem
-    : expression
-    | expression AS name { scanner.notImplemented(@$, "AS"); }
+    : Expr
+    | Expr AS name { scanner.notImplemented(@$, "AS"); }
     ;
 
 orderItem
-    : expression
-    | expression ASCENDING { scanner.notImplemented(@$, "ASCENDING"); }
-    | expression ASC { scanner.notImplemented(@$, "ASC"); }
-    | expression DESCENDING { scanner.notImplemented(@$, "DESCENDING"); }
-    | expression DESC { scanner.notImplemented(@$, "DESC"); }
+    : Expr
+    | Expr ASCENDING { scanner.notImplemented(@$, "ASCENDING"); }
+    | Expr ASC { scanner.notImplemented(@$, "ASC"); }
+    | Expr DESCENDING { scanner.notImplemented(@$, "DESCENDING"); }
+    | Expr DESC { scanner.notImplemented(@$, "DESC"); }
     ;
 
 orderSSt
@@ -338,28 +347,28 @@ orderSSt
     | orderSSt COMMA orderItem
     ;
 
-singlePartQ
-    : returnSt { scanner.notImplemented(@$, "Single part query: Return only"); }
-    | updatingStatements { scanner.notImplemented(@$, "Single part query: Update only"); }
-    | updatingStatements returnSt { scanner.notImplemented(@$, "Single part query: Update + Return"); }
-    | readingStatements returnSt { $$ = ast.newSinglePartQuery(); LOC($$, @$); }
-    | readingStatements updatingStatements { scanner.notImplemented(@$, "Single part query: Reading statement + Update"); }
-    | readingStatements updatingStatements returnSt { scanner.notImplemented(@$, "Single part query: Reading statement + Update + Return"); }
+singlePartQuery
+    : returnSt { $$ = SinglePartQuery::create(ast); $$->setReturnStmt($1); LOC($$, @$); }
+    | updatingStatements { $$ = SinglePartQuery::create(ast); $$->setUpdateStmts($1); LOC($$, @$); }
+    | updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setUpdateStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
+    | readingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
+    | readingStatements updatingStatements { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); LOC($$, @$); }
+    | readingStatements updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); $$->setReturnStmt($3); LOC($$, @$); }
     ;
 
 readingStatements
-    : readingStatement { }
-    | readingStatements readingStatement { }
+    : readingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
+    | readingStatements readingStatement { $$ = $1; $$->add($2); }
     ;
 
 updatingStatements
-    : updatingStatement { scanner.notImplemented(@$, "Updating statement"); }
-    | updatingStatements updatingStatement { scanner.notImplemented(@$, "Multiple updating statements"); }
+    : updatingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
+    | updatingStatements updatingStatement { $$ = $1; $$->add($2); }
     ;
  
-multiPartQ
-    : updateWithSt singlePartQ { scanner.notImplemented(@$, "Update + With + Reading"); }
-    | readingStatements updateWithSt singlePartQ { scanner.notImplemented(@$, "Reading + With + Update + Reading"); }
+multiPartQuery
+    : updateWithSt singlePartQuery { scanner.notImplemented(@$, "Update + With + Reading"); }
+    | readingStatements updateWithSt singlePartQuery { scanner.notImplemented(@$, "Reading + With + Update + Reading"); }
     ;
 
 updateWithSt
@@ -370,16 +379,16 @@ updateWithSt
     ;
 
 matchSt
-    : MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = ast.newStatement<Match>($2, $4, $5); LOC($$, @$); }
-    | OPTIONAL MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = ast.newStatement<Match>($3, $5, $6, true); LOC($$, @$); }
+    : MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = MatchStmt::create(ast, $2); $$->setSkip($4); $$->setLimit($5); LOC($$, @$); }
+    | OPTIONAL MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = MatchStmt::create(ast, $3); $$->setSkip($5); $$->setLimit($6); $$->setOptional(true); LOC($$, @$); }
     ;
 
 unwindSt
-    : UNWIND expression AS symbol { scanner.notImplemented(@$, "UNWIND"); }
+    : UNWIND Expr AS symbol { scanner.notImplemented(@$, "UNWIND"); }
     ;
 
 readingStatement
-    : matchSt { }
+    : matchSt { $$ = $1; }
     | unwindSt { scanner.notImplemented(@$, "UNWIND"); }
     | queryCallSt { scanner.notImplemented(@$, "CALL"); }
     ;
@@ -393,8 +402,8 @@ updatingStatement
     ;
  
 deleteSt
-    : DELETE expressionChain { scanner.notImplemented(@$, "DELETE"); }
-    | DETACH DELETE expressionChain { scanner.notImplemented(@$, "DETACH DELETE"); }
+    : DELETE ExprChain { scanner.notImplemented(@$, "DELETE"); }
+    | DETACH DELETE ExprChain { scanner.notImplemented(@$, "DETACH DELETE"); }
     ;
 
 removeSt
@@ -408,14 +417,14 @@ removeItemChain
 
 removeItem
     : symbol nodeLabels { scanner.notImplemented(@$, "REMOVE"); }
-    | propertyExpression { scanner.notImplemented(@$, "REMOVE"); }
+    | propertyExpr { scanner.notImplemented(@$, "REMOVE"); }
     ;
 
 queryCallSt
-    : CALL invocationName parenExpressionChain { scanner.notImplemented(@$, "CALL name(...)"); }
-    | CALL invocationName parenExpressionChain yieldClause { scanner.notImplemented(@$, "CALL name(...) YIELD ..."); }
-    | OPTIONAL CALL invocationName parenExpressionChain { scanner.notImplemented(@$, "OPTIONAL CALL name(...)"); }
-    | OPTIONAL CALL invocationName parenExpressionChain yieldClause { scanner.notImplemented(@$, "OPTIONAL CALL name(...) YIELD ..."); }
+    : CALL invocationName parenExprChain { scanner.notImplemented(@$, "CALL name(...)"); }
+    | CALL invocationName parenExprChain yieldClause { scanner.notImplemented(@$, "CALL name(...) YIELD ..."); }
+    | OPTIONAL CALL invocationName parenExprChain { scanner.notImplemented(@$, "OPTIONAL CALL name(...)"); }
+    | OPTIONAL CALL invocationName parenExprChain yieldClause { scanner.notImplemented(@$, "OPTIONAL CALL name(...) YIELD ..."); }
     | CALL OBRACE query CBRACE { scanner.notImplemented(@$, "CALL { subquery }"); }
     | CALL OPAREN CPAREN OBRACE query CBRACE { scanner.notImplemented(@$, "CALL () { subquery }"); }
     | CALL OPAREN callCapture CPAREN OBRACE query CBRACE { scanner.notImplemented(@$, "CALL (..) { subquery }"); }
@@ -428,9 +437,9 @@ callCapture
     | callCapture COMMA symbol AS symbol { scanner.notImplemented(@$, "CALL capture"); }
     ;
 
-expressionChain
-    : expression
-    | expressionChain COMMA expression
+ExprChain
+    : Expr
+    | ExprChain COMMA Expr
     ;
 
 yieldClause
@@ -438,8 +447,8 @@ yieldClause
     | YIELD MULT
     ;
 
-parenExpressionChain
-    : OPAREN expressionChain CPAREN
+parenExprChain
+    : OPAREN ExprChain CPAREN
     | OPAREN CPAREN
     ;
 
@@ -479,8 +488,8 @@ setSt
     ;
 
 setItem
-    : propertyExpression ASSIGN expression
-    | symbol ADD_ASSIGN expression
+    : propertyExpr ASSIGN Expr
+    | symbol ADD_ASSIGN Expr
     | symbol nodeLabels
     ;
 
@@ -501,37 +510,37 @@ patternWhere
     ;
 
 where
-    : WHERE expression { $$.setExpression($2); }
+    : WHERE Expr { $$ = WhereClause::create(ast, $2); }
     ;
 
 pattern
-    : patternPart { $$ = ast.newPattern(); $$->addElem($1); LOC($$, @$); }
-    | pattern COMMA patternPart { $$ = $1, $$->addElem($3); }
+    : patternPart { $$ = Pattern::create(ast); $$->addElement($1); LOC($$, @$); }
+    | pattern COMMA patternPart { $$ = $1, $$->addElement($3); }
     ;
 
-expression
-    : xorExpression { $$ = $1; }
-    | expression OR xorExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Or, $3); LOC($$, @$); }
+Expr
+    : xorExpr { $$ = $1; }
+    | Expr OR xorExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Or, $1, $3); LOC($$, @$); }
     ;
 
-xorExpression
-    : andExpression { $$ = $1; }
-    | xorExpression XOR andExpression  { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Xor, $3); LOC($$, @$); }
+xorExpr
+    : andExpr { $$ = $1; }
+    | xorExpr XOR andExpr  { $$ = BinaryExpr::create(ast, BinaryOperator::Xor, $1, $3); LOC($$, @$); }
     ;
 
-andExpression
-    : notExpression { $$ = $1; }
-    | andExpression AND notExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::And, $3); LOC($$, @$); }
+andExpr
+    : notExpr { $$ = $1; }
+    | andExpr AND notExpr { $$ = BinaryExpr::create(ast, BinaryOperator::And, $1, $3); LOC($$, @$); }
     ;
 
-notExpression
-    : comparisonExpression { $$ = $1; }
-    | NOT notExpression { $$ = ast.newExpression<UnaryExpression>(UnaryOperator::Not, $2); LOC($$, @$); }
+notExpr
+    : comparisonExpr { $$ = $1; }
+    | NOT notExpr { $$ = UnaryExpr::create(ast, UnaryOperator::Not, $2); LOC($$, @$); }
     ;
 
-comparisonExpression
-    : addSubExpression { $$ = $1; }
-    | comparisonExpression comparisonSign addSubExpression { $$ = ast.newExpression<BinaryExpression>($1, $2, $3); LOC($$, @$); }
+comparisonExpr
+    : addSubExpr { $$ = $1; }
+    | comparisonExpr comparisonSign addSubExpr { $$ = BinaryExpr::create(ast, $2, $1, $3); LOC($$, @$); }
     ;
 
 comparisonSign
@@ -546,27 +555,27 @@ comparisonSign
     | IN { $$ = BinaryOperator::In; }
     ;
 
-addSubExpression
-    : multDivExpression { $$ = $1; }
-    | addSubExpression PLUS multDivExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Add, $3); LOC($$, @$); }
-    | addSubExpression SUB multDivExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Sub, $3); LOC($$, @$); }
+addSubExpr
+    : multDivExpr { $$ = $1; }
+    | addSubExpr PLUS multDivExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Add, $1, $3); LOC($$, @$); }
+    | addSubExpr SUB multDivExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Sub, $1, $3); LOC($$, @$); }
     ;
 
-multDivExpression
-    : powerExpression { $$ = $1; }
-    | multDivExpression MULT powerExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Mult, $3); LOC($$, @$); }
-    | multDivExpression DIV powerExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Div, $3); LOC($$, @$); }
-    | multDivExpression MOD powerExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Mod, $3); LOC($$, @$); }
+multDivExpr
+    : powerExpr { $$ = $1; }
+    | multDivExpr MULT powerExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Mult, $1, $3); LOC($$, @$); }
+    | multDivExpr DIV powerExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Div, $1, $3); LOC($$, @$); }
+    | multDivExpr MOD powerExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Mod, $1, $3); LOC($$, @$); }
     ;
 
-powerExpression
-    : stringExpression { $$ = $1; }
-    | powerExpression CARET stringExpression { $$ = ast.newExpression<BinaryExpression>($1, BinaryOperator::Pow, $3); LOC($$, @$); }
+powerExpr
+    : stringExpr { $$ = $1; }
+    | powerExpr CARET stringExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Pow, $1, $3); LOC($$, @$); }
     ;
 
-stringExpression
-    : unaryAddSubExpression { $$ = $1; }
-    | stringExpression stringExpPrefix unaryAddSubExpression { $$ = ast.newExpression<StringExpression>($1, $2, $3); LOC($$, @$); }
+stringExpr
+    : unaryAddSubExpr { $$ = $1; }
+    | stringExpr stringExpPrefix unaryAddSubExpr { $$ = StringExpr::create(ast, $2, $1, $3); LOC($$, @$); }
     ;
 
 stringExpPrefix
@@ -575,61 +584,61 @@ stringExpPrefix
     | CONTAINS { $$ = StringOperator::Contains; }
     ;
 
-unaryAddSubExpression
-    : atomicExpression { $$ = $1; }
-    | PLUS unaryAddSubExpression { $$ = ast.newExpression<UnaryExpression>(UnaryOperator::Plus, $2); LOC($$, @$); }
-    | SUB unaryAddSubExpression { $$ = ast.newExpression<UnaryExpression>(UnaryOperator::Minus, $2); LOC($$, @$); }
+unaryAddSubExpr
+    : atomicExpr { $$ = $1; }
+    | PLUS unaryAddSubExpr { $$ = UnaryExpr::create(ast, UnaryOperator::Plus, $2); LOC($$, @$); }
+    | SUB unaryAddSubExpr { $$ = UnaryExpr::create(ast, UnaryOperator::Minus, $2); LOC($$, @$); }
     // this allows chaining operators like -+--1 (which is +1)
     ;
 
-atomicExpression
-    : propertyOrLabelExpression { $$ = $1; }
-    | atomicExpression listExpression { $$ = nullptr; scanner.notImplemented(@$, "List expressions"); }
+atomicExpr
+    : propertyOrLabelExpr { $$ = $1; }
+    | atomicExpr listExpr { $$ = nullptr; scanner.notImplemented(@$, "List Exprs"); }
     ;
 
-listExpression
-    : OBRACK expression CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expression CBRACK"); }
-    | OBRACK expression RANGE expression CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expression RANGE expression CBRACK"); }
-    | OBRACK RANGE expression CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE expression CBRACK"); }
-    | OBRACK expression RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expression RANGE CBRACK"); }
+listExpr
+    : OBRACK Expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK Expr CBRACK"); }
+    | OBRACK Expr RANGE Expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK Expr RANGE Expr CBRACK"); }
+    | OBRACK RANGE Expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE Expr CBRACK"); }
+    | OBRACK Expr RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK Expr RANGE CBRACK"); }
     | OBRACK RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE CBRACK"); }
     ;
 
-propertyOrLabelExpression
-    : propertyExpression { $$ = $1; }
+propertyOrLabelExpr
+    : propertyExpr { $$ = $1; }
 
-    // | propertyExpression nodeLabels
+    // | propertyExpr nodeLabels
     // This seems too permissive, it allows 'n.name:Person' which is weird
 
     // Replaced by this more specific rule
-    | symbol nodeLabels { $$ = ast.newExpression<NodeLabelExpression>($1, std::move($2)); LOC($$, @$); }
+    | symbol nodeLabels { $$ = NodeLabelExpr::create(ast, $1, std::move($2)); LOC($$, @$); }
     ;
 
-propertyExpression
-    : atomExpression { $$ = $1; }
-    | qualifiedName DOT name { $1.addName($3); $$ = ast.newExpression<PropertyExpression>(std::move($1)); LOC($$, @$); }
+propertyExpr
+    : atomExpr { $$ = $1; }
+    | qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
     ;
 
-atomExpression
-    : pathExpression { $$ = $1; }
-    | literal { $$ = ast.newExpression<LiteralExpression>($1); LOC($$, @$); }
-    | symbol { $$ = ast.newExpression<SymbolExpression>($1); LOC($$, @$); }
+atomExpr
+    : pathExpr { $$ = $1; }
+    | literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
+    | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
-    | caseExpression { scanner.notImplemented(@$, "CASE"); }
+    | caseExpr { scanner.notImplemented(@$, "CASE"); }
     | countFunc { scanner.notImplemented(@$, "COUNT"); }
     | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
     | functionInvocation { scanner.notImplemented(@$, "Function invocations"); }
     | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
-    | collectExpression
+    | collectExpr
     ;
 
-collectExpression
+collectExpr
     : COLLECT OBRACE readingStatements returnSt CBRACE { scanner.notImplemented(@$, "COLLECT"); }
-    | COLLECT OPAREN expression CPAREN { scanner.notImplemented(@$, "COLLECT"); }
-    | COLLECT OPAREN DISTINCT expression CPAREN { scanner.notImplemented(@$, "COLLECT"); }
+    | COLLECT OPAREN Expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
+    | COLLECT OPAREN DISTINCT Expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
     ;
 
 patternPart
@@ -641,8 +650,8 @@ patternAlias
     : symbol ASSIGN patternElem { scanner.notImplemented(@$, "Pattern alias: Symbol = ()-[]-()-[]-()..."); }
 
 patternElem
-    : nodePattern { $$ = ast.newPatternElem(); $$->addNode($1); LOC($$, @$); }
-    | patternElem patternElemChain { $$ = $1; $$->addEdge($2.first); $$->addNode($2.second); }
+    : nodePattern { $$ = PatternElement::create(ast); $$->addEntity($1); LOC($$, @$); }
+    | patternElem patternElemChain { $$ = $1; $$->addEntity($2.first); $$->addEntity($2.second); }
     ;
 
 patternElemChain
@@ -650,16 +659,16 @@ patternElemChain
     ;
 
 properties
-    : mapLit { $$ = *$1.as<MapLiteral*>(); }
+    : mapLit { $$ = $1; }
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = ast.newNode($2, std::move($3), $4); LOC($$, @$); }
+    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN { $$ = NodePattern::create(ast); $$->setSymbol($2); $$->setLabels(std::move($3.value())); $$->setProperties($4); LOC($$, @$); }
     ;
 
 opt_symbol
     : symbol { $$ = $1; }
-    | { $$ = std::nullopt; }
+    | { $$ = nullptr; }
     ;
 
 opt_nodeLabels
@@ -688,16 +697,26 @@ opt_rangeLit
 
 
 edgePattern
-    : TAIL_TAIL     { $$ = ast.newOutEdge(std::nullopt, std::nullopt, nullptr); LOC($$, @$); }
-    | TIP_TAIL_TAIL { $$ = ast.newInEdge(std::nullopt, std::nullopt, nullptr); LOC($$, @$); }
-    | TAIL_TAIL_TIP { $$ = ast.newOutEdge(std::nullopt, std::nullopt, nullptr); LOC($$, @$); }
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = ast.newOutEdge(std::get<0>($2), std::move(std::get<1>($2)), std::get<2>($2)); LOC($$, @$); }
-    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = ast.newInEdge(std::get<0>($2), std::move(std::get<1>($2)), std::get<2>($2)); LOC($$, @$); }
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = ast.newOutEdge(std::get<0>($2), std::move(std::get<1>($2)), std::get<2>($2)); LOC($$, @$); }
+    : TAIL_TAIL     { $$ = EdgePattern::create(ast); LOC($$, @$); }
+    | TIP_TAIL_TAIL { $$ = EdgePattern::create(ast); LOC($$, @$); }
+    | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast); LOC($$, @$); }
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = $2; LOC($$, @$); }
+    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = $2; LOC($$, @$); }
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = $2; LOC($$, @$); }
     ;
 
 edgeDetail
-    : opt_symbol opt_edgeTypes opt_rangeLit opt_properties { $$ = std::make_tuple($1, std::move($2), $4); }
+    : opt_symbol opt_edgeTypes opt_rangeLit opt_properties { 
+        $$ = EdgePattern::create(ast);
+        $$->setSymbol($1);
+
+        if ($2.has_value()) {
+            $$->setTypes(std::move($2.value()));
+        }
+
+        $$->setProperties($4);
+        LOC($$, @$); 
+    }
     ;
 
 edgeTypes
@@ -717,8 +736,8 @@ subqueryExist
     ;
 
 qualifiedName
-    : symbol { $$.addName($1._name); }
-    | qualifiedName DOT symbol { $$.addName($3._name); }
+    : symbol { $$ = QualifiedName::create(ast); $$->addName($1); }
+    | qualifiedName DOT symbol { $$ = $1; $$->addName($3); }
     ;
 
 invocationName
@@ -728,68 +747,85 @@ invocationName
 functionInvocation
     : invocationName OPAREN CPAREN { scanner.notImplemented(@$, "Function invocations"); }
     | invocationName OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN expressionChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN DISTINCT expressionChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
+    | invocationName OPAREN ExprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
+    | invocationName OPAREN DISTINCT ExprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
     ;
 
-pathExpression
-    : parenthesizedExpression { $$ = $1; }
-    | OPAREN CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($3); LOC($$, @$); }
-    | OPAREN symbol properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($5); $5->addRootNode(ast.newNode($2, std::nullopt, $3)); LOC($$, @$); }
-    | OPAREN symbol nodeLabels properties CPAREN pathExpressionElem { $$ = ast.newExpression<PathExpression>($6); $6->addRootNode(ast.newNode($2, std::move($3), $4)); LOC($$, @$); }
-    | OPAREN nodeLabels CPAREN pathExpressionElem {
-        $$ = ast.newExpression<PathExpression>($4);
-        auto* node = ast.newNode(std::nullopt, std::move($2), nullptr);
-        $4->addRootNode(node);
+pathExpr
+    : parenthesizedExpr { $$ = $1; }
+    | OPAREN CPAREN pathExprElem { $$ = PathExpr::create(ast, $3); LOC($$, @$); }
+    | OPAREN symbol properties CPAREN pathExprElem { 
+        $$ = PathExpr::create(ast, $5);
+        NodePattern* nodePattern = NodePattern::create(ast);
+        nodePattern->setProperties($3);
+        nodePattern->setSymbol($2);
+        $5->addRootEntity(nodePattern);
+        LOC($$, @$);
+    }
+    | OPAREN symbol nodeLabels properties CPAREN pathExprElem { 
+        $$ = PathExpr::create(ast, $6);
+        NodePattern* nodePattern = NodePattern::create(ast);
+        nodePattern->setLabels(std::move($3));
+        nodePattern->setProperties($4);
+        nodePattern->setSymbol($2);
+        $6->addRootEntity(nodePattern);
+        LOC($$, @$);
+    }
+    | OPAREN nodeLabels CPAREN pathExprElem {
+        $$ = PathExpr::create(ast, $4);
+        NodePattern* node = NodePattern::create(ast);
+        node->setLabels(std::move($2));
+        $4->addRootEntity(node);
         LOC($$, @$);
         LOC(node, @$);
       }
-    | OPAREN nodeLabels properties CPAREN pathExpressionElem {
-        $$ = ast.newExpression<PathExpression>($5);
-        auto* node = ast.newNode(std::nullopt, std::move($2), nullptr);
-        $5->addRootNode(node);
+    | OPAREN nodeLabels properties CPAREN pathExprElem {
+        $$ = PathExpr::create(ast, $5);
+        NodePattern* node = NodePattern::create(ast);
+        node->setLabels(std::move($2));
+        node->setProperties($3);
+        $5->addRootEntity(node);
         LOC($$, @$);
         LOC(node, @$);
       }
 
-    // Those three expressions are tricky and cause conflicts with 'OPAREN expression CPAREN'
+    // Those three Exprs are tricky and cause conflicts with 'OPAREN Expr CPAREN'
 
-    //| OPAREN symbol nodeLabels CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized expressions"); }
-    // Causes conflicts because 'symbol nodeLabels' is a valid expression (propertyOrLabelExpression)
+    //| OPAREN symbol nodeLabels CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized Exprs"); }
+    // Causes conflicts because 'symbol nodeLabels' is a valid Expr (propertyOrLabelExpr)
 
-    //| OPAREN symbol CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized expressions"); }
-    // Causes conflicts because 'symbol' is a valid expression (atomExpression)
+    //| OPAREN symbol CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized Exprs"); }
+    // Causes conflicts because 'symbol' is a valid Expr (atomExpr)
 
-    //| OPAREN properties CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized expressions"); }
-    // Causes conflicts because 'properties' is a valid expression (map literal)
+    //| OPAREN properties CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized Exprs"); }
+    // Causes conflicts because 'properties' is a valid Expr (map literal)
 
     // Instead, they are handled by the rule below
 
-    | OPAREN expression CPAREN pathExpressionElem {
-          $$ = ast.newExpression<PathExpression>($4);
+    | OPAREN Expr CPAREN pathExprElem {
+          $$ = PathExpr::create(ast, $4);
 
-          if (auto* node = ast.nodeFromExpression($2)) {
-              $4->addRootNode(node);
-              LOC(node, @$);
+          if (NodePattern* nodePattern = NodePattern::fromExpr(ast, $2)) {
+              $4->addRootEntity(nodePattern);
           } else {
-              error(@1, "Invalid path expression. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
+              error(@1, "Invalid path Expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
           }
 
           LOC($$, @$);
       }
     ;
 
-pathExpressionElem
-: patternElemChain { $$ = ast.newPatternElem(); $$->addRootNode($1.second); $$->addRootEdge($1.first); LOC($$, @$);}
-    | pathExpressionElem patternElemChain { $$ = $1; $$->addRootNode($2.second); $$->addRootEdge($2.first); }
-    ;
+pathExprElem
+: patternElemChain { $$ = PatternElement::create(ast); $$->addRootEntity($1.second); $$->addRootEntity($1.first); LOC($$, @$); }
+| pathExprElem patternElemChain { $$ = $1; $$->addRootEntity($2.second); $$->addRootEntity($2.first); }
+;
 
-parenthesizedExpression
-    : OPAREN expression CPAREN { $$ = $2; }
+parenthesizedExpr
+    : OPAREN Expr CPAREN { $$ = $2; }
     ;
 
 filterWith
-    : filterKeyword OPAREN filterExpression CPAREN { scanner.notImplemented(@$, "Filters"); }
+    : filterKeyword OPAREN filterExpr CPAREN { scanner.notImplemented(@$, "Filters"); }
     ;
 
 filterKeyword
@@ -800,10 +836,10 @@ filterKeyword
     ;
 
 //patternComprehension
-//    : OBRACK edgesChainPattern PIPE expression CBRACK
-//    | OBRACK lhs edgesChainPattern PIPE expression CBRACK
-//    | OBRACK edgesChainPattern where PIPE expression CBRACK
-//    | OBRACK lhs edgesChainPattern where PIPE expression CBRACK
+//    : OBRACK edgesChainPattern PIPE Expr CBRACK
+//    | OBRACK lhs edgesChainPattern PIPE Expr CBRACK
+//    | OBRACK edgesChainPattern where PIPE Expr CBRACK
+//    | OBRACK lhs edgesChainPattern where PIPE Expr CBRACK
 //    ;
 
 //edgesChainPattern
@@ -812,32 +848,32 @@ filterKeyword
 //    ;
 
 listComprehension
-    : OBRACK filterExpression CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
-    | OBRACK filterExpression PIPE expression CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
+    : OBRACK filterExpr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
+    | OBRACK filterExpr PIPE Expr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
     ;
 
-filterExpression
-    : symbol IN expression { scanner.notImplemented(@$, "IN"); }
-    | symbol IN expression where { scanner.notImplemented(@$, "IN"); }
+filterExpr
+    : symbol IN Expr { scanner.notImplemented(@$, "IN"); }
+    | symbol IN Expr where { scanner.notImplemented(@$, "IN"); }
     ;
 
 countFunc
     : COUNT OPAREN MULT CPAREN { scanner.notImplemented(@$, "COUNT"); }
     | COUNT OPAREN CPAREN { scanner.notImplemented(@$, "COUNT"); }
     | COUNT OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN expressionChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN DISTINCT expressionChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
+    | COUNT OPAREN ExprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
+    | COUNT OPAREN DISTINCT ExprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
     | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "COUNT"); }
 
     // Here, returnSt is mandatory for MATCH subqueries, as opposed to Neo4j's Cypher parser
     | COUNT OBRACE query CBRACE { scanner.notImplemented(@$, "COUNT"); }
     ;
 
-caseExpression
+caseExpr
     : CASE whenThenChain END { scanner.notImplemented(@$, "CASE"); }
-    | CASE expression whenThenChain END  { scanner.notImplemented(@$, "CASE"); }
-    | CASE whenThenChain ELSE expression END { scanner.notImplemented(@$, "CASE"); }
-    | CASE expression whenThenChain ELSE expression END { scanner.notImplemented(@$, "CASE"); }
+    | CASE Expr whenThenChain END  { scanner.notImplemented(@$, "CASE"); }
+    | CASE whenThenChain ELSE Expr END { scanner.notImplemented(@$, "CASE"); }
+    | CASE Expr whenThenChain ELSE Expr END { scanner.notImplemented(@$, "CASE"); }
     ;
 
 whenThenChain
@@ -846,7 +882,7 @@ whenThenChain
     ;
 
 whenThen
-    : WHEN expression THEN expression
+    : WHEN Expr THEN Expr
     ;
 
 parameter
@@ -855,13 +891,13 @@ parameter
     ;
 
 literal
-    : boolLit { $$ = Literal($1); }
-    | numLit { $$ = Literal($1); }
-    | NULL_ { $$ = Literal(); }
-    | stringLit { $$ = Literal($1); }
-    | charLit { $$ = Literal($1); }
+    : boolLit { $$ = $1; }
+    | numLit { $$ = $1; }
+    | NULL_ { $$ = NullLiteral::create(ast); }
+    | stringLit { $$ = $1; }
+    | charLit { $$ = $1; }
     | listLit { scanner.notImplemented(@$, "Lists"); }
-    | mapLit { $$ = Literal(std::move($1)); }
+    | mapLit { $$ = $1; }
     ;
 
 rangeLit
@@ -874,26 +910,26 @@ rangeLit
     ;
 
 boolLit
-    : TRUE { $$ = Literal(true); }
-    | FALSE { $$ = Literal(false); }
+    : TRUE { $$ = BoolLiteral::create(ast, true); }
+    | FALSE { $$ = BoolLiteral::create(ast, false); }
     ;
 
 numLit
-    : DIGIT { $$ = Literal($1); }
-    | FLOAT { $$ = Literal($1); }
+    : DIGIT { $$ = IntegerLiteral::create(ast, $1); }
+    | FLOAT { $$ = DoubleLiteral::create(ast, $1); }
     ;
 
 stringLit
-    : STRING_LITERAL { $$ = Literal($1); }
+    : STRING_LITERAL { $$ = StringLiteral::create(ast, $1); }
     ;
 
 charLit
-    : CHAR_LITERAL { $$ = Literal($1); }
+    : CHAR_LITERAL { $$ = CharLiteral::create(ast, $1); }
     ;
 
 listLit
     : OBRACK CBRACK { scanner.notImplemented(@$, "Lists"); }
-    //| OBRACK expressionChain CBRACK // Enabling this causes conflicts
+    //| OBRACK ExprChain CBRACK // Enabling this causes conflicts
     // Instead using this: (simpler, too simple?)
     | OBRACK listLitItems CBRACK { scanner.notImplemented(@$, "Lists"); }
     ;
@@ -906,44 +942,44 @@ listLitItems
 listLitItem
     : literal
     | parameter { scanner.notImplemented(@$, "Parameters"); }
-    | caseExpression { scanner.notImplemented(@$, "CASE"); }
+    | caseExpr { scanner.notImplemented(@$, "CASE"); }
     | countFunc { scanner.notImplemented(@$, "COUNT"); }
     | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filters"); }
-    | parenthesizedExpression // Enabling this causes conflicts, not needed?
+    | parenthesizedExpr // Enabling this causes conflicts, not needed?
     | functionInvocation { scanner.notImplemented(@$, "Function invocations"); }
     | symbol
     | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
     ;
 
 mapLit
-    : OBRACE CBRACE { auto* map = ast.newMapLiteral(); $$ = Literal(map); LOC(map, @$); }
-    | OBRACE mapPairChain CBRACE { $$ = Literal($2);}
+    : OBRACE CBRACE { $$ = MapLiteral::create(ast); LOC($$, @$); }
+    | OBRACE mapPairChain CBRACE { $$ = $2; }
     ;
 
 mapPairChain
-    : mapPair { $$ = ast.newMapLiteral(); $$->set($1.first, $1.second); LOC($$, @$); }
+    : mapPair { $$ = MapLiteral::create(ast); $$->set($1.first, $1.second); LOC($$, @$); }
     | mapPairChain COMMA mapPair { $$ = $1; $$->set($3.first, $3.second); }
     ;
 
 mapPair
-    : name COLON expression { $$ = std::make_pair($1, $3); }
+    : name COLON Expr { $$ = std::make_pair($1, $3); }
     ;
 
 name
-    : symbol { $$ = $1._name ; }
+    : symbol { $$ = $1; }
     | reservedWord { $$ = $1 ; }
     ;
 
 symbol
-    : ESC_LITERAL { $$ = Symbol { ._name = $1 }; }
-    | ID { $$ = Symbol { ._name = $1 }; }
-    | FILTER { $$ = Symbol { ._name = $1 }; }
-    | EXTRACT { $$ = Symbol { ._name = $1 }; }
-    //| ANY { $$ = Symbol { ._name = $1 }; } // Causes conflicts
-    //| NONE { $$ = Symbol { ._name = $1 }; } // Causes conflicts
-    //| SINGLE { $$ = Symbol { ._name = $1 }; } // Causes conflicts
+    : ESC_LITERAL { $$ = Symbol::create(ast, $1); }
+    | ID { $$ = Symbol::create(ast, $1); }
+    | FILTER { $$ = Symbol::create(ast, $1); }
+    | EXTRACT { $$ = Symbol::create(ast, $1); }
+    //| ANY { $$ = Symbol::create(ast, $1); } // Causes conflicts
+    //| NONE { $$ = Symbol::create(ast, $1); } // Causes conflicts
+    //| SINGLE { $$ = Symbol::create(ast, $1); } // Causes conflicts
     ;
 
 createConstraint
@@ -975,61 +1011,61 @@ dropConstraint
     ;
 
 reservedWord
-    : ALL { $$ = $1; }
-    | ASC { $$ = $1; }
-    | ASCENDING { $$ = $1; }
-    | BY { $$ = $1; }
-    | CREATE { $$ = $1; }
-    | DELETE { $$ = $1; }
-    | DESC { $$ = $1; }
-    | DESCENDING { $$ = $1; }
-    | DETACH { $$ = $1; }
-    | EXISTS { $$ = $1; }
-    | LIMIT { $$ = $1; }
-    | MATCH { $$ = $1; }
-    | MERGE { $$ = $1; }
-    | ON { $$ = $1; }
-    | IF { $$ = $1; }
-    | OPTIONAL { $$ = $1; }
-    | ORDER { $$ = $1; }
-    | REMOVE { $$ = $1; }
-    | RETURN { $$ = $1; }
-    | SET { $$ = $1; }
-    | SKIP { $$ = $1; }
-    | WHERE { $$ = $1; }
-    | WITH { $$ = $1; }
-    | UNION { $$ = $1; }
-    | UNWIND { $$ = $1; }
-    | AND { $$ = $1; }
-    | AS { $$ = $1; }
-    | CONTAINS { $$ = $1; }
-    | DISTINCT { $$ = $1; }
-    | ENDS { $$ = $1; }
-    | IN { $$ = $1; }
-    | IS { $$ = $1; }
-    | NOT { $$ = $1; }
-    | OR { $$ = $1; }
-    | STARTS { $$ = $1; }
-    | XOR { $$ = $1; }
-    | FALSE { $$ = $1; }
-    | TRUE { $$ = $1; }
-    | NULL_ { $$ = $1; }
-    | CONSTRAINT { $$ = $1; }
-    | DO { $$ = $1; }
-    | FOR { $$ = $1; }
-    | REQUIRE { $$ = $1; }
-    | COLLECT { $$ = $1; }
-    | UNIQUE { $$ = $1; }
-    | CASE { $$ = $1; }
-    | WHEN { $$ = $1; }
-    | THEN { $$ = $1; }
-    | ELSE { $$ = $1; }
-    | END { $$ = $1; }
-    | MANDATORY { $$ = $1; }
-    | SCALAR { $$ = $1; }
-    | OF { $$ = $1; }
-    | ADD { $$ = $1; }
-    | DROP { $$ = $1; }
+    : ALL { $$ = Symbol::create(ast, $1); }
+    | ASC { $$ = Symbol::create(ast, $1); }
+    | ASCENDING { $$ = Symbol::create(ast, $1); }
+    | BY { $$ = Symbol::create(ast, $1); }
+    | CREATE { $$ = Symbol::create(ast, $1); }
+    | DELETE { $$ = Symbol::create(ast, $1); }
+    | DESC { $$ = Symbol::create(ast, $1); }
+    | DESCENDING { $$ = Symbol::create(ast, $1); }
+    | DETACH { $$ = Symbol::create(ast, $1); }
+    | EXISTS { $$ = Symbol::create(ast, $1); }
+    | LIMIT { $$ = Symbol::create(ast, $1); }
+    | MATCH { $$ = Symbol::create(ast, $1); }
+    | MERGE { $$ = Symbol::create(ast, $1); }
+    | ON { $$ = Symbol::create(ast, $1); }
+    | IF { $$ = Symbol::create(ast, $1); }
+    | OPTIONAL { $$ = Symbol::create(ast, $1); }
+    | ORDER { $$ = Symbol::create(ast, $1); }
+    | REMOVE { $$ = Symbol::create(ast, $1); }
+    | RETURN { $$ = Symbol::create(ast, $1); }
+    | SET { $$ = Symbol::create(ast, $1); }
+    | SKIP { $$ = Symbol::create(ast, $1); }
+    | WHERE { $$ = Symbol::create(ast, $1); }
+    | WITH { $$ = Symbol::create(ast, $1); }
+    | UNION { $$ = Symbol::create(ast, $1); }
+    | UNWIND { $$ = Symbol::create(ast, $1); }
+    | AND { $$ = Symbol::create(ast, $1); }
+    | AS { $$ = Symbol::create(ast, $1); }
+    | CONTAINS { $$ = Symbol::create(ast, $1); }
+    | DISTINCT { $$ = Symbol::create(ast, $1); }
+    | ENDS { $$ = Symbol::create(ast, $1); }
+    | IN { $$ = Symbol::create(ast, $1); }
+    | IS { $$ = Symbol::create(ast, $1); }
+    | NOT { $$ = Symbol::create(ast, $1); }
+    | OR { $$ = Symbol::create(ast, $1); }
+    | STARTS { $$ = Symbol::create(ast, $1); }
+    | XOR { $$ = Symbol::create(ast, $1); }
+    | FALSE { $$ = Symbol::create(ast, $1); }
+    | TRUE { $$ = Symbol::create(ast, $1); }
+    | NULL_ { $$ = Symbol::create(ast, $1); }
+    | CONSTRAINT { $$ = Symbol::create(ast, $1); }
+    | DO { $$ = Symbol::create(ast, $1); }
+    | FOR { $$ = Symbol::create(ast, $1); }
+    | REQUIRE { $$ = Symbol::create(ast, $1); }
+    | COLLECT { $$ = Symbol::create(ast, $1); }
+    | UNIQUE { $$ = Symbol::create(ast, $1); }
+    | CASE { $$ = Symbol::create(ast, $1); }
+    | WHEN { $$ = Symbol::create(ast, $1); }
+    | THEN { $$ = Symbol::create(ast, $1); }
+    | ELSE { $$ = Symbol::create(ast, $1); }
+    | END { $$ = Symbol::create(ast, $1); }
+    | MANDATORY { $$ = Symbol::create(ast, $1); }
+    | SCALAR { $$ = Symbol::create(ast, $1); }
+    | OF { $$ = Symbol::create(ast, $1); }
+    | ADD { $$ = Symbol::create(ast, $1); }
+    | DROP { $$ = Symbol::create(ast, $1); }
     ;
 
 %%

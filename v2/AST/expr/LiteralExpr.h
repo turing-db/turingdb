@@ -2,22 +2,23 @@
 
 #include "Expr.h"
 
-#include "Literal.h"
-
 namespace db::v2 {
 
 class CypherAST;
+class Literal;
 
 class LiteralExpr : public Expr {
 public:
-    static LiteralExpr* create(CypherAST* ast, const Literal& literal);
+    static LiteralExpr* create(CypherAST* ast, Literal* literal);
 
-    const Literal& literal() const { return _literal; }
+    Literal* getLiteral() const { return _literal; }
+
+    EvaluatedType getType() const override;
 
 private:
-    Literal _literal;
+    Literal* _literal {nullptr};
 
-    explicit LiteralExpr(const Literal& literal)
+    explicit LiteralExpr(Literal* literal)
         : Expr(Kind::LITERAL),
         _literal(literal)
     {

@@ -1,48 +1,32 @@
 #pragma once
 
-#include <string_view>
 #include <unordered_map>
-#include <vector>
-
-#include "decl/DeclID.h"
-#include "decl/EvaluatedType.h"
-#include "decl/VarDecl.h"
+#include <string_view>
 
 namespace db::v2 {
 
-class DeclContainer;
+class CypherAST;
+class VarDecl;
 
 class DeclContext {
 public:
-    DeclContext(DeclContainer& container, DeclContext* parent = nullptr);
-    ~DeclContext();
+    friend CypherAST;
+    friend VarDecl;
 
-    DeclContext(const DeclContext&) = delete;
-    DeclContext& operator=(const DeclContext&) = delete;
-    DeclContext(DeclContext&&) = delete;
-    DeclContext& operator=(DeclContext&&) = delete;
+    static DeclContext* create(CypherAST* ast, DeclContext* parent);
 
-    bool hasParent() const {
-        return _parent != nullptr;
-    }
+    DeclContext* getParent() const { return _parent; }
 
-    const VarDecl* tryGetVariable(std::string_view name) const;
-    VarDecl* tryGetVariable(std::string_view name);
-    const VarDecl& getVariable(std::string_view name) const;
-    VarDecl& getVariable(std::string_view name);
-    const VarDecl& getUnnamedVariable(DeclID id) const;
-    bool hasVariable(std::string_view name) const;
-
-    VarDecl& getOrCreateNamedVariable(EvaluatedType type, std::string_view name);
-    VarDecl& createNamedVariable(EvaluatedType type, std::string_view name);
-    VarDecl& createUnnamedVariable(EvaluatedType type);
+    VarDecl* getDecl(std::string_view name) const;
 
 private:
-    DeclContainer& _container;
     DeclContext* _parent {nullptr};
-    std::vector<DeclContext*> _children;
+    std::unordered_map<std::string_view, VarDecl*> _declMap;
 
-    std::unordered_map<std::string_view, VarDecl*> _decls;
+    DeclContext(DeclContext* parent);
+    ~DeclContext();
+
+    void addDecl(VarDecl* decl);
 };
 
 }

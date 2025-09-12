@@ -7,8 +7,8 @@
 
 using namespace db::v2;
 
-CypherParser::CypherParser(CypherAST& ast)
-    : _ast(&ast)
+CypherParser::CypherParser(CypherAST* ast)
+    : _ast(ast)
 {
 }
 
@@ -17,7 +17,7 @@ void CypherParser::parse(std::string_view query) {
     yscanner.allowNotImplemented(_allowNotImplemented);
     yscanner.setQuery(query);
 
-    YCypherParser yparser(yscanner, *_ast);
+    YCypherParser yparser(yscanner, _ast);
 
     std::istringstream iss;
     iss.rdbuf()->pubsetbuf((char*)query.data(), query.size());

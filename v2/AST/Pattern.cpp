@@ -4,6 +4,10 @@
 
 using namespace db::v2;
 
+Pattern::Pattern()
+{
+}
+
 Pattern::~Pattern() {
 }
 

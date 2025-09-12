@@ -8,23 +8,22 @@ namespace db::v2 {
 
 class CypherAST;
 
-class CompoundStmt : public Stmt {
+class StmtContainer {
 public:
+    friend CypherAST;
     using Stmts = std::vector<const Stmt*>;
 
-    static CompoundStmt* create(CypherAST* ast);
+    static StmtContainer* create(CypherAST* ast);
 
-    void add(const Stmt* stmt) {
-        _stmts.push_back(stmt);
-    }
+    void add(const Stmt* stmt);
 
     const Stmts& stmts() const { return _stmts; }
 
 private:
     Stmts _stmts;
 
-    CompoundStmt();
-    ~CompoundStmt() override;
+    StmtContainer();
+    ~StmtContainer();
 };
 
 }

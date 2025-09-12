@@ -1,74 +1,34 @@
 #pragma once
 
-#include <optional>
-
-#include "Symbol.h"
-
 namespace db::v2 {
 
+class Symbol;
+class CypherAST;
 class MapLiteral;
 class VarDecl;
-class AnalysisData;
-class CypherAST;
 
 class EntityPattern {
 public:
     friend CypherAST;
 
-    static EntityPattern* create(CypherAST* ast);
+    Symbol* getSymbol() const { return _symbol; }
+    MapLiteral* getProperties() const { return _properties; }
 
-    const Symbol& symbol() const {
-        return _symbol.value();
-    }
+    VarDecl* getDecl() const { return _decl; }
 
-    const MapLiteral& properties() const {
-        return *_properties;
-    }
+    void setSymbol(Symbol* symbol) { _symbol = symbol; }
+    void setProperties(MapLiteral* properties) { _properties = properties; }
 
-    Symbol& symbol() {
-        return _symbol.value();
-    }
-
-    MapLiteral& properties() {
-        return *_properties;
-    }
-
-    bool hasSymbol() const {
-        return _symbol.has_value();
-    }
-
-    bool hasProperties() const {
-        return _properties != nullptr;
-    }
-
-    void setSymbol(const std::optional<Symbol>& symbol) {
-        _symbol = symbol;
-    }
-
-    void setProperties(MapLiteral* properties) {
-        _properties = properties;
-    }
-
-    bool analyzed() const {
-        return _data != nullptr;
-    }
-
-    const AnalysisData& data() const { return *_data; }
-
-    AnalysisData& data() { return *_data; }
-
-    void setData(AnalysisData* data) {
-        _data = data;
-    }
+    void setDecl(VarDecl* decl) { _decl = decl; }
 
 protected:
-    EntityPattern() = default;
-    virtual ~EntityPattern() = default;
+    EntityPattern();
+    virtual ~EntityPattern();
 
 private:
-    AnalysisData* _data {nullptr};
-    std::optional<Symbol> _symbol;
+    Symbol* _symbol {nullptr};
     MapLiteral* _properties {nullptr};
+    VarDecl* _decl {nullptr};
 };
 
 }

@@ -1,121 +1,179 @@
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <limits>
-#include <string_view>
 #include <unordered_map>
-#include <variant>
+#include <string_view>
+#include <stdint.h>
+
+#include "decl/EvaluatedType.h"
 
 namespace db::v2 {
 
-class Expression;
-
-class MapLiteral {
-public:
-    MapLiteral() = default;
-    ~MapLiteral() = default;
-
-    MapLiteral(const MapLiteral&) = default;
-    MapLiteral(MapLiteral&&) = default;
-    MapLiteral& operator=(const MapLiteral&) = default;
-    MapLiteral& operator=(MapLiteral&&) = default;
-
-    static std::unique_ptr<MapLiteral> create() {
-        return std::make_unique<MapLiteral>();
-    }
-
-    void set(const std::string_view& key, Expression* value) {
-        _map[key] = value;
-    }
-
-    std::unordered_map<std::string_view, Expression*>::const_iterator begin() const {
-        return _map.begin();
-    }
-
-    std::unordered_map<std::string_view, Expression*>::const_iterator end() const {
-        return _map.end();
-    }
-
-private:
-    std::unordered_map<std::string_view, Expression*> _map;
-};
+class CypherAST;
+class Expr;
+class Symbol;
 
 class Literal {
 public:
-    enum class Type {
-        Null,
-        Bool,
-        Integer,
-        Double,
-        String,
-        Char,
-        Map,
+    friend CypherAST;
+
+    enum class Kind {
+        NULL_LITERAL,
+        BOOL,
+        INTEGER,
+        DOUBLE,
+        STRING,
+        CHAR,
+        MAP
     };
 
-    using ValueType = std::variant<std::monostate, bool, int64_t, double, std::string_view, char, MapLiteral*>;
+    virtual Kind getKind() const = 0;
 
+    virtual EvaluatedType getType() const = 0;
+
+protected:
     Literal() = default;
+    virtual ~Literal() = default;
+};
 
-    explicit Literal(const ValueType& value)
+class NullLiteral : public Literal {
+public:
+    static NullLiteral* create(CypherAST* ast);
+
+    constexpr Kind getKind() const override { return Kind::NULL_LITERAL; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Null; }
+
+private:
+    NullLiteral() = default;
+    ~NullLiteral() = default;
+};
+
+class BoolLiteral : public Literal {
+public:
+    static BoolLiteral* create(CypherAST* ast, bool value);
+
+    constexpr Kind getKind() const override { return Kind::BOOL; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Bool; }
+
+    bool getValue() const { return _value; }
+
+private:
+    bool _value {false};
+
+    BoolLiteral(bool value)
         : _value(value)
     {
     }
 
-    template <typename T>
-    bool is() const {
-        return std::holds_alternative<T>(_value);
-    }
-
-    template <typename T>
-    const T* as() const {
-        return std::get_if<T>(&_value);
-    }
-
-    template <typename T>
-    T* as() {
-        return std::get_if<T>(&_value);
-    }
-
-    const auto& value() const {
-        return _value;
-    }
-
-    template <typename T>
-    static consteval Type type() {
-        constexpr size_t value = VariantTypeIndex<T, ValueType>::value;
-        constexpr size_t max = std::numeric_limits<std::underlying_type_t<Type>>::max();
-        static_assert(value < max, "Type index out of range. Type not handled in enum");
-
-        return static_cast<Type>(VariantTypeIndex<T, ValueType>::value);
-    }
-
-    Type type() const {
-        return static_cast<Type>(_value.index());
-    }
-
-private:
-    ValueType _value;
-
-    template <typename>
-    struct Tag {};
-
-    template <typename T, typename V>
-    struct VariantTypeIndex;
-
-    template <typename T, typename... Ts>
-    struct VariantTypeIndex<T, std::variant<Ts...>>
-        : std::integral_constant<size_t, std::variant<Tag<Ts>...>(Tag<T>()).index()>
-    {
-    };
+    ~BoolLiteral() = default;
 };
 
-static_assert(Literal::type<std::monostate>() == Literal::Type::Null);
-static_assert(Literal::type<bool>() == Literal::Type::Bool);
-static_assert(Literal::type<int64_t>() == Literal::Type::Integer);
-static_assert(Literal::type<double>() == Literal::Type::Double);
-static_assert(Literal::type<std::string_view>() == Literal::Type::String);
-static_assert(Literal::type<char>() == Literal::Type::Char);
-static_assert(Literal::type<MapLiteral*>() == Literal::Type::Map);
+class IntegerLiteral : public Literal {
+public:
+    static IntegerLiteral* create(CypherAST* ast, int64_t value);
+
+    constexpr Kind getKind() const override { return Kind::INTEGER; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Integer; }
+
+    int64_t getValue() const { return _value; }
+
+private:
+    int64_t _value {0};
+
+    IntegerLiteral(int64_t value)
+        : _value(value)
+    {
+    }
+
+    ~IntegerLiteral() = default;
+};
+
+class DoubleLiteral : public Literal {
+public:
+    static DoubleLiteral* create(CypherAST* ast, double value);
+
+    constexpr Kind getKind() const override { return Kind::DOUBLE; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Double; }
+
+    double getValue() const { return _value; }
+
+private:
+    double _value {0.0};
+
+    DoubleLiteral(double value)
+        : _value(value)
+    {
+    }
+
+    ~DoubleLiteral() = default;
+};
+
+class StringLiteral : public Literal {
+public:
+    static StringLiteral* create(CypherAST* ast, std::string_view value);
+
+    constexpr Kind getKind() const override { return Kind::STRING; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::String; }
+
+    std::string_view getValue() const { return _value; }
+
+private:
+    std::string_view _value;
+
+    StringLiteral(std::string_view value)
+        : _value(value)
+    {
+    }
+
+    ~StringLiteral() = default;
+};
+
+class CharLiteral : public Literal {
+public:
+    static CharLiteral* create(CypherAST* ast, char value);
+
+    constexpr Kind getKind() const override { return Kind::CHAR; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Char; }
+
+    char getValue() const { return _value; }
+
+private:
+    char _value {0};
+
+    CharLiteral(char value)
+        : _value(value)
+    {
+    }
+
+    ~CharLiteral() = default;
+};
+
+class MapLiteral : public Literal {
+public:
+    using ExprMap = std::unordered_map<Symbol*, Expr*>;
+    using ExprMapConstIterator = ExprMap::const_iterator;
+
+    constexpr Kind getKind() const override { return Kind::MAP; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Map; }
+
+    static MapLiteral* create(CypherAST* ast);
+
+    void set(Symbol* key, Expr* value);
+
+    ExprMapConstIterator begin() const { return _map.cbegin(); }
+    ExprMapConstIterator end() const { return _map.cend(); }
+
+private:
+    ExprMap _map;
+
+    MapLiteral();
+    ~MapLiteral();
+};
 
 }

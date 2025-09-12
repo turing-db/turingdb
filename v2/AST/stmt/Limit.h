@@ -1,42 +1,25 @@
 #pragma once
 
-#include <memory>
-
-#include "SubStatement.h"
+#include "SubStmt.h"
 
 namespace db::v2 {
 
-class Expression;
+class Expr;
+class CypherAST;
 
-class Limit : public SubStatement {
+class Limit : public SubStmt {
 public:
-    Limit() = default;
-    ~Limit() override = default;
+    static Limit* create(CypherAST* ast, Expr* expr);
 
-    explicit Limit(Expression* expression)
-        : _expression(expression)
-    {
-    }
+    const Expr* getExpr() const { return _expr; }
 
-    Limit(const Limit&) = default;
-    Limit& operator=(const Limit&) = default;
-    Limit(Limit&&) = default;
-    Limit& operator=(Limit&&) = default;
-
-    static std::unique_ptr<Limit> create(Expression* expression) {
-        return std::make_unique<Limit>(expression);
-    }
-
-    const Expression& getExpression() const {
-        return *_expression;
-    }
-
-    void setExpression(Expression* expression) {
-        _expression = expression;
-    }
+    void setExpr(Expr* expr) { _expr = expr; }
 
 private:
-    Expression* _expression {nullptr};
+    Expr* _expr {nullptr};
+
+    Limit(Expr* expr);
+    ~Limit() override;
 };
 
 }

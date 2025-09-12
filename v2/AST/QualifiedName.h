@@ -1,33 +1,32 @@
 #pragma once
 
 #include <vector>
-#include <string_view>
 
 namespace db::v2 {
 
+class Symbol;   
+class CypherAST;
+
 class QualifiedName {
 public:
-    QualifiedName() = default;
-    ~QualifiedName() = default;
+    friend CypherAST;
+    using Symbols = std::vector<Symbol*>;
 
-    QualifiedName(const QualifiedName&) = default;
-    QualifiedName(QualifiedName&&) = default;
-    QualifiedName& operator=(const QualifiedName&) = default;
-    QualifiedName& operator=(QualifiedName&&) = default;
+    static QualifiedName* create(CypherAST* ast);
 
-    void addName(const std::string_view& name) { _names.emplace_back(name); }
-
-    const std::vector<std::string_view>& getNames() const { return _names; }
-
-    std::vector<std::string_view>::const_iterator begin() const { return _names.begin(); }
-    std::vector<std::string_view>::const_iterator end() const { return _names.end(); }
+    const Symbols& names() const { return _names; }
 
     size_t size() const { return _names.size(); }
 
-    std::string_view get(size_t index) const { return _names[index]; }
+    Symbol* get(size_t index) const { return _names[index]; }
+
+    void addName(Symbol* symbol);
 
 private:
-    std::vector<std::string_view> _names;
+    Symbols _names;
+
+    QualifiedName();
+    ~QualifiedName();
 };
 
 }

@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "EntityPattern.h"
 #include "NodePattern.h"
 #include "EdgePattern.h"
 
@@ -15,6 +14,7 @@ public:
     friend CypherAST;
     using EntityPatterns = std::vector<EntityPattern*>;
 
+    // Provides an edge-node view of a pattern element chain
     class ChainIterator {
     public:
         explicit ChainIterator(EntityPatterns::const_iterator it)
@@ -70,28 +70,22 @@ public:
 
     static PatternElement* create(CypherAST* ast);
 
-    void addRootNode(NodePattern* node) {
-        _entities.insert(_entities.begin(), (EntityPattern*)node);
+    // Add a node or edge at the beginning of the chain
+    void addRootEntity(EntityPattern* entity) {
+        _entities.insert(_entities.begin(), entity);
     }
 
-    void addRootEdge(EdgePattern* edge) {
-        _entities.insert(_entities.begin(), (EntityPattern*)edge);
-    }
-
-    void addNode(NodePattern* node) {
-        _entities.emplace_back(node);
-    }
-
-    void addEdge(EdgePattern* edge) {
-        _entities.emplace_back(edge);
+    // Add a node or edge at the end of the chain
+    void addEntity(EntityPattern* entity) {
+        _entities.emplace_back(entity);
     }
 
     const EntityPatterns& getEntities() const {
         return _entities;
     }
 
-    NodePattern* getRootNode() const {
-        return static_cast<NodePattern*>(_entities.front());
+    EntityPattern* getRootEntity() const {
+        return _entities.front();
     }
 
     ChainView getElementChain() const {
