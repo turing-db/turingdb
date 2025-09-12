@@ -61,9 +61,9 @@ public:
          std::vector<UntypedProperty> properties;
      };
 
+     using PendingNodeOffset = size_t;
      // A node: either exists in previous commit (materialised as NodeID),
      // or to be created in this commit (materialised as PendingNode)
-     using PendingNodeOffset = size_t;
      using ContingentNode = std::variant<NodeID, PendingNodeOffset>;
  private:
      struct PendingEdge {
@@ -101,8 +101,6 @@ public:
                              newDeletedNodes.begin(),
                              newDeletedNodes.end());
     }
-
-    std::unordered_map<std::string, PendingNodeOffset> _varNodeMap;
     
 private:
     // Nodes to be created
