@@ -49,7 +49,7 @@ CypherASTDumper::CypherASTDumper(const CypherAST* ast)
 void CypherASTDumper::dump(std::ostream& out) {
     out << "---\n";
     out << "config:\n";
-    out << "  layout: elk\n";
+    out << "  layout: hierarchical\n";
 
     out << "---\n";
     out << "erDiagram\n";
@@ -276,12 +276,10 @@ void CypherASTDumper::dump(std::ostream& out, const NodePattern* node) {
     out << "    }\n";
 
     const VarDecl* decl = node->getDecl();
-    if (!decl) {
-        return;
+    if (decl) {
+        out << "    _" << std::hex << node << " ||--o{ VAR_" << decl << " : \"\"\n";
+        dump(out, decl);
     }
-
-    out << "    _" << std::hex << node << " ||--o{ VAR_" << decl << " : \"\"\n";
-    dump(out, decl);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
@@ -305,12 +303,10 @@ void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
     out << "    }\n";
 
     const VarDecl* decl = edge->getDecl();
-    if (!decl) {
-        return;
+    if (decl) {
+        out << "    _" << std::hex << edge << " ||--o{ VAR_" << decl << " : \"\"\n";
+        dump(out, decl);
     }
-
-    out << "    _" << std::hex << edge << " ||--o{ VAR_" << decl << " : \"\"\n";
-    dump(out, decl);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const MapLiteral* map) {
@@ -619,6 +615,10 @@ void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
 }
 
 void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {
+    if (_dumpedVariables.contains(decl)) {
+        return;
+    }
+    
     out << "    VAR_" << decl << " {\n";
     out << "        ValueType " << EvaluatedTypeName::value(decl->getType()) << "\n";
 
@@ -629,4 +629,6 @@ void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {
     }
 
     out << "    }\n";
+
+    _dumpedVariables.insert(decl);
 }

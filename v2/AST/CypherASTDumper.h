@@ -47,6 +47,7 @@ public:
 
 private:
     const CypherAST* _ast {nullptr};
+    std::unordered_set<const VarDecl*> _dumpedVariables;
 
     void dump(std::ostream& out, const SinglePartQuery* query);
     void dump(std::ostream& out, const MatchStmt* match);
