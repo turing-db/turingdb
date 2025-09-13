@@ -1,4 +1,4 @@
-set(SAMPLE_NAME analyzer2)
+set(SAMPLE_NAME v2)
 set(SOURCES
     main.cpp
 )
