@@ -1,0 +1,5 @@
+MATCH (n1:Person)-[e1:KNOWS_WELL]->(n2:Person),
+      (n2:Person)-[:INTERESTED_IN]->(m1:Interest:SoftwareEngineering),
+      (n3:Person)--(m1)
+WHERE n1.isFrench AND n2.isFrench AND e1.duration > 4
+RETURN n1, n2, n3;
