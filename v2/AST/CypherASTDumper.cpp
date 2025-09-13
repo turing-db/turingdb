@@ -54,8 +54,6 @@ void CypherASTDumper::dump(std::ostream& out) {
     out << "---\n";
     out << "erDiagram\n";
 
-    out << "    script {{ }} \n";
-
     for (const auto& query : _ast->queries()) {
         if (const SinglePartQuery* q = dynamic_cast<const SinglePartQuery*>(query)) {
             dump(out, q);
@@ -67,15 +65,15 @@ void CypherASTDumper::dump(std::ostream& out) {
 }
 
 void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
-    out << "    script ||--o{{ _" << std::hex << &query << " : _\n";
-    out << "    _" << std::hex << &query << " {{\n";
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
     out << "        ASTType SinglePartQuery\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     auto dumpContainer = [&](const StmtContainer* container) {
         for (const auto& st : container->stmts()) {
             if (const MatchStmt* matchSt = dynamic_cast<const MatchStmt*>(st)) {
-                out << "    _" << std::hex << &query << " ||--o{{ _" << std::hex << matchSt << " : _\n";
+                out << "    _" << std::hex << query << " ||--o{ _" << std::hex << matchSt << " : \"\"\n";
 
                 dump(out, matchSt);
             } else {
@@ -93,13 +91,13 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
     }
 
     if (const ReturnStmt* retSt = query->getReturnStmt()) {
-        out << "    _" << std::hex << query << " ||--o{{ _" << std::hex << retSt << " : _\n";
+        out << "    _" << std::hex << query << " ||--o{ _" << std::hex << retSt << " : \"\"\n";
         dump(out, retSt);
     }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {
-    out << "    _" << std::hex << match << " {{\n";
+    out << "    _" << std::hex << match << " {\n";
 
     if (match->isOptional()) {
         out << "        ASTType OPTIONAL_MATCH\n";
@@ -107,64 +105,64 @@ void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {
         out << "        ASTType MATCH\n";
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     const Pattern* pattern = match->getPattern();
-    out << "    _" << std::hex << match << " ||--o{{ _" << std::hex << pattern << " : _\n";
+    out << "    _" << std::hex << match << " ||--o{ _" << std::hex << pattern << " : \"\"\n";
 
     dump(out, pattern);
 
     if (match->hasLimit()) {
         const Limit* lim = match->getLimit();
-        out << "    _" << std::hex << match << " ||--o{{ _" << std::hex << lim << " : _\n";
+        out << "    _" << std::hex << match << " ||--o{ _" << std::hex << lim << " : \"\"\n";
         dump(out, lim);
     }
 
     if (match->hasSkip()) {
         const Skip* skip = match->getSkip();
-        out << "    _" << std::hex << match << " ||--o{{ _" << std::hex << skip << " : _\n";
+        out << "    _" << std::hex << match << " ||--o{ _" << std::hex << skip << " : \"\"\n";
         dump(out, skip);
     }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const Limit* lim) {
-    out << "    _" << std::hex << lim << " {{\n";
+    out << "    _" << std::hex << lim << " {\n";
     out << "        ASTType LIMIT\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     const Expr* expr = lim->getExpr();
 
-    out << "    _" << std::hex << lim << " ||--o{{ _" << std::hex << expr << " : _\n";
+    out << "    _" << std::hex << lim << " ||--o{ _" << std::hex << expr << " : \"\"\n";
 
     dump(out, expr);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const Skip* skip) {
-    out << "    _" << std::hex << skip << " {{\n";
+    out << "    _" << std::hex << skip << " {\n";
     out << "        ASTType SKIP\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     const Expr* expr = skip->getExpr();
 
-    out << "    _" << std::hex << skip << " ||--o{{ _" << std::hex << expr << " : _\n";
+    out << "    _" << std::hex << skip << " ||--o{ _" << std::hex << expr << " : \"\"\n";
 
     dump(out, expr);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const ReturnStmt* ret) {
-    out << "    _" << std::hex << ret << " {{\n";
+    out << "    _" << std::hex << ret << " {\n";
     out << "        ASTType RETURN\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     const Projection* projection = ret->getProjection();
 
-    out << "    _" << std::hex << ret << " ||--o{{ _" << std::hex << projection << " : _\n";
+    out << "    _" << std::hex << ret << " ||--o{ _" << std::hex << projection << " : \"\"\n";
 
     dump(out, projection);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {
-    out << "    _" << std::hex << projection << " {{\n";
+    out << "    _" << std::hex << projection << " {\n";
     out << "        ASTType Projection\n";
 
     if (projection->isDistinct()) {
@@ -191,17 +189,17 @@ void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {
         }
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     if (projection->hasLimit()) {
         const Limit* limit = projection->getLimit();
-        out << "    _" << std::hex << projection << " ||--o{{ _" << std::hex << limit << " : _\n";
+        out << "    _" << std::hex << projection << " ||--o{ _" << std::hex << limit << " : \"\"\n";
         dump(out, limit);
     }
 
     if (projection->hasSkip()) {
         const Skip* skip = projection->getSkip();
-        out << "    _" << std::hex << projection << " ||--o{{ _" << std::hex << skip << " : _\n";
+        out << "    _" << std::hex << projection << " ||--o{ _" << std::hex << skip << " : \"\"\n";
         dump(out, skip);
     }
 
@@ -211,34 +209,34 @@ void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {
 
     const auto& items = projection->items();
     for (const auto& item : items) {
-        out << "    _" << std::hex << projection << " ||--o{{ _" << std::hex << item << " : _\n";
+        out << "    _" << std::hex << projection << " ||--o{ _" << std::hex << item << " : \"\"\n";
         dump(out, item);
     }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const Pattern* pattern) {
-    out << "    _" << std::hex << pattern << " {{\n";
+    out << "    _" << std::hex << pattern << " {\n";
     out << "        ASTType Pattern\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     for (const PatternElement* part : pattern->elements()) {
-        out << "    _" << std::hex << &pattern << " ||--o{{ _" << std::hex << part << " : _\n";
+        out << "    _" << std::hex << pattern << " ||--o{ _" << std::hex << part << " : \"\"\n";
         dump(out, part);
     }
 
     if (const WhereClause* where = pattern->getWhere()) {
-        out << "    _" << std::hex << pattern << " ||--o{{ _" << std::hex << where << " : _\n";
+        out << "    _" << std::hex << pattern << " ||--o{ _" << std::hex << where << " : \"\"\n";
         dump(out, where);
     }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const PatternElement* elem) {
-    out << "    _" << std::hex << elem << " {{\n";
+    out << "    _" << std::hex << elem << " {\n";
     out << "        ASTType PatternElement\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     for (const auto& entity : elem->getEntities()) {
-        out << "    _" << std::hex << elem << " ||--o{{ _" << std::hex << entity << " : _\n";
+        out << "    _" << std::hex << elem << " ||--o{ _" << std::hex << entity << " : \"\"\n";
         if (NodePattern* node = dynamic_cast<NodePattern*>(entity)) {
             dump(out, node);
         } else if (EdgePattern* edge = dynamic_cast<EdgePattern*>(entity)) {
@@ -248,17 +246,17 @@ void CypherASTDumper::dump(std::ostream& out, const PatternElement* elem) {
 }
 
 void CypherASTDumper::dump(std::ostream& out, const WhereClause* where) {
-    out << "    _" << std::hex << where << " {{\n";
+    out << "    _" << std::hex << where << " {\n";
     out << "        ASTType WHERE\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     const Expr* expr = where->getExpr();
-    out << "    _" << std::hex << where << " ||--o{{ _" << std::hex << expr << " : _\n";
+    out << "    _" << std::hex << where << " ||--o{ _" << std::hex << expr << " : \"\"\n";
     dump(out, expr);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const NodePattern* node) {
-    out << "    _" << std::hex << node << " {{\n";
+    out << "    _" << std::hex << node << " {\n";
     out << "        ASTType NodePattern\n";
 
     if (const Symbol* symbol = node->getSymbol()) {
@@ -275,19 +273,19 @@ void CypherASTDumper::dump(std::ostream& out, const NodePattern* node) {
         }
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     const VarDecl* decl = node->getDecl();
     if (!decl) {
         return;
     }
 
-    out << "    _" << std::hex << node << " ||--o{{ VAR_" << decl << " : _\n";
+    out << "    _" << std::hex << node << " ||--o{ VAR_" << decl << " : \"\"\n";
     dump(out, decl);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
-    out << "    _" << std::hex << edge << " {{\n";
+    out << "    _" << std::hex << edge << " {\n";
     out << "        ASTType EdgePattern\n";
 
     if (Symbol* symbol = edge->getSymbol()) {
@@ -304,29 +302,29 @@ void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
         }
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     const VarDecl* decl = edge->getDecl();
     if (!decl) {
         return;
     }
 
-    out << "    _" << std::hex << edge << " ||--o{{ VAR_" << decl << " : _\n";
+    out << "    _" << std::hex << edge << " ||--o{ VAR_" << decl << " : \"\"\n";
     dump(out, decl);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const MapLiteral* map) {
-    out << "    _" << std::hex << map << " {{\n";
+    out << "    _" << std::hex << map << " {\n";
     out << "        ASTType MapLiteral\n";
 
     for (const auto& [k, v] : *map) {
         out << "        prop_" << sanitizeString(k->getName()) << " _" << std::hex << v << "\n";
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     for (const auto& [k, v] : *map) {
-        out << "    _" << std::hex << map << " ||--o{{ _" << std::hex << v << " : _\n";
+        out << "    _" << std::hex << map << " ||--o{ _" << std::hex << v << " : \"\"\n";
         dump(out, v);
     }
 }
@@ -365,7 +363,7 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
 }
 
 void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType BinaryExpression\n";
     out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
 
@@ -423,22 +421,22 @@ void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
             break;
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     const Expr* left = expr->getLHS();
     const Expr* right = expr->getRHS();
 
-    out << "    _" << std::hex << expr << " ||--o{{ _" << std::hex << left << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << left << " : \"\"\n";
 
     dump(out, left);
 
-    out << "    _" << std::hex << expr << " ||--o{{ _" << std::hex << right << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << right << " : \"\"\n";
 
     dump(out, right);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const UnaryExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType UnaryExpression\n";
     out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
 
@@ -457,29 +455,29 @@ void CypherASTDumper::dump(std::ostream& out, const UnaryExpr* expr) {
             break;
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     const Expr* right = expr->getSubExpr();
 
-    out << "    _" << std::hex << expr << " ||--o{{ _" << std::hex << right << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << right << " : \"\"\n";
 
     dump(out, right);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const SymbolExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType SymbolExpression\n";
     out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
     out << "        Symbol " << expr->getSymbol()->getName() << "\n";
-    out << "    }}\n";
+    out << "    }\n";
 
     if (VarDecl* decl = expr->getDecl()) {
-        out << "    _" << std::hex << expr << " ||--o{{ VAR_" << decl << " : _\n";
+        out << "    _" << std::hex << expr << " ||--o{ VAR_" << decl << " : \"\"\n";
     }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType LiteralExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
 
@@ -533,17 +531,17 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
         }
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const PathExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType PathExpr\n";
-    out << "    }}\n";
+    out << "    }\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const NodeLabelExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType NodeLabelExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
@@ -552,17 +550,17 @@ void CypherASTDumper::dump(std::ostream& out, const NodeLabelExpr* expr) {
         out << "        Label " << label->getName() << "\n";
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     if (!expr->getDecl()) {
         return;
     }
 
-    out << "    _" << std::hex << expr << " ||--o{{ VAR_" << expr->getDecl() << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getDecl() << " : \"\"\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const StringExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType StringExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
@@ -581,21 +579,21 @@ void CypherASTDumper::dump(std::ostream& out, const StringExpr* expr) {
             break;
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 
     const Expr* left = expr->getLHS();
     const Expr* right = expr->getRHS();
 
-    out << "    _" << std::hex << expr << " ||--o{{ _" << std::hex << right << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << right << " : \"\"\n";
 
-    out << "    _" << std::hex << expr << " ||--o{{ _" << std::hex << left << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << left << " : \"\"\n";
 
     dump(out, left);
     dump(out, right);
 }
 
 void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
-    out << "    _" << std::hex << expr << " {{\n";
+    out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType PropertyExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
 
@@ -611,17 +609,17 @@ void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
         i++;
     }
 
-    out << "\n    }}\n";
+    out << "\n    }\n";
 
     if (!expr->getDecl()) {
         return;
     }
 
-    out << "    _" << std::hex << expr << " ||--o{{ VAR_" << expr->getDecl() << " : _\n";
+    out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getDecl() << " : \"\"\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {
-    out << "    VAR_" << decl << " {{\n";
+    out << "    VAR_" << decl << " {\n";
     out << "        ValueType " << EvaluatedTypeName::value(decl->getType()) << "\n";
 
     const auto& name = decl->getName();
@@ -630,5 +628,5 @@ void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {
         out << "        Name " << name << "\n";
     }
 
-    out << "    }}\n";
+    out << "    }\n";
 }
