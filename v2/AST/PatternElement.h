@@ -80,13 +80,11 @@ public:
         _entities.emplace_back(entity);
     }
 
-    const EntityPatterns& getEntities() const {
-        return _entities;
-    }
+    const EntityPatterns& getEntities() const { return _entities; }
 
-    EntityPattern* getRootEntity() const {
-        return _entities.front();
-    }
+    size_t size() const { return _entities.size(); }
+
+    EntityPattern* getRootEntity() const { return _entities.front(); }
 
     ChainView getElementChain() const {
         if (_entities.size() <= 1) {

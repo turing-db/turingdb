@@ -13,6 +13,8 @@ class SinglePartQuery : public QueryCommand {
 public:
     static SinglePartQuery* create(CypherAST* ast);
 
+    Kind getKind() const override { return Kind::SINGLE_PART_QUERY; }
+
     const StmtContainer* getReadStmts() const { return _readStmts; }
     const StmtContainer* getUpdateStmts() const { return _updateStmts; }
     const ReturnStmt* getReturnStmt() const { return _returnStmt; }

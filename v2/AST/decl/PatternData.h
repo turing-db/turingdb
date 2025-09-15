@@ -19,7 +19,7 @@ public:
     static NodePatternData* create(CypherAST* ast);
 
     const LabelSet& labelConstraints() const { return _labelConstraints; }
-    const ExprConstraints& exprConstraints() { return _exprConstraints; }
+    const ExprConstraints& exprConstraints() const { return _exprConstraints; }
 
     void addLabelConstraint(LabelID labelID);
     void addExprConstraint(PropertyType propType, Expr* expr);
@@ -41,7 +41,7 @@ public:
     static EdgePatternData* create(CypherAST* ast);
 
     const EdgeTypes& edgeTypeConstraints() const { return _edgeTypeConstraints; }
-    const ExprConstraints& exprConstraints() { return _exprConstraints; }
+    const ExprConstraints& exprConstraints() const { return _exprConstraints; }
 
     void addEdgeTypeConstraint(EdgeTypeID edgeTypeID);
     void addExprConstraint(PropertyType propType, Expr* expr);

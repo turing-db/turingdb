@@ -3,8 +3,11 @@
 #include <ostream>
 
 namespace db {
-
 class GraphView;
+}
+
+namespace db::v2 {
+
 class PlanGraph;
 
 class PlanGraphDebug {

@@ -3,7 +3,7 @@
 #include <vector>
 #include <memory>
 
-namespace db {
+namespace db::v2 {
 
 class Processor;
 class PipelineBuffer;

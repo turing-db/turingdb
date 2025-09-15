@@ -1,10 +1,10 @@
 #include "PlanGraph.h"
 
-#include "VarDecl.h"
+#include "decl/VarDecl.h"
 
 #include "BioAssert.h"
 
-using namespace db;
+using namespace db::v2;
 
 PlanGraph::PlanGraph()
 {

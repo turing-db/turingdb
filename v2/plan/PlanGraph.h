@@ -7,10 +7,10 @@
 #include "metadata/LabelSet.h"
 #include "EnumToString.h"
 
-namespace db {
+namespace db::v2 {
 
 class VarDecl;
-class BinExpr;
+class Expr;
 class ExprConstraint;
 
 enum class PlanGraphOpcode {
@@ -136,30 +136,30 @@ private:
 
 class FilterNodeExprNode : public PlanGraphNode {
 public:
-    explicit FilterNodeExprNode(const BinExpr* expr) 
+    explicit FilterNodeExprNode(const Expr* expr) 
         : PlanGraphNode(PlanGraphOpcode::FILTER_NODE_EXPR),
         _expr(expr)
     {
     }
 
-    const BinExpr* getExpr() const { return _expr; }
+    const Expr* getExpr() const { return _expr; }
 
 private:
-    const BinExpr* _expr {nullptr};
+    const Expr* _expr {nullptr};
 };
 
 class FilterEdgeExprNode : public PlanGraphNode {
 public:
-    explicit FilterEdgeExprNode(const BinExpr* expr) 
+    explicit FilterEdgeExprNode(const Expr* expr) 
         : PlanGraphNode(PlanGraphOpcode::FILTER_EDGE_EXPR),
         _expr(expr)
     {
     }
 
-    const BinExpr* getExpr() const { return _expr; }
+    const Expr* getExpr() const { return _expr; }
 
 private:
-    const BinExpr* _expr {nullptr};
+    const Expr* _expr {nullptr};
 };
 
 class FilterNodeLabelNode : public PlanGraphNode {

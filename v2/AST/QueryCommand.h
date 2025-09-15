@@ -9,6 +9,12 @@ class QueryCommand {
 public:
     friend CypherAST;
 
+    enum class Kind {
+        SINGLE_PART_QUERY = 0,
+    };
+
+    virtual Kind getKind() const = 0;
+
     DeclContext* getDeclContext() const { return _declContext; }
 
 protected:

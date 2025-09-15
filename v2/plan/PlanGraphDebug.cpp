@@ -1,12 +1,17 @@
 #include "PlanGraphDebug.h"
 
-#include "BioAssert.h"
-#include "VarDecl.h"
 #include "views/GraphView.h"
+
 #include "PlanGraph.h"
-#include "Expr.h"
+
+#include "decl/VarDecl.h"
+
+#include "metadata/LabelSet.h"
+
+#include "BioAssert.h"
 
 using namespace db;
+using namespace db::v2;
 
 void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, const PlanGraph& planGraph) {
     const auto& metadata = view.metadata();

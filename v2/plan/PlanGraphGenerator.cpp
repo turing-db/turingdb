@@ -2,25 +2,30 @@
 
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/chunk.hpp>
+#include <spdlog/fmt/bundled/core.h>
+
+#include "views/GraphView.h"
 
 #include "PlanGraph.h"
 #include "QueryCommand.h"
-#include "MatchTarget.h"
-#include "MatchTargets.h"
-#include "PathPattern.h"
-#include "Expr.h"
-#include "TypeConstraint.h"
-#include "ExprConstraint.h"
-#include "views/GraphView.h"
-#include "CreateTarget.h"
+#include "SinglePartQuery.h"
+#include "stmt/StmtContainer.h"
+#include "stmt/Stmt.h"
+#include "stmt/MatchStmt.h"
+#include "Pattern.h"
+#include "PatternElement.h"
+#include "NodePattern.h"
+#include "decl/PatternData.h"
+
+#include "Symbol.h"
 
 #include "PlannerException.h"
 
+using namespace db::v2;
 using namespace db;
-namespace rv = ranges::views;
 
 PlanGraphGenerator::PlanGraphGenerator(const GraphView& view,
-                               QueryCallback callback)
+                                       QueryCallback callback)
     : _view(view)
 {
 }
@@ -28,18 +33,79 @@ PlanGraphGenerator::PlanGraphGenerator(const GraphView& view,
 PlanGraphGenerator::~PlanGraphGenerator() {
 }
 
+const LabelSet* PlanGraphGenerator::getOrCreateLabelSet(const Symbols& symbols) {
+    LabelNames labelNames;
+    for (const Symbol* symbol : symbols) {
+        labelNames.push_back(symbol->getName());
+    }
+
+    const auto labelSetCacheIt = _labelSetCache.find(labelNames);
+    if (labelSetCacheIt != _labelSetCache.end()) {
+        return labelSetCacheIt->second;
+    }
+
+    const LabelSet* labelSet = buildLabelSet(symbols);
+    _labelSetCache[labelNames] = labelSet;
+
+    return labelSet;
+}
+
+const LabelSet* PlanGraphGenerator::buildLabelSet(const Symbols& symbols) {
+    auto labelSet = std::make_unique<LabelSet>();
+    for (const Symbol* symbol : symbols) {
+        const LabelID labelID = getLabel(symbol);
+
+        if (!labelID.isValid()) {
+            throw PlannerException(fmt::format("Unsupported node label: {}", symbol->getName()));
+        }
+
+        labelSet->set(labelID);
+    }
+
+    LabelSet* ptr = labelSet.get();
+    _labelSets.push_back(std::move(labelSet));
+
+    return ptr;
+}
+
+LabelID PlanGraphGenerator::getLabel(const Symbol* symbol) {
+    auto res = _view.metadata().labels().get(symbol->getName());
+    if (!res) {
+        return LabelID {};
+    }
+
+    return res.value();
+}
+
+// ===== Var nodes utilities =====
+
+void PlanGraphGenerator::addVarNode(PlanGraphNode* node, VarDecl* varDecl) {
+    _varNodesMap[varDecl] = node;
+}
+
+PlanGraphNode* PlanGraphGenerator::getVarNode(VarDecl* varDecl) const {
+    const auto it = _varNodesMap.find(varDecl);
+    if (it == _varNodesMap.end()) {
+        return nullptr;
+    }
+
+    return it->second;
+}
+
+PlanGraphNode* PlanGraphGenerator::getOrCreateVarNode(VarDecl* varDecl) {
+    PlanGraphNode* varNode = getVarNode(varDecl);
+    if (!varNode) {
+        varNode = _tree.create<VarNode>(varDecl);
+        addVarNode(varNode, varDecl);
+    }
+
+    return varNode;
+}
+
 void PlanGraphGenerator::generate(const QueryCommand* query) {
     switch (query->getKind()) {
-        case QueryCommand::Kind::MATCH_COMMAND:
-            planMatchCommand(static_cast<const MatchCommand*>(query));
-            break;
-
-        case QueryCommand::Kind::CREATE_COMMAND:
-            planCreateCommand(static_cast<const CreateCommand*>(query));
-            break;
-
-        case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
-            planCreateGraphCommand(static_cast<const CreateGraphCommand*>(query));
+        case QueryCommand::Kind::SINGLE_PART_QUERY:
+            generateSinglePartQuery(static_cast<const SinglePartQuery*>(query));
             break;
 
         default:
@@ -49,6 +115,89 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
     }
 }
 
+void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
+    const StmtContainer* readStmts = query->getReadStmts();
+    for (const Stmt* stmt : readStmts->stmts()) {
+        generateStmt(stmt);
+    }
+
+    // TODO: Return statement
+}
+
+void PlanGraphGenerator::generateStmt(const Stmt* stmt) {
+    switch (stmt->getKind()) {
+        case Stmt::Kind::MATCH:
+            generateMatchStmt(static_cast<const MatchStmt*>(stmt));
+            break;
+
+        default:
+            throw PlannerException(fmt::format("Unsupported statement type: {}", (unsigned)stmt->getKind()));
+            break;
+    }
+}
+
+void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
+    const Pattern* pattern = stmt->getPattern();
+
+    // Each PatternElement is a target of the match
+    // and contains a chain of EntityPatterns
+    for (const PatternElement* element : pattern->elements()) {
+        generatePatternElement(element);
+    }
+}
+
+void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
+    if (element->size() == 0) {
+        throw PlannerException("Empty match pattern element");
+    }
+
+    generatePatternElementOrigin(element->getRootEntity());
+
+    const auto& chain = element->getElementChain();
+    for (const auto& [edge, node] : chain) {
+        generatePatternElementExpand(edge, node);
+    }
+}
+
+void PlanGraphGenerator::generatePatternElementOrigin(const EntityPattern* pattern) {
+    const NodePattern* nodePattern = dynamic_cast<const NodePattern*>(pattern);
+    if (!nodePattern) {
+        throw PlannerException("Pattern element origin must be a node pattern");
+    }
+
+    const NodePatternData* data = nodePattern->getData();
+    const LabelSet& labelSet = data->labelConstraints();
+    const auto& exprConstraints = data->exprConstraints();
+
+    // Scan nodes
+    PlanGraphNode* currentNode = nullptr;
+    if (labelSet.empty()) {
+        currentNode = _tree.create<ScanNodesNode>();
+    } else {
+        currentNode = _tree.create<ScanNodesByLabelNode>(&labelSet);
+    }
+
+    // Expression constraints
+    for (const auto& [propType, expr] : exprConstraints) {
+        FilterNodeExprNode* filter = _tree.create<FilterNodeExprNode>(expr);
+        currentNode->connectOut(filter);
+        currentNode = filter;
+    }
+
+    // Variable declaration
+    VarDecl* varDecl = nodePattern->getDecl();
+    if (varDecl) {
+        auto* varNode = getOrCreateVarNode(varDecl);
+        currentNode->connectOut(varNode);
+        currentNode = varNode;
+    }
+}
+
+void PlanGraphGenerator::generatePatternElementExpand(const EntityPattern* edge,
+                                                      const EntityPattern* node) {
+}
+
+/*
 void PlanGraphGenerator::planMatchCommand(const MatchCommand* cmd) {    
     const auto& matchTargets = cmd->getMatchTargets()->targets();
     for (const auto& target : matchTargets) {
@@ -319,74 +468,4 @@ void PlanGraphGenerator::planCreateGraphCommand(const CreateGraphCommand* cmd) {
 }
 
 // ===== Labels and labelsets utilities =====
-
-const LabelSet* PlanGraphGenerator::getOrCreateLabelSet(const TypeConstraint* typeConstr) {
-    LabelNames labelStrings;
-
-    // Collect strings of all label names in typeConstr
-    for (const VarExpr* nameExpr : typeConstr->getTypeNames()) {
-        labelStrings.push_back(&nameExpr->getName());
-    }
-
-    const auto labelSetCacheIt = _labelSetCache.find(labelStrings);
-    if (labelSetCacheIt != _labelSetCache.end()) {
-        return labelSetCacheIt->second;
-    }
-
-    const LabelSet* labelSet = buildLabelSet(labelStrings);
-    _labelSetCache[labelStrings] = labelSet;
-
-    return labelSet;
-}
-
-const LabelSet* PlanGraphGenerator::buildLabelSet(const LabelNames& labelNames) {
-    auto labelSet = std::make_unique<LabelSet>();
-    for (const std::string* labelName : labelNames) {
-        const LabelID labelID = getLabel(*labelName);
-
-        if (!labelID.isValid()) {
-            throw PlannerException("Unsupported node label: " + *labelName);
-        }
-
-        labelSet->set(labelID);
-    }
-
-    auto* ptr = labelSet.get();
-    _labelSets.push_back(std::move(labelSet));
-
-    return ptr;
-}
-
-LabelID PlanGraphGenerator::getLabel(const std::string& labelName) {
-    auto res = _view.metadata().labels().get(labelName);
-    if (!res) {
-        return LabelID {};
-    }
-
-    return res.value();
-}
-
-// ===== Var nodes utilities =====
-
-void PlanGraphGenerator::addVarNode(PlanGraphNode* node, VarDecl* varDecl) {
-    _varNodesMap[varDecl] = node;
-}
-
-PlanGraphNode* PlanGraphGenerator::getVarNode(VarDecl* varDecl) const {
-    const auto it = _varNodesMap.find(varDecl);
-    if (it == _varNodesMap.end()) {
-        return nullptr;
-    }
-
-    return it->second;
-}
-
-PlanGraphNode* PlanGraphGenerator::getOrCreateVarNode(VarDecl* varDecl) {
-    auto varNode = getVarNode(varDecl);
-    if (!varNode) {
-        varNode = _tree.create<VarNode>(varDecl);
-        addVarNode(varNode, varDecl);
-    }
-
-    return varNode;
-}
+*/

@@ -3,7 +3,7 @@
 #include "PipelineV2.h"
 #include "PlanGraph.h"
 
-using namespace db;
+using namespace db::v2;
 
 PipelineGenerator::PipelineGenerator(const PlanGraph& graph)
     : _graph(graph)
