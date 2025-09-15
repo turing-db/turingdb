@@ -65,9 +65,10 @@ private:
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
     void generatePatternElement(const PatternElement* element);
-    void generatePatternElementOrigin(const EntityPattern* pattern);
-    void generatePatternElementExpand(const EntityPattern* edge,
-                                      const EntityPattern* node);
+    PlanGraphNode* generatePatternElementOrigin(const EntityPattern* pattern);
+    PlanGraphNode* generatePatternElementExpand(PlanGraphNode* currentNode,
+                                                const EntityPattern* edge,
+                                                const EntityPattern* target);
 
     /*
     PlanGraphNode* planPathMatchOrigin(const EntityPattern* pattern);
