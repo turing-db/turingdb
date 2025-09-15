@@ -62,6 +62,7 @@ public:
      };
 
      using PendingNodeOffset = size_t;
+
      // A node: either exists in previous commit (materialised as NodeID),
      // or to be created in this commit (materialised as PendingNode)
      using ContingentNode = std::variant<NodeID, PendingNodeOffset>;
@@ -97,6 +98,7 @@ public:
      */
     void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
         _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
+
         _deletedNodes.insert(_deletedNodes.end(),
                              newDeletedNodes.begin(),
                              newDeletedNodes.end());
@@ -114,7 +116,6 @@ private:
 
     // Edges to be deleted
     std::vector<EdgeID> _deletedEdges;
-
 };
 
 }
