@@ -1,6 +1,7 @@
 #include "CypherAnalyzer.h"
 
 #include <spdlog/fmt/bundled/core.h>
+#include <spdlog/spdlog.h>
 
 #include "AnalyzeException.h"
 
@@ -14,7 +15,6 @@
 #include "WhereClause.h"
 #include "Pattern.h"
 #include "PatternElement.h"
-#include "expr/Expr.h"
 #include "Symbol.h"
 #include "NodePattern.h"
 #include "EdgePattern.h"
@@ -119,10 +119,6 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 }
 
 void CypherAnalyzer::analyze(const Pattern* pattern) {
-    if (pattern->elements().empty()) {
-        throwError("Empty pattern", &pattern);
-    }
-
     for (const PatternElement* element : pattern->elements()) {
         analyze(element);
     }
@@ -278,6 +274,7 @@ void CypherAnalyzer::analyze(BinaryExpr* expr) {
     Expr* lhs = expr->getLHS();
     Expr* rhs = expr->getRHS();
 
+    spdlog::info("Analyzing binary expression lhs kind {}, rhs kind {}",(unsigned) lhs->getKind(), (unsigned) rhs->getKind());
     analyze(lhs);
     analyze(rhs);
 
@@ -421,6 +418,9 @@ void CypherAnalyzer::analyze(UnaryExpr* expr) {
 
 void CypherAnalyzer::analyze(SymbolExpr* expr) {
     VarDecl* varDecl = _ctxt->getDecl(expr->getSymbol()->getName());
+    if (!varDecl) {
+        throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
+    }
     expr->setType(varDecl->getType());
 }
 
@@ -465,6 +465,9 @@ void CypherAnalyzer::analyze(PropertyExpr* expr) {
     const Symbol* propName = qualifiedName->get(1);
 
     VarDecl* varDecl = _ctxt->getDecl(varName->getName());
+    if (!varDecl) {
+        throwError(fmt::format("Variable '{}' not found", varName->getName()), expr);
+    }
 
     if (varDecl->getType() != EvaluatedType::NodePattern && varDecl->getType() != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format("Variable '{}' is '{}' it must be a node or edge",
@@ -472,9 +475,7 @@ void CypherAnalyzer::analyze(PropertyExpr* expr) {
         throwError(std::move(error), expr);
     }
 
-    expr->setDecl(varDecl);
-
-    const std::optional<PropertyType> propType = _graphMetadata.propTypes().get(propName->getName());
+    const auto propType = _graphMetadata.propTypes().get(propName->getName());
     if (!propType) {
         const std::string error = fmt::format("Property type '{}' not found", propName->getName());
         throwError(std::move(error), expr);
@@ -496,8 +497,7 @@ void CypherAnalyzer::analyze(PropertyExpr* expr) {
         case ValueType::String: {
             type = EvaluatedType::String;
         } break;
-        case ValueType::Invalid:
-        case ValueType::_SIZE: {
+        default: {
             const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
             throwError(std::move(error), expr);
         } break;

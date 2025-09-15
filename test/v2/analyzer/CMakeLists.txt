@@ -5,3 +5,4 @@ function(test exe_name cpp_file)
 endfunction()
 
 test(test_expression ExpressionTest.cpp)
+test(test_stmt StmtTest.cpp)
