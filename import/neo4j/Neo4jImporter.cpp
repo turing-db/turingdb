@@ -33,6 +33,8 @@ bool Neo4jImporter::fromUrlToJsonDir(JobSystem& jobSystem,
                                      size_t nodeCountPerQuery,
                                      size_t edgeCountPerQuery,
                                      const UrlToJsonDirArgs& args) {
+    std::lock_guard<std::mutex> lock(_mutex);
+
     JsonParser parser(graph);
     QueryManager manager;
     const FileUtils::Path jsonDir = args._workDir / "json";
@@ -382,10 +384,9 @@ bool Neo4jImporter::fromDumpFileToJsonDir(JobSystem& jobSystem,
                                           std::size_t nodeCountPerQuery,
                                           std::size_t edgeCountPerQuery,
                                           const DumpFileToJsonDirArgs& args) {
-
     std::lock_guard<std::mutex> lock(_mutex);
-    Neo4jInstance instance(args._workDir);
 
+    Neo4jInstance instance(args._workDir);
     if (Neo4jInstance::isRunning()) {
         instance.stop();
     }
