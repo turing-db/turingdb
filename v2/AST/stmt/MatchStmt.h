@@ -13,6 +13,8 @@ class MatchStmt : public Stmt {
 public:
     static MatchStmt* create(CypherAST* ast, Pattern* pattern);
 
+    Kind getKind() const override { return Kind::MATCH; }
+
     bool isOptional() const { return _optional; }
 
     bool hasLimit() const { return _limit != nullptr; }

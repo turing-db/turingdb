@@ -3,7 +3,7 @@
 #include "Processor.h"
 #include "PipelineBuffer.h"
 
-using namespace db;
+using namespace db::v2;
 
 PipelineV2::PipelineV2()
 {

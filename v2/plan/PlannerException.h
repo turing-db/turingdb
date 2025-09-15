@@ -4,7 +4,7 @@
 
 #include "TuringException.h"
 
-namespace db {
+namespace db::v2 {
 
 class PlannerException : public TuringException {
 public:

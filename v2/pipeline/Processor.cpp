@@ -1,6 +1,6 @@
 #include "Processor.h"
 
-using namespace db;
+using namespace db::v2;
 
 Processor::Processor() = default;
 
