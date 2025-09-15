@@ -15,6 +15,7 @@ class Pattern;
 class PatternElement;
 class NodePattern;
 class EdgePattern;
+class EntityPattern;
 class Expr;
 class BinaryExpr;
 class UnaryExpr;
@@ -68,6 +69,10 @@ public:
     void analyze(StringExpr* expr);
     void analyze(NodeLabelExpr* expr);
     void analyze(PathExpr* expr);
+
+    // Create symbols
+    void createPatternDecl(const Pattern* pattern);
+    void createPatternDecl(EntityPattern* entity, EvaluatedType type);
 
 private:
     CypherAST* _ast {nullptr};
