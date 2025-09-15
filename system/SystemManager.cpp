@@ -174,7 +174,7 @@ bool SystemManager::loadGraph(const fs::Path graphPath, const std::string& graph
         case GraphFileType::GML:
             return loadGmlDB(graphName, graphPath, jobSystem);
         case GraphFileType::NEO4J:
-            return loadGmlDB(graphName, graphPath, jobSystem);
+            return loadNeo4jDB(graphName, graphPath, jobSystem);
         case GraphFileType::NEO4J_JSON:
             return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
         case GraphFileType::BINARY:
