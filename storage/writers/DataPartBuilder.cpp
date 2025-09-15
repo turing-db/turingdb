@@ -1,8 +1,7 @@
 #include "DataPartBuilder.h"
 
-#include <range/v3/view/enumerate.hpp>
-
 #include "Graph.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "properties/PropertyManager.h"
@@ -100,6 +99,54 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
 
     ++_nextEdgeID;
     return edge;
+}
+
+NodeID DataPartBuilder::addPendingNode(CommitWriteBuffer::PendingNode& node) {
+    using CWB = CommitWriteBuffer;
+    // Build/get the LabelSet for this node
+    LabelSet labelSet;
+    for (const std::string& label : node.labelNames) {
+        auto labelID = _metadata->getOrCreateLabel(label);
+        labelSet.set(labelID);
+    }
+
+    const NodeID nodeID = this->addNode(labelSet);
+
+    for (const CWB::UntypedProperty& prop : node.properties) {
+        // Get the value type from the untyped property
+        const ValueType propValueType =
+            std::visit(CWB::ValueTypeFromProperty {}, prop.value);
+        // Get the existing ID, or create a new property and get that ID
+        const PropertyTypeID propID =
+            _metadata->getOrCreatePropertyType(prop.propertyName, propValueType)._id;
+
+        // Add this property to this node
+        std::visit(BuildNodeProperty {*this, nodeID, propID}, prop.value);
+    }
+
+    return nodeID;
+}
+
+
+std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& wb,
+                                                      const CommitWriteBuffer::PendingEdge& edge) {
+    // If this edge has source or target which is a node in a previous datapart, check
+    // if it has been deleted
+    if (std::holds_alternative<NodeID>(edge.src)) {
+        NodeID srcID = std::get<NodeID>(edge.src);
+        if (wb.deletedNodes().contains(srcID)) {
+            return std::nullopt;
+        }
+    }
+    if (std::holds_alternative<NodeID>(edge.tgt)) {
+        NodeID tgtID = std::get<NodeID>(edge.tgt);
+        if (wb.deletedNodes().contains(tgtID)) {
+            return std::nullopt;
+        }
+    }
+
+    
+    return {};
 }
 
 #define INSTANTIATE(PType)                                                   \

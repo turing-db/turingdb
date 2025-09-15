@@ -1,12 +1,12 @@
 #pragma once
 
+#include <set>
 #include <string>
 #include <variant>
 #include <vector>
 
 #include "DataPart.h"
 #include "ID.h"
-#include "writers/DataPartBuilder.h"
 #include "metadata/PropertyType.h"
 
 namespace {
@@ -17,7 +17,6 @@ using namespace db;
 
 namespace db {
 
-class VersionController;
 
 class CommitWriteBuffer {
 public:
@@ -65,7 +64,10 @@ public:
         _pendingEdges.emplace_back(src, tgt, edgeLabels, edgeProperties);
     }
 
-    const std::vector<PendingNode> pendingNodes() const { return _pendingNodes; }
+    std::vector<PendingNode>& pendingNodes() { return _pendingNodes; }
+    std::vector<PendingEdge>& pendingEdges() { return _pendingEdges; }
+
+    const std::set<NodeID> deletedNodes() const { return _deletedNodes; }
 
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
@@ -74,15 +76,13 @@ public:
      * std::vector::insert
      */
     void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
-        _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
+        // _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
 
-        _deletedNodes.insert(_deletedNodes.end(),
-                             newDeletedNodes.begin(),
-                             newDeletedNodes.end());
+        _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
     }
     
 private:
-    friend VersionController;
+    friend DataPartBuilder;
 
     // Nodes to be created
     std::vector<PendingNode> _pendingNodes;
@@ -91,38 +91,12 @@ private:
     std::vector<PendingEdge> _pendingEdges;
     
     // Nodes to be deleted
-    std::vector<NodeID> _deletedNodes;
+    std::set<NodeID> _deletedNodes;
 
     // Edges to be deleted
-    std::vector<EdgeID> _deletedEdges;
+    std::set<EdgeID> _deletedEdges;
 
-    struct BuildNodeProperty {
-        BuildNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
-            : _builder(builder),
-              _nid(nid),
-              _pid(pid) {}
-
-        void operator()(types::Int64::Primitive propValue) const {
-            _builder.addNodeProperty<types::Int64>(_nid, _pid, propValue);
-        }
-        void operator()(types::UInt64::Primitive propValue) const {
-            _builder.addNodeProperty<types::UInt64>(_nid, _pid, propValue);
-        }
-        void operator()(types::Double::Primitive propValue) const {
-            _builder.addNodeProperty<types::Double>(_nid, _pid, propValue);
-        }
-        void operator()(types::String::Primitive propValue) const {
-            _builder.addNodeProperty<types::String>(_nid, _pid, propValue);
-        }
-        void operator()(types::Bool::Primitive propValue) const {
-            _builder.addNodeProperty<types::Bool>(_nid, _pid, propValue);
-        }
-
-    private:
-        DataPartBuilder& _builder;
-        NodeID _nid;
-        PropertyTypeID _pid;
-    };
+    
 
     struct ValueTypeFromProperty {
         ValueType operator()(types::Int64::Primitive propValue) const {
@@ -142,4 +116,5 @@ private:
         }
     };
 };
+
 }
