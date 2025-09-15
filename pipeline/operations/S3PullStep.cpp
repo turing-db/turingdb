@@ -9,7 +9,6 @@
 #include "SystemManager.h"
 #include "spdlog/spdlog.h"
 
-
 using namespace db;
 
 S3PullStep::S3PullStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath)

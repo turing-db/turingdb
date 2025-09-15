@@ -5,8 +5,6 @@
 #include "ExecutionContext.h"
 #include "Profiler.h"
 #include "SystemManager.h"
-#include "AwsS3ClientWrapper.h"
-
 
 using namespace db;
 
@@ -17,7 +15,8 @@ S3ConnectStep::S3ConnectStep(const std::string& accessId, const std::string& sec
 {
 }
 
-S3ConnectStep::~S3ConnectStep() {
+S3ConnectStep::~S3ConnectStep()
+{
 }
 
 void S3ConnectStep::prepare(ExecutionContext* ctxt) {
@@ -26,8 +25,7 @@ void S3ConnectStep::prepare(ExecutionContext* ctxt) {
 
 void S3ConnectStep::execute() {
     Profile profile {"S3ConnectStep::execute"};
-    auto wrapper = S3::AwsS3ClientWrapper<>(_accessId, _secretKey, _region);
-    _sysMan->setS3Client(std::make_unique<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>>(std::move(wrapper)));
+    _sysMan->setS3Client(_accessId, _secretKey, _region);
 }
 
 void S3ConnectStep::describe(std::string& descr) const {

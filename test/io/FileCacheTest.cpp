@@ -43,9 +43,9 @@ TEST_F(FileCacheTest, SuccesfulListGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<std::string> graphs;
         auto res = cache.listGraphs(graphs);
@@ -68,9 +68,11 @@ TEST_F(FileCacheTest, UnsuccesfulListGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
+
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
 
         std::vector<std::string> graphs;
         auto res = cache.listGraphs(graphs);
@@ -97,9 +99,9 @@ TEST_F(FileCacheTest, SuccesfulListLocalGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.listLocalGraphs(graphs);
@@ -125,9 +127,9 @@ TEST_F(FileCacheTest, SuccesfulLoadGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.loadGraph("graph1");
@@ -157,9 +159,9 @@ TEST_F(FileCacheTest, SuccesfulLoadGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.loadGraph("graph1");
@@ -192,9 +194,9 @@ TEST_F(FileCacheTest, UnsuccesfulLoadGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.loadGraph("graph1");
@@ -224,8 +226,9 @@ TEST_F(FileCacheTest, SuccesfulSaveGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.saveGraph("graph1");
@@ -251,8 +254,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.saveGraph("graph1");
@@ -281,8 +285,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveGraphs) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> graphs;
         auto res = cache.saveGraph("graph1");
@@ -324,8 +329,9 @@ TEST_F(FileCacheTest, SuccesfulListData) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<std::string> folderResults;
         std::vector<std::string> fileResults;
@@ -352,8 +358,9 @@ TEST_F(FileCacheTest, UnsuccesfulListData) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<std::string> folderResults;
         std::vector<std::string> fileResults;
@@ -385,8 +392,9 @@ TEST_F(FileCacheTest, SuccesfulListLocalData) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> folderResults;
         std::vector<fs::Path> fileResults;
@@ -417,8 +425,9 @@ TEST_F(FileCacheTest, UnsuccesfulListLocalData) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         std::vector<fs::Path> folderResults;
         std::vector<fs::Path> fileResults;
@@ -445,8 +454,9 @@ TEST_F(FileCacheTest, SuccesfulSaveDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataFile("file1");
         ASSERT_TRUE(res);
@@ -469,8 +479,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataFile("file10");
         ASSERT_FALSE(res);
@@ -493,8 +504,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataFile("dir1");
         ASSERT_FALSE(res);
@@ -516,8 +528,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataFile("file1");
         ASSERT_FALSE(res);
@@ -540,8 +553,9 @@ TEST_F(FileCacheTest, SuccesfulLoadDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataFile("file1");
         ASSERT_TRUE(res);
@@ -562,8 +576,9 @@ TEST_F(FileCacheTest, SuccesfulLoadDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataFile("file2");
         ASSERT_TRUE(res);
@@ -587,8 +602,9 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataFile("dir1");
         ASSERT_FALSE(res);
@@ -610,8 +626,9 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataFile) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataFile("file1");
         ASSERT_FALSE(res);
@@ -636,8 +653,9 @@ TEST_F(FileCacheTest, SuccesfulSaveDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataDirectory("dir1");
         ASSERT_TRUE(res);
@@ -661,8 +679,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataDirectory("dir2");
         ASSERT_FALSE(res);
@@ -685,8 +704,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataDirectory("dir1/file1");
         ASSERT_FALSE(res);
@@ -710,8 +730,9 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.saveDataDirectory("dir1");
         ASSERT_FALSE(res);
@@ -735,8 +756,9 @@ TEST_F(FileCacheTest, SuccesfulLoadDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataDirectory("dir1");
         ASSERT_TRUE(res);
@@ -766,8 +788,9 @@ TEST_F(FileCacheTest, SuccesfulLoadDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataDirectory("dir2");
         ASSERT_TRUE(res);
@@ -792,8 +815,9 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataDirectory("file1");
         ASSERT_FALSE(res);
@@ -825,8 +849,9 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataDirectory) {
 
         S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
         S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
+        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> TuringClient(std::move(clientWrapper));
 
-        db::FileCache cache = db::FileCache(graphPath, dataPath, std::move(clientWrapper));
+        db::FileCache cache = db::FileCache(graphPath, dataPath, TuringClient);
 
         auto res = cache.loadDataDirectory("dir1/file1");
         ASSERT_FALSE(res);

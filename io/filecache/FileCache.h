@@ -15,7 +15,7 @@ class FileCache {
 public:
     FileCache(const fs::Path& graphDir,
               const fs::Path& dataDir,
-              ClientType&& clientWrapper);
+              S3::TuringS3Client<ClientType>& clientWrapper);
 
     FileCacheResult<void> saveGraph(std::string_view graphName);
     FileCacheResult<void> loadGraph(std::string_view graphName);
@@ -43,7 +43,7 @@ public:
 private:
     fs::Path _graphsDir;
     fs::Path _dataDir;
-    S3::TuringS3Client<ClientType> _s3Client;
+    S3::TuringS3Client<ClientType>& _s3Client;
     std::string _userId = "turingDefault";
     std::string _bucketName = "turing-disk-test";
 };

@@ -24,11 +24,12 @@ int main() {
     linenoiseHistoryLoad("history.txt");
 
     auto awsClient = S3::AwsS3ClientWrapper<>();
+    auto turingS3client = S3::TuringS3Client(std::move(awsClient));
     db::TuringConfig config;
     db::SystemManager sysMan(config);
     const auto& turingDir = config.getTuringDir();
 
-    db::FileCache cache = db::FileCache(turingDir / "graphs", turingDir / "data", std::move(awsClient));
+    db::FileCache cache = db::FileCache(turingDir / "graphs", turingDir / "data", turingS3client);
     // Main input loop
     char* line = nullptr;
     while ((line = linenoise("prompt> ")) != nullptr) {

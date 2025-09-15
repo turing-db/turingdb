@@ -67,9 +67,9 @@ public:
                                               CommitHash commitHash,
                                               ChangeID changeID);
 
-    void setS3Client(std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> newClient) {
-        // Move assignment
-        _s3Client = std::move(newClient);
+    void setS3Client(const std::string& accessId, const std::string& secretKey, const std::string& region) {
+        auto wrapper = S3::AwsS3ClientWrapper<>(accessId, secretKey, region);
+        _s3Client = std::make_unique<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>>(std::move(wrapper));
     }
 
     S3::TuringS3Client<S3::AwsS3ClientWrapper<>>* getS3Client() {
@@ -81,7 +81,7 @@ private:
     const TuringConfig& _config;
     mutable RWSpinLock _graphsLock;
     Graph* _defaultGraph {nullptr};
-    std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client;
+    std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
     GraphLoadStatus _graphLoadStatus;

@@ -7,7 +7,6 @@
 #include "Profiler.h"
 #include "SystemManager.h"
 
-
 using namespace db;
 
 S3PushStep::S3PushStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath)
