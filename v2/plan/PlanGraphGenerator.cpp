@@ -151,15 +151,15 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
         throw PlannerException("Empty match pattern element");
     }
 
-    generatePatternElementOrigin(element->getRootEntity());
+    PlanGraphNode* currentNode = generatePatternElementOrigin(element->getRootEntity());
 
     const auto& chain = element->getElementChain();
     for (const auto& [edge, node] : chain) {
-        generatePatternElementExpand(edge, node);
+        currentNode = generatePatternElementExpand(currentNode, edge, node);
     }
 }
 
-void PlanGraphGenerator::generatePatternElementOrigin(const EntityPattern* pattern) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const EntityPattern* pattern) {
     const NodePattern* nodePattern = dynamic_cast<const NodePattern*>(pattern);
     if (!nodePattern) {
         throw PlannerException("Pattern element origin must be a node pattern");
@@ -191,10 +191,86 @@ void PlanGraphGenerator::generatePatternElementOrigin(const EntityPattern* patte
         currentNode->connectOut(varNode);
         currentNode = varNode;
     }
+
+    return currentNode;
 }
 
-void PlanGraphGenerator::generatePatternElementExpand(const EntityPattern* edge,
-                                                      const EntityPattern* node) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementExpand(PlanGraphNode* currentNode,
+                                                                const EntityPattern* edge,
+                                                                const EntityPattern* target) {
+    const EdgePattern* edgePattern = dynamic_cast<const EdgePattern*>(edge);
+    if (!edgePattern) {
+        throw PlannerException("Edge pattern element must be an edge pattern");
+    }
+
+    const NodePattern* targetPattern = dynamic_cast<const NodePattern*>(target);
+    if (!targetPattern) {
+        throw PlannerException("Target pattern element must be a node pattern");
+    }
+                                                        
+    // Get out edges
+    GetOutEdgesNode* getOutEdges = _tree.create<GetOutEdgesNode>();
+    currentNode->connectOut(getOutEdges);
+    currentNode = getOutEdges;
+
+    // Edge constraints
+    const EdgePatternData* edgeData = edgePattern->getData();
+    const auto& edgeTypes = edgeData->edgeTypeConstraints();
+
+    for (const EdgeTypeID edgeTypeID : edgeTypes) {
+        auto filterEdgeTypes = _tree.create<FilterEdgeTypeNode>(edgeTypeID);
+        currentNode->connectOut(filterEdgeTypes);
+        currentNode = filterEdgeTypes;
+    }
+
+    // Expression constraints
+    const auto& exprConstraints = edgeData->exprConstraints();
+    for (const auto& [propType, expr] : exprConstraints) {
+        FilterEdgeExprNode* filter = _tree.create<FilterEdgeExprNode>(expr);
+        currentNode->connectOut(filter);
+        currentNode = filter;
+    }
+
+    // Edge variable declaration
+    VarDecl* edgeVarDecl = edgePattern->getDecl();
+    if (edgeVarDecl) {
+        PlanGraphNode* varNode = getOrCreateVarNode(edgeVarDecl);
+        currentNode->connectOut(varNode);
+        currentNode = varNode;
+    }
+
+    // Target nodes
+    const NodePatternData* targetData = targetPattern->getData();
+    const auto& targetLabelSet = targetData->labelConstraints();
+    const auto& targetExprConstraints = targetData->exprConstraints();
+
+    auto getTargetNodes = _tree.create<GetEdgeTargetNode>();
+    currentNode->connectOut(getTargetNodes);
+    currentNode = getTargetNodes;
+
+    // Target node labels
+    if (!targetLabelSet.empty()) {
+        FilterNodeLabelNode* filterLabel = _tree.create<FilterNodeLabelNode>(&targetLabelSet);
+        currentNode->connectOut(filterLabel);
+        currentNode = filterLabel;
+    }
+
+    // Target node expression constraints
+    for (const auto& [propType, expr] : targetExprConstraints) {
+        FilterNodeExprNode* filter = _tree.create<FilterNodeExprNode>(expr);
+        currentNode->connectOut(filter);
+        currentNode = filter;
+    }
+
+    // Target node variable declaration
+    VarDecl* targetVarDecl = targetPattern->getDecl();
+    if (targetVarDecl) {
+        PlanGraphNode* varNode = getOrCreateVarNode(targetVarDecl);
+        currentNode->connectOut(varNode);
+        currentNode = varNode;
+    }
+
+    return currentNode;
 }
 
 /*
