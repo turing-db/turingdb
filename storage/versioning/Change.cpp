@@ -174,6 +174,7 @@ CommitResult<void> Change::applyModifications(JobSystem& jobSystem) {
     CommitWriteBuffer& wb = thisCommit->writeBuffer();
 
     using CWB = CommitWriteBuffer;
+    // TODO: Attempt to remove this by ensuring NodeID = offset + _firstNodeID
     std::unordered_map<CWB::PendingNodeOffset, NodeID> tempIDMap;
 
     for (const auto& [offset, node]: wb.pendingNodes() | rv::enumerate) {
@@ -182,7 +183,7 @@ CommitResult<void> Change::applyModifications(JobSystem& jobSystem) {
     }
 
     for (const auto& edge : wb.pendingEdges()) {
-        dpBuilder.addPendingEdge(wb, edge);
+        dpBuilder.addPendingEdge(wb, edge, tempIDMap);
     }
 
     return {};

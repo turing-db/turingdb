@@ -9,14 +9,7 @@
 #include "ID.h"
 #include "metadata/PropertyType.h"
 
-namespace {
-
-using namespace db;
-
-} 
-
 namespace db {
-
 
 class CommitWriteBuffer {
 public:
@@ -44,7 +37,7 @@ public:
      struct PendingEdge {
          ContingentNode src;
          ContingentNode tgt;
-         std::vector<std::string> edgeLabelTypeNames;
+         std::string edgeLabelTypeName;
          std::vector<UntypedProperty> properties;
     };
 
@@ -59,9 +52,9 @@ public:
     }
 
     void addPendingEdge(ContingentNode src, ContingentNode tgt,
-                        std::vector<std::string>& edgeLabels,
+                        std::string& edgeType,
                         std::vector<UntypedProperty>& edgeProperties) {
-        _pendingEdges.emplace_back(src, tgt, edgeLabels, edgeProperties);
+        _pendingEdges.emplace_back(src, tgt, edgeType, edgeProperties);
     }
 
     std::vector<PendingNode>& pendingNodes() { return _pendingNodes; }
@@ -95,8 +88,6 @@ private:
 
     // Edges to be deleted
     std::set<EdgeID> _deletedEdges;
-
-    
 
     struct ValueTypeFromProperty {
         ValueType operator()(types::Int64::Primitive propValue) const {

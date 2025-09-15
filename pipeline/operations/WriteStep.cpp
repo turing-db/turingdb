@@ -17,6 +17,8 @@
 
 namespace rv = ranges::views;
 
+using namespace db;
+
 void WriteStep::prepare(ExecutionContext* ctxt) {
     Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx->writingPendingCommit()) {
@@ -127,18 +129,18 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern*
 void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
                           const EntityPattern* edgePattern) {
     // Get the labels for PendingEdge
-    const TypeConstraint* patternLabels = edgePattern->getTypeConstraint();
-    std::vector<std::string> edgeLabels;
-    if (patternLabels) {
-        for (const auto& name : patternLabels->getTypeNames()) {
-            edgeLabels.emplace_back(name->getName());
-        }
+    const TypeConstraint* patternType = edgePattern->getTypeConstraint();
+    std::string edgeType;
+    if (patternType) {
+            edgeType = patternType->getTypeNames().front()->getName();
     } else {
         throw PipelineException("Edges must have at least one label");
     }
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
     if (!patternProperties) {
+        UntypedProperties emptyProps;
+        _writeBuffer->addPendingEdge(src, tgt, edgeType, emptyProps);
         return;
     }
 
@@ -188,7 +190,7 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
             }
         }
     }
-    _writeBuffer->addPendingEdge(src, tgt, edgeLabels, edgeProperties);
+    _writeBuffer->addPendingEdge(src, tgt, edgeType, edgeProperties);
 }
 
 

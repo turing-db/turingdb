@@ -1,10 +1,12 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "EdgeRecord.h"
 #include "ID.h"
+#include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 #include "views/GraphView.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -63,7 +65,8 @@ public:
     NodeID addPendingNode(CommitWriteBuffer::PendingNode& node);
 
     std::optional<EdgeID> addPendingEdge(const CommitWriteBuffer& wb,
-                                         const CommitWriteBuffer::PendingEdge& edge);
+                                         const CommitWriteBuffer::PendingEdge& edge,
+                                         const std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID>& tmpNodeIDmap);
 
 private:
     friend ConcurrentWriter;
@@ -104,7 +107,9 @@ private:
         BuildNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
             : _builder(builder),
               _nid(nid),
-              _pid(pid) {}
+              _pid(pid)
+            {
+            }
 
         void operator()(types::Int64::Primitive propValue) const {
             _builder.addNodeProperty<types::Int64>(_nid, _pid, propValue);
@@ -127,6 +132,7 @@ private:
         NodeID _nid;
         PropertyTypeID _pid;
     };
+
 };
 
 }
