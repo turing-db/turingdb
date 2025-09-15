@@ -1,12 +1,19 @@
 #include "VersionController.h"
 
+#include "BioAssert.h"
+#include "JobSystem.h"
 #include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
+#include "reader/GraphReader.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/Transaction.h"
+#include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+#include <variant>
 
 using namespace db;
 
@@ -57,16 +64,84 @@ CommitHash VersionController::getHeadHash() const {
     return head->hash();
 }
 
+CommitResult<void> VersionController::applyChangeModifications(Change* change,
+                                                               JobSystem& jobSystem) {
+    // assumptions on entry:
+    // 1. @param change contains the latest state of main
+    // 2. No new/modified dataparts which will be created due to the modifications made by
+    // @param change are applied yet
+
+    auto& thisCommit = change->_commits.back();
+    // No changes applied yet
+    msgbioassert(thisCommit->isEmpty(), "Latest commit must be empty");
+
+    DataPartBuilder& dpBuilder = thisCommit->getCurrentBuilder();
+
+    // This metadata should be in sync with main
+    MetadataBuilder& md = thisCommit->metadata();
+
+    // Modification application process:
+    // 1. Build all nodes: any new nodes cannot have been deleted
+    // 2. Build edges whose incident nodes have not been deleted
+    // 3. Apply modifications to dataparts with deleted nodes/edges
+
+    CommitWriteBuffer& wb = thisCommit->writeBuffer();
+    using CWB = CommitWriteBuffer;
+    for (const CWB::PendingNode& node : wb.pendingNodes()) {
+        // Build/get the LabelSet for this node
+        LabelSet labelSet;
+        for (const std::string& label : node.labelNames) {
+            auto labelID = md.getOrCreateLabel(label);
+            labelSet.set(labelID);
+        }
+        const NodeID nodeID = dpBuilder.addNode(labelSet);
+
+        for (const CWB::UntypedProperty& prop : node.properties) {
+            // Get the value type from the untyped property
+            const ValueType propValueType =
+                std::visit(CWB::ValueTypeFromProperty {}, prop.value);
+            // Get the existing ID, or create a new property and get that ID
+            const PropertyTypeID propID =
+                md.getOrCreatePropertyType(prop.propertyName, propValueType)._id;
+
+            // Add this property to this node
+            std::visit(CWB::BuildNodeProperty{dpBuilder, nodeID, propID}, prop.value);
+        }
+    }
+
+
+    return {};
+}
+
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile {"VersionController::submitChange"};
 
-    std::scoped_lock lock(_mutex);
+    // std::scoped_lock lock(_mutex);
 
-    const auto& head = _head.load();
-    if (head->hash() != change->baseHash()) {
-        if (auto res = change->rebase(jobSystem); !res) {
-            return res;
+    size_t MAXATTEMPTS = 10;
+    size_t attempt = 0;
+    bool success = false;
+
+    while (!success && attempt++ < MAXATTEMPTS) {
+        // atomic load main
+        Commit* mainState = _head.load();
+
+        // rebase if main has changed under us
+        if (mainState->hash() != change->baseHash()) {
+            if (auto res = change->rebase(jobSystem); !res) {
+                return res;
+            }
         }
+
+        // apply creates
+        // apply deletions
+        // attempt to submit
+
+        Commit* newState = nullptr;
+
+        // cas_weak has less overhead compared to cas_strong, at the cost of the chance of
+        // spurious matches for ll/sc architectures
+        success = _head.compare_exchange_weak(mainState, newState);
     }
 
     auto& tip = change->_commits.back();

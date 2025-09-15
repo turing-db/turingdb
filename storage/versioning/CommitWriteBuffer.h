@@ -12,37 +12,12 @@
 namespace {
 
 using namespace db;
-struct BuildNodeProperty {
-    BuildNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
-        : _builder(builder),
-          _nid(nid),
-          _pid(pid) {}
 
-    void operator()(types::Int64::Primitive propValue) const {
-        _builder.addNodeProperty<types::Int64>(_nid, _pid, propValue);
-    }
-    void operator()(types::UInt64::Primitive propValue) const {
-        _builder.addNodeProperty<types::UInt64>(_nid, _pid, propValue);
-    }
-    void operator()(types::Double::Primitive propValue) const {
-        _builder.addNodeProperty<types::Double>(_nid, _pid, propValue);
-    }
-    void operator()(types::String::Primitive propValue) const {
-        _builder.addNodeProperty<types::String>(_nid, _pid, propValue);
-    }
-    void operator()(types::Bool::Primitive propValue) const {
-        _builder.addNodeProperty<types::Bool>(_nid, _pid, propValue);
-    }
-
-
-private:
-    DataPartBuilder& _builder;
-    NodeID _nid;
-    PropertyTypeID _pid;
-};
-} // Anonymous namespace
+} 
 
 namespace db {
+
+class VersionController;
 
 class CommitWriteBuffer {
 public:
@@ -90,6 +65,8 @@ public:
         _pendingEdges.emplace_back(src, tgt, edgeLabels, edgeProperties);
     }
 
+    const std::vector<PendingNode> pendingNodes() const { return _pendingNodes; }
+
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
      * _deletedNodes
@@ -105,6 +82,8 @@ public:
     }
     
 private:
+    friend VersionController;
+
     // Nodes to be created
     std::vector<PendingNode> _pendingNodes;
 
@@ -116,6 +95,51 @@ private:
 
     // Edges to be deleted
     std::vector<EdgeID> _deletedEdges;
-};
 
+    struct BuildNodeProperty {
+        BuildNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
+            : _builder(builder),
+              _nid(nid),
+              _pid(pid) {}
+
+        void operator()(types::Int64::Primitive propValue) const {
+            _builder.addNodeProperty<types::Int64>(_nid, _pid, propValue);
+        }
+        void operator()(types::UInt64::Primitive propValue) const {
+            _builder.addNodeProperty<types::UInt64>(_nid, _pid, propValue);
+        }
+        void operator()(types::Double::Primitive propValue) const {
+            _builder.addNodeProperty<types::Double>(_nid, _pid, propValue);
+        }
+        void operator()(types::String::Primitive propValue) const {
+            _builder.addNodeProperty<types::String>(_nid, _pid, propValue);
+        }
+        void operator()(types::Bool::Primitive propValue) const {
+            _builder.addNodeProperty<types::Bool>(_nid, _pid, propValue);
+        }
+
+    private:
+        DataPartBuilder& _builder;
+        NodeID _nid;
+        PropertyTypeID _pid;
+    };
+
+    struct ValueTypeFromProperty {
+        ValueType operator()(types::Int64::Primitive propValue) const {
+            return types::Int64::_valueType;
+        }
+        ValueType operator()(types::UInt64::Primitive propValue) const {
+            return types::UInt64::_valueType;
+        }
+        ValueType operator()(types::Double::Primitive propValue) const {
+            return types::Double::_valueType;
+        }
+        ValueType operator()(types::String::Primitive propValue) const {
+            return types::String::_valueType;
+        }
+        ValueType operator()(types::Bool::Primitive propValue) const {
+            return types::Bool::_valueType;
+        }
+    };
+};
 }
