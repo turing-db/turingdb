@@ -9,6 +9,7 @@
 #include "PipelineOpcode.h"
 
 #include "ScanNodesStringApproxStep.h"
+#include "WriteStep.h"
 #include "operations/ScanNodesStep.h"
 #include "operations/ScanNodesByLabelStep.h"
 #include "operations/ScanNodesByPropertyStep.h"
@@ -143,6 +144,7 @@ public:
                  const EntityPattern*,
                  const EntityPattern*,
                  const EntityPattern*);
+    PipelineStep(WriteStep::Tag, const CreateTargets* targets);
     PipelineStep(CommitStep::Tag);
     PipelineStep(CallPropertyStep::Tag,
                  ColumnVector<PropertyTypeID>* id,
@@ -253,6 +255,7 @@ private:
                  ChangeStep,
                  CreateNodeStep,
                  CreateEdgeStep,
+                 WriteStep,
                  CommitStep,
                  CallPropertyStep,
                  CallLabelStep,

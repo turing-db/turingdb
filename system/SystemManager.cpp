@@ -142,10 +142,12 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
 
     // Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
+        spdlog::error("Graph is already load{ed/ing}.");
         return false;
     }
 
     if (!graphPath.exists()) {
+        spdlog::error("Graph path: {} not found.", graphPath.get());
         return false;
     }
 

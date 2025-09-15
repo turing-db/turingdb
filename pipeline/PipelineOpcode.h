@@ -58,6 +58,7 @@ enum class PipelineOpcode : uint64_t {
     CHANGE,
     CREATE_NODE,
     CREATE_EDGE,
+    WRITE,
     COMMIT,
     END,
     CALL_PROPERTIES,

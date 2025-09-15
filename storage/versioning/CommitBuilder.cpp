@@ -1,5 +1,9 @@
 #include "CommitBuilder.h"
 
+#include <unordered_map>
+#include <range/v3/view/enumerate.hpp>
+
+#include "BioAssert.h"
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
@@ -13,6 +17,9 @@
 #include "metadata/GraphMetadata.h"
 
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 CommitBuilder::CommitBuilder() = default;
 
@@ -85,6 +92,44 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     return std::move(_commit);
 }
 
+CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
+    // Ensure this CommitBuilder is in a fresh state
+    msgbioassert(
+        isEmpty(),
+        fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",
+                    dpCount())
+            .c_str());
+    msgbioassert(pendingCount() == 1,
+                 fmt::format("CommitBuilder must have one datapart builders (has {}) to "
+                             "flush write buffer.",
+                             pendingCount())
+                     .c_str());
+
+    // We create a single datapart when flushing the buffer, to ensure it is synced with
+    // the metadata provided when rebasing main
+    _builders.clear();
+    DataPartBuilder& dpBuilder = newBuilder();
+    CommitWriteBuffer& wb = writeBuffer();
+
+    // TODO: Remove this by using a mapping of NodeID = offset + _firstNodeID
+    std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
+
+    // Add pending nodes to be created to the current DataPartBuilder
+    for (const auto& [offset, node] : wb.pendingNodes() | rv::enumerate) {
+        NodeID nodeID = dpBuilder.addPendingNode(node);
+        tempIDMap[offset] = nodeID;
+    }
+
+    // Add pending edges to be created to the current DataPartBuilder
+    for (const auto& edge : wb.pendingEdges()) {
+        dpBuilder.addPendingEdge(wb, edge, tempIDMap);
+    }
+
+    // Build this commit
+    return build(jobsystem);
+}
+
+
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
     : _controller(&controller),
     _change(change),
@@ -112,5 +157,5 @@ void CommitBuilder::initialize() {
     _writeBuffer = std::make_unique<CommitWriteBuffer>();
 
     // Create datapart builder
-    this->newBuilder();
+    // this->newBuilder();
 }

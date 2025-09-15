@@ -12,9 +12,6 @@
 
 using namespace db;
 
-namespace rg = ranges;
-namespace rv = rg::views;
-
 Change::~Change() = default;
 
 Change::Change(VersionController* versionController, ChangeID id, CommitHash base)
@@ -58,8 +55,8 @@ PendingCommitReadTx Change::openReadTransaction(CommitHash commitHash) {
 CommitResult<void> Change::commit(JobSystem& jobsystem) {
     Profile profile {"Change::commit"};
 
-    if (auto res = _tip->buildAllPending(jobsystem); !res) {
-        return res;
+    if (auto res = _tip->flushWriteBuffer(jobsystem); !res) {
+        return {};
     }
 
     auto newTip = CommitBuilder::prepare(*_versionController,
@@ -124,19 +121,7 @@ CommitHash Change::baseHash() const {
 }
 
 CommitResult<void> Change::submit(JobSystem& jobsystem) {
-    Profile profile {"Change::submit"};
-
-    // TODO: Rebase, build new DPs, update this history
-    if (auto res = _tip->buildAllPending(jobsystem); !res) {
-        return res;
-    }
-
-    // TODO: Submit this change by requesting
-    if (auto res = _versionController->submitChange(this, jobsystem); !res) {
-        return res;
-    }
-
-    return {};
+    return _versionController->submitChange(this, jobsystem);
 }
 
 GraphView Change::viewGraph(CommitHash commitHash) const {
@@ -147,43 +132,6 @@ GraphView Change::viewGraph(CommitHash commitHash) const {
     auto it = _commitOffsets.find(commitHash);
     if (it != _commitOffsets.end()) {
         return _commits[it->second]->viewGraph();
-    }
-
-    return {};
-}
-
-
-CommitResult<void> Change::applyModifications(JobSystem& jobSystem) {
-    // assumptions on entry:
-    // 1. @param change contains the latest state of main
-    // 2. No new/modified dataparts which will be created due to the modifications made by
-    // @param change are applied yet
-
-    auto& thisCommit = _commits.back();
-    // No changes applied yet
-    msgbioassert(thisCommit->isEmpty(), "Latest commit must be empty");
-
-    // XXX: Need to ensure a new builder is used each time
-    DataPartBuilder& dpBuilder = thisCommit->getCurrentBuilder();
-
-    // Modification application process:
-    // 1. Build all nodes: any new nodes cannot have been deleted within the same change
-    // 2. Build edges whose incident nodes have not been deleted
-    // 3. Apply modifications to dataparts with deleted nodes/edges
-
-    CommitWriteBuffer& wb = thisCommit->writeBuffer();
-
-    using CWB = CommitWriteBuffer;
-    // TODO: Attempt to remove this by ensuring NodeID = offset + _firstNodeID
-    std::unordered_map<CWB::PendingNodeOffset, NodeID> tempIDMap;
-
-    for (const auto& [offset, node]: wb.pendingNodes() | rv::enumerate) {
-        NodeID nodeID = dpBuilder.addPendingNode(node);
-        tempIDMap[offset] = nodeID;
-    }
-
-    for (const auto& edge : wb.pendingEdges()) {
-        dpBuilder.addPendingEdge(wb, edge, tempIDMap);
     }
 
     return {};

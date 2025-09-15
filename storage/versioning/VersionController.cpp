@@ -64,48 +64,35 @@ CommitHash VersionController::getHeadHash() const {
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile {"VersionController::submitChange"};
 
-    // std::scoped_lock lock(_mutex);
+    std::scoped_lock lock(_mutex);
 
-    size_t MAXATTEMPTS = 10;
-    size_t attempt = 0;
-    bool success = false;
+    // atomic load main
+    Commit* mainState = _head.load();
 
-    while (!success && attempt++ < MAXATTEMPTS) {
-        // atomic load main
-        Commit* mainState = _head.load();
-
-        // rebase if main has changed under us
-        if (mainState->hash() != change->baseHash()) {
-            if (auto res = change->rebase(jobSystem); !res) {
-                return res;
-            }
+    // rebase if main has changed under us
+    if (mainState->hash() != change->baseHash()) {
+        if (auto res = change->rebase(jobSystem); !res) {
+            return res;
         }
-
-        // apply creates
-        // apply deletions
-        // attempt to submit
-
-        Commit* newState = nullptr;
-
-        // cas_weak has less overhead compared to cas_strong, at the cost of the chance of
-        // spurious matches for ll/sc architectures
-        success = _head.compare_exchange_weak(mainState, newState);
-    }
-
-    auto& tip = change->_commits.back();
-    if (tip->isEmpty()) {
-        change->_commits.resize(change->_commits.size() - 1);
     }
 
     for (auto& commit : change->_commits) {
-        _offsets.emplace(commit->hash(), _commits.size());
-        auto buildRes = commit->build(jobSystem);
-        if (!buildRes) {
-            return buildRes.get_unexpected();
+        auto flushRes = commit->flushWriteBuffer(jobSystem);
+        if (!flushRes) {
+            return flushRes.get_unexpected();
         }
-
-        _commits.emplace_back(std::move(buildRes.value()));
+        _commits.emplace_back(std::move(flushRes.value()));
     }
+
+    // for (auto& commit : change->_commits) {
+    //     _offsets.emplace(commit->hash(), _commits.size());
+    //     auto buildRes = commit->build(jobSystem);
+    //     if (!buildRes) {
+    //         return buildRes.get_unexpected();
+    //     }
+
+    //     _commits.emplace_back(std::move(buildRes.value()));
+    // }
 
     _head.store(_commits.back().get());
 

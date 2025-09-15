@@ -303,6 +303,12 @@ PipelineStep::PipelineStep(CreateEdgeStep::Tag,
 {
 }
 
+PipelineStep::PipelineStep(WriteStep::Tag, const CreateTargets* targets)
+    : _opcode(PipelineOpcode::WRITE),
+    _impl(std::in_place_type<WriteStep>, targets)
+{
+}
+
 PipelineStep::PipelineStep(CommitStep::Tag)
     : _opcode(PipelineOpcode::COMMIT),
     _impl(std::in_place_type<CommitStep>)
