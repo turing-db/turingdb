@@ -4,6 +4,7 @@
 #include <vector>
 #include <optional>
 
+#include "Neo4jImporter.h"
 #include "RWSpinLock.h"
 #include "GraphLoadStatus.h"
 #include "TuringS3Client.h"
@@ -51,9 +52,11 @@ public:
 
     void setGraphsDir(const fs::Path& dir);
 
-    bool loadGraph(const std::string& graphName, JobSystem& jobsystem);
+    bool loadGraph(const std::string& graphName, const std::string& graphFileName, JobSystem& jobSystem);
 
-    bool loadGraph(const fs::Path graphPath, const std::string& graphName,
+    bool loadGraph(const std::string& graphFileName, JobSystem& jobSystem);
+
+    bool loadGraph(fs::Path graphPath, const std::string& graphName,
                    JobSystem& jobSystem);
 
     bool isGraphLoading(const std::string& graphName) const;
@@ -85,8 +88,10 @@ private:
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
     GraphLoadStatus _graphLoadStatus;
+    Neo4jImporter _neo4JImporter;
 
     bool loadNeo4jJsonDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
+    bool loadNeo4jDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool addGraph(std::unique_ptr<Graph> graph, const std::string& name);

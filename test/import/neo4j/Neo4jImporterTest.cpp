@@ -117,14 +117,15 @@ TEST_F(Neo4jImporterTest, General) {
     ASSERT_TRUE(FileUtils::exists(jsonDir));
 
     t0 = Clock::now();
-    const bool res = Neo4jImporter::importJsonDir(*_jobSystem,
-                                                  _graph.get(),
-                                                  db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                  db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                  {
-                                                      ._jsonDir = jsonDir,
-                                                      ._workDir = _outDir,
-                                                  });
+    Neo4jImporter neo4jImporter;
+    const bool res = neo4jImporter.importJsonDir(*_jobSystem,
+                                                 _graph.get(),
+                                                 db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                 db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                 {
+                                                     ._jsonDir = jsonDir,
+                                                     ._workDir = _outDir,
+                                                 });
     t1 = Clock::now();
     ASSERT_TRUE(res);
     std::cout << "Parsing: " << duration<Microseconds>(t0, t1) << " us" << std::endl;

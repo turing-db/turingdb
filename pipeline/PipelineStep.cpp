@@ -230,9 +230,15 @@ PipelineStep::PipelineStep(CallLabelSetStep::Tag,
 {
 }
 
-PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
+PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphFileName)
     : _opcode(PipelineOpcode::LOAD_GRAPH),
-    _impl(std::in_place_type<LoadGraphStep>, graphName)
+    _impl(std::in_place_type<LoadGraphStep>, graphFileName)
+{
+}
+
+PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphFileName, const std::string& graphName)
+    : _opcode(PipelineOpcode::LOAD_GRAPH),
+    _impl(std::in_place_type<LoadGraphStep>, graphFileName, graphName)
 {
 }
 

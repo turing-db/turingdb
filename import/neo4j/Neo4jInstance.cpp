@@ -50,7 +50,7 @@ bool Neo4jInstance::setup() {
     }
 
     // Decompress neo4j archive
-    spdlog::info("Decompressing Neo4j archive in {}", _neo4jDir.c_str());
+    spdlog::info("Decompressing Neo4j archive {} in {}", neo4jArchive.string(), _neo4jDir.c_str());
     const int tarRes = boost::process::system(
         "/usr/bin/tar", "xf", neo4jArchive.string(), "-C", _neo4jDir.string(),
         "--strip-components=1");

@@ -1556,7 +1556,13 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
 
 bool QueryPlanner::planLoadGraph(const LoadGraphCommand* loadCmd) {
     _pipeline->add<StopStep>();
-    _pipeline->add<LoadGraphStep>(loadCmd->getName());
+
+    if (!loadCmd->getGraphName().empty()) {
+        _pipeline->add<LoadGraphStep>(loadCmd->getFileName(), loadCmd->getGraphName());
+    } else {
+        _pipeline->add<LoadGraphStep>(loadCmd->getFileName());
+    }
+
     _pipeline->add<EndStep>();
     return true;
 }

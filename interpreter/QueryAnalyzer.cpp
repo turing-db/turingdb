@@ -439,19 +439,19 @@ std::string QueryAnalyzer::createVarName() {
 }
 
 void QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
-    const std::string& name = cmd->getName();
+    const std::string& name = cmd->getFileName();
     if (name.empty()) {
-        throw AnalyzeException("No graph name provided.");
+        throw AnalyzeException("No graph file name provided.");
     }
 
-    // Check that the graph name is only [A-Z0-9_]+
-    for (char c : name) {
-        if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throw AnalyzeException(
-                fmt::format("Graph name must only contain alphanumeric characters "
-                            "or '_': character '{}' not allowed.", c));
-        }
-    }
+    //// Check that the graph name is only [A-Z0-9_]+
+    //for (char c : name) {
+    //    if (!(isalnum(c) || c == '_')) [[unlikely]] {
+    //        throw AnalyzeException(
+    //            fmt::format("Graph name must only contain alphanumeric characters "
+    //                        "or '_': character '{}' not allowed.", c));
+    //    }
+    //}
 }
 
 void parseS3Url(std::string_view s3URL, std::string_view& bucket, std::string_view& prefix, std::string_view& fileName) {

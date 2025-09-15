@@ -84,13 +84,25 @@ ListGraphCommand* ListGraphCommand::create(ASTContext* ctxt) {
 
 // LoadGraphCommand
 
-LoadGraphCommand::LoadGraphCommand(const std::string& name)
-    : _name(name)
+LoadGraphCommand::LoadGraphCommand(const std::string& fileName)
+    :_fileName(fileName)
+{
+}
+
+LoadGraphCommand::LoadGraphCommand(const std::string& fileName, const std::string& graphName)
+    :_fileName(fileName),
+    _graphName(graphName)
 {
 }
 
 LoadGraphCommand* LoadGraphCommand::create(ASTContext* ctxt, const std::string& name) {
     LoadGraphCommand* cmd = new LoadGraphCommand(name);
+    cmd->registerCmd(ctxt);
+    return cmd;
+}
+
+LoadGraphCommand* LoadGraphCommand::create(ASTContext* ctxt, const std::string& name, const std::string& graphName) {
+    LoadGraphCommand* cmd = new LoadGraphCommand(name, graphName);
     cmd->registerCmd(ctxt);
     return cmd;
 }

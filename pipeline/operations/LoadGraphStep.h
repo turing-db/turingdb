@@ -12,7 +12,8 @@ class LoadGraphStep {
 public:
     struct Tag {};
 
-    LoadGraphStep(const std::string& graphName);
+    LoadGraphStep(const std::string& graphFileName, const std::string& graphName);
+    LoadGraphStep(const std::string& graphFileName);
     ~LoadGraphStep();
 
     void prepare(ExecutionContext* ctxt);
@@ -26,6 +27,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
+    std::string _graphFileName;
     std::string _graphName;
     SystemManager* _sysMan {nullptr};
     JobSystem* _jobSystem {nullptr};

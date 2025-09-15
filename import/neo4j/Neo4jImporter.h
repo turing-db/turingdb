@@ -19,7 +19,7 @@ public:
         uint64_t _port = 7474;
         FileUtils::Path _workDir;
     };
-    static bool fromUrlToJsonDir(JobSystem& jobSystem,
+    bool fromUrlToJsonDir(JobSystem& jobSystem,
                           Graph* graph,
                           std::size_t nodeCountPerQuery,
                           std::size_t edgeCountPerQuery,
@@ -29,21 +29,24 @@ public:
         FileUtils::Path _jsonDir;
         FileUtils::Path _workDir;
     };
-    static bool importJsonDir(JobSystem& jobSystem,
-                              Graph* graph,
-                              std::size_t nodeCountPerFile,
-                              std::size_t edgeCountPerFile,
-                              const ImportJsonDirArgs& args);
+    bool importJsonDir(JobSystem& jobSystem,
+                       Graph* graph,
+                       std::size_t nodeCountPerFile,
+                       std::size_t edgeCountPerFile,
+                       const ImportJsonDirArgs& args);
 
     struct DumpFileToJsonDirArgs {
         FileUtils::Path _workDir;
         FileUtils::Path _dumpFilePath;
     };
-    static bool fromDumpFileToJsonDir(JobSystem& jobSystem,
+    bool fromDumpFileToJsonDir(JobSystem& jobSystem,
                                Graph* graph,
                                std::size_t nodeCountPerQuery,
                                std::size_t edgeCountPerQuery,
                                const DumpFileToJsonDirArgs& args);
+
+private:
+    std::mutex _mutex;
 };
 
 }

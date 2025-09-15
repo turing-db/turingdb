@@ -124,7 +124,9 @@ public:
     PipelineStep(ChangeStep::Tag,
                  ChangeOpType,
                  ColumnVector<const Change*>*);
-    PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
+
+    PipelineStep(LoadGraphStep::Tag, const std::string& graphFileName);
+    PipelineStep(LoadGraphStep::Tag, const std::string& graphFileName, const std::string& graphName);
 
     PipelineStep(LookupNodeIndexStep::Tag, ColumnSet<NodeID>* outSet,
                  const GraphView& view, PropertyTypeID propID,

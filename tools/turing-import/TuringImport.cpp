@@ -271,31 +271,33 @@ int main(int argc, const char** argv) {
             }
             case ImportType::NEO4J: {
                 {
+                    Neo4jImporter neo4JImporter;
                     Neo4jImporter::DumpFileToJsonDirArgs args;
                     args._workDir = toolInit.getOutputsDir();
                     args._dumpFilePath = dataIt->path;
 
                     graph = Graph::create();
-                    if (!Neo4jImporter::fromDumpFileToJsonDir(*jobSystem,
-                                                              graph.get(),
-                                                              db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                              db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                              args)) {
+                    if (!neo4JImporter.fromDumpFileToJsonDir(*jobSystem,
+                                                             graph.get(),
+                                                             db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                             db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                             args)) {
                         jobSystem->terminate();
                         return EXIT_FAILURE;
                     }
                 }
 
                 {
+                    Neo4jImporter neo4JImporter;
                     Neo4jImporter::ImportJsonDirArgs args;
                     args._jsonDir = toolInit.getOutputsDir() + "/json";
                     args._workDir = toolInit.getOutputsDir();
                     graph = Graph::create();
-                    if (!Neo4jImporter::importJsonDir(*jobSystem,
-                                                      graph.get(),
-                                                      db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                      db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                      args)) {
+                    if (!neo4JImporter.importJsonDir(*jobSystem,
+                                                     graph.get(),
+                                                     db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                     db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                     args)) {
                         jobSystem->terminate();
                         return EXIT_FAILURE;
                     }
@@ -303,16 +305,17 @@ int main(int argc, const char** argv) {
                 break;
             }
             case ImportType::NEO4J_TO_JSON: {
+                Neo4jImporter neo4JImporter;
                 Neo4jImporter::DumpFileToJsonDirArgs args;
                 args._workDir = toolInit.getOutputsDir();
                 args._dumpFilePath = dataIt->path;
 
                 graph = Graph::create();
-                if (!Neo4jImporter::fromDumpFileToJsonDir(*jobSystem,
-                                                          graph.get(),
-                                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                          db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                          args)) {
+                if (!neo4JImporter.fromDumpFileToJsonDir(*jobSystem,
+                                                         graph.get(),
+                                                         db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                         db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                         args)) {
                     jobSystem->terminate();
                     return EXIT_FAILURE;
                 }
@@ -320,6 +323,7 @@ int main(int argc, const char** argv) {
             }
             case ImportType::NEO4J_URL: {
                 {
+                    Neo4jImporter neo4JImporter;
                     Neo4jImporter::UrlToJsonDirArgs args;
                     args._url = std::move(dataIt->url);
                     args._urlSuffix = std::move(dataIt->urlSuffix);
@@ -329,26 +333,27 @@ int main(int argc, const char** argv) {
                     args._workDir = toolInit.getOutputsDir();
 
                     graph = Graph::create();
-                    if (!Neo4jImporter::fromUrlToJsonDir(*jobSystem,
-                                                         graph.get(),
-                                                         db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                         db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                         args)) {
+                    if (!neo4JImporter.fromUrlToJsonDir(*jobSystem,
+                                                        graph.get(),
+                                                        db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                        db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                        args)) {
                         jobSystem->terminate();
                         return EXIT_FAILURE;
                     }
                 }
                 {
                     {
+                        Neo4jImporter neo4JImporter;
                         Neo4jImporter::ImportJsonDirArgs args;
                         args._jsonDir = toolInit.getOutputsDir() + "/json";
                         args._workDir = toolInit.getOutputsDir();
                         graph = Graph::create();
-                        if (!Neo4jImporter::importJsonDir(*jobSystem,
-                                                          graph.get(),
-                                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                          db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                          args)) {
+                        if (!neo4JImporter.importJsonDir(*jobSystem,
+                                                         graph.get(),
+                                                         db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                         db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                         args)) {
                             jobSystem->terminate();
                             return EXIT_FAILURE;
                         }
@@ -357,16 +362,17 @@ int main(int argc, const char** argv) {
                 break;
             }
             case ImportType::JSON_NEO4J: {
+                Neo4jImporter neo4JImporter;
                 Neo4jImporter::ImportJsonDirArgs args;
                 args._jsonDir = dataIt->path;
                 args._workDir = toolInit.getOutputsDir();
 
                 graph = Graph::create();
-                if (!Neo4jImporter::importJsonDir(*jobSystem,
-                                                  graph.get(),
-                                                  db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                                  db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                                  args)) {
+                if (!neo4JImporter.importJsonDir(*jobSystem,
+                                                 graph.get(),
+                                                 db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                                 db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                                 args)) {
                     jobSystem->terminate();
                     return EXIT_FAILURE;
                 }

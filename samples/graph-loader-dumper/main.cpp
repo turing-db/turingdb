@@ -99,13 +99,14 @@ int main() {
         const std::string turingHome = std::getenv("TURING_HOME");
         const fs::Path jsonDir = fs::Path {turingHome} / "neo4j" / "pole-db";
 
-        if (!Neo4jImporter::importJsonDir(*jobSystem,
-                                          graph.get(),
-                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                          db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                          {
-                                              ._jsonDir = FileUtils::Path {jsonDir.get()},
-                                          })) {
+        Neo4jImporter neo4jImporter;
+        if (!neo4jImporter.importJsonDir(*jobSystem,
+                                         graph.get(),
+                                         db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                         db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                         {
+                                             ._jsonDir = FileUtils::Path {jsonDir.get()},
+                                         })) {
             fmt::print("Could not load Pole\n");
             return 1;
         }

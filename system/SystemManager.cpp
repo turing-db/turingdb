@@ -86,8 +86,8 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
     }
 }
 
-bool SystemManager::loadGraph(const std::string& graphName, JobSystem& jobSystem) {
-    const fs::Path graphPath = _config.getGraphsDir()/graphName;
+bool SystemManager::loadGraph(const std::string& graphName, const std::string& graphFileName, JobSystem& jobSystem) {
+    const fs::Path graphPath = _config.getGraphsDir() / graphFileName;
 
     // Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
@@ -108,10 +108,45 @@ bool SystemManager::loadGraph(const std::string& graphName, JobSystem& jobSystem
     switch (*fileType) {
         case GraphFileType::GML:
             return loadGmlDB(graphName, graphPath, jobSystem);
+        case GraphFileType::NEO4J:
+            return loadNeo4jDB(graphName, graphPath, jobSystem);
         case GraphFileType::NEO4J_JSON:
             return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, graphPath, jobSystem);
+        default:
+            return false;
+    }
+}
+
+bool SystemManager::loadGraph(const std::string& graphFileName, JobSystem& jobSystem) {
+    const fs::Path graphPath = _config.getGraphsDir() / graphFileName;
+
+    // Check if graph was already loaded || is already loading
+    if (getGraph(graphFileName) || isGraphLoading(graphFileName)) {
+        return false;
+    }
+
+    if (!graphPath.exists()) {
+        return false;
+    }
+
+    const auto fileType = getGraphFileType(graphPath);
+    if (!fileType) {
+        // If we can not determine the file type, assume it is a Neo4j JSON graph
+        // to be changed in the future
+        return loadNeo4jJsonDB(graphFileName, graphPath, jobSystem);
+    }
+
+    switch (*fileType) {
+        case GraphFileType::GML:
+            return loadGmlDB(graphFileName, graphPath, jobSystem);
+        case GraphFileType::NEO4J:
+            return loadNeo4jDB(graphFileName, graphPath, jobSystem);
+        case GraphFileType::NEO4J_JSON:
+            return loadNeo4jJsonDB(graphFileName, graphPath, jobSystem);
+        case GraphFileType::BINARY:
+            return loadBinaryDB(graphFileName, graphPath, jobSystem);
         default:
             return false;
     }
@@ -138,6 +173,8 @@ bool SystemManager::loadGraph(const fs::Path graphPath, const std::string& graph
     switch (*fileType) {
         case GraphFileType::GML:
             return loadGmlDB(graphName, graphPath, jobSystem);
+        case GraphFileType::NEO4J:
+            return loadGmlDB(graphName, graphPath, jobSystem);
         case GraphFileType::NEO4J_JSON:
             return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
         case GraphFileType::BINARY:
@@ -150,6 +187,10 @@ bool SystemManager::loadGraph(const fs::Path graphPath, const std::string& graph
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
     if (graphPath.extension() == ".gml") {
         return GraphFileType::GML;
+    }
+
+    if (graphPath.extension() == ".dump") {
+        return GraphFileType::NEO4J;
     }
 
     const auto typeFilePath = graphPath / "type";
@@ -203,7 +244,46 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
 
-    if (!Neo4jImporter::importJsonDir(jobsystem,
+    if (!_neo4JImporter.importJsonDir(jobsystem,
+                                      graph.get(),
+                                      db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                      db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                      args)) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    addGraph(std::move(graph), graphName);
+    _graphLoadStatus.removeLoadingGraph(graphName);
+    return true;
+}
+
+bool SystemManager::loadNeo4jDB(const std::string& graphName,
+                                const fs::Path& dbPath,
+                                JobSystem& jobsystem) {
+    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
+        return false;
+    }
+
+    auto graph = Graph::create();
+
+    Neo4jImporter::DumpFileToJsonDirArgs dumpArgs;
+    dumpArgs._workDir = "/tmp";
+    dumpArgs._dumpFilePath = dbPath.c_str();
+
+    if (!_neo4JImporter.fromDumpFileToJsonDir(jobsystem,
+                                              graph.get(),
+                                              db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                              db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                              dumpArgs)) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    Neo4jImporter::ImportJsonDirArgs args;
+    args._jsonDir = FileUtils::Path {dumpArgs._workDir / "json"};
+
+    if (!_neo4JImporter.importJsonDir(jobsystem,
                                       graph.get(),
                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
