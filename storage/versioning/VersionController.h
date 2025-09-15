@@ -79,6 +79,9 @@ private:
 
     void addCommit(std::unique_ptr<Commit> commit);
 
+    [[nodiscard]] CommitResult<void> applyChangeModifications(Change* change,
+                                                              JobSystem& jobSystem);
+
     [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
 };
 

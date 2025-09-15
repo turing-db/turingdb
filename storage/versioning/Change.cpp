@@ -100,8 +100,8 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
         metadataRebaser.clear();
         metadataRebaser.rebase(prevCommitData->metadata(), commitBuilder->metadata());
 
-        auto& data = commitBuilder->commitData();
-        auto& history = data.history();
+        CommitData& data = commitBuilder->commitData();
+        CommitHistory& history = data.history();
 
         CommitHistoryRebaser historyRebaser {history};
         historyRebaser.rebase(metadataRebaser, dataPartRebaser, *prevHistory);
@@ -120,10 +120,12 @@ CommitHash Change::baseHash() const {
 CommitResult<void> Change::submit(JobSystem& jobsystem) {
     Profile profile {"Change::submit"};
 
+    // TODO: Rebase, build new DPs, update this history
     if (auto res = _tip->buildAllPending(jobsystem); !res) {
         return res;
     }
 
+    // TODO: Submit this change by requesting
     if (auto res = _versionController->submitChange(this, jobsystem); !res) {
         return res;
     }
