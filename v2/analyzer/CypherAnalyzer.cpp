@@ -1,7 +1,6 @@
 #include "CypherAnalyzer.h"
 
 #include <spdlog/fmt/bundled/core.h>
-#include <spdlog/spdlog.h>
 
 #include "AnalyzeException.h"
 
@@ -37,6 +36,25 @@ CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
 }
 
 CypherAnalyzer::~CypherAnalyzer() {
+}
+
+void CypherAnalyzer::createPatternDecl(const Pattern* pattern) {
+    for (const PatternElement* element : pattern->elements()) {
+        for (EntityPattern* entity : element->getEntities()) {
+            if (NodePattern* node = dynamic_cast<NodePattern*>(entity)) {
+                createPatternDecl(node, EvaluatedType::NodePattern);
+            } else if (EdgePattern* edge = dynamic_cast<EdgePattern*>(entity)) {
+                createPatternDecl(edge, EvaluatedType::EdgePattern);
+            }
+        }
+    }
+}
+
+void CypherAnalyzer::createPatternDecl(EntityPattern* node, EvaluatedType type) {
+    if (Symbol* symbol = node->getSymbol()) {
+        VarDecl* decl = getOrCreateNamedVariable(type, symbol->getName());
+        node->setDecl(decl);
+    }
 }
 
 void CypherAnalyzer::analyze() {
@@ -76,6 +94,7 @@ void CypherAnalyzer::analyze(const MatchStmt* matchSt) {
         throwError("MATCH statement must have a pattern", &matchSt);
     }
 
+    createPatternDecl(pattern);
     analyze(pattern);
 
     if (matchSt->hasLimit()) {
@@ -148,11 +167,6 @@ void CypherAnalyzer::analyze(const PatternElement* element) {
 }
 
 void CypherAnalyzer::analyze(NodePattern* nodePattern) {
-    if (Symbol* symbol = nodePattern->getSymbol()) {
-        VarDecl* decl = getOrCreateNamedVariable(EvaluatedType::NodePattern, symbol->getName());
-        nodePattern->setDecl(decl);
-    }
-
     NodePatternData* data = NodePatternData::create(_ast);
     nodePattern->setData(data);
 
@@ -195,11 +209,6 @@ void CypherAnalyzer::analyze(NodePattern* nodePattern) {
 }
 
 void CypherAnalyzer::analyze(EdgePattern* edgePattern) {
-    if (Symbol* symbol = edgePattern->getSymbol()) {
-        VarDecl* decl = getOrCreateNamedVariable(EvaluatedType::EdgePattern, symbol->getName());
-        edgePattern->setDecl(decl);
-    }
-
     EdgePatternData* data = EdgePatternData::create(_ast);
     edgePattern->setData(data);
 
@@ -274,7 +283,6 @@ void CypherAnalyzer::analyze(BinaryExpr* expr) {
     Expr* lhs = expr->getLHS();
     Expr* rhs = expr->getRHS();
 
-    spdlog::info("Analyzing binary expression lhs kind {}, rhs kind {}",(unsigned) lhs->getKind(), (unsigned) rhs->getKind());
     analyze(lhs);
     analyze(rhs);
 
