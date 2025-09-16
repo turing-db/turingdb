@@ -1,14 +1,17 @@
 #include "GraphReader.h"
 
+#include <range/v3/numeric/accumulate.hpp>
+
 #include "DataPart.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "views/EdgeView.h"
 #include "properties/PropertyManager.h"
-#include <numeric>
 
 using namespace db;
+
+namespace rg = ranges;
 
 size_t GraphReader::getNodeCount() const {
     if (_view.dataparts().empty()) {
@@ -17,9 +20,9 @@ size_t GraphReader::getNodeCount() const {
 
     // Due to deletions, NodeIDs are no longer guaranteed to be contiguous across
     // dataparts. Hence we must manually now sum up the nodes in each datapart.
-    return std::accumulate(
-        _view.dataparts().begin(), _view.dataparts().end(), 0,
-        [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getNodeCount(); });
+    return rg::accumulate(_view.dataparts(), 0, [](int acc, const WeakArc<DataPart>& dp) {
+        return acc + dp->getNodeCount();
+    });
 }
 
 size_t GraphReader::getEdgeCount() const {
@@ -29,9 +32,9 @@ size_t GraphReader::getEdgeCount() const {
 
     // Due to deletions, EdgeIDs are no longer guaranteed to be contiguous across
     // dataparts. Hence we must manually now sum up the edges in each datapart.
-    return std::accumulate(
-        _view.dataparts().begin(), _view.dataparts().end(), 0,
-        [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getEdgeCount(); });
+    return rg::accumulate(_view.dataparts(), 0, [](int acc, const WeakArc<DataPart>& dp) {
+        return acc + dp->getEdgeCount();
+    });
 }
 
 LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {
