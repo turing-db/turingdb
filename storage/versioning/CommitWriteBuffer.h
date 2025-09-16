@@ -15,7 +15,7 @@ class CommitWriteBuffer {
 public:
     using SupportedTypeVariant =
         std::variant<types::Int64::Primitive, types::UInt64::Primitive,
-                     types::Double::Primitive, types::String::Primitive,
+                     types::Double::Primitive, std::string,
                      types::Bool::Primitive>;
 
      struct UntypedProperty {
@@ -99,7 +99,7 @@ private:
         ValueType operator()(types::Double::Primitive propValue) const {
             return types::Double::_valueType;
         }
-        ValueType operator()(types::String::Primitive propValue) const {
+        ValueType operator()(std::string propValue) const {
             return types::String::_valueType;
         }
         ValueType operator()(types::Bool::Primitive propValue) const {
