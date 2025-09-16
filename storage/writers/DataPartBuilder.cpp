@@ -133,7 +133,7 @@ NodeID DataPartBuilder::addPendingNode(CommitWriteBuffer::PendingNode& node) {
                     this->addNodeProperty<types::UInt64>(nodeID, propID, propValue);
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
                     this->addNodeProperty<types::Double>(nodeID, propID, propValue);
-                } else if constexpr (std::is_same_v<T, types::String::Primitive>) {
+                } else if constexpr (std::is_same_v<T, std::string>) {
                     this->addNodeProperty<types::String>(nodeID, propID, propValue);
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
                     this->addNodeProperty<types::Bool>(nodeID, propID, propValue);
@@ -204,7 +204,7 @@ std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& w
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
                     this->addEdgeProperty<types::Double>(
                         {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
-                } else if constexpr (std::is_same_v<T, types::String::Primitive>) {
+                } else if constexpr (std::is_same_v<T, std::string>) {
                     this->addEdgeProperty<types::String>(
                         {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {

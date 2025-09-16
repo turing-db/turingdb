@@ -93,7 +93,8 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 }
 
 CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
-    // Ensure this CommitBuilder is in a fresh state
+    // Ensure this CommitBuilder is in a fresh state, otherwise there are builders which
+    // have used a potentially outdated metadata
     msgbioassert(
         isEmpty(),
         fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",
