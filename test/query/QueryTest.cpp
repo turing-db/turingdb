@@ -651,9 +651,9 @@ TEST_F(QueryTest, CallGraphInfo) {
     QueryTester tester {_mem, *_interp};
 
     tester.query("CALL PROPERTIES()")
-        .expectVector<PropertyTypeID>({0, 1, 2, 3, 4, 5, 6})
-        .expectVector<std::string_view>({"name", "dob", "isFrench", "hasPhD", "isReal", "duration", "proficiency"})
-        .expectVector<std::string_view>({"String", "String", "Bool", "Bool", "Bool", "Int64", "String"})
+        .expectVector<PropertyTypeID>({0, 1, 2, 3, 4, 5, 6, 7})
+        .expectVector<std::string_view>({"name", "dob", "age", "isFrench", "hasPhD", "isReal", "duration", "proficiency"})
+        .expectVector<std::string_view>({"String", "String", "Int64", "Bool", "Bool", "Bool", "Int64", "String"})
         .execute();
 
     tester.query("CALL LABELS()")
