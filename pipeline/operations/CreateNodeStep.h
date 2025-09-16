@@ -1,12 +1,12 @@
 #pragma once
 
 #include "ExecutionContext.h"
+#include "columns/ColumnIDs.h"
 
 namespace db {
 
 class EntityPattern;
 class DataPartBuilder;
-class CommitWriteBuffer;
 
 class CreateNodeStep {
 public:
@@ -29,12 +29,10 @@ public:
 
     void describe(std::string& descr) const;
 
-    static void createNode(DataPartBuilder* builder, const EntityPattern* data,
-                           CommitWriteBuffer* writeBuffer);
+    static void createNode(DataPartBuilder* builder, const EntityPattern* data);
 
 private:
     DataPartBuilder* _builder {nullptr};
-    CommitWriteBuffer* _writeBuffer {nullptr};
     const EntityPattern* _data {nullptr};
 };
 

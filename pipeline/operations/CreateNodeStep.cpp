@@ -7,10 +7,8 @@
 #include "TypeConstraint.h"
 #include "PipelineException.h"
 #include "VarDecl.h"
-#include "columns/ColumnIDs.h"
 #include "metadata/LabelSet.h"
 #include "versioning/CommitBuilder.h"
-#include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
@@ -33,15 +31,13 @@ void CreateNodeStep::prepare(ExecutionContext* ctxt) {
 
     auto& tx = rawTx->get<PendingCommitWriteTx>();
 
-    _writeBuffer = &tx.commitBuilder()->writeBuffer();
     _builder = &tx.commitBuilder()->getCurrentBuilder();
-
 }
 
 void CreateNodeStep::execute() {
     Profile profile {"CreateNodeStep::execute"};
 
-    createNode(_builder, _data, _writeBuffer);
+    createNode(_builder, _data);
 }
 
 void CreateNodeStep::describe(std::string& descr) const {
@@ -49,8 +45,7 @@ void CreateNodeStep::describe(std::string& descr) const {
     descr += "CreateNodeStep";
 }
 
-void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* data,
-                                CommitWriteBuffer* writeBuffer) {
+void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* data) {
     auto& metadata = builder->getMetadata();
 
     const TypeConstraint* type = data->getTypeConstraint();
@@ -58,11 +53,9 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
     auto* col = data->getVar()->getDecl()->getColumn();
 
     LabelSet labelSet;
-    std::vector<std::string> labels;
     if (type) {
         for (const auto& name : type->getTypeNames()) {
             labelSet.set(metadata.getOrCreateLabel(name->getName()));
-            labels.emplace_back(name->getName());
         }
     }
 
@@ -76,8 +69,6 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
     if (!expr) {
         return;
     }
-
-    std::vector<CommitWriteBuffer::UntypedProperty> pendingProperties;
 
     for (const auto& e : expr->getExpressions()) {
         const auto& left = static_cast<const VarExpr*>(e->getLeftExpr());
@@ -95,31 +86,26 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
             case ValueType::Int64: {
                 const auto* casted = static_cast<const Int64ExprConst*>(right);
                 builder->addNodeProperty<types::Int64>(nodeID, propType._id, casted->getVal());
-                pendingProperties.emplace_back(left->getName(), casted->getVal());
                 break;
             }
             case ValueType::UInt64: {
                 const auto* casted = static_cast<const UInt64ExprConst*>(right);
                 builder->addNodeProperty<types::UInt64>(nodeID, propType._id, casted->getVal());
-                pendingProperties.emplace_back(left->getName(), casted->getVal());
                 break;
             }
             case ValueType::Double: {
                 const auto* casted = static_cast<const DoubleExprConst*>(right);
                 builder->addNodeProperty<types::Double>(nodeID, propType._id, casted->getVal());
-                pendingProperties.emplace_back(left->getName(), casted->getVal());
                 break;
             }
             case ValueType::String: {
                 const auto* casted = static_cast<const StringExprConst*>(right);
                 builder->addNodeProperty<types::String>(nodeID, propType._id, casted->getVal());
-                pendingProperties.emplace_back(left->getName(), casted->getVal());
                 break;
             }
             case ValueType::Bool: {
                 const auto* casted = static_cast<const BoolExprConst*>(right);
                 builder->addNodeProperty<types::Bool>(nodeID, propType._id, casted->getVal());
-                pendingProperties.emplace_back(left->getName(), casted->getVal());
                 break;
             }
             default: {
@@ -127,7 +113,5 @@ void CreateNodeStep::createNode(DataPartBuilder* builder, const EntityPattern* d
             }
         }
     }
-
-    // Add this node to the write buffer
-    writeBuffer->addPendingNode(labels, pendingProperties);
 }
+

@@ -9,7 +9,6 @@ namespace db {
 
 class EntityPattern;
 class DataPartBuilder;
-class CommitWriteBuffer;
 
 class CreateEdgeStep {
 public:
@@ -36,7 +35,6 @@ public:
 
 private:
     DataPartBuilder* _builder {nullptr};
-    CommitWriteBuffer* _writeBuffer {nullptr};
     const EntityPattern* _src {nullptr};
     const EntityPattern* _edge {nullptr};
     const EntityPattern* _tgt {nullptr};
