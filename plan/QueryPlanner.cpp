@@ -171,53 +171,6 @@ bool QueryPlanner::planMatch(const MatchCommand* matchCmd) {
     return true;
 }
 
-void QueryPlanner::planCreateNode(const EntityPattern* nodePattern) {
-    VarDecl* nodeDcl = nodePattern->getVar()->getDecl();
-
-    if (!nodeDcl->getColumn()) {
-        auto* nodeIDCol = _mem->alloc<ColumnNodeID>();
-        nodeDcl->setColumn(nodeIDCol);
-
-        const NodeID nodeID = nodePattern->getEntityID();
-
-        // If there is no previous decl, and no injected ID, create node
-        if (!nodeID.isValid() && !nodePattern->getInjectedIDs()) {
-            _pipeline->add<CreateNodeStep>(nodePattern);
-        } else if (nodeID.isValid()) { // If there is previous decl, use that
-            nodeIDCol->set(nodeID);
-        } else if (nodePattern->getInjectedIDs()) { // If there is injected ID, use that
-            // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
-            // injected ID (if any), set this node to have that injected ID
-            nodeIDCol->set(nodePattern->getInjectedIDs()->getIDs().front());
-        } else {
-            throw PlannerException(
-                "Could not find previous declaration nor injected ID for node.");
-        }
-    }
-}
-
-void QueryPlanner::planCreateEdges(const PathPattern* pathPattern) {
-    std::span pathElements {pathPattern->elements()};
-
-    EntityPattern* src = pathElements[0];
-    planCreateNode(src);
-
-    for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
-        // Create the target + the edge (the source is already created)
-        const EntityPattern* edge = step[0];
-        VarDecl* edgeDecl = edge->getVar()->getDecl();
-
-        auto edgeID = _mem->alloc<ColumnEdgeID>();
-        edgeDecl->setColumn(edgeID);
-
-        EntityPattern* tgt = step[1];
-        planCreateNode(tgt);
-
-        _pipeline->add<CreateEdgeStep>(src, edge, tgt);
-        src = tgt; // Assign the current target as the source for the next edge
-    }
-}
-
 bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
     const auto& targets = createCmd->createTargets();
     if (targets.size() == 0) {
