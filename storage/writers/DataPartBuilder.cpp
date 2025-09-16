@@ -11,7 +11,7 @@
 using namespace db;
 
 namespace {
-// Functor for helping get the value type from an UntypedProperty
+// Functor for helping get the ValueType from an UntypedProperty
 struct ValueTypeFromProperty {
     ValueType operator()(types::Int64::Primitive propValue) const {
         return types::Int64::_valueType;

@@ -6,7 +6,6 @@
 
 #include "EdgeRecord.h"
 #include "ID.h"
-#include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 #include "views/GraphView.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -102,37 +101,6 @@ private:
     }
 
     DataPartBuilder() = default;
-
-    struct BuildNodeProperty {
-        BuildNodeProperty(DataPartBuilder& builder, NodeID nid, PropertyTypeID pid)
-            : _builder(builder),
-              _nid(nid),
-              _pid(pid)
-            {
-            }
-
-        void operator()(types::Int64::Primitive propValue) const {
-            _builder.addNodeProperty<types::Int64>(_nid, _pid, propValue);
-        }
-        void operator()(types::UInt64::Primitive propValue) const {
-            _builder.addNodeProperty<types::UInt64>(_nid, _pid, propValue);
-        }
-        void operator()(types::Double::Primitive propValue) const {
-            _builder.addNodeProperty<types::Double>(_nid, _pid, propValue);
-        }
-        void operator()(types::String::Primitive propValue) const {
-            _builder.addNodeProperty<types::String>(_nid, _pid, propValue);
-        }
-        void operator()(types::Bool::Primitive propValue) const {
-            _builder.addNodeProperty<types::Bool>(_nid, _pid, propValue);
-        }
-
-    private:
-        DataPartBuilder& _builder;
-        NodeID _nid;
-        PropertyTypeID _pid;
-    };
-
 };
 
 }
