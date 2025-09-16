@@ -237,13 +237,9 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
             spdlog::error("Unsupported path pattern with zero elements");
             return false;
         }
-
-        if (pathElements.size() == 1) {
-            planCreateNode(pathElements.front());
-        } else {
-            planCreateEdges(path);
-        }
     }
+
+    _pipeline->add<WriteStep>(&targets);
 
     // Add END step
     _pipeline->add<EndStep>();

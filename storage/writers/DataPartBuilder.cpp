@@ -145,7 +145,6 @@ NodeID DataPartBuilder::addPendingNode(CommitWriteBuffer::PendingNode& node) {
     return nodeID;
 }
 
-
 std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& wb,
                                                       const CommitWriteBuffer::PendingEdge& edge,
                                                       const std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID>& tempNodeIDMap) {

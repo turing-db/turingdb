@@ -99,7 +99,7 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem&
         fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",
                     dpCount())
             .c_str());
-    msgbioassert(pendingCount() == 1,
+    msgbioassert(pendingCount() == 0,
                  fmt::format("CommitBuilder must have one datapart builders (has {}) to "
                              "flush write buffer.",
                              pendingCount())
