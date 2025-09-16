@@ -63,7 +63,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     for (const auto& builder : _builders) {
         // If we are submitting, @ref _nextNodeID _nextEdgeID are synced to the current
         // next ID for the latest commit on main. This function may be called in the case
-        // of a @ref Change::submit, in which case we do not want to perform this sync,
+        // of a @ref Change::commit, in which case we do not want to perform this sync,
         // and can continue with our local next ID.
         auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
 
@@ -98,21 +98,16 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     // Ensure this CommitBuilder is in a fresh state, otherwise there are builders which
     // have used a potentially outdated metadata
-
     msgbioassert(
         isEmpty(),
-        fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",
-                    dpCount())
-            .c_str());
+        fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",dpCount()).c_str());
     msgbioassert(pendingCount() == 0,
                  fmt::format("CommitBuilder must have one datapart builders (has {}) to "
-                             "flush write buffer.",
-                             pendingCount())
-                     .c_str());
+                             "flush write buffer.", pendingCount()).c_str());
 
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
-    _builders.clear();
+    _builders.clear(); // XXX: Currently redundant
     DataPartBuilder& dpBuilder = newBuilder();
 
     CommitWriteBuffer& wb = writeBuffer();
@@ -170,5 +165,5 @@ void CommitBuilder::initialize() {
     _writeBuffer = std::make_unique<CommitWriteBuffer>();
 
     // Create datapart builder
-    // this->newBuilder();
+    // this->newBuilder(); XXX: Do not do this here, it need be created at submit time
 }

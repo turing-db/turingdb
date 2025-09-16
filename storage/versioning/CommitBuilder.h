@@ -44,11 +44,7 @@ public:
     [[nodiscard]] const CommitData& commitData() const { return *_commitData; }
     [[nodiscard]] MetadataBuilder& metadata() { return *_metadataBuilder; }
     [[nodiscard]] DataPartBuilder& getCurrentBuilder() {
-        if (!_builders.empty()) {
-            return *_builders.back();
-        } else {
-            return newBuilder();
-        }
+        return _builders.empty() ? newBuilder() : *_builders.back();
     }
 
     DataPartBuilder& newBuilder();

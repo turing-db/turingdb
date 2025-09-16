@@ -10,6 +10,28 @@
 
 using namespace db;
 
+namespace {
+// Functor for helping get the value type from an UntypedProperty
+struct ValueTypeFromProperty {
+    ValueType operator()(types::Int64::Primitive propValue) const {
+        return types::Int64::_valueType;
+    }
+    ValueType operator()(types::UInt64::Primitive propValue) const {
+        return types::UInt64::_valueType;
+    }
+    ValueType operator()(types::Double::Primitive propValue) const {
+        return types::Double::_valueType;
+    }
+    ValueType operator()(std::string propValue) const {
+        return types::String::_valueType;
+    }
+    ValueType operator()(types::Bool::Primitive propValue) const {
+        return types::Bool::_valueType;
+    }
+};
+
+}
+
 DataPartBuilder::~DataPartBuilder() = default;
 
 std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metadata,
@@ -116,8 +138,7 @@ NodeID DataPartBuilder::addPendingNode(CommitWriteBuffer::PendingNode& node) {
     // Adding node properties
     for (const CWB::UntypedProperty& prop : node.properties) {
         // Get the value type from the untyped property
-        const ValueType propValueType =
-            std::visit(CWB::ValueTypeFromProperty {}, prop.value);
+        const ValueType propValueType = std::visit(ValueTypeFromProperty {}, prop.value);
         // Get the existing ID, or create a new property and get that ID
         const PropertyTypeID propID =
             _metadata->getOrCreatePropertyType(prop.propertyName, propValueType)._id;
@@ -184,8 +205,7 @@ std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& w
 
     for (const CWB::UntypedProperty& prop : edge.properties) {
         // Get the value type from the untyped property
-        const ValueType propValueType =
-            std::visit(CWB::ValueTypeFromProperty {}, prop.value);
+        const ValueType propValueType = std::visit(ValueTypeFromProperty {}, prop.value);
 
         // Get the existing ID, or create a new property and get that ID
         const PropertyTypeID propID =

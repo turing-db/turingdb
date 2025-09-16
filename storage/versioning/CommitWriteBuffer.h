@@ -47,15 +47,10 @@ public:
     PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
 
     void addPendingNode(std::vector<std::string>& labels,
-                        std::vector<UntypedProperty>& properties) {
-        _pendingNodes.emplace_back(labels, properties);
-    }
+                        std::vector<UntypedProperty>& properties);
 
-    void addPendingEdge(ContingentNode src, ContingentNode tgt,
-                        std::string& edgeType,
-                        std::vector<UntypedProperty>& edgeProperties) {
-        _pendingEdges.emplace_back(src, tgt, edgeType, edgeProperties);
-    }
+    void addPendingEdge(ContingentNode src, ContingentNode tgt, std::string& edgeType,
+                        std::vector<UntypedProperty>& edgeProperties);
 
     std::vector<PendingNode>& pendingNodes() { return _pendingNodes; }
     std::vector<PendingEdge>& pendingEdges() { return _pendingEdges; }
@@ -68,11 +63,7 @@ public:
      * @detail Calls std::vector::reserve for the additional space before calling
      * std::vector::insert
      */
-    void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
-        // _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
-
-        _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
-    }
+    void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes);
     
 private:
     friend DataPartBuilder;
@@ -88,24 +79,6 @@ private:
 
     // Edges to be deleted when this commit commits
     std::set<EdgeID> _deletedEdges;
-
-    struct ValueTypeFromProperty {
-        ValueType operator()(types::Int64::Primitive propValue) const {
-            return types::Int64::_valueType;
-        }
-        ValueType operator()(types::UInt64::Primitive propValue) const {
-            return types::UInt64::_valueType;
-        }
-        ValueType operator()(types::Double::Primitive propValue) const {
-            return types::Double::_valueType;
-        }
-        ValueType operator()(std::string propValue) const {
-            return types::String::_valueType;
-        }
-        ValueType operator()(types::Bool::Primitive propValue) const {
-            return types::Bool::_valueType;
-        }
-    };
 };
 
 }
