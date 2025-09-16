@@ -30,12 +30,14 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     const auto remy = writer.addNode({"Person", "SoftwareEngineering", "Founder"});
     writer.addNodeProperty<types::String>(remy, "name", "Remy");
     writer.addNodeProperty<types::String>(remy, "dob", "18/01");
+    writer.addNodeProperty<types::Int64>(remy, "age", 32);
     writer.addNodeProperty<types::Bool>(remy, "isFrench", true);
     writer.addNodeProperty<types::Bool>(remy, "hasPhD", true);
 
     const auto adam = writer.addNode({"Person", "Bioinformatics", "Founder"});
     writer.addNodeProperty<types::String>(adam, "name", "Adam");
     writer.addNodeProperty<types::String>(adam, "dob", "18/08");
+    writer.addNodeProperty<types::Int64>(adam, "age", 32);
     writer.addNodeProperty<types::Bool>(adam, "isFrench", true);
     writer.addNodeProperty<types::Bool>(adam, "hasPhD", true);
 

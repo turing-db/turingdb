@@ -154,3 +154,65 @@ TEST_F(StmtTest, matchEdgesDirection) {
         EXPECT_NO_THROW(analyzer.analyze());
     }
 }
+
+TEST_F(StmtTest, matchWhere1) {
+    {
+        const std::string query = "MATCH (n) WHERE n.duration = 42 RETURN n";
+        CypherAST ast(query);
+
+        CypherParser parser(&ast);
+        ASSERT_NO_THROW(parser.parse(query));
+
+        auto tx = _graph->openTransaction();
+        CypherAnalyzer analyzer(&ast, tx.viewGraph());
+        ASSERT_NO_THROW(analyzer.analyze());
+    }
+
+    {
+        const std::string query = "MATCH (n)-->(m) WHERE n.age = m.age RETURN n,m";
+        CypherAST ast(query);
+
+        CypherParser parser(&ast);
+        ASSERT_NO_THROW(parser.parse(query));
+
+        auto tx = _graph->openTransaction();
+        CypherAnalyzer analyzer(&ast, tx.viewGraph());
+        ASSERT_NO_THROW(analyzer.analyze());
+    }
+
+    {
+        const std::string query = "MATCH (n)-->(m)-->(z), (p)-->(m) WHERE n.age = p.age+10 RETURN n,m,z,p";
+        CypherAST ast(query);
+
+        CypherParser parser(&ast);
+        ASSERT_NO_THROW(parser.parse(query));
+
+        auto tx = _graph->openTransaction();
+        CypherAnalyzer analyzer(&ast, tx.viewGraph());
+        ASSERT_NO_THROW(analyzer.analyze());
+    }
+
+    {
+        const std::string query = "MATCH (n)-->(m) WHERE n.age = z.age+2 RETURN n,m";
+        CypherAST ast(query);
+
+        CypherParser parser(&ast);
+        ASSERT_NO_THROW(parser.parse(query));
+
+        auto tx = _graph->openTransaction();
+        CypherAnalyzer analyzer(&ast, tx.viewGraph());
+        ASSERT_THROW(analyzer.analyze(), AnalyzeException);
+    }
+
+    {
+        const std::string query = "MATCH (n)-->(m)-->(z), (p)-->(m) WHERE n.age = p.age+10 AND z.age = p.age+2 RETURN n,m,z,p";
+        CypherAST ast(query);
+
+        CypherParser parser(&ast);
+        ASSERT_NO_THROW(parser.parse(query));
+
+        auto tx = _graph->openTransaction();
+        CypherAnalyzer analyzer(&ast, tx.viewGraph());
+        ASSERT_NO_THROW(analyzer.analyze());
+    }
+}
