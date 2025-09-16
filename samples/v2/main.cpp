@@ -12,6 +12,10 @@
 #include "CypherAST.h"
 #include "AnalyzeException.h"
 #include "versioning/Transaction.h"
+#include "columns/Block.h"
+#include "PlanGraphGenerator.h"
+#include "PlanGraph.h"
+#include "PlanGraphDebug.h"
 
 using namespace db;
 using namespace db::v2;
@@ -41,6 +45,8 @@ int main(int argc, char** argv) {
 
         queryStr = it.get<char>(file.getInfo()._size);
     }
+
+    auto callback = [](const Block& block) {};
 
     CypherAST ast(queryStr);
     ast.setDebugLocations(true);
@@ -74,6 +80,14 @@ int main(int argc, char** argv) {
 
         CypherASTDumper dumper(analyzer.getAST());
         dumper.dump(std::cout);
+    }
+
+    {
+        PlanGraphGenerator planGen(view, callback);
+        planGen.generate(ast.queries().front());
+        const PlanGraph& planGraph = planGen.getPlanGraph();
+
+        PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
     }
 
     return EXIT_SUCCESS;
