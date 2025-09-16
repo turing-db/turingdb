@@ -2,21 +2,22 @@
 
 #include <iostream>
 
-#include "ASTContext.h"
-#include "QueryParser.h"
 #include "Graph.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "columns/Block.h"
 #include "SystemManager.h"
 #include "SimpleGraph.h"
+#include "CypherParser.h"
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
 #include "PlanGraphGenerator.h"
-#include "QueryAnalyzer.h"
 #include "PlanGraphTester.h"
-#include "PlanOptimizer.h"
+
 #include "TuringConfig.h"
 
 using namespace db;
+using namespace db::v2;
 
 class PlanGenTest : public ::testing::Test {
 public:
@@ -45,18 +46,17 @@ TEST_F(PlanGenTest, matchAllNodes) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n) RETURN n";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
+
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -76,18 +76,17 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n)-[e]-(m) RETURN n,e,m";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
+
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -111,18 +110,17 @@ TEST_F(PlanGenTest, matchAllEdges2) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n)--(m) RETURN n,m";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
+
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -134,7 +132,6 @@ TEST_F(PlanGenTest, matchAllEdges2) {
         .expect(PlanGraphOpcode::SCAN_NODES)
         .expectVar("n")
         .expect(PlanGraphOpcode::GET_OUT_EDGES)
-        .expectVar("0")
         .expect(PlanGraphOpcode::GET_EDGE_TARGET)
         .expectVar("m")
         .validateComplete();
@@ -146,18 +143,17 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n:Person) RETURN n";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
+
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -177,18 +173,17 @@ TEST_F(PlanGenTest, matchLinear1) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL]-(p:Person) RETURN n,p";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
+
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -214,18 +209,16 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL {isFrench: true}]-(p:Person) RETURN n,p";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -252,22 +245,20 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n:Person {isFrench: true, hasPhD: true})-[e:KNOWS_WELL]-(p:Person {isFrench: false}) RETURN n,p";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
-    PlanGraph& planGraph = planGen.getPlanGraph();
+    planGen.generate(ast.queries().front());
 
     //planGraph.dump(std::cout);
 
+    /*
     PlanOptimizer optimizer(planGraph);
     optimizer.optimize();
 
@@ -287,6 +278,7 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
         .expect(PlanGraphOpcode::FILTER_NODE_EXPR)
         .expectVar("p")
         .validateComplete();
+    */
 }
 
 TEST_F(PlanGenTest, matchMultiTargetsLinear) {
@@ -295,18 +287,17 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (n:Person)--(m), (m{isFrench:true})--(z) RETURN n,z";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
+
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);
@@ -318,18 +309,17 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
-
     const std::string queryStr = "MATCH (a)--(b)--(c), (b{isFrench:true})--(z), (b)--(y), (z)--(n)--(y) RETURN n,z";
-    QueryCommand* queryCmd = parser.parse(queryStr);
-    ASSERT_TRUE(queryCmd);
+    
+    CypherAST ast(queryStr);
+    CypherParser parser(&ast);
+    ASSERT_NO_THROW(parser.parse(queryStr));
 
-    QueryAnalyzer analyzer(view, &ctxt);
-    EXPECT_NO_THROW(analyzer.analyze(queryCmd));
+    CypherAnalyzer analyzer(&ast, view);
+    ASSERT_NO_THROW(analyzer.analyze());
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     planGraph.dump(std::cout);

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "PlanGraph.h"
-#include "VarDecl.h"
+#include "decl/VarDecl.h"
 
 #include "TuringException.h"
 
-namespace db {
+namespace db::v2 {
 
 class PlanGraphTester {
 public:

@@ -11,16 +11,16 @@
 #include "views/GraphView.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
-#include "QueryAnalyzer.h"
-#include "QueryParser.h"
-#include "ASTContext.h"
-#include "QueryCommand.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
+#include "CypherAST.h"
 #include "ParserException.h"
 #include "AnalyzeException.h"
 #include "FileReader.h"
 #include "TuringConfig.h"
 
 using namespace db;
+using namespace db::v2;
 
 void runPlan2(std::string_view query);
 
@@ -60,33 +60,28 @@ void runPlan2(std::string_view query) {
 
     auto callback = [](const Block& block) {};
 
-    ASTContext ctxt;
-    QueryParser parser(&ctxt);
+    CypherAST ast(query);
+    CypherParser parser(&ast);
 
-    QueryCommand* queryCmd {nullptr};
     try {
         auto t0 = Clock::now();
-        queryCmd = parser.parse(query);
-        if (!queryCmd) {
-            std::cerr << "Failed to parse query" << std::endl;
-            return;
-        }
+        parser.parse(query);
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
     } catch (const ParserException& e) {
         std::cerr << "Syntax error: " << e.what() << std::endl;
         return;
     }
 
-    QueryAnalyzer analyzer(view, &ctxt);
+    CypherAnalyzer analyzer(&ast, view);
     try {
-        analyzer.analyze(queryCmd);
+        analyzer.analyze();
     } catch (const AnalyzeException& e) {
         std::cerr << "Analyze error: " << e.what() << std::endl;
         return;
     }
 
     PlanGraphGenerator planGen(view, callback);
-    planGen.generate(queryCmd);
+    planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
