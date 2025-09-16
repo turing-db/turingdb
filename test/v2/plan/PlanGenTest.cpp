@@ -76,7 +76,7 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (n)-[e]-(m) RETURN n,e,m";
+    const std::string queryStr = "MATCH (n)-[e]->(m) RETURN n,e,m";
 
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
@@ -110,7 +110,7 @@ TEST_F(PlanGenTest, matchAllEdges2) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (n)--(m) RETURN n,m";
+    const std::string queryStr = "MATCH (n)-->(m) RETURN n,m";
 
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
@@ -173,7 +173,7 @@ TEST_F(PlanGenTest, matchLinear1) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL]-(p:Person) RETURN n,p";
+    const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL]->(p:Person) RETURN n,p";
 
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
@@ -209,7 +209,7 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL {isFrench: true}]-(p:Person) RETURN n,p";
+    const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL {isFrench: true}]->(p:Person) RETURN n,p";
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
@@ -245,7 +245,7 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (n:Person {isFrench: true, hasPhD: true})-[e:KNOWS_WELL]-(p:Person {isFrench: false}) RETURN n,p";
+    const std::string queryStr = "MATCH (n:Person {isFrench: true, hasPhD: true})-[e:KNOWS_WELL]->(p:Person {isFrench: false}) RETURN n,p";
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
@@ -287,7 +287,7 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (n:Person)--(m), (m{isFrench:true})--(z) RETURN n,z";
+    const std::string queryStr = "MATCH (n:Person)-->(m), (m{isFrench:true})-->(z) RETURN n,z";
 
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
@@ -309,7 +309,7 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
 
     auto callback = [](const Block& block) {};
 
-    const std::string queryStr = "MATCH (a)--(b)--(c), (b{isFrench:true})--(z), (b)--(y), (z)--(n)--(y) RETURN n,z";
+    const std::string queryStr = "MATCH (a)-->(b)-->(c), (b{isFrench:true})-->(z), (b)-->(y), (z)-->(n)-->(y) RETURN n,z";
     
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
