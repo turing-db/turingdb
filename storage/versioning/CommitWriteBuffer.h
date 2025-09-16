@@ -77,16 +77,16 @@ public:
 private:
     friend DataPartBuilder;
 
-    // Nodes to be created
+    // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
 
-    // Edges to be created
+    // Edges to be created when this commit commits
     std::vector<PendingEdge> _pendingEdges;
     
-    // Nodes to be deleted
+    // Nodes to be deleted when this commit commits
     std::set<NodeID> _deletedNodes;
 
-    // Edges to be deleted
+    // Edges to be deleted when this commit commits
     std::set<EdgeID> _deletedEdges;
 
     struct ValueTypeFromProperty {
