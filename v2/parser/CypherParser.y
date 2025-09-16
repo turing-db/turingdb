@@ -705,17 +705,17 @@ opt_rangeLit
 
 
 edgePattern
-    : TAIL_TAIL     { $$ = EdgePattern::create(ast); LOC($$, @$); }
-    | TIP_TAIL_TAIL { $$ = EdgePattern::create(ast); LOC($$, @$); }
-    | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast); LOC($$, @$); }
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = $2; LOC($$, @$); }
-    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = $2; LOC($$, @$); }
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = $2; LOC($$, @$); }
+    : TAIL_TAIL     { $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
+    | TIP_TAIL_TAIL { $$ = EdgePattern::create(ast, EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
+    | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast, EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = $2; $$->setDirection(EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
+    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = $2; $$->setDirection(EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
+    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = $2; $$->setDirection(EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
     ;
 
 edgeDetail
     : opt_symbol opt_edgeTypes opt_rangeLit opt_properties { 
-        $$ = EdgePattern::create(ast);
+        $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
 
         if ($2.has_value()) {

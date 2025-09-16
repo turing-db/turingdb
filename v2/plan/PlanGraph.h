@@ -23,6 +23,8 @@ enum class PlanGraphOpcode {
     FILTER_NODE_LABEL,
     FILTER_EDGE_TYPE,
     GET_OUT_EDGES,
+    GET_IN_EDGES,
+    GET_EDGES,
     GET_EDGE_TARGET,
     CREATE_NODE,
     CREATE_EDGE,
@@ -40,6 +42,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::FILTER_NODE_LABEL, "FILTER_NODE_LABEL">,
     EnumStringPair<PlanGraphOpcode::FILTER_EDGE_TYPE, "FILTER_EDGE_TYPE">,
     EnumStringPair<PlanGraphOpcode::GET_OUT_EDGES, "GET_OUT_EDGES">,
+    EnumStringPair<PlanGraphOpcode::GET_IN_EDGES, "GET_IN_EDGES">,
+    EnumStringPair<PlanGraphOpcode::GET_EDGES, "GET_EDGES">,
     EnumStringPair<PlanGraphOpcode::GET_EDGE_TARGET, "GET_EDGE_TARGET">,
     EnumStringPair<PlanGraphOpcode::CREATE_NODE, "CREATE_NODE">,
     EnumStringPair<PlanGraphOpcode::CREATE_EDGE, "CREATE_EDGE">,
@@ -194,6 +198,22 @@ class GetOutEdgesNode : public PlanGraphNode {
 public:
     explicit GetOutEdgesNode()
         : PlanGraphNode(PlanGraphOpcode::GET_OUT_EDGES)
+    {
+    }
+};
+
+class GetInEdgesNode : public PlanGraphNode {
+public:
+    explicit GetInEdgesNode()
+        : PlanGraphNode(PlanGraphOpcode::GET_IN_EDGES)
+    {
+    }
+};
+
+class GetEdgesNode : public PlanGraphNode {
+public:
+    explicit GetEdgesNode()
+        : PlanGraphNode(PlanGraphOpcode::GET_EDGES)
     {
     }
 };

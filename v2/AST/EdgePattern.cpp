@@ -4,15 +4,16 @@
 
 using namespace db::v2;
 
-EdgePattern::EdgePattern()
+EdgePattern::EdgePattern(Direction direction)
+    : _direction(direction)
 {
 }
 
 EdgePattern::~EdgePattern() {
 }
 
-EdgePattern* EdgePattern::create(CypherAST* ast) {
-    EdgePattern* pattern = new EdgePattern();
+EdgePattern* EdgePattern::create(CypherAST* ast, Direction direction) {
+    EdgePattern* pattern = new EdgePattern(direction);
     ast->addEntityPattern(pattern);
     return pattern;
 }
