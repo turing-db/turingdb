@@ -554,6 +554,14 @@ TEST_F(QueryTest, ChangeWithRebaseQueries) {
     tester.query("CHANGE SUBMIT")
         .execute();
 
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("MATCH (n:TestNode2)-[e:TestEdge2]-(m:TestNode2) RETURN n.name, e.name, m.name")
+        .expectOptVector<types::String::Primitive>({"3"})
+        .expectOptVector<types::String::Primitive>({"3->4"})
+        .expectOptVector<types::String::Primitive>({"4"})
+        .execute();
+
     tester.setChangeID(change1);
 
     tester.query("CHANGE SUBMIT")
