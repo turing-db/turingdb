@@ -6,6 +6,7 @@
 #include "indexers/EdgeIndexer.h"
 #include "views/EdgeView.h"
 #include "properties/PropertyManager.h"
+#include <numeric>
 
 using namespace db;
 
@@ -13,16 +14,24 @@ size_t GraphReader::getNodeCount() const {
     if (_view.dataparts().empty()) {
         return 0;
     }
-    const auto& part = _view.dataparts().back();
-    return part->getFirstNodeID().getValue() + part->getNodeCount();
+
+    // Due to deletions, NodeIDs are no longer guaranteed to be contiguous across
+    // dataparts. Hence we must manually now sum up the nodes in each datapart.
+    return std::accumulate(
+        _view.dataparts().begin(), _view.dataparts().end(), 0,
+        [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getNodeCount(); });
 }
 
 size_t GraphReader::getEdgeCount() const {
     if (_view.dataparts().empty()) {
         return 0;
     }
-    const auto& part = _view.dataparts().back();
-    return part->getFirstEdgeID().getValue() + part->getEdgeCount();
+
+    // Due to deletions, EdgeIDs are no longer guaranteed to be contiguous across
+    // dataparts. Hence we must manually now sum up the edges in each datapart.
+    return std::accumulate(
+        _view.dataparts().begin(), _view.dataparts().end(), 0,
+        [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getEdgeCount(); });
 }
 
 LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {

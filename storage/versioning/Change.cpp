@@ -3,6 +3,7 @@
 #include "reader/GraphReader.h"
 #include <range/v3/view/enumerate.hpp>
 
+#include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/MetadataRebaser.h"
@@ -55,8 +56,15 @@ PendingCommitReadTx Change::openReadTransaction(CommitHash commitHash) {
 CommitResult<void> Change::commit(JobSystem& jobsystem) {
     Profile profile {"Change::commit"};
 
+    // If there are existing dataparts, this is the result of a GraphWriter or similar.
+    // Add this check for backwards compatability.
+    if (!_tip->isEmpty() || _tip->pendingCount() != 0) {
+        auto res = _tip->buildAllPending(jobsystem);
+        return res;
+    }
+
     if (auto res = _tip->flushWriteBuffer(jobsystem); !res) {
-        return {};
+        return res.get_unexpected();
     }
 
     auto newTip = CommitBuilder::prepare(*_versionController,
@@ -78,7 +86,7 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     EdgeID oldNextEdgeID =
         _base->commits().back().openTransaction().readGraph().getEdgeCount();
 
-    // Get current state of main
+    // Get the current state of main
     _base = _versionController->openTransaction().commitData();
 
     // Get the current next Edge and Node IDs on main
@@ -91,14 +99,29 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     DataPartRebaser dataPartRebaser(oldNextNodeID, oldNextEdgeID, newNextNodeID,
                                     newNextEdgeID);
 
-    const auto* prevCommitData = _base.get();
-    const auto* prevHistory = &_base->history();
+    // CommitData of main
+    const CommitData* prevCommitData = _base.get();
+    // CommitHistory of main
+    const CommitHistory* prevHistory = &_base->history();
 
+    NodeID nextNodeID = _versionController->openTransaction().readGraph().getNodeCount();
+    EdgeID nextEdgeID = _versionController->openTransaction().readGraph().getEdgeCount();
+
+    // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
         // Rebasing means:
         // 1. Rebase the metadata
         // 2. Get all commits/dataparts from the previous commit history
         // 3. Add back dataparts of current commit and rebase them
+
+        // These values are initially set at time of the creation of this Change, however
+        // they need to be updated to point to the next ID on the current state of main.
+        // These values will be used when creating new dataparts at time of submit.
+        commitBuilder->_firstNodeID = nextNodeID;
+        commitBuilder->_firstEdgeID = nextEdgeID;
+
+        commitBuilder->_nextNodeID = nextNodeID;
+        commitBuilder->_nextEdgeID = nextEdgeID;
 
         metadataRebaser.clear();
         metadataRebaser.rebase(prevCommitData->metadata(), commitBuilder->metadata());
@@ -111,6 +134,8 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
 
         prevCommitData = &commitBuilder->commitData();
         prevHistory = &prevCommitData->history();
+
+        // TODO: Update nextNodeID based on the previous commits number of nodes/edges
     }
 
     return {};

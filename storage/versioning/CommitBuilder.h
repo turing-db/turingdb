@@ -51,51 +51,48 @@ public:
         }
     }
 
-        DataPartBuilder& newBuilder();
+    DataPartBuilder& newBuilder();
 
-        [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem & jobsystem);
-        [[nodiscard]] CommitResult<std::unique_ptr<Commit>> flushWriteBuffer(JobSystem
-                                                                             & jobsystem);
-        [[nodiscard]] CommitResult<void> buildAllPending(JobSystem & jobsystem);
+    [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
+    [[nodiscard]] CommitResult<std::unique_ptr<Commit>> flushWriteBuffer(JobSystem& jobsystem);
+    [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
 
-        void setEntityIDs(NodeID firstNodeID, EdgeID firstEdgeID) {
-            _firstNodeID = firstNodeID;
-            _firstEdgeID = firstEdgeID;
-        }
+    void setEntityIDs(NodeID firstNodeID, EdgeID firstEdgeID) {
+        _firstNodeID = firstNodeID;
+        _firstEdgeID = firstEdgeID;
+    }
 
-        bool isEmpty() const {
-            return _datapartCount == 0;
-        }
-        size_t dpCount() const { return _datapartCount; }
+    bool isEmpty() const { return _datapartCount == 0; }
+    size_t dpCount() const { return _datapartCount; }
 
-    private:
-        friend CommitWriteBuffer;
-        friend VersionController;
-        friend Change;
+private:
+    friend CommitWriteBuffer;
+    friend VersionController;
+    friend Change;
 
-        mutable std::mutex _mutex;
-        std::unique_ptr<CommitWriteBuffer> _writeBuffer;
+    mutable std::mutex _mutex;
+    std::unique_ptr<CommitWriteBuffer> _writeBuffer;
 
-        VersionController* _controller {nullptr};
-        Change* _change {nullptr};
-        GraphView _view;
+    VersionController* _controller {nullptr};
+    Change* _change {nullptr};
+    GraphView _view;
 
-        NodeID _firstNodeID;
-        EdgeID _firstEdgeID;
-        NodeID _nextNodeID;
-        EdgeID _nextEdgeID;
+    NodeID _firstNodeID;
+    EdgeID _firstEdgeID;
+    NodeID _nextNodeID;
+    EdgeID _nextEdgeID;
 
-        WeakArc<CommitData> _commitData;
-        std::unique_ptr<MetadataBuilder> _metadataBuilder;
-        std::unique_ptr<Commit> _commit;
+    WeakArc<CommitData> _commitData;
+    std::unique_ptr<MetadataBuilder> _metadataBuilder;
+    std::unique_ptr<Commit> _commit;
 
-        size_t _datapartCount {0};
+    size_t _datapartCount {0};
 
-        std::vector<std::unique_ptr<DataPartBuilder>> _builders;
+    std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-        explicit CommitBuilder(VersionController&, Change * change, const GraphView&);
+    explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
 
-        void initialize();
+    void initialize();
     };
 }
 

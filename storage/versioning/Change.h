@@ -66,9 +66,6 @@ private:
     [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
 
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash) const;
-
-    [[nodiscard]] CommitResult<std::unique_ptr<Commit>> applyModifications(JobSystem& jobsystem);
-
 };
 
 }

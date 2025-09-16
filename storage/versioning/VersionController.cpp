@@ -77,22 +77,21 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commit : change->_commits) {
-        auto flushRes = commit->flushWriteBuffer(jobSystem);
-        if (!flushRes) {
-            return flushRes.get_unexpected();
+        // If GraphWriter or similar which uses DataPartBuilders directly
+        if (!commit->isEmpty() || commit->pendingCount() != 0) {
+            auto buildRes = commit->build(jobSystem);
+            if (!buildRes) {
+                return buildRes.get_unexpected();
+            }
+            _commits.emplace_back(std::move(buildRes.value()));
+        } else {
+            auto flushRes = commit->flushWriteBuffer(jobSystem);
+            if (!flushRes) {
+                return flushRes.get_unexpected();
+            }
+            _commits.emplace_back(std::move(flushRes.value()));
         }
-        _commits.emplace_back(std::move(flushRes.value()));
     }
-
-    // for (auto& commit : change->_commits) {
-    //     _offsets.emplace(commit->hash(), _commits.size());
-    //     auto buildRes = commit->build(jobSystem);
-    //     if (!buildRes) {
-    //         return buildRes.get_unexpected();
-    //     }
-
-    //     _commits.emplace_back(std::move(buildRes.value()));
-    // }
 
     _head.store(_commits.back().get());
 

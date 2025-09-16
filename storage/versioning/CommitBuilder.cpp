@@ -8,13 +8,11 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
-#include "versioning/CommitWriteBuffer.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
-#include "metadata/GraphMetadata.h"
 
 using namespace db;
 
@@ -63,10 +61,16 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
-        auto part = _controller->createDataPart(_firstNodeID, _firstEdgeID);
+        // If we are submitting, @ref _nextNodeID _nextEdgeID are synced to the current
+        // next ID for the latest commit on main. This function may be called in the case
+        // of a @ref Change::submit, in which case we do not want to perform this sync,
+        // and can continue with our local next ID.
+        auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
 
-        _firstNodeID += builder->nodeCount();
-        _firstEdgeID += builder->edgeCount();
+        // Update these values so the next builder which is created starts where the last
+        // left off
+        _nextNodeID += builder->nodeCount();
+        _nextEdgeID += builder->edgeCount();
 
         if (!part->load(view, jobsystem, *builder)) {
             return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
@@ -77,7 +81,6 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     _datapartCount += _builders.size();
     historyBuilder.setCommitDatapartCount(_datapartCount);
-
 
     _builders.clear();
 
@@ -95,6 +98,7 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     // Ensure this CommitBuilder is in a fresh state, otherwise there are builders which
     // have used a potentially outdated metadata
+
     msgbioassert(
         isEmpty(),
         fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",
@@ -110,6 +114,7 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem&
     // the metadata provided when rebasing main
     _builders.clear();
     DataPartBuilder& dpBuilder = newBuilder();
+
     CommitWriteBuffer& wb = writeBuffer();
 
     // TODO: Remove this by using a mapping of NodeID = offset + _firstNodeID
@@ -130,7 +135,6 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem&
     return build(jobsystem);
 }
 
-
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
     : _controller(&controller),
     _change(change),
@@ -142,8 +146,16 @@ void CommitBuilder::initialize() {
     Profile profile {"CommitBuilder::initialize"};
 
     auto reader = _view.read();
+
+    // The first ID of this commit will be one more than the current count in the graph
     _firstNodeID = reader.getNodeCount();
     _firstEdgeID = reader.getEdgeCount();
+
+    // Update the 'next' ID values for use when creating dataparts
+    // NOTE: In the case of @ref Change::submit, these values will be resynced to be the
+    // next ID in the graph on main at the time of submission.
+    _nextNodeID = reader.getNodeCount();
+    _nextEdgeID = reader.getEdgeCount();
 
     const CommitView prevCommit = reader.commits().back();
 
