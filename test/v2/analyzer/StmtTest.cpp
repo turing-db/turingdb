@@ -83,6 +83,18 @@ TEST_F(StmtTest, matchAllNodesWithPropertiesWithExpression) {
 
         auto tx = _graph->openTransaction();
         CypherAnalyzer analyzer(&ast, tx.viewGraph());
+        EXPECT_THROW(analyzer.analyze(), AnalyzeException);
+    }
+
+    {
+        const std::string query = "MATCH (y)--(n{duration: y.duration}) RETURN n";
+        CypherAST ast(query);
+
+        CypherParser parser(&ast);
+        ASSERT_NO_THROW(parser.parse(query));
+
+        auto tx = _graph->openTransaction();
+        CypherAnalyzer analyzer(&ast, tx.viewGraph());
         EXPECT_NO_THROW(analyzer.analyze());
     }
 }

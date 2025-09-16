@@ -70,10 +70,6 @@ public:
     void analyze(NodeLabelExpr* expr);
     void analyze(PathExpr* expr);
 
-    // Create symbols
-    void createPatternDecl(const Pattern* pattern);
-    void createPatternDecl(EntityPattern* entity, EvaluatedType type);
-
 private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
