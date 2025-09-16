@@ -129,7 +129,7 @@ NodeID DataPartBuilder::addPendingNode(CommitWriteBuffer::PendingNode& node) {
     // Build/get the LabelSet for this node
     LabelSet labelSet;
     for (const std::string& label : node.labelNames) {
-        auto labelID = _metadata->getOrCreateLabel(label);
+        const auto labelID = _metadata->getOrCreateLabel(label);
         labelSet.set(labelID);
     }
 
@@ -171,27 +171,27 @@ std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& w
                                                       const std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID>& tempNodeIDMap) {
     using CWB = CommitWriteBuffer;
     // If this edge has source or target which is a node in a previous datapart, check
-    // if it has been deleted
+    // if it has been deleted. NOTE: Deletes currently not implemented
     if (std::holds_alternative<NodeID>(edge.src)) {
-        NodeID srcID = std::get<NodeID>(edge.src);
+        const NodeID srcID = std::get<NodeID>(edge.src);
         if (wb.deletedNodes().contains(srcID)) {
             return std::nullopt;
         }
     }
     if (std::holds_alternative<NodeID>(edge.tgt)) {
-        NodeID tgtID = std::get<NodeID>(edge.tgt);
+        const NodeID tgtID = std::get<NodeID>(edge.tgt);
         if (wb.deletedNodes().contains(tgtID)) {
             return std::nullopt;
         }
     }
     // Otherwise: source and target are either non-deleted existing nodes, or nodes
     // created in this commit
-    NodeID srcID =
+    const NodeID srcID =
         std::holds_alternative<NodeID>(edge.src)
             ? std::get<NodeID>(edge.src)
             : tempNodeIDMap.at(std::get<CommitWriteBuffer::PendingNodeOffset>(edge.src));
 
-    NodeID tgtID =
+    const NodeID tgtID =
         std::holds_alternative<NodeID>(edge.tgt)
             ? std::get<NodeID>(edge.tgt)
             : tempNodeIDMap.at(std::get<CommitWriteBuffer::PendingNodeOffset>(edge.tgt));
@@ -199,9 +199,9 @@ std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& w
     const std::string& edgeTypeName = edge.edgeLabelTypeName;
     const EdgeTypeID edgeTypeID = _metadata->getOrCreateEdgeType(edgeTypeName);
 
-    EdgeRecord newEdgeRecord = this->addEdge(edgeTypeID, srcID, tgtID);
+    const EdgeRecord newEdgeRecord = this->addEdge(edgeTypeID, srcID, tgtID);
 
-    EdgeID newEdgeID = newEdgeRecord._edgeID;
+    const EdgeID newEdgeID = newEdgeRecord._edgeID;
 
     for (const CWB::UntypedProperty& prop : edge.properties) {
         // Get the value type from the untyped property
