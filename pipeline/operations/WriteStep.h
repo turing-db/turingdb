@@ -58,14 +58,22 @@ private:
     ContingentNode getOrWriteNode(const EntityPattern* nodePattern);
 
     /**
-     * @brief Writes a node to @ref _writeBuffer according to @param nodePattern to @ref
-     * _writeBuffer, and returns the offset at which it can be found.
+     * @brief Adds a pending node to @ref _writeBuffer specified by @param nodePattern,
+     * and returns the offset at which it can be found in the @ref _pendingNodes vector.
      */
     CommitWriteBuffer::PendingNodeOffset writeNode(const EntityPattern* nodePattern);
 
+    /**
+     * @brief Adds a pending edge to @ref _writeBuffer specified by @param edgePattern and
+     * using @ref src and @ref tgt as the source and target nodes.
+     */
     void writeEdge(const ContingentNode src, const ContingentNode tgt,
                    const EntityPattern* edgePattern);
 
-    void writeEdges(const PathPattern* pathPattern);
+    /**
+     * @brief Adds all edges and previously unwritten nodes to @ref _writeBuffer (as
+     * PendingNode/Edges) which occur in @param pathPattern
+     */
+    void writePath(const PathPattern* pathPattern);
 };
 }

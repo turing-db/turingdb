@@ -15,7 +15,8 @@
 #include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
 
-namespace rv = ranges::views;
+namespace rg = ranges;
+namespace rv = rg::views;
 
 using namespace db;
 
@@ -37,10 +38,11 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     const TypeConstraint* patternLabels = nodePattern->getTypeConstraint();
     std::vector<std::string> nodeLabels;
     if (patternLabels) {
-        for (const auto& name : patternLabels->getTypeNames()) {
+        nodeLabels.reserve(patternLabels->getTypeNames().size());
+        for (const VarExpr* name : patternLabels->getTypeNames()) {
             nodeLabels.emplace_back(name->getName());
         }
-    } else {
+    } else { // TODO: This check should be obselete as it should be checked in parser
         throw PipelineException("Nodes must have at least one label");
     }
 
@@ -119,7 +121,6 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern*
 
     // Check to see if this node has been written already by searching its variable name
     auto pendingNodeIt = _varOffsetMap.find(nodeVarName);
-
     if (pendingNodeIt != _varOffsetMap.end()) {
         return pendingNodeIt->second; // PendingNodeOffset to the PendingNode of this node
     }
@@ -140,17 +141,17 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern*
 
 void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
                           const EntityPattern* edgePattern) {
-    // Get the labels for PendingEdge
+    // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
     std::string edgeType;
     if (patternType) {
             edgeType = patternType->getTypeNames().front()->getName();
-    } else {
+    } else { // TODO: This check should be obselete as it should be checked in parser
         throw PipelineException("Edges must have at least one label");
     }
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
-    if (!patternProperties) {
+    if (!patternProperties) { // Early exit if there are no properties
         UntypedProperties emptyProps;
         _writeBuffer->addPendingEdge(src, tgt, edgeType, emptyProps);
         return;
@@ -168,7 +169,6 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
         }
 
         const std::string& propertyName = left->getName();
-
         const ValueType valueType = right->getType();
 
         switch (valueType) {
@@ -205,8 +205,7 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     _writeBuffer->addPendingEdge(src, tgt, edgeType, edgeProperties);
 }
 
-
-void WriteStep::writeEdges(const PathPattern* pathPattern) {
+void WriteStep::writePath(const PathPattern* pathPattern) {
     std::span pathElements {pathPattern->elements()};
 
     const EntityPattern* srcPattern = pathElements.front();
@@ -234,7 +233,7 @@ void WriteStep::execute() {
         if (pathElements.size() == 1) {
             writeNode(pathElements.front());
         } else {
-            writeEdges(path);
+            writePath(path);
         }
     }
 }
