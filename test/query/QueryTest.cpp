@@ -947,7 +947,71 @@ TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
 
 TEST_F(QueryTest, changeCommitsThenRebase) {
     QueryTester tester {_mem, *_interp, "default"};
-    
+
+    auto change1Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+    ASSERT_TRUE(change1Res);
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+
+    tester.query(R"(create (n:CHANGE1LABEL {"id":1, "changeid": "ONE", "committed":true}))")
+        .execute();
+    tester.query(R"(create (n:CHANGE1LABEL {"id":2, "changeid": "ONE", "committed":true}))")
+        .execute();
+    tester.query(R"(create (n:CHANGE1LABEL {"id":3, "changeid": "ONE", "committed":true}))")
+        .execute();
+
+    // Commit changes locally
+    tester.query("COMMIT")
+        .execute();
+
+    tester.query("match (n) return n, n.id, n.changeid, n.committed")
+        .expectVector<NodeID>({0,1,2})
+        .expectOptVector<types::Int64::Primitive>({1,2,3})
+        .expectOptVector<types::String::Primitive>({"ONE", "ONE", "ONE"})
+        .expectOptVector<types::Bool::Primitive>({true, true, true})
+        .execute();
+
+    auto change2Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+    ASSERT_TRUE(change2Res);
+    const ChangeID change2 = change2Res.value()->back()->id();
+
+    tester.setChangeID(change2);
+
+    tester.query(R"(create (n:CHANGE1LABEL {"id":4, "changeid": "TWO", "committed":false}))")
+        .execute();
+    tester.query(R"(create (n:CHANGE1LABEL {"id":5, "changeid": "TWO", "committed":false}))")
+        .execute();
+
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+    tester.query("match (n) return n, n.id, n.changeid, n.committed")
+        .expectVector<NodeID>({0, 1})
+        .expectOptVector<types::Int64::Primitive>({4, 5})
+        .expectOptVector<types::String::Primitive>({"TWO", "TWO"})
+        .expectOptVector<types::Bool::Primitive>({false, false})
+        .execute();
+
+    tester.setChangeID(change1);
+
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+    tester.query("match (n) return n, n.id, n.changeid, n.committed")
+        .expectVector<NodeID>({0, 1, 2, 3, 4})
+        .expectOptVector<types::Int64::Primitive>({4, 5, 1, 2, 3})
+        .expectOptVector<types::String::Primitive>({"TWO", "TWO", "ONE", "ONE", "ONE"})
+        .expectOptVector<types::Bool::Primitive>({false, false, true, true, true})
+        .execute();
 }
 
 TEST_F(QueryTest, ChangeQueryErrors) {
