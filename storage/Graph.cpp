@@ -25,34 +25,38 @@ CommitHash Graph::getHeadHash() const {
 }
 
 std::unique_ptr<Graph> Graph::create() {
-    auto* graph = new Graph;
+    auto* graph = new Graph();
     graph->_versionController->createFirstCommit();
     return std::unique_ptr<Graph> {graph};
 }
 
-std::unique_ptr<Graph> Graph::create(const std::string& name) {
-    auto* graph = new Graph(name);
+std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& localPath) {
+    auto* graph = new Graph(name, localPath);
     graph->_versionController->createFirstCommit();
     return std::unique_ptr<Graph>(graph);
 }
 
 std::unique_ptr<Graph> Graph::createEmptyGraph() {
-    return std::unique_ptr<Graph>(new Graph);
+    return std::unique_ptr<Graph>(new Graph());
 }
 
-std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name) {
-    return std::unique_ptr<Graph>(new Graph(name));
+std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name, const fs::Path& localPath) {
+    return std::unique_ptr<Graph>(new Graph(name, localPath));
 }
 
 
 Graph::Graph()
     : _graphName("default"),
-    _versionController(new VersionController {this})
+    _graphPath("/dev/null"),
+    _versionController(new VersionController {this}),
+    _dumpAndLoadManger(new DumpAndLoadManager {this})
 {
 }
 
-Graph::Graph(const std::string& name)
+Graph::Graph(const std::string& name, const fs::Path& localPath)
     : _graphName(name),
-    _versionController(new VersionController {this})
+    _graphPath(localPath),
+    _versionController(new VersionController {this}),
+    _dumpAndLoadManger(new DumpAndLoadManager {this})
 {
 }

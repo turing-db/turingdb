@@ -1,5 +1,6 @@
 set(dump_sources GraphLoader.cpp
                  GraphDumper.cpp
+                 DumpAndLoadManager.cpp
                  DataPartLoader.cpp
                  CommitDumper.cpp
                  DataPartDumper.cpp

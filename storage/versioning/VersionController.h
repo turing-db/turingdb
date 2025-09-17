@@ -47,6 +47,8 @@ public:
     [[nodiscard]] CommitHash getHeadHash() const;
     [[nodiscard]] const Graph* getGraph() const { return _graph; }
 
+    long getCommitIndex(CommitHash hash) const;
+
     WeakArc<CommitData> createCommitData(CommitHash hash) {
         Profile profile("VersionController::createCommitData");
         return _dataManager->create(hash);

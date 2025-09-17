@@ -30,7 +30,7 @@ SystemManager::~SystemManager() {
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {
-    std::unique_ptr<Graph> graph = Graph::create(name);
+    std::unique_ptr<Graph> graph = Graph::create(name, _config.getGraphsDir() / name);
     auto* rawPtr = graph.get();
 
     if (!addGraph(std::move(graph), name)) {
@@ -153,7 +153,7 @@ bool SystemManager::loadGraph(const std::string& graphFileName, JobSystem& jobSy
 }
 
 // Load graph using non-default path
-bool SystemManager::loadGraph(const fs::Path graphPath, const std::string& graphName, JobSystem& jobSystem) {
+bool SystemManager::loadGraph(const fs::Path& graphPath, const std::string& graphName, JobSystem& jobSystem) {
     // Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
         return false;
@@ -215,15 +215,20 @@ bool SystemManager::loadBinaryDB(const std::string& graphName,
         return false;
     }
 
-    auto graph = Graph::create(graphName);
+    // in the case of turingDB binaries the path is the same path we load from.
+    auto graph = Graph::create(graphName, dbPath);
 
-    if (auto res = GraphLoader::load(graph.get(), dbPath); !res) {
+    if (auto res = graph->getDumpAndLoadManager()->loadGraph(); !res) {
         spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
 
-    addGraph(std::move(graph), graphName);
+    if (!addGraph(std::move(graph), graphName)) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
     _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
 }
@@ -239,7 +244,7 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
         return false;
     }
 
-    auto graph = Graph::create();
+    auto graph = Graph::create(graphName, _config.getGraphsDir() / graphName);
 
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
@@ -292,7 +297,16 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
         return false;
     }
 
-    addGraph(std::move(graph), graphName);
+    if (!graph->getDumpAndLoadManager()->dumpGraph()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    if (!addGraph(std::move(graph), graphName)) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
     _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
 }
@@ -305,7 +319,7 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
     }
 
     // Load graph
-    auto graph = Graph::create();
+    auto graph = Graph::create(graphName, _config.getGraphsDir() / graphName);
 
     // load GMLs
     GMLImporter importer;
@@ -315,7 +329,16 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
         return false;
     }
 
-    addGraph(std::move(graph), graphName);
+    if (!graph->getDumpAndLoadManager()->dumpGraph()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    if (!addGraph(std::move(graph), graphName)) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
     _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
 }

@@ -74,5 +74,7 @@ target_link_libraries(turing_db_storage_s PRIVATE
 
 target_link_libraries(turing_db_storage_s PUBLIC
         turing_db_base_s
+        turing_db_io_fs_s
+        turing_db_dump_s
         turing_common_s
         range-v3)

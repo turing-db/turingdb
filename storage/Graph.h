@@ -5,6 +5,8 @@
 
 #include "DataPart.h"
 #include "versioning/CommitHash.h"
+#include "Path.h"
+#include "DumpAndLoadManager.h"
 
 namespace db {
 
@@ -33,6 +35,9 @@ public:
     Graph& operator=(Graph&&) = delete;
 
     const std::string& getName() const { return _graphName; }
+    const fs::Path& getPath() const { return _graphPath; }
+
+    const DumpAndLoadManager* getDumpAndLoadManager() const { return _dumpAndLoadManger.get(); };
 
     [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
@@ -40,9 +45,9 @@ public:
     [[nodiscard]] CommitHash getHeadHash() const;
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
-    [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name);
+    [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const fs::Path& localPath);
     [[nodiscard]] static std::unique_ptr<Graph> createEmptyGraph();
-    [[nodiscard]] static std::unique_ptr<Graph> createEmptyGraph(const std::string& name);
+    [[nodiscard]] static std::unique_ptr<Graph> createEmptyGraph(const std::string& name, const fs::Path& localPath);
 
 private:
     friend GraphInfoLoader;
@@ -55,11 +60,13 @@ private:
     friend GraphLoader;
 
     std::string _graphName;
+    fs::Path _graphPath;
 
     std::unique_ptr<VersionController> _versionController;
+    std::unique_ptr<DumpAndLoadManager> _dumpAndLoadManger;
 
-    Graph();
-    explicit Graph(const std::string& name);
+    explicit Graph();
+    explicit Graph(const std::string& name, const fs::Path& localPath);
 };
 
 }

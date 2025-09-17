@@ -82,6 +82,10 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         }
 
         _commits.emplace_back(std::move(buildRes.value()));
+
+        if (auto res = getGraph()->getDumpAndLoadManager()->dumpCommit(*_commits.back()); !res) {
+            return CommitError::result(CommitErrorType::DUMP_FAILED, res.error());
+        }
     }
 
     _head.store(_commits.back().get());
@@ -107,4 +111,14 @@ void VersionController::addCommit(std::unique_ptr<Commit> commit) {
     _offsets.emplace(commit->hash(), _commits.size());
     _commits.emplace_back(std::move(commit));
     _head.store(ptr);
+}
+
+long VersionController::getCommitIndex(CommitHash hash) const {
+    auto it = _offsets.find(hash);
+
+    if (it == _offsets.end()) {
+        return -1;
+    }
+
+    return it->second;
 }
