@@ -111,7 +111,6 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         return thisNodeOffset;
     }
 
-    // Add each property
     for (const BinExpr* e : patternProperties->getExpressions()) {
         addUntypedProperties(nodeProperties, e);
     }
@@ -162,16 +161,13 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     }
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
-    if (!patternProperties) { // Early exit if there are no properties
+    if (!patternProperties) { // No properties
         UntypedProperties emptyProps;
         _writeBuffer->addPendingEdge(src, tgt, edgeType, emptyProps);
         return;
     }
 
-    // Formulate the properties for PendingEdge
     UntypedProperties edgeProperties;
-
-    // Add each property
     for (const auto& e : patternProperties->getExpressions()) {
         addUntypedProperties(edgeProperties, e);
     }
@@ -183,7 +179,6 @@ void WriteStep::writePath(const PathPattern* pathPattern) {
 
     // Process paths in tuples of (src, (edge, tgt)), allowing us to reuse src in the
     // current edge as tgt in the next edge
-
 
     // Process our 'src' in the (src, (edge, tgt)) tuple
     const EntityPattern* srcPattern = pathElements.front();
