@@ -20,6 +20,55 @@ namespace rv = rg::views;
 
 using namespace db;
 
+namespace {
+
+using UntypedProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
+void addUntypedProperties(UntypedProperties& props, const BinExpr* propExpr) {
+
+    const VarExpr* left = static_cast<const VarExpr*>(propExpr->getLeftExpr());
+    const ExprConst* right = static_cast<const ExprConst*>(propExpr->getRightExpr());
+
+    if (left->getKind() != Expr::EK_VAR_EXPR) {
+        throw PipelineException("Node property expression must be an assignment");
+    }
+
+    const std::string& propertyName = left->getName();
+
+    const ValueType valueType = right->getType();
+    switch (valueType) {
+        case ValueType::Int64: {
+            const auto* casted = static_cast<const Int64ExprConst*>(right);
+            props.emplace_back(propertyName, casted->getVal());
+            break;
+        }
+        case ValueType::UInt64: {
+            const auto* casted = static_cast<const UInt64ExprConst*>(right);
+            props.emplace_back(propertyName, casted->getVal());
+            break;
+        }
+        case ValueType::Double: {
+            const auto* casted = static_cast<const DoubleExprConst*>(right);
+            props.emplace_back(propertyName, casted->getVal());
+            break;
+        }
+        case ValueType::String: {
+            const auto* casted = static_cast<const StringExprConst*>(right);
+            props.emplace_back(propertyName, casted->getVal());
+            break;
+        }
+        case ValueType::Bool: {
+            const auto* casted = static_cast<const BoolExprConst*>(right);
+            props.emplace_back(propertyName, casted->getVal());
+            break;
+        }
+        default: {
+            throw PipelineException("Unsupported value type");
+        }
+    }
+}
+
+}
+
 void WriteStep::prepare(ExecutionContext* ctxt) {
     Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx->writingPendingCommit()) {
@@ -62,47 +111,9 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         return thisNodeOffset;
     }
 
-    for (const auto& e : patternProperties->getExpressions()) {
-        const auto& left = static_cast<const VarExpr*>(e->getLeftExpr());
-        const auto& right = static_cast<const ExprConst*>(e->getRightExpr());
-
-        if (left->getKind() != Expr::EK_VAR_EXPR) {
-            throw PipelineException("Node property expression must be an assignment");
-        }
-
-        const std::string& propertyName = left->getName();
-
-        const ValueType valueType = right->getType();
-        switch (valueType) {
-            case ValueType::Int64: {
-                const auto* casted = static_cast<const Int64ExprConst*>(right);
-                nodeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::UInt64: {
-                const auto* casted = static_cast<const UInt64ExprConst*>(right);
-                nodeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::Double: {
-                const auto* casted = static_cast<const DoubleExprConst*>(right);
-                nodeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::String: {
-                const auto* casted = static_cast<const StringExprConst*>(right);
-                nodeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::Bool: {
-                const auto* casted = static_cast<const BoolExprConst*>(right);
-                nodeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            default: {
-                throw PipelineException("Unsupported value type");
-            }
-        }
+    // Add each property
+    for (const BinExpr* e : patternProperties->getExpressions()) {
+        addUntypedProperties(nodeProperties, e);
     }
 
     // Add this node to the write buffer, and record its offset
@@ -160,47 +171,9 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     // Formulate the properties for PendingEdge
     UntypedProperties edgeProperties;
 
+    // Add each property
     for (const auto& e : patternProperties->getExpressions()) {
-        const auto& left = static_cast<const VarExpr*>(e->getLeftExpr());
-        const auto& right = static_cast<const ExprConst*>(e->getRightExpr());
-
-        if (left->getKind() != Expr::EK_VAR_EXPR) {
-            throw PipelineException("Node property expression must be an assignment");
-        }
-
-        const std::string& propertyName = left->getName();
-        const ValueType valueType = right->getType();
-
-        switch (valueType) {
-            case ValueType::Int64: {
-                const auto* casted = static_cast<const Int64ExprConst*>(right);
-                edgeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::UInt64: {
-                const auto* casted = static_cast<const UInt64ExprConst*>(right);
-                edgeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::Double: {
-                const auto* casted = static_cast<const DoubleExprConst*>(right);
-                edgeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::String: {
-                const auto* casted = static_cast<const StringExprConst*>(right);
-                edgeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            case ValueType::Bool: {
-                const auto* casted = static_cast<const BoolExprConst*>(right);
-                edgeProperties.emplace_back(propertyName, casted->getVal());
-                break;
-            }
-            default: {
-                throw std::runtime_error("Unsupported value type");
-            }
-        }
+        addUntypedProperties(edgeProperties, e);
     }
     _writeBuffer->addPendingEdge(src, tgt, edgeType, edgeProperties);
 }
@@ -208,12 +181,18 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
 void WriteStep::writePath(const PathPattern* pathPattern) {
     std::span pathElements {pathPattern->elements()};
 
-    const EntityPattern* srcPattern = pathElements.front();
+    // Process paths in tuples of (src, (edge, tgt)), allowing us to reuse src in the
+    // current edge as tgt in the next edge
 
+
+    // Process our 'src' in the (src, (edge, tgt)) tuple
+    const EntityPattern* srcPattern = pathElements.front();
     ContingentNode srcNode = getOrWriteNode(srcPattern);
 
+    // Drop the src of our tuple: already processed. Chunk by 2 to get (edge, tgt)
     for (auto step : pathElements | rv::drop(1) | rv::chunk(2)) {
         const EntityPattern* edgePattern = step.front();
+
         const EntityPattern* tgtPattern = step.back();
         ContingentNode tgtNode = getOrWriteNode(tgtPattern);
 
