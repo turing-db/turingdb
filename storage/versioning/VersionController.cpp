@@ -77,21 +77,14 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commit : change->_commits) {
-        // GraphWriter (and similar pre-deletion constructs) modify DataPartBuilders
-        // directly. To maintain backwards compatability, build these as normal
-        if (!commit->isEmpty() || commit->pendingCount() != 0) {
-            auto buildRes = commit->build(jobSystem);
-            if (!buildRes) {
-                return buildRes.get_unexpected();
-            }
-            _commits.emplace_back(std::move(buildRes.value()));
-        } else { // Otherwise we are in a standard change, flush & build at submit time
-            auto flushRes = commit->flushWriteBuffer(jobSystem);
-            if (!flushRes) {
-                return flushRes.get_unexpected();
-            }
-            _commits.emplace_back(std::move(flushRes.value()));
+        // Creates a new builder to execute CREATE/DELETE commands
+        commit->flushWriteBuffer(jobSystem);
+
+        auto buildRes = commit->build(jobSystem);
+        if (!buildRes) {
+            return buildRes.get_unexpected();
         }
+        _commits.emplace_back(std::move(buildRes.value()));
     }
 
     _head.store(_commits.back().get());

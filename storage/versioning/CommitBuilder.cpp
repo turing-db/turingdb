@@ -3,10 +3,10 @@
 #include <unordered_map>
 #include <range/v3/view/enumerate.hpp>
 
-#include "BioAssert.h"
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
+#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
@@ -61,10 +61,10 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
-        // If we are submitting, @ref _nextNodeID _nextEdgeID are synced to the current
-        // next ID for the latest commit on main. This function may be called in the case
-        // of a @ref Change::commit, in which case we do not want to perform this sync,
-        // and can continue with our local next ID.
+        // If caller is @ref Change::submit, @ref _nextNodeID _nextEdgeID are synced to
+        // the current next ID for the latest commit on main. If the caller is @ref
+        // Change::commit we do not want to perform this sync, and can continue with our
+        // local next ID.
         auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
 
         // Update these values so the next builder which is created starts where the last
@@ -95,22 +95,24 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     return std::move(_commit);
 }
 
-CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
+void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
+    CommitWriteBuffer& wb = writeBuffer();
+    // If there is nothing to flush, return early without creating a new builder
+    if (wb.empty()) {
+        return;
+    }
+
+    // TODO: Needs to be a better warning mode here
     // Ensure this CommitBuilder is in a fresh state, otherwise there are builders which
     // have used a potentially outdated metadata
-    msgbioassert(
-        isEmpty(),
-        fmt::format("CommitBuilder must be empty (has {}) to flush write buffer.",dpCount()).c_str());
-    msgbioassert(pendingCount() == 0,
-                 fmt::format("CommitBuilder must have one datapart builders (has {}) to "
-                             "flush write buffer.", pendingCount()).c_str());
+    if (isEmpty() || pendingCount() != 0) {
+        spdlog::warn("CommitBuilder to be flushed is not empty.");
+    }
 
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
-    _builders.clear(); // XXX: Currently redundant
     DataPartBuilder& dpBuilder = newBuilder();
 
-    CommitWriteBuffer& wb = writeBuffer();
 
     // TODO: Remove this by using a mapping of NodeID = offset + _firstNodeID
     std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
@@ -125,9 +127,6 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::flushWriteBuffer(JobSystem&
     for (const auto& edge : wb.pendingEdges()) {
         dpBuilder.addPendingEdge(wb, edge, tempIDMap);
     }
-
-    // Build this commit
-    return build(jobsystem);
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)

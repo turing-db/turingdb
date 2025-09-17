@@ -56,15 +56,10 @@ PendingCommitReadTx Change::openReadTransaction(CommitHash commitHash) {
 CommitResult<void> Change::commit(JobSystem& jobsystem) {
     Profile profile {"Change::commit"};
 
-    // If there are existing dataparts, this is the result of a GraphWriter or similar.
-    // Add this check for backwards compatability.
-    if (!_tip->isEmpty() || _tip->pendingCount() != 0) {
-        auto res = _tip->buildAllPending(jobsystem);
-        return res;
-    }
+    _tip->flushWriteBuffer(jobsystem);
 
-    if (auto res = _tip->flushWriteBuffer(jobsystem); !res) {
-        return res.get_unexpected();
+    if (auto res = _tip->buildAllPending(jobsystem); !res) {
+        return res;
     }
 
     auto newTip = CommitBuilder::prepare(*_versionController,

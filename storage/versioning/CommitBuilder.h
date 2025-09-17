@@ -50,7 +50,7 @@ public:
     DataPartBuilder& newBuilder();
 
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<std::unique_ptr<Commit>> flushWriteBuffer(JobSystem& jobsystem);
+    void flushWriteBuffer(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
 
     void setEntityIDs(NodeID firstNodeID, EdgeID firstEdgeID) {

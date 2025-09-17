@@ -57,6 +57,11 @@ public:
 
     const std::set<NodeID> deletedNodes() const { return _deletedNodes; }
 
+    bool empty() const {
+        return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
+            && _deletedEdges.empty();
+    }
+
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
      * _deletedNodes

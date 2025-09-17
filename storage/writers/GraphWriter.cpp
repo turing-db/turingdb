@@ -35,7 +35,7 @@ bool GraphWriter::commit() {
     _commitBuilder = _change->access().getTip();
     _dataPartBuilder = &_commitBuilder->getCurrentBuilder();
 
-    return {};
+    return true;
 }
 
 bool GraphWriter::submit() {
