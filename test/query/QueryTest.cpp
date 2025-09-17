@@ -519,7 +519,6 @@ TEST_F(QueryTest, ChangeQuery) {
         .execute();
 }
 
-
 TEST_F(QueryTest, ChangeWithRebaseQueries) {
     QueryTester tester {_env->getMem(), *_interp};
 

@@ -100,7 +100,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
                 break;
             }
             default: {
-                throw std::runtime_error("Unsupported value type");
+                throw PipelineException("Unsupported value type");
             }
         }
     }

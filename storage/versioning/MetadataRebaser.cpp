@@ -105,21 +105,22 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs, MetadataBuilder& ours)
     }
 
 
-    if (_labelsChanged) {
+    // TODO: Review setting of _labelsChanged, etc.
+    // if (_labelsChanged) {
         ours._metadata->_labelMap = std::move(newLabels);
-    }
+    // }
 
-    if (_labelsetsChanged) {
+    // if (_labelsetsChanged) {
         ours._metadata->_labelsetMap = std::move(newLabelsets);
-    }
+    // }
 
-    if (_edgeTypesChanged) {
+    // if (_edgeTypesChanged) {
         ours._metadata->_edgeTypeMap = std::move(newEdgeTypes);
-    }
+    // }
 
-    if (_propTypesChanged) {
+    // if (_propTypesChanged) {
         ours._metadata->_propTypeMap = std::move(newPropTypes);
-    }
+    // }
 
     return true;
 }
