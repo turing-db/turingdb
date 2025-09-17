@@ -848,7 +848,7 @@ TEST_F(QueryTest, threeChangeRebase) {
     }
 }
 
-TEST_F(QueryTest, twoChangeRebaseLabelsProps) {
+TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
     QueryTester tester {_mem, *_interp, "default"};
 
     constexpr size_t CHANGE1_SIZE = 3;
@@ -894,6 +894,11 @@ TEST_F(QueryTest, twoChangeRebaseLabelsProps) {
         .expectOptVector<types::String::Primitive>({"TWO", "TWO"})
         .execute();
 
+    tester.query("CALL LABELS()")
+        .expectVector<LabelID>({0})
+        .expectVector<std::string_view>({"CHANGE2LABEL"})
+        .execute();
+
     auto change3Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)
                           .execute()
@@ -916,6 +921,11 @@ TEST_F(QueryTest, twoChangeRebaseLabelsProps) {
             {"TWO", "TWO", "THREE", "THREE", "THREE", "THREE", "THREE"})
         .execute();
 
+    tester.query("CALL LABELS()")
+        .expectVector<LabelID>({0,1})
+        .expectVector<std::string_view>({"CHANGE2LABEL", "CHANGE3LABEL"})
+        .execute();
+
     tester.setChangeID(change1);
     tester.query("CHANGE SUBMIT")
         .execute();
@@ -928,6 +938,16 @@ TEST_F(QueryTest, twoChangeRebaseLabelsProps) {
                                                     "THREE", "THREE", "THREE", "ONE",
                                                     "ONE", "ONE"})
         .execute();
+
+    tester.query("CALL LABELS()")
+        .expectVector<LabelID>({0, 1, 2})
+        .expectVector<std::string_view>({"CHANGE2LABEL", "CHANGE3LABEL", "CHANGE1LABEL"})
+        .execute();
+}
+
+TEST_F(QueryTest, changeCommitsThenRebase) {
+    QueryTester tester {_mem, *_interp, "default"};
+    
 }
 
 TEST_F(QueryTest, ChangeQueryErrors) {
