@@ -959,20 +959,43 @@ TEST_F(QueryTest, changeCommitsThenRebase) {
 
     tester.query(R"(create (n:CHANGE1LABEL {"id":1, "changeid": "ONE", "committed":true}))")
         .execute();
-    tester.query(R"(create (n:CHANGE1LABEL {"id":2, "changeid": "ONE", "committed":true}))")
-        .execute();
-    tester.query(R"(create (n:CHANGE1LABEL {"id":3, "changeid": "ONE", "committed":true}))")
-        .execute();
 
     // Commit changes locally
     tester.query("COMMIT")
         .execute();
 
     tester.query("match (n) return n, n.id, n.changeid, n.committed")
+        .expectVector<NodeID>({0})
+        .expectOptVector<types::Int64::Primitive>({1})
+        .expectOptVector<types::String::Primitive>({"ONE"})
+        .expectOptVector<types::Bool::Primitive>({true})
+        .execute();
+    tester.query("call properties ()")
+        .expectVector<PropertyTypeID>({0, 1, 2})
+        .expectVector<std::string_view>({"id", "changeid", "committed"})
+        .expectVector<std::string_view>({"Int64", "String", "Bool"})
+        .execute();
+
+    tester.query(R"(create (n:CHANGE1LABEL {cheeky=true, "id":2, "changeid": "ONE", "committed":true}))")
+        .execute();
+    tester.query(R"(create (n:CHANGE1LABEL {cheeky=true, "id":3, "changeid": "ONE", "committed":true, cheeky=true}))")
+        .execute();
+
+    // Commit changes locally
+    tester.query("COMMIT")
+        .execute();
+
+    tester.query("match (n) return n, n.id, n.changeid, n.committed, n.cheeky")
         .expectVector<NodeID>({0,1,2})
         .expectOptVector<types::Int64::Primitive>({1,2,3})
         .expectOptVector<types::String::Primitive>({"ONE", "ONE", "ONE"})
         .expectOptVector<types::Bool::Primitive>({true, true, true})
+        .expectOptVector<types::Bool::Primitive>({std::nullopt, true, true})
+        .execute();
+    tester.query("call properties ()")
+        .expectVector<PropertyTypeID>({0, 1, 2, 3})
+        .expectVector<std::string_view>({"id", "changeid", "committed", "cheeky"})
+        .expectVector<std::string_view>({"Int64", "String", "Bool", "Bool"})
         .execute();
 
     auto change2Res = tester.query("CHANGE NEW")
@@ -999,11 +1022,18 @@ TEST_F(QueryTest, changeCommitsThenRebase) {
         .expectOptVector<types::String::Primitive>({"TWO", "TWO"})
         .expectOptVector<types::Bool::Primitive>({false, false})
         .execute();
+    tester.query("call properties ()")
+        .expectVector<PropertyTypeID>({0, 1, 2})
+        .expectVector<std::string_view>({"id", "changeid", "committed"})
+        .expectVector<std::string_view>({"Int64", "String", "Bool"})
+        .execute();
+
 
     tester.setChangeID(change1);
 
     tester.query("CHANGE SUBMIT")
         .execute();
+
 
     tester.setChangeID(ChangeID::head());
     tester.query("match (n) return n, n.id, n.changeid, n.committed")
@@ -1011,6 +1041,11 @@ TEST_F(QueryTest, changeCommitsThenRebase) {
         .expectOptVector<types::Int64::Primitive>({4, 5, 1, 2, 3})
         .expectOptVector<types::String::Primitive>({"TWO", "TWO", "ONE", "ONE", "ONE"})
         .expectOptVector<types::Bool::Primitive>({false, false, true, true, true})
+        .execute();
+    tester.query("call properties ()")
+        .expectVector<PropertyTypeID>({0, 1, 2, 3})
+        .expectVector<std::string_view>({"id", "changeid", "committed", "cheeky"})
+        .expectVector<std::string_view>({"Int64", "String", "Bool", "Bool"})
         .execute();
 }
 
