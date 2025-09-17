@@ -848,6 +848,88 @@ TEST_F(QueryTest, threeChangeRebase) {
     }
 }
 
+TEST_F(QueryTest, twoChangeRebaseLabelsProps) {
+    QueryTester tester {_mem, *_interp, "default"};
+
+    constexpr size_t CHANGE1_SIZE = 3;
+    constexpr size_t CHANGE2_SIZE = 2;
+    constexpr size_t CHANGE3_SIZE = 5;
+
+    auto change1Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+
+    ASSERT_TRUE(change1Res);
+
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    auto change2Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+
+    const ChangeID change2 = change2Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+    for (size_t i = 0; i < CHANGE1_SIZE; i++) {
+        tester.query(R"(create (n:CHANGE1LABEL {"changeid": "ONE"}))")
+            .execute();
+    }
+
+    tester.setChangeID(change2);
+
+    for (size_t i = 0; i < CHANGE2_SIZE; i++) {
+        tester.query(R"(create (n:CHANGE2LABEL {"changeid": "TWO"}))")
+            .execute();
+    }
+
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("MATCH (n) RETURN n, n.changeid")
+        .expectVector<NodeID>({0,1})
+        .expectOptVector<types::String::Primitive>({"TWO", "TWO"})
+        .execute();
+
+    auto change3Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+    const ChangeID change3 = change3Res.value()->back()->id();
+
+    tester.setChangeID(change3);
+    for (size_t i = 0; i < CHANGE3_SIZE; i++) {
+        tester.query(R"(create (n:CHANGE3LABEL {"changeid": "THREE"}))")
+            .execute();
+    }
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("MATCH (n) RETURN n, n.changeid")
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6})
+        .expectOptVector<types::String::Primitive>(
+            {"TWO", "TWO", "THREE", "THREE", "THREE", "THREE", "THREE"})
+        .execute();
+
+    tester.setChangeID(change1);
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("MATCH (n) RETURN n, n.changeid")
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+        .expectOptVector<types::String::Primitive>({"TWO", "TWO", "THREE", "THREE",
+                                                    "THREE", "THREE", "THREE", "ONE",
+                                                    "ONE", "ONE"})
+        .execute();
+}
+
 TEST_F(QueryTest, ChangeQueryErrors) {
     QueryTester tester {_env->getMem(), *_interp};
 
