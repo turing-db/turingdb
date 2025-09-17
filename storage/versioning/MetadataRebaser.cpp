@@ -142,6 +142,5 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
     ours._metadata->_labelsetMap = std::move(newLabelsets);
     ours._metadata->_edgeTypeMap = std::move(newEdgeTypes);
     ours._metadata->_propTypeMap = std::move(newPropTypes);
-
     return true;
 }
