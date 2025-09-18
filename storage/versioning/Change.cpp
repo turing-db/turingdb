@@ -77,6 +77,8 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
 
     // Get current state of main
     _base = _versionController->openTransaction().commitData();
+
+    // Get the current next Edge and Node IDs on main
     NodeID newNextNodeID =
         _base->commits().back().openTransaction().readGraph().getNodeCount();
     EdgeID newNextEdgeID =

@@ -44,18 +44,15 @@ private:
     EdgeID _targetCommitFirstEdgeID {0};
 
     NodeID rebaseNodeID(const NodeID& id) const {
-        NodeID newID = id;
-        if (id >= _baseCommitFirstNodeID) {
-            newID += _targetCommitFirstNodeID - _baseCommitFirstNodeID;
-        }
-        else if (id >= _prevFirstNodeID) {
-            newID += _nodeOffset;
-        }
-        return newID;
+        return id >= _baseCommitFirstNodeID
+                 ? id + _targetCommitFirstNodeID - _baseCommitFirstNodeID
+                 : id;
     }
 
     EdgeID rebaseEdgeID(const EdgeID& id) const {
-        return id >= _prevFirstEdgeID ? id + _edgeOffset : id;
+        return id >= _baseCommitFirstEdgeID
+                 ? id + _targetCommitFirstEdgeID - _baseCommitFirstEdgeID
+                 : id;
     }
 };
 
