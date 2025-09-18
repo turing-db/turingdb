@@ -43,8 +43,6 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
     // are edges between locally created nodes.
     const auto rebaseNodeID = [&](NodeID& wbID) {
         if (wbID >= _entryNextNodeID) {
-            spdlog::info("Rebasing NodeID {} to {}", wbID,
-                         wbID + _currentNextNodeID - _entryNextNodeID);
             return wbID + _currentNextNodeID - _entryNextNodeID;
         } else {
             return wbID;
