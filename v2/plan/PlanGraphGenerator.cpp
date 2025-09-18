@@ -1,8 +1,5 @@
 #include "PlanGraphGenerator.h"
 
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/transform.hpp>
 #include <spdlog/fmt/bundled/core.h>
 
 #include "CypherAST.h"
@@ -10,9 +7,8 @@
 #include "FilterNode.h"
 #include "GetNodeLabelSetNode.h"
 #include "GetPropertyNode.h"
-#include "PropertyMapExpr.h"
+#include "PropertyMapExprNode.h"
 #include "QualifiedName.h"
-#include "spdlog/fmt/bundled/ranges.h"
 #include "views/GraphView.h"
 
 #include "expr/PropertyExpr.h"
@@ -305,7 +301,7 @@ PlanGraphNode* PlanGraphGenerator::generateExprConstraints(PlanGraphNode* curren
     PlanGraphNode* prevNode = currentNode;
 
     // Node that generates the mask based on all property constraints
-    PropertyMapExpr* propMapExpr = _tree.create<PropertyMapExpr>();
+    PropertyMapExprNode* propMapExpr = _tree.create<PropertyMapExprNode>();
     currentNode->connectOut(propMapExpr);
     currentNode = propMapExpr;
 
