@@ -75,10 +75,10 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
-    // Get the next Edge and Node IDs at the time this change branched
-    NodeID oldNextNodeID =
+
+    NodeID branchTimeNextNodeID =
         _base->commits().back().openTransaction().readGraph().getNodeCount();
-    EdgeID oldNextEdgeID =
+    EdgeID branchTimeNextEdgeID =
         _base->commits().back().openTransaction().readGraph().getEdgeCount();
 
     // Get the current state of main
@@ -91,7 +91,7 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
         _base->commits().back().openTransaction().readGraph().getEdgeCount();
 
     MetadataRebaser metadataRebaser;
-    DataPartRebaser dataPartRebaser(oldNextNodeID, oldNextEdgeID, newNextNodeID,
+    DataPartRebaser dataPartRebaser(branchTimeNextNodeID, branchTimeNextEdgeID, newNextNodeID,
                                     newNextEdgeID);
 
     // CommitData of main
@@ -99,6 +99,7 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     // CommitHistory of main
     const CommitHistory* prevHistory = &_base->history();
 
+    // Get the Node/EdgeIDs which these commits should start from
     NodeID nextNodeID = _versionController->openTransaction().readGraph().getNodeCount();
     EdgeID nextEdgeID = _versionController->openTransaction().readGraph().getEdgeCount();
 
@@ -112,7 +113,15 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.
         // These values will be used when creating new dataparts at time of submit.
-        commitBuilder->_firstNodeID = nextNodeID;
+
+        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer(),
+                                      branchTimeNextNodeID,
+                                      branchTimeNextEdgeID,
+                                      nextNodeID,
+                                      nextEdgeID);
+        wbRb.rebaseIncidentNodeIDs();
+
+        commitBuilder->_firstNodeID = nextNodeID; // NOTE: These are not even used
         commitBuilder->_firstEdgeID = nextEdgeID;
 
         commitBuilder->_nextNodeID = nextNodeID;
