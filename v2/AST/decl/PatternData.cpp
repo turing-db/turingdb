@@ -4,12 +4,26 @@
 
 using namespace db::v2;
 
+// PatternData
+PatternData::PatternData()
+{
+}
+
+PatternData::~PatternData() {
+}
+
+void PatternData::addExprConstraint(PropertyType propType, Expr* expr) {
+    _exprConstraints.emplace_back(propType, expr);
+}
+
 // NodePatternData
-NodePatternData::NodePatternData() {
+NodePatternData::NodePatternData()
+{
 }
 
 NodePatternData::~NodePatternData() {
 }
+
 
 NodePatternData* NodePatternData::create(CypherAST* ast) {
     NodePatternData* data = new NodePatternData();
@@ -21,12 +35,9 @@ void NodePatternData::addLabelConstraint(LabelID labelID) {
     _labelConstraints.set(labelID);
 }
 
-void NodePatternData::addExprConstraint(PropertyType propType, Expr* expr) {
-    _exprConstraints.emplace_back(propType, expr);
-}
-
 // EdgePatternData
-EdgePatternData::EdgePatternData() {
+EdgePatternData::EdgePatternData()
+{
 }
 
 EdgePatternData::~EdgePatternData() {
@@ -40,8 +51,4 @@ EdgePatternData* EdgePatternData::create(CypherAST* ast) {
 
 void EdgePatternData::addEdgeTypeConstraint(EdgeTypeID edgeTypeID) {
     _edgeTypeConstraints.push_back(edgeTypeID);
-}
-
-void EdgePatternData::addExprConstraint(PropertyType propType, Expr* expr) {
-    _exprConstraints.emplace_back(propType, expr);
 }
