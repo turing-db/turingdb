@@ -18,10 +18,15 @@ enum class PlanGraphOpcode {
     VAR,
     SCAN_NODES,
     SCAN_NODES_BY_LABEL,
+    FILTER,
     FILTER_NODE_EXPR,
     FILTER_EDGE_EXPR,
     FILTER_NODE_LABEL,
     FILTER_EDGE_TYPE,
+    GET_NODE_LABEL_SET,
+    GET_PROPERTY,
+    PROPERTY_MAP_EXPR,
+    EVAL_EXPR,
     GET_OUT_EDGES,
     GET_IN_EDGES,
     GET_EDGES,
@@ -37,10 +42,15 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::VAR, "VAR">,
     EnumStringPair<PlanGraphOpcode::SCAN_NODES, "SCAN_NODES">,
     EnumStringPair<PlanGraphOpcode::SCAN_NODES_BY_LABEL, "SCAN_NODES_BY_LABEL">,
+    EnumStringPair<PlanGraphOpcode::FILTER, "FILTER">,
     EnumStringPair<PlanGraphOpcode::FILTER_NODE_EXPR, "FILTER_NODE_EXPR">,
     EnumStringPair<PlanGraphOpcode::FILTER_EDGE_EXPR, "FILTER_EDGE_EXPR">,
     EnumStringPair<PlanGraphOpcode::FILTER_NODE_LABEL, "FILTER_NODE_LABEL">,
     EnumStringPair<PlanGraphOpcode::FILTER_EDGE_TYPE, "FILTER_EDGE_TYPE">,
+    EnumStringPair<PlanGraphOpcode::GET_NODE_LABEL_SET, "GET_NODE_LABEL_SET">,
+    EnumStringPair<PlanGraphOpcode::GET_PROPERTY, "GET_PROPERTY">,
+    EnumStringPair<PlanGraphOpcode::PROPERTY_MAP_EXPR, "PROPERTY_MAP_EXPR">,
+    EnumStringPair<PlanGraphOpcode::EVAL_EXPR, "EVAL_EXPR">,
     EnumStringPair<PlanGraphOpcode::GET_OUT_EDGES, "GET_OUT_EDGES">,
     EnumStringPair<PlanGraphOpcode::GET_IN_EDGES, "GET_IN_EDGES">,
     EnumStringPair<PlanGraphOpcode::GET_EDGES, "GET_EDGES">,
@@ -85,7 +95,7 @@ public:
     PlanGraph();
     ~PlanGraph();
 
-    template<typename T, typename... Args>
+    template <typename T, typename... Args>
     T* create(Args&&... args) {
         auto node = std::make_unique<T>(std::forward<Args>(args)...);
         auto* nodePtr = node.get();
@@ -95,7 +105,7 @@ public:
 
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
 
-    void dump(std::ostream& out) const ;
+    void dump(std::ostream& out) const;
 
 private:
     friend class PlanGraphDebug;
@@ -119,14 +129,15 @@ private:
 
 class ScanNodesNode : public PlanGraphNode {
 public:
-    explicit ScanNodesNode() 
+    explicit ScanNodesNode()
         : PlanGraphNode(PlanGraphOpcode::SCAN_NODES)
-    {}
+    {
+    }
 };
 
 class ScanNodesByLabelNode : public PlanGraphNode {
 public:
-    explicit ScanNodesByLabelNode(const LabelSet* labelSet) 
+    explicit ScanNodesByLabelNode(const LabelSet* labelSet)
         : PlanGraphNode(PlanGraphOpcode::SCAN_NODES_BY_LABEL),
         _labelSet(labelSet)
     {
@@ -140,7 +151,7 @@ private:
 
 class FilterNodeExprNode : public PlanGraphNode {
 public:
-    explicit FilterNodeExprNode(const Expr* expr) 
+    explicit FilterNodeExprNode(const Expr* expr)
         : PlanGraphNode(PlanGraphOpcode::FILTER_NODE_EXPR),
         _expr(expr)
     {
@@ -154,7 +165,7 @@ private:
 
 class FilterEdgeExprNode : public PlanGraphNode {
 public:
-    explicit FilterEdgeExprNode(const Expr* expr) 
+    explicit FilterEdgeExprNode(const Expr* expr)
         : PlanGraphNode(PlanGraphOpcode::FILTER_EDGE_EXPR),
         _expr(expr)
     {
@@ -168,7 +179,7 @@ private:
 
 class FilterNodeLabelNode : public PlanGraphNode {
 public:
-    explicit FilterNodeLabelNode(const LabelSet* labelSet) 
+    explicit FilterNodeLabelNode(const LabelSet* labelSet)
         : PlanGraphNode(PlanGraphOpcode::FILTER_NODE_LABEL),
         _labelSet(labelSet)
     {
@@ -182,7 +193,7 @@ private:
 
 class FilterEdgeTypeNode : public PlanGraphNode {
 public:
-    explicit FilterEdgeTypeNode(EdgeTypeID edgeTypeID) 
+    explicit FilterEdgeTypeNode(EdgeTypeID edgeTypeID)
         : PlanGraphNode(PlanGraphOpcode::FILTER_EDGE_TYPE),
         _edgeTypeID(edgeTypeID)
     {
@@ -224,7 +235,6 @@ public:
         : PlanGraphNode(PlanGraphOpcode::GET_EDGE_TARGET)
     {
     }
-
 };
 
 class CreateNodeNode : public PlanGraphNode {

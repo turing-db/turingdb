@@ -11,9 +11,10 @@ namespace db::v2 {
 class CypherAST;
 class Expr;
 
+using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
+
 class NodePatternData {
 public:
-    using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
     friend CypherAST;
 
     static NodePatternData* create(CypherAST* ast);
@@ -35,7 +36,6 @@ private:
 class EdgePatternData {
 public:
     using EdgeTypes = std::vector<EdgeTypeID>;
-    using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
     friend CypherAST;
 
     static EdgePatternData* create(CypherAST* ast);
