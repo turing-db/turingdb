@@ -105,8 +105,10 @@ void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     // TODO: Needs to be a better warning mode here
     // Ensure this CommitBuilder is in a fresh state, otherwise there are builders which
     // have used a potentially outdated metadata
-    if (isEmpty() || pendingCount() != 0) {
-        spdlog::warn("CommitBuilder to be flushed is not empty.");
+    if (!isEmpty() || pendingCount() != 0) {
+        spdlog::warn(
+            "CommitBuilder to be flushed is not empty; there are {} pending builders and {} datapartcount",
+            pendingCount(), dpCount());
     }
 
     // We create a single datapart when flushing the buffer, to ensure it is synced with
@@ -141,7 +143,7 @@ void CommitBuilder::initialize() {
 
     auto reader = _view.read();
 
-    // The first ID of this commit will be one more than the current count in the graph
+    // The first ID of this commit will be one more than the max ID in the graph
     _firstNodeID = reader.getNodeCount();
     _firstEdgeID = reader.getEdgeCount();
 

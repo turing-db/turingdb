@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <set>
 #include <string>
 #include <variant>
@@ -10,6 +11,8 @@
 #include "metadata/PropertyType.h"
 
 namespace db {
+
+class CommitWriteBufferRebaser;
 
 class CommitWriteBuffer {
 public:
@@ -72,6 +75,7 @@ public:
     
 private:
     friend DataPartBuilder;
+    friend CommitWriteBufferRebaser;
 
     // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
@@ -84,6 +88,31 @@ private:
 
     // Edges to be deleted when this commit commits
     std::set<EdgeID> _deletedEdges;
+};
+
+class CommitWriteBufferRebaser {
+public:
+    explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer, NodeID entryNextNodeID,
+                                      EdgeID entryNextEdgeID, NodeID currentNextNodeID,
+                                      EdgeID currentNextEdgeID)
+        : _buffer(buffer),
+          _entryNextNodeID(entryNextNodeID),
+          _currentNextNodeID(currentNextNodeID),
+          _entryNextEdgeID(entryNextEdgeID),
+          _currentNextEdgeID(currentNextEdgeID)
+        {
+        }
+
+    void rebaseIncidentNodeIDs();
+
+private:
+    CommitWriteBuffer& _buffer;
+
+    NodeID _entryNextNodeID;
+    NodeID _currentNextNodeID;
+
+    EdgeID _entryNextEdgeID;
+    EdgeID _currentNextEdgeID;
 };
 
 }
