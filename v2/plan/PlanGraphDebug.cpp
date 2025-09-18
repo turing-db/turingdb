@@ -4,7 +4,7 @@
 #include "GetNodeLabelSetNode.h"
 #include "GetPropertyNode.h"
 #include "PlannerException.h"
-#include "PropertyMapExpr.h"
+#include "PropertyMapExprNode.h"
 #include "views/GraphView.h"
 
 #include "PlanGraph.h"
@@ -72,7 +72,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
             } break;
 
             case PlanGraphOpcode::PROPERTY_MAP_EXPR: {
-                const auto* n = dynamic_cast<PropertyMapExpr*>(node.get());
+                const auto* n = dynamic_cast<PropertyMapExprNode*>(node.get());
                 for (const auto& [propType, expr] : n->getExprs()) {
                     std::optional name = propTypeMap.getName(propType);
                     if (!name) {
