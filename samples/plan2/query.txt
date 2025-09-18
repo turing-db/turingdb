@@ -1,5 +1,4 @@
 MATCH (n:Person { name: "Luc" })-[e1:KNOWS_WELL { name : "Luc -> Computers"} ]-(m:Person { name: n.name })-[e2]-(i:Interest),
       (n)-[e3:INTERESTED_IN]-(i:Interest { name: "Computers", hasPhD: true }),
       (m)-[e4:INTERESTED_IN]-(i)
-WHERE n.name = "Luc"
 RETURN n.name, m.name

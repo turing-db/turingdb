@@ -181,7 +181,7 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
         throwError("Pattern element origin must be a node pattern", element);
     }
 
-    generatePatternElementOrigin(origin);
+    PlanGraphNode* currentNode = generatePatternElementOrigin(origin);
 
     const auto& chain = element->getElementChain();
     for (const auto& [edge, node] : chain) {
@@ -190,57 +190,61 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
             throwError("Pattern element edge must be an edge pattern", element);
         }
 
-        generatePatternElementEdge(e);
+        currentNode = generatePatternElementEdge(currentNode, e);
 
         const NodePattern* n = dynamic_cast<const NodePattern*>(node);
         if (!node) {
             throwError("Pattern element node must be a node pattern", element);
         }
 
-        generatePatternElementTarget(n);
+        currentNode = generatePatternElementTarget(currentNode, n);
     }
 }
 
-void PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* origin) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* origin) {
     const NodePatternData* data = origin->getData();
     const LabelSet& labelSet = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
     const VarDecl* decl = origin->getDecl();
 
     // Scan nodes
+    PlanGraphNode* currentNode = nullptr;
     if (labelSet.empty()) {
-        _currentNode = _tree.create<ScanNodesNode>();
+        currentNode = _tree.create<ScanNodesNode>();
     } else {
-        _currentNode = _tree.create<ScanNodesByLabelNode>(&labelSet);
+        currentNode = _tree.create<ScanNodesByLabelNode>(&labelSet);
     }
 
-    generateExprConstraints(decl, exprConstraints);
-    generateVarNode(decl);
+    currentNode = generateExprConstraints(currentNode, decl, exprConstraints);
+    currentNode = generateVarNode(currentNode, decl);
+
+    return currentNode;
 }
 
-void PlanGraphGenerator::generatePatternElementEdge(const EdgePattern* edge) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* currentNode, const EdgePattern* edge) {
     // Expand edge based on direction
+
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected:
         {
             auto* expandEdges = _tree.create<GetEdgesNode>();
-            _currentNode->connectOut(expandEdges);
-            _currentNode = expandEdges;
+            currentNode->connectOut(expandEdges);
+            currentNode = expandEdges;
             break;
         }
         case EdgePattern::Direction::Backward:
         {
             auto* expandEdges = _tree.create<GetInEdgesNode>();
-            _currentNode->connectOut(expandEdges);
-            _currentNode = expandEdges;
+            currentNode->connectOut(expandEdges);
+            currentNode = expandEdges;
             break;
         }
             break;
         case EdgePattern::Direction::Forward:
         {
             auto* expandEdges = _tree.create<GetOutEdgesNode>();
-            _currentNode->connectOut(expandEdges);
-            _currentNode = expandEdges;
+            currentNode->connectOut(expandEdges);
+            currentNode = expandEdges;
             break;
         }
     }
@@ -257,15 +261,17 @@ void PlanGraphGenerator::generatePatternElementEdge(const EdgePattern* edge) {
 
     for (const EdgeTypeID edgeTypeID : edgeTypes) {
         auto* filterEdgeTypes = _tree.create<FilterEdgeTypeNode>(edgeTypeID);
-        _currentNode->connectOut(filterEdgeTypes);
-        _currentNode = filterEdgeTypes;
+        currentNode->connectOut(filterEdgeTypes);
+        currentNode = filterEdgeTypes;
     }
 
-    generateExprConstraints(decl, exprConstraints);
-    generateVarNode(decl);
+    currentNode = generateExprConstraints(currentNode, decl, exprConstraints);
+    currentNode = generateVarNode(currentNode, decl);
+
+    return currentNode;
 }
 
-void PlanGraphGenerator::generatePatternElementTarget(const NodePattern* target) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementTarget(PlanGraphNode* currentNode, const NodePattern* target) {
     // Target nodes
     const NodePatternData* data = target->getData();
     const auto& labelset = data->labelConstraints();
@@ -273,32 +279,35 @@ void PlanGraphGenerator::generatePatternElementTarget(const NodePattern* target)
     const VarDecl* decl = target->getDecl();
 
     auto* getTargetNode = _tree.create<GetEdgeTargetNode>();
-    _currentNode->connectOut(getTargetNode);
-    _currentNode = getTargetNode;
+    currentNode->connectOut(getTargetNode);
+    currentNode = getTargetNode;
 
     // Target node labels
     if (!labelset.empty()) {
         FilterNodeLabelNode* filterLabel = _tree.create<FilterNodeLabelNode>(&labelset);
-        _currentNode->connectOut(filterLabel);
-        _currentNode = filterLabel;
+        currentNode->connectOut(filterLabel);
+        currentNode = filterLabel;
     }
 
-    generateExprConstraints(decl, exprConstraints);
-    generateVarNode(decl);
+    currentNode = generateExprConstraints(currentNode, decl, exprConstraints);
+    currentNode = generateVarNode(currentNode, decl);
+
+    return currentNode;
 }
 
-void PlanGraphGenerator::generateExprConstraints(const VarDecl* varDecl,
-                                                 const ExprConstraints& exprConstraints) {
+PlanGraphNode* PlanGraphGenerator::generateExprConstraints(PlanGraphNode* currentNode,
+                                                           const VarDecl* varDecl,
+                                                           const ExprConstraints& exprConstraints) {
     if (exprConstraints.empty()) {
-        return;
+        return currentNode;
     }
 
-    PlanGraphNode* prevNode = _currentNode;
+    PlanGraphNode* prevNode = currentNode;
 
     // Node that generates the mask based on all property constraints
     PropertyMapExpr* propMapExpr = _tree.create<PropertyMapExpr>();
-    _currentNode->connectOut(propMapExpr);
-    _currentNode = propMapExpr;
+    currentNode->connectOut(propMapExpr);
+    currentNode = propMapExpr;
 
     // All dependencies are branches feeding into propMapExpr, e.g. for property expressions
     //
@@ -309,70 +318,74 @@ void PlanGraphGenerator::generateExprConstraints(const VarDecl* varDecl,
     for (const auto& [propType, expr] : exprConstraints) {
         auto* getPropertyNode = _tree.create<GetPropertyNode>();
         prevNode->connectOut(getPropertyNode);
-        getPropertyNode->connectOut(_currentNode);
+        getPropertyNode->connectOut(currentNode);
 
         propMapExpr->addExpr(propType._id, expr);
-        generateExprDependencies(expr);
+        generateExprDependencies(currentNode, expr);
     }
 
     // Node that applies the mask to whatever needs it
     FilterNode* filter = _tree.create<FilterNode>();
     propMapExpr->connectOut(filter);
-    _currentNode = filter;
+    currentNode = filter;
+
+    return currentNode;
 }
 
-void PlanGraphGenerator::generateVarNode(const VarDecl* varDecl) {
+PlanGraphNode* PlanGraphGenerator::generateVarNode(PlanGraphNode* currentNode, const VarDecl* varDecl) {
     if (varDecl) {
         auto* varNode = getOrCreateVarNode(varDecl);
-        _currentNode->connectOut(varNode);
-        _currentNode = varNode;
+        currentNode->connectOut(varNode);
+        currentNode = varNode;
     }
+
+    return currentNode;
 }
 
-void PlanGraphGenerator::generateExprDependencies(const Expr* expr) {
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY: {
-            generateExprDependencies(static_cast<const BinaryExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const BinaryExpr*>(expr));
         } break;
         case Expr::Kind::UNARY: {
-            generateExprDependencies(static_cast<const UnaryExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const UnaryExpr*>(expr));
         } break;
         case Expr::Kind::STRING: {
-            generateExprDependencies(static_cast<const StringExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const StringExpr*>(expr));
         } break;
         case Expr::Kind::NODE_LABEL: {
-            generateExprDependencies(static_cast<const NodeLabelExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const NodeLabelExpr*>(expr));
         } break;
         case Expr::Kind::PROPERTY: {
-            generateExprDependencies(static_cast<const PropertyExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const PropertyExpr*>(expr));
         } break;
         case Expr::Kind::PATH: {
-            generateExprDependencies(static_cast<const PathExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const PathExpr*>(expr));
         } break;
         case Expr::Kind::SYMBOL: {
-            generateExprDependencies(static_cast<const SymbolExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const SymbolExpr*>(expr));
         } break;
         case Expr::Kind::LITERAL: {
-            generateExprDependencies(static_cast<const LiteralExpr*>(expr));
+            generateExprDependencies(currentNode, static_cast<const LiteralExpr*>(expr));
         } break;
     }
 }
 
-void PlanGraphGenerator::generateExprDependencies(const BinaryExpr* expr) {
-    generateExprDependencies(expr->getLHS());
-    generateExprDependencies(expr->getRHS());
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const BinaryExpr* expr) {
+    generateExprDependencies(currentNode, expr->getLHS());
+    generateExprDependencies(currentNode, expr->getRHS());
 }
 
-void PlanGraphGenerator::generateExprDependencies(const UnaryExpr* expr) {
-    generateExprDependencies(expr->getSubExpr());
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const UnaryExpr* expr) {
+    generateExprDependencies(currentNode, expr->getSubExpr());
 }
 
-void PlanGraphGenerator::generateExprDependencies(const StringExpr* expr) {
-    generateExprDependencies(expr->getLHS());
-    generateExprDependencies(expr->getRHS());
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const StringExpr* expr) {
+    generateExprDependencies(currentNode, expr->getLHS());
+    generateExprDependencies(currentNode, expr->getRHS());
 }
 
-void PlanGraphGenerator::generateExprDependencies(const NodeLabelExpr* expr) {
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const NodeLabelExpr* expr) {
     const VarDecl* varDecl = expr->getDecl();
     if (!varDecl) {
         throwError("Node label expression is missing its variable declaration", expr);
@@ -385,10 +398,10 @@ void PlanGraphGenerator::generateExprDependencies(const NodeLabelExpr* expr) {
 
     auto* getNodeLabelNode = _tree.create<GetNodeLabelSetNode>();
     varNode->connectOut(getNodeLabelNode);
-    getNodeLabelNode->connectOut(_currentNode);
+    getNodeLabelNode->connectOut(currentNode);
 }
 
-void PlanGraphGenerator::generateExprDependencies(const PropertyExpr* expr) {
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const PropertyExpr* expr) {
     const VarDecl* varDecl = expr->getDecl();
     if (!varDecl) {
         throwError("Property expression is missing its variable declaration", expr);
@@ -401,18 +414,18 @@ void PlanGraphGenerator::generateExprDependencies(const PropertyExpr* expr) {
 
     auto* getPropertyNode = _tree.create<GetPropertyNode>();
     varNode->connectOut(getPropertyNode);
-    getPropertyNode->connectOut(_currentNode);
+    getPropertyNode->connectOut(currentNode);
 }
 
-void PlanGraphGenerator::generateExprDependencies(const PathExpr* expr) {
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const PathExpr* expr) {
     throwError("Path expressions are not supported yet", expr);
 }
 
-void PlanGraphGenerator::generateExprDependencies(const SymbolExpr* expr) {
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const SymbolExpr* expr) {
     throwError("Symbol expressions are not supported yet", expr);
 }
 
-void PlanGraphGenerator::generateExprDependencies(const LiteralExpr* expr) {
+void PlanGraphGenerator::generateExprDependencies(PlanGraphNode* currentNode, const LiteralExpr* expr) {
     // No dependencies
 }
 
