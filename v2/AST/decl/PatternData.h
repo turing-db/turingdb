@@ -11,29 +11,39 @@ namespace db::v2 {
 class CypherAST;
 class Expr;
 
-using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
+class PatternData {
+public:
+    using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
 
-class NodePatternData {
+    const ExprConstraints& exprConstraints() const { return _exprConstraints; }
+
+    void addExprConstraint(PropertyType propType, Expr* expr);
+
+protected:
+    PatternData();
+    virtual ~PatternData();
+
+    ExprConstraints _exprConstraints;
+};
+
+class NodePatternData : public PatternData {
 public:
     friend CypherAST;
 
     static NodePatternData* create(CypherAST* ast);
 
     const LabelSet& labelConstraints() const { return _labelConstraints; }
-    const ExprConstraints& exprConstraints() const { return _exprConstraints; }
 
     void addLabelConstraint(LabelID labelID);
-    void addExprConstraint(PropertyType propType, Expr* expr);
 
 private:
     LabelSet _labelConstraints;
-    ExprConstraints _exprConstraints;
 
     NodePatternData();
-    ~NodePatternData();
+    ~NodePatternData() override;
 };
 
-class EdgePatternData {
+class EdgePatternData : public PatternData {
 public:
     using EdgeTypes = std::vector<EdgeTypeID>;
     friend CypherAST;
@@ -41,17 +51,14 @@ public:
     static EdgePatternData* create(CypherAST* ast);
 
     const EdgeTypes& edgeTypeConstraints() const { return _edgeTypeConstraints; }
-    const ExprConstraints& exprConstraints() const { return _exprConstraints; }
 
     void addEdgeTypeConstraint(EdgeTypeID edgeTypeID);
-    void addExprConstraint(PropertyType propType, Expr* expr);
 
 private:
     EdgeTypes _edgeTypeConstraints;
-    ExprConstraints _exprConstraints;
 
     EdgePatternData();
-    ~EdgePatternData();
+    ~EdgePatternData() override;
 };
 
 }
