@@ -86,8 +86,8 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
     }
 }
 
-bool SystemManager::loadGraph(const std::string& graphName, const std::string& graphFileName, JobSystem& jobSystem) {
-    const fs::Path graphPath = _config.getGraphsDir() / graphFileName;
+bool SystemManager::loadGraph(const std::string& graphName, const std::string& fileName, JobSystem& jobSystem) {
+    const fs::Path graphPath = _config.getGraphsDir() / fileName;
 
     // Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {

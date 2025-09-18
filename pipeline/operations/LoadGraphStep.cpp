@@ -9,14 +9,14 @@
 
 using namespace db;
 
-LoadGraphStep::LoadGraphStep(const std::string& graphFileName, const std::string& graphName)
-    :_graphFileName(graphFileName),
+LoadGraphStep::LoadGraphStep(const std::string& fileName, const std::string& graphName)
+    :_fileName(fileName),
     _graphName(graphName)
 {
 }
 
-LoadGraphStep::LoadGraphStep(const std::string& graphFileName) 
-    :_graphFileName(graphFileName)
+LoadGraphStep::LoadGraphStep(const std::string& fileName) 
+    :_fileName(fileName)
 {
 }
 
@@ -34,9 +34,9 @@ void LoadGraphStep::execute() {
     bool res {false};
 
     if (!_graphName.empty()) {
-        res = _sysMan->loadGraph(_graphName, _graphFileName, *_jobSystem);
+        res = _sysMan->loadGraph(_graphName, _fileName, *_jobSystem);
     } else {
-        res = _sysMan->loadGraph(_graphFileName, *_jobSystem);
+        res = _sysMan->loadGraph(_fileName, *_jobSystem);
     }
 
     if (!res) {
@@ -47,7 +47,7 @@ void LoadGraphStep::execute() {
 void LoadGraphStep::describe(std::string& descr) const {
     std::stringstream ss;
     ss << "LoadGraphStep";
-    ss << " graphFileName=" << _graphFileName;
+    ss << " fileName=" << _fileName;
     ss << " graphName=" << _graphName;
     descr.assign(ss.str());
 }
