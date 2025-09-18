@@ -1,7 +1,6 @@
 #include "DBServerProcessor.h"
 
 #include <nlohmann/json.hpp>
-#include <regex>
 
 #include "TuringDB.h"
 #include "Graph.h"

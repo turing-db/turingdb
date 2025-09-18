@@ -35,14 +35,33 @@ QueryCommand* QueryParser::parse(std::string_view query) {
         generateErrorMsg(errMsg, query, e.what(), e.location);
         throw ParserException(std::move(errMsg));
     }
-    
+
     return _astCtxt->getRoot();
 }
 
+std::string sanitizeJsonString(const std::string& input) {
+    std::string result;
+    result.reserve(input.size() * 1.2); // Pre-allocate
+
+    for (char c : input) {
+        if (c == '"') {
+            result += "\\\"";
+        } else if (c == '\\') {
+            result += "\\\\";
+        } else if (c == '/') {
+            result += "\\/";
+        } else {
+            result += c;
+        }
+    }
+
+    return result;
+}
+
 void QueryParser::generateErrorMsg(std::string& msg,
-                          const std::string_view query,
-                          const std::string_view excptMsg,
-                          const location& loc) {
+                                   const std::string_view query,
+                                   const std::string_view excptMsg,
+                                   const location& loc) {
     std::ostringstream out;
     // Get error line of query
     const uint32_t errLineNo = loc.begin.line;
@@ -57,10 +76,11 @@ void QueryParser::generateErrorMsg(std::string& msg,
     const std::string errorBars(errLen, '^');
     const std::string blank(loc.begin.column - 1, ' ');
 
-    out << "\\n" << " |" << "\\n";
-    out << errLineNo << "|\\t" << errLine << "\\n";
+    out << "\\n"
+        << " |" << "\\n";
+    out << errLineNo << "|\\t" << sanitizeJsonString(errLine) << "\\n";
     out << " |\\t" << blank << errorBars << "\\t";
-    out << "\\t"<< excptMsg << "\\n\\n";
+    out << "\\t" << excptMsg << "\\n\\n";
 
     out << "Parse error on line " << loc.begin.line 
         << ", from column " << loc.begin.column 

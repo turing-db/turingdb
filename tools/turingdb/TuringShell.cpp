@@ -296,10 +296,16 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
 
 // Cleans double-escaped characters to single-escaped characters
 void TuringShell::formatMessage(std::string& msg) {
-        const std::regex newLine(R"(\\n)");
-        const std::regex tab(R"(\\t)");
-        msg = std::regex_replace(msg, newLine, "\n");
-        msg = std::regex_replace(msg, tab, "\t");
+    const std::regex newLine(R"(\\n)");
+    const std::regex tab(R"(\\t)");
+    const std::regex quotes(R"(\\")");
+    const std::regex backSlash(R"(\\\\)");
+    const std::regex forwardSlash(R"(\\/)");
+    msg = std::regex_replace(msg, newLine, "\n");
+    msg = std::regex_replace(msg, tab, "\t");
+    msg = std::regex_replace(msg, quotes, "\"");
+    msg = std::regex_replace(msg, backSlash, "\\");
+    msg = std::regex_replace(msg, forwardSlash, "/");
 }
 
 void TuringShell::processLine(std::string& line) {
