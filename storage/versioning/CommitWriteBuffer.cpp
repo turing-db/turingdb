@@ -41,7 +41,7 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
     // creation and submission. We therefore need to readjust any edges which reference a
     // NodeID which is greater than the nextNodeID at time of Change creation, as these
     // are edges between locally created nodes.
-    const auto rebaseNodeID = [&](NodeID& wbID) {
+    const auto rebaseNodeID = [&](NodeID wbID) {
         if (wbID >= _entryNextNodeID) {
             return wbID + _currentNextNodeID - _entryNextNodeID;
         } else {
