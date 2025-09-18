@@ -622,6 +622,144 @@ TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
         .execute();
 }
 
+TEST_F(QueryTest, edgeSpanningCommits) {
+    QueryTester tester {_mem, *_interp, "default"};
+
+    auto change1Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+    ASSERT_TRUE(change1Res);
+    const ChangeID change1 = change1Res.value()->back()->id();
+
+    tester.setChangeID(change1);
+
+    tester.query("create (n:SOURCENODE)")
+        .execute();
+
+    tester.query("commit")
+        .execute();
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0})
+        .execute();
+    tester.query("call labels ()")
+        .expectVector<LabelID>({0})
+        .expectVector<std::string_view>({"SOURCENODE"})
+        .execute();
+
+    tester.query("create (n @ 0)-[e:FORWARDSEDGE]-(m:TARGETNODE)")
+        .execute();
+
+    tester.query("create (m:TARGETNODE)-[e:FORWARDSEDGE]-(n @ 0)")
+        .execute();
+
+    tester.query("commit")
+        .execute();
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1,2})
+        .execute();
+
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({0,2})
+        .expectVector<EdgeID>({0,1})
+        .expectVector<NodeID>({1,0})
+        .execute();
+
+    tester.query("call labels ()")
+        .expectVector<LabelID>({0,1})
+        .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    auto change2Res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+    ASSERT_TRUE(change2Res);
+    const ChangeID change2 = change2Res.value()->back()->id();
+
+    tester.setChangeID(change2);
+
+    // Do exactly the same thing
+    tester.query("create (n:SOURCENODE)")
+        .execute();
+
+    tester.query("commit")
+        .execute();
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0})
+        .execute();
+    tester.query("call labels ()")
+        .expectVector<LabelID>({0})
+        .expectVector<std::string_view>({"SOURCENODE"})
+        .execute();
+
+    tester.query("create (n @ 0)-[e:FORWARDSEDGE]-(m:TARGETNODE)")
+        .execute();
+
+    tester.query("create (m:TARGETNODE)-[e:FORWARDSEDGE]-(n @ 0)")
+        .execute();
+
+    tester.query("commit")
+        .execute();
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1,2})
+        .execute();
+
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({0,2})
+        .expectVector<EdgeID>({0,1})
+        .expectVector<NodeID>({1,0})
+        .execute();
+
+    tester.query("call labels ()")
+        .expectVector<LabelID>({0,1})
+        .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({0,2})
+        .expectVector<EdgeID>({0,1})
+        .expectVector<NodeID>({1,0})
+        .execute();
+
+    tester.query("call labels ()")
+        .expectVector<LabelID>({0,1})
+        .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
+        .execute();
+
+    tester.setChangeID(change1);
+    tester.query("CHANGE SUBMIT")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1,2,3,4,5})
+        .execute();
+
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({0, 2, 3, 5})
+        .expectVector<EdgeID>({0, 1, 2, 3})
+        .expectVector<NodeID>({1, 0, 4, 3})
+        .execute();
+
+    tester.query("call labels ()")
+        .expectVector<LabelID>({0,1})
+        .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
+        .execute();
+}
+
 TEST_F(QueryTest, ChangeQueryErrors) {
     QueryTester tester {_mem, *_interp};
 
