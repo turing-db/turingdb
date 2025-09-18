@@ -75,13 +75,13 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
-
+    // Get the next Edge and Node IDs at the time this change branched
     NodeID branchTimeNextNodeID =
         _base->commits().back().openTransaction().readGraph().getNodeCount();
     EdgeID branchTimeNextEdgeID =
         _base->commits().back().openTransaction().readGraph().getEdgeCount();
 
-    // Get the current state of main
+    // Get current state of main
     _base = _versionController->openTransaction().commitData();
 
     // Get the current next Edge and Node IDs on main
