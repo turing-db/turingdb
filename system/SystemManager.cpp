@@ -12,6 +12,7 @@
 #include "versioning/Transaction.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
+#include "DumpAndLoadManager.h"
 #include "GraphLoader.h"
 #include "FileUtils.h"
 #include "TuringConfig.h"
@@ -23,15 +24,67 @@ SystemManager::SystemManager(const TuringConfig& config)
     : _config(config),
     _changes(std::make_unique<ChangeManager>())
 {
-    _defaultGraph = createGraph("default");
+    init();
 }
 
 SystemManager::~SystemManager() {
 }
 
+void SystemManager::init() {
+    const auto list = _config.getGraphsDir().listDir();
+
+    if (std::find(list->begin(), list->end(), _config.getGraphsDir() / "default") != list->end()) {
+        spdlog::info("loading default");
+        _defaultGraph = loadGraph("default");
+    } else {
+        spdlog::info("creating default");
+        _defaultGraph = createAndDumpGraph("default");
+    }
+
+    if (!_defaultGraph) {
+        throw TuringException("Could Not Initialise the Default Graph");
+    }
+}
+
+Graph* SystemManager::loadGraph(const std::string& name) {
+    std::unique_ptr<Graph> graph = Graph::create("default", _config.getGraphsDir() / "default");
+    auto* rawPtr = graph.get();
+
+    if (auto res = graph->getDumpAndLoadManager()->loadGraph(); !res) {
+        spdlog::info(res.error().fmtMessage());
+        return nullptr;
+    }
+    if (!addGraph(std::move(graph), "default")) {
+        return nullptr;
+    }
+
+    return rawPtr;
+}
+
 Graph* SystemManager::createGraph(const std::string& name) {
     std::unique_ptr<Graph> graph = Graph::create(name, _config.getGraphsDir() / name);
     auto* rawPtr = graph.get();
+
+    if (auto res = graph->getDumpAndLoadManager()->dumpGraph(); !res) {
+        spdlog::info(res.error().fmtMessage());
+        return nullptr;
+    }
+
+    if (!addGraph(std::move(graph), name)) {
+        return nullptr;
+    }
+
+    return rawPtr;
+}
+
+Graph* SystemManager::createAndDumpGraph(const std::string& name) {
+    std::unique_ptr<Graph> graph = Graph::create(name, _config.getGraphsDir() / name);
+    auto* rawPtr = graph.get();
+
+    if (auto res = graph->getDumpAndLoadManager()->dumpGraph(); !res) {
+        spdlog::info(res.error().fmtMessage());
+        return nullptr;
+    }
 
     if (!addGraph(std::move(graph), name)) {
         return nullptr;

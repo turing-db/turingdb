@@ -36,7 +36,13 @@ public:
 
     const TuringConfig& getConfig() const { return _config; }
 
+    void init();
+
+    Graph* loadGraph(const std::string& graphName);
+
     Graph* createGraph(const std::string& graphName);
+
+    Graph* createAndDumpGraph(const std::string& graphName);
 
     void listAvailableGraphs(std::vector<fs::Path>& names);
 

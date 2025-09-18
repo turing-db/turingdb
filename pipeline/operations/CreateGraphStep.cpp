@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "ExecutionContext.h"
+#include "PipelineException.h"
 #include "Profiler.h"
 #include "SystemManager.h"
 
@@ -23,7 +24,9 @@ void CreateGraphStep::prepare(ExecutionContext* ctxt) {
 void CreateGraphStep::execute() {
     Profile profile {"CreateGraphStep::execute"};
 
-    _sysMan->createGraph(_graphName);
+    if (!_sysMan->createAndDumpGraph(_graphName)) {
+        throw PipelineException("Failed To Create Graph");
+    }
 }
 
 void CreateGraphStep::describe(std::string& descr) const {
