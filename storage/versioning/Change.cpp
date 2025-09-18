@@ -1,5 +1,6 @@
 #include "Change.h"
 
+#include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/MetadataRebaser.h"
@@ -68,10 +69,22 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
+    // Get the next Edge and Node IDs at the time this change branched
+    NodeID oldNextNodeID =
+        _base->commits().back().openTransaction().readGraph().getNodeCount();
+    EdgeID oldNextEdgeID =
+        _base->commits().back().openTransaction().readGraph().getEdgeCount();
+
+    // Get current state of main
     _base = _versionController->openTransaction().commitData();
+    NodeID newNextNodeID =
+        _base->commits().back().openTransaction().readGraph().getNodeCount();
+    EdgeID newNextEdgeID =
+        _base->commits().back().openTransaction().readGraph().getEdgeCount();
 
     MetadataRebaser metadataRebaser;
-    DataPartRebaser dataPartRebaser;
+    DataPartRebaser dataPartRebaser(oldNextNodeID, oldNextEdgeID, newNextNodeID,
+                                    newNextEdgeID);
 
     const auto* prevCommitData = _base.get();
     const auto* prevHistory = &_base->history();

@@ -14,6 +14,15 @@ public:
     DataPartRebaser() = default;
     ~DataPartRebaser() = default;
 
+    DataPartRebaser(NodeID baseFstNodeID, EdgeID baseFstEdgeID, NodeID tgtFstNodeID,
+                    EdgeID tgtFstEdgeID)
+        : _baseCommitFirstNodeID(baseFstNodeID),
+          _baseCommitFirstEdgeID(baseFstEdgeID),
+          _targetCommitFirstNodeID(tgtFstNodeID),
+          _targetCommitFirstEdgeID(tgtFstEdgeID)
+    {
+    }
+
     DataPartRebaser(const DataPartRebaser&) = delete;
     DataPartRebaser(DataPartRebaser&&) = delete;
     DataPartRebaser& operator=(const DataPartRebaser&) = delete;
@@ -28,8 +37,21 @@ private:
     size_t _nodeOffset {0};
     size_t _edgeOffset {0};
 
+    NodeID _baseCommitFirstNodeID {0};
+    EdgeID _baseCommitFirstEdgeID {0};
+
+    NodeID _targetCommitFirstNodeID {0};
+    EdgeID _targetCommitFirstEdgeID {0};
+
     NodeID rebaseNodeID(const NodeID& id) const {
-        return id >= _prevFirstNodeID ? id + _nodeOffset : id;
+        NodeID newID = id;
+        if (id >= _baseCommitFirstNodeID) {
+            newID += _targetCommitFirstNodeID - _baseCommitFirstNodeID;
+        }
+        else if (id >= _prevFirstNodeID) {
+            newID += _nodeOffset;
+        }
+        return newID;
     }
 
     EdgeID rebaseEdgeID(const EdgeID& id) const {
