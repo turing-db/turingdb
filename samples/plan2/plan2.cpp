@@ -2,6 +2,7 @@
 
 #include <iostream>
 
+#include "PlannerException.h"
 #include "SystemManager.h"
 #include "TuringTime.h"
 #include "PlanGraphDebug.h"
@@ -80,8 +81,14 @@ void runPlan2(std::string_view query) {
         return;
     }
 
-    PlanGraphGenerator planGen(view, callback);
-    planGen.generate(ast.queries().front());
+    PlanGraphGenerator planGen(ast, view, callback);
+    try {
+        planGen.generate(ast.queries().front());
+    } catch (const PlannerException& e) {
+        std::cerr << "Plan error: " << e.what() << std::endl;
+        return;
+    }
+
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
     PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);

@@ -11,6 +11,7 @@
 #include "PlanGraph.h"
 
 #include "VectorHash.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 class GraphView;
@@ -25,11 +26,26 @@ class Symbol;
 class MatchStmt;
 class PatternElement;
 class EntityPattern;
+class NodePattern;
+class EdgePattern;
+class CypherAST;
+class Expr;
+class BinaryExpr;
+class UnaryExpr;
+class StringExpr;
+class NodeLabelExpr;
+class PropertyExpr;
+class PathExpr;
+class SymbolExpr;
+class LiteralExpr;
+
+using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
 
 class PlanGraphGenerator {
 public:
-    PlanGraphGenerator(const GraphView& view,
-                       QueryCallback callback);
+    PlanGraphGenerator(const CypherAST& ast,
+                       const GraphView& view,
+                       const QueryCallback& callback);
     ~PlanGraphGenerator();
 
     PlanGraph& getPlanGraph() { return _tree; }
@@ -43,6 +59,8 @@ private:
     const GraphView& _view;
 
     PlanGraph _tree;
+    const CypherAST* _ast {nullptr};
+    PlanGraphNode* _currentNode {nullptr};
 
     // Cache for label sets
     std::unordered_map<LabelNames,
@@ -51,36 +69,37 @@ private:
     std::vector<std::unique_ptr<LabelSet>> _labelSets;
 
     // Map of variable nodes
-    std::unordered_map<VarDecl*, PlanGraphNode*> _varNodesMap;
+    std::unordered_map<const VarDecl*, PlanGraphNode*> _varNodesMap;
+
+    // Map of expr dependencies
+    std::unordered_multimap<const Expr*, PlanGraphNode*> _exprDependenciesMap;
 
     const LabelSet* getOrCreateLabelSet(const Symbols& symbols);
     const LabelSet* buildLabelSet(const Symbols& symbols);
     LabelID getLabel(const Symbol* symbol);
 
-    void addVarNode(PlanGraphNode* node, VarDecl* varDecl);
-    PlanGraphNode* getOrCreateVarNode(VarDecl* varDecl);
-    PlanGraphNode* getVarNode(VarDecl* varDecl) const;
+    void addVarNode(PlanGraphNode* node, const VarDecl* varDecl);
+    PlanGraphNode* getOrCreateVarNode(const VarDecl* varDecl);
+    PlanGraphNode* getVarNode(const VarDecl* varDecl) const;
 
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
     void generatePatternElement(const PatternElement* element);
-    PlanGraphNode* generatePatternElementOrigin(const EntityPattern* pattern);
-    PlanGraphNode* generatePatternElementExpand(PlanGraphNode* currentNode,
-                                                const EntityPattern* edge,
-                                                const EntityPattern* target);
-
-    /*
-    PlanGraphNode* planPathMatchOrigin(const EntityPattern* pattern);
-    PlanGraphNode* planPathExpand(PlanGraphNode* currentNode,
-                                  const EntityPattern* edge,
-                                  const EntityPattern* target);
-    void planCreateTarget(const CreateTarget* target);
-    PlanGraphNode* planCreateOrigin(const EntityPattern* pattern);
-    PlanGraphNode* planCreateStep(PlanGraphNode* currentNode,
-                                  const EntityPattern* edge,
-                                  const EntityPattern* target);
-    */
+    void generatePatternElementOrigin(const NodePattern* origin);
+    void generatePatternElementEdge(const EdgePattern* edge);
+    void generatePatternElementTarget(const NodePattern* target);
+    void generateExprConstraints(const VarDecl* varDecl, const ExprConstraints& expr);
+    void generateVarNode(const VarDecl* varDecl);
+    void generateExprDependencies(const Expr* expr);
+    void generateExprDependencies(const BinaryExpr* expr);
+    void generateExprDependencies(const UnaryExpr* expr);
+    void generateExprDependencies(const StringExpr* expr);
+    void generateExprDependencies(const NodeLabelExpr* expr);
+    void generateExprDependencies(const PropertyExpr* expr);
+    void generateExprDependencies(const PathExpr* expr);
+    void generateExprDependencies(const SymbolExpr* expr);
+    void generateExprDependencies(const LiteralExpr* expr);
 };
 
 }

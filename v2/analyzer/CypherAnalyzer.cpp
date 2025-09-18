@@ -67,22 +67,22 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 
 void CypherAnalyzer::analyze(const MatchStmt* matchSt) {
     if (matchSt->isOptional()) {
-        throwError("OPTIONAL MATCH not supported", &matchSt);
+        throwError("OPTIONAL MATCH not supported", matchSt);
     }
 
     const Pattern* pattern = matchSt->getPattern();
     if (!pattern) {
-        throwError("MATCH statement must have a pattern", &matchSt);
+        throwError("MATCH statement must have a pattern", matchSt);
     }
 
     analyze(pattern);
 
     if (matchSt->hasLimit()) {
-        throwError("LIMIT not supported", &matchSt);
+        throwError("LIMIT not supported", matchSt);
     }
 
     if (matchSt->hasSkip()) {
-        throwError("SKIP not supported", &matchSt);
+        throwError("SKIP not supported", matchSt);
     }
 }
 
@@ -97,15 +97,15 @@ void CypherAnalyzer::analyze(const Limit* limit) {
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     const Projection* projection = returnSt->getProjection();
     if (projection->isDistinct()) {
-        throwError("DISTINCT not supported", &returnSt);
+        throwError("DISTINCT not supported", returnSt);
     }
 
     if (projection->hasSkip()) {
-        throwError("SKIP not supported", &returnSt);
+        throwError("SKIP not supported", returnSt);
     }
 
     if (projection->hasLimit()) {
-        throwError("LIMIT not supported", &returnSt);
+        throwError("LIMIT not supported", returnSt);
     }
 
     if (projection->isAll()) {
@@ -162,7 +162,7 @@ void CypherAnalyzer::analyze(NodePattern* nodePattern) {
         for (const Symbol* label : labels) {
             const std::optional<LabelID> labelID = labelMap.get(label->getName());
             if (!labelID) {
-                throwError(fmt::format("Unknown label: {}", label->getName()), &nodePattern);
+                throwError(fmt::format("Unknown label: {}", label->getName()), nodePattern);
             }
 
             data->addLabelConstraint(labelID.value());
@@ -419,6 +419,8 @@ void CypherAnalyzer::analyze(SymbolExpr* expr) {
     if (!varDecl) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
+
+    expr->setDecl(varDecl);
     expr->setType(varDecl->getType());
 }
 
@@ -501,6 +503,7 @@ void CypherAnalyzer::analyze(PropertyExpr* expr) {
         } break;
     }
 
+    expr->setDecl(varDecl);
     expr->setType(type);
 }
 
@@ -527,13 +530,17 @@ void CypherAnalyzer::analyze(NodeLabelExpr* expr) {
 
     VarDecl* decl = _ctxt->getDecl(expr->getSymbol()->getName());
 
+    if (!decl) {
+        throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
+    }
+
+    expr->setDecl(decl);
+
     if (decl->getType() != EvaluatedType::NodePattern) {
         const std::string error = fmt::format("Variable '{}' is '{}' it must be a node",
                                               decl->getName(), EvaluatedTypeName::value(decl->getType()));
         throwError(std::move(error), expr);
     }
-
-    expr->setDecl(decl);
 
     for (const Symbol* label : expr->labels()) {
         const std::optional<LabelID> labelID = labelMap.get(label->getName());

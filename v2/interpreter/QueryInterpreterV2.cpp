@@ -77,7 +77,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     }
 
     // Generate plan graph
-    PlanGraphGenerator planGen(view, ctxt.getQueryCallback());
+    PlanGraphGenerator planGen(ast, view, ctxt.getQueryCallback());
     try {
         
     } catch (const PlannerException& e) {

@@ -55,7 +55,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -85,7 +85,7 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -119,7 +119,7 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -152,7 +152,7 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -182,7 +182,7 @@ TEST_F(PlanGenTest, matchLinear1) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -217,7 +217,7 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -253,7 +253,7 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
 
     //planGraph.dump(std::cout);
@@ -296,7 +296,7 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -318,7 +318,7 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(view, callback);
+    PlanGraphGenerator planGen(ast, view, callback);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
