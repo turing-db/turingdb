@@ -18,6 +18,7 @@ endmacro()
 
 # subdirectories
 add_subdirectory(create_turingdb_object)
+add_subdirectory(json_error_msg)
 add_subdirectory(list_graphs)
 add_subdirectory(change_submit_alice)
 add_subdirectory(change_10)
