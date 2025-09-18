@@ -217,7 +217,8 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePatter
     return currentNode;
 }
 
-PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* currentNode, const EdgePattern* edge) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* currentNode,
+                                                              const EdgePattern* edge) {
     // Expand edge based on direction
 
     switch (edge->getDirection()) {
@@ -267,7 +268,8 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* cur
     return currentNode;
 }
 
-PlanGraphNode* PlanGraphGenerator::generatePatternElementTarget(PlanGraphNode* currentNode, const NodePattern* target) {
+PlanGraphNode* PlanGraphGenerator::generatePatternElementTarget(PlanGraphNode* currentNode,
+                                                                const NodePattern* target) {
     // Target nodes
     const NodePatternData* data = target->getData();
     const auto& labelset = data->labelConstraints();

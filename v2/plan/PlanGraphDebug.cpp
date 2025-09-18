@@ -90,7 +90,9 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
             case PlanGraphOpcode::GET_NODE_LABEL_SET:
             case PlanGraphOpcode::GET_PROPERTY:
             case PlanGraphOpcode::EVAL_EXPR:
+            case PlanGraphOpcode::GET_EDGES:
             case PlanGraphOpcode::GET_OUT_EDGES:
+            case PlanGraphOpcode::GET_IN_EDGES:
             case PlanGraphOpcode::GET_EDGE_TARGET:
             case PlanGraphOpcode::CREATE_NODE:
             case PlanGraphOpcode::CREATE_EDGE: {

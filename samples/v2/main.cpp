@@ -5,6 +5,7 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "Graph.h"
+#include "PlannerException.h"
 #include "TuringTime.h"
 #include "ParserException.h"
 #include "FileReader.h"
@@ -83,8 +84,16 @@ int main(int argc, char** argv) {
     }
 
     {
-        PlanGraphGenerator planGen(view, callback);
-        planGen.generate(ast.queries().front());
+        PlanGraphGenerator planGen(ast, view, callback);
+        try {
+            auto t0 = Clock::now();
+            planGen.generate(ast.queries().front());
+            auto t1 = Clock::now();
+            fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, t1));
+        } catch (const PlannerException& e) {
+            fmt::print("{}\n", e.what());
+            return EXIT_FAILURE;
+        }
         const PlanGraph& planGraph = planGen.getPlanGraph();
 
         PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
