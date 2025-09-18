@@ -100,6 +100,8 @@ private:
     void generateExprDependencies(const PathExpr* expr);
     void generateExprDependencies(const SymbolExpr* expr);
     void generateExprDependencies(const LiteralExpr* expr);
+
+    void throwError(std::string_view msg, const void* obj = 0) const;
 };
 
 }

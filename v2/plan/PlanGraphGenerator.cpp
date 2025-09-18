@@ -6,6 +6,7 @@
 #include <spdlog/fmt/bundled/core.h>
 
 #include "CypherAST.h"
+#include "CypherError.h"
 #include "FilterNode.h"
 #include "GetNodeLabelSetNode.h"
 #include "GetPropertyNode.h"
@@ -75,7 +76,7 @@ const LabelSet* PlanGraphGenerator::buildLabelSet(const Symbols& symbols) {
         const LabelID labelID = getLabel(symbol);
 
         if (!labelID.isValid()) {
-            throw PlannerException(fmt::format("Unsupported node label: {}", symbol->getName()));
+            throwError(fmt::format("Unsupported node label: {}", symbol->getName()), symbol);
         }
 
         labelSet->set(labelID);
@@ -128,8 +129,8 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             break;
 
         default:
-            throw PlannerException("Unsupported query command of type "
-                                   + std::to_string((unsigned)query->getKind()));
+            throwError("Unsupported query command of type "
+                       + std::to_string((unsigned)query->getKind()), query);
             break;
     }
 }
@@ -150,7 +151,7 @@ void PlanGraphGenerator::generateStmt(const Stmt* stmt) {
             break;
 
         default:
-            throw PlannerException(fmt::format("Unsupported statement type: {}", (unsigned)stmt->getKind()));
+            throwError(fmt::format("Unsupported statement type: {}", (unsigned)stmt->getKind()), stmt);
             break;
     }
 }
@@ -166,18 +167,18 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
 
     const WhereClause* where = pattern->getWhere();
     if (where) {
-        throw PlannerException("WHERE clause not supported yet");
+        throwError("WHERE clause not supported yet", where);
     }
 }
 
 void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
     if (element->size() == 0) {
-        throw PlannerException("Empty match pattern element");
+        throwError("Empty match pattern element", element);
     }
 
     const NodePattern* origin = dynamic_cast<const NodePattern*>(element->getRootEntity());
     if (!origin) {
-        throw PlannerException("Pattern element origin must be a node pattern");
+        throwError("Pattern element origin must be a node pattern", element);
     }
 
     generatePatternElementOrigin(origin);
@@ -186,14 +187,14 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
     for (const auto& [edge, node] : chain) {
         const EdgePattern* e = dynamic_cast<const EdgePattern*>(edge);
         if (!edge) {
-            throw PlannerException("Pattern element edge must be an edge pattern");
+            throwError("Pattern element edge must be an edge pattern", element);
         }
 
         generatePatternElementEdge(e);
 
         const NodePattern* n = dynamic_cast<const NodePattern*>(node);
         if (!node) {
-            throw PlannerException("Pattern element node must be a node pattern");
+            throwError("Pattern element node must be a node pattern", element);
         }
 
         generatePatternElementTarget(n);
@@ -251,7 +252,7 @@ void PlanGraphGenerator::generatePatternElementEdge(const EdgePattern* edge) {
     const VarDecl* decl = edge->getDecl();
 
     if (edgeTypes.size() > 1) {
-        throw PlannerException("Only one edge type constraint is supported for now");
+        throwError("Only one edge type constraint is supported for now", edge);
     }
 
     for (const EdgeTypeID edgeTypeID : edgeTypes) {
@@ -329,7 +330,6 @@ void PlanGraphGenerator::generateVarNode(const VarDecl* varDecl) {
 }
 
 void PlanGraphGenerator::generateExprDependencies(const Expr* expr) {
-    fmt::print("Generating dependencies\n");
     switch (expr->getKind()) {
         case Expr::Kind::BINARY: {
             generateExprDependencies(static_cast<const BinaryExpr*>(expr));
@@ -375,12 +375,12 @@ void PlanGraphGenerator::generateExprDependencies(const StringExpr* expr) {
 void PlanGraphGenerator::generateExprDependencies(const NodeLabelExpr* expr) {
     const VarDecl* varDecl = expr->getDecl();
     if (!varDecl) {
-        throw PlannerException("Node label expression is missing its variable declaration");
+        throwError("Node label expression is missing its variable declaration", expr);
     }
 
     PlanGraphNode* varNode = getVarNode(varDecl);
     if (!varNode) {
-        throw PlannerException("Node label expression refers to an undefined variable");
+        throwError("Node label expression refers to an undefined variable", expr);
     }
 
     auto* getNodeLabelNode = _tree.create<GetNodeLabelSetNode>();
@@ -391,12 +391,12 @@ void PlanGraphGenerator::generateExprDependencies(const NodeLabelExpr* expr) {
 void PlanGraphGenerator::generateExprDependencies(const PropertyExpr* expr) {
     const VarDecl* varDecl = expr->getDecl();
     if (!varDecl) {
-        throw PlannerException("Property expression is missing its variable declaration");
+        throwError("Property expression is missing its variable declaration", expr);
     }
 
     PlanGraphNode* varNode = getVarNode(varDecl);
     if (!varNode) {
-        throw PlannerException("Property expression refers to an undefined variable");
+        throwError("Property expression refers to an undefined variable", expr);
     }
 
     auto* getPropertyNode = _tree.create<GetPropertyNode>();
@@ -405,13 +405,30 @@ void PlanGraphGenerator::generateExprDependencies(const PropertyExpr* expr) {
 }
 
 void PlanGraphGenerator::generateExprDependencies(const PathExpr* expr) {
-    throw PlannerException("Path expressions are not supported yet");
+    throwError("Path expressions are not supported yet", expr);
 }
 
 void PlanGraphGenerator::generateExprDependencies(const SymbolExpr* expr) {
-    throw PlannerException("Symbol expressions are not supported yet");
+    throwError("Symbol expressions are not supported yet", expr);
 }
 
 void PlanGraphGenerator::generateExprDependencies(const LiteralExpr* expr) {
     // No dependencies
+}
+
+void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
+    const SourceLocation* location = _ast->getLocation(obj);
+    std::string errorMsg;
+
+    CypherError err {_ast->getQueryString()};
+    err.setTitle("Query plan error");
+    err.setErrorMsg(msg);
+
+    if (location) {
+        err.setLocation(*location);
+    }
+
+    err.generate(errorMsg);
+
+    throw PlannerException(std::move(errorMsg));
 }

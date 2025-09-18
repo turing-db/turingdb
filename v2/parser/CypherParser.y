@@ -505,17 +505,17 @@ createSt
     ;
 
 patternWhere
-    : pattern { $$ = $1; }
-    | pattern where { $1->setWhere($2); $$ = $1; }
+    : pattern { $$ = $1; LOC($$, @$); }
+    | pattern where { $1->setWhere($2); $$ = $1; LOC($$, @$); }
     ;
 
 where
-    : WHERE Expr { $$ = WhereClause::create(ast, $2); }
+    : WHERE Expr { $$ = WhereClause::create(ast, $2); LOC($$, @$); }
     ;
 
 pattern
     : patternPart { $$ = Pattern::create(ast); $$->addElement($1); LOC($$, @$); }
-    | pattern COMMA patternPart { $$ = $1, $$->addElement($3); }
+    | pattern COMMA patternPart { $$ = $1, $$->addElement($3); LOC($$, @$); }
     ;
 
 Expr

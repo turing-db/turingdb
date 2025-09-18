@@ -113,7 +113,7 @@ public:
 
 private:
     std::string_view _queryStr;
-    bool _debugLocations {false};
+    bool _debugLocations {true};
     std::vector<Symbol*> _symbols;
     std::vector<QualifiedName*> _qualifiedNames;
     std::vector<Literal*> _literals;

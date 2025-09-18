@@ -69,7 +69,7 @@ void runPlan2(std::string_view query) {
         parser.parse(query);
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
     } catch (const ParserException& e) {
-        std::cerr << "Syntax error: " << e.what() << std::endl;
+        std::cerr << "Syntax error:\n" << e.what() << std::endl;
         return;
     }
 
@@ -77,7 +77,7 @@ void runPlan2(std::string_view query) {
     try {
         analyzer.analyze();
     } catch (const AnalyzeException& e) {
-        std::cerr << "Analyze error: " << e.what() << std::endl;
+        std::cerr << "Analyze error:\n" << e.what() << std::endl;
         return;
     }
 
@@ -85,7 +85,7 @@ void runPlan2(std::string_view query) {
     try {
         planGen.generate(ast.queries().front());
     } catch (const PlannerException& e) {
-        std::cerr << "Plan error: " << e.what() << std::endl;
+        std::cerr << "Plan error:\n" << e.what() << std::endl;
         return;
     }
 
