@@ -384,7 +384,7 @@ bool Neo4jImporter::fromDumpFileToJsonDir(JobSystem& jobSystem,
                                           std::size_t nodeCountPerQuery,
                                           std::size_t edgeCountPerQuery,
                                           const DumpFileToJsonDirArgs& args) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    std::unique_lock<std::mutex> lock(_mutex);
 
     Neo4jInstance instance(args._workDir);
     if (Neo4jInstance::isRunning()) {
