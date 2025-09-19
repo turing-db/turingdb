@@ -5,6 +5,7 @@
 #include <memory>
 #include "spdlog/spdlog.h"
 
+#include "DumpUtils.h"
 #include "AlignedBuffer.h"
 #include "DumpConfig.h"
 #include "DumpResult.h"
@@ -26,7 +27,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 
     // 3. Write each index
     for (const auto& [propId, idx] : idxer) {
-        ensureSpace(sizeof(uint16_t), _writer);
+        DumpUtils::ensureSpace(sizeof(uint16_t), _writer);
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpIndex(idx);
     }
@@ -42,7 +43,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 }
 
 DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringIndex>& idx) {
-    ensureSpace(sizeof(size_t), _writer);
+    DumpUtils::ensureSpace(sizeof(size_t), _writer);
     const size_t size = idx->getNodeCount();
 
     // 1.  Number of nodes in this index prefix tree
@@ -59,7 +60,7 @@ DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringInde
 }
 
 DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
-    ensureSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
+    DumpUtils::ensureSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
     // 1. Write internal node data
     { // Space written in this block is accounted for by above call to @ref ensureSpace
         const auto& children = node->getChildren();
@@ -88,21 +89,19 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
 }
 
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
-    ensureSpace(owners.size() * sizeof(uint64_t), _auxWriter);
-    for (size_t i = 0; i < owners.size(); i++) {
-        const uint64_t id = owners[i].getValue();
-        _auxWriter.writeToCurrentPage(id);
-    }
+    // DumpUtils::ensureSpace(owners.size() * sizeof(uint64_t), _auxWriter);
+    // for (size_t i = 0; i < owners.size(); i++) {
+    //     const uint64_t id = owners[i].getValue();
+    //     _auxWriter.writeToCurrentPage(id);
+    // }
+
+    std::vector<uint64_t> ids;
+    ids.reserve(owners.size());
+    std::transform(owners.begin(), owners.end(), std::back_inserter(ids),
+                   [](EntityID id) { return id.getValue(); });
+
+
+    DumpUtils::dumpVector(ids, _auxWriter);
     return {};
 }
 
-void StringIndexerDumper::ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr) {
-    if (requiredSpace > DumpConfig::PAGE_SIZE) {
-        spdlog::error("Attempting to write {} bytes which exceedes page size of {}",
-                     requiredSpace, DumpConfig::PAGE_SIZE);
-        throw TuringException("Illegal write.");
-    }
-    if (wr.buffer().avail() < requiredSpace) {
-        wr.nextPage();
-    }
-}

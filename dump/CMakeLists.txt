@@ -4,6 +4,7 @@ set(dump_sources GraphLoader.cpp
                  CommitDumper.cpp
                  DataPartDumper.cpp
                  DumpResult.cpp
+                 DumpUtils.cpp
                  StringIndexerDumper.cpp
                  StringIndexerLoader.cpp)
 
