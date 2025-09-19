@@ -4,7 +4,8 @@ set(plan_sources
     PlanGraphVariables.cpp
     PlanGraph.cpp
     PlanGraphDebug.cpp
-    PipelineGenerator.cpp)
+    PipelineGenerator.cpp
+    WherePredicate.cpp)
 
 add_library(turing_db_v2_plan_s STATIC ${plan_sources})
 

@@ -4,6 +4,7 @@
 #include "ID.h"
 #include "expr/Operators.h"
 #include "metadata/LabelSet.h"
+#include "WherePredicate.h"
 
 namespace db::v2 {
 
@@ -26,12 +27,21 @@ public:
         _propConstraints.emplace_back(type, expr, op);
     }
 
+    void addWherePredicate(WherePredicate&& expr) {
+        _wherePredicates.push_back(std::move(expr));
+    }
+
     const std::vector<PropertyConstraint>& getPropertyConstraints() const {
         return _propConstraints;
     }
 
+    const std::vector<WherePredicate>& getWherePredicates() const {
+        return _wherePredicates;
+    }
+
 private:
     std::vector<PropertyConstraint> _propConstraints;
+    std::vector<WherePredicate> _wherePredicates;
 };
 
 class FilterNodeNode : public FilterNode {

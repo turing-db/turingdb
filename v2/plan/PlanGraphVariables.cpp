@@ -44,7 +44,7 @@ std::tuple<VarNode*, FilterNode*> PlanGraphVariables::getOrCreateVarNodeAndFilte
     if (!varNode) {
 
         // Create varNode/filterNode pair
-        varNode = _tree->create<VarNode>(varDecl);
+        varNode = _tree->create<VarNode>(varDecl, _nextDeclOrder++);
         FilterNode* filterNode = nullptr;
 
         if (varDecl->getType() == EvaluatedType::NodePattern) {

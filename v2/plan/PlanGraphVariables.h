@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <unordered_map>
 
 namespace db::v2 {
@@ -20,6 +21,10 @@ public:
     PlanGraphVariables& operator=(const PlanGraphVariables&) = delete;
     PlanGraphVariables& operator=(PlanGraphVariables&&) = delete;
 
+    void resetDeclOrder() {
+        _nextDeclOrder = 0;
+    }
+
     VarNode* getVarNode(const VarDecl* varDecl) const;
     FilterNode* getNodeFilter(const VarNode* varNode) const;
 
@@ -27,6 +32,8 @@ public:
 
 private:
     PlanGraph* _tree {nullptr};
+
+    uint32_t _nextDeclOrder {0};
 
     // Map of variable nodes
     std::unordered_map<const VarDecl*, VarNode*> _varNodesMap;

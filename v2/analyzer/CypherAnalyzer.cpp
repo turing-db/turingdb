@@ -510,6 +510,7 @@ void CypherAnalyzer::analyze(PropertyExpr* expr) {
     }
 
     expr->setDecl(varDecl);
+    expr->setPropertyType(propType.value()._id);
     expr->setType(type);
 }
 

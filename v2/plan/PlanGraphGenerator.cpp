@@ -4,7 +4,10 @@
 
 #include "CypherAST.h"
 #include "CypherError.h"
+#include "WherePredicate.h"
 #include "QualifiedName.h"
+#include "WhereClause.h"
+#include "decl/VarDecl.h"
 #include "views/GraphView.h"
 
 #include "nodes/FilterNode.h"
@@ -46,8 +49,8 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view,
                                        const QueryCallback& callback)
     : _view(view),
-    _ast(&ast),
-    _variables(_tree)
+      _ast(&ast),
+      _variables(_tree)
 {
 }
 
@@ -144,8 +147,14 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
 
     const WhereClause* where = pattern->getWhere();
     if (where) {
-        throwError("WHERE clause not supported yet", where);
+        generateWhereClause(where);
     }
+}
+
+void PlanGraphGenerator::generateWhereClause(const WhereClause* where) {
+    const Expr* expr = where->getExpr();
+
+    unwrapWhereExpr(expr);
 }
 
 void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
@@ -157,6 +166,9 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
     if (!origin) {
         throwError("Pattern element origin must be a node pattern", element);
     }
+
+    // Reset the decl order of variables (each branch starts at 0)
+    _variables.resetDeclOrder();
 
     PlanGraphNode* currentNode = generatePatternElementOrigin(origin);
 
@@ -281,6 +293,84 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementTarget(PlanGraphNode* c
     return currentNode;
 }
 
+void PlanGraphGenerator::unwrapWhereExpr(const Expr* expr) {
+    if (expr->getKind() == Expr::Kind::NODE_LABEL) {
+        // Node label expression can be pushed down to the var node
+        //
+        // WARNING
+        // NODE_LABEL is missleading
+        // It can also refer to an edge type such as: e:KNOWS
+
+        const NodeLabelExpr* entityTypeExpr = static_cast<const NodeLabelExpr*>(expr);
+        const VarDecl* decl = entityTypeExpr->getDecl();
+        const VarNode* varNode = _variables.getVarNode(decl);
+        FilterNode* filter = _variables.getNodeFilter(varNode);
+
+        if (decl->getType() == EvaluatedType::NodePattern) {
+            FilterNodeNode* nodeFilter = static_cast<FilterNodeNode*>(filter);
+            nodeFilter->addLabelConstraints(entityTypeExpr->labelSet());
+
+        } else if (decl->getType() == EvaluatedType::EdgePattern) {
+            FilterEdgeNode* edgeFilter = static_cast<FilterEdgeNode*>(filter);
+
+            if (entityTypeExpr->labels().size() != 1) {
+                throwError("Only one edge type constraint is supported for now", expr);
+            }
+
+            // TODO: Fix, this is ugly, we make the NodeLabel expression Node/Edge agnostic
+            // Right now we have to interprete "Label ids" as edge types
+            std::vector<LabelID> edgeTypes;
+            entityTypeExpr->labelSet().decompose(edgeTypes);
+            for (const auto& edgeType : edgeTypes) {
+                edgeFilter->addEdgeTypeConstraint(edgeType);
+            }
+        }
+
+        return;
+    }
+
+    if (expr->getKind() == Expr::Kind::BINARY) {
+        const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
+
+        if (binaryExpr->getOperator() == BinaryOperator::And) {
+            // If AND operator, we can unwrap to push down predicates to var nodes
+            unwrapWhereExpr(binaryExpr->getLHS());
+            unwrapWhereExpr(binaryExpr->getRHS());
+            return;
+        }
+
+        // --> Fallthrough
+        //
+        // If any other binary operator, we treat it as a whole predicate on
+        // which we need to generate dependencies
+    }
+
+    // Unwraped the first list of AND expressions,
+    // Treating other cases as a whole Where predicate
+    WherePredicate predicate {expr};
+    predicate.generate();
+
+    uint32_t _lastDeclOrder = 0;
+    const VarNode* _lastDependency = nullptr;
+
+    for (const auto& dep : predicate.getDependencies()) {
+        const VarDecl* decl = dep._decl;
+        const VarNode* var = _variables.getVarNode(decl);
+
+        if (_lastDeclOrder <= var->getDeclOdrer()) {
+            _lastDeclOrder = var->getDeclOdrer();
+            _lastDependency = var;
+        }
+    }
+
+    if (!_lastDependency) {
+        throwError("Where clauses without dependencies are not supported yet", expr);
+    }
+
+    FilterNode* filterNode = _variables.getNodeFilter(_lastDependency);
+    filterNode->addWherePredicate(std::move(predicate));
+}
+
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
     const SourceLocation* location = _ast->getLocation(obj);
     std::string errorMsg;
@@ -297,3 +387,4 @@ void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const
 
     throw PlannerException(std::move(errorMsg));
 }
+

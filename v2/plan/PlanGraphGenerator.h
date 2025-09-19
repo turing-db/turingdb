@@ -41,6 +41,8 @@ class SymbolExpr;
 class LiteralExpr;
 class FilterNode;
 class VarNode;
+class WhereClause;
+class WherePredicate;
 
 using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
 
@@ -82,10 +84,14 @@ private:
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
+    void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
+
     PlanGraphNode* generatePatternElementOrigin(const NodePattern* origin);
     PlanGraphNode* generatePatternElementEdge(PlanGraphNode* currentNode, const EdgePattern* edge);
     PlanGraphNode* generatePatternElementTarget(PlanGraphNode* currentNode, const NodePattern* target);
+
+    void unwrapWhereExpr(const Expr*);
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };

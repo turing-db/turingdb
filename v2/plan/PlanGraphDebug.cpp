@@ -67,6 +67,23 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
                     output << "        prop " << name.value() << "\n";
                 }
+
+                for (const auto& pred : n->getWherePredicates()) {
+                    output << "        predicate _" << fmt::ptr(&pred) << "\n";
+
+                    for (const auto& dep : pred.getDependencies()) {
+                        output << "        pred_dep _" << dep._decl->getName();
+                        if (std::holds_alternative<PredicateDependencies::LabelDependency>(dep._dep)) {
+                            output << " labels\n";
+                        } else if (const auto* p = std::get_if<PredicateDependencies::PropertyDependency>(&dep._dep)) {
+                            std::optional name = propTypeMap.getName(p->_propTypeID);
+                            if (!name) {
+                                name = std::to_string(p->_propTypeID);
+                            }
+                            output << "_" << name.value() << "\n";
+                        }
+                    }
+                }
             } break;
 
             case PlanGraphOpcode::FILTER_EDGE: {
