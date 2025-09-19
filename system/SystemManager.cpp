@@ -297,7 +297,11 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
         return false;
     }
 
-    auto graph = Graph::create(graphName, _config.getGraphsDir() / graphName);
+    const auto& graphPath = _config.getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
+        return false;
+    }
+    auto graph = Graph::create(graphName, graphPath);
 
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
@@ -311,7 +315,16 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
         return false;
     }
 
-    addGraph(std::move(graph), graphName);
+    if (!graph->getDumpAndLoadManager()->dumpGraph()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    if (!addGraph(std::move(graph), graphName)) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
     _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
 }
@@ -323,7 +336,12 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
         return false;
     }
 
-    auto graph = Graph::create();
+    const auto& graphPath = _config.getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
+        return false;
+    }
+
+    auto graph = Graph::create(graphName, graphPath);
 
     Neo4jImporter::DumpFileToJsonDirArgs dumpArgs;
     dumpArgs._workDir = "/tmp";
@@ -371,8 +389,13 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
         return false;
     }
 
+    const auto& graphPath = _config.getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
+        return false;
+    }
+
     // Load graph
-    auto graph = Graph::create(graphName, _config.getGraphsDir() / graphName);
+    auto graph = Graph::create(graphName, graphPath);
 
     // load GMLs
     GMLImporter importer;

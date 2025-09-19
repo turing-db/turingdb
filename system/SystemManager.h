@@ -62,7 +62,7 @@ public:
 
     bool loadGraph(const std::string& graphFileName, JobSystem& jobSystem);
 
-    bool loadGraph(fs::Path graphPath, const std::string& graphName,
+    bool loadGraph(const fs::Path& graphPath, const std::string& graphName,
                    JobSystem& jobSystem);
 
     bool isGraphLoading(const std::string& graphName) const;
