@@ -487,5 +487,4 @@ void parseS3Url(std::string_view s3URL, std::string_view& bucket, std::string_vi
 
 void QueryAnalyzer::analyzeS3Transfer(S3TransferCommand* cmd) {
     parseS3Url(cmd->getS3URL(), cmd->getBucket(), cmd->getPrefix(), cmd->getFile());
-    // For now we let user write/read to/from anywhere on the system
 }
