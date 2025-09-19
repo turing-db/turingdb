@@ -35,8 +35,6 @@
 #include "operations/GetFilteredPropertyStep.h"
 #include "operations/HistoryStep.h"
 #include "operations/ChangeStep.h"
-#include "operations/CreateNodeStep.h"
-#include "operations/CreateEdgeStep.h"
 #include "operations/CommitStep.h"
 #include "operations/CallPropertyStep.h"
 #include "operations/S3ConnectStep.h"
@@ -139,11 +137,6 @@ public:
                  const GraphView& view, PropertyTypeID propID,
                  const std::string& strQuery);
 
-    PipelineStep(CreateNodeStep::Tag, const EntityPattern*);
-    PipelineStep(CreateEdgeStep::Tag,
-                 const EntityPattern*,
-                 const EntityPattern*,
-                 const EntityPattern*);
     PipelineStep(WriteStep::Tag, const CreateTargets* targets);
     PipelineStep(CommitStep::Tag);
     PipelineStep(CallPropertyStep::Tag,
@@ -253,8 +246,6 @@ private:
                  GetFilteredEdgePropertyBoolStep,
                  HistoryStep,
                  ChangeStep,
-                 CreateNodeStep,
-                 CreateEdgeStep,
                  WriteStep,
                  CommitStep,
                  CallPropertyStep,

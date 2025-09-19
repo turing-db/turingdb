@@ -83,8 +83,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_BOOL] = ACTIVATE_PTR(GetFilteredEdgePropertyBoolStep);
         _activateTbl[(uint64_t)PipelineOpcode::HISTORY] = ACTIVATE_PTR(HistoryStep);
         _activateTbl[(uint64_t)PipelineOpcode::CHANGE] = ACTIVATE_PTR(ChangeStep);
-        _activateTbl[(uint64_t)PipelineOpcode::CREATE_NODE] = ACTIVATE_PTR(CreateNodeStep);
-        _activateTbl[(uint64_t)PipelineOpcode::CREATE_EDGE] = ACTIVATE_PTR(CreateEdgeStep);
         _activateTbl[(uint64_t)PipelineOpcode::WRITE] = ACTIVATE_PTR(WriteStep);
         _activateTbl[(uint64_t)PipelineOpcode::COMMIT] = ACTIVATE_PTR(CommitStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = ACTIVATE_PTR(CallPropertyStep);
@@ -148,8 +146,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::GET_FILTERED_EDGE_PROPERTY_BOOL] = RETURN_PTR(GetFilteredEdgePropertyBoolStep);
         _returnTbl[(uint64_t)PipelineOpcode::HISTORY] = RETURN_PTR(HistoryStep);
         _returnTbl[(uint64_t)PipelineOpcode::CHANGE] = RETURN_PTR(ChangeStep);
-        _returnTbl[(uint64_t)PipelineOpcode::CREATE_NODE] = RETURN_PTR(CreateNodeStep);
-        _returnTbl[(uint64_t)PipelineOpcode::CREATE_EDGE] = RETURN_PTR(CreateEdgeStep);
         _returnTbl[(uint64_t)PipelineOpcode::WRITE] = RETURN_PTR(WriteStep);
         _returnTbl[(uint64_t)PipelineOpcode::COMMIT] = RETURN_PTR(CommitStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = RETURN_PTR(CallPropertyStep);
@@ -253,8 +249,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(GetFilteredEdgePropertyBoolStep)
     ACTIVATE_STEP(HistoryStep)
     ACTIVATE_STEP(ChangeStep)
-    ACTIVATE_STEP(CreateNodeStep)
-    ACTIVATE_STEP(CreateEdgeStep)
     ACTIVATE_STEP(WriteStep)
     ACTIVATE_STEP(CommitStep)
     ACTIVATE_STEP(CallPropertyStep)
@@ -317,8 +311,6 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(GetFilteredEdgePropertyBoolStep)
     RETURN_STEP(HistoryStep)
     RETURN_STEP(ChangeStep)
-    RETURN_STEP(CreateNodeStep)
-    RETURN_STEP(CreateEdgeStep)
     RETURN_STEP(WriteStep)
     RETURN_STEP(CommitStep)
     RETURN_STEP(CallPropertyStep)
