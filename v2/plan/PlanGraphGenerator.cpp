@@ -17,6 +17,7 @@
 #include "nodes/GetOutEdgesNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
+#include "nodes/ProjectResultsNode.h"
 
 #include "expr/PropertyExpr.h"
 #include "expr/BinaryExpr.h"
@@ -50,7 +51,7 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const QueryCallback& callback)
     : _view(view),
       _ast(&ast),
-      _variables(_tree)
+     _variables(_tree)
 {
 }
 
@@ -121,7 +122,17 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         generateStmt(stmt);
     }
 
-    // TODO: Return statement
+    const StmtContainer* updateStmts = query->getUpdateStmts();
+    if (updateStmts) {
+        throwError("Update statements are not supported yet", query);
+    }
+
+    const ReturnStmt* returnStmt = query->getReturnStmt();
+    if (!returnStmt) {
+        throwError("Return statement is missing", query);
+    }
+
+    generateReturnStmt(returnStmt);
 }
 
 void PlanGraphGenerator::generateStmt(const Stmt* stmt) {
@@ -148,6 +159,14 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
     const WhereClause* where = pattern->getWhere();
     if (where) {
         generateWhereClause(where);
+    }
+}
+
+void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
+    auto* projectResults = static_cast<PlanGraphNode*>(_tree.create<ProjectResultsNode>());
+
+    for (const auto& end : _endPoints) {
+        end->connectOut(projectResults);
     }
 }
 
@@ -188,6 +207,8 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
 
         currentNode = generatePatternElementTarget(currentNode, n);
     }
+
+    _endPoints.push_back(currentNode);
 }
 
 PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* origin) {

@@ -104,17 +104,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                 }
             } break;
 
-            case PlanGraphOpcode::UNKNOWN:
-            case PlanGraphOpcode::GET_EDGES:
-            case PlanGraphOpcode::GET_OUT_EDGES:
-            case PlanGraphOpcode::GET_IN_EDGES:
-            case PlanGraphOpcode::GET_EDGE_TARGET:
-            case PlanGraphOpcode::CREATE_NODE:
-            case PlanGraphOpcode::CREATE_EDGE: {
-            } break;
-
-            case PlanGraphOpcode::_SIZE: {
-                throw PlannerException("Fatal error: unknown opcode");
+            default: {
             } break;
         }
 

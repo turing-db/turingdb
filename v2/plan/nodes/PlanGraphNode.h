@@ -19,6 +19,7 @@ enum class PlanGraphOpcode {
     CREATE_NODE,
     CREATE_EDGE,
     CREATE_GRAPH,
+    PROJECT_RESULTS,
     _SIZE
 };
 
@@ -34,7 +35,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::GET_EDGE_TARGET, "GET_EDGE_TARGET">,
     EnumStringPair<PlanGraphOpcode::CREATE_NODE, "CREATE_NODE">,
     EnumStringPair<PlanGraphOpcode::CREATE_EDGE, "CREATE_EDGE">,
-    EnumStringPair<PlanGraphOpcode::CREATE_GRAPH, "CREATE_GRAPH">>;
+    EnumStringPair<PlanGraphOpcode::CREATE_GRAPH, "CREATE_GRAPH">,
+    EnumStringPair<PlanGraphOpcode::PROJECT_RESULTS, "PROJECT_RESULTS">>;
 
 
 class PlanGraphNode {

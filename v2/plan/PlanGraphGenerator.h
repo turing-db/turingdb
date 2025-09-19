@@ -25,6 +25,7 @@ class SinglePartQuery;
 class Stmt;
 class Symbol;
 class MatchStmt;
+class ReturnStmt;
 class PatternElement;
 class EntityPattern;
 class NodePattern;
@@ -73,9 +74,7 @@ private:
     std::vector<std::unique_ptr<LabelSet>> _labelSets;
 
     PlanGraphVariables _variables;
-
-    // Map of expr dependencies
-    std::unordered_multimap<const Expr*, PlanGraphNode*> _exprDependenciesMap;
+    std::vector<PlanGraphNode*> _endPoints;
 
     const LabelSet* getOrCreateLabelSet(const Symbols& symbols);
     const LabelSet* buildLabelSet(const Symbols& symbols);
@@ -84,6 +83,7 @@ private:
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
+    void generateReturnStmt(const ReturnStmt* stmt);
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
 
