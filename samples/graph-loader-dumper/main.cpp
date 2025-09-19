@@ -100,7 +100,8 @@ int main() {
         const std::string turingHome = std::getenv("TURING_HOME");
         const fs::Path jsonDir = fs::Path {turingHome} / "neo4j" / "pole-db";
 
-        if (!Neo4jImporter::importJsonDir(*jobSystem,
+        Neo4jImporter neo4jImporter;
+        if (!neo4jImporter.importJsonDir(*jobSystem,
                                          graph.get(),
                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
                                          db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
