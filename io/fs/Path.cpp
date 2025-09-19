@@ -181,7 +181,7 @@ bool Path::isSubDirectory(const Path& rootDirectory, const Path& subDirectory) {
     const auto normalizedSub = std::filesystem::absolute(subDirectory.c_str()).lexically_normal();
 
     // Check if the full path is within the base directory
-    auto relative = normalizedSub.lexically_relative(normalizedRoot);
+    const auto relative = normalizedSub.lexically_relative(normalizedRoot);
 
     // Safe if:
     // 1. Relative path is not empty
