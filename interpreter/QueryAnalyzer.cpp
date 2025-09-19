@@ -53,6 +53,10 @@ const T* enforceType(const Expr* exp) {
 }
 
 void parseS3Url(std::string_view s3URL, std::string_view& bucket, std::string_view& prefix, std::string_view& fileName) {
+    if(s3URL.length() < 5) {
+        throw AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
+    }
+
     if (s3URL.substr(0, 5) != "s3://") {
         throw AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
     }

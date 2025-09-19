@@ -3,6 +3,7 @@
 #include "PipelineException.h"
 #include "S3TransferDirectories.h"
 #include "TuringConfig.h"
+
 namespace db {
 
 class S3TransferStepFunctions {
@@ -10,7 +11,6 @@ public:
     static std::string getFullLocalPath(const S3TransferDirectory transferDirectory,
                                         const TuringConfig& config,
                                         const std::string& localPath) {
-
         if (transferDirectory == S3TransferDirectory::DATA) {
             const auto& root = config.getDataDir();
             const auto& fullPath = root / localPath;
@@ -29,9 +29,9 @@ public:
                                                     (fullPath).c_str()));
             }
             return fullPath.c_str();
+        } else {
+            throw PipelineException(fmt::format("Invalid S3 Transfer Directory"));
         }
-
-        throw PipelineException(fmt::format("Invalid S3 Transfer Directory"));
     }
 };
 
