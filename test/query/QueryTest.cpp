@@ -624,6 +624,78 @@ TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
         .execute();
 }
 
+TEST_F(QueryTest, threeCreateTargets) {
+    QueryTester tester {_mem, *_interp, "default"};
+
+    const auto newChange = [&]() {
+        auto res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    const ChangeID change1 = newChange();
+
+    tester.setChangeID(change1);
+
+    tester.query("create (n:FSTNODE), (m:SNDNODE), (n)-[e:NEWEDGE]-(m)")
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1})
+        .execute();
+
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({0})
+        .expectVector<EdgeID>({0})
+        .expectVector<NodeID>({1})
+        .execute();
+}
+
+TEST_F(QueryTest, manyCreateTargets) {
+    QueryTester tester {_mem, *_interp, "default"};
+
+    const auto newChange = [&]() {
+        auto res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    const ChangeID change1 = newChange();
+
+    tester.setChangeID(change1);
+
+    tester.query("create (n:FSTNODE), (m:SNDNODE), (s:NEWSRC)-[f:NEWEDGE]-(t:NEWTGT), (o:IRRELEVANTNODE), (p:IRRELEVEANTNODE), (n)-[e:NEWEDGE]-(m)")
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1,2,3,4,5})
+        .execute();
+
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({0, 2})
+        .expectVector<EdgeID>({0, 1})
+        .expectVector<NodeID>({1, 3})
+        .execute();
+}
+
 TEST_F(QueryTest, edgeSpanningCommits) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
