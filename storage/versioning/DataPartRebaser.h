@@ -14,12 +14,14 @@ public:
     DataPartRebaser() = default;
     ~DataPartRebaser() = default;
 
-    DataPartRebaser(NodeID baseNxtNodeID, EdgeID baseNxtEdgeID, NodeID tgtNxtNodeID,
+    DataPartRebaser(NodeID baseNxtNodeID,
+                    EdgeID baseNxtEdgeID,
+                    NodeID tgtNxtNodeID,
                     EdgeID tgtNxtEdgeID)
         : _baseCommitNextNodeID(baseNxtNodeID),
-          _baseCommitNextEdgeID(baseNxtEdgeID),
-          _targetCommitNextNodeID(tgtNxtNodeID),
-          _targetCommitNextEdgeID(tgtNxtEdgeID)
+        _baseCommitNextEdgeID(baseNxtEdgeID),
+        _targetCommitNextNodeID(tgtNxtNodeID),
+        _targetCommitNextEdgeID(tgtNxtEdgeID)
     {
     }
 
