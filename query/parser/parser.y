@@ -19,6 +19,7 @@
 
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
+#include "S3TransferDirectories.h"
 
 namespace db {
 class YScanner;
@@ -101,6 +102,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token CREATE       "'CREATE'"
 %token LIST         "'LIST'"
 %token GRAPH        "'GRAPH'"
+%token DATA         "'DATA'"
 %token LOAD         "'LOAD'"
 %token EXPLAIN      "'EXPLAIN'"
 %token HISTORY      "'HISTORY'"
@@ -193,6 +195,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> s3connect_cmd
 %type<db::QueryCommand*> s3transfer_cmd
+%type<db::S3TransferDirectory> s3transfer_directory
 
 %start query_unit
 
@@ -591,11 +594,15 @@ commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
 s3connect_cmd : S3_CONNECT STRING_CONSTANT STRING_CONSTANT STRING_CONSTANT{ $$ = S3ConnectCommand::create(ctxt,$2,$3,$4); }
           ;
 
-//                       <LOCAL_DIR>     <S3URL>
-s3transfer_cmd : S3_PUSH STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PUSH,$3,$2); }
-//                       <S3URL>         <LOCAL_DIR>
-               | S3_PULL STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PULL,$2,$3); }
+//                                            <LOCAL_DIR>     <S3URL>
+s3transfer_cmd : S3_PUSH s3transfer_directory STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Direction::PUSH,$2,$4,$3); }
+//                                            <S3URL>         <LOCAL_DIR>
+               | S3_PULL s3transfer_directory STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Direction::PULL,$2,$3,$4); }
           ;
+
+s3transfer_directory : GRAPH { $$ = S3TransferDirectory::GRAPH; }
+                     | DATA  { $$ = S3TransferDirectory::DATA;  }
+
 
 %%
 

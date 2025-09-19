@@ -4,6 +4,7 @@
 
 #include "AwsS3ClientWrapper.h"
 #include "TuringS3Client.h"
+#include "S3TransferDirectories.h"
 
 namespace db {
 
@@ -14,7 +15,7 @@ class S3PullStep {
 public:
     struct Tag {};
 
-    S3PullStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath);
+    S3PullStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath, S3TransferDirectory dir);
     ~S3PullStep();
 
     void prepare(ExecutionContext* ctxt);
@@ -32,7 +33,9 @@ private:
     std::string_view _s3Prefix;
     std::string_view _s3File;
 
+    S3TransferDirectory _transferDirectory;
     const std::string& _localPath;
+    std::string _fullPath;
 
     SystemManager* _sysMan {nullptr};
 

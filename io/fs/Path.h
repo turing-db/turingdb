@@ -32,6 +32,8 @@ public:
     [[nodiscard]] std::string_view basename() const;
     [[nodiscard]] std::string_view extension() const;
 
+    static bool isSubDirectory(const Path& rootDirectory, const Path& subDirectory);
+
     [[nodiscard]] Path operator/(std::string_view rhs) const {
         std::string p = _path + "/";
         p += rhs;

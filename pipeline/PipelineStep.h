@@ -163,12 +163,14 @@ public:
                  std::string_view s3Bucket,
                  std::string_view s3Prefix,
                  std::string_view s3File,
-                 const std::string& localPath);
+                 const std::string& localPath,
+                 S3TransferDirectory transferDir);
     PipelineStep(S3PullStep::Tag,
                  std::string_view s3Bucket,
                  std::string_view s3Prefix,
                  std::string_view s3File,
-                 const std::string& localPath);
+                 const std::string& localPath,
+                 S3TransferDirectory transferDir);
 
 
     PROPERTY_STEPS(Int64)
