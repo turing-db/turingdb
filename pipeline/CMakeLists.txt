@@ -19,8 +19,6 @@ set(pipeline_sources
         operations/LambdaStep.cpp
         operations/HistoryStep.cpp
         operations/ChangeStep.cpp
-        operations/CreateNodeStep.cpp
-        operations/CreateEdgeStep.cpp
         operations/CommitStep.cpp
         operations/CallPropertyStep.cpp
         operations/CallLabelStep.cpp

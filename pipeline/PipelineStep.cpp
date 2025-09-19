@@ -258,12 +258,6 @@ PipelineStep::PipelineStep(LookupEdgeIndexStep::Tag, ColumnSet<EdgeID>* outSet,
 {
 }
 
-PipelineStep::PipelineStep(CreateNodeStep::Tag, const EntityPattern* data)
-    : _opcode(PipelineOpcode::CREATE_NODE),
-    _impl(std::in_place_type<CreateNodeStep>, data)
-{
-}
-
 PipelineStep::PipelineStep(S3ConnectStep::Tag,
                            const std::string& accessId,
                            const std::string& secretKey,
@@ -291,15 +285,6 @@ PipelineStep::PipelineStep(S3PullStep::Tag,
                            S3TransferDirectory transferDir)
     :_opcode(PipelineOpcode::S3PULL),
     _impl(std::in_place_type<S3PullStep>, s3Bucket, s3Prefix, s3File, localPath, transferDir)
-{
-}
-
-PipelineStep::PipelineStep(CreateEdgeStep::Tag,
-                           const EntityPattern* src,
-                           const EntityPattern* edge,
-                           const EntityPattern* tgt)
-    : _opcode(PipelineOpcode::CREATE_EDGE),
-    _impl(std::in_place_type<CreateEdgeStep>, src, edge, tgt)
 {
 }
 
