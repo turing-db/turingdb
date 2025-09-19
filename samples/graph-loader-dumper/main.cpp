@@ -12,6 +12,7 @@
 #include "Neo4jImporter.h"
 #include "Profiler.h"
 #include "Neo4j/Neo4JParserConfig.h"
+#include "Neo4jImporter.h"
 
 using namespace db;
 
@@ -69,6 +70,7 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
 }
 
 int main() {
+    /*
     {
         // Load & dump simple graph
         const fs::Path path {SAMPLE_DIR "/simple-graph"};
@@ -123,44 +125,46 @@ int main() {
             return 1;
         }
     }
+    */
 
-    // {
-    //     // Dump reactome
-    //     auto t0 = Clock::now();
-    //     const fs::Path path {SAMPLE_DIR "/reactome"};
+    {
+        // Dump reactome
+        auto t0 = Clock::now();
+        const fs::Path path {SAMPLE_DIR "/reactome"};
 
-    //     auto jobSystem = JobSystem::create();
+        auto jobSystem = JobSystem::create();
 
-    //     auto graph = Graph::create();
-    //     const std::string turingHome = std::getenv("HOME");
-    //     const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "reactome";
+        auto graph = Graph::create();
+        const std::string turingHome = std::getenv("HOME");
+        const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "reactome";
 
-    //     if (!Neo4jImporter::importJsonDir(*jobSystem,
-    //                                       graph.get(),
-    //                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-    //                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-    //                                       {
-    //                                           ._jsonDir = FileUtils::Path {jsonDir.get()},
-    //                                       })) {
-    //         fmt::print("Could not load Reactome\n");
-    //         return 1;
-    //     }
+        Neo4jImporter neo4jImporter;
+        if (!neo4jImporter.importJsonDir(*jobSystem,
+                                          graph.get(),
+                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                          db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                          {
+                                              ._jsonDir = FileUtils::Path {jsonDir.get()},
+                                          })) {
+            fmt::print("Could not load Reactome\n");
+            return 1;
+        }
 
-    //     const auto t1 = Clock::now();
-    //     logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
+        const auto t1 = Clock::now();
+        logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
 
-    //     if (path.exists()) {
-    //         // Removing existing dir
-    //         if (auto res = path.rm(); !res) {
-    //             fmt::print("{}\n", res.error().fmtMessage());
-    //             return 1;
-    //         }
-    //     }
+        if (path.exists()) {
+            // Removing existing dir
+            if (auto res = path.rm(); !res) {
+                fmt::print("{}\n", res.error().fmtMessage());
+                return 1;
+            }
+        }
 
-    //     if (!testGraph(*graph, path)) {
-    //         return 1;
-    //     }
-    // }
+        if (!testGraph(*graph, path)) {
+            return 1;
+        }
+    }
 
     // {
     //     // Dump ckg
