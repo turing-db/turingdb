@@ -44,6 +44,7 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
     while (TsThisPage-- && it != vec.cend()) {
         wr.writeToCurrentPage(*it++);
     }
+    wr.nextPage();
 
     if (it == vec.cend()) {
         return {};
