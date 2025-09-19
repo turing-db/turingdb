@@ -760,6 +760,92 @@ TEST_F(QueryTest, edgeSpanningCommits) {
         .execute();
 }
 
+TEST_F(QueryTest, threeChangeRebase) {
+    QueryTester tester {_mem, *_interp, "default"};
+
+    const auto newChange = [&](){
+        auto res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    // Make local changes
+    auto makeChanges = [&]() {
+        ChangeID changeID = newChange();
+        tester.setChangeID(changeID);
+        { // Change
+            tester.query("create (n:NODE)")
+                .execute();
+            tester.query("commit")
+                .execute();
+            tester.query("match (n) return n")
+                .expectVector<NodeID>({0})
+                .execute();
+            tester.query("create (n @ 0)-[:EDGE]-(m:NODE)")
+                .execute();
+            tester.query("commit")
+                .execute();
+            tester.query("match (n)-[e]-(m) return n,e,m")
+                .expectVector<NodeID>({0})
+                .expectVector<EdgeID>({0})
+                .expectVector<NodeID>({1})
+                .execute();
+        }
+        return changeID;
+    };
+
+    // Make local changes on three independent changes
+    ChangeID change1 = makeChanges();
+    ChangeID change2 = makeChanges();
+    ChangeID change3 = makeChanges();
+
+    // Submit the newest change
+    tester.setChangeID(change3);
+    tester.query("change submit")
+        .execute();
+
+    { // Verify on main. Normal submit
+        tester.setChangeID(ChangeID::head());
+        tester.query("match (n)-[e]-(m) return n,e,m")
+            .expectVector<NodeID>({0})
+            .expectVector<EdgeID>({0})
+            .expectVector<NodeID>({1})
+            .execute();
+    }
+
+    // Submit the second newest change
+    tester.setChangeID(change2);
+    tester.query("change submit")
+        .execute();
+
+    { // Verify on main. Ensure correct rebase
+        tester.setChangeID(ChangeID::head());
+        tester.query("match (n)-[e]-(m) return n,e,m")
+            .expectVector<NodeID>({0, 2}) // ID 2 on main = ID 0 on Change2
+            .expectVector<EdgeID>({0, 1}) // ID 1 on main = ID 0 on Change2
+            .expectVector<NodeID>({1, 3}) // ID 3 on main = ID 1 on Change2
+            .execute();
+    }
+
+    // Submit the oldest change
+    tester.setChangeID(change1);
+    tester.query("change submit")
+        .execute();
+
+    { // Verify on main. Ensure correct rebase
+        tester.setChangeID(ChangeID::head());
+        tester.query("match (n)-[e]-(m) return n,e,m")
+            .expectVector<NodeID>({0, 2, 4}) // ID 4 on main = ID 0 on Change2
+            .expectVector<EdgeID>({0, 1, 2}) // ID 2 on main = ID 0 on Change2
+            .expectVector<NodeID>({1, 3, 5}) // ID 5 on main = ID 1 on Change2
+            .execute();
+    }
+}
+
 TEST_F(QueryTest, ChangeQueryErrors) {
     QueryTester tester {_mem, *_interp};
 
