@@ -1,9 +1,5 @@
 #include "PlanGraph.h"
 
-#include "decl/VarDecl.h"
-
-#include "BioAssert.h"
-
 using namespace db::v2;
 
 PlanGraph::PlanGraph()
@@ -11,36 +7,6 @@ PlanGraph::PlanGraph()
 }
 
 PlanGraph::~PlanGraph() {
-}
-
-void PlanGraph::dump(std::ostream& out) const {
-    for (const auto& node : _nodes) {
-        out << "node id=" << std::hex << node.get()
-            << " opcode=" << PlanGraphOpcodeDescription::value(node->getOpcode());
-
-        if (const auto* varNode = dynamic_cast<VarNode*>(node.get())) {
-            bioassert(varNode->getVarDecl());
-            out << " var=" << varNode->getVarDecl()->getName();
-        }
-
-        out << " [\n";
-        out << "    inputs = [ ";
-
-        for (const PlanGraphNode* input : node->inputs()) {
-           out << std::hex << input << " "; 
-        }
-
-        out << "]\n";
-        out << "    outputs = [ ";
-
-        for (const PlanGraphNode* output : node->outputs()) {
-           out << std::hex << output << " "; 
-        }
-
-        out << "]\n";
-
-        out << "]\n\n";
-    }
 }
 
 void PlanGraph::getRoots(std::vector<PlanGraphNode*>& roots) const {

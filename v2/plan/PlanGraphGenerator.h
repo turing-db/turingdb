@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <memory>
 
+#include "PlanGraphVariables.h"
 #include "QueryCallback.h"
 #include "metadata/LabelSet.h"
 
@@ -38,6 +39,8 @@ class PropertyExpr;
 class PathExpr;
 class SymbolExpr;
 class LiteralExpr;
+class FilterNode;
+class VarNode;
 
 using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
 
@@ -67,8 +70,7 @@ private:
                        VectorHash<std::string_view>> _labelSetCache;
     std::vector<std::unique_ptr<LabelSet>> _labelSets;
 
-    // Map of variable nodes
-    std::unordered_map<const VarDecl*, PlanGraphNode*> _varNodesMap;
+    PlanGraphVariables _variables;
 
     // Map of expr dependencies
     std::unordered_multimap<const Expr*, PlanGraphNode*> _exprDependenciesMap;
@@ -77,10 +79,6 @@ private:
     const LabelSet* buildLabelSet(const Symbols& symbols);
     LabelID getLabel(const Symbol* symbol);
 
-    void addVarNode(PlanGraphNode* node, const VarDecl* varDecl);
-    PlanGraphNode* getOrCreateVarNode(const VarDecl* varDecl);
-    PlanGraphNode* getVarNode(const VarDecl* varDecl) const;
-
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
@@ -88,17 +86,6 @@ private:
     PlanGraphNode* generatePatternElementOrigin(const NodePattern* origin);
     PlanGraphNode* generatePatternElementEdge(PlanGraphNode* currentNode, const EdgePattern* edge);
     PlanGraphNode* generatePatternElementTarget(PlanGraphNode* currentNode, const NodePattern* target);
-    PlanGraphNode* generateExprConstraints(PlanGraphNode* currentNode, const VarDecl* varDecl, const ExprConstraints& expr);
-    PlanGraphNode* generateVarNode(PlanGraphNode* currentNode, const VarDecl* varDecl);
-    void generateExprDependencies(PlanGraphNode* currentNode, const Expr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const BinaryExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const UnaryExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const StringExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const NodeLabelExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const PropertyExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const PathExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const SymbolExpr* expr);
-    void generateExprDependencies(PlanGraphNode* currentNode, const LiteralExpr* expr);
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };

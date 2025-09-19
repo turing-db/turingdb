@@ -1,6 +1,7 @@
 
 set(plan_sources
     PlanGraphGenerator.cpp
+    PlanGraphVariables.cpp
     PlanGraph.cpp
     PlanGraphDebug.cpp
     PipelineGenerator.cpp)

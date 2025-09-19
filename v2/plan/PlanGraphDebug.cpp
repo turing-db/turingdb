@@ -1,10 +1,10 @@
 #include "PlanGraphDebug.h"
 
-#include "EvalExprNode.h"
-#include "GetNodeLabelSetNode.h"
-#include "GetPropertyNode.h"
+#include "nodes/FilterNode.h"
+#include "nodes/VarNode.h"
+#include "nodes/CreateGraphNode.h"
+
 #include "PlannerException.h"
-#include "PropertyMapExprNode.h"
 #include "views/GraphView.h"
 
 #include "PlanGraph.h"
@@ -26,7 +26,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
     output << "---\n";
     output << "config:\n";
-    output << "  layout: dagre\n";
+    output << "  layout: hierarchical\n";
     output << "---\n";
     output << "erDiagram\n";
 
@@ -43,37 +43,23 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
             } break;
             case PlanGraphOpcode::SCAN_NODES: {
             } break;
-            case PlanGraphOpcode::SCAN_NODES_BY_LABEL: {
-                const auto* n = dynamic_cast<ScanNodesByLabelNode*>(node.get());
-                bioassert(n->getLabelSet());
-                std::vector<LabelID> labels;
-                n->getLabelSet()->decompose(labels);
-                for (const auto& label : labels) {
-                    output << fmt::format("        label {}\n", labelMap.getName(label).value());
-                }
-            } break;
-            case PlanGraphOpcode::FILTER_NODE_LABEL: {
-                const auto* n = dynamic_cast<FilterNodeLabelNode*>(node.get());
-                bioassert(n->getLabelSet());
-                std::vector<LabelID> labels;
-                n->getLabelSet()->decompose(labels);
-                for (const auto& label : labels) {
-                    output << "        label " << labelMap.getName(label).value() << "\n";
-                }
-            } break;
-            case PlanGraphOpcode::FILTER_EDGE_TYPE: {
-                const auto* n = dynamic_cast<const FilterEdgeTypeNode*>(node.get());
-                output << "        edge_type " << edgeTypeMap.getName(n->getEdgeTypeID()).value() << "\n";
-            } break;
             case PlanGraphOpcode::CREATE_GRAPH: {
                 const auto* n = dynamic_cast<CreateGraphNode*>(node.get());
                 bioassert(n->getGraphName());
                 output << "        graph " << n->getGraphName() << "\n";
             } break;
 
-            case PlanGraphOpcode::PROPERTY_MAP_EXPR: {
-                const auto* n = dynamic_cast<PropertyMapExprNode*>(node.get());
-                for (const auto& [propType, expr] : n->getExprs()) {
+            case PlanGraphOpcode::FILTER_NODE: {
+                const auto* n = dynamic_cast<FilterNodeNode*>(node.get());
+                bioassert(n->getLabelConstraints());
+                std::vector<LabelID> labels;
+                n->getLabelConstraints().decompose(labels);
+
+                for (const auto& label : labels) {
+                    output << "        label " << labelMap.getName(label).value() << "\n";
+                }
+
+                for (const auto& [propType, expr, op] : n->getPropertyConstraints()) {
                     std::optional name = propTypeMap.getName(propType);
                     if (!name) {
                         name = std::to_string(propType);
@@ -81,15 +67,27 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
                     output << "        prop " << name.value() << "\n";
                 }
-            }
+            } break;
+
+            case PlanGraphOpcode::FILTER_EDGE: {
+                const auto* n = dynamic_cast<FilterEdgeNode*>(node.get());
+                bioassert(n->getEdgeTypeConstraints());
+
+                for (const auto& edgeType : n->getEdgeTypeConstraints()) {
+                    output << "        edge_type " << edgeTypeMap.getName(edgeType).value() << "\n";
+                }
+
+                for (const auto& [propType, expr, op] : n->getPropertyConstraints()) {
+                    std::optional name = propTypeMap.getName(propType);
+                    if (!name) {
+                        name = std::to_string(propType);
+                    }
+
+                    output << "        prop " << name.value() << "\n";
+                }
+            } break;
 
             case PlanGraphOpcode::UNKNOWN:
-            case PlanGraphOpcode::FILTER:
-            case PlanGraphOpcode::FILTER_NODE_EXPR:
-            case PlanGraphOpcode::FILTER_EDGE_EXPR:
-            case PlanGraphOpcode::GET_NODE_LABEL_SET:
-            case PlanGraphOpcode::GET_PROPERTY:
-            case PlanGraphOpcode::EVAL_EXPR:
             case PlanGraphOpcode::GET_EDGES:
             case PlanGraphOpcode::GET_OUT_EDGES:
             case PlanGraphOpcode::GET_IN_EDGES:
@@ -107,7 +105,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
         // Writing connections
         for (const PlanGraphNode* out : node->outputs()) {
-            output << fmt::format("    {} ||--o{{ {} : _\n", fmt::ptr(node.get()), fmt::ptr(out));
+            output << fmt::format("    {} ||--o{{ {} : \" \" \n", fmt::ptr(node.get()), fmt::ptr(out));
         }
     }
 }

@@ -134,6 +134,12 @@ public:
         return true;
     }
 
+    void merge(const TemplateLabelSet& other) {
+        for (size_t i = 0; i < TCount; i++) {
+            _integers[i] |= other._integers[i];
+        }
+    }
+
     void decompose(std::vector<LabelID>& labels) const {
         for (LabelID id = 0; id < IntegerSize * IntegerCount; id++) {
             if (hasLabel(id)) {
