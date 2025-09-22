@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EnumToString.h"
+#include "PlanGraphBranch.h"
 
 #include <vector>
 
@@ -53,6 +54,11 @@ public:
 
     bool isRoot() const { return _inputs.empty(); }
 
+    const PlanGraphBranch* branch() const { return _branch; }
+    PlanGraphBranch* branch() { return _branch; }
+
+    void setBranch(PlanGraphBranch* branch) { _branch = branch; }
+
     void connectOut(PlanGraphNode* succ) {
         _outputs.emplace_back(succ);
         succ->_inputs.emplace_back(this);
@@ -66,6 +72,7 @@ protected:
 
 private:
     PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
+    PlanGraphBranch* _branch {nullptr};
     Nodes _inputs;
     Nodes _outputs;
 };

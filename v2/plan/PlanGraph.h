@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 
 #include "nodes/PlanGraphNode.h"
 
@@ -20,6 +21,7 @@ public:
         auto node = std::make_unique<T>(std::forward<Args>(args)...);
         auto* nodePtr = node.get();
         _nodes.emplace_back(std::move(node));
+
         return nodePtr;
     }
 
@@ -32,6 +34,10 @@ public:
     }
 
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
+
+    std::span<const std::unique_ptr<PlanGraphNode>> nodes() const {
+        return _nodes;
+    }
 
 private:
     friend class PlanGraphDebug;

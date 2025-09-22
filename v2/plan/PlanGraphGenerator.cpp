@@ -4,6 +4,7 @@
 
 #include "CypherAST.h"
 #include "CypherError.h"
+#include "PlanGraphTopology.h"
 #include "WherePredicate.h"
 #include "QualifiedName.h"
 #include "WhereClause.h"
@@ -51,8 +52,7 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const QueryCallback& callback)
     : _view(view),
       _ast(&ast),
-     _variables(_tree)
-{
+      _variables(_tree) {
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {
@@ -118,21 +118,33 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     const StmtContainer* readStmts = query->getReadStmts();
-    for (const Stmt* stmt : readStmts->stmts()) {
-        generateStmt(stmt);
+    const StmtContainer* updateStmts = query->getUpdateStmts();
+    const ReturnStmt* returnStmt = query->getReturnStmt();
+
+    // Generate read statements (optional)
+    if (readStmts) {
+        for (const Stmt* stmt : readStmts->stmts()) {
+            generateStmt(stmt);
+        }
     }
 
-    const StmtContainer* updateStmts = query->getUpdateStmts();
+    // Generate update statements (optional)
     if (updateStmts) {
         throwError("Update statements are not supported yet", query);
+    } else {
+        if (!returnStmt) {
+            // Return statement is mandatory if there are no update statements
+            throwError("Return statement is missing", query);
+        }
     }
 
-    const ReturnStmt* returnStmt = query->getReturnStmt();
-    if (!returnStmt) {
-        throwError("Return statement is missing", query);
-    }
+    // Identify end points and branches
+    evaluateTopology();
 
-    generateReturnStmt(returnStmt);
+    // Generate return statement
+    if (returnStmt) {
+        generateReturnStmt(returnStmt);
+    }
 }
 
 void PlanGraphGenerator::generateStmt(const Stmt* stmt) {
@@ -165,8 +177,14 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     auto* projectResults = static_cast<PlanGraphNode*>(_tree.create<ProjectResultsNode>());
 
-    for (const auto& end : _endPoints) {
-        end->connectOut(projectResults);
+    std::unordered_set<const PlanGraphNode*> visited;
+
+    for (const auto& branch : _topology->branches()) {
+        if (!visited.emplace(branch->tip()).second) {
+            continue;
+        }
+
+        branch->tip()->connectOut(projectResults);
     }
 }
 
@@ -207,8 +225,6 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
 
         currentNode = generatePatternElementTarget(currentNode, n);
     }
-
-    _endPoints.push_back(currentNode);
 }
 
 PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* origin) {
@@ -242,16 +258,13 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* cur
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
             currentNode = _tree.newOut<GetEdgesNode>(currentNode);
-            break;
-        }
+        } break;
         case EdgePattern::Direction::Backward: {
             currentNode = _tree.newOut<GetInEdgesNode>(currentNode);
-            break;
         } break;
         case EdgePattern::Direction::Forward: {
             currentNode = _tree.newOut<GetOutEdgesNode>(currentNode);
-            break;
-        }
+        } break;
     }
 
     // Edge constraints
@@ -363,21 +376,24 @@ void PlanGraphGenerator::unwrapWhereExpr(const Expr* expr) {
     WherePredicate predicate {expr};
     predicate.generate();
 
-    uint32_t _lastDeclOrder = 0;
-    const VarNode* _lastDependency = nullptr;
+    const auto& dependencies = predicate.getDependencies();
+    if (dependencies.empty()) {
+        throwError("Where clauses without dependencies are not supported yet", expr);
+    }
 
-    for (const auto& dep : predicate.getDependencies()) {
+    const VarDecl* firstDep = dependencies.begin()->_decl;
+    const VarNode* firstVar = _variables.getVarNode(firstDep);
+    uint32_t _lastDeclOrder = firstVar->getDeclOdrer();
+    const VarNode* _lastDependency = firstVar;
+
+    for (const auto& dep : dependencies) {
         const VarDecl* decl = dep._decl;
         const VarNode* var = _variables.getVarNode(decl);
 
-        if (_lastDeclOrder <= var->getDeclOdrer()) {
+        if (_lastDeclOrder < var->getDeclOdrer()) {
             _lastDeclOrder = var->getDeclOdrer();
             _lastDependency = var;
         }
-    }
-
-    if (!_lastDependency) {
-        throwError("Where clauses without dependencies are not supported yet", expr);
     }
 
     FilterNode* filterNode = _variables.getNodeFilter(_lastDependency);
@@ -401,3 +417,18 @@ void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const
     throw PlannerException(std::move(errorMsg));
 }
 
+void PlanGraphGenerator::evaluateTopology() {
+    _topology = std::make_unique<PlanGraphTopology>();
+
+    for (const auto& node : _tree.nodes()) {
+        if (!node->isRoot()) {
+            continue;
+        }
+
+        PlanGraphBranch* branch = _topology->newBranch();
+        node->setBranch(branch);
+
+        // node is a root, evaluate the topology of the network from it
+        _topology->evaluate(node.get());
+    }
+}

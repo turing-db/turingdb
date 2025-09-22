@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_set>
 #include <vector>
 #include <string_view>
 #include <unordered_map>
@@ -44,6 +45,7 @@ class FilterNode;
 class VarNode;
 class WhereClause;
 class WherePredicate;
+class PlanGraphTopology;
 
 using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
 
@@ -65,6 +67,8 @@ private:
     const GraphView& _view;
 
     PlanGraph _tree;
+    std::unique_ptr<PlanGraphTopology> _topology;
+
     const CypherAST* _ast {nullptr};
 
     // Cache for label sets
@@ -74,7 +78,6 @@ private:
     std::vector<std::unique_ptr<LabelSet>> _labelSets;
 
     PlanGraphVariables _variables;
-    std::vector<PlanGraphNode*> _endPoints;
 
     const LabelSet* getOrCreateLabelSet(const Symbols& symbols);
     const LabelSet* buildLabelSet(const Symbols& symbols);
@@ -92,6 +95,8 @@ private:
     PlanGraphNode* generatePatternElementTarget(PlanGraphNode* currentNode, const NodePattern* target);
 
     void unwrapWhereExpr(const Expr*);
+
+    void evaluateTopology();
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };
