@@ -1,9 +1,16 @@
 
 set(pipeline_sources
     PipelineV2.cpp
-    Processor.cpp)
+    Processor.cpp
+    PipelineBuffer.cpp
+    PipelineExecutor.cpp)
 
-add_library(turing_db_v2_pipeline_s STATIC ${pipeline_sources})
+set(processors_sources
+    processors/ScanNodeProcessor.cpp
+    processors/GetOutEdgesProcessor.cpp
+    processors/MaterializeProcessor.cpp)
+
+add_library(turing_db_v2_pipeline_s STATIC ${pipeline_sources} ${processors_sources})
 
 target_include_directories(turing_db_v2_pipeline_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
