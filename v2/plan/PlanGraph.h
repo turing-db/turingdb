@@ -23,6 +23,14 @@ public:
         return nodePtr;
     }
 
+    template <typename T, typename... Args>
+    T* newOut(PlanGraphNode* prev, Args&&... args) {
+        auto next = create<T>(std::forward<Args>(args)...);
+        prev->connectOut(next);
+
+        return next;
+    }
+
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
 
 private:

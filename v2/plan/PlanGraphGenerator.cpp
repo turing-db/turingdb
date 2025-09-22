@@ -241,21 +241,15 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* cur
 
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
-            auto* expandEdges = _tree.create<GetEdgesNode>();
-            currentNode->connectOut(expandEdges);
-            currentNode = expandEdges;
+            currentNode = _tree.newOut<GetEdgesNode>(currentNode);
             break;
         }
         case EdgePattern::Direction::Backward: {
-            auto* expandEdges = _tree.create<GetInEdgesNode>();
-            currentNode->connectOut(expandEdges);
-            currentNode = expandEdges;
+            currentNode = _tree.newOut<GetInEdgesNode>(currentNode);
             break;
         } break;
         case EdgePattern::Direction::Forward: {
-            auto* expandEdges = _tree.create<GetOutEdgesNode>();
-            currentNode->connectOut(expandEdges);
-            currentNode = expandEdges;
+            currentNode = _tree.newOut<GetOutEdgesNode>(currentNode);
             break;
         }
     }
@@ -295,9 +289,7 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementTarget(PlanGraphNode* c
     const auto& exprConstraints = data->exprConstraints();
     const VarDecl* decl = target->getDecl();
 
-    auto* getTargetNode = _tree.create<GetEdgeTargetNode>();
-    currentNode->connectOut(getTargetNode);
-    currentNode = getTargetNode;
+    currentNode = _tree.newOut<GetEdgeTargetNode>(currentNode);
 
     auto [var, filter] = _variables.getOrCreateVarNodeAndFilter(decl);
     currentNode->connectOut(filter);
