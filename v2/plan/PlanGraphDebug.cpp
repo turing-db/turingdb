@@ -32,8 +32,11 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
     for (const auto& node : planGraph._nodes) {
         // Writing node definition
-        output << fmt::format("    {} {{\n", fmt::ptr(node.get()));
-        output << fmt::format("        opcode {}\n", PlanGraphOpcodeDescription::value(node->getOpcode()));
+        output << fmt::format("    {}[{}] {{\n", fmt::ptr(node.get()), PlanGraphOpcodeDescription::value(node->getOpcode()));
+
+        if (node->branch()) {
+            output << fmt::format("        branch _{}\n", node->branch()->branchId());
+        }
 
         switch (node->getOpcode()) {
             case PlanGraphOpcode::VAR: {
@@ -45,13 +48,11 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
             } break;
             case PlanGraphOpcode::CREATE_GRAPH: {
                 const auto* n = dynamic_cast<CreateGraphNode*>(node.get());
-                bioassert(n->getGraphName());
                 output << "        graph " << n->getGraphName() << "\n";
             } break;
 
             case PlanGraphOpcode::FILTER_NODE: {
                 const auto* n = dynamic_cast<FilterNodeNode*>(node.get());
-                bioassert(n->getLabelConstraints());
                 std::vector<LabelID> labels;
                 n->getLabelConstraints().decompose(labels);
 
@@ -88,8 +89,6 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
             case PlanGraphOpcode::FILTER_EDGE: {
                 const auto* n = dynamic_cast<FilterEdgeNode*>(node.get());
-                bioassert(n->getEdgeTypeConstraints());
-
                 for (const auto& edgeType : n->getEdgeTypeConstraints()) {
                     output << "        edge_type " << edgeTypeMap.getName(edgeType).value() << "\n";
                 }
