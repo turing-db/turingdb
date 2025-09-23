@@ -1,12 +1,11 @@
 #pragma once
 
 #include "nodes/PlanGraphNode.h"
-
 namespace db::v2 {
 
-class CartesianProductNode : public PlanGraphNode {
+class CartesianProductsNode : public PlanGraphNode {
 public:
-    CartesianProductNode()
+    CartesianProductsNode()
         : PlanGraphNode(PlanGraphOpcode::CARTESIAN_PRODUCT)
     {
     }

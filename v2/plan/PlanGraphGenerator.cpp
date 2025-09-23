@@ -1,6 +1,7 @@
 #include "PlanGraphGenerator.h"
 
 #include <spdlog/fmt/bundled/core.h>
+#include <range/v3/view/sliding.hpp>
 
 #include "CypherAST.h"
 #include "CypherError.h"
@@ -9,6 +10,7 @@
 #include "QualifiedName.h"
 #include "WhereClause.h"
 #include "decl/VarDecl.h"
+#include "nodes/CartesianProductNode.h"
 #include "views/GraphView.h"
 
 #include "nodes/FilterNode.h"
@@ -175,17 +177,27 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
 }
 
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
-    auto* projectResults = static_cast<PlanGraphNode*>(_tree.create<ProjectResultsNode>());
+    std::span ends = _topology->ends();
 
-    std::unordered_set<const PlanGraphNode*> visited;
-
-    for (const auto& branch : _topology->branches()) {
-        if (!visited.emplace(branch->tip()).second) {
-            continue;
-        }
-
-        branch->tip()->connectOut(projectResults);
+    if (ends.empty()) {
+        throwError("No end points found", stmt);
     }
+
+    PlanGraphNode* a = (*ends.begin());
+
+    // If there is only one end point, the loop is skipped
+
+    for (auto itB = ++ends.begin(); itB != ends.end(); itB++) {
+        auto* prod = _tree.create<CartesianProductsNode>();
+        PlanGraphNode* b = *itB;
+
+        a->connectOut(prod);
+        b->connectOut(prod);
+
+        a = prod;
+    }
+
+    a->connectOut(_tree.create<ProduceResultsNode>());
 }
 
 void PlanGraphGenerator::generateWhereClause(const WhereClause* where) {
@@ -425,7 +437,7 @@ void PlanGraphGenerator::evaluateTopology() {
             continue;
         }
 
-        PlanGraphBranch* branch = _topology->newBranch();
+        PlanGraphBranch* branch = _topology->newRootBranch();
         node->setBranch(branch);
 
         // node is a root, evaluate the topology of the network from it

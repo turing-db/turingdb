@@ -33,8 +33,10 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
     for (const auto& node : planGraph._nodes) {
         // Writing node definition
         output << fmt::format("    {}[{}] {{\n", fmt::ptr(node.get()), PlanGraphOpcodeDescription::value(node->getOpcode()));
+        // output << fmt::format("        id _{}\n", fmt::ptr(node.get()));
 
         if (node->branch()) {
+            output << fmt::format("        island _{}\n", node->branch()->islandId());
             output << fmt::format("        branch _{}\n", node->branch()->branchId());
         }
 

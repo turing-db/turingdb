@@ -1,12 +1,13 @@
 #pragma once
 
 #include "nodes/PlanGraphNode.h"
+
 namespace db::v2 {
 
-class ProjectResultsNode : public PlanGraphNode {
+class ProduceResultsNode : public PlanGraphNode {
 public:
-    ProjectResultsNode()
-        : PlanGraphNode(PlanGraphOpcode::PROJECT_RESULTS)
+    ProduceResultsNode()
+        : PlanGraphNode(PlanGraphOpcode::PRODUCE_RESULTS)
     {
     }
 };
