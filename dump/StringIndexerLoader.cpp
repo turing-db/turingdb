@@ -13,6 +13,7 @@
 #include "StringIndexerDumpConstants.h"
 #include "indexes/StringIndex.h"
 #include "GraphDumpHelper.h"
+#include "LoadUtils.h"
 
 using namespace db;
 
@@ -151,7 +152,8 @@ DumpResult<void> StringIndexerLoader::loadNode(std::unique_ptr<StringIndex>& ind
     // Managed space ends ~~
 
     // 2. Read owners from external file
-    if (auto ownersResult = loadOwners(node, numOwners, auxIt); !ownersResult) {
+    if (auto ownersResult = loadOwners(node, numOwners, _auxReader, auxIt);
+        !ownersResult) {
         return ownersResult.get_unexpected();
     }
 
@@ -165,17 +167,12 @@ DumpResult<void> StringIndexerLoader::loadNode(std::unique_ptr<StringIndex>& ind
 
 DumpResult<void> StringIndexerLoader::loadOwners(StringIndex::PrefixTreeNode* node,
                                                  size_t sz,
+                                                 fs::FilePageReader& auxReader,
                                                  fs::AlignedBufferIterator& auxIt) {
-    ensureSpace(sz * sizeof(EntityID::Type), auxIt, _auxReader);
-    for (size_t i = 0; i < sz; i++) {
-        const uint64_t id = auxIt.get<uint64_t>();
-        node->addOwner(id);
+    if (sz == 0) {
+        return {};
     }
-
-    if (_auxReader.errorOccured()) {
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER,
-                                 _auxReader.error().value());
-    }
-
-    return {};
+    std::vector<EntityID>& ownersVec = node->_owners;
+    auto res = LoadUtils::loadVector(ownersVec, sz, auxReader, auxIt);
+    return res;
 }

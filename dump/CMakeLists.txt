@@ -5,6 +5,7 @@ set(dump_sources GraphLoader.cpp
                  DataPartDumper.cpp
                  DumpResult.cpp
                  DumpUtils.cpp
+                 LoadUtils.cpp
                  StringIndexerDumper.cpp
                  StringIndexerLoader.cpp)
 

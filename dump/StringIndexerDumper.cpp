@@ -27,7 +27,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 
     // 3. Write each index
     for (const auto& [propId, idx] : idxer) {
-        DumpUtils::ensureSpace(sizeof(uint16_t), _writer);
+        DumpUtils::ensureDumpSpace(sizeof(uint16_t), _writer);
         _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
         dumpIndex(idx);
     }
@@ -43,7 +43,7 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 }
 
 DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringIndex>& idx) {
-    DumpUtils::ensureSpace(sizeof(size_t), _writer);
+    DumpUtils::ensureDumpSpace(sizeof(size_t), _writer);
     const size_t size = idx->getNodeCount();
 
     // 1.  Number of nodes in this index prefix tree
@@ -60,7 +60,7 @@ DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringInde
 }
 
 DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
-    DumpUtils::ensureSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
+    DumpUtils::ensureDumpSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
     // 1. Write internal node data
     { // Space written in this block is accounted for by above call to @ref ensureSpace
         const auto& children = node->getChildren();

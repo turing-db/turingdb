@@ -22,14 +22,12 @@ public:
     template<Dumpable T>
     static DumpResult<void> dumpVector(const std::vector<T>& vec, fs::FilePageWriter& wr);
 
-    static void ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr);
+    static void ensureDumpSpace(size_t requiredSpace, fs::FilePageWriter& wr);
 };
 
 template<Dumpable T>
 DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWriter& wr) {
-    spdlog::info("Dumping vector");
-    size_t TSize = sizeof(T);
-
+    const size_t TSize = sizeof(T);
     if (TSize > DumpConfig::PAGE_SIZE) {
         std::string errMsg = fmt::format(
             "Attempted to dump object {} with size {}, which exceeds page size of {}.",
@@ -38,30 +36,42 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
     }
 
     // Write as many as we can on this page
-    size_t remainingSpace = wr.buffer().avail();
-    size_t TsThisPage = remainingSpace / TSize;
+    const size_t remainingSpace = wr.buffer().avail();
+    const size_t TsThisPage = remainingSpace / TSize; // Truncates
 
     auto it = vec.cbegin();
-    while (TsThisPage-- && it != vec.cend()) {
-        wr.writeToCurrentPage(*it++);
+    for (size_t j = 0; j < TsThisPage && it != vec.cend(); j++) {
+        wr.writeToCurrentPage(*it);
+        it++;
     }
-    wr.nextPage();
-    spdlog::info("Finished first page");
 
     if (it == vec.cend()) {
         return {};
     }
 
-    size_t TsPerPage = DumpConfig::PAGE_SIZE / TSize;
+    const size_t read = TsThisPage;
+    const size_t remaining = vec.size() - read;
 
-    while (it != vec.end()) {
-        for (size_t i {0}; i < TsPerPage && it != vec.cend(); i++) {
+    const size_t TsPerPage = DumpConfig::PAGE_SIZE / TSize;
+
+    const size_t fullPagesNeeded = remaining / TsPerPage;
+    const size_t leftOver = remaining % TsPerPage;
+
+    for (size_t p = 0; p < fullPagesNeeded; p++) {
+        wr.nextPage();
+        for (size_t j = 0; j < TsPerPage; j++) {
             wr.writeToCurrentPage(*it);
             it++;
         }
-        wr.nextPage();
     }
-    spdlog::info("Finished all pages");
+
+    if (leftOver != 0) {
+        wr.nextPage();
+        for (size_t j = 0; j < leftOver; j++) {
+            wr.writeToCurrentPage(*it);
+            it++;
+        }
+    }
 
     return {};
 }
