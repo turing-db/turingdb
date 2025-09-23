@@ -10,9 +10,10 @@
 #include "QualifiedName.h"
 #include "WhereClause.h"
 #include "decl/VarDecl.h"
-#include "nodes/CartesianProductNode.h"
 #include "views/GraphView.h"
 
+#include "nodes/JoinNode.h"
+#include "nodes/CartesianProductNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/GetEdgeTargetNode.h"
 #include "nodes/GetEdgesNode.h"
@@ -20,7 +21,7 @@
 #include "nodes/GetOutEdgesNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
-#include "nodes/ProjectResultsNode.h"
+#include "nodes/ProduceResultsNode.h"
 
 #include "expr/PropertyExpr.h"
 #include "expr/BinaryExpr.h"
@@ -188,16 +189,32 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     // If there is only one end point, the loop is skipped
 
     for (auto itB = ++ends.begin(); itB != ends.end(); itB++) {
-        auto* prod = _tree.create<CartesianProductsNode>();
         PlanGraphNode* b = *itB;
 
+        const auto islandA = a->branch()->islandId();
+        const auto islandB = b->branch()->islandId();
+
+        auto* prod = islandA == islandB
+                       ? static_cast<PlanGraphNode*>(_tree.create<JoinNode>())
+                       : static_cast<PlanGraphNode*>(_tree.create<CartesianProductsNode>());
+
+        // Connect the nodes
         a->connectOut(prod);
         b->connectOut(prod);
+
+        // Update the topology (A, B) -> C
+        _topology->growBranch(a->branch(), prod);
+        _topology->joinBranches(b->branch(), prod->branch());
 
         a = prod;
     }
 
-    a->connectOut(_tree.create<ProduceResultsNode>());
+    // Connect the last node to the output
+    auto* results = _tree.create<ProduceResultsNode>();
+    a->connectOut(results);
+
+    // Update the topology
+    _topology->growBranch(a->branch(), results);
 }
 
 void PlanGraphGenerator::generateWhereClause(const WhereClause* where) {

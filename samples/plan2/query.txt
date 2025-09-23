@@ -14,12 +14,12 @@
 //WHERE n:Founder AND m.name = "Remy"
 //RETURN n, m
 
-MATCH (a)-->(c), (a)-[e]->(b)
-WHERE a:Person AND (a.duration * c.duration) < b.duration
-RETURN a, e, b
+// MATCH (a)-->(c), (a)-[e]->(b)
+// WHERE a:Person AND (a.duration * c.duration) < b.duration
+// RETURN a, e, b
 
-// MATCH (a)--(b)--(c), (d)--(b)--(e)
-// RETURN a, b, c
+MATCH (a)--(b)--(c), (d)--(b)--(e)
+RETURN a, b, c
 
 // MATCH (a)--(b)--(c), (d)--(b)
 // RETURN a, b, c

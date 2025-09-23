@@ -22,6 +22,7 @@ enum class PlanGraphOpcode {
     CREATE_GRAPH,
     PROJECT_RESULTS,
     CARTESIAN_PRODUCT,
+    JOIN,
     PRODUCE_RESULTS,
     _SIZE
 };
@@ -41,6 +42,7 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::CREATE_GRAPH, "CREATE_GRAPH">,
     EnumStringPair<PlanGraphOpcode::PROJECT_RESULTS, "PROJECT_RESULTS">,
     EnumStringPair<PlanGraphOpcode::CARTESIAN_PRODUCT, "CARTESIAN_PRODUCT">,
+    EnumStringPair<PlanGraphOpcode::JOIN, "JOIN">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">>;
 
 

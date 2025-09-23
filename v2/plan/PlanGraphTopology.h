@@ -4,10 +4,9 @@
 #include <span>
 #include <unordered_set>
 
-#include "decl/VarDecl.h"
 #include "nodes/PlanGraphNode.h"
-#include "nodes/VarNode.h"
 #include "spdlog/fmt/bundled/base.h"
+#include "spdlog/fmt/bundled/format.h"
 
 namespace db::v2 {
 
@@ -15,13 +14,6 @@ class PlanGraphTopology {
 public:
     void evaluate(PlanGraphNode* node) {
         const bool inserted = _visited.insert(node).second;
-        std::string currentName;
-
-        if (const auto* n = dynamic_cast<const VarNode*>(node)) {
-            currentName = n->getVarDecl()->getName();
-        } else {
-            currentName = PlanGraphOpcodeDescription::value(node->getOpcode());
-        }
 
         if (!inserted) {
             // Already visited
@@ -43,6 +35,7 @@ public:
         }
 
         // End point
+        fmt::println("Adding end point {} with branch {}", fmt::ptr(node), fmt::ptr(node->branch()));
         _ends.push_back(node);
     }
 
