@@ -11,3 +11,5 @@ function(add_common_tests exe_name cpp_file)
 endfunction()
 
 add_common_tests(test_common_perfstat PerfStatTest.cpp)
+
+add_common_tests(test_common_smallvector SmallVectorTest.cpp)
