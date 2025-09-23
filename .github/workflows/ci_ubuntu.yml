@@ -21,8 +21,9 @@ jobs:
             # Ensure credentials are set for submodule fetches
             persist-credentials: true
             lfs: true
-    - name: checkoutLFS
-      run:  git lfs fetch --all && git lfs checkout
+            fetch-depth: 0
+    #- name: checkoutLFS
+      #run:  git lfs fetch --all && git lfs checkout
     - name: Install uv
       uses: astral-sh/setup-uv@v3
     - name: Install dependencies
