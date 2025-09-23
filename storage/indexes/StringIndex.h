@@ -11,6 +11,9 @@
 #include "TuringException.h"
 
 namespace db {
+
+class StringIndexerLoader;
+    
 /*
  * @brief Approximate string indexing using prefix trees (tries)
  * @detail String properties are preprocesed, replacing any non-alphanumeric characters
@@ -61,6 +64,7 @@ public:
         }
 
     private:
+        friend StringIndexerLoader;
         std::vector<EntityID> _owners;
         std::vector<PrefixTreeNode*> _children;
         size_t _id {std::numeric_limits<size_t>::max()};

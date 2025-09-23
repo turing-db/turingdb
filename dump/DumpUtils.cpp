@@ -7,7 +7,7 @@
 
 using namespace db;
 
-void DumpUtils::ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr) {
+void DumpUtils::ensureDumpSpace(size_t requiredSpace, fs::FilePageWriter& wr) {
     if (requiredSpace > DumpConfig::PAGE_SIZE) {
         spdlog::error("Attempting to write {} bytes which exceedes page size of {}",
                      requiredSpace, DumpConfig::PAGE_SIZE);
