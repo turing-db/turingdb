@@ -487,4 +487,5 @@ void QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
 
 void QueryAnalyzer::analyzeS3Transfer(S3TransferCommand* cmd) {
     parseS3Url(cmd->getS3URL(), cmd->getBucket(), cmd->getPrefix(), cmd->getFile());
+    // For now we let user write/read to/from anywhere on the system
 }

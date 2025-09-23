@@ -34,15 +34,8 @@ public:
 
     static bool isSubDirectory(const Path& rootDirectory, const Path& subDirectory);
 
-    friend Path operator/(const Path& lhs, const Path& rhs) {
-        std::string p = lhs._path + "/";
-        p += rhs._path;
-
-        return Path {std::move(p)};
-    }
-
-    friend Path operator/(const Path& lhs, std::string_view rhs) {
-        std::string p = lhs._path + "/";
+    [[nodiscard]] Path operator/(std::string_view rhs) const {
+        std::string p = _path + "/";
         p += rhs;
 
         return Path {std::move(p)};
