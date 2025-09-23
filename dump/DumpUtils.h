@@ -27,6 +27,7 @@ public:
 
 template<Dumpable T>
 DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWriter& wr) {
+    spdlog::info("Dumping vector");
     size_t TSize = sizeof(T);
 
     if (TSize > DumpConfig::PAGE_SIZE) {
@@ -45,6 +46,7 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
         wr.writeToCurrentPage(*it++);
     }
     wr.nextPage();
+    spdlog::info("Finished first page");
 
     if (it == vec.cend()) {
         return {};
@@ -59,6 +61,7 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
         }
         wr.nextPage();
     }
+    spdlog::info("Finished all pages");
 
     return {};
 }

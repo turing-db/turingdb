@@ -94,7 +94,10 @@ DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& ow
     //     const uint64_t id = owners[i].getValue();
     //     _auxWriter.writeToCurrentPage(id);
     // }
-
+    if (owners.size() == 0) {
+        return {};
+    }
+    
     std::vector<uint64_t> ids;
     ids.reserve(owners.size());
     std::transform(owners.begin(), owners.end(), std::back_inserter(ids),
