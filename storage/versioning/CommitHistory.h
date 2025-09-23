@@ -4,6 +4,7 @@
 
 #include "ArcManager.h"
 #include "DataPartSpan.h"
+#include "versioning/CommitJournal.h"
 #include "versioning/CommitView.h"
 
 namespace db {
@@ -13,8 +14,8 @@ public:
     CommitHistory();
     ~CommitHistory();
 
-    CommitHistory(const CommitHistory&) = default;
-    CommitHistory& operator=(const CommitHistory&) = default;
+    CommitHistory(const CommitHistory&) = delete;
+    CommitHistory& operator=(const CommitHistory&) = delete;
     CommitHistory(CommitHistory&&) = default;
     CommitHistory& operator=(CommitHistory&&) = default;
 
@@ -47,6 +48,8 @@ private:
 
     /// Stores the whole history up to (including) this commit.
     std::vector<CommitView> _commits;
+
+    WeakArc<CommitJournal> _journal;
 };
 
 class CommitHistoryBuilder {
