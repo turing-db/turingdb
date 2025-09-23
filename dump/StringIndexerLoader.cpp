@@ -6,9 +6,7 @@
 
 #include "AlignedBuffer.h"
 #include "DumpResult.h"
-#include "DumpConfig.h"
 #include "FilePageReader.h"
-#include "TuringException.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "StringIndexerDumpConstants.h"
 #include "indexes/StringIndex.h"
@@ -17,36 +15,12 @@
 
 using namespace db;
 
-namespace {
-
-void ensureIteratorReadPage(fs::AlignedBufferIterator& it) {
-    // Check if we received a full page
-    if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-        spdlog::error("Iterator did not get full page prior to loading nodes");
-        spdlog::error("Got {} bytes but needed {} bytes", it.remainingBytes(),
-                      DumpConfig::PAGE_SIZE);
-        throw TuringException("Failed to read from file");
-    }
-}
-
-}
-
-void StringIndexerLoader::ensureSpace(size_t requiredReadSpace,
-                                      fs::AlignedBufferIterator& it,
-                                      fs::FilePageReader& rd) {
-    if (it.remainingBytes() < requiredReadSpace) {
-        rd.nextPage();
-        it = rd.begin();
-        ensureIteratorReadPage(it);
-    }
-}
-
 DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     _reader.nextPage();
     _auxReader.nextPage();
 
     auto it = _reader.begin();
-    ensureIteratorReadPage(it);
+    LoadUtils::ensureIteratorReadPage(it);
 
     // 1. Header
     if (auto res = GraphDumpHelper::checkFileHeader(it); !res) {
@@ -55,7 +29,7 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     }
 
     // 2. Metadata
-    ensureSpace(sizeof(size_t), it, _reader);
+    LoadUtils::ensureLoadSpace(sizeof(size_t), _reader, it);
     size_t numIndexes = it.get<size_t>();
     _reader.nextPage();
 
@@ -69,17 +43,17 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
 
     // Refresh the main iterator as we just turned the page from header page
     it = _reader.begin();
-    ensureIteratorReadPage(it);
+    LoadUtils::ensureIteratorReadPage(it);
 
     // Only start the secondary reader after we check that the index is non-empty,
     // otherwise there is no owners page and this throws an error
     auto auxIt = _auxReader.begin();
-    ensureIteratorReadPage(auxIt);
+    LoadUtils::ensureIteratorReadPage(auxIt);
 
     // 3. Read each index
     for (size_t i = 0; i < numIndexes; i++) {
         // PropertyID that this index is indexing
-        ensureSpace(sizeof(uint16_t), it, _reader);
+        LoadUtils::ensureLoadSpace(sizeof(uint16_t), _reader, it);
         const auto propId = it.get<uint16_t>();
 
         auto loadResult = loadIndex(it, auxIt);
@@ -102,7 +76,7 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
 
 DumpResult<std::unique_ptr<StringIndex>> StringIndexerLoader::loadIndex(fs::AlignedBufferIterator& it,
                                                                         fs::AlignedBufferIterator& auxIt) {
-    ensureSpace(sizeof(size_t), it, _reader);
+    LoadUtils::ensureLoadSpace(sizeof(size_t), _reader, it);
     // 1. Number of nodes in this index prefix tree
     const size_t sz = it.get<size_t>();
 
@@ -132,7 +106,7 @@ DumpResult<std::unique_ptr<StringIndex>> StringIndexerLoader::loadIndex(fs::Alig
 DumpResult<void> StringIndexerLoader::loadNode(std::unique_ptr<StringIndex>& index,
                                                fs::AlignedBufferIterator& it,
                                                fs::AlignedBufferIterator& auxIt) {
-    ensureSpace(StringIndexDumpConstants::MAXNODESIZE, it, _reader);
+    LoadUtils::ensureLoadSpace(StringIndexDumpConstants::MAXNODESIZE, _reader, it);
     // ~~ Managed space starts
 
     // 1. Write internal node data
