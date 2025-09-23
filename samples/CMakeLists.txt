@@ -28,7 +28,6 @@ macro(turing_sample SAMPLE_NAME SOURCES)
 endmacro()
 
 add_subdirectory(fs-mapped)
-add_subdirectory(prefix-tree)
 add_subdirectory(fs-file)
 add_subdirectory(fs-page-reader)
 add_subdirectory(fs-page-writer)
