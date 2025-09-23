@@ -53,8 +53,7 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const QueryCallback& callback)
     : _view(view),
       _ast(&ast),
-      _variables(_tree)
-{
+      _variables(_tree) {
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {
@@ -140,8 +139,14 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         }
     }
 
-    // Place where predicates based on their dependencies
-    placeWherePredicateJoins();
+    // Place joins on vars that have more than one input
+    placeJoinsOnVars();
+
+    // Place joins based on property expressions
+    placePropertyExprJoins();
+
+    // Place joins based on where predicates
+    placePredicateJoins();
 
     // Generate return statement
     if (returnStmt) {
@@ -286,6 +291,8 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePatter
     typedFilter->addLabelConstraints(labelset);
 
     for (const auto& [propType, expr] : exprConstraints) {
+        // TODO Here we need to compute dependencies and decide
+        // if we need a materialize, join or hash join (or nothing)
         typedFilter->addPropertyConstraint(propType._id, expr, BinaryOperator::Equal);
     }
 
@@ -455,7 +462,62 @@ void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const
     throw PlannerException(std::move(errorMsg));
 }
 
-void PlanGraphGenerator::placeWherePredicateJoins() {
+void PlanGraphGenerator::placeJoinsOnVars() {
+    for (auto [var, filter] : _variables.getNodeFiltersMap()) {
+        if (filter->inputs().size() > 1) {
+            _tree.insertBefore<JoinNode>(filter);
+        }
+    }
+}
+
+void PlanGraphGenerator::placePropertyExprJoins() {
+    for (auto [var, filter] : _variables.getNodeFiltersMap()) {
+
+        // Generate dependencies for all constraints and place joins
+        for (auto& prop : filter->getPropertyConstraints()) {
+            auto& deps = prop.dependencies;
+
+            // Generate dependencies
+            deps.genExprDependencies(_variables, prop.expr);
+
+            for (const auto& dep : deps.getDependencies()) {
+                // Place joins
+                const auto path = PlanGraphTopology::getShortestPath(filter, dep._var);
+
+                switch (path) {
+                    case PlanGraphTopology::PathToDependency::SameVar: {
+                        // Nothing to be done
+                        continue;
+                    } break;
+
+                    case PlanGraphTopology::PathToDependency::BackwardPath: {
+                        // If only walked backward
+                        // Materialize
+                        _tree.insertBefore<MaterializeNode>(filter);
+                    } break;
+
+                    case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                        // If had to walk both backward and forward
+                        // Join
+                        JoinNode* join = _tree.insertBefore<JoinNode>(filter);
+                        auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
+                        depBranchTip->connectOut(join);
+                    } break;
+
+                    case PlanGraphTopology::PathToDependency::NoPath: {
+                        // If nodes are on two different islands
+                        // ValueHashJoin
+                        JoinNode* join = _tree.insertBefore<JoinNode>(filter);
+                        auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
+                        depBranchTip->connectOut(join);
+                    } break;
+                }
+            }
+        }
+    }
+}
+
+void PlanGraphGenerator::placePredicateJoins() {
     for (const auto& pred : _tree.wherePredicates()) {
         FilterNode* filterNode = pred->getFilterNode();
 
@@ -473,11 +535,13 @@ void PlanGraphGenerator::placeWherePredicateJoins() {
                 } break;
 
                 case PlanGraphTopology::PathToDependency::BackwardPath: {
+                    // If only walked backward
                     // Materialize
                     _tree.insertBefore<MaterializeNode>(filterNode);
                 } break;
 
                 case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                    // If had to walk both backward and forward
                     // Join
                     JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
                     auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
@@ -485,6 +549,7 @@ void PlanGraphGenerator::placeWherePredicateJoins() {
                 } break;
 
                 case PlanGraphTopology::PathToDependency::NoPath: {
+                    // If nodes are on two different islands
                     // ValueHashJoin
                     JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
                     auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);

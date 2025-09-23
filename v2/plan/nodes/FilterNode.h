@@ -17,6 +17,7 @@ public:
         PropertyTypeID type;
         Expr* expr {nullptr};
         BinaryOperator op {BinaryOperator::Equal};
+        ExprDependencies dependencies;
     };
 
     explicit FilterNode(PlanGraphOpcode opcode)
@@ -40,7 +41,11 @@ public:
         _wherePredicates.push_back(pred);
     }
 
-    const std::vector<PropertyConstraint>& getPropertyConstraints() const {
+    std::span<const PropertyConstraint> getPropertyConstraints() const {
+        return _propConstraints;
+    }
+
+    std::span<PropertyConstraint> getPropertyConstraints() {
         return _propConstraints;
     }
 

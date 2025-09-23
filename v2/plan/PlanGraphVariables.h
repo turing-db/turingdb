@@ -30,6 +30,14 @@ public:
 
     std::tuple<VarNode*, FilterNode*> getOrCreateVarNodeAndFilter(const VarDecl* varDecl);
 
+    std::unordered_map<const VarDecl*, VarNode*>& getVarNodesMap() {
+        return _varNodesMap;
+    }
+
+    std::unordered_map<const VarNode*, FilterNode*>& getNodeFiltersMap() {
+        return _nodeFiltersMap;
+    }
+
 private:
     PlanGraph* _tree {nullptr};
 

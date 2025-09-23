@@ -61,23 +61,36 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     output << "        label " << labelMap.getName(label).value() << "\n";
                 }
 
-                for (const auto& [propType, expr, op] : n->getPropertyConstraints()) {
+                for (const auto& [propType, expr, op, deps] : n->getPropertyConstraints()) {
                     std::optional name = propTypeMap.getName(propType);
                     if (!name) {
                         name = std::to_string(propType);
                     }
 
                     output << "        prop " << name.value() << "\n";
+
+                    for (const auto& dep : deps.getDependencies()) {
+                        output << "        dep _" << dep._var->getVarDecl()->getName();
+                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
+                            output << " labels\n";
+                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
+                            std::optional name = propTypeMap.getName(p->_propTypeID);
+                            if (!name) {
+                                name = std::to_string(p->_propTypeID);
+                            }
+                            output << "_" << name.value() << "\n";
+                        }
+                    }
                 }
 
                 for (const auto& pred : n->getWherePredicates()) {
                     output << "        predicate _" << fmt::ptr(pred) << "\n";
 
                     for (const auto& dep : pred->getDependencies()) {
-                        output << "        pred_dep _" << dep._var->getVarDecl()->getName();
-                        if (std::holds_alternative<PredicateDependencies::LabelDependency>(dep._dep)) {
+                        output << "        dep _" << dep._var->getVarDecl()->getName();
+                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
                             output << " labels\n";
-                        } else if (const auto* p = std::get_if<PredicateDependencies::PropertyDependency>(&dep._dep)) {
+                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
                             std::optional name = propTypeMap.getName(p->_propTypeID);
                             if (!name) {
                                 name = std::to_string(p->_propTypeID);
@@ -94,13 +107,26 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     output << "        edge_type " << edgeTypeMap.getName(edgeType).value() << "\n";
                 }
 
-                for (const auto& [propType, expr, op] : n->getPropertyConstraints()) {
+                for (const auto& [propType, expr, op, deps] : n->getPropertyConstraints()) {
                     std::optional name = propTypeMap.getName(propType);
                     if (!name) {
                         name = std::to_string(propType);
                     }
 
                     output << "        prop " << name.value() << "\n";
+
+                    for (const auto& dep : deps.getDependencies()) {
+                        output << "        dep _" << dep._var->getVarDecl()->getName();
+                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
+                            output << " labels\n";
+                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
+                            std::optional name = propTypeMap.getName(p->_propTypeID);
+                            if (!name) {
+                                name = std::to_string(p->_propTypeID);
+                            }
+                            output << "_" << name.value() << "\n";
+                        }
+                    }
                 }
             } break;
 
