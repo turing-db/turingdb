@@ -320,21 +320,14 @@ public:
         return _s3File;
     }
 
-    static S3TransferCommand* create(ASTContext* ctx,
-                                     Direction transferDirection,
-                                     Directory transferDirectory,
-                                     const std::string& s3URL,
-                                     const std::string& localDir);
+    static S3TransferCommand* create(ASTContext* ctx, Direction transferDirection, Directory transferDirectory, const std::string& s3URL, const std::string& localDir);
 
     Kind getKind() const override {
         return QueryCommand::Kind::S3TRANSFER_COMMAND;
     }
 
 private:
-    S3TransferCommand(Direction transferDirection,
-                      Directory transferDirectory,
-                      const std::string& s3URL,
-                      const std::string& localDir);
+    S3TransferCommand(Direction transferDirection, Directory transferDirectory, const std::string& s3URL, const std::string& localDir);
     S3TransferCommand() = delete;
 
     Direction _transferDirection;
