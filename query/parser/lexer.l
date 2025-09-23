@@ -30,7 +30,6 @@ using namespace db;
 "create"|"CREATE" { return YParser::make_CREATE(getLocation()); }
 "list"|"LIST" { return YParser::make_LIST(getLocation()); }
 "graph"|"GRAPH" { return YParser::make_GRAPH(getLocation()); }
-"data"|"DATA" { return YParser::make_DATA(getLocation()); }
 "load"|"LOAD" { return YParser::make_LOAD(getLocation()); }
 "explain"|"EXPLAIN" { return YParser::make_EXPLAIN(getLocation()); }
 "history"|"HISTORY" { return YParser::make_HISTORY(getLocation()); }

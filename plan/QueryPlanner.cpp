@@ -1762,6 +1762,7 @@ bool QueryPlanner::planCall(const CallCommand* call) {
 }
 
 bool QueryPlanner::planS3Connect(const S3ConnectCommand* s3Connect) {
+    spdlog::info(s3Connect->getRegion());
     _pipeline->add<StopStep>();
     _pipeline->add<S3ConnectStep>(s3Connect->getAccessId(), s3Connect->getSecretKey(), s3Connect->getRegion());
     _pipeline->add<EndStep>();
@@ -1770,18 +1771,16 @@ bool QueryPlanner::planS3Connect(const S3ConnectCommand* s3Connect) {
 
 bool QueryPlanner::planS3Transfer(const S3TransferCommand* s3Transfer) {
     _pipeline->add<StopStep>();
-    if (s3Transfer->getTransferDirection() == S3TransferCommand::Direction::PUSH) {
+    if (s3Transfer->getTransferDir() == S3TransferCommand::Dir::PUSH) {
         _pipeline->add<S3PushStep>(s3Transfer->getBucket(),
                                    s3Transfer->getPrefix(),
                                    s3Transfer->getFile(),
-                                   s3Transfer->getLocalDir(),
-                                   s3Transfer->getTransferDirectory());
+                                   s3Transfer->getLocalDir());
     } else {
         _pipeline->add<S3PullStep>(s3Transfer->getBucket(),
                                    s3Transfer->getPrefix(),
                                    s3Transfer->getFile(),
-                                   s3Transfer->getLocalDir(),
-                                   s3Transfer->getTransferDirectory());
+                                   s3Transfer->getLocalDir());
     }
     _pipeline->add<EndStep>();
     return true;

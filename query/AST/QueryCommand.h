@@ -6,7 +6,6 @@
 
 #include "Path.h"
 #include "metadata/PropertyType.h"
-#include "S3TransferDirectories.h"
 
 namespace db {
 
@@ -273,9 +272,7 @@ private:
 
 class S3TransferCommand : public QueryCommand {
 public:
-    using Directory = S3TransferDirectory;
-
-    enum class Direction : uint8_t {
+    enum class Dir : uint8_t {
         PULL = 0,
         PUSH
     };
@@ -288,12 +285,8 @@ public:
         return _localDir;
     }
 
-    Direction getTransferDirection() const {
-        return _transferDirection;
-    }
-
-    Directory getTransferDirectory() const {
-        return _transferDirectory;
+    Dir getTransferDir() const {
+        return _transferDir;
     }
 
     std::string_view& getBucket() {
@@ -320,18 +313,17 @@ public:
         return _s3File;
     }
 
-    static S3TransferCommand* create(ASTContext* ctx, Direction transferDirection, Directory transferDirectory, const std::string& s3URL, const std::string& localDir);
+    static S3TransferCommand* create(ASTContext* ctx, Dir _transferDir, const std::string& s3URL, const std::string& localDir);
 
     Kind getKind() const override {
         return QueryCommand::Kind::S3TRANSFER_COMMAND;
     }
 
 private:
-    S3TransferCommand(Direction transferDirection, Directory transferDirectory, const std::string& s3URL, const std::string& localDir);
+    S3TransferCommand(Dir _transferDir, const std::string& s3URL, const std::string& localDir);
     S3TransferCommand() = delete;
 
-    Direction _transferDirection;
-    Directory _transferDirectory;
+    Dir _transferDir;
 
     std::string _s3URL;
     std::string _localDir;
