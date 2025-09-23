@@ -137,8 +137,6 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
 
         prevCommitData = &commitBuilder->commitData();
         prevHistory = &prevCommitData->history();
-
-        // TODO: Update nextNodeID based on the previous commits number of nodes/edges
     }
 
     return {};
