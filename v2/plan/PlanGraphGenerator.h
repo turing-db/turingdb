@@ -95,7 +95,9 @@ private:
 
     void unwrapWhereExpr(const Expr*);
 
-    void placeWherePredicateJoins();
+    void placeJoinsOnVars();
+    void placePropertyExprJoins();
+    void placePredicateJoins();
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };
