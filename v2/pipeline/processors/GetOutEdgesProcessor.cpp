@@ -1,6 +1,7 @@
 #include "GetOutEdgesProcessor.h"
 
 #include "PipelineV2.h"
+#include "PipelinePort.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ChunkConfig.h"
 #include "PipelineBuffer.h"
@@ -8,6 +9,8 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
+
+#include "PipelineException.h"
 
 using namespace db::v2;
 
@@ -19,53 +22,62 @@ GetOutEdgesProcessor::~GetOutEdgesProcessor() {
 }
 
 GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
-    GetOutEdgesProcessor* processor = new GetOutEdgesProcessor();
+    GetOutEdgesProcessor* getOutEdges = new GetOutEdgesProcessor();
 
-    PipelineBuffer* inNodeIDs = PipelineBuffer::create(pipeline);
-    PipelineBuffer* outIndices = PipelineBuffer::create(pipeline);
-    PipelineBuffer* outEdgeIDs = PipelineBuffer::create(pipeline);
-    PipelineBuffer* outTargetNodes = PipelineBuffer::create(pipeline);
-    PipelineBuffer* outEdgeTypes = PipelineBuffer::create(pipeline);
+    PipelinePort* inNodeIDs = PipelinePort::create(pipeline, getOutEdges);
+    PipelinePort* outIndices = PipelinePort::create(pipeline, getOutEdges);
+    PipelinePort* outEdgeIDs = PipelinePort::create(pipeline, getOutEdges);
+    PipelinePort* outTargetNodes = PipelinePort::create(pipeline, getOutEdges);
+    PipelinePort* outEdgeTypes = PipelinePort::create(pipeline, getOutEdges);
 
-    processor->_inNodeIDs = inNodeIDs;
-    processor->_outIndices = outIndices;
-    processor->_outEdgeIDs = outEdgeIDs;
-    processor->_outTargetNodes = outTargetNodes;
-    processor->_outEdgeTypes = outEdgeTypes;
+    getOutEdges->_inNodeIDs = inNodeIDs;
+    getOutEdges->_outIndices = outIndices;
+    getOutEdges->_outEdgeIDs = outEdgeIDs;
+    getOutEdges->_outTargetNodes = outTargetNodes;
+    getOutEdges->_outEdgeTypes = outEdgeTypes;
 
-    processor->addInput(inNodeIDs);
-    processor->addOutput(outIndices);
-    processor->addOutput(outEdgeIDs);
-    processor->addOutput(outTargetNodes);
-    processor->addOutput(outEdgeTypes);
+    getOutEdges->addInput(inNodeIDs);
+    getOutEdges->addOutput(outIndices);
+    getOutEdges->addOutput(outEdgeIDs);
+    getOutEdges->addOutput(outTargetNodes);
+    getOutEdges->addOutput(outEdgeTypes);
 
-    processor->postCreate(pipeline);
-    return processor;
+    getOutEdges->postCreate(pipeline);
+    return getOutEdges;
 }
 
 void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs->getBlock()[0]);
+    PipelineBuffer* nodeIDsBuffer = _inNodeIDs->getBuffer();
+    if (!nodeIDsBuffer) {
+        throw PipelineException("GetOutEdgesProcessor: Node IDs port not connected");
+    }
+
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(nodeIDsBuffer->getBlock()[0]);
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
 
-    Column* indices = _outIndices->getBlock()[0];
-    if (indices) {
-        _it->setIndices(dynamic_cast<ColumnVector<size_t>*>(indices));
+    PipelineBuffer* indicesBuffer = _outIndices->getBuffer();
+    if (indicesBuffer) {
+        ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(indicesBuffer->getBlock()[0]);
+        _it->setIndices(indices);
     }
 
-    Column* edgeIDs = _outEdgeIDs->getBlock()[0];
-    if (edgeIDs) {
-        _it->setEdgeIDs(dynamic_cast<ColumnEdgeIDs*>(edgeIDs));
+    PipelineBuffer* edgeIDsBuffer = _outEdgeIDs->getBuffer();
+    if (edgeIDsBuffer) {
+        ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(edgeIDsBuffer->getBlock()[0]);
+        _it->setEdgeIDs(edgeIDs);
     }
 
-    Column* targetNodes = _outTargetNodes->getBlock()[0];
-    if (targetNodes) {
-        _it->setTgtIDs(dynamic_cast<ColumnNodeIDs*>(targetNodes));
+    PipelineBuffer* targetNodesBuffer = _outTargetNodes->getBuffer();
+    if (targetNodesBuffer) {
+        ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(targetNodesBuffer->getBlock()[0]);
+        _it->setTgtIDs(targetNodes);
     }
 
-    Column* edgeTypes = _outEdgeTypes->getBlock()[0];
-    if (edgeTypes) {
-        _it->setEdgeTypes(dynamic_cast<ColumnEdgeTypes*>(edgeTypes));
+    PipelineBuffer* edgeTypesBuffer = _outEdgeTypes->getBuffer();
+    if (edgeTypesBuffer) {
+        ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(edgeTypesBuffer->getBlock()[0]);
+        _it->setEdgeTypes(edgeTypes);
     }
 }
 

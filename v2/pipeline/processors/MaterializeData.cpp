@@ -1,5 +1,6 @@
 #include "MaterializeData.h"
 
+#include "columns/Block.h"
 #include "columns/ColumnVector.h"
 
 #include "LocalMemory.h"
@@ -13,7 +14,8 @@ MaterializeData::MaterializeData(LocalMemory* mem)
 {
 }
 
-MaterializeData::~MaterializeData() = default;
+MaterializeData::~MaterializeData() {
+}
 
 void MaterializeData::createStep(const ColumnIndices* indices) {
     _indices.push_back(indices);
@@ -24,14 +26,14 @@ void MaterializeData::createStep(const ColumnIndices* indices) {
 template <typename T>
 void MaterializeData::addToStep(const T* col) {
     if (_step < _columnsPerStep.size()) {
-        throw PipelineException(fmt::format("Step was not registered with addIndices step={}", _step));
+        throw PipelineException(fmt::format("Step was not registered with createStep step={}", _step));
     }
 
     ++_colCount;
     _columnsPerStep[_step].push_back(col);
 
     Column* outCol = _mem->alloc<T>();
-    _output.addColumn(outCol);
+    _output->addColumn(outCol);
 }
 
 #define INSTANTIATE(Type) \

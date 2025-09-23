@@ -6,7 +6,7 @@
 
 namespace db::v2 {
 
-class PipelineBuffer;
+class PipelinePort;
 class MaterializeData;
 
 class MaterializeProcessor : public Processor {
@@ -14,16 +14,15 @@ public:
     static MaterializeProcessor* create(PipelineV2* pipeline, MaterializeData* matData);
 
     void prepare(ExecutionContext* ctxt) override;
-
     void reset() override;
-
     void execute() override;
 
-    void createStep();
+    PipelinePort* input() const { return _input; }
+    PipelinePort* output() const { return _output; }
 
 private:
-    PipelineBuffer* _input {nullptr};
-    PipelineBuffer* _output {nullptr};
+    PipelinePort* _input {nullptr};
+    PipelinePort* _output {nullptr};
     MaterializeData* _matData {nullptr};
     ColumnVector<size_t> _transform;
 

@@ -539,8 +539,6 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& ou
     // Get the PropertyType (ID and type) which we are scanning for
     const PropertyType propType = propTypeRes.value();
 
-    
-
     const auto caseScanNodesPropertyValueType = [&]<SupportedType T>() {
         using Step = ScanNodesByPropertyStep<T>;
         using Val = typename T::Primitive;

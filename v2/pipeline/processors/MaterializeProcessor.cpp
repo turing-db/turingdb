@@ -6,8 +6,8 @@
 
 #include "PipelineV2.h"
 #include "PipelineBuffer.h"
+#include "PipelinePort.h"
 
-#include "PipelineException.h"
 #include "Panic.h"
 
 using namespace db::v2;
@@ -82,28 +82,36 @@ MaterializeProcessor::~MaterializeProcessor() {
 }
 
 MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, MaterializeData* matData) {
-    MaterializeProcessor* processor = new MaterializeProcessor(matData);
+    MaterializeProcessor* materialize = new MaterializeProcessor(matData);
 
-    PipelineBuffer* input = PipelineBuffer::create(pipeline);
-    processor->_input = input;
-    processor->addInput(input);
+    PipelinePort* input = PipelinePort::create(pipeline, materialize);
+    materialize->_input = input;
+    materialize->addInput(input);
 
-    PipelineBuffer* output = PipelineBuffer::create(pipeline);
-    processor->_output = output;
-    processor->addOutput(output);
+    PipelinePort* output = PipelinePort::create(pipeline, materialize);
+    materialize->_output = output;
+    materialize->addOutput(output);
 
-    processor->postCreate(pipeline);
-    return processor;
+    materialize->postCreate(pipeline);
+    return materialize;
 }
 
 void MaterializeProcessor::prepare(ExecutionContext* ctxt) {
+    if (PipelineBuffer* outputBuffer = _output->getBuffer()) {
+        _matData->setOutput(&outputBuffer->getBlock());
+    }
 }
 
 void MaterializeProcessor::reset() {
 }
 
 void MaterializeProcessor::execute() {
-    Block& output = _matData->getOutput();
+    PipelineBuffer* outputBuffer = _output->getBuffer();
+    if (!outputBuffer) {
+        return;
+    }
+
+    Block& output = outputBuffer->getBlock();
     const MaterializeData::Indices& indices = _matData->getIndices();
     const MaterializeData::ColumnsPerStep& columnsPerStep = _matData->getColumnsPerStep();
     const size_t colCount = _matData->getColumnCount();
@@ -165,4 +173,7 @@ void MaterializeProcessor::execute() {
 #endif
         }
     }
+
+    _input->consume();
+    _output->writeData();
 }

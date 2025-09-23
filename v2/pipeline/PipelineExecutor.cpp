@@ -29,6 +29,13 @@ void PipelineExecutor::init() {
 	}
 }
 
+void PipelineExecutor::execute() {
+    init();
+    while (!_activeQueue.empty()) {
+        executeStep();
+    }
+}
+
 void PipelineExecutor::executeStep() {
     auto& activeQueue = _activeQueue;
     auto& updateQueue = _updateQueue;
@@ -67,9 +74,10 @@ void PipelineExecutor::executeStep() {
         currentProc->setScheduled(false);
 
         // Add all successors to the update queue if they are ready to execute
-        for (PipelineBuffer* output : currentProc->outputs()) {
-            Processor* nextProc = output->getConsumer();
-            if (nextProc) {
+        for (PipelinePort* output : currentProc->outputs()) {
+            PipelinePort* connectedPort = output->getConnectedPort();
+            if (connectedPort) {
+                Processor* nextProc = connectedPort->getProcessor();
                 if (!nextProc->isScheduled() && nextProc->canExecute()) {
                     updateQueue.push(nextProc);
                     nextProc->setScheduled(true);

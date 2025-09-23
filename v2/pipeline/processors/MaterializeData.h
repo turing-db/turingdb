@@ -2,11 +2,11 @@
 
 #include <vector>
 
-#include "columns/Block.h"
 #include "columns/ColumnIndices.h"
 
 namespace db {
 class LocalMemory;
+class Block;
 }
 
 namespace db::v2 {
@@ -20,8 +20,7 @@ public:
     MaterializeData(LocalMemory* mem);
     ~MaterializeData();
 
-    const Block& getOutput() const { return _output; }
-    Block& getOutput() { return _output; }
+    void setOutput(Block* output) { _output = output; }
 
     const Indices& getIndices() const { return _indices; }
     const ColumnsPerStep& getColumnsPerStep() const { return _columnsPerStep; }
@@ -36,7 +35,7 @@ public:
 
 private:
     LocalMemory* _mem {nullptr};
-    Block _output;
+    Block* _output {nullptr};
     size_t _step {0};
     Indices _indices;
     ColumnsPerStep _columnsPerStep;

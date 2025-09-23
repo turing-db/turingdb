@@ -4,7 +4,7 @@
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ChunkConfig.h"
 #include "columns/ColumnIDs.h"
-#include "PipelineBuffer.h"
+#include "PipelinePort.h"
 #include "ExecutionContext.h"
 
 using namespace db::v2;
@@ -17,18 +17,18 @@ ScanNodesProcessor::~ScanNodesProcessor() {
 }
 
 ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
-    ScanNodesProcessor* processor = new ScanNodesProcessor();
+    ScanNodesProcessor* scanNodes = new ScanNodesProcessor();
 
-    PipelineBuffer* outNodeIDs = PipelineBuffer::create(pipeline);
-    processor->_outNodeIDs = outNodeIDs;
-    processor->addOutput(outNodeIDs);
+    PipelinePort* outNodeIDs = PipelinePort::create(pipeline, scanNodes);
+    scanNodes->_outNodeIDs = outNodeIDs;
+    scanNodes->addOutput(outNodeIDs);
 
-    processor->postCreate(pipeline);
-    return processor;
+    scanNodes->postCreate(pipeline);
+    return scanNodes;
 }
 
 void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs->getBlock()[0]);
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs->getBuffer()->getBlock()[0]);
 
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);

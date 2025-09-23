@@ -14,10 +14,11 @@ public:
                      ExecutionContext* ctxt);
     ~PipelineExecutor();
 
+    void execute();
+
+    // For step by step execution & debugging
     void init();
     void executeStep();
-
-    void execute();
 
 private:
     PipelineV2* _pipeline {nullptr};
