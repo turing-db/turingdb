@@ -7,6 +7,7 @@
 #include "Profiler.h"
 #include "TuringS3Client.h"
 #include "SystemManager.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -37,6 +38,7 @@ void S3PullStep::execute() {
             throw PipelineException(awsRes.error().fmtMessage());
         }
     } else {
+        spdlog::info("Downloading file: {}", _s3Prefix);
         auto awsRes = _s3Client->downloadDirectory(_localPath, std::string(_s3Bucket), std::string(_s3Prefix));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
