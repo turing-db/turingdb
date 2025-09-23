@@ -110,10 +110,6 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
         // 2. Get all commits/dataparts from the previous commit history
         // 3. Add back dataparts of current commit and rebase them
 
-        // These values are initially set at time of the creation of this Change, however
-        // they need to be updated to point to the next ID on the current state of main.
-        // These values will be used when creating new dataparts at time of submit.
-
         CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer(),
                                       branchTimeNextNodeID,
                                       branchTimeNextEdgeID,
@@ -121,7 +117,10 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
                                       nextEdgeID);
         wbRb.rebaseIncidentNodeIDs();
 
-        commitBuilder->_firstNodeID = nextNodeID; // NOTE: These are not even used
+        // These values are initially set at time of the creation of this Change, however
+        // they need to be updated to point to the next ID on the current state of main.
+        // These values will be used when creating new dataparts at time of submit.
+        commitBuilder->_firstNodeID = nextNodeID;
         commitBuilder->_firstEdgeID = nextEdgeID;
 
         commitBuilder->_nextNodeID = nextNodeID;
