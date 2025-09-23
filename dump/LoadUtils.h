@@ -3,33 +3,55 @@
 #include "AlignedBuffer.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"
-#include "DumpUtils.h"
+#include "DumpConfig.h"
+#include "TuringException.h"
 
 namespace db {
 
 class LoadUtils {
 public:
-    template <Dumpable T>
+    /**
+     * @brief Reads from the current position of @param it, attempting to read @param sz
+     * elements of type @ref T. If the size of the read exceeds or runs over a page size,
+     * reads from the next page of @param reader, updating @param it in place.
+     */
+    template <fs::Dumpable T>
     [[nodiscard]] static DumpResult<void> loadVector(std::vector<T>& out,
                                                      size_t sz,
                                                      fs::FilePageReader& reader,
                                                      fs::AlignedBufferIterator& it);
 
+    /**
+    * @brief Moves @param rd to the next page, upating @ref it to the start of this new page.
+    * @detail Checks that upon turning the page, the iterator recieved the expected PAGE_SIZE.
+    */
     static void newPage(fs::AlignedBufferIterator& it, fs::FilePageReader& rd);
 
+    /**
+     * @brief Checks if there is at least @param requiredSpace on the page @param it is
+     * curently reading from. If not, moves @param rd to the next page, and updates @param
+     * it to the start of this new page.
+     * @throws TuringException if @param requiredSpace exceeds @ref DumpConfig::PAGE_SIZE
+     */
     static void ensureLoadSpace(size_t requiredSpace,
                          fs::FilePageReader& rd,
                          fs::AlignedBufferIterator& it);
 
+    /**
+     * @brief Checks if the number of bytes remaining for @param it is equal to @ref
+     * DumpConfig::PAGE_SIZE
+     * @warn Should only be called prior to any calls to @ref get() on @param it, such as
+     * after calling @ref FilePageReader::nextPage.
+     */
     static void ensureIteratorReadPage(fs::AlignedBufferIterator& it);
 };
 
-template <Dumpable T>
+template <fs::Dumpable T>
 DumpResult<void> LoadUtils::loadVector(std::vector<T>& out,
                                        size_t sz,
                                        fs::FilePageReader& reader,
                                        fs::AlignedBufferIterator& it) {
-    using WorkingT = WorkingType<T>;
+    using WorkingT = fs::WorkingType<T>;
 
     out.clear();
     out.reserve(sz);

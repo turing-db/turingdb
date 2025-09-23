@@ -63,6 +63,12 @@ public:
         writeToCurrentPage({reinterpret_cast<const uint8_t*>(&v), sizeof(decltype(v))});
     }
 
+    template <DumpableID IDT>
+    void writeToCurrentPage(IDT v) {
+        writeToCurrentPage(
+            {reinterpret_cast<const uint8_t*>(&v), sizeof(typename IDT::Type)});
+    }
+
     template <TrivialPrimitive T, size_t SpanSizeT>
     void writeToCurrentPage(std::span<T, SpanSizeT> s) {
         writeToCurrentPage({reinterpret_cast<const uint8_t*>(s.data()), s.size() * sizeof(T)});

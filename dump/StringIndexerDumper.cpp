@@ -1,18 +1,13 @@
 #include "StringIndexerDumper.h"
 
 #include <cstddef>
-#include <cstdint>
 #include <memory>
-#include "spdlog/spdlog.h"
 
 #include "DumpUtils.h"
-#include "AlignedBuffer.h"
-#include "DumpConfig.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
 #include "GraphDumpHelper.h"
 #include "ID.h"
-#include "TuringException.h"
 #include "indexes/StringIndex.h"
 #include "StringIndexerDumpConstants.h"
 
@@ -27,8 +22,9 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 
     // 3. Write each index
     for (const auto& [propId, idx] : idxer) {
-        DumpUtils::ensureDumpSpace(sizeof(uint16_t), _writer);
-        _writer.writeToCurrentPage(static_cast<uint16_t>(propId.getValue()));
+        DumpUtils::ensureDumpSpace(sizeof(fs::WorkingType<PropertyTypeID>), _writer);
+        _writer.writeToCurrentPage(
+            static_cast<fs::WorkingType<PropertyTypeID>>(propId.getValue()));
         dumpIndex(idx);
     }
 
@@ -89,22 +85,10 @@ DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode
 }
 
 DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& owners) {
-    // DumpUtils::ensureSpace(owners.size() * sizeof(uint64_t), _auxWriter);
-    // for (size_t i = 0; i < owners.size(); i++) {
-    //     const uint64_t id = owners[i].getValue();
-    //     _auxWriter.writeToCurrentPage(id);
-    // }
     if (owners.size() == 0) {
         return {};
     }
-    
-    std::vector<uint64_t> ids;
-    ids.reserve(owners.size());
-    std::transform(owners.begin(), owners.end(), std::back_inserter(ids),
-                   [](EntityID id) { return id.getValue(); });
 
-
-    DumpUtils::dumpVector(ids, _auxWriter);
-    return {};
+    return DumpUtils::dumpVector(owners, _auxWriter);
 }
 

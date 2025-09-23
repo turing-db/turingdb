@@ -17,6 +17,13 @@ void LoadUtils::ensureIteratorReadPage(fs::AlignedBufferIterator& it) {
 void LoadUtils::ensureLoadSpace(size_t requiredSpace,
                                 fs::FilePageReader& rd,
                                 fs::AlignedBufferIterator& it) {
+    if (requiredSpace > DumpConfig::PAGE_SIZE) {
+        std::string info =
+            fmt::format("Attempting to write {} bytes which exceedes page size of {}",
+                        requiredSpace, DumpConfig::PAGE_SIZE);
+        throw TuringException("Illegal read: " + info);
+    }
+
     if (it.remainingBytes() < requiredSpace) {
         rd.nextPage();
         it = rd.begin();
