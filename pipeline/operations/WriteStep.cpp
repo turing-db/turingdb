@@ -22,9 +22,9 @@ using namespace db;
 
 namespace {
 
-using UntypedProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
-void addUntypedProperties(UntypedProperties& props, const BinExpr* propExpr) {
+using CWB = CommitWriteBuffer;
 
+void addUntypedProperties(CWB::UntypedProperties& props, const BinExpr* propExpr) {
     const VarExpr* left = static_cast<const VarExpr*>(propExpr->getLeftExpr());
     const ExprConst* right = static_cast<const ExprConst*>(propExpr->getRightExpr());
 
@@ -80,9 +80,9 @@ void WriteStep::prepare(ExecutionContext* ctxt) {
     _writeBuffer = &tx.commitBuilder()->writeBuffer();
 }
 
-CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* nodePattern) {
+CWB::PendingNodeOffset WriteStep::writeNode(const EntityPattern* nodePattern) {
     // Build a @ref CommitWriteBuffer::PendingNode:
-     
+
     // Labels to pass to the PendingNode
     const TypeConstraint* patternLabels = nodePattern->getTypeConstraint();
     std::vector<std::string> nodeLabels;
@@ -96,12 +96,12 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     }
 
     // Properties to pass to the PendingNode
-    UntypedProperties nodeProperties;
+    CWB::UntypedProperties nodeProperties;
 
     const ExprConstraint* patternProperties = nodePattern->getExprConstraint();
     if (!patternProperties) { // Early exit if no properties
         // Add this node to the write buffer, and record its offset
-        CommitWriteBuffer::PendingNodeOffset thisNodeOffset =
+        CWB::PendingNodeOffset thisNodeOffset =
             _writeBuffer->nextPendingNodeOffset();
         const std::string& nodeVarName = nodePattern->getVar()->getName();
 
@@ -116,7 +116,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     }
 
     // Add this node to the write buffer, and record its offset
-    CommitWriteBuffer::PendingNodeOffset thisNodeOffset =
+    CWB::PendingNodeOffset thisNodeOffset =
         _writeBuffer->nextPendingNodeOffset();
     const std::string& nodeVarName = nodePattern->getVar()->getName();
 
@@ -126,7 +126,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     return thisNodeOffset;
 }
 
-CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern* nodePattern) {
+CWB::ContingentNode WriteStep::getOrWriteNode(const EntityPattern* nodePattern) {
     const std::string& nodeVarName = nodePattern->getVar()->getName();
 
     // Check to see if this node has been written already by searching its variable name
@@ -145,7 +145,7 @@ CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern*
 
     // If this node has not been written, and it does not have a specific NodeID injected,
     // we must write it now
-    CommitWriteBuffer::PendingNodeOffset newOffset = writeNode(nodePattern);
+    CWB::PendingNodeOffset newOffset = writeNode(nodePattern);
     return newOffset;
 }
 
@@ -162,12 +162,12 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
     if (!patternProperties) { // No properties
-        UntypedProperties emptyProps;
+        CWB::UntypedProperties emptyProps;
         _writeBuffer->addPendingEdge(src, tgt, edgeType, emptyProps);
         return;
     }
 
-    UntypedProperties edgeProperties;
+    CWB::UntypedProperties edgeProperties;
     for (const auto& e : patternProperties->getExpressions()) {
         addUntypedProperties(edgeProperties, e);
     }

@@ -25,9 +25,11 @@ public:
         SupportedTypeVariant value;
      };
 
+     using UntypedProperties = std::vector<UntypedProperty>;
+
      struct PendingNode {
          std::vector<std::string> labelNames;
-         std::vector<UntypedProperty> properties;
+         UntypedProperties properties;
      };
 
      using PendingNodeOffset = size_t;
@@ -40,7 +42,7 @@ public:
          ContingentNode src;
          ContingentNode tgt;
          std::string edgeLabelTypeName;
-         std::vector<UntypedProperty> properties;
+         UntypedProperties properties;
     };
 
 public:
@@ -49,10 +51,10 @@ public:
     PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
 
     void addPendingNode(std::vector<std::string>& labels,
-                        std::vector<UntypedProperty>& properties);
+                        UntypedProperties& properties);
 
     void addPendingEdge(ContingentNode src, ContingentNode tgt, std::string& edgeType,
-                        std::vector<UntypedProperty>& edgeProperties);
+                        UntypedProperties& edgeProperties);
 
     std::vector<PendingNode>& pendingNodes() { return _pendingNodes; }
     std::vector<PendingEdge>& pendingEdges() { return _pendingEdges; }

@@ -11,7 +11,7 @@ class PathPattern;
 
 class WriteStep {
 public:
-    struct Tag {};  
+    struct Tag {};
 
     explicit WriteStep(const CreateTargets* targets)
         : _targets(targets)
@@ -33,7 +33,6 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    using UntypedProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
     using ContingentNode = CommitWriteBuffer::ContingentNode;
 
     const CreateTargets* _targets {nullptr};
