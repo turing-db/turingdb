@@ -67,7 +67,6 @@ private:
     const GraphView& _view;
 
     PlanGraph _tree;
-    std::unique_ptr<PlanGraphTopology> _topology;
 
     const CypherAST* _ast {nullptr};
 
@@ -96,10 +95,7 @@ private:
 
     void unwrapWhereExpr(const Expr*);
 
-    void evaluateTopology();
-
     void placeWherePredicateJoins();
-
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };

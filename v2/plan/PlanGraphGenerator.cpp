@@ -139,19 +139,8 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         }
     }
 
-    // Identify end points and branches
-    evaluateTopology();
-
     // Place where predicates based on their dependencies
     placeWherePredicateJoins();
-
-    // Generate end points
-    for (const auto& node : _tree.nodes()) {
-        if (node->outputs().empty()) {
-            fmt::print("    - Adding end point\n");
-            _topology->addEnd(node.get());
-        }
-    }
 
     // Generate return statement
     if (returnStmt) {
@@ -187,7 +176,12 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
 }
 
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
-    std::span ends = _topology->ends();
+    std::vector<PlanGraphNode*> ends;
+    for (const auto& node : _tree.nodes()) {
+        if (node->outputs().empty()) {
+            ends.push_back(node.get());
+        }
+    }
 
     if (ends.empty()) {
         throwError("No end points found", stmt);
@@ -200,10 +194,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     for (auto itB = ++ends.begin(); itB != ends.end(); itB++) {
         PlanGraphNode* b = *itB;
 
-        const auto path = _topology->getShortestPath(a, b);
-
-        // PlanGraphBranch* branchA = a->branch();
-        // PlanGraphBranch* branchB = b->branch();
+        const auto path = PlanGraphTopology::getShortestPath(a, b);
 
         switch (path) {
             case PlanGraphTopology::PathToDependency::SameVar:
@@ -215,24 +206,18 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {
                 // Join
-                fmt::print("    - Join\n");
                 JoinNode* join = _tree.create<JoinNode>();
                 a->connectOut(join);
                 b->connectOut(join);
-                // join->setBranch(branchA);
 
-                // _topology->joinBranches(branchB, branchA);
                 a = join;
             } break;
             case PlanGraphTopology::PathToDependency::NoPath: {
                 // Cartesian product
-                fmt::print("    - Cartesian product\n");
                 CartesianProductNode* join = _tree.create<CartesianProductNode>();
                 a->connectOut(join);
                 b->connectOut(join);
-                // join->setBranch(branchA);
 
-                // _topology->joinBranches(branchB, branchA);
                 a = join;
             } break;
         }
@@ -241,9 +226,6 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     // Connect the last node to the output
     auto* results = _tree.create<ProduceResultsNode>();
     a->connectOut(results);
-
-    // Update the topology
-    // _topology->growBranch(a->branch(), results);
 }
 
 void PlanGraphGenerator::generateWhereClause(const WhereClause* where) {
@@ -472,69 +454,39 @@ void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const
     throw PlannerException(std::move(errorMsg));
 }
 
-void PlanGraphGenerator::evaluateTopology() {
-    _topology = std::make_unique<PlanGraphTopology>();
-
-    for (const auto& node : _tree.nodes()) {
-        if (!node->isRoot()) {
-            continue;
-        }
-
-        PlanGraphBranch* branch = _topology->newRootBranch();
-        node->setBranch(branch);
-
-        // node is a root, evaluate the topology of the network from it
-        _topology->evaluate(node.get());
-    }
-}
-
 void PlanGraphGenerator::placeWherePredicateJoins() {
     for (const auto& pred : _tree.wherePredicates()) {
         FilterNode* filterNode = pred->getFilterNode();
-        [[maybe_unused]] PlanGraphBranch* filterNodeBranch = filterNode->branch();
-
-        const auto& nameA = filterNode->getVarNode()->getVarDecl()->getName();
 
         for (const auto& dep : pred->getDependencies()) {
             if (filterNode->getVarNode() == dep._var) {
                 continue;
             }
 
-            const auto path = _topology->getShortestPath(filterNode, dep._var);
+            const auto path = PlanGraphTopology::getShortestPath(filterNode, dep._var);
 
             switch (path) {
                 case PlanGraphTopology::PathToDependency::SameVar: {
                     // Nothing to be done
-                    fmt::print("  SAME VAR\n");
                     continue;
                 } break;
 
                 case PlanGraphTopology::PathToDependency::BackwardPath: {
                     // Materialize
-                    fmt::print("  MATERIALIZE at {}\n", nameA);
-                    MaterializeNode* materialize = _tree.insertBefore<MaterializeNode>(filterNode);
-                    materialize->setBranch(filterNodeBranch);
+                    _tree.insertBefore<MaterializeNode>(filterNode);
                 } break;
+
                 case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                    // Join
                     JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
-                    join->setBranch(filterNodeBranch);
-
-                    auto* depBranchTip = _topology->getBranchTip(dep._var);
-                    fmt::print("  JOIN {} on {}\n", PlanGraphOpcodeDescription::value(depBranchTip->getOpcode()), nameA);
-
-                    // Join the branches
+                    auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
                     depBranchTip->connectOut(join);
                 } break;
+
                 case PlanGraphTopology::PathToDependency::NoPath: {
                     // ValueHashJoin
                     JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
-                    join->setBranch(filterNodeBranch);
-
-                    auto* depBranchTip = _topology->getBranchTip(dep._var);
-
-                    fmt::print("  VALUE HASH JOIN {} on {}\n", PlanGraphOpcodeDescription::value(depBranchTip->getOpcode()), nameA);
-
-                    // Join the branches
+                    auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
                     depBranchTip->connectOut(join);
                 } break;
             }
