@@ -20,18 +20,18 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelinePort* inNodeIDs() const { return _inNodeIDs; }
-    PipelinePort* outIndices() const { return _outIndices; }
-    PipelinePort* outEdgeIDs() const { return _outEdgeIDs; }
-    PipelinePort* outTargetNodes() const { return _outTargetNodes; }
-    PipelinePort* outEdgeTypes() const { return _outEdgeTypes; }
+    PipelineInputPort* inNodeIDs() const { return _inNodeIDs; }
+    PipelineOutputPort* outIndices() const { return _outIndices; }
+    PipelineOutputPort* outEdgeIDs() const { return _outEdgeIDs; }
+    PipelineOutputPort* outTargetNodes() const { return _outTargetNodes; }
+    PipelineOutputPort* outEdgeTypes() const { return _outEdgeTypes; }
 
 private:
-    PipelinePort* _inNodeIDs {nullptr};
-    PipelinePort* _outIndices {nullptr};
-    PipelinePort* _outEdgeIDs {nullptr};
-    PipelinePort* _outTargetNodes {nullptr};
-    PipelinePort* _outEdgeTypes {nullptr};
+    PipelineInputPort* _inNodeIDs {nullptr};
+    PipelineOutputPort* _outIndices {nullptr};
+    PipelineOutputPort* _outEdgeIDs {nullptr};
+    PipelineOutputPort* _outTargetNodes {nullptr};
+    PipelineOutputPort* _outEdgeTypes {nullptr};
     std::unique_ptr<GetOutEdgesChunkWriter> _it;
 
     GetOutEdgesProcessor();

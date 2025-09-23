@@ -24,6 +24,9 @@ PipelineV2::~PipelineV2() {
 
 void PipelineV2::addProcessor(Processor* processor) {
     _processors.push_back(processor);
+    if (processor->isSource()) {
+        _sources.insert(processor);
+    }
 }
 
 void PipelineV2::addBuffer(PipelineBuffer* buffer) {

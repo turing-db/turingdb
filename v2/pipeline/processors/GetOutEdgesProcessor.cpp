@@ -24,11 +24,11 @@ GetOutEdgesProcessor::~GetOutEdgesProcessor() {
 GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
     GetOutEdgesProcessor* getOutEdges = new GetOutEdgesProcessor();
 
-    PipelinePort* inNodeIDs = PipelinePort::create(pipeline, getOutEdges);
-    PipelinePort* outIndices = PipelinePort::create(pipeline, getOutEdges);
-    PipelinePort* outEdgeIDs = PipelinePort::create(pipeline, getOutEdges);
-    PipelinePort* outTargetNodes = PipelinePort::create(pipeline, getOutEdges);
-    PipelinePort* outEdgeTypes = PipelinePort::create(pipeline, getOutEdges);
+    PipelineInputPort* inNodeIDs = PipelineInputPort::create(pipeline, getOutEdges);
+    PipelineOutputPort* outIndices = PipelineOutputPort::create(pipeline, getOutEdges);
+    PipelineOutputPort* outEdgeIDs = PipelineOutputPort::create(pipeline, getOutEdges);
+    PipelineOutputPort* outTargetNodes = PipelineOutputPort::create(pipeline, getOutEdges);
+    PipelineOutputPort* outEdgeTypes = PipelineOutputPort::create(pipeline, getOutEdges);
 
     getOutEdges->_inNodeIDs = inNodeIDs;
     getOutEdges->_outIndices = outIndices;
@@ -56,27 +56,21 @@ void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
 
-    PipelineBuffer* indicesBuffer = _outIndices->getBuffer();
-    if (indicesBuffer) {
-        ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(indicesBuffer->getBlock()[0]);
-        _it->setIndices(indices);
-    }
+    ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices->getBuffer()->getBlock()[0]);
+    _it->setIndices(indices);
 
-    PipelineBuffer* edgeIDsBuffer = _outEdgeIDs->getBuffer();
-    if (edgeIDsBuffer) {
-        ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(edgeIDsBuffer->getBlock()[0]);
+    if (_outEdgeIDs->isConnected()) {
+        ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdgeIDs->getBuffer()->getBlock()[0]);
         _it->setEdgeIDs(edgeIDs);
     }
 
-    PipelineBuffer* targetNodesBuffer = _outTargetNodes->getBuffer();
-    if (targetNodesBuffer) {
-        ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(targetNodesBuffer->getBlock()[0]);
+    if (_outTargetNodes->isConnected()) {
+        ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outTargetNodes->getBuffer()->getBlock()[0]);
         _it->setTgtIDs(targetNodes);
     }
 
-    PipelineBuffer* edgeTypesBuffer = _outEdgeTypes->getBuffer();
-    if (edgeTypesBuffer) {
-        ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(edgeTypesBuffer->getBlock()[0]);
+    if (_outEdgeTypes->isConnected()) {
+        ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdgeTypes->getBuffer()->getBlock()[0]);
         _it->setEdgeTypes(edgeTypes);
     }
 }

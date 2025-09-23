@@ -17,7 +17,7 @@ public:
     using ColumnsPerStep = std::vector<Columns>;
     using Indices = std::vector<const ColumnIndices*>;
 
-    MaterializeData(LocalMemory* mem);
+    explicit MaterializeData(LocalMemory* mem);
     ~MaterializeData();
 
     void setOutput(Block* output) { _output = output; }

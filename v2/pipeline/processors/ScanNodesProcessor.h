@@ -20,10 +20,10 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelinePort* outNodeIDs() const { return _outNodeIDs; }
+    PipelineOutputPort* outNodeIDs() const { return _outNodeIDs; }
 
 private:
-    PipelinePort* _outNodeIDs {nullptr};
+    PipelineOutputPort* _outNodeIDs {nullptr};
     std::unique_ptr<ScanNodesChunkWriter> _it;
 
     ScanNodesProcessor();

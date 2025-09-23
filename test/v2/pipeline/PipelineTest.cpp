@@ -57,46 +57,40 @@ TEST_F(PipelineTest, scanNodes) {
     PipelineV2 pipeline;
 
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
+    auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
 
     // GetOutEdges1
     GetOutEdgesProcessor* getOutEdges1 = GetOutEdgesProcessor::create(&pipeline);
-    PipelineBuffer* inNodeIDsBuffer = PipelineBuffer::create(&pipeline);
-    auto* inNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, inNodeIDsBuffer);
-    scanNodes->outNodeIDs()->connectTo(getOutEdges1->inNodeIDs(), inNodeIDsBuffer);
+    auto* indices1 = addColumnInBuffer<ColumnIndices>(&mem, getOutEdges1->outIndices()->getBuffer());
+    auto* targetNodes1 = addColumnInBuffer<ColumnNodeIDs>(&mem, getOutEdges1->outTargetNodes()->getBuffer());
+    scanNodes->outNodeIDs()->connectTo(getOutEdges1->inNodeIDs());
 
     // GetOutEdges2
     GetOutEdgesProcessor* getOutEdges2 = GetOutEdgesProcessor::create(&pipeline);
-    PipelineBuffer* targetNodes1Buffer = PipelineBuffer::create(&pipeline);
-    PipelineBuffer* indices1Buffer = PipelineBuffer::create(&pipeline);
-    auto* indices1 = addColumnInBuffer<ColumnIndices>(&mem, indices1Buffer);
-    auto* targetNodes1 = addColumnInBuffer<ColumnNodeIDs>(&mem, targetNodes1Buffer);
-    getOutEdges1->outTargetNodes()->connectTo(getOutEdges2->inNodeIDs(), targetNodes1Buffer);
+    auto* indices2 = addColumnInBuffer<ColumnIndices>(&mem, getOutEdges2->outIndices()->getBuffer());
+    auto* targetNodes2 = addColumnInBuffer<ColumnNodeIDs>(&mem, getOutEdges2->outTargetNodes()->getBuffer());
+    getOutEdges1->outTargetNodes()->connectTo(getOutEdges2->inNodeIDs());
 
     // Materialize
-    MaterializeData matData(&mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    getOutEdges2->outTargetNodes()->connectTo(materialize->input());
 
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &matData);
-    PipelineBuffer* targetNodes2Buffer = PipelineBuffer::create(&pipeline);
-    PipelineBuffer* indices2Buffer = PipelineBuffer::create(&pipeline);
-    auto* indices2 = addColumnInBuffer<ColumnIndices>(&mem, indices2Buffer);
-    auto* targetNodes2 = addColumnInBuffer<ColumnNodeIDs>(&mem, targetNodes2Buffer);
-    getOutEdges2->outTargetNodes()->connectTo(materialize->input(), targetNodes2Buffer);
-
-    matData.addToStep(inNodeIDs);
+    // Fill up materialize data
+    MaterializeData& matData = materialize->getMaterializeData();
+    matData.addToStep(scanNodesOutNodeIDs);
     matData.createStep(indices1);
     matData.addToStep(targetNodes1);
     matData.createStep(indices2);
     matData.addToStep(targetNodes2);
 
+    // Lambda
     auto callback = [](const Block& block, LambdaProcessor::Operation operation) {
     };
 
     LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    {
-        PipelineBuffer* outputBuffer = PipelineBuffer::create(&pipeline);
-        materialize->output()->connectTo(lambda->input(), outputBuffer);
-    }
+    materialize->output()->connectTo(lambda->input());
 
+    // Execute pipeline
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
     ExecutionContext execCtxt(view);

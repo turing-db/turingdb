@@ -18,6 +18,9 @@ public:
     const Ports& inputs() const { return _inputs; }
     const Ports& outputs() const { return _outputs; }
 
+    bool isSource() const { return _inputs.empty(); }
+    bool isSink() const { return _outputs.empty(); }
+
     bool isFinished() const { return _finished; }
 
     virtual void prepare(ExecutionContext* ctxt) = 0;

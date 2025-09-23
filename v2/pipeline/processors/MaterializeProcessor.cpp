@@ -73,33 +73,32 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
 
 }
 
-MaterializeProcessor::MaterializeProcessor(MaterializeData* matData)
-    : _matData(matData)
+MaterializeProcessor::MaterializeProcessor(LocalMemory* mem)
+    : _matData(mem)
 {
 }
 
 MaterializeProcessor::~MaterializeProcessor() {
 }
 
-MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, MaterializeData* matData) {
-    MaterializeProcessor* materialize = new MaterializeProcessor(matData);
+MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMemory* mem) {
+    MaterializeProcessor* materialize = new MaterializeProcessor(mem);
 
-    PipelinePort* input = PipelinePort::create(pipeline, materialize);
+    PipelineInputPort* input = PipelineInputPort::create(pipeline, materialize);
     materialize->_input = input;
     materialize->addInput(input);
 
-    PipelinePort* output = PipelinePort::create(pipeline, materialize);
+    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, materialize);
     materialize->_output = output;
     materialize->addOutput(output);
+
+    materialize->_matData.setOutput(&output->getBuffer()->getBlock());
 
     materialize->postCreate(pipeline);
     return materialize;
 }
 
 void MaterializeProcessor::prepare(ExecutionContext* ctxt) {
-    if (PipelineBuffer* outputBuffer = _output->getBuffer()) {
-        _matData->setOutput(&outputBuffer->getBlock());
-    }
 }
 
 void MaterializeProcessor::reset() {
@@ -112,9 +111,9 @@ void MaterializeProcessor::execute() {
     }
 
     Block& output = outputBuffer->getBlock();
-    const MaterializeData::Indices& indices = _matData->getIndices();
-    const MaterializeData::ColumnsPerStep& columnsPerStep = _matData->getColumnsPerStep();
-    const size_t colCount = _matData->getColumnCount();
+    const MaterializeData::Indices& indices = _matData.getIndices();
+    const MaterializeData::ColumnsPerStep& columnsPerStep = _matData.getColumnsPerStep();
+    const size_t colCount = _matData.getColumnCount();
 
     // Handle the simplest case in which no indices were provided
     if (indices.empty()) {
@@ -174,6 +173,7 @@ void MaterializeProcessor::execute() {
         }
     }
 
+    _finished = true;
     _input->consume();
     _output->writeData();
 }

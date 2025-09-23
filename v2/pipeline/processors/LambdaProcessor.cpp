@@ -18,6 +18,7 @@ void LambdaProcessor::reset() {
 }
 
 void LambdaProcessor::execute() {
+    _finished = true;
     _input->consume();
     _callback(_input->getBuffer()->getBlock(), Operation::EXECUTE);
 }
@@ -25,7 +26,7 @@ void LambdaProcessor::execute() {
 LambdaProcessor* LambdaProcessor::create(PipelineV2* pipeline, Callback callback) {
     LambdaProcessor* lambda = new LambdaProcessor(callback);
 
-    PipelinePort* input = PipelinePort::create(pipeline, lambda);
+    PipelineInputPort* input = PipelineInputPort::create(pipeline, lambda);
     lambda->_input = input;
     lambda->addInput(input);
 

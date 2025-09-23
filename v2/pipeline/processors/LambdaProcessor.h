@@ -25,11 +25,11 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelinePort* input() const { return _input; }
+    PipelineInputPort* input() const { return _input; }
 
 private:
     Callback _callback;
-    PipelinePort* _input {nullptr};
+    PipelineInputPort* _input {nullptr};
 
     LambdaProcessor(Callback callback);
     ~LambdaProcessor();

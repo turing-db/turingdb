@@ -19,7 +19,7 @@ ScanNodesProcessor::~ScanNodesProcessor() {
 ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
     ScanNodesProcessor* scanNodes = new ScanNodesProcessor();
 
-    PipelinePort* outNodeIDs = PipelinePort::create(pipeline, scanNodes);
+    PipelineOutputPort* outNodeIDs = PipelineOutputPort::create(pipeline, scanNodes);
     scanNodes->_outNodeIDs = outNodeIDs;
     scanNodes->addOutput(outNodeIDs);
 
