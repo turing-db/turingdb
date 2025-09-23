@@ -19,6 +19,12 @@ public:
     bool hasData() const { return _hasData; }
     bool canWriteData() const { return !_hasData; }
 
+    Column* getColumn() const { return _col; }
+    void setColumn(Column* column) { _col = column; }
+
+    void setSource(Processor* source) { _source = source; }
+    void setConsumer(Processor* consumer) { _consumer = consumer; }
+
     Column* consume() {
         _hasData = false;
         return _col;
@@ -27,12 +33,6 @@ public:
     void writeData() {
         _hasData = true;
     }
-
-    Column* getColumn() const { return _col; }
-    void setColumn(Column* column) { _col = column; }
-
-    void setSource(Processor* source) { _source = source; }
-    void setConsumer(Processor* consumer) { _consumer = consumer; }
 
     static PipelineBuffer* create(PipelineV2* pipeline);
 
