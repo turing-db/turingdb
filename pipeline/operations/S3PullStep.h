@@ -15,11 +15,7 @@ class S3PullStep {
 public:
     struct Tag {};
 
-    S3PullStep(std::string_view s3Bucket,
-               std::string_view s3Prefix,
-               std::string_view s3File,
-               const std::string& localPath,
-               S3TransferDirectory dir);
+    S3PullStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath, S3TransferDirectory dir);
     ~S3PullStep();
 
     void prepare(ExecutionContext* ctxt);

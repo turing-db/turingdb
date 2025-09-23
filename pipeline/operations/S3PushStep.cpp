@@ -11,11 +11,7 @@
 
 using namespace db;
 
-S3PushStep::S3PushStep(std::string_view s3Bucket,
-                       std::string_view s3Prefix,
-                       std::string_view s3File,
-                       const std::string& localPath,
-                       S3TransferDirectory dir)
+S3PushStep::S3PushStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath, S3TransferDirectory dir)
     : _s3Bucket(s3Bucket),
     _s3Prefix(s3Prefix),
     _s3File(s3File),
@@ -43,16 +39,12 @@ void S3PushStep::execute() {
     Profile profile {"S3PushStep::execute"};
 
     if (!_s3File.empty()) {
-        auto awsRes = _s3Client->uploadFile(_fullPath,
-                                            std::string(_s3Bucket),
-                                            std::string(_s3File));
+        auto awsRes = _s3Client->uploadFile(_fullPath, std::string(_s3Bucket), std::string(_s3File));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
         }
     } else {
-        auto awsRes = _s3Client->uploadDirectory(_fullPath,
-                                                 std::string(_s3Bucket),
-                                                 std::string(_s3Prefix));
+        auto awsRes = _s3Client->uploadDirectory(_fullPath, std::string(_s3Bucket), std::string(_s3Prefix));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
         }
