@@ -73,7 +73,7 @@ public:
      * std::vector::insert
      */
     void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes);
-    
+
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
@@ -83,7 +83,7 @@ private:
 
     // Edges to be created when this commit commits
     std::vector<PendingEdge> _pendingEdges;
-    
+
     // Nodes to be deleted when this commit commits
     std::set<NodeID> _deletedNodes;
 
