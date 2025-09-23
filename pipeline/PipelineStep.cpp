@@ -270,10 +270,9 @@ PipelineStep::PipelineStep(S3PushStep::Tag,
                            std::string_view s3Bucket,
                            std::string_view s3Prefix,
                            std::string_view s3File,
-                           const std::string& localPath,
-                           S3TransferDirectory transferDir)
+                           const std::string& localPath)
     :_opcode(PipelineOpcode::S3PUSH),
-    _impl(std::in_place_type<S3PushStep>, s3Bucket, s3Prefix, s3File, localPath,transferDir)
+    _impl(std::in_place_type<S3PushStep>, s3Bucket, s3Prefix, s3File, localPath)
 {
 }
 
@@ -281,10 +280,9 @@ PipelineStep::PipelineStep(S3PullStep::Tag,
                            std::string_view s3Bucket,
                            std::string_view s3Prefix,
                            std::string_view s3File,
-                           const std::string& localPath,
-                           S3TransferDirectory transferDir)
+                           const std::string& localPath)
     :_opcode(PipelineOpcode::S3PULL),
-    _impl(std::in_place_type<S3PullStep>, s3Bucket, s3Prefix, s3File, localPath, transferDir)
+    _impl(std::in_place_type<S3PullStep>, s3Bucket, s3Prefix, s3File, localPath)
 {
 }
 

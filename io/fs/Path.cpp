@@ -176,15 +176,3 @@ Result<void> Path::rm() const {
     return {};
 }
 
-bool Path::isSubDirectory(const Path& rootDirectory, const Path& subDirectory) {
-    auto normalizedRoot = std::filesystem::absolute(rootDirectory.c_str()).lexically_normal();
-    auto normalizedSub = std::filesystem::absolute(subDirectory.c_str()).lexically_normal();
-
-    // Check if the full path is within the base directory
-    auto relative = normalizedSub.lexically_relative(normalizedRoot);
-
-    // Safe if:
-    // 1. Relative path is not empty
-    // 2. Doesn't start with ".." (going up directories)
-    return !relative.empty() && relative.begin()->string() != "..";
-}
