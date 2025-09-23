@@ -53,7 +53,8 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const QueryCallback& callback)
     : _view(view),
       _ast(&ast),
-      _variables(_tree) {
+      _variables(_tree)
+{
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {

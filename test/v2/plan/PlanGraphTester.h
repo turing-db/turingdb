@@ -4,6 +4,7 @@
 #include "decl/VarDecl.h"
 
 #include "TuringException.h"
+#include "nodes/VarNode.h"
 
 namespace db::v2 {
 

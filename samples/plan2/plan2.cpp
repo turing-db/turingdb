@@ -23,7 +23,7 @@
 using namespace db;
 using namespace db::v2;
 
-void runPlan2(std::string_view query);
+static void runPlan2(std::string_view query);
 
 int main(int argc, char** argv) {
     std::string queryStr;
@@ -69,23 +69,30 @@ void runPlan2(std::string_view query) {
         parser.parse(query);
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
     } catch (const ParserException& e) {
-        std::cerr << "Syntax error:\n" << e.what() << std::endl;
+        std::cerr << "Syntax error:\n"
+                  << e.what() << std::endl;
         return;
     }
 
     CypherAnalyzer analyzer(&ast, view);
     try {
+        auto t0 = Clock::now();
         analyzer.analyze();
+        fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, Clock::now()));
     } catch (const AnalyzeException& e) {
-        std::cerr << "Analyze error:\n" << e.what() << std::endl;
+        std::cerr << "Analyze error:\n"
+                  << e.what() << std::endl;
         return;
     }
 
     PlanGraphGenerator planGen(ast, view, callback);
     try {
+        auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
+        fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, Clock::now()));
     } catch (const PlannerException& e) {
-        std::cerr << "Plan error:\n" << e.what() << std::endl;
+        std::cerr << "Plan error:\n"
+                  << e.what() << std::endl;
         return;
     }
 

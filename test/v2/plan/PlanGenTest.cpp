@@ -12,6 +12,7 @@
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "PlanGraphGenerator.h"
+#include "PlanGraphDebug.h"
 #include "PlanGraphTester.h"
 
 #include "TuringConfig.h"
@@ -59,14 +60,14 @@ TEST_F(PlanGenTest, matchAllNodes) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
-
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
 
     PlanGraphTester(roots.front())
         .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
+        .expect(PlanGraphOpcode::PRODUCE_RESULTS)
         .validateComplete();
 }
 
@@ -89,18 +90,22 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
 
     PlanGraphTester(roots.front())
         .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
         .expect(PlanGraphOpcode::GET_OUT_EDGES)
+        .expect(PlanGraphOpcode::FILTER_EDGE)
         .expectVar("e")
         .expect(PlanGraphOpcode::GET_EDGE_TARGET)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("m")
+        .expect(PlanGraphOpcode::PRODUCE_RESULTS)
         .validateComplete();
 }
 
@@ -123,17 +128,22 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
 
     PlanGraphTester(roots.front())
         .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
         .expect(PlanGraphOpcode::GET_OUT_EDGES)
+        .expect(PlanGraphOpcode::FILTER_EDGE)
+        .expectVar("v0")
         .expect(PlanGraphOpcode::GET_EDGE_TARGET)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("m")
+        .expect(PlanGraphOpcode::PRODUCE_RESULTS)
         .validateComplete();
 }
 
@@ -156,14 +166,17 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
 
+    // TODO, Find ways to better test this
     PlanGraphTester(roots.front())
-        .expect(PlanGraphOpcode::SCAN_NODES_BY_LABEL)
+        .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
+        .expect(PlanGraphOpcode::PRODUCE_RESULTS)
         .validateComplete();
 }
 
@@ -186,20 +199,22 @@ TEST_F(PlanGenTest, matchLinear1) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
 
     PlanGraphTester(roots.front())
-        .expect(PlanGraphOpcode::SCAN_NODES_BY_LABEL)
+        .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
         .expect(PlanGraphOpcode::GET_OUT_EDGES)
-        .expect(PlanGraphOpcode::FILTER_EDGE_TYPE)
+        .expect(PlanGraphOpcode::FILTER_EDGE)
         .expectVar("e")
         .expect(PlanGraphOpcode::GET_EDGE_TARGET)
-        .expect(PlanGraphOpcode::FILTER_NODE_LABEL)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("p")
+        .expect(PlanGraphOpcode::PRODUCE_RESULTS)
         .validateComplete();
 }
 
@@ -221,21 +236,22 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 
     std::vector<PlanGraphNode*> roots;
     planGraph.getRoots(roots);
 
     PlanGraphTester(roots.front())
-        .expect(PlanGraphOpcode::SCAN_NODES_BY_LABEL)
+        .expect(PlanGraphOpcode::SCAN_NODES)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
         .expect(PlanGraphOpcode::GET_OUT_EDGES)
-        .expect(PlanGraphOpcode::FILTER_EDGE_TYPE)
-        .expect(PlanGraphOpcode::FILTER_EDGE_EXPR)
+        .expect(PlanGraphOpcode::FILTER_EDGE)
         .expectVar("e")
         .expect(PlanGraphOpcode::GET_EDGE_TARGET)
-        .expect(PlanGraphOpcode::FILTER_NODE_LABEL)
+        .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("p")
+        .expect(PlanGraphOpcode::PRODUCE_RESULTS)
         .validateComplete();
 }
 
@@ -300,7 +316,7 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 }
 
 TEST_F(PlanGenTest, matchMultiTargets1) {
@@ -322,5 +338,5 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
-    planGraph.dump(std::cout);
+    PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 }
