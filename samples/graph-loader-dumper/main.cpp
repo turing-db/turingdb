@@ -133,8 +133,8 @@ int main() {
         auto jobSystem = JobSystem::create();
 
         auto graph = Graph::create();
-        const std::string turingHome = std::getenv("HOME");
-        const fs::Path jsonDir = fs::Path {turingHome} / "graphs_v2" / "reactome";
+        const std::string turingHome = std::getenv("TURING_HOME");
+        const fs::Path jsonDir = fs::Path {turingHome} / "neo4j" / "reactome";
 
         Neo4jImporter neo4jImporter;
         if (!neo4jImporter.importJsonDir(*jobSystem,
