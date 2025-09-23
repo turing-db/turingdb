@@ -10,6 +10,8 @@ class ScanNodesChunkWriter;
 
 namespace db::v2 {
 
+class PipelineBuffer;
+
 class ScanNodeProcessor : public Processor {
 public:
     static ScanNodeProcessor* create(PipelineV2* pipeline);

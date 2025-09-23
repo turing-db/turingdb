@@ -10,6 +10,8 @@ class GetOutEdgesChunkWriter;
 
 namespace db::v2 {
 
+class PipelineBuffer;
+
 class GetOutEdgesProcessor : public Processor {
 public:
     static GetOutEdgesProcessor* create(PipelineV2* pipeline);
