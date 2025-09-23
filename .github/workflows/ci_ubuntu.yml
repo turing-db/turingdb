@@ -20,6 +20,10 @@ jobs:
             submodules: recursive
             # Ensure credentials are set for submodule fetches
             persist-credentials: true
+            lfs: true
+    - name: checkoutLFS
+      uses: actions/checkout@v4
+    - run:  git lfs pull
     - name: Install uv
       uses: astral-sh/setup-uv@v3
     - name: Install dependencies
