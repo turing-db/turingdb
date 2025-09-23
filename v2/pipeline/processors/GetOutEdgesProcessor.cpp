@@ -44,26 +44,26 @@ GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
 }
 
 void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs->getColumn());
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs->getBlock()[0]);
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
 
-    Column* indices = _outIndices->getColumn();
+    Column* indices = _outIndices->getBlock()[0];
     if (indices) {
         _it->setIndices(dynamic_cast<ColumnVector<size_t>*>(indices));
     }
 
-    Column* edgeIDs = _outEdgeIDs->getColumn();
+    Column* edgeIDs = _outEdgeIDs->getBlock()[0];
     if (edgeIDs) {
         _it->setEdgeIDs(dynamic_cast<ColumnEdgeIDs*>(edgeIDs));
     }
 
-    Column* targetNodes = _outTargetNodes->getColumn();
+    Column* targetNodes = _outTargetNodes->getBlock()[0];
     if (targetNodes) {
         _it->setTgtIDs(dynamic_cast<ColumnNodeIDs*>(targetNodes));
     }
 
-    Column* edgeTypes = _outEdgeTypes->getColumn();
+    Column* edgeTypes = _outEdgeTypes->getBlock()[0];
     if (edgeTypes) {
         _it->setEdgeTypes(dynamic_cast<ColumnEdgeTypes*>(edgeTypes));
     }

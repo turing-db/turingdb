@@ -28,7 +28,7 @@ ScanNodeProcessor* ScanNodeProcessor::create(PipelineV2* pipeline) {
 }
 
 void ScanNodeProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs->getColumn());
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs->getBlock()[0]);
 
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
