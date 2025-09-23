@@ -12,9 +12,9 @@ namespace db::v2 {
 
 class PipelineBuffer;
 
-class ScanNodeProcessor : public Processor {
+class ScanNodesProcessor : public Processor {
 public:
-    static ScanNodeProcessor* create(PipelineV2* pipeline);
+    static ScanNodesProcessor* create(PipelineV2* pipeline);
 
     void prepare(ExecutionContext* ctxt) override;
 
@@ -26,8 +26,8 @@ private:
     PipelineBuffer* _outNodeIDs {nullptr};
     std::unique_ptr<ScanNodesChunkWriter> _it;
 
-    ScanNodeProcessor();
-    ~ScanNodeProcessor();
+    ScanNodesProcessor();
+    ~ScanNodesProcessor();
 };
 
 

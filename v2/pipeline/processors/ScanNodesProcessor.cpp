@@ -1,4 +1,4 @@
-#include "ScanNodeProcessor.h"
+#include "ScanNodesProcessor.h"
 
 #include "PipelineV2.h"
 #include "iterators/ScanNodesIterator.h"
@@ -9,15 +9,15 @@
 
 using namespace db::v2;
 
-ScanNodeProcessor::ScanNodeProcessor()
+ScanNodesProcessor::ScanNodesProcessor()
 {
 }
 
-ScanNodeProcessor::~ScanNodeProcessor() {
+ScanNodesProcessor::~ScanNodesProcessor() {
 }
 
-ScanNodeProcessor* ScanNodeProcessor::create(PipelineV2* pipeline) {
-    ScanNodeProcessor* processor = new ScanNodeProcessor();
+ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
+    ScanNodesProcessor* processor = new ScanNodesProcessor();
 
     PipelineBuffer* outNodeIDs = PipelineBuffer::create(pipeline);
     processor->_outNodeIDs = outNodeIDs;
@@ -27,18 +27,18 @@ ScanNodeProcessor* ScanNodeProcessor::create(PipelineV2* pipeline) {
     return processor;
 }
 
-void ScanNodeProcessor::prepare(ExecutionContext* ctxt) {
+void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs->getBlock()[0]);
 
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
 }
 
-void ScanNodeProcessor::reset() {
+void ScanNodesProcessor::reset() {
     _it->reset();
 }
 
-void ScanNodeProcessor::execute() {
+void ScanNodesProcessor::execute() {
     _it->fill(ChunkConfig::CHUNK_SIZE);
 
     if (!_it->isValid()) {

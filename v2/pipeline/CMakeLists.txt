@@ -6,7 +6,7 @@ set(pipeline_sources
     PipelineExecutor.cpp)
 
 set(processors_sources
-    processors/ScanNodeProcessor.cpp
+    processors/ScanNodesProcessor.cpp
     processors/GetOutEdgesProcessor.cpp
     processors/MaterializeProcessor.cpp
     processors/MaterializeData.cpp)
