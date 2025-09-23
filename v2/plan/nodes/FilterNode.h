@@ -9,6 +9,7 @@
 namespace db::v2 {
 
 class Expr;
+class VarNode;
 
 class FilterNode : public PlanGraphNode {
 public:
@@ -22,26 +23,35 @@ public:
         : PlanGraphNode(opcode)
     {
     }
+    
+    void setVarNode(VarNode* varNode) {
+        _varNode = varNode;
+    }
+
+    VarNode* getVarNode() {
+        return _varNode;
+    }
 
     void addPropertyConstraint(PropertyTypeID type, Expr* expr, BinaryOperator op) {
         _propConstraints.emplace_back(type, expr, op);
     }
 
-    void addWherePredicate(WherePredicate&& expr) {
-        _wherePredicates.push_back(std::move(expr));
+    void addWherePredicate(WherePredicate* pred) {
+        _wherePredicates.push_back(pred);
     }
 
     const std::vector<PropertyConstraint>& getPropertyConstraints() const {
         return _propConstraints;
     }
 
-    const std::vector<WherePredicate>& getWherePredicates() const {
+    const std::vector<WherePredicate*>& getWherePredicates() const {
         return _wherePredicates;
     }
 
 private:
+    VarNode* _varNode {nullptr};
     std::vector<PropertyConstraint> _propConstraints;
-    std::vector<WherePredicate> _wherePredicates;
+    std::vector<WherePredicate*> _wherePredicates;
 };
 
 class FilterNodeNode : public FilterNode {

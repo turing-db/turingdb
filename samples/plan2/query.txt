@@ -10,19 +10,29 @@
 //       (m:Founder { age: 30 })
 // RETURN n.name, m.name
 
-//MATCH (n)-->(m)
-//WHERE n:Founder AND m.name = "Remy"
-//RETURN n, m
+// MATCH (a), (b), (c)
+// WHERE a.name = b.name OR b.name = c.name
+// RETURN a, b
 
-// MATCH (a)-->(c), (a)-[e]->(b)
-// WHERE a:Person AND (a.duration * c.duration) < b.duration
-// RETURN a, e, b
+// MATCH (a)-->(c), (a)-->(b), (f)
+// WHERE     a.name = "Luc"
+//       AND a.name = c.name
+//       AND a.name = b.name
+//       AND c.name = b.name
+//       AND a.name = f.name
+//       AND (a.name = "Luc" OR b.name = "Remy")
+// RETURN a, b
 
-MATCH (a)--(b)--(c), (d)--(b)--(e)
-RETURN a, b, c
+// MATCH (a)--(b)--(c), (d)--(b)--(e)
+// RETURN a, b, c
 
 // MATCH (a)--(b)--(c), (d)--(b)
 // RETURN a, b, c
 
-// MATCH (a), (b), (c)
-// RETURN a, b, c
+MATCH (a), (b), (c)
+WHERE a.name = b.name OR b.name = c.name
+RETURN a, b, c
+
+// MATCH (a), (b)
+// WHERE a.name = b.name
+// RETURN a, b

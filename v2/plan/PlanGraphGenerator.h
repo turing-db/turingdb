@@ -98,6 +98,9 @@ private:
 
     void evaluateTopology();
 
+    void placeWherePredicateJoins();
+
+
     void throwError(std::string_view msg, const void* obj = 0) const;
 };
 

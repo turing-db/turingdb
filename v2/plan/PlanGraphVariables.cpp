@@ -59,6 +59,7 @@ std::tuple<VarNode*, FilterNode*> PlanGraphVariables::getOrCreateVarNodeAndFilte
         _nodeFiltersMap[varNode] = filterNode;
 
         filterNode->connectOut(varNode);
+        filterNode->setVarNode(varNode);
 
         return {varNode, filterNode};
     }

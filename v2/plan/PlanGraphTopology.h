@@ -1,17 +1,23 @@
 #pragma once
 
 #include <memory>
+#include <queue>
 #include <span>
 #include <unordered_set>
 
 #include "nodes/PlanGraphNode.h"
-#include "spdlog/fmt/bundled/base.h"
-#include "spdlog/fmt/bundled/format.h"
 
 namespace db::v2 {
 
 class PlanGraphTopology {
 public:
+    enum class PathToDependency {
+        SameVar,
+        BackwardPath,
+        UndirectedPath,
+        NoPath
+    };
+
     void evaluate(PlanGraphNode* node) {
         const bool inserted = _visited.insert(node).second;
 
@@ -33,10 +39,6 @@ public:
             evaluateMultipleOutputs(node);
             return;
         }
-
-        // End point
-        fmt::println("Adding end point {} with branch {}", fmt::ptr(node), fmt::ptr(node->branch()));
-        _ends.push_back(node);
     }
 
     void evaluateSingleOutput(PlanGraphNode* node) {
@@ -97,6 +99,10 @@ public:
         return newBranchPtr;
     }
 
+    void addEnd(PlanGraphNode* node) {
+        _ends.push_back(node);
+    }
+
     void clear() {
         _visited.clear();
         _branches.clear();
@@ -123,6 +129,103 @@ public:
 
     std::span<const PlanGraphNode* const> ends() const {
         return _ends;
+    }
+
+
+    PathToDependency getShortestPath(const PlanGraphNode* origin, const PlanGraphNode* target) const {
+        if (target == origin) {
+            return PathToDependency::SameVar;
+        }
+
+        std::queue<const PlanGraphNode*> phase1;
+        std::queue<const PlanGraphNode*> phase2;
+        std::unordered_set<const PlanGraphNode*> visited;
+
+        phase1.push(origin);
+        visited.insert(origin);
+
+        while (!phase1.empty()) {
+            const PlanGraphNode* node = phase1.front();
+            phase1.pop();
+
+            if (node == target) {
+                return PathToDependency::BackwardPath;
+            }
+
+            for (const auto& in : node->inputs()) {
+                if (!visited.insert(in).second) {
+                    continue; // Already visited
+                }
+
+                phase1.push(in);
+            }
+
+            for (const auto& out : node->outputs()) {
+                if (!visited.insert(out).second) {
+                    continue; // Already visited
+                }
+
+                phase2.push(out);
+            }
+        }
+
+        while (!phase2.empty()) {
+            const PlanGraphNode* node = phase2.front();
+            phase2.pop();
+
+            if (node == target) {
+                return PathToDependency::UndirectedPath;
+            }
+
+            for (const auto& out : node->outputs()) {
+                if (!visited.insert(out).second) {
+                    continue; // Already visited
+                }
+
+                phase2.push(out);
+            }
+
+            for (const auto& in : node->inputs()) {
+                if (!visited.insert(in).second) {
+                    continue; // Already visited
+                }
+
+                phase2.push(in);
+            }
+        }
+
+        return PathToDependency::NoPath;
+    }
+
+    PlanGraphNode* getBranchTip(PlanGraphNode* origin) const {
+        std::queue<PlanGraphNode*> q;
+
+        // Should not be needed since we should have loops
+        std::unordered_set<PlanGraphNode*> visited;
+
+        q.push(origin);
+        visited.insert(origin);
+
+        while (!q.empty()) {
+            PlanGraphNode* node = q.front();
+            q.pop();
+
+            const auto& outputs = node->outputs();
+
+            if (outputs.empty()) {
+                return node;
+            }
+
+            for (const auto& out : node->outputs()) {
+                if (!visited.insert(out).second) {
+                    continue; // Already visited
+                }
+
+                q.push(out);
+            }
+        }
+
+        return nullptr; // Should not happen
     }
 
 private:

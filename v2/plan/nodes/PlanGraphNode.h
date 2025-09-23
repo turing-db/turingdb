@@ -23,6 +23,7 @@ enum class PlanGraphOpcode {
     PROJECT_RESULTS,
     CARTESIAN_PRODUCT,
     JOIN,
+    MATERIALIZE,
     PRODUCE_RESULTS,
     _SIZE
 };
@@ -43,6 +44,7 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::PROJECT_RESULTS, "PROJECT_RESULTS">,
     EnumStringPair<PlanGraphOpcode::CARTESIAN_PRODUCT, "CARTESIAN_PRODUCT">,
     EnumStringPair<PlanGraphOpcode::JOIN, "JOIN">,
+    EnumStringPair<PlanGraphOpcode::MATERIALIZE, "MATERIALIZE">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">>;
 
 
@@ -60,7 +62,7 @@ public:
 
     bool isRoot() const { return _inputs.empty(); }
 
-    const PlanGraphBranch* branch() const { return _branch; }
+    PlanGraphBranch* branch() const { return _branch; }
     PlanGraphBranch* branch() { return _branch; }
 
     void setBranch(PlanGraphBranch* branch) { _branch = branch; }
@@ -68,6 +70,22 @@ public:
     void connectOut(PlanGraphNode* succ) {
         _outputs.emplace_back(succ);
         succ->_inputs.emplace_back(this);
+    }
+
+    void clearInputs() {
+        // Remove self from the outputs of our inputs
+        for (PlanGraphNode* input : _inputs) {
+            auto& outputs = input->_outputs;
+
+            for (auto it = outputs.begin(); it != outputs.end(); ++it) {
+                if (*it == this) {
+                    outputs.erase(it);
+                    break;
+                }
+            }
+        }
+
+        _inputs.clear();
     }
 
 protected:

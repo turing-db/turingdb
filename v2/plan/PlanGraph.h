@@ -10,6 +10,7 @@ namespace db::v2 {
 class VarDecl;
 class Expr;
 class ExprConstraint;
+class WherePredicate;
 
 class PlanGraph {
 public:
@@ -33,16 +34,36 @@ public:
         return next;
     }
 
+    template <typename T, typename... Args>
+    T* insertBefore(PlanGraphNode* after, Args&&... args) {
+        auto before = create<T>(std::forward<Args>(args)...);
+        for (PlanGraphNode* input : after->inputs()) {
+            input->connectOut(before);
+        }
+
+        after->clearInputs();
+        before->connectOut(after);
+
+        return before;
+    }
+
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
 
     std::span<const std::unique_ptr<PlanGraphNode>> nodes() const {
         return _nodes;
     }
 
+    WherePredicate* createWherePredicate(const Expr* expr);
+
+    std::span<const std::unique_ptr<WherePredicate>> wherePredicates() const {
+        return _wherePredicates;
+    }
+
 private:
     friend class PlanGraphDebug;
 
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
+    std::vector<std::unique_ptr<WherePredicate>> _wherePredicates;
 };
 
 }

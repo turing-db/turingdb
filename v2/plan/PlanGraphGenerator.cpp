@@ -1,8 +1,5 @@
 #include "PlanGraphGenerator.h"
 
-#include <spdlog/fmt/bundled/core.h>
-#include <range/v3/view/sliding.hpp>
-
 #include "CypherAST.h"
 #include "CypherError.h"
 #include "PlanGraphTopology.h"
@@ -10,6 +7,7 @@
 #include "QualifiedName.h"
 #include "WhereClause.h"
 #include "decl/VarDecl.h"
+#include "nodes/MaterializeNode.h"
 #include "views/GraphView.h"
 
 #include "nodes/JoinNode.h"
@@ -144,6 +142,17 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     // Identify end points and branches
     evaluateTopology();
 
+    // Place where predicates based on their dependencies
+    placeWherePredicateJoins();
+
+    // Generate end points
+    for (const auto& node : _tree.nodes()) {
+        if (node->outputs().empty()) {
+            fmt::print("    - Adding end point\n");
+            _topology->addEnd(node.get());
+        }
+    }
+
     // Generate return statement
     if (returnStmt) {
         generateReturnStmt(returnStmt);
@@ -191,22 +200,42 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     for (auto itB = ++ends.begin(); itB != ends.end(); itB++) {
         PlanGraphNode* b = *itB;
 
-        const auto islandA = a->branch()->islandId();
-        const auto islandB = b->branch()->islandId();
+        const auto path = _topology->getShortestPath(a, b);
 
-        auto* prod = islandA == islandB
-                       ? static_cast<PlanGraphNode*>(_tree.create<JoinNode>())
-                       : static_cast<PlanGraphNode*>(_tree.create<CartesianProductsNode>());
+        // PlanGraphBranch* branchA = a->branch();
+        // PlanGraphBranch* branchB = b->branch();
 
-        // Connect the nodes
-        a->connectOut(prod);
-        b->connectOut(prod);
+        switch (path) {
+            case PlanGraphTopology::PathToDependency::SameVar:
+            case PlanGraphTopology::PathToDependency::BackwardPath: {
+                // Should not happen
+                throwError("Should not happen", a);
+                continue;
+            } break;
 
-        // Update the topology (A, B) -> C
-        _topology->growBranch(a->branch(), prod);
-        _topology->joinBranches(b->branch(), prod->branch());
+            case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                // Join
+                fmt::print("    - Join\n");
+                JoinNode* join = _tree.create<JoinNode>();
+                a->connectOut(join);
+                b->connectOut(join);
+                // join->setBranch(branchA);
 
-        a = prod;
+                // _topology->joinBranches(branchB, branchA);
+                a = join;
+            } break;
+            case PlanGraphTopology::PathToDependency::NoPath: {
+                // Cartesian product
+                fmt::print("    - Cartesian product\n");
+                CartesianProductNode* join = _tree.create<CartesianProductNode>();
+                a->connectOut(join);
+                b->connectOut(join);
+                // join->setBranch(branchA);
+
+                // _topology->joinBranches(branchB, branchA);
+                a = join;
+            } break;
+        }
     }
 
     // Connect the last node to the output
@@ -214,7 +243,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     a->connectOut(results);
 
     // Update the topology
-    _topology->growBranch(a->branch(), results);
+    // _topology->growBranch(a->branch(), results);
 }
 
 void PlanGraphGenerator::generateWhereClause(const WhereClause* where) {
@@ -402,31 +431,28 @@ void PlanGraphGenerator::unwrapWhereExpr(const Expr* expr) {
 
     // Unwraped the first list of AND expressions,
     // Treating other cases as a whole Where predicate
-    WherePredicate predicate {expr};
-    predicate.generate();
+    WherePredicate* predicate = _tree.createWherePredicate(expr);
+    predicate->generate(_variables);
 
-    const auto& dependencies = predicate.getDependencies();
+    const auto& dependencies = predicate->getDependencies();
     if (dependencies.empty()) {
         throwError("Where clauses without dependencies are not supported yet", expr);
     }
 
-    const VarDecl* firstDep = dependencies.begin()->_decl;
-    const VarNode* firstVar = _variables.getVarNode(firstDep);
+    const VarNode* firstVar = dependencies.begin()->_var;
     uint32_t _lastDeclOrder = firstVar->getDeclOdrer();
     const VarNode* _lastDependency = firstVar;
 
     for (const auto& dep : dependencies) {
-        const VarDecl* decl = dep._decl;
-        const VarNode* var = _variables.getVarNode(decl);
-
-        if (_lastDeclOrder < var->getDeclOdrer()) {
-            _lastDeclOrder = var->getDeclOdrer();
-            _lastDependency = var;
+        if (_lastDeclOrder < dep._var->getDeclOdrer()) {
+            _lastDeclOrder = dep._var->getDeclOdrer();
+            _lastDependency = dep._var;
         }
     }
 
     FilterNode* filterNode = _variables.getNodeFilter(_lastDependency);
-    filterNode->addWherePredicate(std::move(predicate));
+    filterNode->addWherePredicate(predicate);
+    predicate->setFilterNode(filterNode);
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
@@ -459,5 +485,59 @@ void PlanGraphGenerator::evaluateTopology() {
 
         // node is a root, evaluate the topology of the network from it
         _topology->evaluate(node.get());
+    }
+}
+
+void PlanGraphGenerator::placeWherePredicateJoins() {
+    for (const auto& pred : _tree.wherePredicates()) {
+        FilterNode* filterNode = pred->getFilterNode();
+        [[maybe_unused]] PlanGraphBranch* filterNodeBranch = filterNode->branch();
+
+        const auto& nameA = filterNode->getVarNode()->getVarDecl()->getName();
+
+        for (const auto& dep : pred->getDependencies()) {
+            if (filterNode->getVarNode() == dep._var) {
+                continue;
+            }
+
+            const auto path = _topology->getShortestPath(filterNode, dep._var);
+
+            switch (path) {
+                case PlanGraphTopology::PathToDependency::SameVar: {
+                    // Nothing to be done
+                    fmt::print("  SAME VAR\n");
+                    continue;
+                } break;
+
+                case PlanGraphTopology::PathToDependency::BackwardPath: {
+                    // Materialize
+                    fmt::print("  MATERIALIZE at {}\n", nameA);
+                    MaterializeNode* materialize = _tree.insertBefore<MaterializeNode>(filterNode);
+                    materialize->setBranch(filterNodeBranch);
+                } break;
+                case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                    JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
+                    join->setBranch(filterNodeBranch);
+
+                    auto* depBranchTip = _topology->getBranchTip(dep._var);
+                    fmt::print("  JOIN {} on {}\n", PlanGraphOpcodeDescription::value(depBranchTip->getOpcode()), nameA);
+
+                    // Join the branches
+                    depBranchTip->connectOut(join);
+                } break;
+                case PlanGraphTopology::PathToDependency::NoPath: {
+                    // ValueHashJoin
+                    JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
+                    join->setBranch(filterNodeBranch);
+
+                    auto* depBranchTip = _topology->getBranchTip(dep._var);
+
+                    fmt::print("  VALUE HASH JOIN {} on {}\n", PlanGraphOpcodeDescription::value(depBranchTip->getOpcode()), nameA);
+
+                    // Join the branches
+                    depBranchTip->connectOut(join);
+                } break;
+            }
+        }
     }
 }

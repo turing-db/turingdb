@@ -4,7 +4,6 @@
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
 
-#include "PlannerException.h"
 #include "views/GraphView.h"
 
 #include "PlanGraph.h"
@@ -35,10 +34,10 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
         output << fmt::format("    {}[{}] {{\n", fmt::ptr(node.get()), PlanGraphOpcodeDescription::value(node->getOpcode()));
         // output << fmt::format("        id _{}\n", fmt::ptr(node.get()));
 
-        if (node->branch()) {
-            output << fmt::format("        island _{}\n", node->branch()->islandId());
-            output << fmt::format("        branch _{}\n", node->branch()->branchId());
-        }
+        // if (node->branch()) {
+        //     output << fmt::format("        island _{}\n", node->branch()->islandId());
+        //     output << fmt::format("        branch _{}\n", node->branch()->branchId());
+        // }
 
         switch (node->getOpcode()) {
             case PlanGraphOpcode::VAR: {
@@ -72,10 +71,10 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                 }
 
                 for (const auto& pred : n->getWherePredicates()) {
-                    output << "        predicate _" << fmt::ptr(&pred) << "\n";
+                    output << "        predicate _" << fmt::ptr(pred) << "\n";
 
-                    for (const auto& dep : pred.getDependencies()) {
-                        output << "        pred_dep _" << dep._decl->getName();
+                    for (const auto& dep : pred->getDependencies()) {
+                        output << "        pred_dep _" << dep._var->getVarDecl()->getName();
                         if (std::holds_alternative<PredicateDependencies::LabelDependency>(dep._dep)) {
                             output << " labels\n";
                         } else if (const auto* p = std::get_if<PredicateDependencies::PropertyDependency>(&dep._dep)) {
@@ -113,7 +112,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
         // Writing connections
         for (const PlanGraphNode* out : node->outputs()) {
-            output << fmt::format("    {} ||--o{{ {} : \" \" \n", fmt::ptr(node.get()), fmt::ptr(out));
+            output << fmt::format("    {} ||--o{{ {} : \" \"\n", fmt::ptr(node.get()), fmt::ptr(out));
         }
     }
 }

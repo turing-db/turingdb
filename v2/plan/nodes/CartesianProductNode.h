@@ -3,9 +3,9 @@
 #include "nodes/PlanGraphNode.h"
 namespace db::v2 {
 
-class CartesianProductsNode : public PlanGraphNode {
+class CartesianProductNode : public PlanGraphNode {
 public:
-    CartesianProductsNode()
+    CartesianProductNode()
         : PlanGraphNode(PlanGraphOpcode::CARTESIAN_PRODUCT)
     {
     }

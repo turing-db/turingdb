@@ -11,6 +11,9 @@ class UnaryExpr;
 class StringExpr;
 class NodeLabelExpr;
 class PropertyExpr;
+class FilterNode;
+class PlanGraphVariables;
+class PlanGraphNode;
 
 class WherePredicate {
 public:
@@ -30,20 +33,29 @@ public:
         return _dependencies.getDependencies();
     }
 
-    void generate() {
-        genExprDependencies(_expr);
+    void generate(const PlanGraphVariables& variables) {
+        genExprDependencies(variables, _expr);
+    }
+
+    FilterNode* getFilterNode() const {
+        return _filterNode;
+    }
+
+    void setFilterNode(FilterNode* filterNode) {
+        _filterNode = filterNode;
     }
 
 private:
     const Expr* _expr {nullptr};
+    FilterNode* _filterNode {nullptr};
     PredicateDependencies _dependencies;
 
-    void genExprDependencies(const Expr*);
-    void genExprDependencies(const BinaryExpr*);
-    void genExprDependencies(const UnaryExpr*);
-    void genExprDependencies(const StringExpr*);
-    void genExprDependencies(const NodeLabelExpr*);
-    void genExprDependencies(const PropertyExpr*);
+    void genExprDependencies(const PlanGraphVariables& variables, const Expr*);
+    void genExprDependencies(const PlanGraphVariables& variables, const BinaryExpr*);
+    void genExprDependencies(const PlanGraphVariables& variables, const UnaryExpr*);
+    void genExprDependencies(const PlanGraphVariables& variables, const StringExpr*);
+    void genExprDependencies(const PlanGraphVariables& variables, const NodeLabelExpr*);
+    void genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr*);
 };
 
 }

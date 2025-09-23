@@ -1,34 +1,38 @@
 #include "WherePredicate.h"
 
+#include "PlanGraphVariables.h"
 #include "PlannerException.h"
+
 #include "expr/BinaryExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/NodeLabelExpr.h"
 #include "expr/PropertyExpr.h"
 
+#include "nodes/FilterNode.h"
+
 using namespace db::v2;
 
-void WherePredicate::genExprDependencies(const Expr* expr) {
+void WherePredicate::genExprDependencies(const PlanGraphVariables& variables, const Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY:
-            genExprDependencies(static_cast<const BinaryExpr*>(expr));
+            genExprDependencies(variables, static_cast<const BinaryExpr*>(expr));
             break;
 
         case Expr::Kind::UNARY:
-            genExprDependencies(static_cast<const UnaryExpr*>(expr));
+            genExprDependencies(variables, static_cast<const UnaryExpr*>(expr));
             break;
 
         case Expr::Kind::STRING:
-            genExprDependencies(static_cast<const StringExpr*>(expr));
+            genExprDependencies(variables, static_cast<const StringExpr*>(expr));
             break;
 
         case Expr::Kind::NODE_LABEL:
-            genExprDependencies( static_cast<const NodeLabelExpr*>(expr));
+            genExprDependencies(variables, static_cast<const NodeLabelExpr*>(expr));
             break;
 
         case Expr::Kind::PROPERTY:
-            genExprDependencies( static_cast<const PropertyExpr*>(expr));
+            genExprDependencies(variables, static_cast<const PropertyExpr*>(expr));
             break;
 
         case Expr::Kind::PATH:
@@ -49,25 +53,24 @@ void WherePredicate::genExprDependencies(const Expr* expr) {
     }
 }
 
-void WherePredicate::genExprDependencies(const BinaryExpr* expr) {
-    genExprDependencies(expr->getLHS());
-    genExprDependencies(expr->getRHS());
+void WherePredicate::genExprDependencies(const PlanGraphVariables& variables, const BinaryExpr* expr) {
+    genExprDependencies(variables, expr->getLHS());
+    genExprDependencies(variables, expr->getRHS());
 }
 
-void WherePredicate::genExprDependencies(const UnaryExpr* expr) {
-    genExprDependencies(expr->getSubExpr());
+void WherePredicate::genExprDependencies(const PlanGraphVariables& variables, const UnaryExpr* expr) {
+    genExprDependencies(variables, expr->getSubExpr());
 }
 
-void WherePredicate::genExprDependencies(const StringExpr* expr) {
-    genExprDependencies(expr->getLHS());
-    genExprDependencies(expr->getRHS());
+void WherePredicate::genExprDependencies(const PlanGraphVariables& variables, const StringExpr* expr) {
+    genExprDependencies(variables, expr->getLHS());
+    genExprDependencies(variables, expr->getRHS());
 }
 
-void WherePredicate::genExprDependencies(const NodeLabelExpr* expr) {
-    _dependencies.addDependency(expr->getDecl(), expr->labelSet());
+void WherePredicate::genExprDependencies(const PlanGraphVariables& variables, const NodeLabelExpr* expr) {
+    _dependencies.addDependency(variables.getVarNode(expr->getDecl()), expr->labelSet());
 }
 
-void WherePredicate::genExprDependencies(const PropertyExpr* expr) {
-    _dependencies.addDependency(expr->getDecl(), expr->getPropertyType());
+void WherePredicate::genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr* expr) {
+    _dependencies.addDependency(variables.getVarNode(expr->getDecl()), expr->getPropertyType());
 }
-
