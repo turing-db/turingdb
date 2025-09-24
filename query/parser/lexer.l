@@ -41,12 +41,10 @@ using namespace db;
 "new"|"NEW" { return YParser::make_NEW(getLocation()); }
 "submit"|"SUBMIT" { return YParser::make_SUBMIT(getLocation()); }
 "delete"|"DELETE" { return YParser::make_DELETE(getLocation()); }
+"nodes"|"NODES" { return YParser::make_NODES(getLocation()); }
+"edges"|"EDGES" { return YParser::make_EDGES(getLocation()); }
 "call"|"CALL" { return YParser::make_CALL(getLocation()); }
 "@"|"at"|"AT" { return YParser::make_AT(getLocation()); }
-
-"S3_CONNECT"|"s3_connect" { return YParser::make_S3_CONNECT(getLocation()); }
-"S3_PUSH"|"s3_push" {  return YParser::make_S3_PUSH(getLocation()); }
-"S3_PULL"|"s3_pull" {  return YParser::make_S3_PULL(getLocation()); }
 
 "properties"|"PROPERTIES" { return YParser::make_PROPERTIES(getLocation()); }
 "labels"|"LABELS" { return YParser::make_LABELS(getLocation()); }

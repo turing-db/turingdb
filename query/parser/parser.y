@@ -116,10 +116,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token LABELS       "'LABELS'"
 %token EDGETYPES    "'EDGETYPES'" 
 %token LABELSETS    "'LABELSETS'"
-
-%token S3_CONNECT "'S3_CONNECT'"
-%token S3_PUSH "'S3_PUSH'"
-%token S3_PULL "'S3_PULL'"
+%token NODES        "'NODES'"
+%token EDGES        "'EDGES'"
 
 // Operators
 %token PLUS         "'+'"
@@ -152,6 +150,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> match_cmd
 %type<db::QueryCommand*> create_cmd
+%type<db::QueryCommand*> delete_cmd
 %type<db::ReturnProjection*> return_fields
 %type<db::ReturnField*> return_field
 %type<db::MatchTarget*> match_target
@@ -160,12 +159,13 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::CreateTargets*> create_targets
 %type<db::PathPattern*> create_path_pattern
 %type<db::PathPattern*> path_pattern
-%type<db::InjectedIDs*> injected_nodes
+%type<db::InjectedIDs*> injected_ids injected_nodes injected_edges
 %type<db::EntityPattern*> create_node_pattern
 %type<db::EntityPattern*> node_pattern
 %type<db::EntityPattern*> edge_pattern
 %type<db::EntityPattern*> entity_pattern
 %type<db::EntityPattern*> edge_entity_pattern
+%type<db::EntityPattern*> known_entity_pattern
 %type<db::TypeConstraint*> type_constraint
 %type<db::BinExpr*> prop_equals_expr
 %type<db::BinExpr*> prop_approx_expr
@@ -196,6 +196,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> s3connect_cmd
 %type<db::QueryCommand*> s3transfer_cmd
+%type<db::S3TransferDirectory> s3transfer_directory
 
 %start query_unit
 
@@ -207,6 +208,7 @@ query_unit: cmd { $$ = $1; }
           
 cmd: match_cmd { ctxt->setRoot($1); }
    | create_cmd { ctxt->setRoot($1); }
+   | delete_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
@@ -216,8 +218,6 @@ cmd: match_cmd { ctxt->setRoot($1); }
    | change_cmd { ctxt->setRoot($1); }
    | commit_cmd { ctxt->setRoot($1); }
    | call_cmd { ctxt->setRoot($1); }
-   | s3connect_cmd { ctxt->setRoot($1); }
-   | s3transfer_cmd { ctxt->setRoot($1); }
    ;
 
 match_cmd: MATCH match_targets RETURN return_fields {
@@ -259,6 +259,10 @@ create_cmd: CREATE create_targets
               $$ = CreateCommand::create(ctxt, $2);
           }
           ;
+
+delete_cmd: DELETE NODES injected_nodes { std::cout << "delete nodes command" << std::endl; }
+          | DELETE EDGES injected_edges { std::cout << "delete edges command" << std::endl; }
+		  ;
 
 return_field: STAR {
                         auto field = ReturnField::create(ctxt);
@@ -340,19 +344,29 @@ path_pattern: node_pattern
             }
             ;
 
-injected_nodes: INT_CONSTANT
+injected_ids: INT_CONSTANT
                    {
-                        auto injectedNodes = InjectedIDs::create(ctxt);
-                        injectedNodes->addID(std::stoull($1));
-                        $$ = injectedNodes;
+                        auto injectedIDs = InjectedIDs::create(ctxt);
+                        injectedIDs->addID(std::stoull($1));
+                        $$ = injectedIDs;
                    }
-                   | injected_nodes COMMA INT_CONSTANT
+                   | injected_ids COMMA INT_CONSTANT
                    {
                         $1->addID(std::stoull($3));
                         $$ = $1;
                    }
+				   ;
+
+injected_nodes : injected_ids;
+injected_edges : injected_ids;
+
                    
 create_node_pattern: OPAR entity_pattern CPAR
+                   {
+                        $2->setKind(DeclKind::NODE_DECL);
+                        $$ = $2;
+                   }
+                   | OPAR known_entity_pattern CPAR
                    {
                         $2->setKind(DeclKind::NODE_DECL);
                         $$ = $2;
@@ -403,7 +417,7 @@ entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBR
                     auto* pattern = EntityPattern::create(ctxt, nullptr, $2, nullptr, nullptr);
                     $$ = pattern;
               }
-              |entity_var COLON type_constraint AT injected_nodes OBRACK prop_expr_constraint CBRACK
+              | entity_var COLON type_constraint AT injected_nodes OBRACK prop_expr_constraint CBRACK
               {
                     auto* pattern = EntityPattern::create(ctxt, $1, $3, $7, $5);
                     $$=pattern;
@@ -438,34 +452,44 @@ entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBR
               }
               ;
 
+known_entity_pattern: entity_var COLON INT_CONSTANT
+                    { $$ = EntityPattern::create(ctxt, $1, std::stoull($3)); }
+                    | COLON INT_CONSTANT
+                    { $$ = EntityPattern::create(ctxt, nullptr, std::stoull($2)); }
 edge_entity_pattern: entity_var COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
                     auto* pattern = EntityPattern::create(ctxt, $1, $3, $5, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
                     $$=pattern;
               }
               | entity_var COLON type_constraint
               { 
                     auto* pattern = EntityPattern::create(ctxt, $1, $3, nullptr, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
                     $$=pattern;
               }
               | entity_var OBRACK prop_expr_constraint CBRACK
               { 
                     auto* pattern = EntityPattern::create(ctxt, $1, nullptr, $3, nullptr); 
+                    pattern->setKind(DeclKind::NODE_DECL);
                     $$=pattern;
               }
               | entity_var 
               { 
                     auto* pattern = EntityPattern::create(ctxt, $1, nullptr, nullptr, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
                     $$=pattern;
               }
               | COLON type_constraint OBRACK prop_expr_constraint CBRACK
               {
                     auto* pattern = EntityPattern::create(ctxt, nullptr, $2, $4, nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
                     $$=pattern;
               }
               | COLON type_constraint
               {
                     auto* pattern = EntityPattern::create(ctxt, nullptr, $2, nullptr,nullptr);
+                    pattern->setKind(DeclKind::NODE_DECL);
                     $$ = pattern;
               }
               ;
@@ -603,7 +627,6 @@ s3transfer_cmd : S3_PUSH STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferComman
 //                       <S3URL>         <LOCAL_DIR>
                | S3_PULL STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PULL,$2,$3); }
           ;
-
 %%
 
 
