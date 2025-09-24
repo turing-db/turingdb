@@ -266,8 +266,8 @@ create_cmd: CREATE create_targets
           }
           ;
 
-delete_cmd: DELETE NODES deleted_nodes { std::cout << "delete nodes command" << std::endl; }
-          | DELETE EDGES deleted_edges { std::cout << "delete edges command" << std::endl; }
+delete_cmd: DELETE NODES deleted_nodes { $$ = DeleteCommand<NodeID>::create(ctxt, $3); }
+          | DELETE EDGES deleted_edges { $$ = DeleteCommand<EdgeID>::create(ctxt, $3); }
 		  ;
 
 return_field: STAR {

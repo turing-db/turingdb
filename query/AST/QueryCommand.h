@@ -1,10 +1,12 @@
 #pragma once
 
 #include <string>
-#include <vector>
 #include <memory>
+#include <type_traits>
 
 #include "Path.h"
+#include "ID.h"
+#include "TypeConstraint.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -15,6 +17,8 @@ class ReturnProjection;
 class MatchTargets;
 class CreateTarget;
 class CreateTargets;
+template <TypedInternalID IDT>
+class DeletedIDs;
 
 class QueryCommand {
 public:
@@ -23,6 +27,8 @@ public:
     enum class Kind {
         MATCH_COMMAND = 0,
         CREATE_COMMAND,
+        DELETE_NODES_COMMAND,
+        DELETE_EDGES_COMMAND,
         COMMIT_COMMAND,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
@@ -83,6 +89,43 @@ private:
     explicit CreateCommand(CreateTargets* targets);
     ~CreateCommand() override;
 };
+
+// DELETE command
+template <TypedInternalID IDT>
+class DeleteCommand : public QueryCommand {
+public:
+    static DeleteCommand<IDT>* create(ASTContext* ctxt, DeletedIDs<IDT>* deletedIDs);
+
+    const DeletedIDs<IDT>& deltetions() const { return *_deletedIDs; }
+
+    Kind getKind() const override {
+        if constexpr (std::is_same_v<IDT, NodeID>) {
+            return QueryCommand::Kind::DELETE_NODES_COMMAND;
+        } else {
+            return QueryCommand::Kind::DELETE_EDGES_COMMAND;
+        }
+    }
+
+private:
+    DeletedIDs<IDT>* _deletedIDs;
+
+    explicit DeleteCommand(DeletedIDs<IDT>* deletions);
+    ~DeleteCommand() override = default;
+};
+
+template <TypedInternalID IDT>
+DeleteCommand<IDT>::DeleteCommand(DeletedIDs<IDT>* deletions)
+    : _deletedIDs(deletions)
+{
+}
+
+template <TypedInternalID IDT>
+DeleteCommand<IDT>* DeleteCommand<IDT>::create(ASTContext* ctxt,
+                                               DeletedIDs<IDT>* deletedIDs) {
+    DeleteCommand<IDT>* delCmd = new DeleteCommand<IDT>(deletedIDs);
+    delCmd->registerCmd(ctxt);
+    return delCmd;
+}
 
 class CommitCommand : public QueryCommand {
 public:

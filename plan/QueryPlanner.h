@@ -73,6 +73,9 @@ private:
     void getMatchingLabelSets(std::vector<LabelSetID>& labelSets,
                               const LabelSet* targetLabelSet);
 
+    using DeleteNodesCommand = DeleteCommand<NodeID>;
+    using DeleteEdgesCommand = DeleteCommand<EdgeID>;
+
     // Property Functions
     void generateNodePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
                                          std::span<const BinExpr* const> expressions,
@@ -84,6 +87,9 @@ private:
     // Planning functions
     bool planMatch(const MatchCommand* matchCmd);
     bool planCreate(const CreateCommand* createCmd);
+
+    bool planDeleteNodes(const DeleteNodesCommand* delCmd);
+    bool planDeleteEdges(const DeleteEdgesCommand* delCmd);
 
     void planInjectNodes(const std::vector<EntityPattern*>& path);
     void planPath(const std::vector<EntityPattern*>& path);
