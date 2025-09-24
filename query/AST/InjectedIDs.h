@@ -2,7 +2,6 @@
 
 #include <vector>
 
-
 #include "ID.h"
 
 namespace db {

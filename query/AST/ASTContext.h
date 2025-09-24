@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ID.h"
 #include <vector>
 
 namespace db {
@@ -16,6 +17,8 @@ class EntityPattern;
 class TypeConstraint;
 class ExprConstraint;
 class Expr;
+template <TypedInternalID IDT>
+class DeletedIDs;
 class VarDecl;
 class ReturnProjection;
 
@@ -31,6 +34,8 @@ public:
     friend EntityPattern;
     friend TypeConstraint;
     friend InjectedIDs;
+    friend DeletedIDs<NodeID>;
+    friend DeletedIDs<EdgeID>;
     friend ExprConstraint;
     friend Expr;
     friend VarDecl;
@@ -52,6 +57,9 @@ public:
     void setError(bool hasError) { _isError = hasError; }
 
 private:
+    using DeletedNodes = DeletedIDs<NodeID>;
+    using DeletedEdges = DeletedIDs<EdgeID>;
+
     bool _isError {false};
     QueryCommand* _root {nullptr};
     std::vector<QueryCommand*> _cmds;
@@ -62,6 +70,8 @@ private:
     std::vector<EntityPattern*> _entityPatterns;
     std::vector<TypeConstraint*> _typeConstraints;
     std::vector<InjectedIDs*> _injectedIDs;
+    std::vector<DeletedNodes*> _deletedNodeIDs;
+    std::vector<DeletedEdges*> _deletedEdgeIDs;
     std::vector<ExprConstraint*> _exprConstraints;
     std::vector<CreateTarget*> _createTargets;
     std::vector<CreateTargets*> _createTargetVectors;
@@ -79,6 +89,8 @@ private:
     void addEntityPattern(EntityPattern* pattern);
     void addTypeConstraint(TypeConstraint* constr);
     void addInjectedIDs(InjectedIDs* injectedIDs);
+    void addDeletedNodes(DeletedNodes* deletedIDs);
+    void addDeletedEdges(DeletedEdges* deletedIDs);
     void addExprConstraint(ExprConstraint* constr);
     void addExpr(Expr* expr);
     void addVarDecl(VarDecl* decl);

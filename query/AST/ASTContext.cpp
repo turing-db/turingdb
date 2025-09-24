@@ -121,6 +121,13 @@ void ASTContext::addInjectedIDs(InjectedIDs* injectedIDs) {
     _injectedIDs.push_back(injectedIDs);
 }
 
+void ASTContext::addDeletedNodes(DeletedNodes* deletedIDs) {
+    _deletedNodeIDs.emplace_back(deletedIDs);
+}
+void ASTContext::addDeletedEdges(DeletedEdges* deletedIDs) {
+    _deletedEdgeIDs.emplace_back(deletedIDs);
+}
+
 void ASTContext::addExprConstraint(ExprConstraint* constr) {
     _exprConstraints.push_back(constr);
 }

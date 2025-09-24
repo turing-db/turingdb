@@ -19,6 +19,7 @@
 
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
+#include "ID.h"
 
 namespace db {
 class YScanner;
@@ -33,6 +34,8 @@ class PathPattern;
 class EntityPattern;
 class TypeConstraint;
 class InjectedIDs;
+template <TypedInternalID IDT>
+class DeletedIDs;
 class ExprConstraint;
 class VarExpr;
 class BinExpr;
@@ -61,6 +64,7 @@ class ReturnProjection;
 #include "Expr.h"
 #include "TypeConstraint.h"
 #include "InjectedIDs.h"
+#include "DeletedIDs.h"
 #include "ExprConstraint.h"
 #include "ReturnProjection.h"
 
@@ -159,7 +163,9 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::CreateTargets*> create_targets
 %type<db::PathPattern*> create_path_pattern
 %type<db::PathPattern*> path_pattern
-%type<db::InjectedIDs*> injected_ids injected_nodes injected_edges
+%type<db::InjectedIDs*> injected_nodes
+%type<db::DeletedIDs<NodeID>*> deleted_nodes
+%type<db::DeletedIDs<EdgeID>*> deleted_edges
 %type<db::EntityPattern*> create_node_pattern
 %type<db::EntityPattern*> node_pattern
 %type<db::EntityPattern*> edge_pattern
@@ -260,8 +266,8 @@ create_cmd: CREATE create_targets
           }
           ;
 
-delete_cmd: DELETE NODES injected_nodes { std::cout << "delete nodes command" << std::endl; }
-          | DELETE EDGES injected_edges { std::cout << "delete edges command" << std::endl; }
+delete_cmd: DELETE NODES deleted_nodes { std::cout << "delete nodes command" << std::endl; }
+          | DELETE EDGES deleted_edges { std::cout << "delete edges command" << std::endl; }
 		  ;
 
 return_field: STAR {
@@ -344,23 +350,45 @@ path_pattern: node_pattern
             }
             ;
 
-injected_ids: INT_CONSTANT
+injected_nodes: INT_CONSTANT
                    {
                         auto injectedIDs = InjectedIDs::create(ctxt);
                         injectedIDs->addID(std::stoull($1));
                         $$ = injectedIDs;
                    }
-                   | injected_ids COMMA INT_CONSTANT
+                   | injected_nodes COMMA INT_CONSTANT
                    {
                         $1->addID(std::stoull($3));
                         $$ = $1;
                    }
 				   ;
 
-injected_nodes : injected_ids;
-injected_edges : injected_ids;
+deleted_nodes : INT_CONSTANT
+                   {
+                        auto deletedIDs = DeletedIDs<NodeID>::create(ctxt);
+                        deletedIDs->addID(std::stoull($1));
+                        $$ = deletedIDs;
+                   }
+                   | deleted_nodes COMMA INT_CONSTANT
+                   {
+                        $1->addID(std::stoull($3));
+                        $$ = $1;
+                   }
+				   ;
 
-                   
+deleted_edges : INT_CONSTANT
+                   {
+                        auto deletedIDs = DeletedIDs<EdgeID>::create(ctxt);
+                        deletedIDs->addID(std::stoull($1));
+                        $$ = deletedIDs;
+                   }
+                   | deleted_edges COMMA INT_CONSTANT
+                   {
+                        $1->addID(std::stoull($3));
+                        $$ = $1;
+                   }
+				   ;
+
 create_node_pattern: OPAR entity_pattern CPAR
                    {
                         $2->setKind(DeclKind::NODE_DECL);

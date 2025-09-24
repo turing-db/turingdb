@@ -1,4 +1,3 @@
-
 set(AST_sources 
         ASTContext.cpp
         DeclContext.cpp 
