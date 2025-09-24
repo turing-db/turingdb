@@ -46,6 +46,9 @@ public:
     };
 
 public:
+    using PendingNodes = std::vector<PendingNode>;
+    using PendingEdges = std::vector<PendingEdge>;
+
     CommitWriteBuffer() = default;
 
     PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
@@ -56,8 +59,8 @@ public:
     void addPendingEdge(ContingentNode src, ContingentNode tgt, std::string& edgeType,
                         UntypedProperties& edgeProperties);
 
-    std::vector<PendingNode>& pendingNodes() { return _pendingNodes; }
-    std::vector<PendingEdge>& pendingEdges() { return _pendingEdges; }
+    PendingNodes& pendingNodes() { return _pendingNodes; }
+    PendingEdges& pendingEdges() { return _pendingEdges; }
 
     const std::set<NodeID> deletedNodes() const { return _deletedNodes; }
 
