@@ -6,7 +6,6 @@
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
-#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
@@ -102,15 +101,6 @@ void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
         return;
     }
 
-    // TODO: Needs to be a better warning mode here
-    // Ensure this CommitBuilder is in a fresh state, otherwise there are builders which
-    // have used a potentially outdated metadata
-    if (!isEmpty() || pendingCount() != 0) {
-        spdlog::warn(
-            "CommitBuilder to be flushed is not empty; there are {} pending builders and {} datapartcount",
-            pendingCount(), dpCount());
-    }
-
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
     DataPartBuilder& dpBuilder = newBuilder();
@@ -164,7 +154,4 @@ void CommitBuilder::initialize() {
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>();
-
-    // Create datapart builder
-    // this->newBuilder(); XXX: Do not do this here, it need be created at submit time
 }

@@ -13,7 +13,11 @@ namespace db {
 
 class CommitWriteBufferRebaser;
 
+
 class CommitWriteBuffer {
+
+struct PendingEdge;
+
 public:
     using SupportedTypeVariant =
         std::variant<types::Int64::Primitive, types::UInt64::Primitive,
@@ -37,36 +41,26 @@ public:
      // A node: either exists in previous commit (materialised as NodeID),
      // or to be created in this commit (materialised as PendingNode)
      using ContingentNode = std::variant<NodeID, PendingNodeOffset>;
- private:
-     struct PendingEdge {
-         ContingentNode src;
-         ContingentNode tgt;
-         std::string edgeLabelTypeName;
-         UntypedProperties properties;
-    };
+     using PendingNodes = std::vector<PendingNode>;
+     using PendingEdges = std::vector<PendingEdge>;
 
-public:
-    using PendingNodes = std::vector<PendingNode>;
-    using PendingEdges = std::vector<PendingEdge>;
+     CommitWriteBuffer() = default;
 
-    CommitWriteBuffer() = default;
+     PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
 
-    PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
+     void addPendingNode(std::vector<std::string>& labels, UntypedProperties& properties);
 
-    void addPendingNode(std::vector<std::string>& labels,
-                        UntypedProperties& properties);
+     void addPendingEdge(ContingentNode src, ContingentNode tgt, std::string& edgeType,
+                         UntypedProperties& edgeProperties);
 
-    void addPendingEdge(ContingentNode src, ContingentNode tgt, std::string& edgeType,
-                        UntypedProperties& edgeProperties);
+     PendingNodes& pendingNodes() { return _pendingNodes; }
+     PendingEdges& pendingEdges() { return _pendingEdges; }
 
-    PendingNodes& pendingNodes() { return _pendingNodes; }
-    PendingEdges& pendingEdges() { return _pendingEdges; }
+     const std::set<NodeID> deletedNodes() const { return _deletedNodes; }
 
-    const std::set<NodeID> deletedNodes() const { return _deletedNodes; }
-
-    bool empty() const {
-        return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
-            && _deletedEdges.empty();
+     bool empty() const {
+         return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
+             && _deletedEdges.empty();
     }
 
     /**
@@ -80,6 +74,13 @@ public:
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
+
+    struct PendingEdge {
+         ContingentNode src;
+         ContingentNode tgt;
+         std::string edgeLabelTypeName;
+         UntypedProperties properties;
+    };
 
     // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
