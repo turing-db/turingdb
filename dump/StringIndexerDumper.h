@@ -23,8 +23,6 @@ private:
     fs::FilePageWriter& _writer;
     fs::FilePageWriter& _auxWriter;
 
-    void ensureSpace(size_t requiredSpace, fs::FilePageWriter& wr);
-
     DumpResult<void> dumpIndex(const std::unique_ptr<StringIndex>& idx);
 
     DumpResult<void> dumpNode(const StringIndex::PrefixTreeNode* node);

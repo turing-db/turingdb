@@ -22,9 +22,8 @@ DumpResult<void> StringIndexerDumper::dump(const StringPropertyIndexer& idxer) {
 
     // 3. Write each index
     for (const auto& [propId, idx] : idxer) {
-        DumpUtils::ensureDumpSpace(sizeof(fs::WorkingType<PropertyTypeID>), _writer);
-        _writer.writeToCurrentPage(
-            static_cast<fs::WorkingType<PropertyTypeID>>(propId.getValue()));
+        DumpUtils::ensureDumpSpace(sizeof(PropertyTypeID::Type), _writer);
+        _writer.writeToCurrentPage(static_cast<PropertyTypeID::Type>(propId.getValue()));
         dumpIndex(idx);
     }
 
@@ -58,7 +57,7 @@ DumpResult<void> StringIndexerDumper::dumpIndex(const std::unique_ptr<StringInde
 DumpResult<void> StringIndexerDumper::dumpNode(const StringIndex::PrefixTreeNode* node) {
     DumpUtils::ensureDumpSpace(StringIndexDumpConstants::MAXNODESIZE, _writer);
     // 1. Write internal node data
-    { // Space written in this block is accounted for by above call to @ref ensureSpace
+    { // Space written in this block is accounted for by above call to @ref ensureDumpSpace
         const auto& children = node->getChildren();
         const size_t nonNullChildren =
             std::ranges::count_if(children, [](auto ptr) { return ptr != nullptr; });

@@ -1,6 +1,8 @@
 #include "StringIndexerLoader.h"
 
 #include <cstdint>
+#include "ID.h"
+#include "metadata/PropertyType.h"
 #include "spdlog/spdlog.h"
 #include <memory>
 
@@ -53,8 +55,8 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
     // 3. Read each index
     for (size_t i = 0; i < numIndexes; i++) {
         // PropertyID that this index is indexing
-        LoadUtils::ensureLoadSpace(sizeof(uint16_t), _reader, it);
-        const auto propId = it.get<uint16_t>();
+        LoadUtils::ensureLoadSpace(sizeof(PropertyTypeID::Type), _reader, it);
+        const auto propId = it.get<PropertyTypeID::Type>();
 
         auto loadResult = loadIndex(it, auxIt);
         if (!loadResult) {
@@ -110,7 +112,7 @@ DumpResult<void> StringIndexerLoader::loadNode(std::unique_ptr<StringIndex>& ind
     // ~~ Managed space starts
 
     // 1. Write internal node data
-    const size_t nodeID = it.get<size_t>();
+    const size_t nodeID = it.get<size_t>(); // ID of the node in index, not @ref NodeID
     StringIndex::PrefixTreeNode* node = index->getNode(nodeID);
 
     const size_t numChildren = it.get<size_t>();
