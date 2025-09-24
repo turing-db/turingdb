@@ -2,6 +2,7 @@
 
 #include "CreateTarget.h"
 #include "ExecutionContext.h"
+#include "VarDecl.h"
 #include "versioning/CommitWriteBuffer.h"
 
 namespace db {
@@ -45,7 +46,7 @@ private:
      * CreateTarget to be correctly referred to when creating PendingEdges in the
      * CommitWriteBuffer.
      */
-    std::unordered_map<std::string, CommitWriteBuffer::PendingNodeOffset> _varOffsetMap;
+    std::unordered_map<const VarDecl*, CommitWriteBuffer::PendingNodeOffset> _varOffsetMap;
 
     /**
      * @brief If the node specified by @param nodePattern already exists, returns its
