@@ -66,7 +66,8 @@ private:
      * @brief Adds a pending edge to @ref _writeBuffer specified by @param edgePattern and
      * using @ref src and @ref tgt as the source and target nodes.
      */
-    void writeEdge(const ContingentNode src, const ContingentNode tgt,
+    void writeEdge(const ContingentNode src,
+                   const ContingentNode tgt,
                    const EntityPattern* edgePattern);
 
     /**
