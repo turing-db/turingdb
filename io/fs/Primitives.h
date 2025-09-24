@@ -24,7 +24,7 @@ concept TrivialNonCharPrimitive = TrivialPrimitive<T> && !CharPrimitive<T>;
 template <typename, typename = void>
 struct is_dumpable_id : std::false_type {};
 
-// Specialised trait declares all ID types (determine if T::Type) exists as dumpable IDs
+// Specialism declares all ID types (determined by if T::Type exists) as dumpable IDs
 template <typename T>
 struct is_dumpable_id<T, std::void_t<typename T::Type>> : std::true_type {};
 
@@ -34,7 +34,7 @@ concept DumpableID = is_dumpable_id<T>::value;
 
 // Concept to constrain a trivial type to be dumped
 template <typename T>
-concept TriviallyDumpable = fs::TrivialPrimitive<T>;
+concept TriviallyDumpable = TrivialPrimitive<T>;
 
 // Dumpable concept: either an ID or a trivial type
 template <typename T>
