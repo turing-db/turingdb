@@ -97,20 +97,10 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     CommitWriteBuffer::UntypedProperties nodeProperties;
 
     const ExprConstraint* patternProperties = nodePattern->getExprConstraint();
-    if (!patternProperties) { // Early exit if no properties
-        // Add this node to the write buffer, and record its offset
-        CommitWriteBuffer::PendingNodeOffset thisNodeOffset =
-            _writeBuffer->nextPendingNodeOffset();
-        const std::string& nodeVarName = nodePattern->getVar()->getName();
-
-        _writeBuffer->addPendingNode(nodeLabels, nodeProperties);
-        _varOffsetMap[nodeVarName] = thisNodeOffset;
-
-        return thisNodeOffset;
-    }
-
-    for (const BinExpr* e : patternProperties->getExpressions()) {
-        addUntypedProperties(nodeProperties, e);
+    if (patternProperties) {
+        for (const BinExpr* e : patternProperties->getExpressions()) {
+            addUntypedProperties(nodeProperties, e);
+        }
     }
 
     // Add this node to the write buffer, and record its offset
