@@ -66,12 +66,13 @@ public:
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
-     const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
+    const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
+    const std::set<EdgeID>& deletedEdges() const { return _deletedEdges; }
 
-     bool empty() const {
-         return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
-             && _deletedEdges.empty();
-     }
+    bool empty() const {
+        return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
+            && _deletedEdges.empty();
+    }
 
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
@@ -114,8 +115,10 @@ private:
 
 class CommitWriteBufferRebaser {
 public:
-    explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer, NodeID entryNextNodeID,
-                                      EdgeID entryNextEdgeID, NodeID currentNextNodeID,
+    explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer,
+                                      NodeID entryNextNodeID,
+                                      EdgeID entryNextEdgeID,
+                                      NodeID currentNextNodeID,
                                       EdgeID currentNextEdgeID)
         : _buffer(&buffer),
           _entryNextNodeID(entryNextNodeID),
