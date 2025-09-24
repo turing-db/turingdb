@@ -5,7 +5,6 @@
 #include "decl/VarDecl.h"
 #include "nodes/VarNode.h"
 #include "nodes/FilterNode.h"
-#include "BioAssert.h"
 
 using namespace db::v2;
 
@@ -34,35 +33,33 @@ FilterNode* PlanGraphVariables::getNodeFilter(const VarNode* varNode) const {
     return it->second;
 }
 
-std::tuple<VarNode*, FilterNode*> PlanGraphVariables::getOrCreateVarNodeAndFilter(const VarDecl* varDecl) {
-    VarNode* varNode = getVarNode(varDecl);
-    FilterNode* filterNode = getNodeFilter(varNode);
-
-    // Either varNode and FilterNode both exist, or neither exist
-    bioassert((varNode && filterNode) || (!varNode && !filterNode));
-
-    if (!varNode) {
-
-        // Create varNode/filterNode pair
-        varNode = _tree->create<VarNode>(varDecl, _nextDeclOrder++);
-        FilterNode* filterNode = nullptr;
-
-        if (varDecl->getType() == EvaluatedType::NodePattern) {
-            filterNode = _tree->create<FilterNodeNode>();
-        } else if (varDecl->getType() == EvaluatedType::EdgePattern) {
-            filterNode = _tree->create<FilterEdgeNode>();
-        } else {
-            throw PlannerException("Unsupported variable type");
-        }
-
-        _varNodesMap[varDecl] = varNode;
-        _nodeFiltersMap[varNode] = filterNode;
-
-        filterNode->connectOut(varNode);
-        filterNode->setVarNode(varNode);
-
-        return {varNode, filterNode};
+std::tuple<VarNode*, FilterNode*> PlanGraphVariables::getVarNodeAndFilter(const VarDecl* varDecl) {
+    const auto it = _varNodesMap.find(varDecl);
+    if (it == _varNodesMap.end()) {
+        return { nullptr, nullptr };
     }
+
+    return {it->second, getNodeFilter(it->second)};
+}
+
+std::tuple<VarNode*, FilterNode*> PlanGraphVariables::createVarNodeAndFilter(const VarDecl* varDecl) {
+    // Create varNode/filterNode pair
+    VarNode* varNode = _tree->create<VarNode>(varDecl, _nextDeclOrder++);
+    FilterNode* filterNode = nullptr;
+
+    if (varDecl->getType() == EvaluatedType::NodePattern) {
+        filterNode = _tree->create<FilterNodeNode>();
+    } else if (varDecl->getType() == EvaluatedType::EdgePattern) {
+        filterNode = _tree->create<FilterEdgeNode>();
+    } else {
+        throw PlannerException("Unsupported variable type");
+    }
+
+    _varNodesMap[varDecl] = varNode;
+    _nodeFiltersMap[varNode] = filterNode;
+
+    filterNode->connectOut(varNode);
+    filterNode->setVarNode(varNode);
 
     return {varNode, filterNode};
 }

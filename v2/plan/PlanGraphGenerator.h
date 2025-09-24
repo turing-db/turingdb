@@ -46,8 +46,7 @@ class VarNode;
 class WhereClause;
 class WherePredicate;
 class PlanGraphTopology;
-
-using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
+class PropertyConstraint;
 
 class PlanGraphGenerator {
 public:
@@ -64,23 +63,11 @@ private:
     using Symbols = std::vector<Symbol*>;
     using LabelNames = std::vector<std::string_view>;
 
-    const GraphView& _view;
-
-    PlanGraph _tree;
-
     const CypherAST* _ast {nullptr};
-
-    // Cache for label sets
-    std::unordered_map<LabelNames,
-                       const LabelSet*,
-                       VectorHash<std::string_view>> _labelSetCache;
-    std::vector<std::unique_ptr<LabelSet>> _labelSets;
-
+    const GraphView& _view;
+    PlanGraph _tree;
     PlanGraphVariables _variables;
-
-    const LabelSet* getOrCreateLabelSet(const Symbols& symbols);
-    const LabelSet* buildLabelSet(const Symbols& symbols);
-    LabelID getLabel(const Symbol* symbol);
+    std::vector<std::unique_ptr<PropertyConstraint>> _propConstraints;
 
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateStmt(const Stmt* stmt);
@@ -89,15 +76,17 @@ private:
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
 
-    PlanGraphNode* generatePatternElementOrigin(const NodePattern* origin);
-    PlanGraphNode* generatePatternElementEdge(PlanGraphNode* currentNode, const EdgePattern* edge);
-    PlanGraphNode* generatePatternElementTarget(PlanGraphNode* currentNode, const NodePattern* target);
+    VarNode* generatePatternElementOrigin(const NodePattern* origin);
+    VarNode* generatePatternElementEdge(VarNode* prevNode, const EdgePattern* edge);
+    VarNode* generatePatternElementTarget(VarNode* prevNode, const NodePattern* target);
 
     void unwrapWhereExpr(const Expr*);
 
+    void incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin);
     void placeJoinsOnVars();
     void placePropertyExprJoins();
     void placePredicateJoins();
+    void insertDataFlowNode(const VarNode* node, VarNode* dependency);
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };

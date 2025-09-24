@@ -5,21 +5,14 @@
 #include "expr/Operators.h"
 #include "metadata/LabelSet.h"
 #include "WherePredicate.h"
+#include "PropertyConstraint.h"
 
 namespace db::v2 {
 
-class Expr;
 class VarNode;
 
 class FilterNode : public PlanGraphNode {
 public:
-    struct PropertyConstraint {
-        PropertyTypeID type;
-        Expr* expr {nullptr};
-        BinaryOperator op {BinaryOperator::Equal};
-        ExprDependencies dependencies;
-    };
-
     explicit FilterNode(PlanGraphOpcode opcode)
         : PlanGraphNode(opcode)
     {
@@ -33,19 +26,19 @@ public:
         return _varNode;
     }
 
-    void addPropertyConstraint(PropertyTypeID type, Expr* expr, BinaryOperator op) {
-        _propConstraints.emplace_back(type, expr, op);
+    void addPropertyConstraint(PropertyConstraint* constraint) {
+        _propConstraints.push_back(constraint);
     }
 
     void addWherePredicate(WherePredicate* pred) {
         _wherePredicates.push_back(pred);
     }
 
-    std::span<const PropertyConstraint> getPropertyConstraints() const {
+    std::span<const PropertyConstraint* const> getPropertyConstraints() const {
         return _propConstraints;
     }
 
-    std::span<PropertyConstraint> getPropertyConstraints() {
+    std::span<PropertyConstraint*> getPropertyConstraints() {
         return _propConstraints;
     }
 
@@ -55,7 +48,7 @@ public:
 
 private:
     VarNode* _varNode {nullptr};
-    std::vector<PropertyConstraint> _propConstraints;
+    std::vector<PropertyConstraint*> _propConstraints;
     std::vector<WherePredicate*> _wherePredicates;
 };
 

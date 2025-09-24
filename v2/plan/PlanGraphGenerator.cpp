@@ -51,56 +51,12 @@ using namespace db;
 PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view,
                                        const QueryCallback& callback)
-    : _view(view),
-      _ast(&ast),
+    : _ast(&ast),
+      _view(view),
       _variables(_tree) {
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {
-}
-
-const LabelSet* PlanGraphGenerator::getOrCreateLabelSet(const Symbols& symbols) {
-    LabelNames labelNames;
-    for (const Symbol* symbol : symbols) {
-        labelNames.push_back(symbol->getName());
-    }
-
-    const auto labelSetCacheIt = _labelSetCache.find(labelNames);
-    if (labelSetCacheIt != _labelSetCache.end()) {
-        return labelSetCacheIt->second;
-    }
-
-    const LabelSet* labelSet = buildLabelSet(symbols);
-    _labelSetCache[labelNames] = labelSet;
-
-    return labelSet;
-}
-
-const LabelSet* PlanGraphGenerator::buildLabelSet(const Symbols& symbols) {
-    auto labelSet = std::make_unique<LabelSet>();
-    for (const Symbol* symbol : symbols) {
-        const LabelID labelID = getLabel(symbol);
-
-        if (!labelID.isValid()) {
-            throwError(fmt::format("Unsupported node label: {}", symbol->getName()), symbol);
-        }
-
-        labelSet->set(labelID);
-    }
-
-    LabelSet* ptr = labelSet.get();
-    _labelSets.push_back(std::move(labelSet));
-
-    return ptr;
-}
-
-LabelID PlanGraphGenerator::getLabel(const Symbol* symbol) {
-    auto res = _view.metadata().labels().get(symbol->getName());
-    if (!res) {
-        return LabelID {};
-    }
-
-    return res.value();
 }
 
 void PlanGraphGenerator::generate(const QueryCommand* query) {
@@ -253,7 +209,7 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
     // Reset the decl order of variables (each branch starts at 0)
     _variables.resetDeclOrder();
 
-    PlanGraphNode* currentNode = generatePatternElementOrigin(origin);
+    VarNode* currentNode = generatePatternElementOrigin(origin);
 
     const auto& chain = element->getElementChain();
     for (const auto& [edge, node] : chain) {
@@ -273,45 +229,46 @@ void PlanGraphGenerator::generatePatternElement(const PatternElement* element) {
     }
 }
 
-PlanGraphNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* origin) {
+VarNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* origin) {
     const NodePatternData* data = origin->getData();
     const LabelSet& labelset = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
     const VarDecl* decl = origin->getDecl();
 
-    // Scan nodes
-    PlanGraphNode* currentNode = _tree.create<ScanNodesNode>();
+    auto [var, filter] = _variables.getVarNodeAndFilter(decl);
 
-    const auto [var, filter] = _variables.getOrCreateVarNodeAndFilter(decl);
-    currentNode->connectOut(filter);
-    currentNode = var;
+    if (!var) {
+        // Scan nodes
+        PlanGraphNode* scan = _tree.create<ScanNodesNode>();
+        std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
+
+        scan->connectOut(filter);
+    }
 
     auto* typedFilter = static_cast<FilterNodeNode*>(filter);
-
     typedFilter->addLabelConstraints(labelset);
 
     for (const auto& [propType, expr] : exprConstraints) {
-        // TODO Here we need to compute dependencies and decide
-        // if we need a materialize, join or hash join (or nothing)
-        typedFilter->addPropertyConstraint(propType._id, expr, BinaryOperator::Equal);
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
 
-    return currentNode;
+    return var;
 }
 
-PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* currentNode,
-                                                              const EdgePattern* edge) {
+VarNode* PlanGraphGenerator::generatePatternElementEdge(VarNode* prevNode,
+                                                        const EdgePattern* edge) {
     // Expand edge based on direction
 
+    PlanGraphNode* currentNode = nullptr;
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
-            currentNode = _tree.newOut<GetEdgesNode>(currentNode);
+            currentNode = _tree.newOut<GetEdgesNode>(prevNode);
         } break;
         case EdgePattern::Direction::Backward: {
-            currentNode = _tree.newOut<GetInEdgesNode>(currentNode);
+            currentNode = _tree.newOut<GetInEdgesNode>(prevNode);
         } break;
         case EdgePattern::Direction::Forward: {
-            currentNode = _tree.newOut<GetOutEdgesNode>(currentNode);
+            currentNode = _tree.newOut<GetOutEdgesNode>(prevNode);
         } break;
     }
 
@@ -325,46 +282,53 @@ PlanGraphNode* PlanGraphGenerator::generatePatternElementEdge(PlanGraphNode* cur
         throwError("Only one edge type constraint is supported for now", edge);
     }
 
-    auto [var, filter] = _variables.getOrCreateVarNodeAndFilter(decl);
-    currentNode->connectOut(filter);
-    currentNode = var;
+    auto [var, filter] = _variables.getVarNodeAndFilter(decl);
+    if (!var) {
+        std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
+    } else {
+        incrementDeclOrders(prevNode->getDeclOdrer(), filter);
+    }
 
+    currentNode->connectOut(filter);
     auto* typedFilter = static_cast<FilterEdgeNode*>(filter);
 
     for (const auto& [propType, expr] : exprConstraints) {
-        typedFilter->addPropertyConstraint(propType._id, expr, BinaryOperator::Equal);
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
 
     for (const EdgeTypeID edgeTypeID : edgeTypes) {
         typedFilter->addEdgeTypeConstraint(edgeTypeID);
     }
 
-    return currentNode;
+    return var;
 }
 
-PlanGraphNode* PlanGraphGenerator::generatePatternElementTarget(PlanGraphNode* currentNode,
-                                                                const NodePattern* target) {
+VarNode* PlanGraphGenerator::generatePatternElementTarget(VarNode* prevNode,
+                                                          const NodePattern* target) {
     // Target nodes
     const NodePatternData* data = target->getData();
     const auto& labelset = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
     const VarDecl* decl = target->getDecl();
 
-    currentNode = _tree.newOut<GetEdgeTargetNode>(currentNode);
+    PlanGraphNode* currentNode = _tree.newOut<GetEdgeTargetNode>(prevNode);
 
-    auto [var, filter] = _variables.getOrCreateVarNodeAndFilter(decl);
+    auto [var, filter] = _variables.getVarNodeAndFilter(decl);
+    if (!var) {
+        std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
+    } else {
+        incrementDeclOrders(prevNode->getDeclOdrer(), filter);
+    }
+
     currentNode->connectOut(filter);
-    currentNode = var;
-
     auto* typedFilter = static_cast<FilterNodeNode*>(filter);
-
     typedFilter->addLabelConstraints(labelset);
 
     for (const auto& [propType, expr] : exprConstraints) {
-        typedFilter->addPropertyConstraint(propType._id, expr, BinaryOperator::Equal);
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
 
-    return currentNode;
+    return var;
 }
 
 void PlanGraphGenerator::unwrapWhereExpr(const Expr* expr) {
@@ -462,6 +426,25 @@ void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const
     throw PlannerException(std::move(errorMsg));
 }
 
+void PlanGraphGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin) {
+    std::queue<PlanGraphNode*> q;
+    q.push(origin);
+
+    while (!q.empty()) {
+        auto* node = q.front();
+        q.pop();
+
+        if (node->getOpcode() == PlanGraphOpcode::VAR) {
+            auto* varNode = static_cast<VarNode*>(node);
+            varNode->setDeclOdrer(varNode->getDeclOdrer() + declOrder + 1);
+        }
+
+        for (auto* out : node->outputs()) {
+            q.push(out);
+        }
+    }
+}
+
 void PlanGraphGenerator::placeJoinsOnVars() {
     for (auto [var, filter] : _variables.getNodeFiltersMap()) {
         if (filter->inputs().size() > 1) {
@@ -471,48 +454,33 @@ void PlanGraphGenerator::placeJoinsOnVars() {
 }
 
 void PlanGraphGenerator::placePropertyExprJoins() {
-    for (auto [var, filter] : _variables.getNodeFiltersMap()) {
+    for (auto& prop : _propConstraints) {
+        auto& deps = prop->dependencies;
+        const auto& depContainer = deps.getDependencies();
 
-        // Generate dependencies for all constraints and place joins
-        for (auto& prop : filter->getPropertyConstraints()) {
-            auto& deps = prop.dependencies;
+        // Generate missing dependencies
+        deps.genExprDependencies(_variables, prop->expr);
 
-            // Generate dependencies
-            deps.genExprDependencies(_variables, prop.expr);
+        // First step: place the constraint
+        auto it = depContainer.begin();
+        const VarNode* var = prop->var;
+        uint32_t order = var->getDeclOdrer();
 
-            for (const auto& dep : deps.getDependencies()) {
-                // Place joins
-                const auto path = PlanGraphTopology::getShortestPath(filter, dep._var);
-
-                switch (path) {
-                    case PlanGraphTopology::PathToDependency::SameVar: {
-                        // Nothing to be done
-                        continue;
-                    } break;
-
-                    case PlanGraphTopology::PathToDependency::BackwardPath: {
-                        // If only walked backward
-                        // Materialize
-                        _tree.insertBefore<MaterializeNode>(filter);
-                    } break;
-
-                    case PlanGraphTopology::PathToDependency::UndirectedPath: {
-                        // If had to walk both backward and forward
-                        // Join
-                        JoinNode* join = _tree.insertBefore<JoinNode>(filter);
-                        auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
-                        depBranchTip->connectOut(join);
-                    } break;
-
-                    case PlanGraphTopology::PathToDependency::NoPath: {
-                        // If nodes are on two different islands
-                        // ValueHashJoin
-                        JoinNode* join = _tree.insertBefore<JoinNode>(filter);
-                        auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
-                        depBranchTip->connectOut(join);
-                    } break;
-                }
+        for (; it != depContainer.end(); ++it) {
+            if (order < it->_var->getDeclOdrer()) {
+                order = it->_var->getDeclOdrer();
+                var = it->_var;
             }
+        }
+
+        // The constraint is evaluated on var (latest dependency)
+        auto* filter = _variables.getNodeFilter(var);
+        filter->addPropertyConstraint(prop.get());
+        insertDataFlowNode(var, prop->var);
+
+        for (const auto& dep : deps.getDependencies()) {
+            // Second step: place joins
+            insertDataFlowNode(var, dep._var);
         }
     }
 }
@@ -520,42 +488,51 @@ void PlanGraphGenerator::placePropertyExprJoins() {
 void PlanGraphGenerator::placePredicateJoins() {
     for (const auto& pred : _tree.wherePredicates()) {
         FilterNode* filterNode = pred->getFilterNode();
+        const VarNode* var = filterNode->getVarNode();
 
         for (const auto& dep : pred->getDependencies()) {
             if (filterNode->getVarNode() == dep._var) {
                 continue;
             }
 
-            const auto path = PlanGraphTopology::getShortestPath(filterNode, dep._var);
+            insertDataFlowNode(var, dep._var);
+        }
+    }
+}
 
-            switch (path) {
-                case PlanGraphTopology::PathToDependency::SameVar: {
-                    // Nothing to be done
-                    continue;
-                } break;
+void PlanGraphGenerator::insertDataFlowNode(const VarNode* node, VarNode* dependency) {
+    FilterNode* filter = _variables.getNodeFilter(node);
+    const auto path = PlanGraphTopology::getShortestPath(node, dependency);
 
-                case PlanGraphTopology::PathToDependency::BackwardPath: {
-                    // If only walked backward
-                    // Materialize
-                    _tree.insertBefore<MaterializeNode>(filterNode);
-                } break;
+    switch (path) {
+        case PlanGraphTopology::PathToDependency::SameVar: {
+            // Nothing to be done
+            return;
+        }
 
-                case PlanGraphTopology::PathToDependency::UndirectedPath: {
-                    // If had to walk both backward and forward
-                    // Join
-                    JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
-                    auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
-                    depBranchTip->connectOut(join);
-                } break;
+        case PlanGraphTopology::PathToDependency::BackwardPath: {
+            // If only walked backward
+            // Materialize
+            _tree.insertBefore<MaterializeNode>(filter);
+            return;
+        }
 
-                case PlanGraphTopology::PathToDependency::NoPath: {
-                    // If nodes are on two different islands
-                    // ValueHashJoin
-                    JoinNode* join = _tree.insertBefore<JoinNode>(filterNode);
-                    auto* depBranchTip = PlanGraphTopology::getBranchTip(dep._var);
-                    depBranchTip->connectOut(join);
-                } break;
-            }
+        case PlanGraphTopology::PathToDependency::UndirectedPath: {
+            // If had to walk both backward and forward
+            // Join
+            JoinNode* join = _tree.insertBefore<JoinNode>(filter);
+            auto* depBranchTip = PlanGraphTopology::getBranchTip(dependency);
+            depBranchTip->connectOut(join);
+            return;
+        }
+
+        case PlanGraphTopology::PathToDependency::NoPath: {
+            // If nodes are on two different islands
+            // ValueHashJoin
+            JoinNode* join = _tree.insertBefore<JoinNode>(filter);
+            auto* depBranchTip = PlanGraphTopology::getBranchTip(dependency);
+            depBranchTip->connectOut(join);
+            return;
         }
     }
 }

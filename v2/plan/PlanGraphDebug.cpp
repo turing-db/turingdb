@@ -44,6 +44,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                 const auto* n = dynamic_cast<VarNode*>(node.get());
                 bioassert(n->getVarDecl());
                 output << fmt::format("        name _{}\n", n->getVarDecl()->getName());
+                output << fmt::format("        order _{}\n", n->getDeclOdrer());
             } break;
             case PlanGraphOpcode::SCAN_NODES: {
             } break;
@@ -61,13 +62,15 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     output << "        label " << labelMap.getName(label).value() << "\n";
                 }
 
-                for (const auto& [propType, expr, op, deps] : n->getPropertyConstraints()) {
+                for (const auto& constraint : n->getPropertyConstraints()) {
+                    const auto& [var, propType, expr, deps] = *constraint;
+
                     std::optional name = propTypeMap.getName(propType);
                     if (!name) {
                         name = std::to_string(propType);
                     }
 
-                    output << "        prop " << name.value() << "\n";
+                    output << fmt::format("        prop {}_{}\n", var->getVarDecl()->getName(), name.value());
 
                     for (const auto& dep : deps.getDependencies()) {
                         output << "        dep _" << dep._var->getVarDecl()->getName();
@@ -107,13 +110,15 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     output << "        edge_type " << edgeTypeMap.getName(edgeType).value() << "\n";
                 }
 
-                for (const auto& [propType, expr, op, deps] : n->getPropertyConstraints()) {
+                for (const auto& constraint : n->getPropertyConstraints()) {
+                    const auto& [var, propType, expr, deps] = *constraint;
+
                     std::optional name = propTypeMap.getName(propType);
                     if (!name) {
                         name = std::to_string(propType);
                     }
 
-                    output << "        prop " << name.value() << "\n";
+                    output << fmt::format("        prop {}_{}\n", var->getVarDecl()->getName(), name.value());
 
                     for (const auto& dep : deps.getDependencies()) {
                         output << "        dep _" << dep._var->getVarDecl()->getName();

@@ -1,2 +1,13 @@
-MATCH (a)-[e { name: a.name }]->(b), (c)-->(b)
-RETURN a, b
+// MATCH (b)-->(c), (a { name: c.name })-->(b)
+// RETURN a
+
+// MATCH (b)-->(c), (a)-->(b)
+// WHERE a.name = b.name
+// RETURN a
+
+MATCH (b)-->(c), (n)-->(m)-->(a)-->(b { name: n.name })
+WHERE a.name = c.name
+RETURN a
+
+// MATCH (a)-->(b), (b)-->(c { name: a.name })
+// RETURN a

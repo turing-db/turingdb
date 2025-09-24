@@ -28,7 +28,8 @@ public:
     VarNode* getVarNode(const VarDecl* varDecl) const;
     FilterNode* getNodeFilter(const VarNode* varNode) const;
 
-    std::tuple<VarNode*, FilterNode*> getOrCreateVarNodeAndFilter(const VarDecl* varDecl);
+    std::tuple<VarNode*, FilterNode*> getVarNodeAndFilter(const VarDecl* varDecl);
+    std::tuple<VarNode*, FilterNode*> createVarNodeAndFilter(const VarDecl* varDecl);
 
     std::unordered_map<const VarDecl*, VarNode*>& getVarNodesMap() {
         return _varNodesMap;

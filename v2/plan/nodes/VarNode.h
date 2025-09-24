@@ -15,8 +15,9 @@ public:
     {
     }
 
-    uint32_t getDeclOdrer() const { return _declOdrer; }
+    void setDeclOdrer(uint32_t declOdrer) { _declOdrer = declOdrer; }
 
+    uint32_t getDeclOdrer() const { return _declOdrer; }
     const VarDecl* getVarDecl() const { return _varDecl; }
 
 private:
