@@ -11,7 +11,7 @@ namespace fs {
 
 template <db::IntegralType T, int I>
 void WriteToCurrentPage(fs::FilePageWriter& w, db::ID<T, I> id) {
-    w.writeToCurrentPage(reinterpret_cast<const uint8_t*>(id.getValue()));
+    w.writeToCurrentPage(id.getValue());
 }
 
 }
