@@ -1,11 +1,9 @@
 #include "StringIndexerLoader.h"
 
-#include <cstdint>
-#include "ID.h"
-#include "metadata/PropertyType.h"
-#include "spdlog/spdlog.h"
 #include <memory>
+#include <spdlog/spdlog.h>
 
+#include "ID.h"
 #include "AlignedBuffer.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"

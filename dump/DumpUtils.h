@@ -1,12 +1,10 @@
 #pragma once
 
 #include "Primitives.h"
-#include "TuringException.h"
-
 #include "DumpConfig.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
-
+#include "TuringException.h"
 
 namespace db {
 
@@ -42,10 +40,10 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
 
     // Write as many as we can on this page
     const size_t remainingSpace = wr.buffer().avail();
-    const size_t TsThisPage = remainingSpace / TSize;
+    const size_t countThisPage = remainingSpace / TSize;
 
     auto it = vec.cbegin();
-    for (size_t j = 0; j < TsThisPage && it != vec.cend(); j++) {
+    for (size_t j = 0; j < countThisPage && it != vec.cend(); j++) {
         wr.writeToCurrentPage(*it);
         it++;
     }
@@ -54,17 +52,17 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
         return {};
     }
 
-    const size_t read = TsThisPage;
+    const size_t read = countThisPage;
     const size_t remaining = vec.size() - read;
 
-    const size_t TsPerPage = DumpConfig::PAGE_SIZE / TSize;
+    const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
 
-    const size_t fullPagesNeeded = remaining / TsPerPage;
-    const size_t leftOver = remaining % TsPerPage;
+    const size_t fullPagesNeeded = remaining / countPerPage;
+    const size_t leftOver = remaining % countPerPage;
 
     for (size_t p = 0; p < fullPagesNeeded; p++) {
         wr.nextPage();
-        for (size_t j = 0; j < TsPerPage; j++) {
+        for (size_t j = 0; j < countPerPage; j++) {
             wr.writeToCurrentPage(*it);
             it++;
         }
