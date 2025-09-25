@@ -76,18 +76,18 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
     // Get the next Edge and Node IDs at the time this change branched
-    const GraphReader reader = _base->commits().back().openTransaction().readGraph();
-    NodeID branchTimeNextNodeID = reader.getNodeCount();
-    EdgeID branchTimeNextEdgeID = reader.getEdgeCount();
+    const GraphReader branchTimeReader =
+        _base->commits().back().openTransaction().readGraph();
+    NodeID branchTimeNextNodeID = branchTimeReader.getNodeCount();
+    EdgeID branchTimeNextEdgeID = branchTimeReader.getEdgeCount();
 
     // Get current state of main
     _base = _versionController->openTransaction().commitData();
 
     // Get the current next Edge and Node IDs on main
-    NodeID newNextNodeID =
-        _base->commits().back().openTransaction().readGraph().getNodeCount();
-    EdgeID newNextEdgeID =
-        _base->commits().back().openTransaction().readGraph().getEdgeCount();
+    const GraphReader mainReader = _base->commits().back().openTransaction().readGraph();
+    NodeID newNextNodeID = mainReader.getNodeCount();
+    EdgeID newNextEdgeID = mainReader.getEdgeCount();
 
     MetadataRebaser metadataRebaser;
     DataPartRebaser dataPartRebaser(branchTimeNextNodeID, branchTimeNextEdgeID, newNextNodeID,
