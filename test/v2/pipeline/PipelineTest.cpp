@@ -171,12 +171,23 @@ TEST_F(PipelineTest, scanNodesExpand2) {
         std::vector<NodeID> expectedNodeIDs;
         std::vector<NodeID> expectedTargets1;
         std::vector<NodeID> expectedTargets2;
-        for (NodeID nodeID : nodeIDs->getRaw()) {
+
+        // Get all expected node IDs
+        std::vector<NodeID> allNodeIDs;
+        {
+            auto transaction = _graph->openTransaction();
+            auto reader = transaction.readGraph();
+            auto nodes = reader.scanNodes();
+            for (auto node : nodes) {
+                allNodeIDs.push_back(node);
+            }
+        }
+
+        for (NodeID nodeID : allNodeIDs) {
             SimpleGraph::findOutEdges(_graph, {nodeID}, tmpEdgeIDs, tmpEdgeTypes, tmpTargets);
             for (NodeID targetNodeID : tmpTargets) {
                 SimpleGraph::findOutEdges(_graph, {targetNodeID}, tmpEdgeIDs2, tmpEdgeTypes2, tmpTargets2);
                 for (NodeID targetNodeID2 : tmpTargets2) {
-                    std::cout << nodeID << "->" << targetNodeID << "->" << targetNodeID2 << std::endl;
                     expectedNodeIDs.push_back(nodeID);
                     expectedTargets1.push_back(targetNodeID);
                     expectedTargets2.push_back(targetNodeID2);
