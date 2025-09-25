@@ -105,7 +105,6 @@ void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     // the metadata provided when rebasing main
     DataPartBuilder& dpBuilder = newBuilder();
 
-
     // TODO: Remove this by using a mapping of NodeID = offset + _firstNodeID
     std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
 
