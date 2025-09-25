@@ -48,15 +48,28 @@ public:
 
      PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
 
-     void addPendingNode(std::vector<std::string>& labels, UntypedProperties& properties);
+     /**
+      * @brief Adds a pending node to this WriteBuffer with the provided properties and
+      * labels.
+      * @warn Takes ownership and moves ownership of @param labels and @param properties
+      * to this WriteBuffer
+      */
+     void addPendingNode(std::vector<std::string>&& labels, UntypedProperties&& properties);
 
-     void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string& edgeType,
-                         UntypedProperties& edgeProperties);
+     /**
+      * @brief Adds a pending edge to this WriteBuffer with the provided properties and
+      * labels.
+      * @warn Takes ownership and moves ownership of @param edgeType and @param
+      * edgeProperties to this WriteBuffer. Does not take ownership of @param src nor
+      * @param tgt
+      */
+     void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string&& edgeType,
+                         UntypedProperties&& edgeProperties);
 
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
-     const std::set<NodeID> deletedNodes() const { return _deletedNodes; }
+     const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
 
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
