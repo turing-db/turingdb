@@ -65,34 +65,34 @@ DumpResult<void> LoadUtils::loadVector(std::vector<T>& out,
     }
 
     const size_t remainingSpace = it.remainingBytes();
-    size_t TsThisPage = remainingSpace / TSize; // Truncates
-    TsThisPage = std::min(sz, TsThisPage);      // The amount that fit on this page
+    size_t countThisPage = remainingSpace / TSize; // Truncates
+    countThisPage = std::min(sz, countThisPage);      // The amount that fit on this page
 
     // Read the number on this page
-    for (size_t i = 0; i < TsThisPage; i++) {
+    for (size_t i = 0; i < countThisPage; i++) {
         auto id = it.get<WorkingT>();
         out.emplace_back(id);
     }
 
     // If we all were on a single page: done
-    if (sz == TsThisPage) {
+    if (sz == countThisPage) {
         return {};
     }
 
-    const size_t read = TsThisPage;
+    const size_t read = countThisPage;
     const size_t remaining = sz - read;
 
-    const size_t TsPerPage = DumpConfig::PAGE_SIZE / TSize;
+    const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
 
     // Number of pages that were full
-    const size_t fullPagesNeeded = remaining / TsPerPage;
+    const size_t fullPagesNeeded = remaining / countPerPage;
     // Remainder on last page: doesn't fill the whole page
-    const size_t leftOver = remaining % TsPerPage;
+    const size_t leftOver = remaining % countPerPage;
 
     // Get full pages
     for (size_t p = 0; p < fullPagesNeeded; p++) {
         LoadUtils::newPage(it, reader);
-        for (size_t j = 0; j < TsPerPage; j++) {
+        for (size_t j = 0; j < countPerPage; j++) {
             out.emplace_back(it.get<WorkingT>());
         }
         if (reader.errorOccured()) {

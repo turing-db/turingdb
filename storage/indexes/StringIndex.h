@@ -25,6 +25,8 @@ class StringIndex {
 public:
     class PrefixTreeNode {
     public:
+        friend StringIndexerLoader;
+
         PrefixTreeNode(size_t id)
             : _children(ALPHABET_SIZE),
             _id {id}
@@ -64,7 +66,6 @@ public:
         }
 
     private:
-        friend StringIndexerLoader;
         std::vector<EntityID> _owners;
         std::vector<PrefixTreeNode*> _children;
         size_t _id {std::numeric_limits<size_t>::max()};
