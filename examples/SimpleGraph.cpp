@@ -108,7 +108,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     const auto cooking = writer.addNode({"Interest"});
     writer.addNodeProperty<types::String>(cooking, "name", "Cooking");
 
-    const auto ghosts = writer.addNode({"Interest", "Supernatural", "SleepDisturber", "Exotic"});
+    const auto ghosts = writer.addNode({"Interest", "Supernatural", "SleepDisturber", "Exotic"}); //6
     writer.addNodeProperty<types::String>(ghosts, "name", "Ghosts");
     writer.addNodeProperty<types::Bool>(ghosts, "isReal", true);
 
