@@ -9,7 +9,7 @@ void CommitWriteBuffer::addPendingNode(std::vector<std::string>& labels,
     _pendingNodes.emplace_back(labels, properties);
 }
 
-void CommitWriteBuffer::addPendingEdge(ContingentNode src, ContingentNode tgt,
+void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
                                        std::string& edgeType,
                                        std::vector<UntypedProperty>& edgeProperties) {
     _pendingEdges.emplace_back(src, tgt, edgeType, edgeProperties);

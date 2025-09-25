@@ -34,7 +34,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    using ContingentNode = CommitWriteBuffer::ContingentNode;
+    using ContingentNode = CommitWriteBuffer::ExistingOrPendingNode;
 
     const CreateTargets* _targets {nullptr};
     CommitWriteBuffer* _writeBuffer {nullptr};

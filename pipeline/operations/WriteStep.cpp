@@ -114,7 +114,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     return thisNodeOffset;
 }
 
-CommitWriteBuffer::ContingentNode WriteStep::getOrWriteNode(const EntityPattern* nodePattern) {
+CommitWriteBuffer::ExistingOrPendingNode WriteStep::getOrWriteNode(const EntityPattern* nodePattern) {
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
 
     // Check to see if this node has been written already by searching its variable name

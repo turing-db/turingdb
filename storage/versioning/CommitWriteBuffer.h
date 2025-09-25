@@ -39,8 +39,8 @@ public:
      using PendingNodeOffset = size_t;
 
      // A node: either exists in previous commit (materialised as NodeID),
-     // or to be created in this commit (materialised as PendingNode)
-     using ContingentNode = std::variant<NodeID, PendingNodeOffset>;
+     // or to be created in this commit (materialised as PendingNodeOffset)
+     using ExistingOrPendingNode = std::variant<NodeID, PendingNodeOffset>;
      using PendingNodes = std::vector<PendingNode>;
      using PendingEdges = std::vector<PendingEdge>;
 
@@ -50,7 +50,7 @@ public:
 
      void addPendingNode(std::vector<std::string>& labels, UntypedProperties& properties);
 
-     void addPendingEdge(ContingentNode src, ContingentNode tgt, std::string& edgeType,
+     void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string& edgeType,
                          UntypedProperties& edgeProperties);
 
      PendingNodes& pendingNodes() { return _pendingNodes; }
@@ -76,8 +76,8 @@ private:
     friend CommitWriteBufferRebaser;
 
     struct PendingEdge {
-         ContingentNode src;
-         ContingentNode tgt;
+         ExistingOrPendingNode src;
+         ExistingOrPendingNode tgt;
          std::string edgeLabelTypeName;
          UntypedProperties properties;
     };
