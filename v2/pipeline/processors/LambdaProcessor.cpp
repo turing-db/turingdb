@@ -11,6 +11,7 @@ LambdaProcessor::~LambdaProcessor() {
 }
 
 void LambdaProcessor::prepare(ExecutionContext* ctxt) {
+    _prepared = true;
 }
 
 void LambdaProcessor::reset() {

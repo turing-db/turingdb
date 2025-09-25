@@ -25,7 +25,6 @@ public:
     {
     }
 
-
     bool isValid() const {
         return _view.isValid();
     }

@@ -32,6 +32,8 @@ void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
 
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
+
+    _prepared = true;
 }
 
 void ScanNodesProcessor::reset() {

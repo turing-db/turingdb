@@ -99,18 +99,18 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
 }
 
 void MaterializeProcessor::prepare(ExecutionContext* ctxt) {
+    _prepared = true;
 }
 
 void MaterializeProcessor::reset() {
 }
 
 void MaterializeProcessor::execute() {
-    PipelineBuffer* outputBuffer = _output->getBuffer();
-    if (!outputBuffer) {
-        return;
-    }
+    _input->consume();
+    _output->writeData();
+    _finished = true;
 
-    Block& output = outputBuffer->getBlock();
+    Block& output = _output->getBuffer()->getBlock();
     const MaterializeData::Indices& indices = _matData.getIndices();
     const MaterializeData::ColumnsPerStep& columnsPerStep = _matData.getColumnsPerStep();
     const size_t colCount = _matData.getColumnCount();
@@ -124,6 +124,7 @@ void MaterializeProcessor::execute() {
                 ++currentColIndex;
             }
         }
+
         return;
     }
 
@@ -135,7 +136,7 @@ void MaterializeProcessor::execute() {
     size_t currentColIndex = colCount - 1;
     const size_t lastStep = columnsPerStep.size() - 1;
 
-    for (size_t currentStep = lastStep; currentStep > 0; --currentStep) {
+    for (size_t currentStep = lastStep; currentStep >= 0; --currentStep) {
         const MaterializeData::Columns& cols = columnsPerStep[currentStep];
 
         // If last step, don't use the transform, just copy columns
@@ -172,8 +173,4 @@ void MaterializeProcessor::execute() {
 #endif
         }
     }
-
-    _finished = true;
-    _input->consume();
-    _output->writeData();
 }

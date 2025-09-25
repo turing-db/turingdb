@@ -10,13 +10,66 @@
 
 using namespace db;
 
+NodeID SimpleGraph::findNodeID(Graph* graph, std::string_view nodeName) {
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
+
+    auto it = reader.scanNodeProperties<types::String>(0).begin();
+    for (; it.isValid(); it.next()) {
+        if (it.get() == nodeName) {
+            return it.getCurrentNodeID();
+        }
+    }
+
+    throw std::runtime_error(fmt::format("Node not found: {}", nodeName));
+}
+
+void SimpleGraph::findNodesByLabel(Graph* graph, std::string_view labelName, std::vector<NodeID>& nodeIDs) {
+    nodeIDs.clear();
+
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
+
+    LabelSet labelSet;
+    const LabelID labelID = reader.getMetadata().labels().get(labelName).value();
+    labelSet.set(labelID);
+    const LabelSetHandle labelSetHandle = LabelSetHandle(labelSet);
+
+    auto it = reader.scanNodesByLabel(labelSetHandle).begin();
+    for (; it.isValid(); it.next()) {
+        nodeIDs.push_back(it.get());
+    }
+}
+
+void SimpleGraph::findOutEdges(Graph* graph,
+                               const std::vector<NodeID>& nodeIDs,
+                               std::vector<EdgeID>& edgeIDs,
+                               std::vector<EdgeTypeID>& edgeTypes,
+                               std::vector<NodeID>& targetNodeIDs) {
+    edgeIDs.clear();
+    edgeTypes.clear();
+    targetNodeIDs.clear();
+                                
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
+
+    ColumnNodeIDs columnNodeIDs(nodeIDs);
+
+    const auto edges = reader.getOutEdges(&columnNodeIDs);
+    for (const auto& edge : edges) {
+        edgeIDs.push_back(edge._edgeID);
+        edgeTypes.push_back(edge._edgeTypeID);
+        targetNodeIDs.push_back(edge._otherID);
+    }
+}
+
 void SimpleGraph::createSimpleGraph(Graph* graph) {
     GraphWriter writer {graph};
 
-    const auto findNodeID = [&](std::string_view nodeName) {
+    auto findNodeIDInWriter = [&](std::string_view nodeName) -> NodeID {
         const auto transaction = writer.openWriteTransaction();
         const auto reader = transaction.readGraph();
-
+        
         auto it = reader.scanNodeProperties<types::String>(0).begin();
         for (; it.isValid(); it.next()) {
             if (it.get() == nodeName) {
@@ -103,7 +156,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     const auto paddle = writer.addNode({"Interest"});
     writer.addNodeProperty<types::String>(paddle, "name", "Paddle");
 
-    const auto maximeBio = writer.addEdge("INTERESTED_IN", maxime, findNodeID("Bio"));
+    const auto maximeBio = writer.addEdge("INTERESTED_IN", maxime, findNodeIDInWriter("Bio"));
     writer.addEdgeProperty<types::String>(maximeBio, "name", "Maxime -> Bio");
 
     const auto maximePaddle = writer.addEdge("INTERESTED_IN", maxime, paddle);
@@ -126,7 +179,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addEdgeProperty<types::String>(lucAnimals, "name", "Luc -> Animals");
     writer.addEdgeProperty<types::Int64>(lucAnimals, "duration", 20);
 
-    const auto lucComputers = writer.addEdge("INTERESTED_IN", luc, findNodeID("Computers"));
+    const auto lucComputers = writer.addEdge("INTERESTED_IN", luc, findNodeIDInWriter("Computers"));
     writer.addEdgeProperty<types::String>(lucComputers, "name", "Luc -> Computers");
     writer.addEdgeProperty<types::Int64>(lucComputers, "duration", 15);
 
@@ -137,7 +190,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(martina, "isFrench", false);
     writer.addNodeProperty<types::Bool>(martina, "hasPhD", true);
 
-    const auto martinaCooking = writer.addEdge("INTERESTED_IN", martina, findNodeID("Cooking"));
+    const auto martinaCooking = writer.addEdge("INTERESTED_IN", martina, findNodeIDInWriter("Cooking"));
     writer.addEdgeProperty<types::String>(martinaCooking, "name", "Martina -> Cooking");
     writer.addEdgeProperty<types::Int64>(martinaCooking, "duration", 10);
 

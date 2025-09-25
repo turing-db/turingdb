@@ -73,6 +73,8 @@ void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
         ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdgeTypes->getBuffer()->getBlock()[0]);
         _it->setEdgeTypes(edgeTypes);
     }
+
+    _prepared = true;
 }
 
 void GetOutEdgesProcessor::reset() {
