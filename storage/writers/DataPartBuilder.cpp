@@ -172,15 +172,13 @@ std::optional<EdgeID> DataPartBuilder::addPendingEdge(const CommitWriteBuffer& w
     using CWB = CommitWriteBuffer;
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted. NOTE: Deletes currently not implemented
-    if (std::holds_alternative<NodeID>(edge.src)) {
-        const NodeID srcID = std::get<NodeID>(edge.src);
-        if (wb.deletedNodes().contains(srcID)) {
+    if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
+        if (wb.deletedNodes().contains(*srcID)) {
             return std::nullopt;
         }
     }
-    if (std::holds_alternative<NodeID>(edge.tgt)) {
-        const NodeID tgtID = std::get<NodeID>(edge.tgt);
-        if (wb.deletedNodes().contains(tgtID)) {
+    if (const NodeID* tgtID = std::get_if<NodeID>(&edge.tgt)) {
+        if (wb.deletedNodes().contains(*tgtID)) {
             return std::nullopt;
         }
     }

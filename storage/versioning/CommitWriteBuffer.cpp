@@ -4,14 +4,14 @@
 
 using namespace db;
 
-void CommitWriteBuffer::addPendingNode(std::vector<std::string>& labels,
-                                       std::vector<UntypedProperty>& properties) {
+void CommitWriteBuffer::addPendingNode(std::vector<std::string>&& labels,
+                                       std::vector<UntypedProperty>&& properties) {
     _pendingNodes.emplace_back(labels, properties);
 }
 
 void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
-                                       std::string& edgeType,
-                                       std::vector<UntypedProperty>& edgeProperties) {
+                                       std::string&& edgeType,
+                                       std::vector<UntypedProperty>&& edgeProperties) {
     _pendingEdges.emplace_back(src, tgt, edgeType, edgeProperties);
 }
 

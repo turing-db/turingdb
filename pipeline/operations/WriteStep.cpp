@@ -108,7 +108,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         _writeBuffer->nextPendingNodeOffset();
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
 
-    _writeBuffer->addPendingNode(nodeLabels, nodeProperties);
+    _writeBuffer->addPendingNode(std::move(nodeLabels), std::move(nodeProperties));
     _varOffsetMap[nodeVarDecl] = thisNodeOffset;
 
     return thisNodeOffset;
@@ -149,17 +149,13 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     }
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
-    if (!patternProperties) { // No properties
-        CommitWriteBuffer::UntypedProperties emptyProps;
-        _writeBuffer->addPendingEdge(src, tgt, edgeType, emptyProps);
-        return;
-    }
-
     CommitWriteBuffer::UntypedProperties edgeProperties;
-    for (const auto& e : patternProperties->getExpressions()) {
-        addUntypedProperties(edgeProperties, e);
+    if (patternProperties) {
+        for (const auto& e : patternProperties->getExpressions()) {
+            addUntypedProperties(edgeProperties, e);
+        }
     }
-    _writeBuffer->addPendingEdge(src, tgt, edgeType, edgeProperties);
+    _writeBuffer->addPendingEdge(src, tgt, std::move(edgeType), std::move(edgeProperties));
 }
 
 void WriteStep::writePath(const PathPattern* pathPattern) {
