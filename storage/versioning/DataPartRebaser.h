@@ -45,12 +45,6 @@ private:
     NodeID _targetCommitNextNodeID {0};
     EdgeID _targetCommitNextEdgeID {0};
 
-    NodeID _baseCommitFirstNodeID {0};
-    EdgeID _baseCommitFirstEdgeID {0};
-
-    NodeID _targetCommitFirstNodeID {0};
-    EdgeID _targetCommitFirstEdgeID {0};
-
     NodeID rebaseNodeID(const NodeID& id) const {
         return id >= _baseCommitNextNodeID
                  ? id + _targetCommitNextNodeID - _baseCommitNextNodeID
