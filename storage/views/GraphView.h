@@ -17,7 +17,7 @@ public:
     {
     }
 
-    bool isValid() const { return !_data; }
+    bool isValid() const { return _data; }
 
     [[nodiscard]] GraphReader read() const;
     [[nodiscard]] std::span<const CommitView> commits() const { return _data->commits(); }

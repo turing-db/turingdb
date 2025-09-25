@@ -22,6 +22,7 @@ public:
     bool isSink() const { return _outputs.empty(); }
 
     bool isFinished() const { return _finished; }
+    bool isPrepared() const { return _prepared; }
 
     virtual void prepare(ExecutionContext* ctxt) = 0;
     virtual void reset() = 0;
@@ -54,6 +55,7 @@ protected:
     Ports _outputs;
     bool _scheduled {false};
     bool _finished {false};
+    bool _prepared {false};
 
     Processor();
     virtual ~Processor();

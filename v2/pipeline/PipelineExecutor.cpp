@@ -17,11 +17,6 @@ PipelineExecutor::~PipelineExecutor() {
 }
 
 void PipelineExecutor::init() {
-    // Prepare all processors
-    for (Processor* processor : _pipeline->processors()) {
-        processor->prepare(_ctxt);
-    }
-
     // Add all sources to the active queue
     auto& activeQueue = _activeQueue;
 	for (Processor* source : _pipeline->sources()) {
@@ -58,10 +53,12 @@ void PipelineExecutor::executeStep() {
         Processor* currentProc = updateQueue.front();
         updateQueue.pop();
 
-        // We need to reset processors that were finished
-        // and that are reactivated by new data
         if (currentProc->isFinished()) {
             currentProc->reset();
+        }
+
+        if (!currentProc->isPrepared()) {
+            currentProc->prepare(_ctxt);
         }
 
         currentProc->execute();
