@@ -17,22 +17,23 @@ using namespace db;
 class QueryAnalyzerTest : public turing::test::TuringTest {
 public:
     QueryAnalyzerTest()
-        : _db(_config)
     {
+        _config.setSyncedOnDisk(false);
+        _db = std::make_unique<TuringDB>(_config);
     }
 
     void initialize() override {
-        SystemManager& sysMan = _db.getSystemManager();
-        // XXX: Bug (I think), does not work unless set to "simple"
+        SystemManager& sysMan = _db->getSystemManager();
+        // FIX: Bug (I think), does not work unless set to "simple"
         Graph* graph = sysMan.createGraph("simple");
         TypingGraph::createTypingGraph(graph);
-        _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
-                                                     &_db.getJobSystem());
+        _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
+                                                     &_db->getJobSystem());
     }
     
 protected:
     TuringConfig _config;
-    TuringDB _db;
+    std::unique_ptr<TuringDB> _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
@@ -300,4 +301,10 @@ TEST_F(QueryAnalyzerTest, testApproxStringOperator) {
         .expectError()
         .expectErrorMessage("Operator '~=' must be used with values of type 'String'.")
         .execute();
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 4;
+    });
 }

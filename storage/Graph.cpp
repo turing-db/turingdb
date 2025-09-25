@@ -30,8 +30,8 @@ std::unique_ptr<Graph> Graph::create() {
     return std::unique_ptr<Graph> {graph};
 }
 
-std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& localPath) {
-    auto* graph = new Graph(name, localPath);
+std::unique_ptr<Graph> Graph::create(const std::string& name, const std::string& path) {
+    auto* graph = new Graph(name, path);
     graph->_versionController->createFirstCommit();
     return std::unique_ptr<Graph>(graph);
 }
@@ -40,23 +40,21 @@ std::unique_ptr<Graph> Graph::createEmptyGraph() {
     return std::unique_ptr<Graph>(new Graph());
 }
 
-std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name, const fs::Path& localPath) {
-    return std::unique_ptr<Graph>(new Graph(name, localPath));
+std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name, const std::string& path) {
+    return std::unique_ptr<Graph>(new Graph(name, path));
 }
 
 
 Graph::Graph()
     : _graphName("default"),
     _graphPath("/dev/null"),
-    _versionController(new VersionController {this}),
-    _dumpAndLoadManger(new DumpAndLoadManager {this})
+    _versionController(new VersionController {this})
 {
 }
 
-Graph::Graph(const std::string& name, const fs::Path& localPath)
+Graph::Graph(const std::string& name, const std::string& path)
     : _graphName(name),
-    _graphPath(localPath),
-    _versionController(new VersionController {this}),
-    _dumpAndLoadManger(new DumpAndLoadManager {this})
+    _graphPath(path),
+    _versionController(new VersionController {this})
 {
 }

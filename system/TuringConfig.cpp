@@ -8,55 +8,56 @@
 
 using namespace db;
 
-TuringConfig::TuringConfig()
-{
-    init();
+TuringConfig::TuringConfig() {
 }
 
 TuringConfig::~TuringConfig() {
 }
 
 void TuringConfig::init() {
-    const char* homeEnv = getenv("HOME");
-    if (!homeEnv || !*homeEnv) {
-        panic("Environment variable $HOME undefined");
+    // Create turing directory if it does not exist
+    if (_turingDir.get().empty()) {
+        const char* homeEnv = getenv("HOME");
+        if (!homeEnv || !*homeEnv) {
+            panic("Environment variable $HOME undefined");
+        }
+
+        _turingDir = fs::Path(homeEnv) / ".turing";
     }
 
-    // Create turing directory if it does not exist
-    const fs::Path turingDir = fs::Path(homeEnv)/".turing";
-
-    if (!turingDir.exists()) {
-        spdlog::info("Creating turing directory in {}", turingDir.c_str());
-        if (auto res = turingDir.mkdir(); !res) {
+    if (!_turingDir.exists()) {
+        spdlog::info("Creating turing directory in {}", _turingDir.c_str());
+        if (auto res = _turingDir.mkdir(); !res) {
             panic("Can not create turing directory: {}", res.error().fmtMessage());
         }
     }
 
-    // Create turing/graphs directory if it does not exist
-    const fs::Path graphsDir = turingDir/"graphs";
-    if (!graphsDir.exists()) {
-        spdlog::info("Create directory {}", graphsDir.c_str());
-        if (auto res = graphsDir.mkdir(); !res) {
-            panic("Can not create directory {} {}", graphsDir.c_str(), res.error().fmtMessage());
+    if (_graphsDir.get().empty()) {
+        _graphsDir = _turingDir / "graphs";
+    }
+
+    if (!_graphsDir.exists()) {
+        spdlog::info("Create directory {}", _graphsDir.c_str());
+        if (auto res = _graphsDir.mkdir(); !res) {
+            panic("Can not create directory {} {}", _graphsDir.c_str(), res.error().fmtMessage());
         }
+    }
+
+    if (_dataDir.get().empty()) {
+        _dataDir = _turingDir / "data";
     }
 
     // Create turing/data directory if it does not exist
-    const fs::Path dataDir = turingDir/"data";
-    if (!dataDir.exists()) {
-        spdlog::info("Create directory {}", dataDir.c_str());
-        if (auto res = dataDir.mkdir(); !res) {
-            panic("Can not create directory {} {}", dataDir.c_str(), res.error().fmtMessage());
+    if (!_dataDir.exists()) {
+        spdlog::info("Create directory {}", _dataDir.c_str());
+        if (auto res = _dataDir.mkdir(); !res) {
+            panic("Can not create directory {} {}", _dataDir.c_str(), res.error().fmtMessage());
         }
     }
-
-    _turingDir = turingDir;
-    _graphsDir = graphsDir;
-    _dataDir = dataDir;
 }
 
 void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _turingDir = turingDir;
-    _graphsDir = _turingDir/"graphs";
-    _dataDir = _turingDir/"data";
+    _graphsDir = _turingDir / "graphs";
+    _dataDir = _turingDir / "data";
 }

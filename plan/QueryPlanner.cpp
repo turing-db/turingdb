@@ -1558,7 +1558,7 @@ bool QueryPlanner::planLoadGraph(const LoadGraphCommand* loadCmd) {
     if (!loadCmd->getGraphName().empty()) {
         _pipeline->add<LoadGraphStep>(loadCmd->getFileName(), loadCmd->getGraphName());
     } else {
-        _pipeline->add<LoadGraphStep>(loadCmd->getFileName());
+        _pipeline->add<LoadGraphStep>(loadCmd->getGraphName());
     }
 
     _pipeline->add<EndStep>();

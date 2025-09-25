@@ -3,6 +3,8 @@
 
 #include "GraphDumper.h"
 #include "Path.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 
@@ -19,8 +21,11 @@ using namespace turing::test;
 
 class SimpleGraphSerialisationTest : public TuringTest {
 public:
-    void initialize() {
-        SystemManager& sysMan = _db.getSystemManager();
+    void initialize() override {
+        _config.setSyncedOnDisk(false);
+        _db = std::make_unique<TuringDB>(_config);
+
+        SystemManager& sysMan = _db->getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
         _workingPath = fs::Path {_outDir + "/testfile"};
@@ -34,8 +39,9 @@ public:
     }
 
 protected:
-    TuringDB _db;
-    Graph* _builtGraph;
+    TuringConfig _config;
+    std::unique_ptr<TuringDB> _db;
+    Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     LocalMemory _mem;
     fs::Path _workingPath;

@@ -17,6 +17,7 @@ public:
 
         const auto& name = graph.getName();
 
+        _writer.writeToCurrentPage(graph.getID().get());
         _writer.writeToCurrentPage((uint64_t)name.size());
         _writer.writeToCurrentPage(name);
 

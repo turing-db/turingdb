@@ -471,14 +471,13 @@ std::string QueryAnalyzer::createVarName() {
 }
 
 void QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
-    const std::string& fileName = cmd->getFileName();
-    if (fileName.empty()) {
-        throw AnalyzeException("No graph file name provided.");
+    const std::string& graphName = cmd->getGraphName();
+    if (graphName.empty()) {
+        throw AnalyzeException("No graph name provided.");
     }
 
-    const std::string& name = cmd->getGraphName();
     // Check that the graph name is only [A-Z0-9_]+
-    for (char c : name) {
+    for (char c : graphName) {
         if (!(isalnum(c) || c == '_')) [[unlikely]] {
             throw AnalyzeException(
                 fmt::format("Graph name must only contain alphanumeric characters "

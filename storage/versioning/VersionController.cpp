@@ -82,10 +82,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         }
 
         _commits.emplace_back(std::move(buildRes.value()));
-
-        if (auto res = getGraph()->getDumpAndLoadManager()->dumpCommit(*_commits.back()); !res) {
-            return CommitError::result(CommitErrorType::DUMP_FAILED, res.error());
-        }
     }
 
     _head.store(_commits.back().get());
@@ -97,12 +93,8 @@ std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
     return Change::create(this, ChangeID {_nextChangeID.fetch_add(1)}, base);
 }
 
-void VersionController::lock() {
-    _mutex.lock();
-}
-
-void VersionController::unlock() {
-    _mutex.unlock();
+std::unique_lock<std::mutex> VersionController::lock() {
+    return std::unique_lock<std::mutex> {_mutex};
 }
 
 void VersionController::addCommit(std::unique_ptr<Commit> commit) {

@@ -11,6 +11,7 @@ class SystemManagerTest : public ::testing::Test {
 
 TEST_F(SystemManagerTest, createGraph) {
     TuringConfig config;
+    config.setSyncedOnDisk(false);
     SystemManager sysMan(config);
 
     // The default graph exists

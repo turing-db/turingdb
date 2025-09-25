@@ -16,21 +16,22 @@ using namespace db;
 class QueryTest : public turing::test::TuringTest {
 public:
     QueryTest()
-        : _db(_config)
     {
+        _config.setSyncedOnDisk(false);
+        _db = std::make_unique<TuringDB>(_config);
     }
 
     void initialize() override {
-        SystemManager& sysMan = _db.getSystemManager();
+        SystemManager& sysMan = _db->getSystemManager();
         Graph* graph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(graph);
-        _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
-                                                     &_db.getJobSystem());
+        _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
+                                                     &_db->getJobSystem());
     }
 
 protected:
     TuringConfig _config;
-    TuringDB _db;
+    std::unique_ptr<TuringDB> _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };

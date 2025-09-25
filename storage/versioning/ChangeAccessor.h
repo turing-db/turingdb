@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <span>
 
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
@@ -38,6 +39,7 @@ public:
     [[nodiscard]] ChangeID getID() const;
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash = CommitHash::head()) const;
     [[nodiscard]] const Graph* getGraph() const;
+    [[nodiscard]] std::span<const std::unique_ptr<CommitBuilder>> pendingCommits() const;
 
     void release() {
         _lock.unlock();

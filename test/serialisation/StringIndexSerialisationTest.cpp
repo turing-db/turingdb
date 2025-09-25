@@ -24,13 +24,11 @@ using namespace turing::test;
 
 class StringIndexSerialisationTest : public TuringTest {
 public:
-    StringIndexSerialisationTest()
-        : _db(_config)
-    {
-    }
+    void initialize()  override {
+        _config.setSyncedOnDisk(false);
+        _db = std::make_unique<TuringDB>(_config);
 
-    void initialize()  {
-        SystemManager& sysMan = _db.getSystemManager();
+        SystemManager& sysMan = _db->getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
         _workingPath = fs::Path {_outDir + "/testfile"};
@@ -46,8 +44,8 @@ public:
 
 protected:
     TuringConfig _config;
-    TuringDB _db;
-    Graph* _builtGraph;
+    std::unique_ptr<TuringDB> _db;
+    Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     LocalMemory _mem;
     fs::Path _workingPath;

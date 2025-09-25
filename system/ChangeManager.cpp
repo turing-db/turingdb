@@ -32,7 +32,7 @@ ChangeResult<Change*> ChangeManager::getChange(const Graph* graph, ChangeID chan
     return it->second.get();
 }
 
-ChangeResult<void> ChangeManager::acceptChange(ChangeAccessor& access, JobSystem& jobsystem) {
+ChangeResult<void> ChangeManager::submitChange(ChangeAccessor& access, JobSystem& jobsystem) {
     std::unique_lock guard(_changesLock);
     const Graph* graph = access.getGraph();
 

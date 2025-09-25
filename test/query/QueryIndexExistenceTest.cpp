@@ -17,64 +17,46 @@ using namespace db;
 
 class QueryIndexExistenceTest : public turing::test::TuringTest {
 public:
-    QueryIndexExistenceTest()
-        : _db(_config)
-    {
-    }
-
     void initialize() override {
-        SystemManager& sysMan = _db.getSystemManager();
+        const fs::Path turingDir = fs::Path(_outDir) / "turing";
+        _config.setTuringDirectory(turingDir);
+        _db = std::make_unique<TuringDB>(_config);
+
+        SystemManager& sysMan = _db->getSystemManager();
+
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
-        _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
-                                                     &_db.getJobSystem());
+        _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
+                                                     &_db->getJobSystem());
 
         auto graphDir = sysMan.getConfig().getGraphsDir();
-        std::string x = std::string(graphDir.filename());
-        _workingPath = fs::Path("newSimple");
-
-        if (FileUtils::exists(_workingPath.filename())) {
-            FileUtils::removeDirectory(_workingPath.filename());
-        }
     }
 
-    void terminate() override {
-        if (FileUtils::exists(_workingPath.filename())) {
-            FileUtils::removeDirectory(_workingPath.filename());
-        }
-    }
 protected:
     TuringConfig _config;
-    TuringDB _db;
+    std::unique_ptr<TuringDB> _db;
     LocalMemory _mem;
-    fs::Path _workingPath;
-    Graph* _builtGraph;
+    Graph* _builtGraph {nullptr};
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
 
 // Dump graph, load it: index should be present
 TEST_F(QueryIndexExistenceTest, noStringIndex) {
-    GraphDumper dumper;
-    auto res = dumper.dump(*_builtGraph, _workingPath);
-    if (!res) {
-        throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
+    {
+        auto& sysMan = _db->getSystemManager();
+        ASSERT_TRUE(sysMan.dumpGraph("simple"));
     }
 
-    const std::string& newName = "newSimple";
     TuringDB newDB(_config);
     LocalMemory newMem;
-    std::unique_ptr<QueryInterpreter> newInterp =
-        std::make_unique<QueryInterpreter>(&newDB.getSystemManager(), &newDB.getJobSystem());
+    auto newInterp = std::make_unique<QueryInterpreter>(&newDB.getSystemManager(),
+                                                        &newDB.getJobSystem());
 
-    auto graphDir = newDB.getSystemManager().getConfig().getGraphsDir();
-
-    bool loadRes =
-        newDB.getSystemManager().loadGraph(_workingPath, newName, newDB.getJobSystem());
-    ASSERT_TRUE(loadRes);
-
+    auto& sysMan = newDB.getSystemManager();
+    ASSERT_TRUE(sysMan.loadGraph("simple"));
 
     QueryTester tester {newMem, *newInterp};
-    tester.setGraphName(newName);
+    tester.setGraphName("simple");
 
     tester.query("MATCH (n{name=\"Remy\"}) return n")
         .expectVector<NodeID>({0})

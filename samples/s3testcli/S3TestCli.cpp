@@ -26,6 +26,7 @@ int main() {
     auto awsClient = S3::AwsS3ClientWrapper<>();
     auto turingS3client = S3::TuringS3Client(std::move(awsClient));
     db::TuringConfig config;
+    config.setSyncedOnDisk(false);
     db::SystemManager sysMan(config);
     const auto& turingDir = config.getTuringDir();
 

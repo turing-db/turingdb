@@ -13,12 +13,12 @@ public:
     struct Tag {};
 
     LoadGraphStep(const std::string& fileName, const std::string& graphName);
-    LoadGraphStep(const std::string& fileName);
+    LoadGraphStep(const std::string& graphName);
     ~LoadGraphStep();
 
     void prepare(ExecutionContext* ctxt);
 
-    inline bool isFinished() const { return true; }
+    bool isFinished() const { return true; }
 
     void reset() {}
 

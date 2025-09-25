@@ -13,6 +13,7 @@
 #include "GraphFileType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
+#include "DumpResult.h"
 
 namespace db {
 
@@ -26,7 +27,7 @@ class Change;
 
 class SystemManager {
 public:
-    explicit SystemManager(const TuringConfig& config);
+    explicit SystemManager(TuringConfig& config);
     ~SystemManager();
 
     SystemManager(const SystemManager&) = delete;
@@ -58,12 +59,11 @@ public:
 
     void setGraphsDir(const fs::Path& dir);
 
-    bool loadGraph(const std::string& graphName, const std::string& graphFileName, JobSystem& jobSystem);
+    /** Load a graph from a file (gml, neo4j)
+     * */
+    bool loadGraphFromFile(const std::string& graphName, const std::string& graphFileName, JobSystem& jobSystem);
 
-    bool loadGraph(const std::string& graphFileName, JobSystem& jobSystem);
-
-    bool loadGraph(const fs::Path& graphPath, const std::string& graphName,
-                   JobSystem& jobSystem);
+    DumpResult<void> dumpGraph(const std::string& graphName);
 
     bool isGraphLoading(const std::string& graphName) const;
 
@@ -87,11 +87,12 @@ public:
 
 
 private:
-    const TuringConfig& _config;
+    TuringConfig& _config;
     mutable RWSpinLock _graphsLock;
     Graph* _defaultGraph {nullptr};
     std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
+    std::unordered_map<Graph* , std::unique_ptr<class GraphSerializer>> _serializers;
     std::unique_ptr<ChangeManager> _changes;
     GraphLoadStatus _graphLoadStatus;
     Neo4jImporter _neo4JImporter;
@@ -100,7 +101,8 @@ private:
     bool loadNeo4jDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
-    bool addGraph(std::unique_ptr<Graph> graph, const std::string& name);
+    bool addGraph(std::unique_ptr<Graph> graph,
+                  std::unique_ptr<GraphSerializer> serializer);
     std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
 };
 

@@ -4,7 +4,6 @@
 
 #include "LocalMemory.h"
 #include "QueryInterpreter.h"
-#include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
 #include "TuringDB.h"
 #include "Panic.h"
@@ -145,6 +144,9 @@ public:
             [](const QueryCommand* cmd) {},
             _commitHash, _changeID);
 
+        if (!res) {
+            fmt::println("{} Error: {}", QueryStatusDescription::value(res.getStatus()), res.getError());
+        }
         EXPECT_TRUE(res);
 
         return *this;
@@ -200,6 +202,6 @@ private:
     std::vector<std::pair<std::unique_ptr<Column>, bool>> _expectedColumns;
     std::vector<std::unique_ptr<Column>> _outputColumns;
     bool _expectError = false;
-    std::optional<std::string> _expectErrMsg{std::nullopt};
+    std::optional<std::string> _expectErrMsg {std::nullopt};
 };
 }

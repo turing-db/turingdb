@@ -23,6 +23,7 @@ int main(int argc, const char** argv) {
     unsigned port = 6666;
     std::string address {"127.0.0.1"};
     bool nodemon = false;
+    bool inMemory = false;
     std::vector<std::string> graphsToLoad;
     argParser.add_argument("-cli")
              .store_into(noServer);
@@ -34,6 +35,9 @@ int main(int argc, const char** argv) {
              .store_into(nodemon);
     argParser.add_argument("-load")
              .store_into(graphsToLoad);
+    argParser.add_argument("-in-memory")
+             .store_into(inMemory);
+          
 
     toolInit.init(argc, argv);
 
@@ -43,6 +47,7 @@ int main(int argc, const char** argv) {
     }
 
     TuringConfig config;
+    config.setSyncedOnDisk(!inMemory);
     TuringDB turingDB(config);
     LocalMemory mem;
 

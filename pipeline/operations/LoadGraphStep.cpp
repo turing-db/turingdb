@@ -10,13 +10,13 @@
 using namespace db;
 
 LoadGraphStep::LoadGraphStep(const std::string& fileName, const std::string& graphName)
-    :_fileName(fileName),
+    : _fileName(fileName),
     _graphName(graphName)
 {
 }
 
-LoadGraphStep::LoadGraphStep(const std::string& fileName) 
-    :_fileName(fileName)
+LoadGraphStep::LoadGraphStep(const std::string& graphName) 
+    : _fileName(graphName)
 {
 }
 
@@ -33,10 +33,12 @@ void LoadGraphStep::execute() {
 
     bool res {false};
 
-    if (!_graphName.empty()) {
-        res = _sysMan->loadGraph(_graphName, _fileName, *_jobSystem);
+    if (!_fileName.empty()) {
+        fmt::print("Loading graph {} from file {}\n", _graphName, _fileName);
+        res = _sysMan->loadGraphFromFile(_graphName, _fileName, *_jobSystem);
     } else {
-        res = _sysMan->loadGraph(_fileName, *_jobSystem);
+        fmt::print("Loading turing graph {}\n", _graphName);
+        res = _sysMan->loadGraph(_graphName);
     }
 
     if (!res) {

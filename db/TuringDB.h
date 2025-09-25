@@ -17,7 +17,7 @@ class Block;
 
 class TuringDB {
 public:
-    TuringDB(const TuringConfig& config);
+    TuringDB(TuringConfig& config);
     ~TuringDB();
 
     SystemManager& getSystemManager() {

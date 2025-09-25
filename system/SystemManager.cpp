@@ -12,7 +12,7 @@
 #include "versioning/Transaction.h"
 #include "GMLImporter.h"
 #include "JobSystem.h"
-#include "DumpAndLoadManager.h"
+#include "GraphSerializer.h"
 #include "GraphLoader.h"
 #include "FileUtils.h"
 #include "TuringConfig.h"
@@ -20,10 +20,10 @@
 
 using namespace db;
 
-SystemManager::SystemManager(const TuringConfig& config)
+SystemManager::SystemManager(TuringConfig& config)
     : _config(config),
-    _changes(std::make_unique<ChangeManager>())
-{
+      _changes(std::make_unique<ChangeManager>()) {
+    _config.init();
     init();
 }
 
@@ -42,35 +42,46 @@ void SystemManager::init() {
     }
 
     if (!_defaultGraph) {
-        throw TuringException("Could Not Initialise the Default Graph");
+        throw TuringException("Could not initialise the default graph");
     }
 }
 
 Graph* SystemManager::loadGraph(const std::string& name) {
-    std::unique_ptr<Graph> graph = Graph::create("default", _config.getGraphsDir() / "default");
-    auto* rawPtr = graph.get();
+    const fs::Path path = _config.getGraphsDir() / name;
 
-    if (auto res = graph->getDumpAndLoadManager()->loadGraph(); !res) {
-        spdlog::info(res.error().fmtMessage());
+    auto graph = Graph::createEmptyGraph(name, path.c_str());
+    auto graphSerializer = std::make_unique<GraphSerializer>(graph.get());
+
+    auto* graphPtr = graph.get();
+
+    if (auto res = graphSerializer->load(); !res) {
+        spdlog::error(res.error().fmtMessage());
         return nullptr;
     }
-    if (!addGraph(std::move(graph), "default")) {
+
+    if (!addGraph(std::move(graph), std::move(graphSerializer))) {
         return nullptr;
     }
 
-    return rawPtr;
+    return graphPtr;
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {
-    std::unique_ptr<Graph> graph = Graph::create(name, _config.getGraphsDir() / name);
+    const fs::Path path = _config.getGraphsDir() / name;
+
+    auto graph = Graph::create(name, path.c_str());
+    auto graphSerializer = std::make_unique<GraphSerializer>(graph.get());
+
     auto* rawPtr = graph.get();
 
-    if (auto res = graph->getDumpAndLoadManager()->dumpGraph(); !res) {
-        spdlog::info(res.error().fmtMessage());
-        return nullptr;
+    if (_config.isSyncedOnDisk()) {
+        if (auto res = graphSerializer->dump(); !res) {
+            spdlog::error(res.error().fmtMessage());
+            return nullptr;
+        }
     }
 
-    if (!addGraph(std::move(graph), name)) {
+    if (!addGraph(std::move(graph), std::move(graphSerializer))) {
         return nullptr;
     }
 
@@ -78,23 +89,35 @@ Graph* SystemManager::createGraph(const std::string& name) {
 }
 
 Graph* SystemManager::createAndDumpGraph(const std::string& name) {
-    std::unique_ptr<Graph> graph = Graph::create(name, _config.getGraphsDir() / name);
+    const fs::Path path = _config.getGraphsDir() / name;
+
+    auto graph = Graph::create(name, path.c_str());
+    auto serializer = std::make_unique<GraphSerializer>(graph.get());
+
     auto* rawPtr = graph.get();
 
-    if (auto res = graph->getDumpAndLoadManager()->dumpGraph(); !res) {
-        spdlog::info(res.error().fmtMessage());
-        return nullptr;
+    if (_config.isSyncedOnDisk()) {
+        if (auto res = serializer->dump(); !res) {
+            spdlog::error(res.error().fmtMessage());
+            return nullptr;
+        }
+    } else {
+        spdlog::warn("Cannot dump graph, The system is running in full in-memory mode");
     }
 
-    if (!addGraph(std::move(graph), name)) {
+    if (!addGraph(std::move(graph), std::move(serializer))) {
+        spdlog::error("Could not add graph to storage {}", name);
         return nullptr;
     }
 
     return rawPtr;
 }
 
-bool SystemManager::addGraph(std::unique_ptr<Graph> graph, const std::string& name) {
+bool SystemManager::addGraph(std::unique_ptr<Graph> graph,
+                             std::unique_ptr<GraphSerializer> serializer) {
     std::unique_lock guard(_graphsLock);
+
+    const auto& name = graph->getName();
 
     // Search if a graph with the same name exists
     const auto it = _graphs.find(name);
@@ -102,7 +125,15 @@ bool SystemManager::addGraph(std::unique_ptr<Graph> graph, const std::string& na
         return false;
     }
 
+    // Search if a serializer with the same graph exists
+    const auto serializerIt = _serializers.find(graph.get());
+    if (serializerIt != _serializers.end()) [[unlikely]] {
+        return false; // Should not happen
+    }
+
+    _serializers[graph.get()] = std::move(serializer);
     _graphs[name] = std::move(graph);
+
     return true;
 }
 
@@ -139,7 +170,7 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
     }
 }
 
-bool SystemManager::loadGraph(const std::string& graphName, const std::string& fileName, JobSystem& jobSystem) {
+bool SystemManager::loadGraphFromFile(const std::string& graphName, const std::string& fileName, JobSystem& jobSystem) {
     const fs::Path graphPath = _config.getGraphsDir() / fileName;
 
     // Check if graph was already loaded || is already loading
@@ -172,69 +203,25 @@ bool SystemManager::loadGraph(const std::string& graphName, const std::string& f
     }
 }
 
-bool SystemManager::loadGraph(const std::string& graphFileName, JobSystem& jobSystem) {
-    const fs::Path graphPath = _config.getGraphsDir() / graphFileName;
+DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
+    std::shared_lock guard(_graphsLock);
 
-    // Check if graph was already loaded || is already loading
-    if (getGraph(graphFileName) || isGraphLoading(graphFileName)) {
-        return false;
+    if (!_config.isSyncedOnDisk()) {
+        spdlog::warn("Cannot dump graph, The system is running in full in-memory mode");
+        return {};
     }
 
-    if (!graphPath.exists()) {
-        return false;
+    const auto graphIt = _graphs.find(graphName);
+    if (graphIt == _graphs.end()) {
+        return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
 
-    const auto fileType = getGraphFileType(graphPath);
-    if (!fileType) {
-        // If we can not determine the file type, assume it is a Neo4j JSON graph
-        // to be changed in the future
-        return loadNeo4jJsonDB(graphFileName, graphPath, jobSystem);
+    const auto serializerIt = _serializers.find(graphIt->second.get());
+    if (serializerIt == _serializers.end()) {
+        return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
 
-    switch (*fileType) {
-        case GraphFileType::GML:
-            return loadGmlDB(graphFileName, graphPath, jobSystem);
-        case GraphFileType::NEO4J:
-            return loadNeo4jDB(graphFileName, graphPath, jobSystem);
-        case GraphFileType::NEO4J_JSON:
-            return loadNeo4jJsonDB(graphFileName, graphPath, jobSystem);
-        case GraphFileType::BINARY:
-            return loadBinaryDB(graphFileName, graphPath, jobSystem);
-        default:
-            return false;
-    }
-}
-
-// Load graph using non-default path
-bool SystemManager::loadGraph(const fs::Path& graphPath, const std::string& graphName, JobSystem& jobSystem) {
-    // Check if graph was already loaded || is already loading
-    if (getGraph(graphName) || isGraphLoading(graphName)) {
-        return false;
-    }
-
-    if (!graphPath.exists()) {
-        return false;
-    }
-
-    const auto fileType = getGraphFileType(graphPath);
-    if (!fileType) {
-        // If we can not determine the file type, assume it is a Neo4j JSON graph
-        // to be changed in the future
-        return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
-    }
-
-    switch (*fileType) {
-        case GraphFileType::GML:
-            return loadGmlDB(graphName, graphPath, jobSystem);
-        case GraphFileType::NEO4J:
-            return loadNeo4jDB(graphName, graphPath, jobSystem);
-        case GraphFileType::NEO4J_JSON:
-            return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
-        case GraphFileType::BINARY:
-            return loadBinaryDB(graphName, graphPath, jobSystem);
-        default:
-            return false;
-    }
+    return serializerIt->second->dump();
 }
 
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
@@ -264,25 +251,28 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
 bool SystemManager::loadBinaryDB(const std::string& graphName,
                                  const fs::Path& dbPath,
                                  JobSystem& jobsystem) {
+    fmt::print("Loading turing graph {}\n", graphName);
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
 
     // in the case of turingDB binaries the path is the same path we load from.
-    auto graph = Graph::create(graphName, dbPath);
+    auto graph = Graph::createEmptyGraph(graphName, dbPath.c_str());
+    auto serializer = std::make_unique<GraphSerializer>(graph.get());
 
-    if (auto res = graph->getDumpAndLoadManager()->loadGraph(); !res) {
+    if (auto res = serializer->load(); !res) {
         spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
 
-    if (!addGraph(std::move(graph), graphName)) {
+    if (!addGraph(std::move(graph), std::move(serializer))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
 
     _graphLoadStatus.removeLoadingGraph(graphName);
+
     return true;
 }
 
@@ -301,7 +291,9 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
     if (graphPath == dbPath) {
         return false;
     }
-    auto graph = Graph::create(graphName, graphPath);
+
+    auto graph = Graph::create(graphName, graphPath.c_str());
+    auto serializer = std::make_unique<GraphSerializer>(graph.get());
 
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
@@ -315,12 +307,14 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
         return false;
     }
 
-    if (!graph->getDumpAndLoadManager()->dumpGraph()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+    if (_config.isSyncedOnDisk()) {
+        if (!serializer->dump()) {
+            _graphLoadStatus.removeLoadingGraph(graphName);
+            return false;
+        }
     }
 
-    if (!addGraph(std::move(graph), graphName)) {
+    if (!addGraph(std::move(graph), std::move(serializer))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -341,7 +335,8 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
         return false;
     }
 
-    auto graph = Graph::create(graphName, graphPath);
+    auto graph = Graph::create(graphName, graphPath.c_str());
+    auto serializer = std::make_unique<GraphSerializer>(graph.get());
 
     Neo4jImporter::DumpFileToJsonDirArgs dumpArgs;
     dumpArgs._workDir = "/tmp";
@@ -368,12 +363,14 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
         return false;
     }
 
-    if (!graph->getDumpAndLoadManager()->dumpGraph()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+    if (_config.isSyncedOnDisk()) {
+        if (!serializer->dump()) {
+            _graphLoadStatus.removeLoadingGraph(graphName);
+            return false;
+        }
     }
 
-    if (!addGraph(std::move(graph), graphName)) {
+    if (!addGraph(std::move(graph), std::move(serializer))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -395,7 +392,8 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
     }
 
     // Load graph
-    auto graph = Graph::create(graphName, graphPath);
+    auto graph = Graph::create(graphName, graphPath.c_str());
+    auto serializer = std::make_unique<GraphSerializer>(graph.get());
 
     // load GMLs
     GMLImporter importer;
@@ -405,12 +403,14 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
         return false;
     }
 
-    if (!graph->getDumpAndLoadManager()->dumpGraph()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+    if (_config.isSyncedOnDisk()) {
+        if (!serializer->dump()) {
+            _graphLoadStatus.removeLoadingGraph(graphName);
+            return false;
+        }
     }
 
-    if (!addGraph(std::move(graph), graphName)) {
+    if (!addGraph(std::move(graph), std::move(serializer))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }

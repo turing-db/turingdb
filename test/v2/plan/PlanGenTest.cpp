@@ -22,13 +22,11 @@ using namespace db::v2;
 
 class PlanGenTest : public ::testing::Test {
 public:
-    PlanGenTest()
-        : _sysMan(_config)
-    {
-    }
-
     void SetUp() override {
-        _graph = _sysMan.createGraph("simpledb");
+        _config.setSyncedOnDisk(false);
+        _sysMan = std::make_unique<SystemManager>(_config);
+
+        _graph = _sysMan->createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
     }
 
@@ -37,7 +35,7 @@ public:
 
 protected:
     TuringConfig _config;
-    SystemManager _sysMan;
+    std::unique_ptr<SystemManager> _sysMan;
     Graph* _graph {nullptr};
 };
 

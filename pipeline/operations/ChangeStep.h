@@ -46,7 +46,7 @@ private:
     Transaction* _tx {nullptr};
 
     ChangeResult<Change*> createChange() const;
-    ChangeResult<void> acceptChange() const;
+    ChangeResult<void> submitChange() const;
     ChangeResult<void> deleteChange() const;
     void listChanges() const;
 };

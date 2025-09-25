@@ -123,8 +123,8 @@ private:
 
 class LoadGraphCommand : public QueryCommand {
 public:
-    static LoadGraphCommand* create(ASTContext* ctxt, const std::string& name);
-    static LoadGraphCommand* create(ASTContext* ctxt, const std::string& name, const std::string& graphName);
+    static LoadGraphCommand* create(ASTContext* ctxt, const std::string& graphName);
+    static LoadGraphCommand* create(ASTContext* ctxt, const std::string& fileName, const std::string& graphName);
 
     Kind getKind() const override { return Kind::LOAD_GRAPH_COMMAND; }
 
@@ -135,8 +135,8 @@ private:
     std::string _fileName;
     std::string _graphName;
 
-    LoadGraphCommand(const std::string& name);
-    LoadGraphCommand(const std::string& name, const std::string& graphName);
+    LoadGraphCommand(const std::string& graphName);
+    LoadGraphCommand(const std::string& fileName, const std::string& graphName);
     ~LoadGraphCommand() override = default;
 };
 

@@ -75,8 +75,7 @@ private:
     std::unique_ptr<ArcManager<CommitData>> _dataManager;
     std::unique_ptr<ArcManager<DataPart>> _partManager;
 
-    void lock();
-    void unlock();
+    std::unique_lock<std::mutex> lock();
 
     void addCommit(std::unique_ptr<Commit> commit);
 

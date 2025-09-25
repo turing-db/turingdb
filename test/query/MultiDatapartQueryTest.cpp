@@ -23,23 +23,24 @@ using namespace db;
 class MultiDatapartQueryTest : public turing::test::TuringTest {
 public:
     MultiDatapartQueryTest()
-        : _db(_config)
     {
+        _config.setSyncedOnDisk(false);
+        _db = std::make_unique<TuringDB>(_config);
     }
 
 protected:
     TuringConfig _config;
-    TuringDB _db;
+    std::unique_ptr<TuringDB> _db;
     LocalMemory _mem;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
 
 TEST_F(MultiDatapartQueryTest, MultiDatapartTest) {
-    SystemManager& sysMan = _db.getSystemManager();
+    SystemManager& sysMan = _db->getSystemManager();
     Graph* graph = sysMan.createGraph("simple");
     GraphWriter writer {graph};
-    _interp = std::make_unique<QueryInterpreter>(&_db.getSystemManager(),
-                                                 &_db.getJobSystem());
+    _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
+                                                 &_db->getJobSystem());
     QueryTester tester {_mem, *_interp};
 
     const auto node1 = writer.addNode({"label1", "label2", "label3"});
@@ -124,3 +125,4 @@ TEST_F(MultiDatapartQueryTest, MultiDatapartTest) {
         .expectVector<EdgeID>({EDGEID(edge3)})
         .execute();
 }
+

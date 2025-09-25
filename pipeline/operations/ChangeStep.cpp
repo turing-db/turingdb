@@ -4,6 +4,7 @@
 
 #include "ChangeManager.h"
 #include "ExecutionContext.h"
+#include "Graph.h"
 #include "Profiler.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -52,7 +53,7 @@ void ChangeStep::execute() {
             }
         } break;
         case ChangeOpType::SUBMIT: {
-            if (auto res = acceptChange(); !res) {
+            if (auto res = submitChange(); !res) {
                 throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
             }
         } break;
@@ -87,7 +88,7 @@ ChangeResult<Change*> ChangeStep::createChange() const {
 
     const auto& graphName = std::get<std::string>(_changeInfo);
 
-    const auto res = _sysMan->newChange(graphName);
+    auto res = _sysMan->newChange(graphName);
     if (!res) {
         return res;
     }
@@ -97,8 +98,8 @@ ChangeResult<Change*> ChangeStep::createChange() const {
     return {};
 }
 
-ChangeResult<void> ChangeStep::acceptChange() const {
-    Profile profile {"ChangeStep::acceptChange"};
+ChangeResult<void> ChangeStep::submitChange() const {
+    Profile profile {"ChangeStep::submitChange"};
 
     if (!_tx->writingPendingCommit()) {
         throw PipelineException("ChangeStep: Cannot accept change outside of a write transaction");
@@ -111,8 +112,18 @@ ChangeResult<void> ChangeStep::acceptChange() const {
     }
 
     ChangeManager& changeMan = _sysMan->getChangeManager();
-    
-    return changeMan.acceptChange(tx.changeAccessor(), *_jobSystem);
+
+    // Step 1: Submit the change
+    if (auto res = changeMan.submitChange(tx.changeAccessor(), *_jobSystem); !res) {
+        return res;
+    }
+
+    // Step 2: Dump newly created commits
+    if (auto res = _sysMan->dumpGraph(_graph->getName()); !res) {
+        return ChangeError::result(ChangeErrorType::SERIALIZATION_ERROR);
+    }
+
+    return {};
 }
 
 ChangeResult<void> ChangeStep::deleteChange() const {
