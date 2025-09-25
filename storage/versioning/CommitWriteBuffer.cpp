@@ -213,13 +213,11 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
 
     for (CommitWriteBuffer::PendingEdge& e : _buffer.pendingEdges()) {
         // We only care about edges that refer to NodeIDs
-        if (std::holds_alternative<NodeID>(e.src)) {
-            NodeID oldSrcID = std::get<NodeID>(e.src);
-            e.src = NodeID {rebaseNodeID(oldSrcID)};
+        if (NodeID* oldSrcID = std::get_if<NodeID>(&e.src)) {
+            e.src = NodeID {rebaseNodeID(*oldSrcID)};
         }
-        if (std::holds_alternative<NodeID>(e.tgt)) {
-            NodeID oldTgtID = std::get<NodeID>(e.tgt);
-            e.tgt = NodeID {rebaseNodeID(oldTgtID)};
+        if (NodeID* oldTgtID = std::get_if<NodeID>(&e.tgt)) {
+            e.tgt = NodeID {rebaseNodeID(*oldTgtID)};
         }
     }
 }
