@@ -33,7 +33,11 @@ public:
                                                              size_t pageSize = DEFAULT_PAGE_SIZE);
 
     void write(const uint8_t* data, size_t size);
+
     void writeToCurrentPage(std::span<const uint8_t> data);
+
+    void writeToCurrentPage(auto&& v);
+
     void sync();
     void finish();
     void nextPage();
@@ -59,31 +63,6 @@ public:
         write(std::basic_string_view<T> {str});
     }
 
-    void writeToCurrentPage(fs::TrivialPrimitive auto v) {
-        writeToCurrentPage({reinterpret_cast<const uint8_t*>(&v), sizeof(decltype(v))});
-    }
-
-    template <DumpableID IDT>
-    void writeToCurrentPage(IDT v) {
-        writeToCurrentPage(
-            {reinterpret_cast<const uint8_t*>(&v), sizeof(typename IDT::Type)});
-    }
-
-    template <TrivialPrimitive T, size_t SpanSizeT>
-    void writeToCurrentPage(std::span<T, SpanSizeT> s) {
-        writeToCurrentPage({reinterpret_cast<const uint8_t*>(s.data()), s.size() * sizeof(T)});
-    }
-
-    template <CharPrimitive T>
-    void writeToCurrentPage(std::basic_string_view<T> str) {
-        writeToCurrentPage({reinterpret_cast<const uint8_t*>(str.data()), str.size() * sizeof(T)});
-    }
-
-    template <CharPrimitive T>
-    void writeToCurrentPage(const std::basic_string<T>& str) {
-        writeToCurrentPage(std::basic_string_view<T> {str});
-    }
-
     size_t getBytesWritten() const { return _written; };
     bool errorOccured() const { return _error.has_value(); }
     bool reachedEnd() const { return _reachedEnd; }
@@ -106,5 +85,28 @@ private:
 
     void flush();
 };
+
+void fs::FilePageWriter::writeToCurrentPage(auto&& v) {
+    WriteToCurrentPage(*this, std::forward<decltype(v)>(v));
+}
+
+void WriteToCurrentPage(fs::FilePageWriter& w, fs::TrivialPrimitive auto v) {
+    w.writeToCurrentPage({reinterpret_cast<const uint8_t*>(&v), sizeof(decltype(v))});
+}
+
+template <TrivialPrimitive T, size_t SpanSizeT>
+void WriteToCurrentPage(fs::FilePageWriter& w, std::span<T, SpanSizeT> s) {
+    w.writeToCurrentPage({reinterpret_cast<const uint8_t*>(s.data()), s.size() * sizeof(T)});
+}
+
+template <CharPrimitive T>
+void WriteToCurrentPage(fs::FilePageWriter& w, std::basic_string_view<T> str) {
+    w.writeToCurrentPage({reinterpret_cast<const uint8_t*>(str.data()), str.size() * sizeof(T)});
+}
+
+template <CharPrimitive T>
+void WriteToCurrentPage(fs::FilePageWriter& w, const std::basic_string<T>& str) {
+    w.writeToCurrentPage(std::basic_string_view<T> {str});
+}
 
 }

@@ -5,6 +5,7 @@
 #include "FilePageReader.h"
 #include "DumpConfig.h"
 #include "TuringException.h"
+#include "DumpUtils.h"
 
 namespace db {
 
@@ -15,7 +16,7 @@ public:
      * elements of type @ref T. If the size of the read exceeds or runs over a page size,
      * reads from the next page of @param reader, updating @param it in place.
      */
-    template <fs::Dumpable T>
+    template <Dumpable T>
     [[nodiscard]] static DumpResult<void> loadVector(std::vector<T>& out,
                                                      size_t sz,
                                                      fs::FilePageReader& reader,
@@ -46,12 +47,12 @@ public:
     static void ensureIteratorReadPage(fs::AlignedBufferIterator& it);
 };
 
-template <fs::Dumpable T>
+template <Dumpable T>
 DumpResult<void> LoadUtils::loadVector(std::vector<T>& out,
                                        size_t sz,
                                        fs::FilePageReader& reader,
                                        fs::AlignedBufferIterator& it) {
-    using WorkingT = fs::WorkingType<T>;
+    using WorkingT = WorkingType<T>;
 
     out.clear();
     out.reserve(sz);
