@@ -81,7 +81,7 @@ private:
     void throwError(std::string_view msg, const void* obj = 0) const;
     bool propTypeCompatible(ValueType vt, EvaluatedType exprType) const;
     VarDecl* getOrCreateNamedVariable(EvaluatedType type, std::string_view name);
-    VarDecl* getOrCreateUnnamedVariable(EvaluatedType type);
+    VarDecl* createUnnamedVariable(EvaluatedType type);
 };
 
 }

@@ -151,7 +151,7 @@ void CypherAnalyzer::analyze(NodePattern* nodePattern) {
         VarDecl* decl = getOrCreateNamedVariable(EvaluatedType::NodePattern, symbol->getName());
         nodePattern->setDecl(decl);
     } else {
-        VarDecl* decl = getOrCreateUnnamedVariable(EvaluatedType::NodePattern);
+        VarDecl* decl = createUnnamedVariable(EvaluatedType::NodePattern);
         nodePattern->setDecl(decl);
     }
     
@@ -201,7 +201,7 @@ void CypherAnalyzer::analyze(EdgePattern* edgePattern) {
         VarDecl* decl = getOrCreateNamedVariable(EvaluatedType::EdgePattern, symbol->getName());
         edgePattern->setDecl(decl);
     } else {
-        VarDecl* decl = getOrCreateUnnamedVariable(EvaluatedType::EdgePattern);
+        VarDecl* decl = createUnnamedVariable(EvaluatedType::EdgePattern);
         edgePattern->setDecl(decl);
     }
 
@@ -622,7 +622,7 @@ VarDecl* CypherAnalyzer::getOrCreateNamedVariable(EvaluatedType type, std::strin
     return decl;
 }
 
-VarDecl* CypherAnalyzer::getOrCreateUnnamedVariable(EvaluatedType type) {
+VarDecl* CypherAnalyzer::createUnnamedVariable(EvaluatedType type) {
     std::string name = "v" + std::to_string(_unnamedVarCounter++);
     std::string_view inserted = _ctxt->storeUnnamedVarName(std::move(name));
 

@@ -66,9 +66,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             break;
 
         default:
-            throwError("Unsupported query command of type "
-                           + std::to_string((unsigned)query->getKind()),
-                       query);
+            throwError(fmt::format("Unsupported query command of type {}", (uint64_t)query->getKind()), query);
             break;
     }
 }
@@ -117,7 +115,7 @@ void PlanGraphGenerator::generateStmt(const Stmt* stmt) {
             break;
 
         default:
-            throwError(fmt::format("Unsupported statement type: {}", (unsigned)stmt->getKind()), stmt);
+            throwError(fmt::format("Unsupported statement type: {}", (uint64_t)stmt->getKind()), stmt);
             break;
     }
 }
@@ -162,7 +160,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
             case PlanGraphTopology::PathToDependency::SameVar:
             case PlanGraphTopology::PathToDependency::BackwardPath: {
                 // Should not happen
-                throwError("Should not happen", a);
+                throwError("Unknown error", a);
                 continue;
             } break;
 
@@ -461,7 +459,7 @@ void PlanGraphGenerator::placePropertyExprJoins() {
         // Generate missing dependencies
         deps.genExprDependencies(_variables, prop->expr);
 
-        // First step: place the constraint
+        // Step 1: find the latest dependency
         auto it = depContainer.begin();
         const VarNode* var = prop->var;
         uint32_t order = var->getDeclOdrer();
@@ -473,13 +471,14 @@ void PlanGraphGenerator::placePropertyExprJoins() {
             }
         }
 
-        // The constraint is evaluated on var (latest dependency)
+        // Step 2: Place the constraint
         auto* filter = _variables.getNodeFilter(var);
         filter->addPropertyConstraint(prop.get());
+
+        // Step 3: place joins
         insertDataFlowNode(var, prop->var);
 
         for (const auto& dep : deps.getDependencies()) {
-            // Second step: place joins
             insertDataFlowNode(var, dep._var);
         }
     }

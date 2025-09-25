@@ -1,7 +1,6 @@
 #pragma once
 
 #include <variant>
-#include <unordered_set>
 
 #include "metadata/LabelSet.h"
 
@@ -32,21 +31,9 @@ public:
     struct ExprDependency {
         VarNode* _var {nullptr};
         Dependency _dep;
-
-        struct Hasher {
-            size_t operator()(const ExprDependency& v) const {
-                return std::hash<const VarNode*> {}(v._var);
-            }
-        };
-
-        struct Predicate {
-            bool operator()(const ExprDependency& a, const ExprDependency& b) const {
-                return a._var == b._var;
-            }
-        };
     };
 
-    using Container = std::unordered_set<ExprDependency, ExprDependency::Hasher, ExprDependency::Predicate>;
+    using Container = std::vector<ExprDependency>;
 
     const Container& getDependencies() const {
         return _dependencies;
@@ -110,14 +97,14 @@ private:
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const NodeLabelExpr* expr) {
-        _dependencies.emplace(
+        _dependencies.emplace_back(
             variables.getVarNode(expr->getDecl()),
             LabelDependency {&expr->labelSet()});
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr* expr) {
-        _dependencies.emplace(variables.getVarNode(expr->getDecl()),
-                              PropertyDependency {expr->getPropertyType()});
+        _dependencies.emplace_back(variables.getVarNode(expr->getDecl()),
+                                   PropertyDependency {expr->getPropertyType()});
     }
 };
 

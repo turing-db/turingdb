@@ -32,12 +32,6 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
     for (const auto& node : planGraph._nodes) {
         // Writing node definition
         output << fmt::format("    {}[{}] {{\n", fmt::ptr(node.get()), PlanGraphOpcodeDescription::value(node->getOpcode()));
-        // output << fmt::format("        id _{}\n", fmt::ptr(node.get()));
-
-        // if (node->branch()) {
-        //     output << fmt::format("        island _{}\n", node->branch()->islandId());
-        //     output << fmt::format("        branch _{}\n", node->branch()->branchId());
-        // }
 
         switch (node->getOpcode()) {
             case PlanGraphOpcode::VAR: {
@@ -75,7 +69,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     for (const auto& dep : deps.getDependencies()) {
                         output << "        dep _" << dep._var->getVarDecl()->getName();
                         if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << " labels\n";
+                            output << "_labels\n";
                         } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
                             std::optional name = propTypeMap.getName(p->_propTypeID);
                             if (!name) {
@@ -92,7 +86,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     for (const auto& dep : pred->getDependencies()) {
                         output << "        dep _" << dep._var->getVarDecl()->getName();
                         if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << " labels\n";
+                            output << "_labels\n";
                         } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
                             std::optional name = propTypeMap.getName(p->_propTypeID);
                             if (!name) {
@@ -123,7 +117,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     for (const auto& dep : deps.getDependencies()) {
                         output << "        dep _" << dep._var->getVarDecl()->getName();
                         if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << " labels\n";
+                            output << "_labels\n";
                         } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
                             std::optional name = propTypeMap.getName(p->_propTypeID);
                             if (!name) {
