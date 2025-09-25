@@ -8,7 +8,6 @@
 #include "ID.h"
 #include "properties/PropertyManager.h"
 #include "views/GraphView.h"
-#include "versioning/CommitWriteBuffer.h"
 
 namespace db {
 
@@ -60,12 +59,6 @@ public:
 
     const GraphView& getView() const { return _view; }
     MetadataBuilder& getMetadata() { return *_metadata; }
-
-    NodeID addPendingNode(CommitWriteBuffer::PendingNode& node);
-
-    std::optional<EdgeID> addPendingEdge(const CommitWriteBuffer& wb,
-                                         const CommitWriteBuffer::PendingEdge& edge,
-                                         const std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID>& tmpNodeIDmap);
 
 private:
     friend ConcurrentWriter;

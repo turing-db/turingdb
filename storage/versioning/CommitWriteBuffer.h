@@ -12,7 +12,7 @@
 namespace db {
 
 class CommitWriteBufferRebaser;
-
+class MetadataBuilder;
 
 class CommitWriteBuffer {
 
@@ -66,6 +66,11 @@ public:
      void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string&& edgeType,
                          UntypedProperties&& edgeProperties);
 
+     /**
+      * @brief Adds the pending nodes and edges to the provided datapart builder
+      */
+     void buildPending(DataPartBuilder& builder);
+
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
@@ -106,6 +111,18 @@ private:
 
     // Edges to be deleted when this commit commits
     std::set<EdgeID> _deletedEdges;
+
+    // Collection of methods to write the buffer to the provided datapart builder
+    void buildPendingNodes(DataPartBuilder& builder, MetadataBuilder& metadataBuilder);
+    void buildPendingEdges(DataPartBuilder& builder, MetadataBuilder& metadataBuilder);
+
+    void buildPendingNode(DataPartBuilder& builder,
+                          MetadataBuilder& metadataBuilder,
+                          const PendingNode& node);
+    void buildPendingEdge(DataPartBuilder& builder,
+                          MetadataBuilder& metadataBuilder,
+                          const PendingEdge& edge);
+
 };
 
 class CommitWriteBufferRebaser {

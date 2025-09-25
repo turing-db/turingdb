@@ -1,8 +1,35 @@
 #include "CommitWriteBuffer.h"
-#include "ID.h"
+
 #include <variant>
 
+#include "ID.h"
+#include "versioning/MetadataRebaser.h"
+#include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+
 using namespace db;
+
+namespace {
+// Functor for helping get the ValueType from an UntypedProperty
+struct ValueTypeFromProperty {
+    ValueType operator()(types::Int64::Primitive propValue) const {
+        return types::Int64::_valueType;
+    }
+    ValueType operator()(types::UInt64::Primitive propValue) const {
+        return types::UInt64::_valueType;
+    }
+    ValueType operator()(types::Double::Primitive propValue) const {
+        return types::Double::_valueType;
+    }
+    ValueType operator()(std::string propValue) const {
+        return types::String::_valueType;
+    }
+    ValueType operator()(types::Bool::Primitive propValue) const {
+        return types::Bool::_valueType;
+    }
+};
+}
+
 
 void CommitWriteBuffer::addPendingNode(std::vector<std::string>&& labels,
                                        std::vector<UntypedProperty>&& properties) {
@@ -17,6 +44,141 @@ void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPend
 
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
+}
+
+void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
+                                         MetadataBuilder& metadataBuilder,
+                                         const PendingNode& node) {
+    LabelSet labelSet;
+    for (const std::string& label : node.labelNames) {
+        const auto labelID = metadataBuilder.getOrCreateLabel(label);
+        labelSet.set(labelID);
+    }
+
+    const NodeID nodeID = builder.addNode(labelSet);
+
+    // Adding node properties
+    for (const CommitWriteBuffer::UntypedProperty& prop : node.properties) {
+        // Get the value type from the untyped property
+        const ValueType propValueType = std::visit(ValueTypeFromProperty {}, prop.value);
+        // Get the existing ID, or create a new property and get that ID
+        const PropertyTypeID propID =
+            metadataBuilder.getOrCreatePropertyType(prop.propertyName, propValueType)._id;
+
+        // Add this property to this node
+        std::visit(
+            [&](auto&& propValue) {
+                using T = std::decay_t<decltype(propValue)>;
+
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addNodeProperty<types::Int64>(nodeID, propID, propValue);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addNodeProperty<types::UInt64>(nodeID, propID, propValue);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addNodeProperty<types::Double>(nodeID, propID, propValue);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addNodeProperty<types::String>(nodeID, propID, propValue);
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addNodeProperty<types::Bool>(nodeID, propID, propValue);
+                }
+            },
+            prop.value);
+    }
+}
+
+void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder,
+                                          MetadataBuilder& metadataBuilder) {
+    // Build/get the LabelSet for this node
+    for (const auto& node : pendingNodes()) {
+        buildPendingNode(builder, metadataBuilder, node);
+    }
+}
+
+void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
+                                         MetadataBuilder& metadataBuilder,
+                                         const PendingEdge& edge) {
+    // If this edge has source or target which is a node in a previous datapart, check
+    // if it has been deleted. NOTE: Deletes currently not implemented
+    if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
+        if (deletedNodes().contains(*srcID)) {
+            return;
+        }
+    }
+    if (const NodeID* tgtID = std::get_if<NodeID>(&edge.tgt)) {
+        if (deletedNodes().contains(*tgtID)) {
+            return;
+        }
+    }
+    // Otherwise: source and target are either non-deleted existing nodes, or nodes
+    // created in this commit
+    // WARN: PendingNodes have their IDs computed based on their offset in the
+    // PendingNodes vector, and the firstNodeID of the datapart. This is correct if
+    // PendingNodes are added to the datapart builder in the order that they appear in the
+    // PendingNodes vector.
+    const NodeID srcID =
+        std::holds_alternative<NodeID>(edge.src)
+            ? std::get<NodeID>(edge.src)
+            : NodeID {std::get<CommitWriteBuffer::PendingNodeOffset>(edge.src)}
+                  + builder.firstNodeID();
+
+    const NodeID tgtID =
+        std::holds_alternative<NodeID>(edge.tgt)
+            ? std::get<NodeID>(edge.tgt)
+            : NodeID { std::get<CommitWriteBuffer::PendingNodeOffset>(edge.tgt) } + builder.firstNodeID();
+
+    const std::string& edgeTypeName = edge.edgeLabelTypeName;
+    const EdgeTypeID edgeTypeID = metadataBuilder.getOrCreateEdgeType(edgeTypeName);
+
+    const EdgeRecord newEdgeRecord = builder.addEdge(edgeTypeID, srcID, tgtID);
+
+    const EdgeID newEdgeID = newEdgeRecord._edgeID;
+
+    for (const CommitWriteBuffer::UntypedProperty& prop : edge.properties) {
+        // Get the value type from the untyped property
+        const ValueType propValueType = std::visit(ValueTypeFromProperty {}, prop.value);
+
+        // Get the existing ID, or create a new property and get that ID
+        const PropertyTypeID propID =
+            metadataBuilder.getOrCreatePropertyType(prop.propertyName, propValueType)._id;
+
+        // Add this property to this edge in this builder
+        std::visit(
+            [&](const auto& propValue) {
+                using T = std::decay_t<decltype(propValue)>;
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addEdgeProperty<types::Int64>(
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addEdgeProperty<types::UInt64>(
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addEdgeProperty<types::Double>(
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addEdgeProperty<types::String>(
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addEdgeProperty<types::Bool>(
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                }
+            },
+            prop.value);
+    }
+}
+
+void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder,
+                                          MetadataBuilder& metadataBuilder) {
+    for (const PendingEdge& edge : pendingEdges()) {
+        buildPendingEdge(builder, metadataBuilder, edge);
+    }
+}
+
+void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
+    MetadataBuilder& metadataBuilder = builder.getMetadata();
+    std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
+
+    buildPendingNodes(builder, metadataBuilder);
+    buildPendingEdges(builder, metadataBuilder);
 }
 
 void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {

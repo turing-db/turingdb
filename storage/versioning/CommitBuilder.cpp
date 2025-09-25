@@ -1,6 +1,5 @@
 #include "CommitBuilder.h"
 
-#include <unordered_map>
 #include <range/v3/view/enumerate.hpp>
 
 #include "reader/GraphReader.h"
@@ -14,9 +13,6 @@
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
-
-namespace rg = ranges;
-namespace rv = rg::views;
 
 CommitBuilder::CommitBuilder() = default;
 
@@ -104,20 +100,7 @@ void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
     DataPartBuilder& dpBuilder = newBuilder();
-
-    // TODO: Remove this by using a mapping of NodeID = offset + _firstNodeID
-    std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
-
-    // Add pending nodes to be created to the current DataPartBuilder
-    for (const auto& [offset, node] : wb.pendingNodes() | rv::enumerate) {
-        NodeID nodeID = dpBuilder.addPendingNode(node);
-        tempIDMap[offset] = nodeID;
-    }
-
-    // Add pending edges to be created to the current DataPartBuilder
-    for (const auto& edge : wb.pendingEdges()) {
-        dpBuilder.addPendingEdge(wb, edge, tempIDMap);
-    }
+    wb.buildPending(dpBuilder);
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
