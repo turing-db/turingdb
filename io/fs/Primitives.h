@@ -20,6 +20,4 @@ concept TrivialPrimitive = std::is_trivial_v<T>
 template <typename T>
 concept TrivialNonCharPrimitive = TrivialPrimitive<T> && !CharPrimitive<T>;
 
-
-
 }
