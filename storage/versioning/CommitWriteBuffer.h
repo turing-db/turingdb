@@ -36,6 +36,11 @@ public:
          UntypedProperties properties;
      };
 
+     struct PendingNodex {
+         LabelSetHandle labelsetHandle;
+         UntypedProperties proproperties;
+     };
+
      using PendingNodeOffset = size_t;
 
      // A node: either exists in previous commit (materialised as NodeID),
@@ -55,6 +60,7 @@ public:
       * to this WriteBuffer
       */
      void addPendingNode(std::vector<std::string>&& labels, UntypedProperties&& properties);
+     void addPendingNodex(LabelSetHandle lsh, UntypedProperties&& properties);
 
      /**
       * @brief Adds a pending edge to this WriteBuffer with the provided properties and
@@ -72,6 +78,7 @@ public:
      void buildPending(DataPartBuilder& builder);
 
      PendingNodes& pendingNodes() { return _pendingNodes; }
+     auto& pendingNodesx() { return _pendingNodesx; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
      const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
@@ -102,6 +109,7 @@ private:
 
     // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
+    std::vector<PendingNodex> _pendingNodesx;
 
     // Edges to be created when this commit commits
     std::vector<PendingEdge> _pendingEdges;

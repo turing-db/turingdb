@@ -2,6 +2,7 @@
 
 #include "Profiler.h"
 #include "metadata/GraphMetadata.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
@@ -110,4 +111,26 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs, MetadataBuilder& ours)
     ours._metadata->_propTypeMap = std::move(newPropTypes);
 
     return true;
+}
+
+void MetadataRebaser::rebaseWriteBuffer(CommitWriteBuffer& cwb,
+                                        MetadataBuilder& newMetadata) {
+    auto& pendingNodesx = cwb.pendingNodesx();
+
+    for (CommitWriteBuffer::PendingNodex& node : pendingNodesx) {
+        LabelSet newSet;
+
+        // Get the LabelIDs that made up the node's LabelSetHandle
+        std::vector<LabelID> nodeLabelSetLabels;
+        node.labelsetHandle.decompose(nodeLabelSetLabels);
+
+        // Check each LabelID, map it over to the new ID if it exists
+        for (LabelID& id : nodeLabelSetLabels) {
+            if (_labelMapping.contains(id)) {
+                id = _labelMapping.at(id);
+            } // If not in mapping, it should already exist from WriteStep
+            newSet.set(id);
+        }
+        node.labelsetHandle = newMetadata.getOrCreateLabelSet(newSet);
+    }
 }
