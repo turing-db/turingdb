@@ -74,8 +74,10 @@ void WriteStep::prepare(ExecutionContext* ctxt) {
     }
 
     auto& tx = rawTx->get<PendingCommitWriteTx>();
+    CommitBuilder* commitBuilder = tx.commitBuilder();
 
-    _writeBuffer = &tx.commitBuilder()->writeBuffer();
+    _metadataBuilder = &commitBuilder->metadata();
+    _writeBuffer = &commitBuilder->writeBuffer();
 }
 
 CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* nodePattern) {
