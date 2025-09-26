@@ -11,6 +11,7 @@
 #include "Profiler.h"
 #include "SystemManager.h"
 #include "TypeConstraint.h"
+#include "metadata/LabelSet.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
@@ -85,23 +86,30 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
 
     // Labels to pass to the PendingNode
     const TypeConstraint* patternLabels = nodePattern->getTypeConstraint();
+
     std::vector<std::string> nodeLabels;
-    if (patternLabels) {
+    LabelSet labelset;
+
+    if (patternLabels != nullptr) {
         nodeLabels.reserve(patternLabels->getTypeNames().size());
         for (const VarExpr* name : patternLabels->getTypeNames()) {
             nodeLabels.emplace_back(name->getName());
+
+            labelset.set(_metadataBuilder->getOrCreateLabel(name->getName()));
         }
     } else { // TODO: This check should be obselete as it should be checked in parser
         throw PipelineException("Nodes must have at least one label");
     }
 
+    LabelSetHandle lsh = _metadataBuilder->getOrCreateLabelSet(labelset);
+
     // Properties to pass to the PendingNode
     CommitWriteBuffer::UntypedProperties nodeProperties;
 
     const ExprConstraint* patternProperties = nodePattern->getExprConstraint();
-    if (patternProperties) {
-        for (const BinExpr* e : patternProperties->getExpressions()) {
-            addUntypedProperties(nodeProperties, e);
+    if (patternProperties != nullptr) {
+        for (const BinExpr* expr : patternProperties->getExpressions()) {
+            addUntypedProperties(nodeProperties, expr);
         }
     }
 
@@ -111,6 +119,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
 
     _writeBuffer->addPendingNode(std::move(nodeLabels), std::move(nodeProperties));
+    _writeBuffer->addPendingNodex(lsh, std::move(nodeProperties));
     _varOffsetMap[nodeVarDecl] = thisNodeOffset;
 
     return thisNodeOffset;

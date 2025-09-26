@@ -2,8 +2,6 @@
 
 #include "reader/GraphReader.h"
 #include <range/v3/view/enumerate.hpp>
-
-#include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/MetadataRebaser.h"

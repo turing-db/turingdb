@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "ID.h"
 #include "versioning/MetadataRebaser.h"
@@ -35,6 +36,10 @@ struct ValueTypeFromProperty {
 void CommitWriteBuffer::addPendingNode(std::vector<std::string>&& labels,
                                        std::vector<UntypedProperty>&& properties) {
     _pendingNodes.emplace_back(std::move(labels), std::move(properties));
+}
+
+void CommitWriteBuffer::addPendingNodex(LabelSetHandle lsh, UntypedProperties&& properties) {
+    _pendingNodesx.emplace_back(lsh, std::move(properties));
 }
 
 void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
