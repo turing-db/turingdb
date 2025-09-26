@@ -33,13 +33,9 @@ struct ValueTypeFromProperty {
 }
 
 
-void CommitWriteBuffer::addPendingNode(std::vector<std::string>&& labels,
+void CommitWriteBuffer::addPendingNode(LabelSetHandle lsh,
                                        std::vector<UntypedProperty>&& properties) {
-    _pendingNodes.emplace_back(std::move(labels), std::move(properties));
-}
-
-void CommitWriteBuffer::addPendingNodex(LabelSetHandle lsh, UntypedProperties&& properties) {
-    _pendingNodesx.emplace_back(lsh, std::move(properties));
+    _pendingNodes.emplace_back(lsh, std::move(properties));
 }
 
 void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
@@ -55,13 +51,7 @@ void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNod
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
                                          MetadataBuilder& metadataBuilder,
                                          const PendingNode& node) {
-    LabelSet labelSet;
-    for (const std::string& label : node.labelNames) {
-        const auto labelID = metadataBuilder.getOrCreateLabel(label);
-        labelSet.set(labelID);
-    }
-
-    const NodeID nodeID = builder.addNode(labelSet);
+    const NodeID nodeID = builder.addNode(node.labelsetHandle);
 
     // Adding node properties
     for (const CommitWriteBuffer::UntypedProperty& prop : node.properties) {

@@ -118,8 +118,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         _writeBuffer->nextPendingNodeOffset();
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
 
-    _writeBuffer->addPendingNode(std::move(nodeLabels), std::move(nodeProperties));
-    _writeBuffer->addPendingNodex(lsh, std::move(nodeProperties));
+    _writeBuffer->addPendingNode(lsh, std::move(nodeProperties));
     _varOffsetMap[nodeVarDecl] = thisNodeOffset;
 
     return thisNodeOffset;
@@ -135,7 +134,7 @@ CommitWriteBuffer::ExistingOrPendingNode WriteStep::getOrWriteNode(const EntityP
     }
 
     // Check to see if @ref nodePattern has injected ID, return that ID if so
-    auto injectedIDs = nodePattern->getInjectedIDs();
+    auto *injectedIDs = nodePattern->getInjectedIDs();
     if (injectedIDs) {
         // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
         // injected ID (if any)

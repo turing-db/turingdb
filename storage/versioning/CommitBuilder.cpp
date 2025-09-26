@@ -92,6 +92,7 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 
 void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
+
     // If there is nothing to flush, return early without creating a new builder
     if (wb.empty()) {
         return;

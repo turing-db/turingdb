@@ -115,22 +115,23 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs, MetadataBuilder& ours)
 
 void MetadataRebaser::rebaseWriteBuffer(CommitWriteBuffer& cwb,
                                         MetadataBuilder& newMetadata) {
-    auto& pendingNodesx = cwb.pendingNodesx();
+    auto& pendingNodes = cwb.pendingNodes();
 
-    for (CommitWriteBuffer::PendingNodex& node : pendingNodesx) {
-        LabelSet newSet;
+    LabelSet newLabelset;
+    for (CommitWriteBuffer::PendingNode& node : pendingNodes) {
+        newLabelset = LabelSet {};
 
         // Get the LabelIDs that made up the node's LabelSetHandle
         std::vector<LabelID> nodeLabelSetLabels;
         node.labelsetHandle.decompose(nodeLabelSetLabels);
 
         // Check each LabelID, map it over to the new ID if it exists
-        for (LabelID& id : nodeLabelSetLabels) {
+        for (LabelID id : nodeLabelSetLabels) {
             if (_labelMapping.contains(id)) {
-                id = _labelMapping.at(id);
+                newLabelset.set(_labelMapping.at(id));
             } // If not in mapping, it should already exist from WriteStep
-            newSet.set(id);
+            newLabelset.set(id);
         }
-        node.labelsetHandle = newMetadata.getOrCreateLabelSet(newSet);
+        node.labelsetHandle = newMetadata.getOrCreateLabelSet(newLabelset);
     }
 }
