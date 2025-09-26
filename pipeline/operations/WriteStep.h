@@ -4,6 +4,7 @@
 #include "ExecutionContext.h"
 #include "VarDecl.h"
 #include "versioning/CommitWriteBuffer.h"
+#include "writers/MetadataBuilder.h"
 
 namespace db {
 
@@ -38,6 +39,7 @@ private:
 
     const CreateTargets* _targets {nullptr};
     CommitWriteBuffer* _writeBuffer {nullptr};
+    MetadataBuilder* _metadataBuilder {nullptr};
 
     /**
      * @brief Mapping from variable names to offsets in @ref _writeBuffer 's @ref
