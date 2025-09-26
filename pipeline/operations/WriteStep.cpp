@@ -91,10 +91,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     LabelSet labelset;
 
     if (patternLabels != nullptr) {
-        nodeLabels.reserve(patternLabels->getTypeNames().size());
         for (const VarExpr* name : patternLabels->getTypeNames()) {
-            nodeLabels.emplace_back(name->getName());
-
             labelset.set(_metadataBuilder->getOrCreateLabel(name->getName()));
         }
     } else { // TODO: This check should be obselete as it should be checked in parser

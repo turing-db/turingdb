@@ -20,7 +20,7 @@ public:
     MetadataRebaser& operator=(const MetadataRebaser&) = delete;
     MetadataRebaser& operator=(MetadataRebaser&&) = delete;
 
-    bool rebase(const GraphMetadata& theirs, MetadataBuilder& ours);
+    bool rebase(const GraphMetadata& theirs, MetadataBuilder& ours, CommitWriteBuffer& cwb);
     void rebaseWriteBuffer(CommitWriteBuffer& cwb, MetadataBuilder& newMetadata);
 
     LabelID getLabelMapping(LabelID id) const { return _labelMapping.at(id); }

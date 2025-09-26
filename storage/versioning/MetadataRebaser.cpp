@@ -7,7 +7,9 @@
 
 using namespace db;
 
-bool MetadataRebaser::rebase(const GraphMetadata& theirs, MetadataBuilder& ours) {
+bool MetadataRebaser::rebase(const GraphMetadata& theirs,
+                             MetadataBuilder& ours,
+                             CommitWriteBuffer& cwb) {
     Profile profile {"MetadataRebaser::rebase"};
 
     const auto& theirLabels = theirs.labels();
@@ -105,33 +107,28 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs, MetadataBuilder& ours)
         }
     }
 
+    // Rebase WriteBuffer metadata
+    auto& pendingNodes = cwb.pendingNodes();
+    for (CommitWriteBuffer::PendingNode& node : pendingNodes) {
+        // Get the LabelIDs that made up the node's LabelSetHandle
+        std::vector<LabelID> nodeLabelSetLabels;
+        node.labelsetHandle.decompose(nodeLabelSetLabels);
+
+        newLabelset = LabelSet {};
+
+        // Check each LabelID, map it over to the new ID if it exists
+        for (LabelID id : nodeLabelSetLabels) {
+            if (_labelMapping.contains(id)) {
+                newLabelset.set(_labelMapping.at(id));
+            }
+        }
+        node.labelsetHandle = newLabelsets.getOrCreate(newLabelset);
+    }
+
     ours._metadata->_labelMap = std::move(newLabels);
     ours._metadata->_labelsetMap = std::move(newLabelsets);
     ours._metadata->_edgeTypeMap = std::move(newEdgeTypes);
     ours._metadata->_propTypeMap = std::move(newPropTypes);
 
     return true;
-}
-
-void MetadataRebaser::rebaseWriteBuffer(CommitWriteBuffer& cwb,
-                                        MetadataBuilder& newMetadata) {
-    auto& pendingNodes = cwb.pendingNodes();
-
-    LabelSet newLabelset;
-    for (CommitWriteBuffer::PendingNode& node : pendingNodes) {
-        newLabelset = LabelSet {};
-
-        // Get the LabelIDs that made up the node's LabelSetHandle
-        std::vector<LabelID> nodeLabelSetLabels;
-        node.labelsetHandle.decompose(nodeLabelSetLabels);
-
-        // Check each LabelID, map it over to the new ID if it exists
-        for (LabelID id : nodeLabelSetLabels) {
-            if (_labelMapping.contains(id)) {
-                newLabelset.set(_labelMapping.at(id));
-            } // If not in mapping, it should already exist from WriteStep
-            newLabelset.set(id);
-        }
-        node.labelsetHandle = newMetadata.getOrCreateLabelSet(newLabelset);
-    }
 }

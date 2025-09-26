@@ -4,6 +4,7 @@
 #include "metadata/LabelSetMap.h"
 #include "versioning/MetadataRebaser.h"
 #include "metadata/GraphMetadata.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
@@ -16,6 +17,7 @@ protected:
 TEST_F(MetadataRebaserTest, labels) {
     GraphMetadata dataA;
     GraphMetadata dataB;
+    CommitWriteBuffer cwb;
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -29,7 +31,7 @@ TEST_F(MetadataRebaserTest, labels) {
     builderB->getOrCreateLabel("Protein");
 
     MetadataRebaser rebaser;
-    rebaser.rebase(dataA, *builderB);
+    rebaser.rebase(dataA, *builderB, cwb);
 
     ASSERT_EQ(dataB.labels().get("Protein")->getValue(), 0);
     ASSERT_EQ(dataB.labels().get("Gene")->getValue(), 1);
@@ -47,6 +49,7 @@ TEST_F(MetadataRebaserTest, labels) {
 TEST_F(MetadataRebaserTest, edgeTypes) {
     GraphMetadata dataA;
     GraphMetadata dataB;
+    CommitWriteBuffer cwb;
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -62,7 +65,7 @@ TEST_F(MetadataRebaserTest, edgeTypes) {
     builderB->getOrCreateEdgeType("AssociatedWith");
 
     MetadataRebaser rebaser;
-    rebaser.rebase(dataA, *builderB);
+    rebaser.rebase(dataA, *builderB, cwb);
 
     ASSERT_EQ(dataB.edgeTypes().get("Interacts")->getValue(), 0);
     ASSERT_EQ(dataB.edgeTypes().get("IsPartOf")->getValue(), 1);
@@ -83,6 +86,7 @@ TEST_F(MetadataRebaserTest, edgeTypes) {
 TEST_F(MetadataRebaserTest, propertyTypes) {
     GraphMetadata dataA;
     GraphMetadata dataB;
+    CommitWriteBuffer cwb;
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -97,7 +101,7 @@ TEST_F(MetadataRebaserTest, propertyTypes) {
     builderB->getOrCreatePropertyType("height", ValueType::Double);
 
     MetadataRebaser rebaser;
-    rebaser.rebase(dataA, *builderB);
+    rebaser.rebase(dataA, *builderB, cwb);
 
     ASSERT_EQ(dataB.propTypes().get("name")->_id, 0);
     ASSERT_EQ(dataB.propTypes().get("age")->_id, 1);
@@ -119,6 +123,7 @@ TEST_F(MetadataRebaserTest, propertyTypes) {
 TEST_F(MetadataRebaserTest, labelsets) {
     GraphMetadata dataA;
     GraphMetadata dataB;
+    CommitWriteBuffer cwb;
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -145,7 +150,7 @@ TEST_F(MetadataRebaserTest, labelsets) {
     ASSERT_EQ(dataB.labelsets().getCount(), 2);
 
     MetadataRebaser rebaser;
-    rebaser.rebase(dataA, *builderB);
+    rebaser.rebase(dataA, *builderB, cwb);
     ASSERT_EQ(dataB.labels().get("Protein")->getValue(), 0);
     ASSERT_EQ(dataB.labels().get("Gene")->getValue(), 1);
     ASSERT_EQ(dataB.labels().get("Disease")->getValue(), 2);
