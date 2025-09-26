@@ -102,6 +102,9 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
 
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
+
+
+
         // Rebasing means:
         // 1. Rebase the metadata
         // 2. Get all commits/dataparts from the previous commit history
@@ -124,7 +127,10 @@ CommitResult<void> Change::rebase(JobSystem& jobsystem) {
         commitBuilder->_nextEdgeID = nextEdgeID;
 
         metadataRebaser.clear();
+        //                     GraphMetadata               MetadataBuilder
         metadataRebaser.rebase(prevCommitData->metadata(), commitBuilder->metadata());
+        metadataRebaser.rebaseWriteBuffer(commitBuilder->writeBuffer(),
+                                          commitBuilder->metadata());
 
         CommitData& data = commitBuilder->commitData();
         CommitHistory& history = data.history();

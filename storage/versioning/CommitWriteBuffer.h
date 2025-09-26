@@ -32,13 +32,8 @@ public:
      using UntypedProperties = std::vector<UntypedProperty>;
 
      struct PendingNode {
-         std::vector<std::string> labelNames;
-         UntypedProperties properties;
-     };
-
-     struct PendingNodex {
          LabelSetHandle labelsetHandle;
-         UntypedProperties proproperties;
+         UntypedProperties properties;
      };
 
      using PendingNodeOffset = size_t;
@@ -59,8 +54,7 @@ public:
       * @warn Takes ownership and moves ownership of @param labels and @param properties
       * to this WriteBuffer
       */
-     void addPendingNode(std::vector<std::string>&& labels, UntypedProperties&& properties);
-     void addPendingNodex(LabelSetHandle lsh, UntypedProperties&& properties);
+     void addPendingNode(LabelSetHandle lsh, UntypedProperties&& properties);
 
      /**
       * @brief Adds a pending edge to this WriteBuffer with the provided properties and
@@ -78,7 +72,6 @@ public:
      void buildPending(DataPartBuilder& builder);
 
      PendingNodes& pendingNodes() { return _pendingNodes; }
-     auto& pendingNodesx() { return _pendingNodesx; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
      const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
@@ -109,7 +102,6 @@ private:
 
     // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
-    std::vector<PendingNodex> _pendingNodesx;
 
     // Edges to be created when this commit commits
     std::vector<PendingEdge> _pendingEdges;
