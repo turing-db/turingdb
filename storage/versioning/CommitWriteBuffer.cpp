@@ -1,5 +1,6 @@
 #include "CommitWriteBuffer.h"
 
+#include <utility>
 #include <variant>
 
 #include "ID.h"
@@ -77,7 +78,8 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
                     builder.addNodeProperty<types::Double>(nodeID, propID, propValue);
                 } else if constexpr (std::is_same_v<T, std::string>) {
-                    builder.addNodeProperty<types::String>(nodeID, propID, propValue);
+                    builder.addNodeProperty<types::String>(
+                        nodeID, propID, std::forward<decltype(propValue)>(propValue));
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
                     builder.addNodeProperty<types::Bool>(nodeID, propID, propValue);
                 }
