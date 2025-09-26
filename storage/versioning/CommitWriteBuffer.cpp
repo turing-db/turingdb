@@ -12,19 +12,19 @@ using namespace db;
 namespace {
 // Functor for helping get the ValueType from an UntypedProperty
 struct ValueTypeFromProperty {
-    ValueType operator()(types::Int64::Primitive propValue) const {
+    ValueType operator()([[maybe_unused]] types::Int64::Primitive propValue) const {
         return types::Int64::_valueType;
     }
-    ValueType operator()(types::UInt64::Primitive propValue) const {
+    ValueType operator()([[maybe_unused]] types::UInt64::Primitive propValue) const {
         return types::UInt64::_valueType;
     }
-    ValueType operator()(types::Double::Primitive propValue) const {
+    ValueType operator()([[maybe_unused]] types::Double::Primitive propValue) const {
         return types::Double::_valueType;
     }
-    ValueType operator()(std::string propValue) const {
+    ValueType operator()([[maybe_unused]] const std::string& propValue) const {
         return types::String::_valueType;
     }
-    ValueType operator()(types::Bool::Primitive propValue) const {
+    ValueType operator()([[maybe_unused]] types::Bool::Primitive propValue) const {
         return types::Bool::_valueType;
     }
 };
@@ -33,13 +33,13 @@ struct ValueTypeFromProperty {
 
 void CommitWriteBuffer::addPendingNode(std::vector<std::string>&& labels,
                                        std::vector<UntypedProperty>&& properties) {
-    _pendingNodes.emplace_back(labels, properties);
+    _pendingNodes.emplace_back(std::move(labels), std::move(properties));
 }
 
 void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
                                        std::string&& edgeType,
                                        std::vector<UntypedProperty>&& edgeProperties) {
-    _pendingEdges.emplace_back(src, tgt, edgeType, edgeProperties);
+    _pendingEdges.emplace_back(src, tgt, std::move(edgeType), std::move(edgeProperties));
 }
 
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
@@ -206,18 +206,18 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
     const auto rebaseNodeID = [&](NodeID wbID) {
         if (wbID >= _entryNextNodeID) {
             return wbID + _currentNextNodeID - _entryNextNodeID;
-        } else {
-            return wbID;
         }
+        return wbID;
+
     };
 
-    for (CommitWriteBuffer::PendingEdge& e : _buffer.pendingEdges()) {
+    for (CommitWriteBuffer::PendingEdge& edge : _buffer.pendingEdges()) {
         // We only care about edges that refer to NodeIDs
-        if (NodeID* oldSrcID = std::get_if<NodeID>(&e.src)) {
-            e.src = NodeID {rebaseNodeID(*oldSrcID)};
+        if (NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
+            edge.src = NodeID {rebaseNodeID(*oldSrcID)};
         }
-        if (NodeID* oldTgtID = std::get_if<NodeID>(&e.tgt)) {
-            e.tgt = NodeID {rebaseNodeID(*oldTgtID)};
+        if (NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
+            edge.tgt = NodeID {rebaseNodeID(*oldTgtID)};
         }
     }
 }
