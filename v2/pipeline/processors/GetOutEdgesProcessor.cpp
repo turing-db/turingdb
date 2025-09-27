@@ -93,4 +93,5 @@ void GetOutEdgesProcessor::execute() {
     _outEdgeIDs->writeData();
     _outTargetNodes->writeData();
     _outEdgeTypes->writeData();
+    _outIndices->writeData();
 }

@@ -18,7 +18,7 @@ public:
 
     // For step by step execution & debugging
     void init();
-    void executeStep();
+    void executeCycle();
 
 private:
     PipelineV2* _pipeline {nullptr};

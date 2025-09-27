@@ -42,6 +42,9 @@ public:
         }
     }
 
+    static void dump(std::string_view str);
+    static void dump(const std::string& str);
+
     static void dumpString(const std::string& str);
     static void dumpNull();
 
