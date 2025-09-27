@@ -27,11 +27,11 @@ void PipelineExecutor::init() {
 void PipelineExecutor::execute() {
     init();
     while (!_activeQueue.empty()) {
-        executeStep();
+        executeCycle();
     }
 }
 
-void PipelineExecutor::executeStep() {
+void PipelineExecutor::executeCycle() {
     auto& activeQueue = _activeQueue;
     auto& updateQueue = _updateQueue;
 

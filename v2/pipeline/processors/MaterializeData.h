@@ -20,6 +20,11 @@ public:
     explicit MaterializeData(LocalMemory* mem);
     ~MaterializeData();
 
+    MaterializeData(const MaterializeData& other) = delete;
+    MaterializeData& operator=(const MaterializeData& other) = delete;
+    MaterializeData(MaterializeData&& other) = delete;
+    MaterializeData& operator=(MaterializeData&& other) = delete;
+
     void setOutput(Block* output) { _output = output; }
 
     const Indices& getIndices() const { return _indices; }

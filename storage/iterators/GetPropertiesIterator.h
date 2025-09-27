@@ -110,6 +110,7 @@ template <IteratedID ID, SupportedType T>
 class GetPropertiesChunkWriter : public GetPropertiesIterator<ID, T> {
 public:
     using ColumnIDs = ColumnVector<ID>;
+    using ColumnValues = ColumnVector<typename T::Primitive>;
 
     GetPropertiesChunkWriter(const GraphView& view,
                              PropertyTypeID propTypeID,
@@ -117,13 +118,13 @@ public:
 
     void fill(size_t maxCount);
 
-    void setOutput(ColumnVector<typename T::Primitive>* output) { _output = output; }
+    void setOutput(ColumnValues* output) { _output = output; }
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
 
 private:
     ColumnVector<size_t>* _indices {nullptr};
     ColumnIDs* _entityIDs {nullptr};
-    ColumnVector<typename T::Primitive>* _output {nullptr};
+    ColumnValues* _output {nullptr};
 };
 
 template <IteratedID ID, SupportedType T>
