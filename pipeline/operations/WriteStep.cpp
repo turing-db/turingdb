@@ -149,7 +149,7 @@ CommitWriteBuffer::ExistingOrPendingNode WriteStep::getOrWriteNode(const EntityP
 
     // Check to see if @ref nodePattern has injected ID, return that ID if so
     auto *injectedIDs = nodePattern->getInjectedIDs();
-    if (injectedIDs) {
+    if (injectedIDs != nullptr) {
         // @ref QueryPlanner::analyzeEntityPattern ensures there is exactly 1
         // injected ID (if any)
         return NodeID {injectedIDs->getIDs().front()};
@@ -166,17 +166,17 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     auto& pendingEdge = _writeBuffer->pendingEdges().emplace_back();
     // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
-    std::string edgeType;
     if (patternType != nullptr) {
-            pendingEdge.edgeLabelTypeName = patternType->getTypeNames().front()->getName();
+        pendingEdge.edgeType = _metadataBuilder->getOrCreateEdgeType(
+            patternType->getTypeNames().front()->getName());
     } else { // TODO: This check should be obselete as it should be checked in parser
         throw PipelineException("Edges must have at least one label");
     }
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
     if (patternProperties != nullptr) {
-        for (const auto& e : patternProperties->getExpressions()) {
-            addUntypedProperties(pendingEdge.properties, e, *_metadataBuilder);
+        for (const BinExpr* expr : patternProperties->getExpressions()) {
+            addUntypedProperties(pendingEdge.properties, expr, *_metadataBuilder);
         }
     }
 

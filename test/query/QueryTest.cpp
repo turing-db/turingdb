@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "ID.h"
 #include "LocalMemory.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Change.h"
@@ -1019,7 +1020,7 @@ TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
 
 /*
  * Multiple concurrent changes, committed locally, then submitted in a different order,
- * rebasing all of : NodeIDs, EdgeIDs, PropertyIDs, LabelIDs, LabelSets
+ * rebasing all of : NodeIDs, EdgeIDs, PropertyIDs, LabelIDs, LabelSets, EdgeTypes
  */
 TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
     QueryTester tester {_mem, *_interp, "default"};
@@ -1095,6 +1096,11 @@ TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
             .expectVector<std::string_view>({"NODE_ID_2"})
             .execute();
 
+        tester.query("call edgetypes()")
+            .expectVector<EdgeTypeID>({0})
+            .expectVector<std::string_view>({"EDGE_ID_2"})
+            .execute();
+
         tester.query("call properties ()")
             .expectVector<PropertyTypeID>({0, 1})
             .expectVector<std::string_view>({"property_2", "edge_property_2"})
@@ -1126,6 +1132,11 @@ TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
             .expectVector<std::string_view>({"NODE_ID_2", "NODE_ID_1"})
             .execute();
 
+        tester.query("call edgetypes()")
+            .expectVector<EdgeTypeID>({0, 1})
+            .expectVector<std::string_view>({"EDGE_ID_2", "EDGE_ID_1"})
+            .execute();
+
         tester.query("call properties ()")
             .expectVector<PropertyTypeID>({0, 1, 2, 3})
             .expectVector<std::string_view>(
@@ -1155,6 +1166,11 @@ TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
         tester.query("call labels ()")
             .expectVector<LabelID>({0, 1, 2})
             .expectVector<std::string_view>({"NODE_ID_2", "NODE_ID_1", "NODE_ID_0"})
+            .execute();
+
+        tester.query("call edgetypes()")
+            .expectVector<EdgeTypeID>({0, 1, 2})
+            .expectVector<std::string_view>({"EDGE_ID_2", "EDGE_ID_1", "EDGE_ID_0"})
             .execute();
 
         tester.query("call properties ()")

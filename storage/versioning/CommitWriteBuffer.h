@@ -63,8 +63,8 @@ public:
       * edgeProperties to this WriteBuffer. Does not take ownership of @param src nor
       * @param tgt
       */
-     void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string&& edgeType,
-                         UntypedProperties&& edgeProperties);
+     // void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string&& edgeType,
+                         // UntypedProperties&& edgeProperties);
 
      /**
       * @brief Adds the pending nodes and edges to the provided datapart builder
@@ -96,7 +96,7 @@ private:
     struct PendingEdge {
          ExistingOrPendingNode src;
          ExistingOrPendingNode tgt;
-         std::string edgeLabelTypeName;
+         EdgeTypeID edgeType;
          UntypedProperties properties;
     };
 

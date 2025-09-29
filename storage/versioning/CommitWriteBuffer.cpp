@@ -16,11 +16,11 @@ void CommitWriteBuffer::addPendingNode(LabelSetHandle lsh,
     _pendingNodes.emplace_back(lsh, std::move(properties));
 }
 
-void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
-                                       std::string&& edgeType,
-                                       std::vector<UntypedProperty>&& edgeProperties) {
-    _pendingEdges.emplace_back(src, tgt, std::move(edgeType), std::move(edgeProperties));
-}
+// void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
+                                       // std::string&& edgeType,
+                                       // std::vector<UntypedProperty>&& edgeProperties) {
+    // _pendingEdges.emplace_back(src, tgt, std::move(edgeType), std::move(edgeProperties));
+// }
 
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
@@ -93,9 +93,7 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
             ? std::get<NodeID>(edge.tgt)
             : NodeID { std::get<CommitWriteBuffer::PendingNodeOffset>(edge.tgt) } + builder.firstNodeID();
 
-    const std::string& edgeTypeName = edge.edgeLabelTypeName;
-    const EdgeTypeID edgeTypeID = metadataBuilder.getOrCreateEdgeType(edgeTypeName);
-
+    EdgeTypeID edgeTypeID = edge.edgeType;
     const EdgeRecord newEdgeRecord = builder.addEdge(edgeTypeID, srcID, tgtID);
 
     const EdgeID newEdgeID = newEdgeRecord._edgeID;
