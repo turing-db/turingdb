@@ -1557,29 +1557,32 @@ TEST_F(QueryTest, createChunkingTest) {
 
     tester.setChangeID(ChangeID::head());
 
+    NodeID nextNodeID = 13;
+    EdgeID nextEdgeID = 13;
+
     tester.query("match (n:Z1) return n")
-        .expectVector<NodeID>({13})
+        .expectVector<NodeID>({nextNodeID++})
         .execute();
 
     tester.query("match (:A1)-[e:AE1]-(:A2) return e")
-        .expectVector<EdgeID>({13})
+        .expectVector<EdgeID>({nextEdgeID++})
         .execute();
 
     tester.query("match (:B1)-[e:BE1]-(:B2)-[f:BE2]-(:B3) return e, f")
-        .expectVector<EdgeID>({14})
-        .expectVector<EdgeID>({15})
+        .expectVector<EdgeID>({nextEdgeID++})
+        .expectVector<EdgeID>({nextEdgeID++})
         .execute();
 
     tester.query("match (:C1)-[e:CE1]-(:C2)-[f:CE2]-(:C3)-[g:CE3]-(:C4) return e, f, g")
-        .expectVector<EdgeID>({16})
-        .expectVector<EdgeID>({17})
-        .expectVector<EdgeID>({18})
+        .expectVector<EdgeID>({nextEdgeID++})
+        .expectVector<EdgeID>({nextEdgeID++})
+        .expectVector<EdgeID>({nextEdgeID++})
         .execute();
 
     tester.query("match (:D1)-[e:DE1]-(:D2)-[f:DE2]-(:D3)-[g:DE3]-(:D4)-[h:DE4]-(:D5) return e, f, g, h")
-        .expectVector<EdgeID>({19})
-        .expectVector<EdgeID>({20})
-        .expectVector<EdgeID>({21})
-        .expectVector<EdgeID>({22})
+        .expectVector<EdgeID>({nextEdgeID++})
+        .expectVector<EdgeID>({nextEdgeID++})
+        .expectVector<EdgeID>({nextEdgeID++})
+        .expectVector<EdgeID>({nextEdgeID++})
         .execute();
 }
