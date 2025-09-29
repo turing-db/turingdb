@@ -1064,6 +1064,7 @@ TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
             tester.query(query)
                   .execute();
         }
+        tester.query("commit");
     }
 
     // Submit the changes in reverse order
