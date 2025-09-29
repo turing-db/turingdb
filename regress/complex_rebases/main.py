@@ -26,9 +26,8 @@ def submit_change(client : TuringDB, change_id : str):
   client.checkout(change=change_id)
   client.query("change submit")
 
-
 def main():
-  client = TuringDB(host="http://localhost:123")
+  client = TuringDB(host="http://localhost:6666")
   print("Connected to DB")
 
   graph = "complex_rebases_graph"
