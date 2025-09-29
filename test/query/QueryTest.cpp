@@ -1017,6 +1017,156 @@ TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
         .execute();
 }
 
+/*
+ * Multiple concurrent changes, committed locally, then submitted in a different order,
+ * rebasing all of : NodeIDs, EdgeIDs, PropertyIDs, LabelIDs, LabelSets
+ */
+TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
+    QueryTester tester {_mem, *_interp, "default"};
+
+    constexpr size_t CHANGE0_SIZE = 4;
+    constexpr size_t CHANGE1_SIZE = 1;
+    constexpr size_t CHANGE2_SIZE = 2;
+    constexpr std::array<size_t, 3> SIZES = {CHANGE0_SIZE, CHANGE1_SIZE, CHANGE2_SIZE};
+
+    const auto newChange = [&](){
+        auto res = tester.query("CHANGE NEW")
+                          .expectVector<const Change*>({}, false)
+                          .execute()
+                          .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    auto makeNodePtn = [](ChangeID id) -> std::string {
+        return fmt::format(":NODE_ID_{0}{{property_{0}:\"value_{0}\"}}",
+                           id.get());
+    };
+
+    auto makeEdgePtn = [](ChangeID id) -> std::string {
+        return fmt::format(":EDGE_ID_{0}{{edge_property_{0}:\"value_{0}\"}}",
+                           id.get());
+    };
+
+    // Create various changes, all with unique properties and labels
+    std::vector<ChangeID> changeIDs;
+    for (size_t size : SIZES) {
+        const ChangeID thisChangeID = newChange();
+        changeIDs.emplace_back(thisChangeID);
+
+        std::string nodePtn = makeNodePtn(thisChangeID);
+        std::string edgePtn = makeEdgePtn(thisChangeID);
+
+        for (size_t i = 0; i < size; i++) {
+            std::string query =
+                fmt::format("create (n{})-[e{}]-(m{})", nodePtn, edgePtn, nodePtn);
+            tester.query(query)
+                  .execute();
+        }
+    }
+
+    // Submit the changes in reverse order
+    auto idIt = changeIDs.rbegin();
+    // auto szIt = SIZES.rbegin();
+
+    { // Change2: Creates 2 edges, 4 nodes
+        ChangeID id = *idIt;
+        tester.setChangeID(id);
+        tester.query("change submit")
+               .execute();
+        tester.setChangeID(ChangeID::head());
+
+        std::string nodePtn = makeNodePtn(id);
+        std::string edgePtn = makeEdgePtn(id);
+
+        std::string query = fmt::format("match (n{})-[e{}]-(m{}) return n,e,m", nodePtn,
+                                        edgePtn, nodePtn);
+
+        tester.query(query)
+              .expectVector<NodeID>({0,2})
+              .expectVector<EdgeID>({0,1})
+              .expectVector<NodeID>({1,3})
+              .execute();
+
+        tester.query("call labels ()")
+            .expectVector<LabelID>({0})
+            .expectVector<std::string_view>({"NODE_ID_2"})
+            .execute();
+
+        tester.query("call properties ()")
+            .expectVector<PropertyTypeID>({0, 1})
+            .expectVector<std::string_view>({"property_2", "edge_property_2"})
+            .expectVector<std::string_view>({"String", "String"})
+            .execute();
+    }
+
+    { // Change1: Creates 1 edge, 2 nodes
+        ChangeID id = *(++idIt);
+        tester.setChangeID(id);
+        tester.query("change submit")
+               .execute();
+        tester.setChangeID(ChangeID::head());
+
+        std::string nodePtn = makeNodePtn(id);
+        std::string edgePtn = makeEdgePtn(id);
+
+        std::string query = fmt::format("match (n{})-[e{}]-(m{}) return n,e,m", nodePtn,
+                                        edgePtn, nodePtn);
+
+        tester.query(query)
+              .expectVector<NodeID>({4})
+              .expectVector<EdgeID>({2})
+              .expectVector<NodeID>({5})
+              .execute();
+
+        tester.query("call labels ()")
+            .expectVector<LabelID>({0, 1})
+            .expectVector<std::string_view>({"NODE_ID_2", "NODE_ID_1"})
+            .execute();
+
+        tester.query("call properties ()")
+            .expectVector<PropertyTypeID>({0, 1, 2, 3})
+            .expectVector<std::string_view>(
+                {"property_2", "edge_property_2", "property_1", "edge_property_1"})
+            .expectVector<std::string_view>({"String", "String", "String", "String"})
+            .execute();
+    }
+
+    { // Change0: Creates 4 edges, 8 nodes
+        ChangeID id = *(++idIt);
+        tester.setChangeID(id);
+        tester.query("change submit").execute();
+        tester.setChangeID(ChangeID::head());
+
+        std::string nodePtn = makeNodePtn(id);
+        std::string edgePtn = makeEdgePtn(id);
+
+        std::string query = fmt::format("match (n{})-[e{}]-(m{}) return n,e,m",
+                                        nodePtn, edgePtn, nodePtn);
+
+        tester.query(query)
+            .expectVector<NodeID>({6, 8, 10, 12})
+            .expectVector<EdgeID>({3, 4, 5,  6})
+            .expectVector<NodeID>({7, 9, 11, 13})
+            .execute();
+
+        tester.query("call labels ()")
+            .expectVector<LabelID>({0, 1, 2})
+            .expectVector<std::string_view>({"NODE_ID_2", "NODE_ID_1", "NODE_ID_0"})
+            .execute();
+
+        tester.query("call properties ()")
+            .expectVector<PropertyTypeID>({0, 1, 2, 3, 4, 5})
+            .expectVector<std::string_view>({"property_2", "edge_property_2",
+                                             "property_1", "edge_property_1",
+                                             "property_0", "edge_property_0"})
+            .expectVector<std::string_view>(
+                {"String", "String", "String", "String", "String", "String"})
+            .execute();
+    }
+}
+
 TEST_F(QueryTest, changeCommitsThenRebase) {
     QueryTester tester {_mem, *_interp, "default"};
 
