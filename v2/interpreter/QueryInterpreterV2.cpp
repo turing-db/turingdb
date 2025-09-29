@@ -79,7 +79,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     // Generate plan graph
     PlanGraphGenerator planGen(ast, view, ctxt.getQueryCallback());
     try {
-        
+        planGen.generate(ast.queries().front());
     } catch (const PlannerException& e) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
     } catch (const std::exception& e) {

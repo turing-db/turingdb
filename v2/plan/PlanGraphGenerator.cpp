@@ -1,5 +1,7 @@
 #include "PlanGraphGenerator.h"
 
+#include <queue>
+
 #include "CypherAST.h"
 #include "CypherError.h"
 #include "PlanGraphTopology.h"
@@ -136,6 +138,7 @@ void PlanGraphGenerator::generateMatchStmt(const MatchStmt* stmt) {
 }
 
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
+    // Step 1: Find all end points
     std::vector<PlanGraphNode*> ends;
     for (const auto& node : _tree.nodes()) {
         if (node->outputs().empty()) {
@@ -147,45 +150,69 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
         throwError("No end points found", stmt);
     }
 
-    PlanGraphNode* a = (*ends.begin());
+    if (ends.size() == 1) {
+        // No joins needed, just generate the last ProduceResultsNode
+        auto* results = _tree.create<ProduceResultsNode>();
+        ends.back()->connectOut(results);
+    }
 
-    // If there is only one end point, the loop is skipped
+    // Step 2: Generate all joins
+    // Algorithm:
+    // - Pick the first endpoint (= rhs)
+    // - For each other endpoint (= lhs):
+    //     - Find the shortest path between the lhs and rhs
+    //     - If the path is undirected, JOIN the two endpoints
+    //     - If no path is found, CARTESIAN_PRODUCT the two endpoints
+    //     - rhs becomes the join node
+    /*       A              A              A
+     *      / \            / \            / \
+     *     B   C          B   C          B   C
+     *    /     \    ->  /     \    ->  /     \
+     *   D       F      D       F      D       F
+     *    \     / \      \     / \      \     / \
+     *     H   I   J      H   I   J      H   I   J
+     *                         \ /        \   \ /
+     *                         [u]         \  [u]
+     *                                      \ /
+     *                                      [u]   */
 
-    for (auto itB = ++ends.begin(); itB != ends.end(); itB++) {
-        PlanGraphNode* b = *itB;
+    PlanGraphNode* rhsNode = ends[0];
 
-        const auto path = PlanGraphTopology::getShortestPath(a, b);
+    for (size_t i = 1; i < ends.size(); i++) {
+        PlanGraphNode* lhsNode = ends[i];
+
+        const auto path = PlanGraphTopology::getShortestPath(rhsNode, lhsNode);
 
         switch (path) {
             case PlanGraphTopology::PathToDependency::SameVar:
             case PlanGraphTopology::PathToDependency::BackwardPath: {
                 // Should not happen
-                throwError("Unknown error", a);
+                throwError("Unknown error", rhsNode);
                 continue;
             } break;
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {
                 // Join
                 JoinNode* join = _tree.create<JoinNode>();
-                a->connectOut(join);
-                b->connectOut(join);
+                rhsNode->connectOut(join);
+                lhsNode->connectOut(join);
 
-                a = join;
+                rhsNode = join;
             } break;
             case PlanGraphTopology::PathToDependency::NoPath: {
                 // Cartesian product
                 CartesianProductNode* join = _tree.create<CartesianProductNode>();
-                a->connectOut(join);
-                b->connectOut(join);
+                rhsNode->connectOut(join);
+                lhsNode->connectOut(join);
 
-                a = join;
+                rhsNode = join;
             } break;
         }
     }
 
-    // Connect the last node to the output
+    // Step 3: Connect the last node to the output
     auto* results = _tree.create<ProduceResultsNode>();
-    a->connectOut(results);
+    rhsNode->connectOut(results);
 }
 
 void PlanGraphGenerator::generateWhereClause(const WhereClause* where) {
@@ -243,8 +270,8 @@ VarNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* ori
         scan->connectOut(filter);
     }
 
-    auto* typedFilter = static_cast<FilterNodeNode*>(filter);
-    typedFilter->addLabelConstraints(labelset);
+    NodeFilterNode* nodeFilter = filter->asNodeFilter();
+    nodeFilter->addLabelConstraints(labelset);
 
     for (const auto& [propType, expr] : exprConstraints) {
         _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
@@ -284,18 +311,18 @@ VarNode* PlanGraphGenerator::generatePatternElementEdge(VarNode* prevNode,
     if (!var) {
         std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
     } else {
-        incrementDeclOrders(prevNode->getDeclOdrer(), filter);
+        incrementDeclOrders(prevNode->getDeclOrder(), filter);
     }
 
     currentNode->connectOut(filter);
-    auto* typedFilter = static_cast<FilterEdgeNode*>(filter);
+    EdgeFilterNode* edgeFilter = filter->asEdgeFilter();
 
     for (const auto& [propType, expr] : exprConstraints) {
         _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
 
     for (const EdgeTypeID edgeTypeID : edgeTypes) {
-        typedFilter->addEdgeTypeConstraint(edgeTypeID);
+        edgeFilter->addEdgeTypeConstraint(edgeTypeID);
     }
 
     return var;
@@ -315,11 +342,11 @@ VarNode* PlanGraphGenerator::generatePatternElementTarget(VarNode* prevNode,
     if (!var) {
         std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
     } else {
-        incrementDeclOrders(prevNode->getDeclOdrer(), filter);
+        incrementDeclOrders(prevNode->getDeclOrder(), filter);
     }
 
     currentNode->connectOut(filter);
-    auto* typedFilter = static_cast<FilterNodeNode*>(filter);
+    auto* typedFilter = static_cast<NodeFilterNode*>(filter);
     typedFilter->addLabelConstraints(labelset);
 
     for (const auto& [propType, expr] : exprConstraints) {
@@ -343,11 +370,11 @@ void PlanGraphGenerator::unwrapWhereExpr(const Expr* expr) {
         FilterNode* filter = _variables.getNodeFilter(varNode);
 
         if (decl->getType() == EvaluatedType::NodePattern) {
-            FilterNodeNode* nodeFilter = static_cast<FilterNodeNode*>(filter);
+            NodeFilterNode* nodeFilter = static_cast<NodeFilterNode*>(filter);
             nodeFilter->addLabelConstraints(entityTypeExpr->labelSet());
 
         } else if (decl->getType() == EvaluatedType::EdgePattern) {
-            FilterEdgeNode* edgeFilter = static_cast<FilterEdgeNode*>(filter);
+            EdgeFilterNode* edgeFilter = static_cast<EdgeFilterNode*>(filter);
 
             if (entityTypeExpr->labels().size() != 1) {
                 throwError("Only one edge type constraint is supported for now", expr);
@@ -392,12 +419,12 @@ void PlanGraphGenerator::unwrapWhereExpr(const Expr* expr) {
     }
 
     const VarNode* firstVar = dependencies.begin()->_var;
-    uint32_t _lastDeclOrder = firstVar->getDeclOdrer();
+    uint32_t _lastDeclOrder = firstVar->getDeclOrder();
     const VarNode* _lastDependency = firstVar;
 
     for (const auto& dep : dependencies) {
-        if (_lastDeclOrder < dep._var->getDeclOdrer()) {
-            _lastDeclOrder = dep._var->getDeclOdrer();
+        if (_lastDeclOrder < dep._var->getDeclOrder()) {
+            _lastDeclOrder = dep._var->getDeclOrder();
             _lastDependency = dep._var;
         }
     }
@@ -434,7 +461,7 @@ void PlanGraphGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* 
 
         if (node->getOpcode() == PlanGraphOpcode::VAR) {
             auto* varNode = static_cast<VarNode*>(node);
-            varNode->setDeclOdrer(varNode->getDeclOdrer() + declOrder + 1);
+            varNode->setDeclOrder(varNode->getDeclOrder() + declOrder + 1);
         }
 
         for (auto* out : node->outputs()) {
@@ -462,11 +489,11 @@ void PlanGraphGenerator::placePropertyExprJoins() {
         // Step 1: find the latest dependency
         auto it = depContainer.begin();
         const VarNode* var = prop->var;
-        uint32_t order = var->getDeclOdrer();
+        uint32_t order = var->getDeclOrder();
 
         for (; it != depContainer.end(); ++it) {
-            if (order < it->_var->getDeclOdrer()) {
-                order = it->_var->getDeclOdrer();
+            if (order < it->_var->getDeclOrder()) {
+                order = it->_var->getDeclOrder();
                 var = it->_var;
             }
         }

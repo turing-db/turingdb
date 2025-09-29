@@ -48,9 +48,9 @@ std::tuple<VarNode*, FilterNode*> PlanGraphVariables::createVarNodeAndFilter(con
     FilterNode* filterNode = nullptr;
 
     if (varDecl->getType() == EvaluatedType::NodePattern) {
-        filterNode = _tree->create<FilterNodeNode>();
+        filterNode = _tree->create<NodeFilterNode>();
     } else if (varDecl->getType() == EvaluatedType::EdgePattern) {
-        filterNode = _tree->create<FilterEdgeNode>();
+        filterNode = _tree->create<EdgeFilterNode>();
     } else {
         throw PlannerException("Unsupported variable type");
     }

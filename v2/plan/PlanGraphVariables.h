@@ -16,6 +16,22 @@ public:
     explicit PlanGraphVariables(PlanGraph& tree);
     ~PlanGraphVariables();
 
+    using VarNodeMap = std::unordered_map<const VarDecl*, VarNode*>;
+    using FilterNodeMap = std::unordered_map<const VarNode*, FilterNode*>;
+
+    struct FilterNodeMapRange {
+        FilterNodeMap::const_iterator _begin;
+        FilterNodeMap::const_iterator _end;
+
+        FilterNodeMap::const_iterator begin() const {
+            return _begin;
+        }
+
+        FilterNodeMap::const_iterator end() const {
+            return _end;
+        }
+    };
+
     PlanGraphVariables(const PlanGraphVariables&) = delete;
     PlanGraphVariables(PlanGraphVariables&&) = delete;
     PlanGraphVariables& operator=(const PlanGraphVariables&) = delete;
@@ -31,12 +47,8 @@ public:
     std::tuple<VarNode*, FilterNode*> getVarNodeAndFilter(const VarDecl* varDecl);
     std::tuple<VarNode*, FilterNode*> createVarNodeAndFilter(const VarDecl* varDecl);
 
-    std::unordered_map<const VarDecl*, VarNode*>& getVarNodesMap() {
-        return _varNodesMap;
-    }
-
-    std::unordered_map<const VarNode*, FilterNode*>& getNodeFiltersMap() {
-        return _nodeFiltersMap;
+    FilterNodeMapRange getNodeFiltersMap() {
+        return {_nodeFiltersMap.begin(), _nodeFiltersMap.end()};
     }
 
 private:
@@ -45,10 +57,10 @@ private:
     uint32_t _nextDeclOrder {0};
 
     // Map of variable nodes
-    std::unordered_map<const VarDecl*, VarNode*> _varNodesMap;
+    VarNodeMap _varNodesMap;
 
     // Map of node filters
-    std::unordered_map<const VarNode*, FilterNode*> _nodeFiltersMap;
+    FilterNodeMap _nodeFiltersMap;
 };
 
 }

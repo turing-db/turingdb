@@ -10,6 +10,8 @@
 namespace db::v2 {
 
 class VarNode;
+class NodeFilterNode;
+class EdgeFilterNode;
 
 class FilterNode : public PlanGraphNode {
 public:
@@ -17,7 +19,7 @@ public:
         : PlanGraphNode(opcode)
     {
     }
-    
+
     void setVarNode(VarNode* varNode) {
         _varNode = varNode;
     }
@@ -46,15 +48,21 @@ public:
         return _wherePredicates;
     }
 
+    NodeFilterNode* asNodeFilter();
+    const NodeFilterNode* asNodeFilter() const;
+
+    EdgeFilterNode* asEdgeFilter();
+    const EdgeFilterNode* asEdgeFilter() const;
+
 private:
     VarNode* _varNode {nullptr};
     std::vector<PropertyConstraint*> _propConstraints;
     std::vector<WherePredicate*> _wherePredicates;
 };
 
-class FilterNodeNode : public FilterNode {
+class NodeFilterNode : public FilterNode {
 public:
-    FilterNodeNode()
+    NodeFilterNode()
         : FilterNode(PlanGraphOpcode::FILTER_NODE)
     {
     }
@@ -71,9 +79,9 @@ private:
     LabelSet _labelConstraints;
 };
 
-class FilterEdgeNode : public FilterNode {
+class EdgeFilterNode : public FilterNode {
 public:
-    FilterEdgeNode()
+    EdgeFilterNode()
         : FilterNode(PlanGraphOpcode::FILTER_EDGE)
     {
     }
@@ -89,5 +97,21 @@ public:
 private:
     std::vector<EdgeTypeID> _edgeTypeConstraints;
 };
+
+inline NodeFilterNode* FilterNode::asNodeFilter() {
+    return static_cast<NodeFilterNode*>(this);
+}
+
+inline const NodeFilterNode* FilterNode::asNodeFilter() const {
+    return static_cast<const NodeFilterNode*>(this);
+}
+
+inline EdgeFilterNode* FilterNode::asEdgeFilter() {
+    return static_cast<EdgeFilterNode*>(this);
+}
+
+inline const EdgeFilterNode* FilterNode::asEdgeFilter() const {
+    return static_cast<const EdgeFilterNode*>(this);
+}
 
 }
