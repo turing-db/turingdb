@@ -11,28 +11,6 @@
 
 using namespace db;
 
-namespace {
-// Functor for helping get the ValueType from an UntypedProperty
-struct ValueTypeFromProperty {
-    ValueType operator()([[maybe_unused]] types::Int64::Primitive propValue) const {
-        return types::Int64::_valueType;
-    }
-    ValueType operator()([[maybe_unused]] types::UInt64::Primitive propValue) const {
-        return types::UInt64::_valueType;
-    }
-    ValueType operator()([[maybe_unused]] types::Double::Primitive propValue) const {
-        return types::Double::_valueType;
-    }
-    ValueType operator()([[maybe_unused]] const std::string& propValue) const {
-        return types::String::_valueType;
-    }
-    ValueType operator()([[maybe_unused]] types::Bool::Primitive propValue) const {
-        return types::Bool::_valueType;
-    }
-};
-}
-
-
 void CommitWriteBuffer::addPendingNode(LabelSetHandle lsh,
                                        std::vector<UntypedProperty>&& properties) {
     _pendingNodes.emplace_back(lsh, std::move(properties));
@@ -55,13 +33,6 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
 
     // Adding node properties
     for (const auto& [id, value] : node.properties) {
-        // Get the value type from the untyped property
-        // const ValueType propValueType = std::visit(ValueTypeFromProperty {}, value);
-        // Get the existing ID, or create a new property and get that ID
-        // const PropertyTypeID propID =
-            // metadataBuilder.getOrCreatePropertyType(prop.propertyID, propValueType)._id;
-
-        // Add this property to this node
         std::visit(
             [&](auto&& val) {
                 using T = std::decay_t<decltype(val)>;
@@ -130,14 +101,6 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
     const EdgeID newEdgeID = newEdgeRecord._edgeID;
 
     for (const auto& [id, value] : edge.properties) {
-        // Get the value type from the untyped property
-        // const ValueType propValueType = std::visit(ValueTypeFromProperty {}, value);
-
-        // Get the existing ID, or create a new property and get that ID
-        // const PropertyTypeID propID =
-            // metadataBuilder.getOrCreatePropertyType(prop.propertyID, propValueType)._id;
-
-        // Add this property to this edge in this builder
         std::visit(
             [&](const auto& val) {
                 using T = std::decay_t<decltype(val)>;
