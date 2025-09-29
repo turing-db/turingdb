@@ -22,7 +22,8 @@ using namespace db;
 
 SystemManager::SystemManager(TuringConfig& config)
     : _config(config),
-      _changes(std::make_unique<ChangeManager>()) {
+    _changes(std::make_unique<ChangeManager>())
+{
     _config.init();
     init();
 }
@@ -33,7 +34,14 @@ SystemManager::~SystemManager() {
 void SystemManager::init() {
     const auto list = _config.getGraphsDir().listDir();
 
-    if (std::find(list->begin(), list->end(), _config.getGraphsDir() / "default") != list->end()) {
+    if (!list) {
+        throw TuringException("Can not list graphs in turing directory");
+    }
+
+    const fs::Path defaultPath = _config.getGraphsDir() / "default";
+    auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
+
+    if (found != list->end()) {
         spdlog::info("loading default");
         _defaultGraph = loadGraph("default");
     } else {
@@ -47,9 +55,9 @@ void SystemManager::init() {
 }
 
 Graph* SystemManager::loadGraph(const std::string& name) {
-    const fs::Path path = _config.getGraphsDir() / name;
+    const fs::Path graphPath = _config.getGraphsDir() / name;
 
-    auto graph = Graph::createEmptyGraph(name, path.c_str());
+    auto graph = Graph::createEmptyGraph(name, graphPath.c_str());
     auto graphSerializer = std::make_unique<GraphSerializer>(graph.get());
 
     auto* graphPtr = graph.get();

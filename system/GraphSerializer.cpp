@@ -1,11 +1,11 @@
 #include "GraphSerializer.h"
 
 #include <mutex>
+#include <spdlog/spdlog.h>
 
 #include "Graph.h"
 #include "GraphLoader.h"
 #include "GraphDumper.h"
-#include "spdlog/spdlog.h"
 
 
 using namespace db;

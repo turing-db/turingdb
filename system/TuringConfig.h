@@ -24,7 +24,7 @@ private:
     fs::Path _graphsDir;
     fs::Path _dataDir;
 
-    bool _syncedOnDisk = true;
+    bool _syncedOnDisk {true};
 };
 
 }

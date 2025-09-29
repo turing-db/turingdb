@@ -26,7 +26,7 @@ public:
 private:
     mutable std::mutex _mutex;
 
-    Graph* _graph;
+    Graph* _graph {nullptr};
 };
 
 }

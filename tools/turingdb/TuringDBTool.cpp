@@ -37,10 +37,8 @@ int main(int argc, const char** argv) {
              .store_into(graphsToLoad);
     argParser.add_argument("-in-memory")
              .store_into(inMemory);
-          
 
     toolInit.init(argc, argv);
-
 
     if (!noServer && !nodemon) {
         Demonology::demonize();

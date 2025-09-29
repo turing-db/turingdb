@@ -85,12 +85,12 @@ ListGraphCommand* ListGraphCommand::create(ASTContext* ctxt) {
 // LoadGraphCommand
 
 LoadGraphCommand::LoadGraphCommand(const std::string& graphName)
-    :_graphName(graphName)
+    : _graphName(graphName)
 {
 }
 
 LoadGraphCommand::LoadGraphCommand(const std::string& fileName, const std::string& graphName)
-    :_fileName(fileName),
+    : _fileName(fileName),
     _graphName(graphName)
 {
 }
