@@ -124,12 +124,12 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
         }
         node.labelsetHandle = newLabelsets.getOrCreate(newLabelset);
 
-
         for (auto& [id, value] : node.properties) {
              id = _propTypeMapping[id]._id;
         }
     }
 
+    // Rebase WriteBuffer edge metadata
     auto& pendingEdges = cwb.pendingEdges();
     for (auto&& edge : pendingEdges) {
         for (auto& [id, value] : edge.properties) {
