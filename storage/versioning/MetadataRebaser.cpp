@@ -133,6 +133,7 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
     auto& pendingEdges = cwb.pendingEdges();
     for (auto&& edge : pendingEdges) {
         for (auto& [id, value] : edge.properties) {
+            id = _propTypeMapping[id]._id;
         }
     }
 

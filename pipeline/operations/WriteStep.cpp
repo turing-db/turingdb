@@ -163,23 +163,25 @@ CommitWriteBuffer::ExistingOrPendingNode WriteStep::getOrWriteNode(const EntityP
 
 void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
                           const EntityPattern* edgePattern) {
+    auto& pendingEdge = _writeBuffer->pendingEdges().emplace_back();
     // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
     std::string edgeType;
     if (patternType != nullptr) {
-            edgeType = patternType->getTypeNames().front()->getName();
+            pendingEdge.edgeLabelTypeName = patternType->getTypeNames().front()->getName();
     } else { // TODO: This check should be obselete as it should be checked in parser
         throw PipelineException("Edges must have at least one label");
     }
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
-    CommitWriteBuffer::UntypedProperties edgeProperties;
     if (patternProperties != nullptr) {
         for (const auto& e : patternProperties->getExpressions()) {
-            addUntypedProperties(edgeProperties, e, *_metadataBuilder);
+            addUntypedProperties(pendingEdge.properties, e, *_metadataBuilder);
         }
     }
-    _writeBuffer->addPendingEdge(src, tgt, std::move(edgeType), std::move(edgeProperties));
+
+    pendingEdge.src = src;
+    pendingEdge.tgt = tgt;
 }
 
 void WriteStep::writePath(const PathPattern* pathPattern) {
