@@ -54,8 +54,9 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view,
                                        const QueryCallback& callback)
     : _ast(&ast),
-      _view(view),
-      _variables(_tree) {
+    _view(view),
+    _variables(_tree)
+{
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {
@@ -152,7 +153,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
 
     if (ends.size() == 1) {
         // No joins needed, just generate the last ProduceResultsNode
-        auto* results = _tree.create<ProduceResultsNode>();
+        ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
         ends.back()->connectOut(results);
     }
 
@@ -211,7 +212,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     }
 
     // Step 3: Connect the last node to the output
-    auto* results = _tree.create<ProduceResultsNode>();
+    ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
     rhsNode->connectOut(results);
 }
 
@@ -264,15 +265,18 @@ VarNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* ori
 
     if (!var) {
         // Scan nodes
-        PlanGraphNode* scan = _tree.create<ScanNodesNode>();
+        ScanNodesNode* scan = _tree.create<ScanNodesNode>();
         std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
 
         scan->connectOut(filter);
     }
 
     NodeFilterNode* nodeFilter = filter->asNodeFilter();
+
+    // Type constraints
     nodeFilter->addLabelConstraints(labelset);
 
+    // Property constraints
     for (const auto& [propType, expr] : exprConstraints) {
         _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
@@ -317,12 +321,14 @@ VarNode* PlanGraphGenerator::generatePatternElementEdge(VarNode* prevNode,
     currentNode->connectOut(filter);
     EdgeFilterNode* edgeFilter = filter->asEdgeFilter();
 
-    for (const auto& [propType, expr] : exprConstraints) {
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
-    }
-
+    // Type constraints
     for (const EdgeTypeID edgeTypeID : edgeTypes) {
         edgeFilter->addEdgeTypeConstraint(edgeTypeID);
+    }
+
+    // Property constraints
+    for (const auto& [propType, expr] : exprConstraints) {
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
 
     return var;
@@ -347,8 +353,11 @@ VarNode* PlanGraphGenerator::generatePatternElementTarget(VarNode* prevNode,
 
     currentNode->connectOut(filter);
     auto* typedFilter = static_cast<NodeFilterNode*>(filter);
+
+    // Type constraintsj
     typedFilter->addLabelConstraints(labelset);
 
+    // Property constraints
     for (const auto& [propType, expr] : exprConstraints) {
         _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
     }
