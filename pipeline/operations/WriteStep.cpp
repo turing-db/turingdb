@@ -15,6 +15,7 @@
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
+#include "writers/MetadataBuilder.h"
 
 namespace rg = ranges;
 namespace rv = rg::views;
@@ -24,7 +25,8 @@ using namespace db;
 namespace {
 
 void addUntypedProperties(CommitWriteBuffer::UntypedProperties& props,
-                          const BinExpr* propExpr) {
+                          const BinExpr* propExpr,
+                          MetadataBuilder& metadataBuilder) {
     const VarExpr* left = static_cast<const VarExpr*>(propExpr->getLeftExpr());
     const ExprConst* right = static_cast<const ExprConst*>(propExpr->getRightExpr());
 
@@ -38,28 +40,48 @@ void addUntypedProperties(CommitWriteBuffer::UntypedProperties& props,
     switch (valueType) {
         case ValueType::Int64: {
             const auto* casted = static_cast<const Int64ExprConst*>(right);
-            props.emplace_back(propertyName, casted->getVal());
+            PropertyTypeID propID =
+                metadataBuilder.getOrCreatePropertyType(propertyName, casted->getType())
+                    ._id;
+
+            props.emplace_back(propID, casted->getVal());
             break;
         }
         case ValueType::UInt64: {
             const auto* casted = static_cast<const UInt64ExprConst*>(right);
-            props.emplace_back(propertyName, casted->getVal());
+            PropertyTypeID propID =
+                metadataBuilder.getOrCreatePropertyType(propertyName, casted->getType())
+                    ._id;
+
+            props.emplace_back(propID, casted->getVal());
             break;
         }
         case ValueType::Double: {
             const auto* casted = static_cast<const DoubleExprConst*>(right);
-            props.emplace_back(propertyName, casted->getVal());
+            PropertyTypeID propID =
+                metadataBuilder.getOrCreatePropertyType(propertyName, casted->getType())
+                    ._id;
+
+            props.emplace_back(propID, casted->getVal());
             break;
         }
         case ValueType::String: {
             const auto* casted = static_cast<const StringExprConst*>(right);
-            props.emplace_back(propertyName, casted->getVal());
+            PropertyTypeID propID =
+                metadataBuilder.getOrCreatePropertyType(propertyName, casted->getType())
+                    ._id;
+
+            props.emplace_back(propID, casted->getVal());
             break;
         }
         case ValueType::Bool: {
             const auto* casted = static_cast<const BoolExprConst*>(right);
-            props.emplace_back(propertyName, casted->getVal());
-            break;
+           PropertyTypeID propID =
+                metadataBuilder.getOrCreatePropertyType(propertyName, casted->getType())
+                    ._id;
+
+           props.emplace_back(propID, casted->getVal());
+           break;
         }
         default: {
             throw PipelineException("Unsupported value type");
@@ -87,35 +109,30 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
     // Labels to pass to the PendingNode
     const TypeConstraint* patternLabels = nodePattern->getTypeConstraint();
 
-    std::vector<std::string> nodeLabels;
+    CommitWriteBuffer::PendingNode& newNode = _writeBuffer->pendingNodes().emplace_back();
     LabelSet labelset;
-
     if (patternLabels != nullptr) {
         for (const VarExpr* name : patternLabels->getTypeNames()) {
             labelset.set(_metadataBuilder->getOrCreateLabel(name->getName()));
         }
-    } else { // TODO: This check should be obselete as it should be checked in parser
+    } else {
         throw PipelineException("Nodes must have at least one label");
     }
 
-    LabelSetHandle lsh = _metadataBuilder->getOrCreateLabelSet(labelset);
+    newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(labelset);
 
     // Properties to pass to the PendingNode
-    CommitWriteBuffer::UntypedProperties nodeProperties;
-
     const ExprConstraint* patternProperties = nodePattern->getExprConstraint();
     if (patternProperties != nullptr) {
         for (const BinExpr* expr : patternProperties->getExpressions()) {
-            addUntypedProperties(nodeProperties, expr);
+            addUntypedProperties(newNode.properties, expr, *_metadataBuilder);
         }
     }
 
     // Add this node to the write buffer, and record its offset
     CommitWriteBuffer::PendingNodeOffset thisNodeOffset =
-        _writeBuffer->nextPendingNodeOffset();
+        _writeBuffer->nextPendingNodeOffset() - 1;
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
-
-    _writeBuffer->addPendingNode(lsh, std::move(nodeProperties));
     _varOffsetMap[nodeVarDecl] = thisNodeOffset;
 
     return thisNodeOffset;
@@ -149,7 +166,7 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
     std::string edgeType;
-    if (patternType) {
+    if (patternType != nullptr) {
             edgeType = patternType->getTypeNames().front()->getName();
     } else { // TODO: This check should be obselete as it should be checked in parser
         throw PipelineException("Edges must have at least one label");
@@ -157,9 +174,9 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
     CommitWriteBuffer::UntypedProperties edgeProperties;
-    if (patternProperties) {
+    if (patternProperties != nullptr) {
         for (const auto& e : patternProperties->getExpressions()) {
-            addUntypedProperties(edgeProperties, e);
+            addUntypedProperties(edgeProperties, e, *_metadataBuilder);
         }
     }
     _writeBuffer->addPendingEdge(src, tgt, std::move(edgeType), std::move(edgeProperties));

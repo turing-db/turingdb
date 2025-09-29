@@ -49,43 +49,42 @@ void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNod
 }
 
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
-                                         MetadataBuilder& metadataBuilder,
+                                         [[maybe_unused]] MetadataBuilder& metadataBuilder,
                                          const PendingNode& node) {
     const NodeID nodeID = builder.addNode(node.labelsetHandle);
 
     // Adding node properties
-    for (const CommitWriteBuffer::UntypedProperty& prop : node.properties) {
+    for (const auto& [id, value] : node.properties) {
         // Get the value type from the untyped property
-        const ValueType propValueType = std::visit(ValueTypeFromProperty {}, prop.value);
+        // const ValueType propValueType = std::visit(ValueTypeFromProperty {}, value);
         // Get the existing ID, or create a new property and get that ID
-        const PropertyTypeID propID =
-            metadataBuilder.getOrCreatePropertyType(prop.propertyName, propValueType)._id;
+        // const PropertyTypeID propID =
+            // metadataBuilder.getOrCreatePropertyType(prop.propertyID, propValueType)._id;
 
         // Add this property to this node
         std::visit(
-            [&](auto&& propValue) {
-                using T = std::decay_t<decltype(propValue)>;
+            [&](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
 
                 if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
-                    builder.addNodeProperty<types::Int64>(nodeID, propID, propValue);
+                    builder.addNodeProperty<types::Int64>(nodeID, id, val);
                 } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
-                    builder.addNodeProperty<types::UInt64>(nodeID, propID, propValue);
+                    builder.addNodeProperty<types::UInt64>(nodeID, id, val);
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
-                    builder.addNodeProperty<types::Double>(nodeID, propID, propValue);
+                    builder.addNodeProperty<types::Double>(nodeID, id, val);
                 } else if constexpr (std::is_same_v<T, std::string>) {
                     builder.addNodeProperty<types::String>(
-                        nodeID, propID, std::forward<decltype(propValue)>(propValue));
+                        nodeID, id, std::forward<decltype(val)>(val));
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
-                    builder.addNodeProperty<types::Bool>(nodeID, propID, propValue);
+                    builder.addNodeProperty<types::Bool>(nodeID, id, val);
                 }
             },
-            prop.value);
+            value);
     }
 }
 
 void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder,
                                           MetadataBuilder& metadataBuilder) {
-    // Build/get the LabelSet for this node
     for (const auto& node : pendingNodes()) {
         buildPendingNode(builder, metadataBuilder, node);
     }
@@ -130,36 +129,36 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
 
     const EdgeID newEdgeID = newEdgeRecord._edgeID;
 
-    for (const CommitWriteBuffer::UntypedProperty& prop : edge.properties) {
+    for (const auto& [id, value] : edge.properties) {
         // Get the value type from the untyped property
-        const ValueType propValueType = std::visit(ValueTypeFromProperty {}, prop.value);
+        // const ValueType propValueType = std::visit(ValueTypeFromProperty {}, value);
 
         // Get the existing ID, or create a new property and get that ID
-        const PropertyTypeID propID =
-            metadataBuilder.getOrCreatePropertyType(prop.propertyName, propValueType)._id;
+        // const PropertyTypeID propID =
+            // metadataBuilder.getOrCreatePropertyType(prop.propertyID, propValueType)._id;
 
         // Add this property to this edge in this builder
         std::visit(
-            [&](const auto& propValue) {
-                using T = std::decay_t<decltype(propValue)>;
+            [&](const auto& val) {
+                using T = std::decay_t<decltype(val)>;
                 if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
                     builder.addEdgeProperty<types::Int64>(
-                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, id, val);
                 } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
                     builder.addEdgeProperty<types::UInt64>(
-                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, id, val);
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
                     builder.addEdgeProperty<types::Double>(
-                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, id, val);
                 } else if constexpr (std::is_same_v<T, std::string>) {
                     builder.addEdgeProperty<types::String>(
-                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, id, val);
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
                     builder.addEdgeProperty<types::Bool>(
-                        {newEdgeID, srcID, tgtID, edgeTypeID}, propID, propValue);
+                        {newEdgeID, srcID, tgtID, edgeTypeID}, id, val);
                 }
             },
-            prop.value);
+            value);
     }
 }
 

@@ -107,9 +107,9 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
         }
     }
 
-    // Rebase WriteBuffer metadata
+    // Rebase WriteBuffer node metadata
     auto& pendingNodes = cwb.pendingNodes();
-    for (CommitWriteBuffer::PendingNode& node : pendingNodes) {
+    for (auto&& node : pendingNodes) {
         // Get the LabelIDs that made up the node's LabelSetHandle
         std::vector<LabelID> nodeLabelSetLabels;
         node.labelsetHandle.decompose(nodeLabelSetLabels);
@@ -123,6 +123,17 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
             }
         }
         node.labelsetHandle = newLabelsets.getOrCreate(newLabelset);
+
+
+        for (auto& [id, value] : node.properties) {
+             id = _propTypeMapping[id]._id;
+        }
+    }
+
+    auto& pendingEdges = cwb.pendingEdges();
+    for (auto&& edge : pendingEdges) {
+        for (auto& [id, value] : edge.properties) {
+        }
     }
 
     ours._metadata->_labelMap = std::move(newLabels);

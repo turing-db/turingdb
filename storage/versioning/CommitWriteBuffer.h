@@ -25,7 +25,7 @@ public:
                      types::Bool::Primitive>;
 
      struct UntypedProperty {
-        std::string propertyName;
+        PropertyTypeID propertyID;
         SupportedTypeVariant value;
      };
 
