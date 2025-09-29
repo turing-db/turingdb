@@ -8,21 +8,21 @@ class VarDecl;
 
 class VarNode : public PlanGraphNode {
 public:
-    VarNode(const VarDecl* varDecl, uint32_t declOdrer)
+    VarNode(const VarDecl* varDecl, uint32_t declOrder)
         : PlanGraphNode(PlanGraphOpcode::VAR),
         _varDecl(varDecl),
-        _declOdrer(declOdrer)
+        _declOrder(declOrder)
     {
     }
 
-    void setDeclOdrer(uint32_t declOdrer) { _declOdrer = declOdrer; }
+    void setDeclOrder(uint32_t declOrder) { _declOrder = declOrder; }
 
-    uint32_t getDeclOdrer() const { return _declOdrer; }
+    uint32_t getDeclOrder() const { return _declOrder; }
     const VarDecl* getVarDecl() const { return _varDecl; }
 
 private:
     const VarDecl* _varDecl {nullptr};
-    uint32_t _declOdrer {0};
+    uint32_t _declOrder {0};
 };
 
 
