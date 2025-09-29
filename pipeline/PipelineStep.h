@@ -167,7 +167,6 @@ public:
                  std::string_view s3File,
                  const std::string& localPath);
 
-
     PROPERTY_STEPS(Int64)
     PROPERTY_STEPS(UInt64)
     PROPERTY_STEPS(Double)

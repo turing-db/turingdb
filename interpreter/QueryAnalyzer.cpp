@@ -26,7 +26,6 @@
 #include "InjectedIDs.h"
 #include "BioAssert.h"
 
-
 using namespace db;
 namespace rv = ranges::views;
 

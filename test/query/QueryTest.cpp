@@ -89,7 +89,6 @@ TEST_F(QueryTest, EdgeMatching) {
         .expectVector<NodeID>({1, 6, 2, 3, 1, 6, 2, 3, 0, 4, 5, 0, 0, 4, 5, 0})
         .execute();
 
-
     tester.query("MATCH (n:Person)-[e]-(m:Interest) RETURN n, n.name, e.name, m.name, m")
         .expectVector<NodeID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
         .expectOptVector<types::String::Primitive>({
@@ -1267,12 +1266,10 @@ TEST_F(QueryTest, changeCommitsThenRebase) {
         .expectVector<std::string_view>({"Int64", "String", "Bool"})
         .execute();
 
-
     tester.setChangeID(change1);
 
     tester.query("CHANGE SUBMIT")
         .execute();
-
 
     tester.setChangeID(ChangeID::head());
     tester.query("match (n) return n, n.id, n.changeid, n.committed")
@@ -1453,7 +1450,6 @@ TEST_F(QueryTest, injectNodesCreate) {
             "Edges may only be created between nodes with at most one specified ID")
         .execute();
 
-
     tester.query("create (a @ 0,1)-[:BADEDGE]-(b @ 2, 3)")
         .expectError()
         .expectErrorMessage(
@@ -1566,7 +1562,6 @@ TEST_F(QueryTest, stringApproxTest) {
         .expectVector<StrOpt>({"Norbert->Micheal"})
         .execute();
 
-
     // No name constraints on nodes
     const std::string approxEdgeNameNorbertSlim =
         "match (n:NewNode"
@@ -1631,9 +1626,7 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
     tester.query("CHANGE SUBMIT").execute();
     tester.setChangeID(ChangeID::head());
 
-
     const std::string matchQuery = "match (n:NewNode{poem~=\"cat\", rating=5u}) return n.poem";
-
 
     tester.query(matchQuery)
         .expectVector<StrOpt>({"the cat jumped"})

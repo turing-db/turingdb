@@ -60,7 +60,6 @@
     {                                                                              \
     }                                                                              \
 
-
 using namespace db;
 
 PipelineStep::PipelineStep(ScanNodesStringApproxStep::Tag, ColumnVector<NodeID>* nodes,

@@ -84,7 +84,6 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
     edge._otherID = tgtID;
     edge._edgeTypeID = typeID;
 
-
     if (edge._nodeID < _firstNodeID) {
         _nodeHasPatchEdges.emplace(edge._nodeID);
         _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});

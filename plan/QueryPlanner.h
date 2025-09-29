@@ -33,7 +33,6 @@ class PathPattern;
 class ReturnField;
 class Block;
 
-
 class QueryPlanner {
 public:
     QueryPlanner(const GraphView& view,

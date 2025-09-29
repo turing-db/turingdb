@@ -257,7 +257,6 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
             ._dest = filterOutNodes,
         });
 
-
         // Assign the filtered nodes column to the general node column
         // pointer so we can iteratively apply filters.
         _result = filterOutNodes;
@@ -803,7 +802,6 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
     }
 }
 
-
 void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filterMasks,
                                                    const std::span<const BinExpr* const> expressions,
                                                    const ColumnEdgeIDs* entities) {
@@ -1065,7 +1063,6 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     }
 
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
-
 
     if (edgeExprConstr || targetExprConstr) {
         planExpressionConstraintFilters(edgeExprConstr, targetExprConstr, edgeWriteInfo._edges, edgeWriteInfo._targetNodes,
