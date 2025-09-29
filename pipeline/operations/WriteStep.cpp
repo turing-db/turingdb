@@ -104,12 +104,10 @@ void WriteStep::prepare(ExecutionContext* ctxt) {
 }
 
 CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* nodePattern) {
-    // Build a @ref CommitWriteBuffer::PendingNode:
+    // Build a @ref CommitWriteBuffer::PendingNode with empty fields:
+    CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
 
-    // Labels to pass to the PendingNode
     const TypeConstraint* patternLabels = nodePattern->getTypeConstraint();
-
-    CommitWriteBuffer::PendingNode& newNode = _writeBuffer->pendingNodes().emplace_back();
     LabelSet labelset;
     if (patternLabels != nullptr) {
         for (const VarExpr* name : patternLabels->getTypeNames()) {
@@ -119,9 +117,10 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         throw PipelineException("Nodes must have at least one label");
     }
 
+    // Set the labelset of the PendingNode
     newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(labelset);
 
-    // Properties to pass to the PendingNode
+    // Set the properties of the PendingNode
     const ExprConstraint* patternProperties = nodePattern->getExprConstraint();
     if (patternProperties != nullptr) {
         for (const BinExpr* expr : patternProperties->getExpressions()) {
@@ -129,10 +128,11 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         }
     }
 
-    // Add this node to the write buffer, and record its offset
+    // Record this node's offset for later reference
     CommitWriteBuffer::PendingNodeOffset thisNodeOffset =
-        _writeBuffer->nextPendingNodeOffset() - 1;
+        _writeBuffer->pendingNodes().size() - 1;
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
+
     _varOffsetMap[nodeVarDecl] = thisNodeOffset;
 
     return thisNodeOffset;
@@ -163,7 +163,7 @@ CommitWriteBuffer::ExistingOrPendingNode WriteStep::getOrWriteNode(const EntityP
 
 void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
                           const EntityPattern* edgePattern) {
-    auto& pendingEdge = _writeBuffer->pendingEdges().emplace_back();
+    auto& pendingEdge = _writeBuffer->newPendingEdge(src, tgt);
     // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
     if (patternType != nullptr) {

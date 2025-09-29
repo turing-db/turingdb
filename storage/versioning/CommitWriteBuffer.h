@@ -19,6 +19,8 @@ class CommitWriteBuffer {
 struct PendingEdge;
 
 public:
+    CommitWriteBuffer() = default;
+
     using SupportedTypeVariant =
         std::variant<types::Int64::Primitive, types::UInt64::Primitive,
                      types::Double::Primitive, std::string,
@@ -44,27 +46,17 @@ public:
      using PendingNodes = std::vector<PendingNode>;
      using PendingEdges = std::vector<PendingEdge>;
 
-     CommitWriteBuffer() = default;
-
-     PendingNodeOffset nextPendingNodeOffset() { return _pendingNodes.size(); }
+     /**
+      * @brief Adds a pending node to this WriteBuffer with empty properties and
+      * labels.
+      */
+     PendingNode& newPendingNode();
 
      /**
-      * @brief Adds a pending node to this WriteBuffer with the provided properties and
-      * labels.
-      * @warn Takes ownership and moves ownership of @param labels and @param properties
-      * to this WriteBuffer
+      * @brief Adds a pending edge to this WriteBuffer with provided source and target
+      * nodes and empty properties and labels.
       */
-     void addPendingNode(LabelSetHandle lsh, UntypedProperties&& properties);
-
-     /**
-      * @brief Adds a pending edge to this WriteBuffer with the provided properties and
-      * labels.
-      * @warn Takes ownership and moves ownership of @param edgeType and @param
-      * edgeProperties to this WriteBuffer. Does not take ownership of @param src nor
-      * @param tgt
-      */
-     // void addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt, std::string&& edgeType,
-                         // UntypedProperties&& edgeProperties);
+     PendingEdge& newPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt);
 
      /**
       * @brief Adds the pending nodes and edges to the provided datapart builder
@@ -79,7 +71,7 @@ public:
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
              && _deletedEdges.empty();
-    }
+     }
 
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
@@ -113,16 +105,11 @@ private:
     std::set<EdgeID> _deletedEdges;
 
     // Collection of methods to write the buffer to the provided datapart builder
-    void buildPendingNodes(DataPartBuilder& builder, MetadataBuilder& metadataBuilder);
-    void buildPendingEdges(DataPartBuilder& builder, MetadataBuilder& metadataBuilder);
+    void buildPendingNodes(DataPartBuilder& builder);
+    void buildPendingEdges(DataPartBuilder& builder);
 
-    void buildPendingNode(DataPartBuilder& builder,
-                          MetadataBuilder& metadataBuilder,
-                          const PendingNode& node);
-    void buildPendingEdge(DataPartBuilder& builder,
-                          MetadataBuilder& metadataBuilder,
-                          const PendingEdge& edge);
-
+    void buildPendingNode(DataPartBuilder& builder, const PendingNode& node);
+    void buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge);
 };
 
 class CommitWriteBufferRebaser {
@@ -130,7 +117,7 @@ public:
     explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer, NodeID entryNextNodeID,
                                       EdgeID entryNextEdgeID, NodeID currentNextNodeID,
                                       EdgeID currentNextEdgeID)
-        : _buffer(buffer),
+        : _buffer(&buffer),
           _entryNextNodeID(entryNextNodeID),
           _currentNextNodeID(currentNextNodeID),
           _entryNextEdgeID(entryNextEdgeID),
@@ -141,7 +128,7 @@ public:
     void rebaseIncidentNodeIDs();
 
 private:
-    CommitWriteBuffer& _buffer;
+    CommitWriteBuffer* _buffer;
 
     NodeID _entryNextNodeID;
     NodeID _currentNextNodeID;

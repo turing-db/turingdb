@@ -7,27 +7,26 @@
 #include "ID.h"
 #include "versioning/MetadataRebaser.h"
 #include "writers/DataPartBuilder.h"
-#include "writers/MetadataBuilder.h"
 
 using namespace db;
 
-void CommitWriteBuffer::addPendingNode(LabelSetHandle lsh,
-                                       std::vector<UntypedProperty>&& properties) {
-    _pendingNodes.emplace_back(lsh, std::move(properties));
+CommitWriteBuffer::PendingNode& CommitWriteBuffer::newPendingNode() {
+    return _pendingNodes.emplace_back();
 }
 
-// void CommitWriteBuffer::addPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt,
-                                       // std::string&& edgeType,
-                                       // std::vector<UntypedProperty>&& edgeProperties) {
-    // _pendingEdges.emplace_back(src, tgt, std::move(edgeType), std::move(edgeProperties));
-// }
+CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPendingNode src,
+                                                                  ExistingOrPendingNode tgt) {
+    auto& pendingEdge = _pendingEdges.emplace_back(); // Create an empty edge
+    pendingEdge.src = src; // Assign src and target
+    pendingEdge.tgt = tgt;
+    return pendingEdge; 
+}
 
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
 }
 
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
-                                         [[maybe_unused]] MetadataBuilder& metadataBuilder,
                                          const PendingNode& node) {
     const NodeID nodeID = builder.addNode(node.labelsetHandle);
 
@@ -54,15 +53,13 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
     }
 }
 
-void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder,
-                                          MetadataBuilder& metadataBuilder) {
+void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
     for (const auto& node : pendingNodes()) {
-        buildPendingNode(builder, metadataBuilder, node);
+        buildPendingNode(builder, node);
     }
 }
 
 void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
-                                         MetadataBuilder& metadataBuilder,
                                          const PendingEdge& edge) {
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted. NOTE: Deletes currently not implemented
@@ -123,19 +120,17 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
     }
 }
 
-void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder,
-                                          MetadataBuilder& metadataBuilder) {
+void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
     for (const PendingEdge& edge : pendingEdges()) {
-        buildPendingEdge(builder, metadataBuilder, edge);
+        buildPendingEdge(builder, edge);
     }
 }
 
 void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
-    MetadataBuilder& metadataBuilder = builder.getMetadata();
     std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
 
-    buildPendingNodes(builder, metadataBuilder);
-    buildPendingEdges(builder, metadataBuilder);
+    buildPendingNodes(builder);
+    buildPendingEdges(builder);
 }
 
 void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
@@ -165,10 +160,9 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
             return wbID + _currentNextNodeID - _entryNextNodeID;
         }
         return wbID;
-
     };
 
-    for (CommitWriteBuffer::PendingEdge& edge : _buffer.pendingEdges()) {
+    for (auto&& edge : _buffer->pendingEdges()) {
         // We only care about edges that refer to NodeIDs
         if (NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
             edge.src = NodeID {rebaseNodeID(*oldSrcID)};
