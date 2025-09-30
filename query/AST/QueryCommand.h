@@ -96,7 +96,7 @@ class DeleteCommand : public QueryCommand {
 public:
     static DeleteCommand<IDT>* create(ASTContext* ctxt, DeletedIDs<IDT>* deletedIDs);
 
-    const DeletedIDs<IDT>& deltetions() const { return *_deletedIDs; }
+    const DeletedIDs<IDT>& deletions() const { return *_deletedIDs; }
 
     Kind getKind() const override {
         if constexpr (std::is_same_v<IDT, NodeID>) {

@@ -18,7 +18,7 @@ public:
 
     void addID(IDT id);
     
-    std::vector<NodeID>& getIDs() { return _deletedIDs; }
+    std::vector<IDT>& getIDs() { return _deletedIDs; }
 
 private:
     std::vector<IDT> _deletedIDs;

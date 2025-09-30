@@ -1,5 +1,7 @@
 #include "GraphReader.h"
 
+#include <algorithm>
+
 #include "DataPart.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
@@ -244,8 +246,12 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
     return false;
 }
 
+// NOTE: Due to deletions, NodeIDs are not guaranteed to be contiguous across dataparts,
+// and thus we must check each datapart explicitly
 bool GraphReader::graphHasNode(NodeID nodeID) const {
-    return (nodeID < getNodeCount());
+    DataPartSpan dps = _view.dataparts();
+    return std::ranges::any_of(
+        dps, [nodeID](WeakArc<DataPart> dp) { return dp->hasNode(nodeID); });
 }
 
 template <SupportedType T>
