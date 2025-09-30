@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <math.h>
+
 #include "TuringConfig.h"
 #include "SystemManager.h"
 #include "Graph.h"
@@ -19,6 +21,7 @@
 #include "processors/MaterializeData.h"
 #include "processors/LambdaProcessor.h"
 #include "processors/GetPropertiesProcessor.h"
+#include "processors/LimitProcessor.h"
 #include "reader/GraphReader.h"
 
 #include "PipelineExecutor.h"
@@ -389,4 +392,45 @@ TEST_F(PipelineTest, scanNodesExpand2) {
     ExecutionContext execCtxt(view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
+}
+
+TEST_F(PipelineTest, scanNodesLimit) {
+    LocalMemory mem;
+    PipelineV2 pipeline;
+
+    // Scan nodes
+    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
+    auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
+
+    // Materialize
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    scanNodes->outNodeIDs()->connectTo(materialize->input());
+    {
+        MaterializeData& matData = materialize->getMaterializeData();
+        matData.addToStep(scanNodesOutNodeIDs);
+    }
+
+    // Limit
+    constexpr size_t limitCount = 4;
+    LimitProcessor* limit = LimitProcessor::create(&pipeline, limitCount);
+    materialize->output()->connectTo(limit->input());
+
+    // Lambda
+    size_t lambdaRowCount = 0;
+    auto callback = [&](const Block& block, LambdaProcessor::Operation operation) {
+        lambdaRowCount += block.getBlockRowCount();
+    };
+
+    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
+    limit->output()->connectTo(lambda->input());
+
+    // Execute pipeline
+    const auto transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    executor.execute();
+
+    // Check number of lambda invocations
+    EXPECT_LE(lambdaRowCount, limitCount);
 }

@@ -40,6 +40,7 @@ void SkipProcessor::reset() {
 
 void SkipProcessor::execute() {
     _input->consume();
+    _finished = true;
 
     if (_skipping) {
         const Block& inputBlock = _input->getBuffer()->getBlock();

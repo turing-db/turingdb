@@ -37,6 +37,7 @@ void LimitProcessor::reset() {
 
 void LimitProcessor::execute() {
     _input->consume();
+    _finished = true;
 
     if (_reachedLimit) {
         // We have reached the limit, do nothing
