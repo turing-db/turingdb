@@ -66,8 +66,8 @@ public:
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
-    const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
-    const std::set<EdgeID>& deletedEdges() const { return _deletedEdges; }
+     std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
+     std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
 
     bool empty() const {
         return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
@@ -106,10 +106,10 @@ private:
     std::vector<PendingEdge> _pendingEdges;
 
     // Nodes to be deleted when this commit commits
-    std::set<NodeID> _deletedNodes;
+    std::vector<NodeID> _deletedNodes;
 
     // Edges to be deleted when this commit commits
-    std::set<EdgeID> _deletedEdges;
+    std::vector<EdgeID> _deletedEdges;
 
     // Collection of methods to write the buffer to the provided datapart builder
     void buildPendingNodes(DataPartBuilder& builder);
