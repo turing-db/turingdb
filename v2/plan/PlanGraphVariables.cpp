@@ -8,8 +8,8 @@
 
 using namespace db::v2;
 
-PlanGraphVariables::PlanGraphVariables(PlanGraph& tree)
-    : _tree(&tree)
+PlanGraphVariables::PlanGraphVariables(PlanGraph* tree)
+    : _tree(tree)
 {
 }
 

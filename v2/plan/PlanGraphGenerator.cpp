@@ -55,7 +55,7 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const QueryCallback& callback)
     : _ast(&ast),
     _view(view),
-    _variables(_tree)
+    _variables(&_tree)
 {
 }
 
@@ -148,13 +148,33 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     }
 
     if (ends.empty()) {
-        throwError("No end points found", stmt);
+        /* Right now (a)-->(b)-->(c)-->(a) is a loop, which means that we
+         * cannot define an endpoint.
+         *
+         * This needs to be explictely handled,
+         * probably using "loop unrolling". When we detect a loop, we actually
+         * define a new variable (a') in this example, and add a constraint,
+         * WHERE a == a'.
+         *
+         * To implement this, we need to:
+         *
+         * - Allow comparing entities (e.g. a == b) and test the query:
+         *   `MATCH (a)-->(b) WHERE a == b RETURN *`
+         * - Then, add the unrolling logic to the query planner. This can
+         *   probably be as simple as: in planOrigin and planTarget, if the
+         *   node already exists, detect if we can come back to the same
+         *   position by going backwards. If so, create a new unnamed variable
+         *   and add the constraint.
+         * */
+
+        throwError("No endpoints found, loops are not supported yet", stmt);
     }
 
     if (ends.size() == 1) {
         // No joins needed, just generate the last ProduceResultsNode
         ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
         ends.back()->connectOut(results);
+        return;
     }
 
     // Step 2: Generate all joins
@@ -269,6 +289,8 @@ VarNode* PlanGraphGenerator::generatePatternElementOrigin(const NodePattern* ori
         std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
 
         scan->connectOut(filter);
+    } else {
+        _variables.setNextDeclOrder(var->getDeclOrder() + 1);
     }
 
     NodeFilterNode* nodeFilter = filter->asNodeFilter();
