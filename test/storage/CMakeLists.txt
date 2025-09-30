@@ -30,3 +30,4 @@ add_storage_tests(test_storage_scan_nodes_iterator iterators/ScanNodesIteratorTe
 add_storage_tests(test_storage_metadatarebaser versioning/MetadataRebaserTest.cpp)
 
 add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
+add_storage_tests(test_storage_stringindexer dump/PropertyContainerDumperTest.cpp)

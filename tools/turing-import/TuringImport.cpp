@@ -3,11 +3,11 @@
 
 #include "BannerDisplay.h"
 #include "Graph.h"
-#include "GraphDumper.h"
+#include "dump/GraphDumper.h"
 #include "FileUtils.h"
 #include "GMLImporter.h"
 #include "comparators/GraphComparator.h"
-#include "GraphLoader.h"
+#include "dump/GraphLoader.h"
 #include "JobSystem.h"
 #include "LogUtils.h"
 #include "Neo4j/Neo4JParserConfig.h"

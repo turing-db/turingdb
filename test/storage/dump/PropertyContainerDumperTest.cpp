@@ -1,6 +1,6 @@
 #include "TuringTest.h"
 
-#include "PropertyContainerDumper.h"
+#include "dump/PropertyContainerDumper.h"
 
 using namespace db;
 using namespace turing::test;
