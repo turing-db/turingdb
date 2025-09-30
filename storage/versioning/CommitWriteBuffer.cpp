@@ -25,6 +25,7 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
 }
+
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
                                          const PendingNode& node) {
     const NodeID nodeID = builder.addNode(node.labelsetHandle);

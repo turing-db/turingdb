@@ -77,10 +77,16 @@ public:
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
      * _deletedNodes
-     * @detail Calls std::vector::reserve for the additional space before calling
-     * std::vector::insert
+     * @detail Calls std::set::insert
      */
     void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes);
+
+    /**
+     * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
+     * _deletedNodes
+     * @detail Calls std::set::insert
+     */
+    void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
 private:
     friend DataPartBuilder;
