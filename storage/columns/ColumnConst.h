@@ -45,6 +45,17 @@ public:
         _value = otherCol->_value;
     }
 
+    void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
+        const ColumnConst<T>* otherCol = dynamic_cast<const ColumnConst<T>*>(other);
+        msgbioassert(otherCol, "ColumnConst::assignFromLine: other is not a ColumnConst of the same type");
+
+        if (rowCount == 0) {
+            return;
+        }
+
+        _value = otherCol->_value;
+    }
+
     void set(const T& value) { _value = value; }
 
     void dump() const override {

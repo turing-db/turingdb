@@ -88,6 +88,15 @@ public:
         _data = otherCol->_data;
     }
 
+    void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
+        const ColumnVector<T>* otherCol = dynamic_cast<const ColumnVector<T>*>(other);
+        msgbioassert(otherCol, "ColumnVector::assignFromLine: other is not a ColumnVector of the same type");
+
+        _data.clear();
+        const auto otherStart = otherCol->_data.cbegin() + startLine;
+        _data.assign(otherStart, otherStart + rowCount);
+    }
+
     void clear() { _data.clear(); }
 
     void resize(size_t size) { _data.resize(size); }

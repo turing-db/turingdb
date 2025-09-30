@@ -33,10 +33,13 @@ public:
     void addColumn(Column *col);
     void append(const Block &other);
 
+    void assignFrom(const Block &other);
+    void assignFromLine(const Block &other, size_t startLine, size_t rowCount);
+
     size_t getBlockRowCount() const;
 
   private:
     Columns _columns;
 };
 
-} // namespace db
+}

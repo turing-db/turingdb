@@ -68,6 +68,10 @@ public:
         _data = otherCol->_data;
     }
 
+    void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
+        msgbioassert(false, "ColumnSet::assignFromLine: not implemented for ColumnSet");
+    }
+
     void clear() noexcept { _data.clear(); }
 
     std::pair<Iterator, bool> insert(const T& val) { return _data.insert(val); }

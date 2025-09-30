@@ -39,3 +39,19 @@ size_t Block::getBlockRowCount() const {
     }
     return rowCount;
 }
+
+void Block::assignFrom(const Block &other) {
+    const Columns& otherColumns = other.columns();
+    const size_t assignSize = std::min(_columns.size(), otherColumns.size());
+    for (size_t i = 0; i < assignSize; i++) {
+        _columns[i]->assign(otherColumns[i]);
+    }
+}
+
+void Block::assignFromLine(const Block &other, size_t startLine, size_t rowCount) {
+    const Columns& otherColumns = other.columns();
+    const size_t assignSize = std::min(_columns.size(), otherColumns.size());
+    for (size_t i = 0; i < assignSize; i++) {
+        _columns[i]->assignFromLine(otherColumns[i], startLine, rowCount);
+    }
+}

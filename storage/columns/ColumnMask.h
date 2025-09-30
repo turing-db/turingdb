@@ -101,6 +101,15 @@ public:
         _data = otherCol->_data;
     }
 
+    void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
+        const ColumnMask* otherCol = dynamic_cast<const ColumnMask*>(other);
+        msgbioassert(otherCol, "ColumnMask::assignFromLine: other is not a ColumnMask of the same type");
+
+        _data.clear();
+        const auto otherStart = otherCol->_data.cbegin() + startLine;
+        _data.assign(otherStart, otherStart + rowCount);
+    }
+
     void clear() { _data.clear(); }
 
     void resize(size_t size) { _data.resize(size); }

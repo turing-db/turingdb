@@ -16,6 +16,7 @@ public:
     virtual size_t size() const = 0;
 
     virtual void assign(const Column* other) = 0;
+    virtual void assignFromLine(const Column* other, size_t startLine, size_t rowCount) = 0;
 
     virtual void dump() const = 0;
 
