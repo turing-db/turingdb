@@ -77,6 +77,9 @@ void DeleteStep<IDT>::execute() {
         } else if constexpr (std::is_same_v<IDT, EdgeID>) {
             wb.addDeletedEdges(_deletions);
         }
+
+        if constexpr (std::is_same_v<IDT, NodeID>) {
+        }
     }
 }
 

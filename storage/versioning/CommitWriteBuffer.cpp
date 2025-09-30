@@ -69,7 +69,7 @@ void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
 void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                          const PendingEdge& edge) {
     // If this edge has source or target which is a node in a previous datapart, check
-    // if it has been deleted. NOTE: Deletes currently not implemented
+    // if it has been deleted.
     if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
         if (std::ranges::binary_search(deletedNodes(), *srcID)) {
             return;
@@ -80,6 +80,7 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
             return;
         }
     }
+
     // Otherwise: source and target are either non-deleted existing nodes, or nodes
     // created in this commit
     // WARN: PendingNodes have their IDs computed based on their offset in the

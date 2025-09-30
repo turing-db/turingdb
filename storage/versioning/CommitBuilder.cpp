@@ -1,11 +1,16 @@
 #include "CommitBuilder.h"
 
+#include <algorithm>
+#include <bits/ranges_algo.h>
 #include <range/v3/view/enumerate.hpp>
 
+#include "EnumerateFrom.h"
+#include "EdgeContainer.h"
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -13,6 +18,9 @@
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 CommitBuilder::CommitBuilder() = default;
 
@@ -90,6 +98,91 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     return std::move(_commit);
 }
 
+void CommitBuilder::detectHangingEdges() {
+    DataPartSpan parts = _commitData->commitDataparts();
+    CommitWriteBuffer& wb = writeBuffer();
+
+    auto& delNodes = wb.deletedNodes();
+
+    if (!std::ranges::is_sorted(delNodes)) {
+        std::ranges::sort(delNodes);
+    }
+
+    for (const WeakArc<DataPart>& part : parts) {
+        const EdgeContainer& edgeContainer = part->edges();
+        const EdgeID edgeContainerFirstID = edgeContainer.getFirstEdgeID();
+
+        // Consider the range of NodeIDs that exist in this datapart
+        NodeID smallestNodeID = part->getFirstNodeID();
+        NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
+        // The nodes to be deleted from this datapart are in the interval [nlb, nub)
+        auto nlb = std::ranges::lower_bound(delNodes, smallestNodeID);
+        auto nub = std::ranges::upper_bound(delNodes, largestNodeID);
+
+        // Subspan to reduce the search space
+        std::span thisDPNodesToDelete(nlb, nub);
+
+        if (thisDPNodesToDelete.empty()) {
+            continue;
+        }
+
+        for (const auto& [edgeID, edgeRecord] :
+             EnumerateFrom(edgeContainerFirstID.getValue(), edgeContainer.getOuts())) {
+            NodeID src = edgeRecord._nodeID;
+            NodeID tgt = edgeRecord._otherID;
+
+            // If the source or target are deleted, we must also delete this edge
+            if (std::ranges::binary_search(thisDPNodesToDelete, src)
+                || std::ranges::binary_search(thisDPNodesToDelete, tgt)) {
+                wb.addDeletedEdges({edgeID});
+            }
+        }
+    }
+}
+
+void CommitBuilder::applyDeletions() {
+    CommitWriteBuffer& wb = writeBuffer();
+    auto dataparts = _commitData->commitDataparts();
+
+    // Add to @ref _deletedEdges any edges which are incident to a node which will
+    // be deleted
+    detectHangingEdges();
+
+    auto& delNodes = wb.deletedNodes();
+    auto& delEdges = wb.deletedEdges();
+
+    // Sort our vectors for O(logn) lookup whilst being more cache-friendly than a
+    // std::set
+    if (!std::ranges::is_sorted(delNodes)) {
+        std::ranges::sort(delNodes);
+    }
+    if (!std::ranges::is_sorted(delEdges)) {
+        std::ranges::sort(delEdges);
+    }
+
+    for (const auto& [idx, part] : rv::enumerate(dataparts)) {
+        // Consider the range of NodeIDs that exist in this datapart
+        NodeID smallestNodeID = part->getFirstNodeID();
+        NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
+
+        // The nodes to be deleted from this datapart are in the interval [nlb, nub)
+        auto nlb = std::ranges::lower_bound(delNodes, smallestNodeID);
+        auto nub = std::ranges::upper_bound(delNodes, largestNodeID);
+
+        // Consider the range of EdgeIDs that exist in this datapart
+        EdgeID smallestEdgeID = part->getFirstEdgeID();
+        EdgeID largestEdgeID = part->getFirstEdgeID() + part->getEdgeCount() - 1;
+
+        // The edges to be deleted from this datapart are in the interval [elb, eub)
+        auto elb = std::ranges::lower_bound(delEdges, smallestEdgeID);
+        auto eub = std::ranges::upper_bound(delEdges, largestEdgeID);
+
+        // Subspans to reduce the search space of what we need delete from this datapart
+        std::span thisDPDeletedNodes(nlb, nub);
+        std::span thisDPDeletedEdges(elb, eub);
+    }
+}
+
 void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
 
@@ -97,6 +190,9 @@ void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
     if (wb.empty()) {
         return;
     }
+
+    // Peform deletions
+    applyDeletions();
 
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
