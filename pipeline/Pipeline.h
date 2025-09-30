@@ -18,7 +18,7 @@ public:
 
     template <typename StepT, typename... ArgsT>
     PipelineStep& add(ArgsT&&... args) {
-        _steps.emplace_back(typename StepT::Tag {}, args...);
+        _steps.emplace_back(typename StepT::Tag {}, std::forward<ArgsT>(args)...);
         return _steps.back();
     }
 
