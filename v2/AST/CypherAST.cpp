@@ -98,8 +98,8 @@ CypherAST::~CypherAST() {
     }
 }
 
-std::string* CypherAST::createUnnamedVarIdentifier() {
-    std::string* name = new std::string;
+std::string* CypherAST::createString() {
+    std::string* name = new std::string();
     _unnamedVarIdentifiers.push_back(name);
 
     return name;

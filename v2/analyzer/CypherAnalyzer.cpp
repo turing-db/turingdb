@@ -623,7 +623,7 @@ VarDecl* CypherAnalyzer::getOrCreateNamedVariable(EvaluatedType type, std::strin
 }
 
 VarDecl* CypherAnalyzer::createUnnamedVariable(EvaluatedType type) {
-    std::string* name = _ast->createUnnamedVarIdentifier();
+    std::string* name = _ast->createString();
     name->assign("v" + std::to_string(_unnamedVarCounter++));
 
     return VarDecl::create(_ast, _ctxt, *name, type);
