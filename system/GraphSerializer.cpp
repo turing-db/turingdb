@@ -4,8 +4,8 @@
 #include <spdlog/spdlog.h>
 
 #include "Graph.h"
-#include "GraphLoader.h"
-#include "GraphDumper.h"
+#include "dump/GraphLoader.h"
+#include "dump/GraphDumper.h"
 
 
 using namespace db;

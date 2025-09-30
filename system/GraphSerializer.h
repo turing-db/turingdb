@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DumpResult.h"
+#include "dump/DumpResult.h"
 
 namespace db {
 

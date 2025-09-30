@@ -13,7 +13,7 @@
 #include "GraphFileType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
-#include "DumpResult.h"
+#include "dump/DumpResult.h"
 
 namespace db {
 

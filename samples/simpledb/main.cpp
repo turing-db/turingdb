@@ -4,13 +4,13 @@
 
 #include <spdlog/spdlog.h>
 
-#include "GraphLoader.h"
+#include "dump/GraphLoader.h"
+#include "dump/GraphDumper.h"
 #include "TuringDB.h"
 #include "Graph.h"
 #include "reader/GraphReader.h"
 #include "SystemManager.h"
 #include "SimpleGraph.h"
-#include "GraphDumper.h"
 #include "GraphReport.h"
 #include "versioning/Transaction.h"
 #include "TuringConfig.h"

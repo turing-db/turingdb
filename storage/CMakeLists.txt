@@ -62,17 +62,28 @@ set(storage_sources
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp
-        comparators/GraphComparator.cpp)
+        comparators/GraphComparator.cpp
 
+        dump/GraphLoader.cpp
+        dump/GraphDumper.cpp
+        dump/DataPartLoader.cpp
+        dump/CommitDumper.cpp
+        dump/DataPartDumper.cpp
+        dump/DumpResult.cpp
+        dump/DumpUtils.cpp
+        dump/LoadUtils.cpp
+        dump/StringIndexerDumper.cpp
+        dump/StringIndexerLoader.cpp)
 
 add_library(turing_db_storage_s STATIC ${storage_sources})
 
-target_include_directories(turing_db_storage_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(turing_db_storage_s
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}
+            ${BUILD_INFO_INCLUDE_DIR})
 
-target_link_libraries(turing_db_storage_s PRIVATE
-    turing_db_jobs_s)
-
-target_link_libraries(turing_db_storage_s PUBLIC
-        turing_db_base_s
-        turing_common_s
-        range-v3)
+target_link_libraries(turing_db_storage_s
+    PRIVATE turing_db_jobs_s
+    PUBLIC  turing_db_base_s
+            turing_db_io_fs_s
+            turing_common_s
+            range-v3)

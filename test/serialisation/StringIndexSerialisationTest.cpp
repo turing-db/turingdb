@@ -1,7 +1,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "GraphDumper.h"
+#include "dump/GraphDumper.h"
 #include "Path.h"
 #include "TuringException.h"
 #include "TuringTest.h"
@@ -14,7 +14,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
-#include "GraphLoader.h"
+#include "dump/GraphLoader.h"
 #include "TuringConfig.h"
 #include "SimpleGraph.h"
 

@@ -13,7 +13,7 @@
 #include "GMLImporter.h"
 #include "JobSystem.h"
 #include "GraphSerializer.h"
-#include "GraphLoader.h"
+#include "dump/GraphLoader.h"
 #include "FileUtils.h"
 #include "TuringConfig.h"
 #include "TuringException.h"
