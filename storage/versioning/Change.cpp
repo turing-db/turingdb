@@ -80,10 +80,14 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     EdgeID branchTimeNextEdgeID = branchTimeReader.getEdgeCount();
 
     // Get current state of main
-    _base = _versionController->openTransaction().commitData();
+    auto mainTx = _versionController->openTransaction();
+
+    // Set the base of this commit (that which new changes are to be rebased on top of) to
+    // be the current state of main.
+    _base = mainTx.commitData();
 
     // Get the current next Edge and Node IDs on main
-    const GraphReader mainReader = _base->commits().back().openTransaction().readGraph();
+    const GraphReader mainReader = _versionController->openTransaction().readGraph();
     NodeID newNextNodeID = mainReader.getNodeCount();
     EdgeID newNextEdgeID = mainReader.getEdgeCount();
 
@@ -95,10 +99,6 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     const CommitData* prevCommitData = _base.get();
     // CommitHistory of main
     const CommitHistory* prevHistory = &_base->history();
-
-    // Get the Node/EdgeIDs which these commits should start from
-    NodeID nextNodeID = _versionController->openTransaction().readGraph().getNodeCount();
-    EdgeID nextEdgeID = _versionController->openTransaction().readGraph().getEdgeCount();
 
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
@@ -114,12 +114,20 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer(),
                                       branchTimeNextNodeID,
                                       branchTimeNextEdgeID,
-                                      nextNodeID,
-                                      nextEdgeID);
+                                      newNextNodeID,
+                                      newNextEdgeID);
         wbRb.rebaseIncidentNodeIDs();
 
-        commitBuilder->_nextNodeID = nextNodeID;
-        commitBuilder->_nextEdgeID = nextEdgeID;
+
+
+        // These values are initially set at time of the creation of this Change, however
+        // they need to be updated to point to the next ID on the current state of main.
+        // These values will be used when creating new dataparts at time of submit.
+        commitBuilder->_firstNodeID = newNextNodeID;
+        commitBuilder->_firstEdgeID = newNextEdgeID;
+
+        commitBuilder->_nextNodeID = newNextNodeID;
+        commitBuilder->_nextEdgeID = newNextEdgeID;
 
         metadataRebaser.clear();
         metadataRebaser.rebase(prevCommitData->metadata(),
