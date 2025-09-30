@@ -7,6 +7,7 @@
 #include <range/v3/all.hpp>
 
 #include "DataPart.h"
+#include "DeleteStep.h"
 #include "Expr.h"
 #include "FilterStep.h"
 #include "GetPropertyStep.h"
@@ -204,12 +205,28 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
     return true;
 }
 
-bool QueryPlanner::planDeleteEdges(const DeleteEdgesCommand* delCmd) {
-    return false;
+bool QueryPlanner::planDeleteNodes(const DeleteNodesCommand* delCmd) {
+    std::vector<NodeID>& deletions = delCmd->deletions();
+
+    _pipeline->add<StopStep>();
+
+    _pipeline->add<DeleteStep<NodeID>>(std::move(deletions));
+
+    _pipeline->add<EndStep>();
+
+    return true;
 }
 
-bool QueryPlanner::planDeleteNodes(const DeleteNodesCommand* delCmd) {
-    return false;
+bool QueryPlanner::planDeleteEdges(const DeleteEdgesCommand* delCmd) {
+    std::vector<EdgeID>& deletions = delCmd->deletions();
+
+    _pipeline->add<StopStep>();
+
+    _pipeline->add<DeleteStep<EdgeID>>(std::move(deletions));
+
+    _pipeline->add<EndStep>();
+
+    return true;
 }
 
 void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {

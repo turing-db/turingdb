@@ -3,6 +3,7 @@
 #include "ASTContext.h"
 #include "DeclContext.h"
 #include "ChangeCommand.h"
+#include "ID.h"
 
 using namespace db;
 

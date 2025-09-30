@@ -2,12 +2,16 @@
 
 #include "CallEdgeTypeStep.h"
 #include "CallLabelStep.h"
+#include "DeleteStep.h"
 #include "Pipeline.h"
 #include "PipelineException.h"
 #include "PipelineMacros.h"
 #include "Profiler.h"
 
 using namespace db;
+
+using DeleteNodesStep = DeleteStep<NodeID>;
+using DeleteEdgesStep = DeleteStep<EdgeID>;
 
 Executor::Executor() 
 {
@@ -84,6 +88,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::HISTORY] = ACTIVATE_PTR(HistoryStep);
         _activateTbl[(uint64_t)PipelineOpcode::CHANGE] = ACTIVATE_PTR(ChangeStep);
         _activateTbl[(uint64_t)PipelineOpcode::WRITE] = ACTIVATE_PTR(WriteStep);
+        _activateTbl[(uint64_t)PipelineOpcode::DELETE_NODES] = ACTIVATE_PTR(DeleteNodesStep);
+        _activateTbl[(uint64_t)PipelineOpcode::DELETE_EDGES] = ACTIVATE_PTR(DeleteEdgesStep);
         _activateTbl[(uint64_t)PipelineOpcode::COMMIT] = ACTIVATE_PTR(CommitStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = ACTIVATE_PTR(CallPropertyStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_LABELS] = ACTIVATE_PTR(CallLabelStep);
@@ -147,6 +153,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::HISTORY] = RETURN_PTR(HistoryStep);
         _returnTbl[(uint64_t)PipelineOpcode::CHANGE] = RETURN_PTR(ChangeStep);
         _returnTbl[(uint64_t)PipelineOpcode::WRITE] = RETURN_PTR(WriteStep);
+        _returnTbl[(uint64_t)PipelineOpcode::DELETE_NODES] = RETURN_PTR(DeleteNodesStep);
+        _returnTbl[(uint64_t)PipelineOpcode::DELETE_EDGES] = RETURN_PTR(DeleteEdgesStep);
         _returnTbl[(uint64_t)PipelineOpcode::COMMIT] = RETURN_PTR(CommitStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = RETURN_PTR(CallPropertyStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_LABELS] = RETURN_PTR(CallLabelStep);
@@ -250,6 +258,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(HistoryStep)
     ACTIVATE_STEP(ChangeStep)
     ACTIVATE_STEP(WriteStep)
+    ACTIVATE_STEP(DeleteNodesStep)
+    ACTIVATE_STEP(DeleteEdgesStep)
     ACTIVATE_STEP(CommitStep)
     ACTIVATE_STEP(CallPropertyStep)
     ACTIVATE_STEP(CallLabelStep)
@@ -312,6 +322,8 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(HistoryStep)
     RETURN_STEP(ChangeStep)
     RETURN_STEP(WriteStep)
+    RETURN_STEP(DeleteNodesStep)
+    RETURN_STEP(DeleteEdgesStep)
     RETURN_STEP(CommitStep)
     RETURN_STEP(CallPropertyStep)
     RETURN_STEP(CallLabelStep)

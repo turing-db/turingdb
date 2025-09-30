@@ -8,6 +8,13 @@
 #include "ID.h"
 #include "TypeConstraint.h"
 #include "metadata/PropertyType.h"
+<<<<<<< HEAD
+||||||| parent of ab1103150 (Add DeleteStep to pipeline (!deletes-with-wb))
+#include "S3TransferDirectories.h"
+=======
+#include "S3TransferDirectories.h"
+#include "DeletedIDs.h"
+>>>>>>> ab1103150 (Add DeleteStep to pipeline (!deletes-with-wb))
 
 namespace db {
 
@@ -17,8 +24,6 @@ class ReturnProjection;
 class MatchTargets;
 class CreateTarget;
 class CreateTargets;
-template <TypedInternalID IDT>
-class DeletedIDs;
 
 class QueryCommand {
 public:
@@ -96,7 +101,7 @@ class DeleteCommand : public QueryCommand {
 public:
     static DeleteCommand<IDT>* create(ASTContext* ctxt, DeletedIDs<IDT>* deletedIDs);
 
-    const DeletedIDs<IDT>& deletions() const { return *_deletedIDs; }
+    std::vector<IDT>& deletions() const { return _deletedIDs->getIDs(); }
 
     Kind getKind() const override {
         if constexpr (std::is_same_v<IDT, NodeID>) {

@@ -291,6 +291,18 @@ PipelineStep::PipelineStep(WriteStep::Tag, const CreateTargets* targets)
 {
 }
 
+PipelineStep::PipelineStep(DeleteStep<NodeID>::Tag, std::vector<NodeID>&& deletedIDs)
+    : _opcode(PipelineOpcode::DELETE_NODES),
+    _impl(std::in_place_type<DeleteStep<NodeID>>, std::move(deletedIDs))
+{
+}
+
+PipelineStep::PipelineStep(DeleteStep<EdgeID>::Tag, std::vector<EdgeID>&& deletedIDs)
+    : _opcode(PipelineOpcode::DELETE_EDGES),
+    _impl(std::in_place_type<DeleteStep<EdgeID>>, std::move(deletedIDs))
+{
+}
+
 PipelineStep::PipelineStep(CommitStep::Tag)
     : _opcode(PipelineOpcode::COMMIT),
     _impl(std::in_place_type<CommitStep>)
