@@ -614,8 +614,8 @@ VarDecl* CypherAnalyzer::getOrCreateNamedVariable(EvaluatedType type, std::strin
 
     if (decl->getType() != type) {
         throwError(fmt::format("Variable '{}' is already declared with type '{}'",
-                   name,
-                   EvaluatedTypeName::value(decl->getType())), 
+                               name,
+                               EvaluatedTypeName::value(decl->getType())),
                    decl);
     }
 
@@ -623,8 +623,8 @@ VarDecl* CypherAnalyzer::getOrCreateNamedVariable(EvaluatedType type, std::strin
 }
 
 VarDecl* CypherAnalyzer::createUnnamedVariable(EvaluatedType type) {
-    std::string name = "v" + std::to_string(_unnamedVarCounter++);
-    std::string_view inserted = _ctxt->storeUnnamedVarName(std::move(name));
+    std::string* name = _ast->createUnnamedVarIdentifier();
+    name->assign("v" + std::to_string(_unnamedVarCounter++));
 
-    return VarDecl::create(_ast, _ctxt, inserted, type);
+    return VarDecl::create(_ast, _ctxt, *name, type);
 }

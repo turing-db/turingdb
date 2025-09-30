@@ -5,8 +5,8 @@
 // WHERE a.name = b.name
 // RETURN a
 
-MATCH (n)-->(m)-->(p)
-WHERE n:Person AND n.name = "Luc" AND n.duration = m.duration OR p.= 25 AND n.age = 20
+MATCH (a)-[e]->(b), (b)-[e]->(c)
+WHERE a:Person AND a.name = "Luc"
 RETURN a
 
 // MATCH (a)-->(b), (b)-->(c { name: a.name })

@@ -111,6 +111,8 @@ public:
         return getLocation((uintptr_t)obj);
     }
 
+    std::string* createUnnamedVarIdentifier();
+
 private:
     std::string_view _queryStr;
     bool _debugLocations {true};
@@ -131,6 +133,7 @@ private:
     std::vector<VarDecl*> _varDecls;
     std::vector<NodePatternData*> _nodePatternDatas;
     std::vector<EdgePatternData*> _edgePatternDatas;
+    std::vector<std::string*> _unnamedVarIdentifiers;
 
     // Locations
     std::unordered_map<uintptr_t, SourceLocation> _locations;

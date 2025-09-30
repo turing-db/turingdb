@@ -13,7 +13,7 @@ class PlanGraph;
 
 class PlanGraphVariables {
 public:
-    explicit PlanGraphVariables(PlanGraph& tree);
+    explicit PlanGraphVariables(PlanGraph* tree);
     ~PlanGraphVariables();
 
     using VarNodeMap = std::unordered_map<const VarDecl*, VarNode*>;
@@ -39,6 +39,10 @@ public:
 
     void resetDeclOrder() {
         _nextDeclOrder = 0;
+    }
+
+    void setNextDeclOrder(uint32_t order) {
+        _nextDeclOrder = order;
     }
 
     VarNode* getVarNode(const VarDecl* varDecl) const;

@@ -11,6 +11,11 @@ VarDecl* VarDecl::create(CypherAST* ast,
                          EvaluatedType type) {
     VarDecl* decl = new VarDecl(type, name);
     ast->addVarDecl(decl);
-    declContext->addDecl(decl);
+
+    // If unnamed variable, no need to add it to the context
+    if (!decl->getName().empty()) {
+        declContext->addDecl(decl);
+    }
+
     return decl;
 }

@@ -92,6 +92,17 @@ CypherAST::~CypherAST() {
     for (EdgePatternData* data : _edgePatternDatas) {
         delete data;
     }
+
+    for (std::string* name : _unnamedVarIdentifiers) {
+        delete name;
+    }
+}
+
+std::string* CypherAST::createUnnamedVarIdentifier() {
+    std::string* name = new std::string;
+    _unnamedVarIdentifiers.push_back(name);
+
+    return name;
 }
 
 void CypherAST::setLocation(uintptr_t obj, const SourceLocation& loc) {
