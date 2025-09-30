@@ -4,7 +4,8 @@
 
 using namespace db::v2;
 
-PlanGraph::PlanGraph() {
+PlanGraph::PlanGraph()
+{
 }
 
 PlanGraph::~PlanGraph() {
