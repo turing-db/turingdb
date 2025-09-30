@@ -254,6 +254,12 @@ bool GraphReader::graphHasNode(NodeID nodeID) const {
         dps, [nodeID](WeakArc<DataPart> dp) { return dp->hasNode(nodeID); });
 }
 
+bool GraphReader::graphHasEdge(EdgeID edgeID) const {
+    DataPartSpan dps = _view.dataparts();
+    return std::ranges::any_of(
+        dps, [edgeID](WeakArc<DataPart> dp) { return dp->hasEdge(edgeID); });
+}
+
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
