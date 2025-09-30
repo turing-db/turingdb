@@ -36,14 +36,6 @@ ASTContext::~ASTContext() {
         delete targets;
     }
 
-    for (CreateTarget* target : _createTargets) {
-        delete target;
-    }
-
-    for (CreateTargets* targets : _createTargetVectors) {
-        delete targets;
-    }
-
     for (PathPattern* pattern : _pathPatterns) {
         delete pattern;
     }
@@ -56,8 +48,20 @@ ASTContext::~ASTContext() {
         delete constr;
     }
 
+    for (InjectedIDs* ids : _injectedIDs) {
+        delete ids;
+    }
+
     for (ExprConstraint* constr : _exprConstraints) {
         delete constr;
+    }
+
+    for (CreateTarget* target : _createTargets) {
+        delete target;
+    }
+
+    for (CreateTargets* targets : _createTargetVectors) {
+        delete targets;
     }
 
     for (Expr* expr : _expr) {
