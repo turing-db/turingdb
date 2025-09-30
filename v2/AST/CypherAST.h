@@ -111,7 +111,7 @@ public:
         return getLocation((uintptr_t)obj);
     }
 
-    std::string* createUnnamedVarIdentifier();
+    std::string* createString();
 
 private:
     std::string_view _queryStr;
