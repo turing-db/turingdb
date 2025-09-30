@@ -180,6 +180,10 @@ void CommitBuilder::applyDeletions() {
         // Subspans to reduce the search space of what we need delete from this datapart
         std::span thisDPDeletedNodes(nlb, nub);
         std::span thisDPDeletedEdges(elb, eub);
+
+        if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()) {
+            continue;
+        }
     }
 }
 

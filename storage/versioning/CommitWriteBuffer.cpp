@@ -70,6 +70,8 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                          const PendingEdge& edge) {
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted.
+    // XXX: Should this be an error? In the case that you deleted the node? Or a conflict
+    // with another change?
     if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
         if (std::ranges::binary_search(deletedNodes(), *srcID)) {
             return;
