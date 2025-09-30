@@ -160,8 +160,8 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
          *
          * - Allow comparing entities (e.g. a == b) and test the query:
          *   `MATCH (a)-->(b) WHERE a == b RETURN *`
-         * - Then, add the unrolling logic to the query planner. This can
-         *   probably be as simple as: in planOrigin and planTarget, if the
+         * - Then, add the unrolling logic to the query planner. This may
+         *   be as simple as: in planOrigin and planTarget, if the
          *   node already exists, detect if we can come back to the same
          *   position by going backwards. If so, create a new unnamed variable
          *   and add the constraint.
@@ -337,7 +337,7 @@ VarNode* PlanGraphGenerator::generatePatternElementEdge(VarNode* prevNode,
     if (!var) {
         std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
     } else {
-        incrementDeclOrders(prevNode->getDeclOrder(), filter);
+        throwError("Re-using the same edge variable, this is not supported yet", edge);
     }
 
     currentNode->connectOut(filter);
@@ -369,11 +369,17 @@ VarNode* PlanGraphGenerator::generatePatternElementTarget(VarNode* prevNode,
     auto [var, filter] = _variables.getVarNodeAndFilter(decl);
     if (!var) {
         std::tie(var, filter) = _variables.createVarNodeAndFilter(decl);
+        currentNode->connectOut(filter);
     } else {
         incrementDeclOrders(prevNode->getDeclOrder(), filter);
+        currentNode->connectOut(filter);
+
+        // Detect loops
+        if (PlanGraphTopology::detectLoops(filter)) {
+            throwError("Loop detected. This is not supported yet", target);
+        }
     }
 
-    currentNode->connectOut(filter);
     auto* typedFilter = static_cast<NodeFilterNode*>(filter);
 
     // Type constraintsj

@@ -5,7 +5,7 @@
 // WHERE a.name = b.name
 // RETURN a
 
-MATCH (a)-[e]->(b), (b)-[e]->(c)
+MATCH (a)-[e]->(b), (b)-->(c)
 WHERE a:Person AND a.name = "Luc"
 RETURN a
 
