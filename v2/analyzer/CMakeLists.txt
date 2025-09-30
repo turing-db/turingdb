@@ -11,6 +11,6 @@ target_include_directories(turing_db_v2_analyzer_s
 target_link_libraries(turing_db_v2_analyzer_s
   PUBLIC turing_common_s
          turing_db_v2_parser_s
-         turing_db_storage_s
-         turing_db_examples_s)
+         turing_db_examples_s
+         turing_db_storage_s)
 

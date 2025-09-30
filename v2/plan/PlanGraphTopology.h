@@ -15,6 +15,7 @@ public:
 
     static PathToDependency getShortestPath(const PlanGraphNode* origin, const PlanGraphNode* target);
     static PlanGraphNode* getBranchTip(PlanGraphNode* origin);
+    static bool detectLoops(const PlanGraphNode* origin);
 };
 
 }

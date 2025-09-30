@@ -101,3 +101,32 @@ PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
 
     return nullptr; // Should not happen
 }
+
+bool PlanGraphTopology::detectLoops(const PlanGraphNode* origin) {
+    std::unordered_set<PlanGraphNode*> visited;
+    std::queue<PlanGraphNode*> q;
+
+    for (const auto& in : origin->inputs()) {
+        q.push(in);
+    }
+
+    while (!q.empty()) {
+        PlanGraphNode* node = q.front();
+        q.pop();
+
+        if (node == origin) {
+            return true;
+        }
+
+        for (const auto& in : node->inputs()) {
+            if (!visited.insert(in).second) {
+                // If a neighbor is already visited, we have a loop
+                continue;
+            }
+
+            q.push(in);
+        }
+    }
+
+    return false;
+}
