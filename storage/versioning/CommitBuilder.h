@@ -48,6 +48,8 @@ public:
     }
 
     DataPartBuilder& newBuilder();
+    DataPartBuilder& newBuilder(size_t partIndex);
+
 
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
     void flushWriteBuffer(JobSystem& jobsystem);

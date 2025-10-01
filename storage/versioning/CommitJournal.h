@@ -6,7 +6,6 @@
 #include "NodeRange.h"
 #include "versioning/CommitWriteBuffer.h"
 
-
 namespace db {
 
 /**

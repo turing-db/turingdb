@@ -55,6 +55,14 @@ DataPartBuilder& CommitBuilder::newBuilder() {
     return *builder;
 }
 
+DataPartBuilder& CommitBuilder::newBuilder(size_t partIndex) {
+    std::scoped_lock lock {_mutex};
+    GraphView view {*_commitData};
+    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder, view, partIndex));
+
+    return *builder;
+}
+
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile {"CommitBuilder::buildAllPending"};
 
@@ -151,16 +159,17 @@ void CommitBuilder::applyDeletions() {
     auto& delNodes = wb.deletedNodes();
     auto& delEdges = wb.deletedEdges();
 
-    // Sort our vectors for O(logn) lookup whilst being more cache-friendly than a
-    // std::set
+    // Sort our vectors and remove duplicates for O(logn) lookup whilst being more
+    // cache-friendly than a std::set
+    // NOTE: Since deletes are idempotent within a commit, we do not care about duplicates
     if (!std::ranges::is_sorted(delNodes)) {
         std::ranges::sort(delNodes);
     }
-    // std::ranges::unique(delNodes);
+    delNodes.erase(std::ranges::unique(delNodes).end(), delNodes.end());
     if (!std::ranges::is_sorted(delEdges)) {
         std::ranges::sort(delEdges);
     }
-    // std::ranges::unique(delEdges);
+    delEdges.erase(std::ranges::unique(delEdges).end(), delEdges.end());
 
     for (const auto& [idx, part] : rv::enumerate(dataparts)) {
         // Consider the range of NodeIDs that exist in this datapart
