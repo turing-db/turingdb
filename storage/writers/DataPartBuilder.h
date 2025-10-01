@@ -19,6 +19,7 @@ class CommitBuilder;
 class Graph;
 class JobSystem;
 class GraphView;
+class DataPartModifier;
 
 class DataPartBuilder {
 public:
@@ -64,6 +65,7 @@ private:
     friend ConcurrentWriter;
     friend DataPart;
     friend CommitBuilder;
+    friend DataPartModifier;
 
     NodeID _firstNodeID {0};
     EdgeID _firstEdgeID {0};

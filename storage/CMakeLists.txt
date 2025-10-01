@@ -60,7 +60,9 @@ set(storage_sources
         versioning/DataPartRebaser.cpp
         versioning/Transaction.cpp
         versioning/CommitHistory.cpp
+
         versioning/CommitWriteBuffer.cpp
+        versioning/DataPartModifier.cpp
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp

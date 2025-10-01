@@ -11,6 +11,7 @@
 #include "Graph.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitWriteBuffer.h"
+#include "versioning/DataPartModifier.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -195,10 +196,16 @@ void CommitBuilder::applyDeletions() {
         if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()) {
             continue;
         }
+
+        auto& newDataPartBuilder = newBuilder(idx);
+
+        auto modifier = DataPartModifier(part, newDataPartBuilder, thisDPDeletedNodes,
+                                         thisDPDeletedEdges);
+
     }
 }
 
-void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
+void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
 
     // If there is nothing to flush, return early without creating a new builder
