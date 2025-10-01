@@ -65,7 +65,7 @@ DataPartBuilder& CommitBuilder::newBuilder(size_t partIndex) {
     return *builder;
 }
 
-CommitResult<void> CommitBuilder::buildNewDatapart(JobSystem& jobsystem,
+CommitResult<void> CommitBuilder::buildNewDataPart(JobSystem& jobsystem,
                                                    const GraphView view,
                                                    DataPartBuilder* builder,
                                                    CommitHistoryBuilder& historyBuilder) {
@@ -118,10 +118,18 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     std::scoped_lock lock {_mutex};
 
     GraphView view {*_commitData};
+    size_t numExistingDataparts = view.dataparts().size();
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
-        buildNewDatapart(jobsystem, view, builder.get(), historyBuilder);
+        auto res =
+            builder->getPartIndex() < numExistingDataparts
+                ? buildModifiedDataPart(jobsystem, view, builder.get(), historyBuilder)
+                : buildNewDataPart(jobsystem, view, builder.get(), historyBuilder);
+
+        if (!res) {
+            return res.get_unexpected();
+        }
     }
 
     _datapartCount += _builders.size();

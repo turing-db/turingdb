@@ -98,7 +98,7 @@ private:
     void detectHangingEdges();
     void applyDeletions();
 
-    CommitResult<void> buildNewDatapart(JobSystem& jobsystem,
+    CommitResult<void> buildNewDataPart(JobSystem& jobsystem,
                                         const GraphView view,
                                         DataPartBuilder* builder,
                                         CommitHistoryBuilder& historyBuilder);
