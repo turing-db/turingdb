@@ -156,9 +156,11 @@ void CommitBuilder::applyDeletions() {
     if (!std::ranges::is_sorted(delNodes)) {
         std::ranges::sort(delNodes);
     }
+    // std::ranges::unique(delNodes);
     if (!std::ranges::is_sorted(delEdges)) {
         std::ranges::sort(delEdges);
     }
+    // std::ranges::unique(delEdges);
 
     for (const auto& [idx, part] : rv::enumerate(dataparts)) {
         // Consider the range of NodeIDs that exist in this datapart
