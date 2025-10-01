@@ -20,15 +20,14 @@ namespace rv = rg::views;
 DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
     Profile profile {"GraphDumper::dump"};
 
+    auto lock = graph._versionController->lock();
+
     if (!path.exists()) {
         // Create directory
         if (auto res = path.mkdir(); !res) {
-            fmt::println("Cannot create directory {}", path.get());
             return DumpError::result(DumpErrorType::CANNOT_MKDIR_GRAPH, res.error());
         }
     }
-
-    auto lock = graph._versionController->lock();
 
     // Dumping graph info
     {

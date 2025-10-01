@@ -252,7 +252,7 @@ int main(int argc, const char** argv) {
     for (auto& graph : graphs) {
         switch (dataIt->type) {
             case ImportType::BIN: {
-                graph = Graph::createEmptyGraph();
+                graph = Graph::create();
                 if (auto res = GraphLoader::load(graph.get(), fs::Path(dataIt->path)); !res) {
                     spdlog::error("Failed To Load Graph: {}", res.error().fmtMessage());
                     jobSystem->terminate();

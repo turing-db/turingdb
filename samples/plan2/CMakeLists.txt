@@ -13,5 +13,4 @@ PRIVATE
     turing_db_system_s
     turing_db_memory_s
     turing_db_v2_plan_s
-    turing_db_examples_s
     turing_db_s)

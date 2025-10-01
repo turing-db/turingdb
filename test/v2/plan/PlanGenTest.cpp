@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "Graph.h"
+#include "TuringDB.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "columns/Block.h"
@@ -14,28 +15,23 @@
 #include "PlanGraphGenerator.h"
 #include "PlanGraphDebug.h"
 #include "PlanGraphTester.h"
-
-#include "TuringConfig.h"
+#include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 using namespace db;
 using namespace db::v2;
+using namespace turing::test;
 
-class PlanGenTest : public ::testing::Test {
+class PlanGenTest : public TuringTest {
 public:
-    void SetUp() override {
-        _config.setSyncedOnDisk(false);
-        _sysMan = std::make_unique<SystemManager>(_config);
-
-        _graph = _sysMan->createGraph("simpledb");
+    void initialize() override {
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        _graph = _env->getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
     }
 
-    void TearDown() override {
-    }
-
 protected:
-    TuringConfig _config;
-    std::unique_ptr<SystemManager> _sysMan;
+    std::unique_ptr<TuringTestEnv> _env;
     Graph* _graph {nullptr};
 };
 

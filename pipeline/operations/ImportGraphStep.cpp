@@ -32,7 +32,6 @@ void ImportGraphStep::execute() {
         throw PipelineException("Invalid graph name or file path");
     }
 
-    fmt::print("Importing graph {} from file {}\n", _graphName, _filePath.get());
     res = _sysMan->importGraph(_graphName, _filePath, *_jobSystem);
 
     if (!res) {

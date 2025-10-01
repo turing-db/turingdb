@@ -41,7 +41,7 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
     fmt::print("- Loading graph from: {}\n", path.c_str());
 
     const auto t0 = Clock::now();
-    auto loadedGraph = Graph::createEmptyGraph();
+    auto loadedGraph = Graph::create();
     auto loadedGraphRes = GraphLoader::load(loadedGraph.get(), path);
 
     std::string profilerOutput;

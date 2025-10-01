@@ -44,10 +44,12 @@ int main(int argc, const char** argv) {
         Demonology::demonize();
     }
 
-    TuringConfig config;
-    config.setSyncedOnDisk(!inMemory);
-    TuringDB turingDB(config);
     LocalMemory mem;
+    TuringConfig config = TuringConfig::createDefault();
+    config.setSyncedOnDisk(!inMemory);
+
+    TuringDB turingDB(&config);
+    turingDB.run();
 
     for (const auto& graphName : graphsToLoad) {
         const auto res = turingDB.query("load graph " + graphName, "", &mem);

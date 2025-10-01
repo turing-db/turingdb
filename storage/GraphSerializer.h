@@ -21,11 +21,7 @@ public:
     DumpResult<void> load() const;
     DumpResult<void> dump() const;
 
-    DumpResult<void> dumpCommit(const Commit& commit) const;
-
 private:
-    mutable std::mutex _mutex;
-
     Graph* _graph {nullptr};
 };
 

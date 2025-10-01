@@ -17,16 +17,10 @@ class Block;
 
 class TuringDB {
 public:
-    TuringDB(TuringConfig& config);
+    TuringDB(const TuringConfig* config);
     ~TuringDB();
 
-    SystemManager& getSystemManager() {
-        return *_systemManager;
-    }
-
-    JobSystem& getJobSystem() {
-        return *_jobSystem;
-    }
+    void run();
 
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
@@ -50,7 +44,16 @@ public:
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 
+    SystemManager& getSystemManager() {
+        return *_systemManager;
+    }
+
+    JobSystem& getJobSystem() {
+        return *_jobSystem;
+    }
+
 private:
+    const TuringConfig* _config;
     std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
 };

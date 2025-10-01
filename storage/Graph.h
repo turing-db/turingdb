@@ -4,6 +4,7 @@
 #include <string>
 
 #include "DataPart.h"
+#include "Path.h"
 #include "versioning/CommitHash.h"
 #include "versioning/GraphID.h"
 
@@ -35,7 +36,7 @@ public:
     Graph& operator=(Graph&&) = delete;
 
     const std::string& getName() const { return _graphName; }
-    const std::string& getPath() const { return _graphPath; }
+    const fs::Path& getPath() const { return _graphPath; }
 
     [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
@@ -45,9 +46,7 @@ public:
     [[nodiscard]] const GraphSerializer& getSerializer() const { return *_serializer; }
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
-    [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const std::string& path);
-    [[nodiscard]] static std::unique_ptr<Graph> createEmptyGraph();
-    [[nodiscard]] static std::unique_ptr<Graph> createEmptyGraph(const std::string& name, const std::string& path);
+    [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const fs::Path& path);
 
 private:
     friend GraphInfoLoader;
@@ -61,13 +60,13 @@ private:
 
     GraphID _graphID;
     std::string _graphName;
-    std::string _graphPath;
+    fs::Path _graphPath;
 
     std::unique_ptr<VersionController> _versionController;
     std::unique_ptr<GraphSerializer> _serializer;
 
     explicit Graph();
-    explicit Graph(const std::string& name, const std::string& path);
+    explicit Graph(const std::string& name, const fs::Path& path);
 };
 
 }

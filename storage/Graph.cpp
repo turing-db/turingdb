@@ -31,20 +31,11 @@ std::unique_ptr<Graph> Graph::create() {
     return std::unique_ptr<Graph> {graph};
 }
 
-std::unique_ptr<Graph> Graph::create(const std::string& name, const std::string& path) {
+std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& path) {
     auto* graph = new Graph(name, path);
     graph->_versionController->createFirstCommit();
     return std::unique_ptr<Graph>(graph);
 }
-
-std::unique_ptr<Graph> Graph::createEmptyGraph() {
-    return std::unique_ptr<Graph>(new Graph());
-}
-
-std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name, const std::string& path) {
-    return std::unique_ptr<Graph>(new Graph(name, path));
-}
-
 
 Graph::Graph()
     : _graphName("default"),
@@ -54,7 +45,7 @@ Graph::Graph()
 {
 }
 
-Graph::Graph(const std::string& name, const std::string& path)
+Graph::Graph(const std::string& name, const fs::Path& path)
     : _graphName(name),
     _graphPath(path),
     _versionController(new VersionController {this}),

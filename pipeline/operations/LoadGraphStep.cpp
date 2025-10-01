@@ -34,10 +34,8 @@ void LoadGraphStep::execute() {
     bool res {false};
 
     if (!_filePath.empty()) {
-        fmt::print("Loading graph {} from file {}\n", _graphName, _filePath.get());
         res = _sysMan->importGraph(_graphName, _filePath, *_jobSystem);
     } else {
-        fmt::print("Loading turing graph {}\n", _graphName);
         res = _sysMan->loadGraph(_graphName);
     }
 

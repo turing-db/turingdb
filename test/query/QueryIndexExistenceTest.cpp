@@ -3,59 +3,49 @@
 #include "TuringDB.h"
 #include "SystemManager.h"
 #include "QueryInterpreter.h"
-#include "LocalMemory.h"
 #include "TuringTest.h"
 #include "dump/GraphDumper.h"
 #include "dump/GraphLoader.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "Path.h"
-#include "TuringConfig.h"
+#include "TuringTestEnv.h"
 #include "QueryTester.h"
 
 using namespace db;
+using namespace turing::test;
 
-class QueryIndexExistenceTest : public turing::test::TuringTest {
+class QueryIndexExistenceTest : public TuringTest {
 public:
     void initialize() override {
-        const fs::Path turingDir = fs::Path(_outDir) / "turing";
-        _config.setTuringDirectory(turingDir);
-        _db = std::make_unique<TuringDB>(_config);
+        _env = TuringTestEnv::createSyncedOnDisk(fs::Path {_outDir} / "turing");
 
-        SystemManager& sysMan = _db->getSystemManager();
-
-        _builtGraph = sysMan.createGraph("simple");
+        _builtGraph = _env->getSystemManager().createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
-        _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
-                                                     &_db->getJobSystem());
-
-        auto graphDir = sysMan.getConfig().getGraphsDir();
+        _interp = std::make_unique<QueryInterpreter>(&_env->getSystemManager(),
+                                                     &_env->getJobSystem());
     }
 
 protected:
-    TuringConfig _config;
-    std::unique_ptr<TuringDB> _db;
-    LocalMemory _mem;
     Graph* _builtGraph {nullptr};
+    std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
 
 // Dump graph, load it: index should be present
 TEST_F(QueryIndexExistenceTest, noStringIndex) {
     {
-        auto& sysMan = _db->getSystemManager();
-        ASSERT_TRUE(sysMan.dumpGraph("simple"));
+        ASSERT_TRUE(_env->getSystemManager().dumpGraph("simple"));
     }
 
-    TuringDB newDB(_config);
-    LocalMemory newMem;
-    auto newInterp = std::make_unique<QueryInterpreter>(&newDB.getSystemManager(),
-                                                        &newDB.getJobSystem());
+    // Create a new environment pointing to the same directory
+    auto env2 = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+    auto newInterp = std::make_unique<QueryInterpreter>(&env2->getSystemManager(),
+                                                        &env2->getJobSystem());
 
-    auto& sysMan = newDB.getSystemManager();
-    ASSERT_TRUE(sysMan.loadGraph("simple"));
+    ASSERT_TRUE(env2->getSystemManager().loadGraph("simple"));
 
-    QueryTester tester {newMem, *newInterp};
+    QueryTester tester {env2->getMem(), *newInterp};
     tester.setGraphName("simple");
 
     tester.query("MATCH (n{name=\"Remy\"}) return n")

@@ -1,18 +1,19 @@
 #include "gtest/gtest.h"
 
 #include "SystemManager.h"
-#include "TuringConfig.h"
 #include "Graph.h"
+#include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 using namespace db;
+using namespace turing::test;
 
-class SystemManagerTest : public ::testing::Test {
+class SystemManagerTest : public TuringTest {
 };
 
 TEST_F(SystemManagerTest, createGraph) {
-    TuringConfig config;
-    config.setSyncedOnDisk(false);
-    SystemManager sysMan(config);
+    auto env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+    auto& sysMan = env->getSystemManager();
 
     // The default graph exists
     Graph* defaultGraph = sysMan.getDefaultGraph();

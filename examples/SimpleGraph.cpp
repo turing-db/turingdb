@@ -1,10 +1,10 @@
 #include "SimpleGraph.h"
 
-#include "SystemManager.h"
 #include "Graph.h"
 #include "ID.h"
 #include "reader/GraphReader.h"
 #include "metadata/PropertyType.h"
+#include "metadata/LabelSet.h"
 #include "writers/GraphWriter.h"
 #include "versioning/Transaction.h"
 

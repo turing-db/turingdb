@@ -27,7 +27,7 @@ class Change;
 
 class SystemManager {
 public:
-    explicit SystemManager(TuringConfig& config);
+    explicit SystemManager(const TuringConfig* config);
     ~SystemManager();
 
     SystemManager(const SystemManager&) = delete;
@@ -35,7 +35,7 @@ public:
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
 
-    const TuringConfig& getConfig() const { return _config; }
+    const TuringConfig& getConfig() const { return *_config; }
 
     void init();
 
@@ -86,7 +86,7 @@ public:
 
 
 private:
-    TuringConfig& _config;
+    const TuringConfig* _config;
     mutable RWSpinLock _graphsLock;
     Graph* _defaultGraph {nullptr};
     std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
