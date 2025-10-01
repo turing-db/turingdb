@@ -6,6 +6,7 @@
 
 #include "EnumerateFrom.h"
 #include "EdgeContainer.h"
+#include "JobSystem.h"
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
@@ -64,6 +65,30 @@ DataPartBuilder& CommitBuilder::newBuilder(size_t partIndex) {
     return *builder;
 }
 
+CommitResult<void> CommitBuilder::buildNewDatapart(JobSystem& jobsystem,
+                                                   const GraphView view,
+                                                   DataPartBuilder* builder,
+                                                   CommitHistoryBuilder& historyBuilder) {
+    // If caller is @ref Change::submit, @ref _nextNodeID _nextEdgeID are synced to
+    // the current next ID for the latest commit on main. If the caller is @ref
+    // Change::commit we do not want to perform this sync, and can continue with our
+    // local next ID.
+    auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
+
+    // Update these values so the next builder which is created starts where the last
+    // left off
+    _nextNodeID += builder->nodeCount();
+    _nextEdgeID += builder->edgeCount();
+
+    if (!part->load(view, jobsystem, *builder)) {
+        return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
+    }
+
+    historyBuilder.addDatapart(part);
+
+    return {};
+}
+
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile {"CommitBuilder::buildAllPending"};
 
@@ -73,22 +98,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
-        // If caller is @ref Change::submit, @ref _nextNodeID _nextEdgeID are synced to
-        // the current next ID for the latest commit on main. If the caller is @ref
-        // Change::commit we do not want to perform this sync, and can continue with our
-        // local next ID.
-        auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
-
-        // Update these values so the next builder which is created starts where the last
-        // left off
-        _nextNodeID += builder->nodeCount();
-        _nextEdgeID += builder->edgeCount();
-
-        if (!part->load(view, jobsystem, *builder)) {
-            return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
-        }
-
-        historyBuilder.addDatapart(part);
+        buildNewDatapart(jobsystem, view, builder.get(), historyBuilder);
     }
 
     _datapartCount += _builders.size();
@@ -213,13 +223,14 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         return;
     }
 
-    // Peform deletions
+    // Peform deletions: adds DataPartBuilders to @ref _builders to be built by @ref
+    // CommitBuilder::buildAllPending
     applyDeletions();
 
-    // We create a single datapart when flushing the buffer, to ensure it is synced with
-    // the metadata provided when rebasing main
+    // We create one more datapart which contains our CREATE commands when flushing the
+    // buffer
     DataPartBuilder& dpBuilder = newBuilder();
-    wb.buildPending(dpBuilder);
+    wb.buildFromBuffer(dpBuilder);
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)

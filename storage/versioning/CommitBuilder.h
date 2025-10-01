@@ -99,6 +99,11 @@ private:
     void detectHangingEdges();
     void applyDeletions();
 
+    CommitResult<void> buildNewDatapart(JobSystem& jobsystem,
+                                        const GraphView view,
+                                        DataPartBuilder* builder,
+                                        CommitHistoryBuilder& historyBuilder);
+
     void initialize();
     };
 }

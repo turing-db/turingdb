@@ -136,7 +136,7 @@ void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
     }
 }
 
-void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
+void CommitWriteBuffer::buildFromBuffer(DataPartBuilder& builder) {
     buildPendingNodes(builder);
     buildPendingEdges(builder);
 }

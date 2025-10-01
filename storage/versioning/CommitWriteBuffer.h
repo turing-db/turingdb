@@ -61,7 +61,7 @@ public:
      /**
       * @brief Adds the pending nodes and edges to the provided datapart builder
       */
-     void buildPending(DataPartBuilder& builder);
+     void buildFromBuffer(DataPartBuilder& builder);
 
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
