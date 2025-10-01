@@ -26,7 +26,8 @@ class StringIndexSerialisationTest : public TuringTest {
 public:
     void initialize()  override {
         _config.setSyncedOnDisk(false);
-        _db = std::make_unique<TuringDB>(_config);
+        _db = std::make_unique<TuringDB>(&_config);
+        _db->run();
 
         SystemManager& sysMan = _db->getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
@@ -59,7 +60,7 @@ private:
             throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
         }
 
-        _loadedGraph = Graph::createEmptyGraph();
+        _loadedGraph = Graph::create();
         const auto loadRes = GraphLoader::load(_loadedGraph.get(), _workingPath);
         if (!loadRes) {
             throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());

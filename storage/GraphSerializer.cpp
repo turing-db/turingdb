@@ -1,6 +1,5 @@
 #include "GraphSerializer.h"
 
-#include <mutex>
 #include <spdlog/spdlog.h>
 
 #include "Graph.h"
@@ -16,13 +15,11 @@ GraphSerializer::GraphSerializer(Graph* graph)
 }
 
 DumpResult<void> GraphSerializer::load() const {
-    std::unique_lock<std::mutex> lock(_mutex);
-    spdlog::info("Loading graph {} to {}", _graph->getName(), _graph->getPath());
-    return GraphLoader::load(_graph, fs::Path {_graph->getPath()});
+    spdlog::info("Loading graph {} from {}", _graph->getName(), _graph->getPath().get());
+    return GraphLoader::load(_graph, _graph->getPath());
 }
 
 DumpResult<void> GraphSerializer::dump() const {
-    std::unique_lock<std::mutex> lock(_mutex);
-    spdlog::info("Dumping graph {} to {}", _graph->getName(), _graph->getPath());
-    return GraphDumper::dump(*_graph, fs::Path {_graph->getPath()});
+    spdlog::info("Dumping graph {} to {}", _graph->getName(), _graph->getPath().get());
+    return GraphDumper::dump(*_graph, _graph->getPath());
 }

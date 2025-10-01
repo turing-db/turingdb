@@ -1,12 +1,10 @@
-function(add_db_system_gtest exe_name cpp_file)
-    add_executable(${exe_name} ${cpp_file})
+function(add_db_system_tests exe_name cpp_file)
+    add_turing_test(${exe_name} ${cpp_file})
     target_link_libraries(${exe_name}
         PRIVATE turing_db_storage_s
                 turing_db_system_s
-                gtest_main)
-    gtest_discover_tests(${exe_name}
-        DISCOVERY_TIMEOUT 10
-        DISCOVER_MODE PRE_TEST)
+                turing_testenv_s
+                turing_testutils_s)
 endfunction()
 
-add_db_system_gtest(test_system SystemTest.cpp)
+add_db_system_tests(test_system SystemTest.cpp)

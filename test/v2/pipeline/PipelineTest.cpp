@@ -5,6 +5,7 @@
 #include "TuringConfig.h"
 #include "SystemManager.h"
 #include "Graph.h"
+#include "TuringDB.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "SimpleGraph.h"
@@ -26,31 +27,26 @@
 #include "processors/CountProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
 #include "reader/GraphReader.h"
+#include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
 
 using namespace db;
 using namespace db::v2;
+using namespace turing::test;
 
-class PipelineTest : public ::testing::Test {
+class PipelineTest : public TuringTest {
 public:
-    PipelineTest()
-        : _sysMan(_config)
-    {
-    }
-
-    void SetUp() override {
-        _graph = _sysMan.createGraph("simpledb");
+    void initialize() override {
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        _graph = _env->getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
     }
 
-    void TearDown() override {
-    }
-
 protected:
-    TuringConfig _config;
-    SystemManager _sysMan;
+    std::unique_ptr<TuringTestEnv> _env;
     Graph* _graph {nullptr};
 };
 

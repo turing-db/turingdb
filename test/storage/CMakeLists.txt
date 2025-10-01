@@ -1,15 +1,10 @@
 function(add_storage_tests exe_name cpp_file)
-    add_executable(${exe_name} ${cpp_file})
+    add_turing_test(${exe_name} ${cpp_file})
     target_link_libraries(${exe_name} PRIVATE
-            turing_db_storage_s
             turing_common_s
-            turing_db_jobs_s
-            turing_test_utils_s
-            gtest_main)
-
-    gtest_discover_tests(${exe_name}
-        DISCOVERY_TIMEOUT 10
-        DISCOVER_MODE PRE_TEST)
+            turing_db_storage_s
+            turing_db_examples_s
+            turing_db_jobs_s)
 endfunction()
 
 add_storage_tests(test_storage_stringcontainer StringContainerTest.cpp)
@@ -30,4 +25,7 @@ add_storage_tests(test_storage_scan_nodes_iterator iterators/ScanNodesIteratorTe
 add_storage_tests(test_storage_metadatarebaser versioning/MetadataRebaserTest.cpp)
 
 add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
-add_storage_tests(test_storage_stringindexer dump/PropertyContainerDumperTest.cpp)
+
+add_storage_tests(test_storage_dump_propertycontainerdumper dump/PropertyContainerDumperTest.cpp)
+add_storage_tests(test_storage_dump_graphloader dump/GraphLoaderTest.cpp)
+add_storage_tests(test_storage_dump_stringindexloader dump/StringIndexLoaderTest.cpp)

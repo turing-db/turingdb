@@ -11,6 +11,7 @@
 #include "FileCache.h"
 #include "SystemManager.h"
 #include "TuringConfig.h"
+#include "TuringDB.h"
 
 void splitString(std::string& string, std::vector<std::string>& result) {
     std::istringstream iss(string);
@@ -25,9 +26,11 @@ int main() {
 
     auto awsClient = S3::AwsS3ClientWrapper<>();
     auto turingS3client = S3::TuringS3Client(std::move(awsClient));
-    db::TuringConfig config;
+    db::TuringConfig config = db::TuringConfig::createDefault();
     config.setSyncedOnDisk(false);
-    db::SystemManager sysMan(config);
+    db::TuringDB db(&config);
+    db.run();
+
     const auto& turingDir = config.getTuringDir();
 
     db::FileCache cache = db::FileCache(turingDir / "graphs", turingDir / "data", turingS3client);

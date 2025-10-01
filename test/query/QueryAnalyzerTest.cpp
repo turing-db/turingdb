@@ -4,42 +4,34 @@
 #include "TuringDB.h"
 #include "QueryInterpreter.h"
 #include "SystemManager.h"
-#include "LocalMemory.h"
 #include "views/GraphView.h"
 #include "ID.h"
 #include "QueryTester.h"
 #include "TypingGraph.h"
-#include "TuringConfig.h"
 #include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 using namespace db;
+using namespace turing::test;
 
-class QueryAnalyzerTest : public turing::test::TuringTest {
+class QueryAnalyzerTest : public TuringTest {
 public:
-    QueryAnalyzerTest()
-    {
-        _config.setSyncedOnDisk(false);
-        _db = std::make_unique<TuringDB>(_config);
-    }
-
     void initialize() override {
-        SystemManager& sysMan = _db->getSystemManager();
-        // FIX: Bug (I think), does not work unless set to "simple"
-        Graph* graph = sysMan.createGraph("simple");
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+
+        Graph* graph = _env->getSystemManager().createGraph("simple");
         TypingGraph::createTypingGraph(graph);
-        _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
-                                                     &_db->getJobSystem());
+        _interp = std::make_unique<QueryInterpreter>(&_env->getSystemManager(),
+                                                     &_env->getJobSystem());
     }
     
 protected:
-    TuringConfig _config;
-    std::unique_ptr<TuringDB> _db;
-    LocalMemory _mem;
+    std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
 
 TEST_F(QueryAnalyzerTest, typeCheckInt64) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     // Query Int64 with Int64
     tester.query("MATCH (n:Typer{pos_int = 256}) return n")
@@ -82,7 +74,7 @@ TEST_F(QueryAnalyzerTest, typeCheckInt64) {
 }
 
 TEST_F(QueryAnalyzerTest, typeCheckUInt64) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     // Query UInt64 with Int64
     // NOTE: Coercion implemented
@@ -121,7 +113,7 @@ TEST_F(QueryAnalyzerTest, typeCheckUInt64) {
 }
 
 TEST_F(QueryAnalyzerTest, typeCheckString) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     // Query String with String
     tester.query("MATCH (n:Typer{str = \"string property\"}) return n")
@@ -162,7 +154,7 @@ TEST_F(QueryAnalyzerTest, typeCheckString) {
 }
 
 TEST_F(QueryAnalyzerTest, typeCheckDouble) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     // Query Double with Double
     tester.query("MATCH (n:Typer{dbl:1.618}) return n")
@@ -203,7 +195,7 @@ TEST_F(QueryAnalyzerTest, typeCheckDouble) {
 }
 
 TEST_F(QueryAnalyzerTest, typeCheckBool) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     // Query Bool with Bool
     tester.query("MATCH (n:Typer{bool_t:true}) return n")
@@ -245,7 +237,7 @@ TEST_F(QueryAnalyzerTest, typeCheckBool) {
 
 
 TEST_F(QueryAnalyzerTest, checkMatchVariableUniqueness) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n)--(m) return n")
         .expectVector<NodeID>({0})
@@ -286,7 +278,7 @@ TEST_F(QueryAnalyzerTest, checkMatchVariableUniqueness) {
 }
 
 TEST_F(QueryAnalyzerTest, testApproxStringOperator) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     // Correct usage of the string approximate operator
     const std::string query1 = "MATCH (n:Typer{str~=\"string property\"}) return n";

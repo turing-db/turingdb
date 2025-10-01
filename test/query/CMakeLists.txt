@@ -5,10 +5,10 @@ function(add_db_query_gtest exe_name cpp_file)
                 turing_db_query_AST_s
                 turing_db_system_s
                 turing_db_memory_s
-                turing_db_interpreter_s
                 turing_db_examples_s
+                turing_db_interpreter_s
                 turing_db_s
-                gtest_main
+                turing_testenv_s
                 tabulate)
 endfunction()
 

@@ -24,8 +24,9 @@ int main(int argc, const char** argv) {
 
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "typingdb";
 
-    TuringConfig config;
-    TuringDB db(config);
+    TuringConfig config = TuringConfig::createDefault();
+    TuringDB db(&config);
+    db.run();
 
     {
         spdlog::info("Create company graph");
@@ -51,7 +52,7 @@ int main(int argc, const char** argv) {
     }
 
     {
-        auto graph = Graph::createEmptyGraph();
+        auto graph = Graph::create();
         const auto loadRes = GraphLoader::load(graph.get(), outDir);
         const auto tx = graph->openTransaction();
 

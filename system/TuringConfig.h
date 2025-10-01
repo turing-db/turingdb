@@ -9,6 +9,11 @@ public:
     TuringConfig();
     ~TuringConfig();
 
+    TuringConfig(const TuringConfig&);
+    TuringConfig(TuringConfig&&) noexcept;
+    TuringConfig& operator=(const TuringConfig&);
+    TuringConfig& operator=(TuringConfig&&) noexcept;
+
     const fs::Path& getTuringDir() const { return _turingDir; }
     const fs::Path& getGraphsDir() const { return _graphsDir; }
     const fs::Path& getDataDir() const { return _dataDir; }
@@ -17,7 +22,7 @@ public:
     void setTuringDirectory(const fs::Path& turingDir);
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
 
-    void init();
+    [[nodiscard]] static TuringConfig createDefault();
 
 private:
     fs::Path _turingDir;

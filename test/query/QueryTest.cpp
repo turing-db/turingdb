@@ -6,38 +6,33 @@
 #include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
-#include "TuringConfig.h"
 #include "SimpleGraph.h"
 #include "QueryTester.h"
 #include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 using namespace db;
+using namespace turing::test;
 
-class QueryTest : public turing::test::TuringTest {
+class QueryTest : public TuringTest {
 public:
-    QueryTest()
-    {
-        _config.setSyncedOnDisk(false);
-        _db = std::make_unique<TuringDB>(_config);
-    }
-
     void initialize() override {
-        SystemManager& sysMan = _db->getSystemManager();
-        Graph* graph = sysMan.createGraph("simple");
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+
+        Graph* graph = _env->getSystemManager().createGraph("simple");
         SimpleGraph::createSimpleGraph(graph);
-        _interp = std::make_unique<QueryInterpreter>(&_db->getSystemManager(),
-                                                     &_db->getJobSystem());
+
+        _interp = std::make_unique<QueryInterpreter>(&_env->getSystemManager(),
+                                                     &_env->getJobSystem());
     }
 
 protected:
-    TuringConfig _config;
-    std::unique_ptr<TuringDB> _db;
-    LocalMemory _mem;
+    std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreter> _interp {nullptr};
 };
 
 TEST_F(QueryTest, ReturnNode) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n) RETURN n")
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
@@ -76,7 +71,7 @@ TEST_F(QueryTest, ReturnNode) {
 }
 
 TEST_F(QueryTest, EdgeMatching) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n)-[e]-(m) RETURN n, e, m")
         .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 9, 9, 11})
@@ -138,7 +133,7 @@ TEST_F(QueryTest, EdgeMatching) {
 }
 
 TEST_F(QueryTest, MatchWildcard) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
     tester.query("MATCH (n) RETURN *")
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
         .execute();
@@ -158,7 +153,7 @@ TEST_F(QueryTest, MatchWildcard) {
 }
 
 TEST_F(QueryTest, MatchNodeLabel) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n:Person) RETURN n")
         .expectVector<NodeID>({0, 1, 8, 9, 11, 12})
@@ -183,7 +178,7 @@ TEST_F(QueryTest, MatchNodeLabel) {
 }
 
 TEST_F(QueryTest, MatchEdgeType) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n)-[e:INTERESTED_IN]-(m) RETURN n, e, m")
         .expectVector<NodeID>({0, 0, 0, 1, 1, 8, 8, 9, 9, 11})
@@ -220,7 +215,7 @@ TEST_F(QueryTest, MatchEdgeType) {
 }
 
 TEST_F(QueryTest, NodePropertyProjection) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n) RETURN n, n.name")
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
@@ -272,7 +267,7 @@ TEST_F(QueryTest, NodePropertyProjection) {
 }
 
 TEST_F(QueryTest, EdgePropertyProjection) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n)-[e]-(m) RETURN e.name")
         .expectOptVector<types::String::Primitive>({
@@ -371,7 +366,7 @@ TEST_F(QueryTest, EdgePropertyProjection) {
 }
 
 TEST_F(QueryTest, PropertyConstraints) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n{hasPhD:true}) RETURN n.name")
         .expectOptVector<types::String::Primitive>({"Remy", "Adam", "Luc", "Martina"})
@@ -421,7 +416,7 @@ TEST_F(QueryTest, PropertyConstraints) {
 }
 
 TEST_F(QueryTest, ChangeQuery) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("CHANGE NEW")
         .expectVector<const Change*>({}, false)
@@ -527,7 +522,7 @@ TEST_F(QueryTest, ChangeQuery) {
 
 
 TEST_F(QueryTest, ChangeWithRebaseQueries) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     auto change1Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)
@@ -581,7 +576,7 @@ TEST_F(QueryTest, ChangeWithRebaseQueries) {
 }
 
 TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     auto change1Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)
@@ -624,7 +619,7 @@ TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
 }
 
 TEST_F(QueryTest, edgeSpanningCommits) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     auto change1Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)
@@ -659,17 +654,17 @@ TEST_F(QueryTest, edgeSpanningCommits) {
         .execute();
 
     tester.query("match (n) return n")
-        .expectVector<NodeID>({0,1,2})
+        .expectVector<NodeID>({0, 1, 2})
         .execute();
 
     tester.query("match (n)-[e]-(m) return n,e,m")
-        .expectVector<NodeID>({0,2})
-        .expectVector<EdgeID>({0,1})
-        .expectVector<NodeID>({1,0})
+        .expectVector<NodeID>({0, 2})
+        .expectVector<EdgeID>({0, 1})
+        .expectVector<NodeID>({1, 0})
         .execute();
 
     tester.query("call labels ()")
-        .expectVector<LabelID>({0,1})
+        .expectVector<LabelID>({0, 1})
         .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
         .execute();
 
@@ -709,17 +704,17 @@ TEST_F(QueryTest, edgeSpanningCommits) {
         .execute();
 
     tester.query("match (n) return n")
-        .expectVector<NodeID>({0,1,2})
+        .expectVector<NodeID>({0, 1, 2})
         .execute();
 
     tester.query("match (n)-[e]-(m) return n,e,m")
-        .expectVector<NodeID>({0,2})
-        .expectVector<EdgeID>({0,1})
-        .expectVector<NodeID>({1,0})
+        .expectVector<NodeID>({0, 2})
+        .expectVector<EdgeID>({0, 1})
+        .expectVector<NodeID>({1, 0})
         .execute();
 
     tester.query("call labels ()")
-        .expectVector<LabelID>({0,1})
+        .expectVector<LabelID>({0, 1})
         .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
         .execute();
 
@@ -729,13 +724,13 @@ TEST_F(QueryTest, edgeSpanningCommits) {
     tester.setChangeID(ChangeID::head());
 
     tester.query("match (n)-[e]-(m) return n,e,m")
-        .expectVector<NodeID>({0,2})
-        .expectVector<EdgeID>({0,1})
-        .expectVector<NodeID>({1,0})
+        .expectVector<NodeID>({0, 2})
+        .expectVector<EdgeID>({0, 1})
+        .expectVector<NodeID>({1, 0})
         .execute();
 
     tester.query("call labels ()")
-        .expectVector<LabelID>({0,1})
+        .expectVector<LabelID>({0, 1})
         .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
         .execute();
 
@@ -746,7 +741,7 @@ TEST_F(QueryTest, edgeSpanningCommits) {
     tester.setChangeID(ChangeID::head());
 
     tester.query("match (n) return n")
-        .expectVector<NodeID>({0,1,2,3,4,5})
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5})
         .execute();
 
     tester.query("match (n)-[e]-(m) return n,e,m")
@@ -756,19 +751,19 @@ TEST_F(QueryTest, edgeSpanningCommits) {
         .execute();
 
     tester.query("call labels ()")
-        .expectVector<LabelID>({0,1})
+        .expectVector<LabelID>({0, 1})
         .expectVector<std::string_view>({"SOURCENODE", "TARGETNODE"})
         .execute();
 }
 
 TEST_F(QueryTest, threeChangeRebase) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
-    const auto newChange = [&](){
+    const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
-                          .execute()
-                          .outputColumnVector<const Change*>(0);
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
         const ChangeID id = res.value()->back()->id();
         tester.setChangeID(id);
         return id;
@@ -848,7 +843,7 @@ TEST_F(QueryTest, threeChangeRebase) {
 }
 
 TEST_F(QueryTest, ChangeQueryErrors) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("CHANGE NEW")
         .expectVector<const Change*>({}, false)
@@ -873,7 +868,7 @@ TEST_F(QueryTest, ChangeQueryErrors) {
 }
 
 TEST_F(QueryTest, CallGraphInfo) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("CALL PROPERTIES()")
         .expectVector<PropertyTypeID>({0, 1, 2, 3, 4, 5, 6, 7})
@@ -895,11 +890,10 @@ TEST_F(QueryTest, CallGraphInfo) {
         .expectVector<LabelSetID>({0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 5, 5, 5, 6, 6, 7, 7, 8, 8})
         .expectVector<std::string_view>({"Person", "SoftwareEngineering", "Founder", "Person", "Founder", "Bioinformatics", "SoftwareEngineering", "Interest", "Interest", "Exotic", "Interest", "Interest", "Exotic", "Supernatural", "SleepDisturber", "Person", "Bioinformatics", "Person", "SoftwareEngineering", "Interest", "SleepDisturber"})
         .execute();
-
 }
 
 TEST_F(QueryTest, InjectNodes) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("MATCH (n@0,1,8,9,11) RETURN n.name")
         .expectOptVector<types::String::Primitive>({"Remy", "Adam", "Maxime", "Luc", "Martina"})
@@ -969,12 +963,12 @@ TEST_F(QueryTest, InjectNodes) {
 }
 
 TEST_F(QueryTest, injectNodesCreate) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     const auto change0res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
-                       .execute()
-                       .outputColumnVector<const Change*>(0);
+                                .expectVector<const Change*>({}, false)
+                                .execute()
+                                .outputColumnVector<const Change*>(0);
     const ChangeID change0 = change0res.value()->back()->id();
     tester.setChangeID(change0);
 
@@ -1080,8 +1074,8 @@ TEST_F(QueryTest, injectNodesCreate) {
 }
 
 TEST_F(QueryTest, stringApproxTest) {
-    QueryTester tester {_mem, *_interp};
-    
+    QueryTester tester {_env->getMem(), *_interp};
+
     auto change1Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)
                           .execute()
@@ -1166,14 +1160,14 @@ TEST_F(QueryTest, stringApproxTest) {
         "match (n{name~=\"Norbert\"}"
         ")-[e{name~=\"Micheal\"}]-("
         "m{name~=\"Micheal\"}) return e.name";
-    
+
     tester.query(allApproxNoLabels)
         .expectVector<StrOpt>({"Norbert->Micheal"})
         .execute();
 }
 
 TEST_F(QueryTest, StringAproxMultiExpr) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     using StrOpt = std::optional<types::String::Primitive>;
 
@@ -1191,30 +1185,30 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
     tester.query("CHANGE SUBMIT").execute();
     tester.setChangeID(ChangeID::head());
 
-    
+
     const std::string matchQuery = "match (n:NewNode{poem~=\"cat\", rating=5u}) return n.poem";
 
-    
+
     tester.query(matchQuery)
         .expectVector<StrOpt>({"the cat jumped"})
         .execute();
 }
 
 TEST_F(QueryTest, personGraphApproxMatching) {
-    QueryTester tester{_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     using StrOpt = std::optional<types::String::Primitive>;
 
     const auto changeRes = tester.query("change new")
-                              .expectVector<const Change*>({}, false)
-                              .execute()
-                              .outputColumnVector<const Change*>(0);
+                               .expectVector<const Change*>({}, false)
+                               .execute()
+                               .outputColumnVector<const Change*>(0);
 
     const ChangeID change = changeRes.value()->back()->id();
     tester.setChangeID(change);
 
     tester.query(
-            R"(create (n:Person{name="Cyrus", hasPhD=false})-[e:Edgey{name="Housemate"}]-(m:Person{name="Sai", hasPhD=true}))")
+              R"(create (n:Person{name="Cyrus", hasPhD=false})-[e:Edgey{name="Housemate"}]-(m:Person{name="Sai", hasPhD=true}))")
         .execute();
 
     // Commit the change
@@ -1252,7 +1246,7 @@ TEST_F(QueryTest, personGraphApproxMatching) {
 }
 
 TEST_F(QueryTest, createChunkingTest) {
-    QueryTester tester {_mem, *_interp};
+    QueryTester tester {_env->getMem(), *_interp};
 
     auto change1Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)

@@ -4,6 +4,7 @@
 
 #include "PlannerException.h"
 #include "SystemManager.h"
+#include "TuringDB.h"
 #include "TuringTime.h"
 #include "PlanGraphDebug.h"
 #include "Graph.h"
@@ -51,10 +52,12 @@ int main(int argc, char** argv) {
 }
 
 void runPlan2(std::string_view query) {
-    TuringConfig config;
+    TuringConfig config = TuringConfig::createDefault();
     config.setSyncedOnDisk(false);
-    SystemManager sysMan(config);
-    Graph* graph = sysMan.createGraph("simpledb");
+    TuringDB db(&config);
+    db.run();
+
+    Graph* graph = db.getSystemManager().createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
     const Transaction transaction = graph->openTransaction();

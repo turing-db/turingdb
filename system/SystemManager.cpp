@@ -20,25 +20,24 @@
 
 using namespace db;
 
-SystemManager::SystemManager(TuringConfig& config)
+SystemManager::SystemManager(const TuringConfig* config)
     : _config(config),
     _changes(std::make_unique<ChangeManager>())
 {
-    _config.init();
-    init();
 }
 
 SystemManager::~SystemManager() {
 }
 
 void SystemManager::init() {
-    const auto list = _config.getGraphsDir().listDir();
+    const auto list = _config->getGraphsDir().listDir();
 
     if (!list) {
-        throw TuringException("Can not list graphs in turing directory");
+        throw TuringException(fmt::format("Can not list graphs in turing directory '{}'",
+                                          _config->getGraphsDir().get()));
     }
 
-    const fs::Path defaultPath = _config.getGraphsDir() / "default";
+    const fs::Path defaultPath = _config->getGraphsDir() / "default";
     auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
 
     if (found != list->end()) {
@@ -55,9 +54,9 @@ void SystemManager::init() {
 }
 
 Graph* SystemManager::loadGraph(const std::string& name) {
-    const fs::Path graphPath = _config.getGraphsDir() / name;
+    const fs::Path graphPath = _config->getGraphsDir() / name;
 
-    auto graph = Graph::create(name, graphPath.c_str());
+    auto graph = Graph::create(name, graphPath);
     auto* graphPtr = graph.get();
 
     if (auto res = graph->getSerializer().load(); !res) {
@@ -73,12 +72,12 @@ Graph* SystemManager::loadGraph(const std::string& name) {
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {
-    const fs::Path path = _config.getGraphsDir() / name;
+    const fs::Path path = _config->getGraphsDir() / name;
 
-    auto graph = Graph::create(name, path.c_str());
+    auto graph = Graph::create(name, path);
     auto* graphPtr = graph.get();
 
-    if (_config.isSyncedOnDisk()) {
+    if (_config->isSyncedOnDisk()) {
         if (auto res = graph->getSerializer().dump(); !res) {
             spdlog::error(res.error().fmtMessage());
             return nullptr;
@@ -93,12 +92,12 @@ Graph* SystemManager::createGraph(const std::string& name) {
 }
 
 Graph* SystemManager::createAndDumpGraph(const std::string& name) {
-    const fs::Path path = _config.getGraphsDir() / name;
+    const fs::Path path = _config->getGraphsDir() / name;
 
-    auto graph = Graph::create(name, path.c_str());
+    auto graph = Graph::create(name, path);
     auto* rawPtr = graph.get();
 
-    if (_config.isSyncedOnDisk()) {
+    if (_config->isSyncedOnDisk()) {
         if (auto res = graph->getSerializer().dump(); !res) {
             spdlog::error(res.error().fmtMessage());
             return nullptr;
@@ -165,7 +164,7 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
 }
 
 bool SystemManager::importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem) {
-    const fs::Path graphPath = _config.getGraphsDir() / filePath;
+    const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
     // Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
@@ -200,7 +199,7 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
 DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
     std::shared_lock guard(_graphsLock);
 
-    if (!_config.isSyncedOnDisk()) {
+    if (!_config->isSyncedOnDisk()) {
         spdlog::warn("Cannot dump graph, The system is running in full in-memory mode");
         return {};
     }
@@ -240,13 +239,12 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
 bool SystemManager::loadBinaryDB(const std::string& graphName,
                                  const fs::Path& dbPath,
                                  JobSystem& jobsystem) {
-    fmt::print("Loading turing graph {}\n", graphName);
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
 
     // in the case of turingDB binaries the path is the same path we load from.
-    auto graph = Graph::createEmptyGraph(graphName, dbPath.c_str());
+    auto graph = Graph::create(graphName, dbPath);
 
     if (auto res = graph->getSerializer().load(); !res) {
         spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
@@ -275,12 +273,12 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
         return false;
     }
 
-    const auto& graphPath = _config.getGraphsDir() / graphName;
+    const auto& graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return false;
     }
 
-    auto graph = Graph::create(graphName, graphPath.c_str());
+    auto graph = Graph::create(graphName, graphPath);
 
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
@@ -294,7 +292,7 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
         return false;
     }
 
-    if (_config.isSyncedOnDisk()) {
+    if (_config->isSyncedOnDisk()) {
         if (!graph->getSerializer().dump()) {
             _graphLoadStatus.removeLoadingGraph(graphName);
             return false;
@@ -317,12 +315,12 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
         return false;
     }
 
-    const auto& graphPath = _config.getGraphsDir() / graphName;
+    const auto& graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return false;
     }
 
-    auto graph = Graph::create(graphName, graphPath.c_str());
+    auto graph = Graph::create(graphName, graphPath);
 
     Neo4jImporter::DumpFileToJsonDirArgs dumpArgs;
     dumpArgs._workDir = "/tmp";
@@ -349,7 +347,7 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
         return false;
     }
 
-    if (_config.isSyncedOnDisk()) {
+    if (_config->isSyncedOnDisk()) {
         if (!graph->getSerializer().dump()) {
             _graphLoadStatus.removeLoadingGraph(graphName);
             return false;
@@ -372,13 +370,13 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
         return false;
     }
 
-    const auto& graphPath = _config.getGraphsDir() / graphName;
+    const auto& graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return false;
     }
 
     // Load graph
-    auto graph = Graph::create(graphName, graphPath.c_str());
+    auto graph = Graph::create(graphName, graphPath);
 
     // load GMLs
     GMLImporter importer;
@@ -388,7 +386,7 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
         return false;
     }
 
-    if (_config.isSyncedOnDisk()) {
+    if (_config->isSyncedOnDisk()) {
         if (!graph->getSerializer().dump()) {
             _graphLoadStatus.removeLoadingGraph(graphName);
             return false;
@@ -405,7 +403,7 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
 }
 
 void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
-    const auto list = _config.getGraphsDir().listDir();
+    const auto list = _config->getGraphsDir().listDir();
     if (!list) {
         throw TuringException("Can not list graphs in turing directory");
     }
