@@ -8,7 +8,7 @@ print(res)
 
 # Create a change
 t.set_graph('mygraph')
-change = t.query('CHANGE NEW')['Change ID'][0]
+change = t.query('CHANGE NEW')[0][0]
 
 t.checkout(change=str(change))
 t.query("CREATE (:Person {name: 'Alice'})")
