@@ -104,6 +104,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token GRAPH        "'GRAPH'"
 %token DATA         "'DATA'"
 %token LOAD         "'LOAD'"
+%token IMPORT       "'IMPORT'"
 %token EXPLAIN      "'EXPLAIN'"
 %token HISTORY      "'HISTORY'"
 %token CHANGE       "'CHANGE'"
@@ -181,6 +182,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> load_graph_cmd
 
+%type<db::QueryCommand*> import_graph_cmd
+
 %type<db::QueryCommand*> explain_cmd
 
 %type<db::QueryCommand*> history_cmd
@@ -210,6 +213,7 @@ cmd: match_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
+   | import_graph_cmd { ctxt->setRoot($1); }
    | explain_cmd { ctxt->setRoot($1); }
    | history_cmd { ctxt->setRoot($1); }
    | change_cmd { ctxt->setRoot($1); }
@@ -539,9 +543,15 @@ list_graph_cmd: LIST GRAPH { $$ = ListGraphCommand::create(ctxt); }
            ;
 
 // LOAD GRAPH
-load_graph_cmd: LOAD GRAPH STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, $3); }
-           |    LOAD GRAPH STRING_CONSTANT STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, $3, $4); }
-           ;
+load_graph_cmd: LOAD GRAPH ID { $$ = LoadGraphCommand::create(ctxt, $3); }
+              | LOAD GRAPH STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, $3); }
+              | LOAD GRAPH ID STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, fs::Path ($4), $3); }
+              | LOAD GRAPH STRING_CONSTANT STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, fs::Path ($4), $3); }
+              ;
+
+// IMPORT GRAPH
+import_graph_cmd: IMPORT GRAPH ID FROM STRING_CONSTANT { $$ = ImportGraphCommand::create(ctxt, fs::Path ($5), $3); }
+                ;
 
 // EXPLAIN
 explain_cmd: EXPLAIN cmd {
@@ -612,4 +622,3 @@ void db::YParser::error(const location_type& loc, const std::string& msg) {
     location turingLoc = scanner.getLocation();
     throw db::YParser::syntax_error(turingLoc, msg);
 }
-

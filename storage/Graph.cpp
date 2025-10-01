@@ -1,5 +1,6 @@
 #include "Graph.h"
 
+#include "GraphSerializer.h"
 #include "views/GraphView.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/Change.h"
@@ -48,13 +49,15 @@ std::unique_ptr<Graph> Graph::createEmptyGraph(const std::string& name, const st
 Graph::Graph()
     : _graphName("default"),
     _graphPath("/dev/null"),
-    _versionController(new VersionController {this})
+    _versionController(new VersionController {this}),
+    _serializer(new GraphSerializer {this})
 {
 }
 
 Graph::Graph(const std::string& name, const std::string& path)
     : _graphName(name),
     _graphPath(path),
-    _versionController(new VersionController {this})
+    _versionController(new VersionController {this}),
+    _serializer(new GraphSerializer {this})
 {
 }

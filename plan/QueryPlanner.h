@@ -27,6 +27,7 @@ class CreateGraphCommand;
 class ListGraphCommand;
 class LoadGraphCommand;
 class ExplainCommand;
+class ImportGraphCommand;
 class VarDecl;
 class ReturnField;
 class Block;
@@ -121,6 +122,7 @@ private:
     bool planCreateGraph(const CreateGraphCommand* createCmd);
     bool planListGraph(const ListGraphCommand* listCmd);
     bool planLoadGraph(const LoadGraphCommand* loadCmd);
+    bool planImportGraph(const ImportGraphCommand* importCmd);
     void planProjection(const MatchCommand* matchCmd);
     void planPropertyProjection(ColumnNodeIDs* columnIDs,
                                 const VarDecl* parentDecl,

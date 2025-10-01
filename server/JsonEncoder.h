@@ -136,6 +136,7 @@ public:
             case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             case QueryCommand::Kind::S3CONNECT_COMMAND:
             case QueryCommand::Kind::S3TRANSFER_COMMAND:
+            case QueryCommand::Kind::IMPORT_GRAPH_COMMAND:
             case QueryCommand::Kind::LOAD_GRAPH_COMMAND: {
                 writer.end();
                 writer.key("column_types");

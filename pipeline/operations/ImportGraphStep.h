@@ -8,13 +8,12 @@ class ExecutionContext;
 class SystemManager;
 class JobSystem;
 
-class LoadGraphStep {
+class ImportGraphStep {
 public:
     struct Tag {};
 
-    LoadGraphStep(const fs::Path& filePath, const std::string& graphName);
-    LoadGraphStep(const std::string& graphName);
-    ~LoadGraphStep();
+    ImportGraphStep(const fs::Path& filePath, const std::string& graphName);
+    ~ImportGraphStep();
 
     void prepare(ExecutionContext* ctxt);
 

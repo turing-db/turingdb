@@ -28,9 +28,8 @@ using namespace db;
 DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
     : _writer(&connection.getWriter()),
-    _db(db),
-    _connection(connection)
-{
+      _db(db),
+      _connection(connection) {
 }
 
 DBServerProcessor::~DBServerProcessor() {
@@ -179,7 +178,8 @@ void DBServerProcessor::load_graph() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    if (!sys.loadGraphFromFile(transactionInfo.graphName, transactionInfo.graphName, _db.getJobSystem())) {
+    // TODO: Fix this, we should differentiate load graph and import graph
+    if (!sys.importGraph(transactionInfo.graphName, fs::Path {transactionInfo.graphName}, _db.getJobSystem())) {
         payload.key("error");
         // Try to determine the specific error
         if (sys.getGraph(transactionInfo.graphName)) {

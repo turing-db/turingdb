@@ -2,7 +2,6 @@
 
 #include <string>
 #include <vector>
-#include <compare>
 
 #include "FileInfo.h"
 #include "FileResult.h"
@@ -31,18 +30,33 @@ public:
     [[nodiscard]] std::string_view filename() const;
     [[nodiscard]] std::string_view basename() const;
     [[nodiscard]] std::string_view extension() const;
+    [[nodiscard]] bool empty() const { return _path.empty(); }
 
     static bool isSubDirectory(const Path& rootDirectory, const Path& subDirectory);
 
-    [[nodiscard]] Path operator/(std::string_view rhs) const {
-        std::string p = _path + "/";
+    friend Path operator/(const Path& lhs, const Path& rhs) {
+        std::string p = lhs._path + "/";
+        p += rhs._path;
+
+        return Path {std::move(p)};
+    }
+
+    friend Path operator/(const Path& lhs, std::string_view rhs) {
+        std::string p = lhs._path + "/";
         p += rhs;
-        return Path(std::move(p));
+
+        return Path {std::move(p)};
     }
 
     Path& operator/=(std::string_view rhs) {
         _path += "/";
         _path += rhs;
+        return *this;
+    }
+
+    Path& operator/=(const fs::Path& rhs) {
+        _path += "/";
+        _path += rhs.get();
         return *this;
     }
 

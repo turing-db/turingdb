@@ -22,6 +22,7 @@ using namespace db;
 %{
 // Pass location when making each token for location based parse errors
 %}
+"import"|"IMPORT" { return YParser::make_IMPORT(getLocation()); }
 "select"|"SELECT" { return YParser::make_SELECT(getLocation()); }
 "from"|"FROM" { return YParser::make_FROM(getLocation()); }
 "match"|"MATCH" { return YParser::make_MATCH(getLocation()); }

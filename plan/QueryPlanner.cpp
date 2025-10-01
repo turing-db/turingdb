@@ -104,6 +104,9 @@ bool QueryPlanner::plan(const QueryCommand* query) {
         case QueryCommand::Kind::LOAD_GRAPH_COMMAND:
             return planLoadGraph(static_cast<const LoadGraphCommand*>(query));
 
+        case QueryCommand::Kind::IMPORT_GRAPH_COMMAND:
+            return planImportGraph(static_cast<const ImportGraphCommand*>(query));
+
         case QueryCommand::Kind::EXPLAIN_COMMAND:
             return planExplain(static_cast<const ExplainCommand*>(query));
 
@@ -1555,11 +1558,25 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
 bool QueryPlanner::planLoadGraph(const LoadGraphCommand* loadCmd) {
     _pipeline->add<StopStep>();
 
-    if (!loadCmd->getGraphName().empty()) {
-        _pipeline->add<LoadGraphStep>(loadCmd->getFileName(), loadCmd->getGraphName());
+    if (!loadCmd->getFilePath().empty()) {
+        spdlog::warn("LOAD GRAPH <graph_name> \"<file_path>\" is deprecated, please use IMPORT GRAPH <graph_name> FROM <file_path>");
+        _pipeline->add<LoadGraphStep>(loadCmd->getFilePath(), loadCmd->getGraphName());
     } else {
         _pipeline->add<LoadGraphStep>(loadCmd->getGraphName());
     }
+
+    _pipeline->add<EndStep>();
+    return true;
+}
+
+bool QueryPlanner::planImportGraph(const ImportGraphCommand* importCmd) {
+    _pipeline->add<StopStep>();
+
+    if (importCmd->getGraphName().empty() || importCmd->getFilePath().empty()) {
+        throw PlannerException("Invalid graph name or file path");
+    }
+
+    _pipeline->add<ImportGraphStep>(importCmd->getFilePath(), importCmd->getGraphName());
 
     _pipeline->add<EndStep>();
     return true;

@@ -59,9 +59,8 @@ public:
 
     void setGraphsDir(const fs::Path& dir);
 
-    /** Load a graph from a file (gml, neo4j)
-     * */
-    bool loadGraphFromFile(const std::string& graphName, const std::string& graphFileName, JobSystem& jobSystem);
+    /// @brief Load a graph from a file (gml, neo4j)
+    bool importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem);
 
     DumpResult<void> dumpGraph(const std::string& graphName);
 
@@ -92,7 +91,6 @@ private:
     Graph* _defaultGraph {nullptr};
     std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
-    std::unordered_map<Graph* , std::unique_ptr<class GraphSerializer>> _serializers;
     std::unique_ptr<ChangeManager> _changes;
     GraphLoadStatus _graphLoadStatus;
     Neo4jImporter _neo4JImporter;
@@ -101,8 +99,7 @@ private:
     bool loadNeo4jDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
-    bool addGraph(std::unique_ptr<Graph> graph,
-                  std::unique_ptr<GraphSerializer> serializer);
+    bool addGraph(std::unique_ptr<Graph> graph);
     std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
 };
 

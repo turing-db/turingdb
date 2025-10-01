@@ -1,6 +1,7 @@
 
 set(storage_sources
         Graph.cpp
+        GraphSerializer.cpp
         DataPart.cpp
         DebugDump.cpp
         NodeContainer.cpp
