@@ -5,6 +5,7 @@
 #include "ID.h"
 #include "metadata/GraphMetadata.h"
 #include "versioning/Change.h"
+#include "versioning/CommitBuilder.h"
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
 #include "metadata/PropertyType.h"
@@ -152,6 +153,10 @@ public:
         write(v);
         write('"');
         _comma = true;
+    }
+
+    void value(const CommitBuilder* v) {
+        value(v->hash().get());
     }
 
     void nullValue() {

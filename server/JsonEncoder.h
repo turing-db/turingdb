@@ -7,6 +7,7 @@
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "ChangeCommand.h"
@@ -28,6 +29,13 @@ namespace db {
         }                                                 \
         writer.end();                                     \
         return;                                           \
+    }
+
+#define JSON_ENCODE_COL_CONST_CASE(Type)                \
+    case Type::staticKind(): {                          \
+        const Type& c = *static_cast<const Type*>(col); \
+        writer.value(c.getRaw());                       \
+        return;                                         \
     }
 
 class JsonEncoder {
@@ -63,8 +71,7 @@ public:
                         writer.value(ValueTypeName::value(ValueType::UInt64));
                     }
                 }
-            }
-            break;
+            } break;
 
             case QueryCommand::Kind::EXPLAIN_COMMAND: {
                 writer.value("Plan Explanation");
@@ -73,8 +80,7 @@ public:
                 writer.key("column_types");
                 writer.arr();
                 writer.value(ValueTypeName::value(ValueType::String));
-            }
-            break;
+            } break;
 
             case QueryCommand::Kind::HISTORY_COMMAND: {
                 // JSON doesn't support the single escaped
@@ -83,8 +89,7 @@ public:
 
                 writer.key("column_types");
                 writer.arr();
-            }
-            break;
+            } break;
 
             case QueryCommand::Kind::CHANGE_COMMAND: {
                 const auto& changeCmd = static_cast<const ChangeCommand*>(cmd);
@@ -101,8 +106,7 @@ public:
                     writer.key("column_types");
                     writer.arr();
                 }
-            }
-            break;
+            } break;
 
             case QueryCommand::Kind::CALL_COMMAND: {
                 const auto& callCmd = static_cast<const CallCommand*>(cmd);
@@ -118,8 +122,7 @@ public:
                 for (const auto& type : callCmd->getColTypes()) {
                     writer.value(ValueTypeName::value(type));
                 }
-            }
-            break;
+            } break;
 
             case QueryCommand::Kind::LIST_GRAPH_COMMAND: {
                 writer.value("graph");
@@ -128,8 +131,7 @@ public:
                 writer.key("column_types");
                 writer.arr();
                 writer.value(ValueTypeName::value(ValueType::String));
-            }
-            break;
+            } break;
 
             case QueryCommand::Kind::CREATE_COMMAND:
             case QueryCommand::Kind::COMMIT_COMMAND:
@@ -141,8 +143,7 @@ public:
                 writer.end();
                 writer.key("column_types");
                 writer.arr();
-            }
-            break;
+            } break;
         }
         writer.end();
         writer.end();
@@ -164,8 +165,8 @@ public:
             JSON_ENCODE_COL_CASE(ColumnVector<EntityID>)
             JSON_ENCODE_COL_CASE(ColumnVector<NodeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<EdgeID>)
-            JSON_ENCODE_COL_CASE(ColumnVector<const Change*>)
-            JSON_ENCODE_COL_CASE(ColumnVector<std::string>)
+            JSON_ENCODE_COL_CASE(ColumnVector<PropertyTypeID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<LabelSetID>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::UInt64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Int64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Double::Primitive>)
@@ -176,6 +177,17 @@ public:
             JSON_ENCODE_COL_CASE(ColumnOptVector<types::Double::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnOptVector<types::String::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnOptVector<types::Bool::Primitive>)
+            JSON_ENCODE_COL_CASE(ColumnVector<std::string>)
+            JSON_ENCODE_COL_CASE(ColumnVector<const CommitBuilder*>)
+            JSON_ENCODE_COL_CASE(ColumnVector<const Change*>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<EntityID>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<NodeID>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<EdgeID>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
+            JSON_ENCODE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
 
             default: {
                 panic("writeColumn not handled for columns of kind {}", col->getKind());
