@@ -9,45 +9,45 @@
 using namespace db;
 
 void DataPartModifier::applyModifications() {
-     // The only nodes whose ID changes are those which have an ID greater than a
-     // deleted node, as whenever a node is deleted, all subsequent nodes need to have
-     // their ID reduced by 1 to fill the gap left by the deleted node. Thus, the new
-     // ID of a node, x, is equal to the number of deleted nodes which have an ID
-     // smaller than x.
-     const auto nodeIDMapping = [&](NodeID x) {
-         if (std::ranges::binary_search(_nodesToDelete, x)) [[unlikely]] {
-             std::string err =
-                 fmt::format("Attempted to get mapped ID of deleted node: {}.", x);
-             throw TuringException(std::move(err));
-         }
-         // lower_bound O(logn) (binary search); distance is O(1) 
-         auto smallerNodesIt = std::ranges::lower_bound(_nodesToDelete, x);
-         size_t numSmallerNodes = std::distance(_nodesToDelete.begin(), smallerNodesIt);
-         return x - numSmallerNodes;
-     };
-     const auto edgeIDMapping = [&](EdgeID x) {
-         if (std::ranges::binary_search(_edgesToDelete, x)) [[unlikely]] {
-             std::string err =
-                 fmt::format("Attempted to get mapped ID of deleted edge: {}.", x);
-             throw TuringException(std::move(err));
-         }
-         // lower_bound O(logn) (binary search); distance is O(1) 
-         auto smallerEdgesIt = std::ranges::lower_bound(_edgesToDelete, x);
-         size_t numSmallerEdges = std::distance(_edgesToDelete.begin(), smallerEdgesIt);
-         return x - numSmallerEdges;
-     };
+    // The only nodes (edges) whose ID changes are those which have an ID greater than a
+    // deleted node (edge), as whenever a node (edge) is deleted, all subsequent nodes
+    // (edges) need to have their ID reduced by 1 to fill the gap left by the deleted
+    // node (edge). Thus, the new ID of a node (edge), x, is equal to the number of
+    // deleted nodes (edges) in this datapart which have an ID smaller than x.
+    const auto nodeIDMapping = [&](NodeID x) {
+        if (std::ranges::binary_search(_nodesToDelete, x)) [[unlikely]] {
+            std::string err =
+                fmt::format("Attempted to get mapped ID of deleted node: {}.", x);
+            throw TuringException(std::move(err));
+        }
+        // lower_bound O(logn) (binary search); distance is O(1)
+        auto smallerNodesIt = std::ranges::lower_bound(_nodesToDelete, x);
+        size_t numSmallerNodes = std::distance(_nodesToDelete.begin(), smallerNodesIt);
+        return x - numSmallerNodes;
+    };
+    const auto edgeIDMapping = [&](EdgeID x) {
+        if (std::ranges::binary_search(_edgesToDelete, x)) [[unlikely]] {
+            std::string err =
+                fmt::format("Attempted to get mapped ID of deleted edge: {}.", x);
+            throw TuringException(std::move(err));
+        }
+        // lower_bound O(logn) (binary search); distance is O(1)
+        auto smallerEdgesIt = std::ranges::lower_bound(_edgesToDelete, x);
+        size_t numSmallerEdges = std::distance(_edgesToDelete.begin(), smallerEdgesIt);
+        return x - numSmallerEdges;
+    };
 
-     // The first node/edge ID differs if some block of IDs starting with the first is
-     // deleted
-     NodeID oldFirstNodeID = _oldDP->getFirstNodeID();
-     EdgeID oldFirstEdgeID = _oldDP->getFirstEdgeID();
+    // The first node/edge ID differs if some block of IDs starting with the first is
+    // deleted
+    NodeID oldFirstNodeID = _oldDP->getFirstNodeID();
+    EdgeID oldFirstEdgeID = _oldDP->getFirstEdgeID();
 
-     // We are reconstructing the new datapart in the same ID space
-     _builder->_firstNodeID = _builder->_nextNodeID = nodeIDMapping(oldFirstNodeID);
-     _builder->_firstEdgeID = _builder->_nextEdgeID = edgeIDMapping(oldFirstEdgeID);
+    // We are reconstructing the new datapart in the same ID space
+    _builder->_firstNodeID = _builder->_nextNodeID = nodeIDMapping(oldFirstNodeID);
+    _builder->_firstEdgeID = _builder->_nextEdgeID = edgeIDMapping(oldFirstEdgeID);
 
-     _builder->_nodeProperties = std::make_unique<PropertyManager>();
-     _builder->_edgeProperties = std::make_unique<PropertyManager>();
+    _builder->_nodeProperties = std::make_unique<PropertyManager>();
+    _builder->_edgeProperties = std::make_unique<PropertyManager>();
 
     const std::vector<NodeRecord>& oldNodeRecords = _oldDP->nodes().records();
     // DataPartBuilder only requires providing OUT edges

@@ -89,6 +89,29 @@ CommitResult<void> CommitBuilder::buildNewDatapart(JobSystem& jobsystem,
     return {};
 }
 
+CommitResult<void> CommitBuilder::buildModifiedDataPart(JobSystem& jobsystem,
+                                                        const GraphView view,
+                                                        DataPartBuilder* builder,
+                                                        CommitHistoryBuilder& historyBuilder) {
+    // The builder knows what ID space it is building in: provide the first node/edge IDs
+    // from the builder.
+    WeakArc<DataPart> part =
+        _controller->createDataPart(builder->firstNodeID(), builder->firstEdgeID());
+
+    if (!part->load(view, jobsystem, *builder)) {
+        return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
+    }
+
+    // Replace the unmodified datapart (copied from previous commit in historyBuilder),
+    // with the modified version
+    historyBuilder.replaceDataPartAtIndex(part, builder->getPartIndex());
+
+    // Do not increment datapart count, as this is a replacement of an existing datapart,
+    // and not an additional datapart
+
+    return {};
+}
+
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile {"CommitBuilder::buildAllPending"};
 
@@ -126,6 +149,7 @@ void CommitBuilder::detectHangingEdges() {
     if (!std::ranges::is_sorted(delNodes)) {
         std::ranges::sort(delNodes);
     }
+    delNodes.erase(std::ranges::unique(delNodes).end(), delNodes.end());
 
     for (const WeakArc<DataPart>& part : parts) {
         const EdgeContainer& edgeContainer = part->edges();
@@ -172,13 +196,14 @@ void CommitBuilder::applyDeletions() {
 
     // Sort our vectors and remove duplicates for O(logn) lookup whilst being more
     // cache-friendly than a std::set
-    // NOTE: Since deletes are idempotent within a commit, we do not care about duplicates
+    // NOTE: Since deletes are idempotent within a commit, we do not care about
+    // duplicates
     if (!std::ranges::is_sorted(delNodes)) {
-        std::ranges::sort(delNodes);
+        std::ranges::sort(delNodes); // TODO: BM radix sort
     }
     delNodes.erase(std::ranges::unique(delNodes).end(), delNodes.end());
     if (!std::ranges::is_sorted(delEdges)) {
-        std::ranges::sort(delEdges);
+        std::ranges::sort(delEdges); // TODO: BM radix sort
     }
     delEdges.erase(std::ranges::unique(delEdges).end(), delEdges.end());
 
@@ -199,10 +224,11 @@ void CommitBuilder::applyDeletions() {
         auto elb = std::ranges::lower_bound(delEdges, smallestEdgeID);
         auto eub = std::ranges::upper_bound(delEdges, largestEdgeID);
 
-        // Subspans to reduce the search space of what we need delete from this datapart
+        // Subspans reduce the search space of what we need delete from this datapart
         std::span thisDPDeletedNodes(nlb, nub);
         std::span thisDPDeletedEdges(elb, eub);
 
+        // Nothing in this datapart to delete
         if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()) {
             continue;
         }
@@ -211,7 +237,7 @@ void CommitBuilder::applyDeletions() {
 
         auto modifier = DataPartModifier(part, newDataPartBuilder, thisDPDeletedNodes,
                                          thisDPDeletedEdges);
-
+        modifier.applyModifications();
     }
 }
 
@@ -223,21 +249,21 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         return;
     }
 
-    // Peform deletions: adds DataPartBuilders to @ref _builders to be built by @ref
+    // Adds DataPartBuilders to @ref _builders to be built by @ref
     // CommitBuilder::buildAllPending
     applyDeletions();
 
-    // We create one more datapart which contains our CREATE commands when flushing the
-    // buffer
+    // We create one more datapart which contains our CREATE commands when flushing
+    // the buffer
     DataPartBuilder& dpBuilder = newBuilder();
     wb.buildFromBuffer(dpBuilder);
 }
 
-CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
+CommitBuilder::CommitBuilder(VersionController& controller, Change* change,
+                             const GraphView& view)
     : _controller(&controller),
-    _change(change),
-    _view(view)
-{
+      _change(change),
+      _view(view) {
 }
 
 void CommitBuilder::initialize() {
@@ -250,8 +276,8 @@ void CommitBuilder::initialize() {
     _firstEdgeID = reader.getEdgeCount();
 
     // Update the 'next' ID values for use when creating dataparts
-    // NOTE: In the case of @ref Change::submit, these values will be resynced to be the
-    // next ID in the graph on main at the time of submission.
+    // NOTE: In the case of @ref Change::submit, these values will be resynced to be
+    // the next ID in the graph on main at the time of submission.
     _nextNodeID = reader.getNodeCount();
     _nextEdgeID = reader.getEdgeCount();
 

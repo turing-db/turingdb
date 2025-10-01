@@ -50,7 +50,6 @@ public:
     DataPartBuilder& newBuilder();
     DataPartBuilder& newBuilder(size_t partIndex);
 
-
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
     void flushWriteBuffer(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> buildAllPending(JobSystem& jobsystem);
@@ -103,6 +102,10 @@ private:
                                         const GraphView view,
                                         DataPartBuilder* builder,
                                         CommitHistoryBuilder& historyBuilder);
+    CommitResult<void> buildModifiedDataPart(JobSystem& jobsystem,
+                                             const GraphView view,
+                                             DataPartBuilder* builder,
+                                             CommitHistoryBuilder& historyBuilder);
 
     void initialize();
     };
