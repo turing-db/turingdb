@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 
+#include "Path.h"
 #include "metadata/PropertyType.h"
 #include "S3TransferDirectories.h"
 
@@ -27,6 +28,7 @@ public:
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
         LOAD_GRAPH_COMMAND,
+        IMPORT_GRAPH_COMMAND,
         EXPLAIN_COMMAND,
         HISTORY_COMMAND,
         CHANGE_COMMAND,
@@ -124,20 +126,37 @@ private:
 class LoadGraphCommand : public QueryCommand {
 public:
     static LoadGraphCommand* create(ASTContext* ctxt, const std::string& graphName);
-    static LoadGraphCommand* create(ASTContext* ctxt, const std::string& fileName, const std::string& graphName);
+    static LoadGraphCommand* create(ASTContext* ctxt, const fs::Path& filePath, const std::string& graphName);
 
     Kind getKind() const override { return Kind::LOAD_GRAPH_COMMAND; }
 
-    const std::string& getFileName() const { return _fileName; }
+    const fs::Path& getFilePath() const { return _filePath; }
     const std::string& getGraphName() const { return _graphName; }
 
 private:
-    std::string _fileName;
+    fs::Path _filePath;
     std::string _graphName;
 
     LoadGraphCommand(const std::string& graphName);
-    LoadGraphCommand(const std::string& fileName, const std::string& graphName);
+    LoadGraphCommand(const fs::Path& filePath, const std::string& graphName);
     ~LoadGraphCommand() override = default;
+};
+
+class ImportGraphCommand : public QueryCommand {
+public:
+    static ImportGraphCommand* create(ASTContext* ctxt, const fs::Path& filePath, const std::string& graphName);
+
+    Kind getKind() const override { return Kind::IMPORT_GRAPH_COMMAND; }
+
+    const fs::Path& getFilePath() const { return _filePath; }
+    const std::string& getGraphName() const { return _graphName; }
+
+private:
+    fs::Path _filePath;
+    std::string _graphName;
+
+    ImportGraphCommand(const fs::Path& filePath, const std::string& graphName);
+    ~ImportGraphCommand() override = default;
 };
 
 class ExplainCommand : public QueryCommand {

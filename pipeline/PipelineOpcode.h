@@ -20,6 +20,7 @@ enum class PipelineOpcode : uint64_t {
     CREATE_GRAPH,
     LIST_GRAPH,
     LOAD_GRAPH,
+    IMPORT_GRAPH,
     QUERY_NODE_INDEX,
     QUERY_EDGE_INDEX,
     SCAN_NODE_PROPERTY_INT64,

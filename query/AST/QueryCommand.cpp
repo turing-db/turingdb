@@ -89,8 +89,8 @@ LoadGraphCommand::LoadGraphCommand(const std::string& graphName)
 {
 }
 
-LoadGraphCommand::LoadGraphCommand(const std::string& fileName, const std::string& graphName)
-    : _fileName(fileName),
+LoadGraphCommand::LoadGraphCommand(const fs::Path& filePath, const std::string& graphName)
+    : _filePath(filePath),
     _graphName(graphName)
 {
 }
@@ -101,8 +101,22 @@ LoadGraphCommand* LoadGraphCommand::create(ASTContext* ctxt, const std::string& 
     return cmd;
 }
 
-LoadGraphCommand* LoadGraphCommand::create(ASTContext* ctxt, const std::string& name, const std::string& graphName) {
-    LoadGraphCommand* cmd = new LoadGraphCommand(name, graphName);
+LoadGraphCommand* LoadGraphCommand::create(ASTContext* ctxt, const fs::Path& filePath, const std::string& graphName) {
+    LoadGraphCommand* cmd = new LoadGraphCommand(filePath, graphName);
+    cmd->registerCmd(ctxt);
+    return cmd;
+}
+
+// ImportGraphCommand
+
+ImportGraphCommand::ImportGraphCommand(const fs::Path& filePath, const std::string& graphName)
+    : _filePath(filePath),
+    _graphName(graphName)
+{
+}
+
+ImportGraphCommand* ImportGraphCommand::create(ASTContext* ctxt, const fs::Path& filePath, const std::string& graphName) {
+    ImportGraphCommand* cmd = new ImportGraphCommand(filePath, graphName);
     cmd->registerCmd(ctxt);
     return cmd;
 }

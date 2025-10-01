@@ -28,6 +28,7 @@
 #include "operations/ListGraphStep.h"
 #include "operations/GetLabelSetIDStep.h"
 #include "operations/LoadGraphStep.h"
+#include "operations/ImportGraphStep.h"
 #include "operations/LookupStringIndexStep.h"
 #include "operations/GetPropertyStep.h"
 #include "operations/GetFilteredPropertyStep.h"
@@ -125,8 +126,10 @@ public:
                  ChangeOpType,
                  ColumnVector<const Change*>*);
 
-    PipelineStep(LoadGraphStep::Tag, const std::string& fileName);
-    PipelineStep(LoadGraphStep::Tag, const std::string& fileName, const std::string& graphName);
+    PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
+    PipelineStep(LoadGraphStep::Tag, const fs::Path& filePath, const std::string& graphName);
+
+    PipelineStep(ImportGraphStep::Tag, const fs::Path& filePath, const std::string& graphName);
 
     PipelineStep(LookupNodeIndexStep::Tag, ColumnSet<NodeID>* outSet,
                  const GraphView& view, PropertyTypeID propID,
@@ -213,6 +216,7 @@ private:
                  CreateGraphStep,
                  ListGraphStep,
                  LoadGraphStep,
+                 ImportGraphStep,
                  LookupNodeIndexStep,
                  LookupEdgeIndexStep,
                  ScanNodesByPropertyInt64Step,

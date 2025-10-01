@@ -21,6 +21,7 @@ class Commit;
 class GraphDumper;
 class CommitBuilder;
 class FrozenCommitTx;
+class GraphSerializer;
 
 class Graph {
 public:
@@ -41,6 +42,7 @@ public:
 
     [[nodiscard]] GraphID getID() const { return _graphID; }
     [[nodiscard]] CommitHash getHeadHash() const;
+    [[nodiscard]] const GraphSerializer& getSerializer() const { return *_serializer; }
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
     [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const std::string& path);
@@ -62,6 +64,7 @@ private:
     std::string _graphPath;
 
     std::unique_ptr<VersionController> _versionController;
+    std::unique_ptr<GraphSerializer> _serializer;
 
     explicit Graph();
     explicit Graph(const std::string& name, const std::string& path);
