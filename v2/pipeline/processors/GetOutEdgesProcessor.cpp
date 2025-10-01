@@ -74,11 +74,12 @@ void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
         _it->setEdgeTypes(edgeTypes);
     }
 
-    _prepared = true;
+    markAsPrepared();
 }
 
 void GetOutEdgesProcessor::reset() {
     _it->reset();
+    markAsReset();
 }
 
 void GetOutEdgesProcessor::execute() {
@@ -86,7 +87,7 @@ void GetOutEdgesProcessor::execute() {
     _it->fill(ChunkConfig::CHUNK_SIZE);
 
     if (!_it->isValid()) {
-        _finished = true;
+        finish();
     }
 
     _outIndices->writeData();

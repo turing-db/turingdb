@@ -41,6 +41,7 @@ public:
         MakeMemoryPool<ColumnConst<EdgeID>>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
+        MakeMemoryPool<ColumnConst<size_t>>::type,
         MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::UInt64::Primitive>>::type,
@@ -84,6 +85,7 @@ public:
         _pools.get<ColumnVector<PropertyType>>().clear();
         _pools.get<ColumnVector<size_t>>().clear();
         _pools.get<ColumnConst<EdgeTypeID>>().clear();
+        _pools.get<ColumnConst<size_t>>().clear();
         _pools.get<ColumnVector<std::string>>().clear();
         _pools.get<ColumnVector<std::string_view>>().clear();
         _pools.get<ColumnVector<const CommitBuilder*>>().clear();

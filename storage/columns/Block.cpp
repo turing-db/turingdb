@@ -33,11 +33,11 @@ void Block::append(const Block &other) {
 }
 
 size_t Block::getBlockRowCount() const {
-    size_t rowCount = 0;
-    for (const Column *column : _columns) {
-        rowCount = std::max(rowCount, column->size());
+    if (_columns.empty()) {
+        return 0;
     }
-    return rowCount;
+
+    return _columns.front()->size();
 }
 
 void Block::assignFrom(const Block &other) {

@@ -19,12 +19,22 @@ public:
 
     bool isConnected() const { return _connectedPort != nullptr; }
 
+    bool isOpen() const { return _open; }
+    bool isClosed() const { return !_open; }
+
     bool hasData() const {
         return _connectedPort ? _buffer->hasData() : false;
     }
 
     bool canWriteData() const {
         return _connectedPort ? !_buffer->hasData() : true;
+    }
+
+    void close() {
+        _open = false;
+        if (_connectedPort) {
+            _connectedPort->_open = false;
+        }
     }
 
     void consume() {
@@ -43,6 +53,7 @@ protected:
     Processor* _processor {nullptr};
     PipelinePort* _connectedPort {nullptr};
     PipelineBuffer* _buffer {nullptr};
+    bool _open {true};
 
     PipelinePort(Processor* processor)
         : _processor(processor)

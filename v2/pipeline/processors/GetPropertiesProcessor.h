@@ -60,12 +60,14 @@ public:
 
         _propWriter->setIndices(indices);
         _propWriter->setOutput(values);
-        _prepared = true;
+        markAsPrepared();
     }
 
     void reset() override {
         _propWriter->reset();
+        markAsReset();
     }
+
     void execute() override {
         _inIDs->consume();
         _propWriter->fill(ChunkConfig::CHUNK_SIZE);
@@ -73,7 +75,7 @@ public:
         _outValues->writeData();
 
         if (!_propWriter->isValid()) {
-            _finished = true;
+            finish();
         }
     }
 

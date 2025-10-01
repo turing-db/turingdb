@@ -11,17 +11,18 @@ LambdaProcessor::~LambdaProcessor() {
 }
 
 void LambdaProcessor::prepare(ExecutionContext* ctxt) {
-    _prepared = true;
+    markAsPrepared();
 }
 
 void LambdaProcessor::reset() {
     _callback(_input->getBuffer()->getBlock(), Operation::RESET);
+    markAsReset();
 }
 
 void LambdaProcessor::execute() {
-    _finished = true;
     _input->consume();
     _callback(_input->getBuffer()->getBlock(), Operation::EXECUTE);
+    finish();
 }
 
 LambdaProcessor* LambdaProcessor::create(PipelineV2* pipeline, Callback callback) {

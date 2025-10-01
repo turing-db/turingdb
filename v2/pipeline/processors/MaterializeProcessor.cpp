@@ -99,16 +99,17 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
 }
 
 void MaterializeProcessor::prepare(ExecutionContext* ctxt) {
-    _prepared = true;
+    markAsPrepared();
 }
 
 void MaterializeProcessor::reset() {
+    markAsReset();
 }
 
 void MaterializeProcessor::execute() {
     _input->consume();
     _output->writeData();
-    _finished = true;
+    finish();
 
     Block& output = _output->getBuffer()->getBlock();
     const MaterializeData::Indices& indices = _matData.getIndices();

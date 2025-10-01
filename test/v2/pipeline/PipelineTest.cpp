@@ -22,6 +22,7 @@
 #include "processors/LambdaProcessor.h"
 #include "processors/GetPropertiesProcessor.h"
 #include "processors/LimitProcessor.h"
+#include "processors/SkipProcessor.h"
 #include "reader/GraphReader.h"
 
 #include "PipelineExecutor.h"
@@ -413,12 +414,18 @@ TEST_F(PipelineTest, scanNodesLimit) {
     // Limit
     constexpr size_t limitCount = 4;
     LimitProcessor* limit = LimitProcessor::create(&pipeline, limitCount);
+    addColumnInBuffer<ColumnNodeIDs>(&mem, limit->output()->getBuffer());
     materialize->output()->connectTo(limit->input());
 
     // Lambda
-    size_t lambdaRowCount = 0;
+    std::vector<NodeID> resultNodeIds;
     auto callback = [&](const Block& block, LambdaProcessor::Operation operation) {
-        lambdaRowCount += block.getBlockRowCount();
+        EXPECT_EQ(block.size(), 1);
+        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(block[0]);
+        ASSERT_TRUE(nodeIDs != nullptr);
+        ASSERT_TRUE(!nodeIDs->empty());
+
+        resultNodeIds.insert(resultNodeIds.end(), nodeIDs->getRaw().begin(), nodeIDs->getRaw().end());
     };
 
     LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
@@ -431,6 +438,80 @@ TEST_F(PipelineTest, scanNodesLimit) {
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 
-    // Check number of lambda invocations
-    EXPECT_LE(lambdaRowCount, limitCount);
+    // Check returned node IDs
+    std::vector<NodeID> expectedNodeIDs;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        size_t i = 0;
+        for (auto node : nodes) {
+            if (i < limitCount) {
+                expectedNodeIDs.push_back(node);
+            }
+            i++;
+        }
+    }
+    EXPECT_EQ(resultNodeIds, expectedNodeIDs);
+}
+
+TEST_F(PipelineTest, scanNodesSkip) {
+    LocalMemory mem;
+    PipelineV2 pipeline;
+
+    // Scan nodes
+    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
+    auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
+
+    // Materialize
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    scanNodes->outNodeIDs()->connectTo(materialize->input());
+    {
+        MaterializeData& matData = materialize->getMaterializeData();
+        matData.addToStep(scanNodesOutNodeIDs);
+    }
+
+    // Skip
+    constexpr size_t skipCount = 4;
+    SkipProcessor* skip = SkipProcessor::create(&pipeline, skipCount);
+    addColumnInBuffer<ColumnNodeIDs>(&mem, skip->output()->getBuffer());
+    materialize->output()->connectTo(skip->input());
+
+    // Lambda
+    std::vector<NodeID> resultNodeIds;
+    auto callback = [&](const Block& block, LambdaProcessor::Operation operation) {
+        EXPECT_EQ(block.size(), 1);
+        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(block[0]);
+        ASSERT_TRUE(nodeIDs != nullptr);
+        ASSERT_TRUE(!nodeIDs->empty());
+
+        resultNodeIds.insert(resultNodeIds.end(), nodeIDs->getRaw().begin(), nodeIDs->getRaw().end());
+    };
+
+    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
+    skip->output()->connectTo(lambda->input());
+
+    // Execute pipeline
+    const auto transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    executor.execute();
+
+    // Check returned node IDs
+    std::vector<NodeID> expectedNodeIDs;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        size_t i = 0;
+        for (auto node : nodes) {
+            if (i >= skipCount) {
+                expectedNodeIDs.push_back(node);
+            }
+            i++;
+        }
+    }
+
+    EXPECT_EQ(resultNodeIds, expectedNodeIDs);
 }

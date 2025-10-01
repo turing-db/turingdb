@@ -13,10 +13,11 @@ class ExecutionContext;
 class Processor {
 public:
     friend PipelineV2;
-    using Ports = std::vector<PipelinePort*>;
+    using InputPorts = std::vector<PipelineInputPort*>;
+    using OutputPorts = std::vector<PipelineOutputPort*>;
 
-    const Ports& inputs() const { return _inputs; }
-    const Ports& outputs() const { return _outputs; }
+    const InputPorts& inputs() const { return _inputs; }
+    const OutputPorts& outputs() const { return _outputs; }
 
     bool isSource() const { return _inputs.empty(); }
     bool isSink() const { return _outputs.empty(); }
@@ -51,17 +52,24 @@ public:
     }
 
 protected:
-    Ports _inputs;
-    Ports _outputs;
+    Processor();
+    virtual ~Processor();
+    void postCreate(PipelineV2* pipeline);
+    void addInput(PipelineInputPort* port);
+    void addOutput(PipelineOutputPort* port);
+    void markAsPrepared() { _prepared = true; }
+    void markAsReset() { _finished = false; }
+    void finish();
+
+private:
+    InputPorts _inputs;
+    OutputPorts _outputs;
     bool _scheduled {false};
     bool _finished {false};
     bool _prepared {false};
 
-    Processor();
-    virtual ~Processor();
-    void postCreate(PipelineV2* pipeline);
-    void addInput(PipelinePort* port);
-    void addOutput(PipelinePort* port);
+    bool checkInputsClosed() const;
+    void closeOutputs();
 };
 
 }

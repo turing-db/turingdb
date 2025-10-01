@@ -13,7 +13,8 @@ set(processors_sources
     processors/MaterializeData.cpp
     processors/LambdaProcessor.cpp
     processors/SkipProcessor.cpp
-    processors/LimitProcessor.cpp)
+    processors/LimitProcessor.cpp
+    processors/CountProcessor.cpp)
 
 add_library(turing_db_v2_pipeline_s STATIC ${pipeline_sources} ${processors_sources})
 

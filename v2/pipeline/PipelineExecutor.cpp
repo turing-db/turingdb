@@ -53,12 +53,12 @@ void PipelineExecutor::executeCycle() {
         Processor* currentProc = updateQueue.front();
         updateQueue.pop();
 
-        if (currentProc->isFinished()) {
-            currentProc->reset();
-        }
-
         if (!currentProc->isPrepared()) {
             currentProc->prepare(_ctxt);
+        }
+
+        if (currentProc->isFinished()) {
+            currentProc->reset();
         }
 
         currentProc->execute();

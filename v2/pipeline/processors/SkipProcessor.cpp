@@ -30,7 +30,7 @@ SkipProcessor* SkipProcessor::create(PipelineV2* pipeline, size_t skipCount) {
 }
 
 void SkipProcessor::prepare(ExecutionContext* ctxt) {
-    _prepared = true;
+    markAsPrepared();
 }
 
 void SkipProcessor::reset() {
@@ -40,18 +40,16 @@ void SkipProcessor::reset() {
 
 void SkipProcessor::execute() {
     _input->consume();
-    _finished = true;
 
     if (_skipping) {
         const Block& inputBlock = _input->getBuffer()->getBlock();
-        const Column* firstColumn = inputBlock.columns().front();
-        const size_t blockRowCount = firstColumn->size();
+        const size_t blockRowCount = inputBlock.getBlockRowCount();
         const size_t newRowCount = _currentRowCount + blockRowCount;
 
         if (newRowCount > _skipCount) {
             // We have crossed the skipping threshold in this block
             // write the rows that are in excess of the amount to skip
-            Block& outputBlock = _input->getBuffer()->getBlock();
+            Block& outputBlock = _output->getBuffer()->getBlock();
             const size_t rowsToWrite = newRowCount - _skipCount;
             const size_t startRow = blockRowCount - rowsToWrite;
             outputBlock.assignFromLine(inputBlock, startRow, rowsToWrite);
@@ -67,9 +65,11 @@ void SkipProcessor::execute() {
     } else {
         // We are beyond the number of lines to be skipped, just copy the input block
         const Block& inputBlock = _input->getBuffer()->getBlock();
-        Block& outputBlock = _input->getBuffer()->getBlock();
+        Block& outputBlock = _output->getBuffer()->getBlock();
         outputBlock.assignFrom(inputBlock);
 
         _output->writeData();
     }
+
+    finish();
 }

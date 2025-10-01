@@ -33,7 +33,7 @@ void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
 
-    _prepared = true;
+    markAsPrepared();
 }
 
 void ScanNodesProcessor::reset() {
@@ -44,7 +44,7 @@ void ScanNodesProcessor::execute() {
     _it->fill(ChunkConfig::CHUNK_SIZE);
 
     if (!_it->isValid()) {
-        _finished = true;
+        finish();
     }
 
     _outNodeIDs->writeData();

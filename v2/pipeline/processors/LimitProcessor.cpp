@@ -27,17 +27,18 @@ LimitProcessor* LimitProcessor::create(PipelineV2* pipeline, size_t limit) {
 }
 
 void LimitProcessor::prepare(ExecutionContext* ctxt) {
-    _prepared = true;
+    markAsPrepared();
 }
 
 void LimitProcessor::reset() {
     _currentRowCount = 0;
     _reachedLimit = false;
+    markAsReset();
 }
 
 void LimitProcessor::execute() {
     _input->consume();
-    _finished = true;
+    finish();
 
     if (_reachedLimit) {
         // We have reached the limit, do nothing
@@ -45,7 +46,7 @@ void LimitProcessor::execute() {
     } else {
         const Block& inputBlock = _input->getBuffer()->getBlock();
         Block& outputBlock = _output->getBuffer()->getBlock();
-        const size_t blockRowCount = inputBlock.columns().front()->size();
+        const size_t blockRowCount = inputBlock.getBlockRowCount();
         const size_t remainingCapacity = _limit - _currentRowCount;
 
         // Write rows of inputBlock that are below the limit
