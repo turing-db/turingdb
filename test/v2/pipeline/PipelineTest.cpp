@@ -23,6 +23,8 @@
 #include "processors/GetPropertiesProcessor.h"
 #include "processors/LimitProcessor.h"
 #include "processors/SkipProcessor.h"
+#include "processors/CountProcessor.h"
+#include "processors/LambdaSourceProcessor.h"
 #include "reader/GraphReader.h"
 
 #include "PipelineExecutor.h"
@@ -514,4 +516,107 @@ TEST_F(PipelineTest, scanNodesSkip) {
     }
 
     EXPECT_EQ(resultNodeIds, expectedNodeIDs);
+}
+
+TEST_F(PipelineTest, scanNodesCount) {
+    LocalMemory mem;
+    PipelineV2 pipeline;
+
+    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
+    auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
+
+    // Materialize
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    scanNodes->outNodeIDs()->connectTo(materialize->input());
+
+    // Fill up materialize data
+    MaterializeData& matData = materialize->getMaterializeData();
+    matData.addToStep(scanNodesOutNodeIDs);
+
+    // Count
+    CountProcessor* count = CountProcessor::create(&pipeline);
+    addColumnInBuffer<ColumnConst<size_t>>(&mem, count->output()->getBuffer());
+    materialize->output()->connectTo(count->input());
+
+    // Lambda
+    size_t expectedCount = 0;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        expectedCount = reader.getNodeCount();
+    }
+
+    auto callback = [&](const Block& block, LambdaProcessor::Operation operation) {
+        EXPECT_EQ(block.size(), 1);
+
+        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(block[0]);
+        ASSERT_TRUE(count != nullptr);
+
+        EXPECT_TRUE(count->getRaw() != 0);
+        EXPECT_EQ(count->getRaw(), expectedCount);
+    };
+
+    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
+    count->output()->connectTo(lambda->input());
+
+    // Execute pipeline
+    const auto transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    executor.execute();
+}
+
+TEST_F(PipelineTest, multiChunkCount) {
+    LocalMemory mem;
+    PipelineV2 pipeline;
+
+    // Create a source of 100 chunks
+    size_t currentChunk = 0;
+    constexpr size_t chunkCount = 1000;
+    constexpr size_t chunkSize = ChunkConfig::CHUNK_SIZE;
+    auto sourceCallback = [&](Block& block, bool& isFinished, auto operation) {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        EXPECT_EQ(block.size(), 1);
+
+        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(block[0]);
+        ASSERT_TRUE(nodeIDs != nullptr);
+
+        nodeIDs->resize(chunkSize);
+        std::iota(nodeIDs->begin(), nodeIDs->end(), 0);
+
+        currentChunk++;
+        if (currentChunk == chunkCount) {
+            isFinished = true;
+        }
+    };
+
+    LambdaSourceProcessor* source = LambdaSourceProcessor::create(&pipeline, sourceCallback);
+    addColumnInBuffer<ColumnNodeIDs>(&mem, source->output()->getBuffer());
+
+    // Count
+    CountProcessor* count = CountProcessor::create(&pipeline);
+    addColumnInBuffer<ColumnConst<size_t>>(&mem, count->output()->getBuffer());
+    source->output()->connectTo(count->input());
+    
+    // Lambda
+    auto callback = [&](const Block& block, LambdaProcessor::Operation operation) {
+        EXPECT_EQ(block.size(), 1);
+        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(block[0]);
+        ASSERT_TRUE(count != nullptr);
+        EXPECT_EQ(count->getRaw(), chunkCount * chunkSize);
+    };
+    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
+    count->output()->connectTo(lambda->input());
+
+    // Execute pipeline
+    const auto transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    executor.execute();
 }
