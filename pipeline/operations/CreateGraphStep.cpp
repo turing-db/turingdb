@@ -24,7 +24,7 @@ void CreateGraphStep::prepare(ExecutionContext* ctxt) {
 void CreateGraphStep::execute() {
     Profile profile {"CreateGraphStep::execute"};
 
-    if (!_sysMan->createAndDumpGraph(_graphName)) {
+    if (!_sysMan->createGraph(_graphName)) {
         throw PipelineException("Failed To Create Graph");
     }
 }

@@ -45,7 +45,7 @@ void SystemManager::init() {
         _defaultGraph = loadGraph("default");
     } else {
         spdlog::info("creating default");
-        _defaultGraph = createAndDumpGraph("default");
+        _defaultGraph = createGraph("default");
     }
 
     if (!_defaultGraph) {
@@ -89,29 +89,6 @@ Graph* SystemManager::createGraph(const std::string& name) {
     }
 
     return graphPtr;
-}
-
-Graph* SystemManager::createAndDumpGraph(const std::string& name) {
-    const fs::Path path = _config->getGraphsDir() / name;
-
-    auto graph = Graph::create(name, path);
-    auto* rawPtr = graph.get();
-
-    if (_config->isSyncedOnDisk()) {
-        if (auto res = graph->getSerializer().dump(); !res) {
-            spdlog::error(res.error().fmtMessage());
-            return nullptr;
-        }
-    } else {
-        spdlog::warn("Cannot dump graph, The system is running in full in-memory mode");
-    }
-
-    if (!addGraph(std::move(graph))) {
-        spdlog::error("Could not add graph to storage {}", name);
-        return nullptr;
-    }
-
-    return rawPtr;
 }
 
 bool SystemManager::addGraph(std::unique_ptr<Graph> graph) {

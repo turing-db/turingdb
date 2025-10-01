@@ -43,8 +43,6 @@ public:
 
     Graph* createGraph(const std::string& graphName);
 
-    Graph* createAndDumpGraph(const std::string& graphName);
-
     void listAvailableGraphs(std::vector<fs::Path>& names);
 
     void listGraphs(std::vector<std::string_view>& names);
