@@ -14,8 +14,19 @@ class WherePredicate;
 
 class PlanGraph {
 public:
+    using PlanGraphNodesSpan = std::span<const std::unique_ptr<PlanGraphNode>>;
+    using WherePredicatesSpan = std::span<const std::unique_ptr<WherePredicate>>;
+
     PlanGraph();
     ~PlanGraph();
+
+    void getRoots(std::vector<PlanGraphNode*>& roots) const;
+
+    PlanGraphNodesSpan nodes() const { return _nodes; }
+
+    WherePredicatesSpan wherePredicates() const { return _wherePredicates; }
+
+    WherePredicate* createWherePredicate(const Expr* expr);
 
     template <typename T, typename... Args>
     T* create(Args&&... args) {
@@ -45,18 +56,6 @@ public:
         before->connectOut(after);
 
         return before;
-    }
-
-    void getRoots(std::vector<PlanGraphNode*>& roots) const;
-
-    std::span<const std::unique_ptr<PlanGraphNode>> nodes() const {
-        return _nodes;
-    }
-
-    WherePredicate* createWherePredicate(const Expr* expr);
-
-    std::span<const std::unique_ptr<WherePredicate>> wherePredicates() const {
-        return _wherePredicates;
     }
 
 private:

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "EnumToString.h"
-
 #include <vector>
+
+#include "EnumToString.h"
 
 namespace db::v2 {
 
@@ -46,10 +46,22 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::MATERIALIZE, "MATERIALIZE">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">>;
 
-
 class PlanGraphNode {
 public:
     using Nodes = std::vector<PlanGraphNode*>;
+
+    class GenerationState {
+    public:
+        bool isDiscovered() const { return _discovered; }
+        void setDiscovered() { _discovered = true; }
+
+        bool isTranslated() const { return _translated; }
+        void setTranslated() { _translated = true; }
+
+    private:
+        bool _discovered {false};
+        bool _translated {false};
+    };
 
     virtual ~PlanGraphNode() = default;
 
@@ -61,26 +73,11 @@ public:
 
     bool isRoot() const { return _inputs.empty(); }
 
-    void connectOut(PlanGraphNode* succ) {
-        _outputs.emplace_back(succ);
-        succ->_inputs.emplace_back(this);
-    }
+    GenerationState& getGenerationState() { return _genState; }
+    const GenerationState& getGenerationState() const { return _genState; }
 
-    void clearInputs() {
-        // Remove self from the outputs of our inputs
-        for (PlanGraphNode* input : _inputs) {
-            auto& outputs = input->_outputs;
-
-            for (auto it = outputs.begin(); it != outputs.end(); ++it) {
-                if (*it == this) {
-                    outputs.erase(it);
-                    break;
-                }
-            }
-        }
-
-        _inputs.clear();
-    }
+    void connectOut(PlanGraphNode* succ);
+    void clearInputs();
 
 protected:
     explicit PlanGraphNode(PlanGraphOpcode opcode)
@@ -92,6 +89,7 @@ private:
     PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
     Nodes _inputs;
     Nodes _outputs;
+    GenerationState _genState;
 };
 
 }
