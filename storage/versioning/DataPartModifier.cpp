@@ -42,6 +42,17 @@ void DataPartModifier::applyModifications() {
     NodeID oldFirstNodeID = _oldDP->getFirstNodeID();
     EdgeID oldFirstEdgeID = _oldDP->getFirstEdgeID();
 
+    NodeID newFirstNodeID =
+        _nodesToDelete.front() != oldFirstNodeID
+            ? oldFirstNodeID
+            : *std::ranges::adjacent_find(_nodesToDelete,
+                                          [](NodeID a, NodeID b) { return a != b + 1; });
+    EdgeID newFirstEdgeID =
+        _edgesToDelete.front() != oldFirstEdgeID
+            ? oldFirstEdgeID
+            : *std::ranges::adjacent_find(_edgesToDelete,
+                                          [](EdgeID a, EdgeID b) { return a != b + 1; });
+
     // We are reconstructing the new datapart in the same ID space
     _builder->_firstNodeID = _builder->_nextNodeID = nodeIDMapping(oldFirstNodeID);
     _builder->_firstEdgeID = _builder->_nextEdgeID = edgeIDMapping(oldFirstEdgeID);

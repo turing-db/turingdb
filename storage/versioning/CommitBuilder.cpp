@@ -193,7 +193,7 @@ void CommitBuilder::detectHangingEdges() {
 
 void CommitBuilder::applyDeletions() {
     CommitWriteBuffer& wb = writeBuffer();
-    auto dataparts = _commitData->commitDataparts();
+    auto dataparts = _commitData->allDataparts();
 
     // Add to @ref _deletedEdges any edges which are incident to a node which will
     // be deleted
@@ -201,6 +201,10 @@ void CommitBuilder::applyDeletions() {
 
     auto& delNodes = wb.deletedNodes();
     auto& delEdges = wb.deletedEdges();
+
+    if (delNodes.empty() && delEdges.empty()) {
+        return;
+    }
 
     // Sort our vectors and remove duplicates for O(logn) lookup whilst being more
     // cache-friendly than a std::set
@@ -260,6 +264,10 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     // Adds DataPartBuilders to @ref _builders to be built by @ref
     // CommitBuilder::buildAllPending
     applyDeletions();
+
+    if (wb.pendingNodes().empty() && wb.pendingEdges().empty()) {
+        return;
+    }
 
     // We create one more datapart which contains our CREATE commands when flushing
     // the buffer

@@ -5,6 +5,7 @@
 #include "PipelineException.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
 
 namespace db {
@@ -35,6 +36,7 @@ public:
 private:
     std::vector<IDT> _deletions;
     CommitBuilder* _commitBuilder {nullptr};
+    CommitWriteBuffer* _writeBuffer {nullptr};
 };
 
 template <TypedInternalID IDT>
@@ -49,6 +51,7 @@ void DeleteStep<IDT>::prepare(ExecutionContext* ctxt) {
 
     // Get the CommitBuilder for this transaction
     _commitBuilder = tx.commitBuilder();
+    _writeBuffer = &_commitBuilder->writeBuffer();
 }
 
 template <TypedInternalID IDT>
@@ -70,16 +73,16 @@ void DeleteStep<IDT>::execute() {
                             id.getValue());
             throw PipelineException(std::move(err));
         }
+    }
 
-        CommitWriteBuffer& wb = _commitBuilder->writeBuffer();
-        if constexpr (std::is_same_v<IDT, NodeID>) {
-            wb.addDeletedNodes(_deletions);
-        } else if constexpr (std::is_same_v<IDT, EdgeID>) {
-            wb.addDeletedEdges(_deletions);
-        }
+    if constexpr (std::is_same_v<IDT, NodeID>) {
+        _writeBuffer->addDeletedNodes(_deletions);
+    } else if constexpr (std::is_same_v<IDT, EdgeID>) {
+        _writeBuffer->addDeletedEdges(_deletions);
+    }
 
-        if constexpr (std::is_same_v<IDT, NodeID>) {
-        }
+    if constexpr (std::is_same_v<IDT, NodeID>) {
+        // TODO: ?
     }
 }
 

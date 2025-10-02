@@ -69,9 +69,9 @@ public:
      std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
      std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
 
-    bool empty() const {
-        return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
-            && _deletedEdges.empty();
+     bool empty() const {
+         return _pendingNodes.empty() && _pendingEdges.empty() && _deletedNodes.empty()
+             && _deletedEdges.empty();
     }
 
     /**
