@@ -24,6 +24,7 @@ add_subdirectory(change_submit_alice)
 add_subdirectory(change_10)
 add_subdirectory(submit_empty_change)
 add_subdirectory(create_edges_inject)
+add_subdirectory(call_labels)
 
 # write run_regress target
 set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")
