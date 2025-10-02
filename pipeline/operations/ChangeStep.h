@@ -1,14 +1,12 @@
 #pragma once
 
 #include <string>
-
 #include <variant>
 
 #include "ExecutionContext.h"
 #include "columns/ColumnVector.h"
 #include "versioning/ChangeID.h"
 #include "views/GraphView.h"
-#include "versioning/ChangeResult.h"
 #include "ChangeOpType.h"
 
 namespace db {
@@ -27,7 +25,7 @@ public:
 
     void prepare(ExecutionContext* ctxt);
 
-    inline bool isFinished() const { return true; }
+    bool isFinished() const { return true; }
 
     void reset() {}
 
@@ -45,9 +43,9 @@ private:
     ColumnVector<const Change*>* _output {nullptr};
     Transaction* _tx {nullptr};
 
-    ChangeResult<Change*> createChange() const;
-    ChangeResult<void> submitChange() const;
-    ChangeResult<void> deleteChange() const;
+    void createChange() const;
+    void submitChange() const;
+    void deleteChange() const;
     void listChanges() const;
 };
 

@@ -27,9 +27,9 @@ public:
     {
     }
 
-    ColumnVector(std::initializer_list<T>&& v)
+    ColumnVector(std::initializer_list<T> v)
         : Column(_staticKind),
-          _data(std::forward<std::initializer_list<T>>(v))
+          _data(v)
     {
     }
 
@@ -65,7 +65,7 @@ public:
     const T& at(size_t i) const { return _data.at(i); }
     T& at(size_t i) { return _data.at(i); }
 
-    void set(size_t i, T&& v) { _data[i] = std::forward<T>(v); }
+    void set(size_t i, T&& v) { _data[i] = std::move(v); }
     T getCopy(size_t i) const { return _data[i]; }
 
     Iterator begin() { return _data.begin(); }

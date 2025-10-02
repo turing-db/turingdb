@@ -48,19 +48,13 @@ void ChangeStep::prepare(ExecutionContext* ctxt) {
 void ChangeStep::execute() {
     switch (_type) {
         case ChangeOpType::NEW: {
-            if (auto res = createChange(); !res) {
-                throw PipelineException(fmt::format("Failed to create change: {}", res.error().fmtMessage()));
-            }
+            createChange();
         } break;
         case ChangeOpType::SUBMIT: {
-            if (auto res = submitChange(); !res) {
-                throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
-            }
+            submitChange();
         } break;
         case ChangeOpType::DELETE: {
-            if (auto res = deleteChange(); !res) {
-                throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
-            }
+            deleteChange();
         } break;
         case ChangeOpType::LIST: {
             listChanges();
@@ -78,7 +72,7 @@ void ChangeStep::describe(std::string& descr) const {
     descr.assign(ss.str());
 }
 
-ChangeResult<Change*> ChangeStep::createChange() const {
+void ChangeStep::createChange() const {
     Profile profile {"ChangeStep::createChange"};
     _output->clear();
 
@@ -90,15 +84,13 @@ ChangeResult<Change*> ChangeStep::createChange() const {
 
     auto res = _sysMan->newChange(graphName);
     if (!res) {
-        return res;
+        throw PipelineException(fmt::format("Failed to create change: {}", res.error().fmtMessage()));
     }
 
     _output->push_back(res.value());
-
-    return {};
 }
 
-ChangeResult<void> ChangeStep::submitChange() const {
+void ChangeStep::submitChange() const {
     Profile profile {"ChangeStep::submitChange"};
 
     if (!_tx->writingPendingCommit()) {
@@ -114,19 +106,17 @@ ChangeResult<void> ChangeStep::submitChange() const {
     ChangeManager& changeMan = _sysMan->getChangeManager();
 
     // Step 1: Submit the change
-    if (auto res = changeMan.submitChange(tx.changeAccessor(), *_jobSystem); !res) {
-        return res;
+    if (const auto res = changeMan.submitChange(tx.changeAccessor(), *_jobSystem); !res) {
+        throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 
     // Step 2: Dump newly created commits
-    if (auto res = _sysMan->dumpGraph(_graph->getName()); !res) {
-        return ChangeError::result(ChangeErrorType::SERIALIZATION_ERROR);
+    if (const auto res = _sysMan->dumpGraph(_graph->getName()); !res) {
+        throw PipelineException(fmt::format("Failed to dump new commits: {}", res.error().fmtMessage()));
     }
-
-    return {};
 }
 
-ChangeResult<void> ChangeStep::deleteChange() const {
+void ChangeStep::deleteChange() const {
     Profile profile {"ChangeStep::deleteChange"};
 
     if (!_tx->writingPendingCommit()) {
@@ -139,8 +129,11 @@ ChangeResult<void> ChangeStep::deleteChange() const {
         throw PipelineException("ChangeStep: Change info must contain the change hash");
     }
 
-    ChangeID changeID = std::get<ChangeID>(_changeInfo);
-    return _sysMan->getChangeManager().deleteChange(tx.changeAccessor(), changeID);
+    const ChangeID changeID = std::get<ChangeID>(_changeInfo);
+
+    if (const auto res = _sysMan->getChangeManager().deleteChange(tx.changeAccessor(), changeID); !res) {
+        throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
+    }
 }
 
 void ChangeStep::listChanges() const {
