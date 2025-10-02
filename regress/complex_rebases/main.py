@@ -9,7 +9,7 @@ MAX_EDGES : int = MAX_NODES
 def make_local_changes(client : TuringDB, num_nodes : int, num_edges : int) -> tuple[int, str]:
   ts = int(time.time())
 
-  change = client.query("CHANGE NEW")["Change ID"][0]
+  change = client.query("CHANGE NEW")[0][0]
   client.checkout(change=change)
 
   for _ in range(num_nodes):
@@ -60,8 +60,8 @@ def main():
     expected_nodes += rand_node_counts[change] + (2 * rand_edge_counts[change])
     expected_edges += rand_edge_counts[change]
 
-    num_nodes : int = len(client.query("match (n) return n")["n"])
-    num_edges : int = len(client.query("match (n)-[e]-(m) return e")["e"])
+    num_nodes : int = len(client.query("match (n) return n")[0])
+    num_edges : int = len(client.query("match (n)-[e]-(m) return e")[0])
 
     assert expected_nodes == num_nodes
     assert expected_edges == num_edges
