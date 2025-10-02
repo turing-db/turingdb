@@ -625,7 +625,7 @@ TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
 }
 
 TEST_F(QueryTest, threeCreateTargets) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
@@ -661,7 +661,7 @@ TEST_F(QueryTest, threeCreateTargets) {
 }
 
 TEST_F(QueryTest, manyCreateTargets) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
@@ -921,7 +921,7 @@ TEST_F(QueryTest, threeChangeRebase) {
 }
 
 TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     constexpr size_t CHANGE1_SIZE = 3;
     constexpr size_t CHANGE2_SIZE = 2;
@@ -1022,7 +1022,7 @@ TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
  * rebasing all of : NodeIDs, EdgeIDs, PropertyIDs, LabelIDs, LabelSets, EdgeTypes
  */
 TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     constexpr size_t CHANGE0_SIZE = 4;
     constexpr size_t CHANGE1_SIZE = 1;
@@ -1184,7 +1184,7 @@ TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
 }
 
 TEST_F(QueryTest, changeCommitsThenRebase) {
-    QueryTester tester {_mem, *_interp, "default"};
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 
     auto change1Res = tester.query("CHANGE NEW")
                           .expectVector<const Change*>({}, false)
