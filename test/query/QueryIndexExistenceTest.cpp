@@ -47,9 +47,6 @@ TEST_F(QueryIndexExistenceTest, noStringIndex) {
 
     QueryTester tester {env2->getMem(), *newInterp};
     tester.setGraphName("simple");
-    bool loadRes =
-        newDB.getSystemManager().loadGraph(_workingPath, newName, newDB.getJobSystem());
-    ASSERT_TRUE(loadRes);
 
     tester.query("MATCH (n{name=\"Remy\"}) return n")
         .expectVector<NodeID>({0})
