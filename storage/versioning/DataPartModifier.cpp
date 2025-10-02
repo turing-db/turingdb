@@ -1,7 +1,5 @@
 #include "DataPartModifier.h"
 
-#include <bits/ranges_algo.h>
-
 #include "EdgeContainer.h"
 #include "NodeContainer.h"
 #include "EnumerateFrom.h"
@@ -9,6 +7,12 @@
 using namespace db;
 
 void DataPartModifier::applyModifications() {
+    // If we are deleting the entire datapart, return an empty builder
+    if (_oldDP->getNodeCount() == _nodesToDelete.size()
+        && _oldDP->getEdgeCount() == _edgesToDelete.size()) {
+        return;
+    }
+
     // The only nodes (edges) whose ID changes are those which have an ID greater than a
     // deleted node (edge), as whenever a node (edge) is deleted, all subsequent nodes
     // (edges) need to have their ID reduced by 1 to fill the gap left by the deleted
@@ -25,7 +29,7 @@ void DataPartModifier::applyModifications() {
         size_t numSmallerNodes = std::distance(_nodesToDelete.begin(), smallerNodesIt);
         return x - numSmallerNodes;
     };
-    const auto edgeIDMapping = [&](EdgeID x) {
+    [[maybe_unused]] const auto edgeIDMapping = [&](EdgeID x) {
         if (std::ranges::binary_search(_edgesToDelete, x)) [[unlikely]] {
             std::string err =
                 fmt::format("Attempted to get mapped ID of deleted edge: {}.", x);
@@ -42,20 +46,9 @@ void DataPartModifier::applyModifications() {
     NodeID oldFirstNodeID = _oldDP->getFirstNodeID();
     EdgeID oldFirstEdgeID = _oldDP->getFirstEdgeID();
 
-    NodeID newFirstNodeID =
-        _nodesToDelete.front() != oldFirstNodeID
-            ? oldFirstNodeID
-            : *std::ranges::adjacent_find(_nodesToDelete,
-                                          [](NodeID a, NodeID b) { return a != b + 1; });
-    EdgeID newFirstEdgeID =
-        _edgesToDelete.front() != oldFirstEdgeID
-            ? oldFirstEdgeID
-            : *std::ranges::adjacent_find(_edgesToDelete,
-                                          [](EdgeID a, EdgeID b) { return a != b + 1; });
-
     // We are reconstructing the new datapart in the same ID space
-    _builder->_firstNodeID = _builder->_nextNodeID = nodeIDMapping(oldFirstNodeID);
-    _builder->_firstEdgeID = _builder->_nextEdgeID = edgeIDMapping(oldFirstEdgeID);
+    _builder->_firstNodeID = _builder->_nextNodeID = oldFirstNodeID;
+    _builder->_firstEdgeID = _builder->_nextEdgeID = oldFirstEdgeID;
 
     _builder->_nodeProperties = std::make_unique<PropertyManager>();
     _builder->_edgeProperties = std::make_unique<PropertyManager>();
