@@ -35,7 +35,7 @@ public:
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
 
-    const TuringConfig& getConfig() const { return *_config; }
+    const TuringConfig* getConfig() const { return _config; }
 
     void init();
 
@@ -84,8 +84,8 @@ public:
 
 
 private:
-    const TuringConfig* _config;
     mutable RWSpinLock _graphsLock;
+    const TuringConfig* _config {nullptr};
     Graph* _defaultGraph {nullptr};
     std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;

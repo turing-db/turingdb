@@ -9,10 +9,10 @@ namespace db {
 class S3TransferStepFunctions {
 public:
     static std::string getFullLocalPath(const S3TransferDirectory transferDirectory,
-                                        const TuringConfig& config,
+                                        const TuringConfig* config,
                                         const std::string& localPath) {
         if (transferDirectory == S3TransferDirectory::DATA) {
-            const auto& root = config.getDataDir();
+            const auto& root = config->getDataDir();
             const auto& fullPath = root / localPath;
             if (!fs::Path::isSubDirectory(root, fullPath)) {
                 throw PipelineException(fmt::format("Invalid Suffix Directory {}",
@@ -21,7 +21,7 @@ public:
             return fullPath.c_str();
 
         } else if (transferDirectory == S3TransferDirectory::GRAPH) {
-            const auto& root = config.getGraphsDir();
+            const auto& root = config->getGraphsDir();
             const auto& fullPath = root / localPath;
 
             if (!fs::Path::isSubDirectory(root, fullPath)) {

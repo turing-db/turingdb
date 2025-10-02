@@ -57,7 +57,7 @@ public:
         }
 
         // Start reading metadata page
-        auto it = _reader.begin();
+        fs::AlignedBufferIterator it = _reader.begin();
 
         if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
             return DumpError::result(DumpErrorType::COULD_NOT_READ_GRAPH_INFO);
