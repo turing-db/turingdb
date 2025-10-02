@@ -89,13 +89,6 @@ private:
 
     explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
 
-    /**
-     * @brief Using @ref _commitData as the state of the graph, checks for edges which are
-     * incident to a node with an ID which appears in @ref _writeBuffer @ref _deletedNodes
-     * vector. EdgeIDs which are found to be incident are appended to @ref _deletedEdges.
-     * @warn Sorts @ref _deletedNodes in-place
-     */
-    void detectHangingEdges();
     void applyDeletions();
 
     CommitResult<void> buildNewDataPart(JobSystem& jobsystem,

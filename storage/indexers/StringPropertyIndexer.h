@@ -40,7 +40,7 @@ public:
 
     auto end() const { return _indexer.end(); }
 
-    const auto find(PropertyTypeID id) const { return _indexer.find(id); }
+    auto find(PropertyTypeID id) const { return _indexer.find(id); }
 
 private:
     std::map<PropertyTypeID, std::unique_ptr<StringIndex>> _indexer;
@@ -79,8 +79,8 @@ void StringPropertyIndexer::addStringPropertyToIndex(
     // Get the index map for this property type
     StringIndex* trie = _indexer.at(propertyID).get();
     if (!trie) {
-        throw TuringException("Tree is nullpointer at property index "
-                              + std::to_string(propertyID.getValue()));
+     throw TuringException("Tree is nullpointer at property index "
+                           + std::to_string(propertyID.getValue()));
     }
 
     // Get [ID, stringValue] pairs

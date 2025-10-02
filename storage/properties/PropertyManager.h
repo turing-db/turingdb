@@ -14,6 +14,7 @@ class EntityPropertyView;
 class NodeContainer;
 class DataPartLoader;
 class DataPartRebaser;
+class DataPartModifier;
 
 class PropertyManager {
 public:
@@ -154,6 +155,7 @@ public:
 private:
     friend DataPartLoader;
     friend DataPartRebaser;
+    friend DataPartModifier;
 
     PropertyContainerMap _map;
 
