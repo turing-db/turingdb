@@ -40,10 +40,8 @@ void SystemManager::init() {
     const fs::Path defaultPath = _config->getGraphsDir() / "default"; auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
 
     if (found != list->end()) {
-        spdlog::info("loading default");
         _defaultGraph = loadGraph("default");
     } else {
-        spdlog::info("creating default");
         _defaultGraph = createGraph("default");
     }
 

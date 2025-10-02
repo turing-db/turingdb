@@ -14,11 +14,11 @@ GraphSerializer::GraphSerializer(Graph* graph)
 }
 
 DumpResult<void> GraphSerializer::load() const {
-    spdlog::info("Loading graph {} from {}", _graph->getName(), _graph->getPath().get());
+    spdlog::info("Loading graph {}", _graph->getName());
     return GraphLoader::load(_graph, _graph->getPath());
 }
 
 DumpResult<void> GraphSerializer::dump() const {
-    spdlog::info("Dumping graph {} to {}", _graph->getName(), _graph->getPath().get());
+    spdlog::info("Dumping graph {}", _graph->getName());
     return GraphDumper::dump(*_graph, _graph->getPath());
 }
