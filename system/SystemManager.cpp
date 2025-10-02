@@ -37,8 +37,7 @@ void SystemManager::init() {
                                           _config->getGraphsDir().get()));
     }
 
-    const fs::Path defaultPath = _config->getGraphsDir() / "default";
-    auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
+    const fs::Path defaultPath = _config->getGraphsDir() / "default"; auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
 
     if (found != list->end()) {
         spdlog::info("loading default");
@@ -57,9 +56,9 @@ Graph* SystemManager::loadGraph(const std::string& name) {
     const fs::Path graphPath = _config->getGraphsDir() / name;
 
     auto graph = Graph::create(name, graphPath);
-    auto* graphPtr = graph.get();
+    Graph* graphPtr = graph.get();
 
-    if (auto res = graph->getSerializer().load(); !res) {
+    if (const auto res = graph->getSerializer().load(); !res) {
         spdlog::error(res.error().fmtMessage());
         return nullptr;
     }
@@ -75,7 +74,7 @@ Graph* SystemManager::createGraph(const std::string& name) {
     const fs::Path path = _config->getGraphsDir() / name;
 
     auto graph = Graph::create(name, path);
-    auto* graphPtr = graph.get();
+    Graph* graphPtr = graph.get();
 
     if (_config->isSyncedOnDisk()) {
         if (auto res = graph->getSerializer().dump(); !res) {
