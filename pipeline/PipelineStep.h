@@ -127,7 +127,6 @@ public:
                  ColumnVector<const Change*>*);
 
     PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
-    PipelineStep(LoadGraphStep::Tag, const fs::Path& filePath, const std::string& graphName);
 
     PipelineStep(ImportGraphStep::Tag, const fs::Path& filePath, const std::string& graphName);
 

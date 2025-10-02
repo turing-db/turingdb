@@ -12,7 +12,6 @@ class LoadGraphStep {
 public:
     struct Tag {};
 
-    LoadGraphStep(const fs::Path& filePath, const std::string& graphName);
     LoadGraphStep(const std::string& graphName);
     ~LoadGraphStep();
 

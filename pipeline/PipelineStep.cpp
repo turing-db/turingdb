@@ -236,12 +236,6 @@ PipelineStep::PipelineStep(LoadGraphStep::Tag, const std::string& graphName)
 {
 }
 
-PipelineStep::PipelineStep(LoadGraphStep::Tag, const fs::Path& filePath, const std::string& graphName)
-    : _opcode(PipelineOpcode::LOAD_GRAPH),
-    _impl(std::in_place_type<LoadGraphStep>, filePath, graphName)
-{
-}
-
 PipelineStep::PipelineStep(ImportGraphStep::Tag, const fs::Path& filePath, const std::string& graphName)
     : _opcode(PipelineOpcode::IMPORT_GRAPH),
     _impl(std::in_place_type<ImportGraphStep>, filePath, graphName)

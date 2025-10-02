@@ -1557,14 +1557,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
 
 bool QueryPlanner::planLoadGraph(const LoadGraphCommand* loadCmd) {
     _pipeline->add<StopStep>();
-
-    if (!loadCmd->getFilePath().empty()) {
-        spdlog::warn("LOAD GRAPH <graph_name> \"<file_path>\" is deprecated, please use IMPORT GRAPH <graph_name> FROM <file_path>");
-        _pipeline->add<LoadGraphStep>(loadCmd->getFilePath(), loadCmd->getGraphName());
-    } else {
-        _pipeline->add<LoadGraphStep>(loadCmd->getGraphName());
-    }
-
+    _pipeline->add<LoadGraphStep>(loadCmd->getGraphName());
     _pipeline->add<EndStep>();
     return true;
 }

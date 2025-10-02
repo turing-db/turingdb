@@ -26,13 +26,11 @@ void ImportGraphStep::prepare(ExecutionContext* ctxt) {
 void ImportGraphStep::execute() {
     Profile profile {"ImportGraphStep::execute"};
 
-    bool res {false};
-
     if (_filePath.empty() || _graphName.empty()) {
         throw PipelineException("Invalid graph name or file path");
     }
 
-    res = _sysMan->importGraph(_graphName, _filePath, *_jobSystem);
+    const bool res = _sysMan->importGraph(_graphName, _filePath, *_jobSystem);
 
     if (!res) {
         throw PipelineException("Failed to load graph " + _graphName);

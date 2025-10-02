@@ -9,12 +9,6 @@
 
 using namespace db;
 
-LoadGraphStep::LoadGraphStep(const fs::Path& filePath, const std::string& graphName)
-    : _filePath(filePath),
-    _graphName(graphName)
-{
-}
-
 LoadGraphStep::LoadGraphStep(const std::string& graphName) 
     : _graphName(graphName)
 {

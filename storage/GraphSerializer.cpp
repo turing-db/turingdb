@@ -6,7 +6,6 @@
 #include "dump/GraphLoader.h"
 #include "dump/GraphDumper.h"
 
-
 using namespace db;
 
 GraphSerializer::GraphSerializer(Graph* graph)

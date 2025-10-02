@@ -544,9 +544,6 @@ list_graph_cmd: LIST GRAPH { $$ = ListGraphCommand::create(ctxt); }
 
 // LOAD GRAPH
 load_graph_cmd: LOAD GRAPH ID { $$ = LoadGraphCommand::create(ctxt, $3); }
-              | LOAD GRAPH STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, $3); }
-              | LOAD GRAPH ID STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, fs::Path ($4), $3); }
-              | LOAD GRAPH STRING_CONSTANT STRING_CONSTANT { $$ = LoadGraphCommand::create(ctxt, fs::Path ($4), $3); }
               ;
 
 // IMPORT GRAPH
