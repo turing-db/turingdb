@@ -26,6 +26,7 @@ add_subdirectory(submit_empty_change)
 add_subdirectory(create_edges_inject)
 add_subdirectory(call_labels)
 add_subdirectory(complex_rebases)
+add_subdirectory(serialization)
 
 # write run_regress target
 set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")

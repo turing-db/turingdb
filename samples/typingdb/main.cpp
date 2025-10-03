@@ -25,6 +25,7 @@ int main(int argc, const char** argv) {
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "typingdb";
 
     TuringConfig config = TuringConfig::createDefault();
+    config.setTuringDirectory(fs::Path(SAMPLE_DIR) / ".turing");
     TuringDB db(&config);
     db.run();
 

@@ -20,11 +20,13 @@ int main(int argc, const char** argv) {
     auto& argParser = toolInit.getArgParser();
 
     bool noServer = false;
-    unsigned port = 6666;
-    std::string address {"127.0.0.1"};
     bool nodemon = false;
     bool inMemory = false;
+    unsigned port = 6666;
+    std::string address {"127.0.0.1"};
+    std::string turingDir;
     std::vector<std::string> graphsToLoad;
+
     argParser.add_argument("-cli")
              .store_into(noServer);
     argParser.add_argument("-p")
@@ -37,6 +39,9 @@ int main(int argc, const char** argv) {
              .store_into(graphsToLoad);
     argParser.add_argument("-in-memory")
              .store_into(inMemory);
+    argParser.add_argument("-turing-dir")
+             .store_into(turingDir)
+             .help("Root Turing directory");
 
     toolInit.init(argc, argv);
 
@@ -44,12 +49,21 @@ int main(int argc, const char** argv) {
         Demonology::demonize();
     }
 
-    LocalMemory mem;
+    // Config
     TuringConfig config = TuringConfig::createDefault();
     config.setSyncedOnDisk(!inMemory);
 
+    fmt::println("TuringDB path: {}", config.getTuringDir().get());
+    if (!turingDir.empty()) {
+        config.setTuringDirectory(fs::Path {turingDir});
+    }
+
+    // Run TuringDB
     TuringDB turingDB(&config);
     turingDB.run();
+
+    // Load graphs
+    LocalMemory mem;
 
     for (const auto& graphName : graphsToLoad) {
         const auto res = turingDB.query("load graph " + graphName, "", &mem);

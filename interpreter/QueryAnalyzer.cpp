@@ -236,8 +236,8 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
                 const auto propTypeRes = propTypeMap.get(memberName);
                 if (!propTypeRes) {
                     throw AnalyzeException(
-                        "Property type not found for property member \""
-                       + field->getMemberName() + "\"");
+                        "Property type not found for property member '"
+                       + field->getMemberName() + "'");
                 }
 
                 const auto propType = propTypeRes.value();

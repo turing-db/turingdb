@@ -1,0 +1,73 @@
+from turingdb import TuringDB
+
+import subprocess
+import signal
+import os
+import shutil
+import time
+
+GREEN = "\033[0;32m"
+BLUE = "\033[0;34m"
+NC = "\033[0m"
+
+
+def spawn_turingdb():
+    print(f"- {GREEN}Starting turingdb{NC}")
+    return subprocess.Popen("exec turingdb -turing-dir .turing -nodemon", shell=True)
+
+
+def stop_turingdb(proc):
+    print(f"- {GREEN}Stopping turingdb{NC}")
+    proc.send_signal(signal.SIGTERM)
+    proc.wait()
+
+
+def wait_ready(client):
+    t0 = time.time()
+    while time.time() - t0 < 6:
+        try:
+            client.try_reach(timeout=1)
+            return
+        except:
+            time.sleep(0.1)
+
+
+if __name__ == "__main__":
+    proc = None
+    try:
+        if os.path.exists(".turing"):
+            shutil.rmtree(".turing")
+
+        proc = spawn_turingdb()
+
+        # Connect to turingdb
+        client = TuringDB(host="http://localhost:6666")
+        wait_ready(client)
+
+        print(f"- {BLUE}Creating graph{NC}")
+        print(client.query("CREATE GRAPH mygraph"))
+
+        client.set_graph("mygraph")
+
+        # Make changes
+        print(f"- {BLUE}Making changes{NC}")
+        change = client.query("CHANGE NEW")[0][0]
+        client.checkout(change=str(change))
+        print(client.query("CREATE (:Person {name: 'Alice'})"))
+        #print(client.query("COMMIT"))
+        print(client.query("CHANGE SUBMIT"))
+        client.checkout()
+
+        # Restart turingdb
+        stop_turingdb(proc)
+
+        proc = spawn_turingdb()
+        wait_ready(client)
+
+        client.load_graph("mygraph")
+        print(f"- {BLUE}Restarting turingdb{NC}")
+        print(client.query("MATCH (n) RETURN n, n.name"))
+
+    finally:
+        if proc:
+            stop_turingdb(proc)
