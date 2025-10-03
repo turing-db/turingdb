@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "PlanGraphNodeGenState.h"
+
 #include "EnumToString.h"
 
 namespace db::v2 {
@@ -50,19 +52,6 @@ class PlanGraphNode {
 public:
     using Nodes = std::vector<PlanGraphNode*>;
 
-    class GenerationState {
-    public:
-        bool isDiscovered() const { return _discovered; }
-        void setDiscovered() { _discovered = true; }
-
-        bool isTranslated() const { return _translated; }
-        void setTranslated() { _translated = true; }
-
-    private:
-        bool _discovered {false};
-        bool _translated {false};
-    };
-
     virtual ~PlanGraphNode() = default;
 
     PlanGraphOpcode getOpcode() const { return _opcode; }
@@ -73,8 +62,8 @@ public:
 
     bool isRoot() const { return _inputs.empty(); }
 
-    GenerationState& getGenerationState() { return _genState; }
-    const GenerationState& getGenerationState() const { return _genState; }
+    PlanGraphNodeGenState& getGenerationState() { return _genState; }
+    const PlanGraphNodeGenState& getGenerationState() const { return _genState; }
 
     void connectOut(PlanGraphNode* succ);
     void clearInputs();
@@ -89,7 +78,7 @@ private:
     PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
     Nodes _inputs;
     Nodes _outputs;
-    GenerationState _genState;
+    PlanGraphNodeGenState _genState;
 };
 
 }

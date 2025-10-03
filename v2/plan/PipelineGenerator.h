@@ -9,6 +9,7 @@ namespace db::v2 {
 class PlanGraph;
 class PipelineV2;
 class PlanGraphNode;
+class PlanGraphStream;
 
 class PipelineGenerator {
 public:
@@ -30,9 +31,7 @@ private:
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
 
-    void translateNode(PlanGraphNode* node);
-    void translateScanNodes(PlanGraphNode* node);
-    void translateGetOutEdges(PlanGraphNode* node);
+    void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
 };
 
 }

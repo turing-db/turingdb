@@ -1,12 +1,18 @@
 #include "PipelineGenerator.h"
 
-#include <stack>
+#include <spdlog/fmt/fmt.h>
 
+#include "PipelinePort.h"
 #include "PlanGraph.h"
+#include "PlanGraphStream.h"
+#include "TranslateToken.h"
+
+#include "PipelineBuffer.h"
 
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
 
+#include "columns/Block.h"
 #include "columns/ColumnIDs.h"
 
 #include "LocalMemory.h"
@@ -17,94 +23,109 @@ using namespace db;
 
 namespace {
 
+/*
 template <typename ColumnType>
-ColumnType* addColumnInBuffer(LocalMemory* mem, PipelineBuffer* buffer) {
+PipelineOutputPort* addColumnInPort(LocalMemory* mem, PipelineOutputPort* outPort) {
     auto* col = mem->alloc<ColumnType>();
+    PipelineBuffer* buffer = outPort->getBuffer();
     buffer->getBlock().addColumn(col);
-    return col;
+    return outPort;
 }
+*/
 
 }
 
 void PipelineGenerator::generate() {
-    std::stack<PlanGraphNode*> nodeStack;
+    TranslateTokenStack nodeStack;
 
     // Insert root nodes
     std::vector<PlanGraphNode*> rootNodes;
     _graph->getRoots(rootNodes);
+
     for (const auto& node : rootNodes) {
-        nodeStack.push(node);
-        node->getGenerationState().setDiscovered();
+        nodeStack.emplace(node, PlanGraphStream());
     }
 
     // Translate nodes in a DFS manner
     while (!nodeStack.empty()) {
-        PlanGraphNode* node = nodeStack.top();
+        auto [node, stream] = nodeStack.top();
+        nodeStack.pop();
 
-        PlanGraphNode::GenerationState& nodeState = node->getGenerationState();
-        if (nodeState.isTranslated()) {
-            // The node is already translated
-            // so it means that we are coming back to the node on the DFS backtrack path
-            // All its outputs have been translated already
-            nodeStack.pop();
-            continue;
-        } else {
-            // First time we encounter this node
-            // Translate the node into a pipeline processor
-            translateNode(node);
-            nodeState.setTranslated();
-        }
+        translateNode(node, stream);
 
         for (PlanGraphNode* nextNode : node->outputs()) {
-            PlanGraphNode::GenerationState& nextNodeState = nextNode->getGenerationState();
-            if (!nextNodeState.isDiscovered()) {
-                nodeStack.push(nextNode);
-                nextNodeState.setDiscovered();
-            }
+            nodeStack.emplace(nextNode, stream);
         }
     }
 }
 
-void PipelineGenerator::translateNode(PlanGraphNode* node) {
+void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stream) {
     switch (node->getOpcode()) {
-        case PlanGraphOpcode::VAR: {
+        case PlanGraphOpcode::VAR:
+            // Do nothing
+        break;
+        case PlanGraphOpcode::SCAN_NODES: {
+            ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
+            PipelineOutputPort* outNodes = proc->outNodeIDs();
+            stream.set(PlanGraphStream::NodeStream{outNodes});
+        }
+        break;
+        case PlanGraphOpcode::GET_OUT_EDGES: {
+            // Require a node stream
+            if (!stream.isNodeStream()) {
+                throw PlannerException(fmt::format("GET_OUT_EDGES node requires a node stream"));
+            }
+            GetOutEdgesProcessor* proc = GetOutEdgesProcessor::create(_pipeline);
+            PipelineOutputPort* outEdgeIDs = proc->outEdgeIDs();
+            PipelineOutputPort* outTargetIDs = proc->outTargetNodes();
+            stream.set(PlanGraphStream::EdgeStream{outEdgeIDs, outTargetIDs});
+        }
+        break;
+        case PlanGraphOpcode::GET_EDGE_TARGET: {
+            // Require an edge stream
+            if (!stream.isEdgeStream()) {
+                throw PlannerException(fmt::format("GET_EDGE_TARGET node requires an edge stream"));
+            }
+
+            PipelineOutputPort* targetIDs = stream.getEdgeStream().targetIDs;
+            stream.set(PlanGraphStream::NodeStream{targetIDs});
+        }
+        break;
+        case PlanGraphOpcode::MATERIALIZE: {
+            // Do nothing
+        }
+        break;
+        case PlanGraphOpcode::FILTER_NODE: {
+            // Require a node stream
+            if (!stream.isNodeStream()) {
+                throw PlannerException(fmt::format("FILTER_NODE node requires a node stream"));
+            }
+        }
+        break;
+        case PlanGraphOpcode::FILTER_EDGE: {
+            // Require an edge stream
+            if (!stream.isEdgeStream()) {
+                throw PlannerException(fmt::format("FILTER_EDGE node requires an edge stream"));
+            }
+        }
+        break;
+        case PlanGraphOpcode::PRODUCE_RESULTS: {
             // Do nothing
         }
         break;
 
-        case PlanGraphOpcode::SCAN_NODES:
-            translateScanNodes(node);
-        break;
-
-        case PlanGraphOpcode::GET_OUT_EDGES:
-            translateGetOutEdges(node);
-        break;
-        
-        case PlanGraphOpcode::FILTER_NODE:
-        case PlanGraphOpcode::FILTER_EDGE:
         case PlanGraphOpcode::GET_IN_EDGES:
         case PlanGraphOpcode::GET_EDGES:
-        case PlanGraphOpcode::GET_EDGE_TARGET:
+        
         case PlanGraphOpcode::CREATE_NODE:
         case PlanGraphOpcode::CREATE_EDGE:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
         case PlanGraphOpcode::JOIN:
-        case PlanGraphOpcode::MATERIALIZE:
-        case PlanGraphOpcode::PRODUCE_RESULTS:
-        default:
-            throw PlannerException("Unsupported plan graph opcode: "
-                + std::string(PlanGraphOpcodeDescription::value(node->getOpcode())));
-        break;
+        case PlanGraphOpcode::_SIZE:
+        case PlanGraphOpcode::UNKNOWN:
+            throw PlannerException(fmt::format("Unknown plan graph node opcode: {}",
+                PlanGraphOpcodeDescription::value(node->getOpcode())));
     }
-}
-
-void PipelineGenerator::translateScanNodes(PlanGraphNode* node) {
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(_pipeline);
-    addColumnInBuffer<ColumnNodeIDs>(_mem, scanNodes->outNodeIDs()->getBuffer());
-}
-
-void PipelineGenerator::translateGetOutEdges(PlanGraphNode* node) {
-    //GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
 }

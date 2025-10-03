@@ -17,6 +17,9 @@
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
+#include "PipelineGenerator.h"
+#include "PipelineV2.h"
+#include "LocalMemory.h"
 
 using namespace db;
 using namespace db::v2;
@@ -52,6 +55,7 @@ int main(int argc, char** argv) {
     CypherAST ast(queryStr);
     ast.setDebugLocations(true);
 
+    fmt::print("\n========== Query Parsing ==========\n");
     {
         CypherParser parser(&ast);
         parser.allowNotImplemented(false);
@@ -83,8 +87,10 @@ int main(int argc, char** argv) {
         dumper.dump(std::cout);
     }
 
+    fmt::print("\n========== Plan Graph Generation ==========\n");
+    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraph& planGraph = planGen.getPlanGraph();
     {
-        PlanGraphGenerator planGen(ast, view, callback);
         try {
             auto t0 = Clock::now();
             planGen.generate(ast.queries().front());
@@ -97,6 +103,23 @@ int main(int argc, char** argv) {
         const PlanGraph& planGraph = planGen.getPlanGraph();
 
         PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
+    }
+
+    PipelineV2 pipeline;
+    LocalMemory localMem;
+
+    fmt::print("\n========== Pipeline Generation ==========\n");
+    {
+        PipelineGenerator pipelineGenerator(&planGraph, &pipeline, &localMem);
+        try {
+            auto t0 = Clock::now();
+            pipelineGenerator.generate();
+            auto t1 = Clock::now();
+            fmt::print("Pipeline generated in {} us\n", duration<Microseconds>(t0, t1));
+        } catch (const PlannerException& e) {
+            fmt::print("{}\n", e.what());
+            return EXIT_FAILURE;
+        }
     }
 
     return EXIT_SUCCESS;
