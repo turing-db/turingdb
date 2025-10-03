@@ -22,6 +22,11 @@ int main(int argc, const char** argv) {
     ToolInit toolInit("typingdb");
     toolInit.init(argc, argv);
 
+    const fs::Path turingDir = fs::Path(SAMPLE_DIR) / ".turing";
+    if (turingDir.exists()) {
+        turingDir.rm();
+    }
+
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "typingdb";
 
     TuringConfig config = TuringConfig::createDefault();

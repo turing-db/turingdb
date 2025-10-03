@@ -23,6 +23,11 @@ int main(int argc, const char** argv) {
     ToolInit toolInit("simpledb");
     toolInit.init(argc, argv);
 
+    const fs::Path turingDir = fs::Path(SAMPLE_DIR) / ".turing";
+    if (turingDir.exists()) {
+        turingDir.rm();
+    }
+
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "simpledb";
 
     TuringConfig config = TuringConfig::createDefault();
