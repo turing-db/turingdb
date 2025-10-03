@@ -76,6 +76,13 @@ public:
         };
     }
 
+    void undoLocalCommits(size_t totalDPs, size_t committedDPs) {
+        // Just delete the most recent committedDPs number of DPs
+        resizeDataParts(totalDPs - committedDPs);
+        // Reset this commit to have no locally created DPs
+        setCommitDatapartCount(0);
+    }
+
 private:
     CommitHistory& _history;
 };

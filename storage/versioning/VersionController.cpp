@@ -6,12 +6,10 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
-#include "spdlog/spdlog.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/Transaction.h"
-#include "writers/DataPartBuilder.h"
 
 using namespace db;
 
@@ -70,11 +68,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     // atomic load main
     Commit* mainState = _head.load();
 
-    spdlog::info("Change Submit: MAIN");
-    for (auto&& dp : mainState->data().allDataparts()) {
-        spdlog::info("DataPart : {} nodes {} edges", dp->getNodeCount(), dp->getEdgeCount());
-    }
-
     // rebase if main has changed under us
     if (mainState->hash() != change->baseHash()) {
         if (auto res = change->rebase(jobSystem); !res) {
@@ -83,19 +76,31 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commitBuilder : change->_commits) {
-        // Creates a new builder to execute CREATE/DELETE commands
+        // Undo any commits that were made locally
 
+        // Only check those with an non-empty writebuffer, as other sources e.g.
+        // GraphWriter will create multiple dataparts from builders at commit-time but not
+        // at submit time, and so should not be erased
         if (!commitBuilder->writeBuffer().empty()) {
+            // Only undo those which have committed, denoted by having a datapart
             if (commitBuilder->_datapartCount != 0) {
+                // Total number of dataparts that this commit sees
+                size_t totalDataPartCount =
+                    commitBuilder->commitData().allDataparts().size();
+                // Number of dataparts that were created as a result of calls to
+                // Change::submit (1 submit = 1 datapart)
+                size_t thisCommitDataPartCount =
+                    commitBuilder->commitData().commitDataparts().size();
+
                 CommitHistoryBuilder hstryBuilder {commitBuilder->_commitData->_history};
-                hstryBuilder.resizeDataParts(
-                    commitBuilder->commitData().allDataparts().size()
-                    - commitBuilder->_datapartCount);
-                hstryBuilder.setCommitDatapartCount(0);
+                hstryBuilder.undoLocalCommits(totalDataPartCount,
+                                              thisCommitDataPartCount);
+                // We have deleted all created DPs: reset this number
                 commitBuilder->_datapartCount = 0;
             }
         }
-        
+
+        // Creates a new builder to execute CREATE/DELETE commands
         commitBuilder->flushWriteBuffer(jobSystem);
 
         auto buildRes = commitBuilder->build(jobSystem);
