@@ -6,6 +6,7 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
+#include "spdlog/spdlog.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/DataPartRebaser.h"
@@ -69,6 +70,11 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     // atomic load main
     Commit* mainState = _head.load();
 
+    spdlog::info("Change Submit: MAIN");
+    for (auto&& dp : mainState->data().allDataparts()) {
+        spdlog::info("DataPart : {} nodes {} edges", dp->getNodeCount(), dp->getEdgeCount());
+    }
+
     // rebase if main has changed under us
     if (mainState->hash() != change->baseHash()) {
         if (auto res = change->rebase(jobSystem); !res) {
@@ -76,11 +82,23 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         }
     }
 
-    for (auto& commit : change->_commits) {
+    for (auto& commitBuilder : change->_commits) {
         // Creates a new builder to execute CREATE/DELETE commands
-        commit->flushWriteBuffer(jobSystem);
 
-        auto buildRes = commit->build(jobSystem);
+        if (!commitBuilder->writeBuffer().empty()) {
+            if (commitBuilder->_datapartCount != 0) {
+                CommitHistoryBuilder hstryBuilder {commitBuilder->_commitData->_history};
+                hstryBuilder.resizeDataParts(
+                    commitBuilder->commitData().allDataparts().size()
+                    - commitBuilder->_datapartCount);
+                hstryBuilder.setCommitDatapartCount(0);
+                commitBuilder->_datapartCount = 0;
+            }
+        }
+        
+        commitBuilder->flushWriteBuffer(jobSystem);
+
+        auto buildRes = commitBuilder->build(jobSystem);
         if (!buildRes) {
             return buildRes.get_unexpected();
         }

@@ -60,6 +60,10 @@ public:
         _history._allDataparts.push_back(datapart);
     }
 
+    void resizeDataParts(size_t newSize) {
+        _history._allDataparts.resize(newSize);
+    }
+
     void setCommitDatapartCount(size_t count) {
         auto* begin = _history._allDataparts.data();
         const size_t totalCount = _history._allDataparts.size();
