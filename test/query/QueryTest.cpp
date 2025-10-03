@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "ID.h"
 #include "LocalMemory.h"
@@ -14,6 +15,7 @@
 
 using namespace db;
 using namespace turing::test;
+using namespace testing;
 
 class QueryTest : public TuringTest {
 public:
@@ -1745,4 +1747,86 @@ TEST_F(QueryTest, createChunkingTest) {
         .expectVector<EdgeID>({nextEdgeID++})
         .expectVector<EdgeID>({nextEdgeID++})
         .execute();
+}
+
+// Tests a bug with @ref CreateWriteBuffer where muliple commits would create duplicate
+// parts
+TEST_F(QueryTest, historyCorrectParts) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    const auto newChange = [&]() {
+        auto res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    // Each commit should only create a single datapart, so there should only be a single
+    // Part entry in History
+    const auto occursOnce = [](const std::string& text, const std::string& pattern) {
+        size_t firstOccurence = text.find(pattern);
+        size_t lastOccurence = text.rfind(pattern);
+        return firstOccurence != std::string::npos && firstOccurence == lastOccurence;
+    };
+
+    const auto validateHistory = [&]() {
+        auto historyOpt = tester.query("history")
+                              .expectVector<std::string>({"1"}, false)
+                              .execute()
+                              .outputColumnVector<std::string>(0);
+
+        ASSERT_TRUE(historyOpt.has_value());
+
+        const auto* history = historyOpt.value();
+
+        for (auto&& historyEntry : *history) { // For each commit in history
+            // If this isn't a commit with a datapart, we don't care
+            if (historyEntry.find("Part") == std::string::npos) {
+                continue;
+            }
+            // Assert that we have only created a single datapart
+            EXPECT_TRUE(occursOnce(historyEntry, "Part"));
+        }
+    };
+
+    newChange();
+
+    tester.query("create (n:Person{name=\"Cyrus\"})")
+          .execute();
+
+    tester.query("commit")
+          .execute();
+
+    tester.query("change submit")
+          .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    validateHistory();
+
+    newChange();
+
+    tester.query("create (n:Person{name=\"Cyrus\"})")
+          .execute();
+
+    tester.query("commit")
+          .execute();
+
+    tester.query("create (n:Person{name=\"Cyrus\"})")
+          .execute();
+    tester.query("create (n:Person{name=\"Cyrus\"})")
+          .execute();
+
+    tester.query("commit")
+          .execute();
+
+    tester.query("change submit")
+          .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    validateHistory();
 }
