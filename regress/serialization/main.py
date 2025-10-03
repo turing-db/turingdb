@@ -1,5 +1,7 @@
 from turingdb import TuringDB
 
+import pandas as pd
+
 import subprocess
 import signal
 import os
@@ -54,7 +56,7 @@ if __name__ == "__main__":
         change = client.query("CHANGE NEW")[0][0]
         client.checkout(change=str(change))
         print(client.query("CREATE (:Person {name: 'Alice'})"))
-        #print(client.query("COMMIT"))
+        print(client.query("COMMIT"))
         print(client.query("CHANGE SUBMIT"))
         client.checkout()
 
@@ -66,7 +68,13 @@ if __name__ == "__main__":
 
         client.load_graph("mygraph")
         print(f"- {BLUE}Restarting turingdb{NC}")
-        print(client.query("MATCH (n) RETURN n, n.name"))
+        res: pd.DataFrame = client.query("MATCH (n) RETURN n, n.name")
+
+        if res.shape[0] != 1:
+            raise Exception(
+                f"After reloading the graph, the query should return one row. "
+                f"Returned {res.shape[0]} instead. Query result:\n{res}"
+            )
 
     finally:
         if proc:

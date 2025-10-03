@@ -178,18 +178,28 @@ void DBServerProcessor::load_graph() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    // TODO: Fix this, we should differentiate load graph and import graph
-    if (!sys.importGraph(transactionInfo.graphName, fs::Path {transactionInfo.graphName}, _db.getJobSystem())) {
-        payload.key("error");
-        // Try to determine the specific error
-        if (sys.getGraph(transactionInfo.graphName)) {
-            payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_ALREADY_EXISTS));
-        } else if (sys.isGraphLoading(transactionInfo.graphName)) {
-            payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_ALREADY_LOADING));
-        } else {
+    const fs::Path graphPath {transactionInfo.graphName};
+
+    const auto graphType = sys.getGraphFileType(graphPath);
+    if (graphType == GraphFileType::BINARY) {
+        if (!sys.loadGraph(transactionInfo.graphName)) {
+            payload.key("error");
             payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_LOAD_ERROR));
+            return;
         }
-        return;
+    } else {
+        if (!sys.importGraph(transactionInfo.graphName, graphPath, _db.getJobSystem())) {
+            payload.key("error");
+            // Try to determine the specific error
+            if (sys.getGraph(transactionInfo.graphName)) {
+                payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_ALREADY_EXISTS));
+            } else if (sys.isGraphLoading(transactionInfo.graphName)) {
+                payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_ALREADY_LOADING));
+            } else {
+                payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_LOAD_ERROR));
+            }
+            return;
+        }
     }
 }
 

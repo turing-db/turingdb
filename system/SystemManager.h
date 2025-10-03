@@ -82,6 +82,7 @@ public:
         return _s3Client.get();
     }
 
+    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
 
 private:
     mutable RWSpinLock _graphsLock;
@@ -98,7 +99,6 @@ private:
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool addGraph(std::unique_ptr<Graph> graph);
-    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
 };
 
 }
