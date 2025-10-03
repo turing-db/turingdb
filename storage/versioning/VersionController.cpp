@@ -84,17 +84,8 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (!commitBuilder->writeBuffer().empty()) {
             // Only undo those which have committed, denoted by having a datapart
             if (commitBuilder->_datapartCount != 0) {
-                // Total number of dataparts that this commit sees
-                size_t totalDataPartCount =
-                    commitBuilder->commitData().allDataparts().size();
-                // Number of dataparts that were created as a result of calls to
-                // Change::submit (1 submit = 1 datapart)
-                size_t thisCommitDataPartCount =
-                    commitBuilder->commitData().commitDataparts().size();
-
-                CommitHistoryBuilder hstryBuilder {commitBuilder->_commitData->_history};
-                hstryBuilder.undoLocalCommits(totalDataPartCount,
-                                              thisCommitDataPartCount);
+                CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
+                historyBuilder.undoLocalCommits();
                 // We have deleted all created DPs: reset this number
                 commitBuilder->_datapartCount = 0;
             }
