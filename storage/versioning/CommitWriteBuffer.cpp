@@ -191,6 +191,7 @@ void CommitWriteBuffer::detectHangingEdges() {
 
 void CommitWriteBuffer::prepare(CommitBuilder* commitBuilder) {
     _commitBuilder = commitBuilder;
+    // TODO: Undo repeated work via Node/Edge specifc fills and sorts
     sortDeletions();
     detectHangingEdges();
     sortDeletions(); // NOTE: Theoretically this second call is not needed ?
