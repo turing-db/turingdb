@@ -55,8 +55,16 @@ if __name__ == "__main__":
         print(f"- {BLUE}Making changes{NC}")
         change = client.query("CHANGE NEW")[0][0]
         client.checkout(change=str(change))
-        print(client.query("CREATE (:Person {name: 'Alice'})"))
+
+        create_query = "CREATE (a:Person {name: 'Alice'}), (j:Person {name: 'John'}), (a)-[:KNOWS]-(j)"
+        print(client.query(create_query))
         print(client.query("COMMIT"))
+
+        create_query = "CREATE (b:Person {name: 'Bob'}), (j at 1)-[:KNOWS]-(b)"
+        print(client.query(create_query))
+        print(client.query("COMMIT"))
+
+        create_query = "CREATE (c:Person {name: 'Charlie'}), (m:Person {name: 'Mike'}), (c)-[:KNOWS]-(m)"
         print(client.query("CHANGE SUBMIT"))
         client.checkout()
 
@@ -70,9 +78,9 @@ if __name__ == "__main__":
         print(f"- {BLUE}Restarting turingdb{NC}")
         res: pd.DataFrame = client.query("MATCH (n) RETURN n, n.name")
 
-        if res.shape[0] != 1:
+        if res.shape[0] != 3:
             raise Exception(
-                f"After reloading the graph, the query should return one row. "
+                f"After reloading the graph, the query should return three rows. "
                 f"Returned {res.shape[0]} instead. Query result:\n{res}"
             )
 
