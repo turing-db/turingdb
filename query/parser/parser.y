@@ -123,6 +123,10 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token NODES        "'NODES'"
 %token EDGES        "'EDGES'"
 
+%token S3_CONNECT "'S3_CONNECT'"
+%token S3_PUSH "'S3_PUSH'"
+%token S3_PULL "'S3_PULL'"
+
 // Operators
 %token PLUS         "'+'"
 %token MINUS        "'-'"
@@ -202,7 +206,6 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> s3connect_cmd
 %type<db::QueryCommand*> s3transfer_cmd
-%type<db::S3TransferDirectory> s3transfer_directory
 
 %start query_unit
 

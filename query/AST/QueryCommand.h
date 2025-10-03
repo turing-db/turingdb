@@ -8,13 +8,7 @@
 #include "ID.h"
 #include "TypeConstraint.h"
 #include "metadata/PropertyType.h"
-<<<<<<< HEAD
-||||||| parent of ab1103150 (Add DeleteStep to pipeline (!deletes-with-wb))
-#include "S3TransferDirectories.h"
-=======
-#include "S3TransferDirectories.h"
 #include "DeletedIDs.h"
->>>>>>> ab1103150 (Add DeleteStep to pipeline (!deletes-with-wb))
 
 namespace db {
 
