@@ -66,16 +66,27 @@ if __name__ == "__main__":
 
         create_query = "CREATE (c:Person {name: 'Charlie'}), (m:Person {name: 'Mike'}), (c)-[:KNOWS]-(m)"
         print(client.query("CHANGE SUBMIT"))
+
         client.checkout()
 
+        res: pd.DataFrame = client.query("MATCH (n) RETURN n, n.name")
+        print(res)
+
+        if res.shape[0] != 3:
+            raise Exception(
+                f"After reloading the graph, the query should return three rows. "
+                f"Returned {res.shape[0]} instead. Query result:\n{res}"
+            )
+
         # Restart turingdb
+        print(f"- {BLUE}Restarting turingdb{NC}")
         stop_turingdb(proc)
 
         proc = spawn_turingdb()
         wait_ready(client)
 
+        # Test after reload
         client.load_graph("mygraph")
-        print(f"- {BLUE}Restarting turingdb{NC}")
         res: pd.DataFrame = client.query("MATCH (n) RETURN n, n.name")
 
         if res.shape[0] != 3:
