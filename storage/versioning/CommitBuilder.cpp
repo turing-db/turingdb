@@ -167,13 +167,12 @@ void CommitBuilder::applyDeletions() {
 
         // Nothing in this datapart to delete
         if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()) {
-            continue;
+            // continue;
         }
 
         auto& newDataPartBuilder = newBuilder(idx);
-        auto modifier = DataPartModifier(part, newDataPartBuilder, thisDPDeletedNodes,
-                                         thisDPDeletedEdges);
-        modifier.applyModifications();
+        auto modifier = DataPartModifier(part, newDataPartBuilder, wb);
+        modifier.applyModifications(idx);
     }
 }
 

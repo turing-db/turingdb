@@ -4,10 +4,17 @@
 #include "EnumerateFrom.h"
 #include "NodeContainer.h"
 #include "metadata/PropertyType.h"
+#include "CommitBuilder.h"
+#include "range/v3/view/enumerate.hpp"
 
 using namespace db;
 
-void DataPartModifier::applyModifications() {
+void DataPartModifier::applyModifications(size_t index) {
+    _dpIndex = index;
+
+    _nodesToDelete = _writeBuffer.deletedNodesFromDataPart(_dpIndex);
+    _edgesToDelete = _writeBuffer.deletedEdgesFromDataPart(_dpIndex);
+
     // If we are deleting the entire datapart, return an empty builder
     if (_oldDP->getNodeCount() == _nodesToDelete.size()
         && _oldDP->getEdgeCount() == _edgesToDelete.size()) {
@@ -70,4 +77,22 @@ void DataPartModifier::applyModifications() {
     copyEdgeProps<types::Double>(edgePropManager._doubles, oldIdsToNewRecords);
     copyEdgeProps<types::String>(edgePropManager._strings, oldIdsToNewRecords);
     copyEdgeProps<types::Bool>(edgePropManager._bools, oldIdsToNewRecords);
+}
+
+DataPartModifier::DataPartIndex DataPartModifier::getDataPartIndex(NodeID node) {
+    auto it = _nodeToDPMap.find(node);
+    if (it != _nodeToDPMap.end()) {
+        return it->second;
+    }
+
+    DataPartSpan dataparts = _writeBuffer._commitBuilder->commitData().allDataparts();
+
+    // TODO:: Binary search-esque
+    for (const auto& [index, part] : rv::enumerate(dataparts)) {
+        if (part->hasNode(node)) {
+            _nodeToDPMap[node] = index;
+            return index;
+        }
+    }
+    panic("Node {} does not exist in dataparts.", node);
 }

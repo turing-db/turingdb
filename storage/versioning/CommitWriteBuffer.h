@@ -13,6 +13,7 @@ namespace db {
 class CommitWriteBufferRebaser;
 class MetadataBuilder;
 class CommitBuilder;
+class DataPartModifier;
 
 class CommitWriteBuffer {
 struct PendingEdge;
@@ -68,10 +69,10 @@ public:
      std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
      std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
 
-     std::span<NodeID> deletedNodesFromDataPart(size_t index) {
+     std::span<NodeID> deletedNodesFromDataPart(size_t index) const {
          return _perDataPartDeletedNodes[index];
      }
-     std::span<EdgeID> deletedEdgesFromDataPart(size_t index) {
+     std::span<EdgeID> deletedEdgesFromDataPart(size_t index) const {
          return _perDataPartDeletedEdges[index];
      }
 
@@ -99,6 +100,7 @@ public:
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
+    friend DataPartModifier;
 
     struct PendingEdge {
          ExistingOrPendingNode src;
