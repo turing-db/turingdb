@@ -183,8 +183,8 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
             const auto& injectedNodes = entityPattern->getInjectedIDs()->getIDs();
             for (const auto& node : injectedNodes) {
                 if (!_view.read().graphHasNode(node)) {
-                    throw AnalyzeException("Could Not Find Injected Node In Graph:\""
-                                           + std::to_string(node.getValue()) + "\"");
+                    throw AnalyzeException("Could Not Find Injected Node In Graph:'"
+                                           + std::to_string(node.getValue()) + "'");
                 }
             }
         }
@@ -201,8 +201,8 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
 
                 if (target->getInjectedIDs()) {
                     throw AnalyzeException("Injecting Nodes In Non-Primary Entity Not Supported,"
-                                           "For Entity:\""
-                                           + target->getVar()->getName() + "\"");
+                                           "For Entity:'"
+                                           + target->getVar()->getName() + "'");
                 }
                 analyzeEntityPattern(declContext, target, isCreate);
             }
@@ -398,8 +398,8 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
         // We have a single injected node: set this VarDecl to have the injected ID
         idToSet = injectedIDs.at(0).getValue();
         if (!_view.read().graphHasNode(idToSet)) {
-            throw AnalyzeException("No such node with ID: \""
-                                   + std::to_string(idToSet) + "\"");
+            throw AnalyzeException("No such node with ID: '"
+                                   + std::to_string(idToSet) + "'");
         }
     }
 
