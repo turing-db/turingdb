@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
 
 void runPlan2(std::string_view query) {
     TuringConfig config = TuringConfig::createDefault();
-    config.setSyncedOnDisk(false);
+    config.setTuringDirectory(fs::Path(SAMPLE_DIR) / ".turing");
     TuringDB db(&config);
     db.run();
 

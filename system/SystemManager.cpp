@@ -71,6 +71,10 @@ Graph* SystemManager::loadGraph(const std::string& name) {
 Graph* SystemManager::createGraph(const std::string& name) {
     const fs::Path path = _config->getGraphsDir() / name;
 
+    if (path.exists()) {
+        throw TuringException(fmt::format("Graph '{}' already exists", name));
+    }
+
     auto graph = Graph::create(name, path);
     Graph* graphPtr = graph.get();
 
