@@ -39,8 +39,6 @@ TEST_F(PlanGenTest, matchAllNodes) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n) RETURN n";
 
     CypherAST ast(queryStr);
@@ -50,7 +48,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -69,8 +67,6 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n)-[e]->(m) RETURN n,e,m";
 
     CypherAST ast(queryStr);
@@ -80,7 +76,7 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -107,8 +103,6 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n)-->(m) RETURN n,m";
 
     CypherAST ast(queryStr);
@@ -118,7 +112,7 @@ TEST_F(PlanGenTest, matchAllEdges2) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -145,8 +139,6 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n:Person) RETURN n";
 
     CypherAST ast(queryStr);
@@ -156,7 +148,7 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -178,8 +170,6 @@ TEST_F(PlanGenTest, matchLinear1) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL]->(p:Person) RETURN n,p";
 
     CypherAST ast(queryStr);
@@ -189,7 +179,7 @@ TEST_F(PlanGenTest, matchLinear1) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -216,8 +206,6 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL {isFrench: true}]->(p:Person) RETURN n,p";
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
@@ -226,7 +214,7 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -253,8 +241,6 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n:Person {isFrench: true, hasPhD: true})-[e:KNOWS_WELL]->(p:Person {isFrench: false}) RETURN n,p";
     CypherAST ast(queryStr);
     CypherParser parser(&ast);
@@ -263,7 +249,7 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
 
     //planGraph.dump(std::cout);
@@ -295,8 +281,6 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (n:Person)-->(m), (m{isFrench:true})-->(z) RETURN n,z";
 
     CypherAST ast(queryStr);
@@ -306,7 +290,7 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 
@@ -317,8 +301,6 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
     const Transaction transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     const std::string queryStr = "MATCH (a)-->(b)-->(c), (b{isFrench:true})-->(z), (b)-->(y), (z)-->(n)-->(y) RETURN n,z";
     
     CypherAST ast(queryStr);
@@ -328,7 +310,7 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
     CypherAnalyzer analyzer(&ast, view);
     ASSERT_NO_THROW(analyzer.analyze());
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     planGen.generate(ast.queries().front());
     const PlanGraph& planGraph = planGen.getPlanGraph();
 

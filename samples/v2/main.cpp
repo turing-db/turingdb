@@ -13,7 +13,6 @@
 #include "CypherAST.h"
 #include "AnalyzeException.h"
 #include "versioning/Transaction.h"
-#include "columns/Block.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
@@ -46,8 +45,6 @@ int main(int argc, char** argv) {
 
         queryStr = it.get<char>(file.getInfo()._size);
     }
-
-    auto callback = [](const Block& block) {};
 
     CypherAST ast(queryStr);
     ast.setDebugLocations(true);
@@ -84,7 +81,7 @@ int main(int argc, char** argv) {
     }
 
     {
-        PlanGraphGenerator planGen(ast, view, callback);
+        PlanGraphGenerator planGen(ast, view);
         try {
             auto t0 = Clock::now();
             planGen.generate(ast.queries().front());

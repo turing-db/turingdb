@@ -503,7 +503,7 @@ nodeLabels
     ;
 
 createSt
-    : CREATE pattern { $$ = CreateStmt::create(ast, $2); LOC($$, @$); }
+    : CREATE pattern { $$ = CreateStmt::create(ast, $2); LOC($$, @$);}
     ;
 
 patternWhere

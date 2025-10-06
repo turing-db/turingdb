@@ -20,6 +20,7 @@ set(ast_sources
     stmt/Stmt.cpp
     stmt/StmtContainer.cpp
     stmt/MatchStmt.cpp
+    stmt/CreateStmt.cpp
     stmt/ReturnStmt.cpp
     stmt/Limit.cpp
     stmt/Skip.cpp
