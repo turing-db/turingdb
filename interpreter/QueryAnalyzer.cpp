@@ -221,7 +221,9 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
             // Check that the variable exists in the declContext
             VarDecl* decl = declContext->getDecl(name);
             if (!decl) {
-                throw AnalyzeException("Could not get declation context.");
+                std::string error = fmt::format(
+                    "Variable {} was used in return field, but not defined.", name);
+                throw AnalyzeException(std::move(error));
             }
 
             decl->setUsed(true);
