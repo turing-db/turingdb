@@ -31,6 +31,8 @@ public:
 
     PendingCommitWriteTx openWriteTransaction();
 
+    void setName(const std::string& name);
+
     NodeID addNode(std::initializer_list<std::string_view> labels);
     NodeID addNode(std::initializer_list<LabelID> labels);
     NodeID addNode(const LabelSet& labelset);

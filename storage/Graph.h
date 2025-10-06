@@ -23,6 +23,7 @@ class GraphDumper;
 class CommitBuilder;
 class FrozenCommitTx;
 class GraphSerializer;
+class GraphWriter;
 
 class Graph {
 public:
@@ -57,6 +58,7 @@ private:
     friend CommitLoader;
     friend CommitBuilder;
     friend GraphLoader;
+    friend GraphWriter;
 
     GraphID _graphID;
     std::string _graphName;

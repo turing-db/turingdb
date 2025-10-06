@@ -51,6 +51,10 @@ PendingCommitWriteTx GraphWriter::openWriteTransaction() {
     return _change->openWriteTransaction();
 }
 
+void GraphWriter::setName(const std::string& name) {
+    _graph->_graphName = name;
+}
+
 NodeID GraphWriter::addNode(std::initializer_list<std::string_view> labels) {
     if (!_dataPartBuilder) {
         return {};
