@@ -105,7 +105,7 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
             const auto nodeOutEdges = _partIt.get()->edgeIndexer().getNodeOutEdges(*_nodeIt);
             const auto nodeOutEdgesEnd = nodeOutEdges.end();
             const size_t availOutPart = std::distance(_edgeIt, nodeOutEdgesEnd);
-            const size_t rangeSize = std::min(maxCount, availOutPart);
+            const size_t rangeSize = std::min(remainingToMax, availOutPart);
             const size_t prevSize = _indices->size();
             const size_t newSize = prevSize + rangeSize;
             _indices->resize(newSize);

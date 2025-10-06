@@ -145,7 +145,7 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (this->isValid() && remainingToMax > 0) {
             const size_t availInPart = std::distance(this->_propIt, this->_props.end());
-            const size_t rangeSize = std::min(maxCount, availInPart);
+            const size_t rangeSize = std::min(remainingToMax, availInPart);
             const size_t prevSize = getPrevSize();
             const size_t newSize = prevSize + rangeSize;
 
