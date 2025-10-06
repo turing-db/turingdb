@@ -5,6 +5,7 @@ set(plan_sources
     PlanGraph.cpp
     PlanGraphDebug.cpp
     PlanGraphTopology.cpp
+    ReadStatementGenerator.cpp
     PipelineGenerator.cpp)
 
 add_library(turing_db_v2_plan_s STATIC ${plan_sources})

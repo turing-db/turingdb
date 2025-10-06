@@ -41,6 +41,7 @@ class Limit;
 class Skip;
 class StmtContainer;
 class MatchStmt;
+class CreateStmt;
 class QueryCommand;
 class SinglePartQuery;
 class ReturnStmt;
@@ -82,6 +83,7 @@ public:
     friend Skip;
     friend StmtContainer;
     friend MatchStmt;
+    friend CreateStmt;
     friend ReturnStmt;
     friend WhereClause;
     friend SinglePartQuery;
@@ -90,6 +92,7 @@ public:
     friend NodePatternData;
     friend EdgePatternData;
     friend YCypherParser;
+
     using QueryCommands = std::vector<QueryCommand*>;
 
     CypherAST(std::string_view queryString);
