@@ -152,6 +152,7 @@ void CommitWriteBuffer::detectHangingEdges() {
 
     auto& delNodes = deletedNodes();
 
+    // Sort deleted nodes and remove duplicates for logn lookup with binary search
     if (!std::ranges::is_sorted(delNodes)) {
         std::ranges::sort(delNodes);
     }
@@ -160,29 +161,33 @@ void CommitWriteBuffer::detectHangingEdges() {
     for (const WeakArc<DataPart>& part : parts) {
         const EdgeContainer& edgeContainer = part->edges();
 
-        // Consider the range of NodeIDs that exist in this datapart
-        NodeID smallestNodeID = part->getFirstNodeID();
-        NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
+        // Edges in this part can only be between nodes which exist in this datapart or a
+        // previous datapart. Hence, when checking whether an edge is incident to a node
+        // which is deleted, we check nodes in the range from the smallest node ID to be
+        // deleted (@ref nlb = delNodes.begin()), to the largets node ID in this datapart
+        // (@ref nub).
+
+        const NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
 
         // The nodes to be deleted from this datapart are in the interval [nlb, nub)
-        auto nlb = std::ranges::lower_bound(delNodes, smallestNodeID);
-        auto nub = std::ranges::upper_bound(delNodes, largestNodeID);
+        const auto nlb = delNodes.cbegin();
+        const auto nub = std::ranges::upper_bound(delNodes, largestNodeID);
 
         // Subspan to reduce the search space
-        std::span thisDPNodesToDelete(nlb, nub);
+        const std::span possiblyIncidentDeletedNodes(nlb, nub);
 
-        if (thisDPNodesToDelete.empty()) {
+        if (possiblyIncidentDeletedNodes.empty()) {
             continue;
         }
 
         for (const auto& edgeRecord : edgeContainer.getOuts()) {
-            NodeID src = edgeRecord._nodeID;
-            NodeID tgt = edgeRecord._otherID;
-            EdgeID eid = edgeRecord._edgeID;
+            const NodeID src = edgeRecord._nodeID;
+            const NodeID tgt = edgeRecord._otherID;
+            const EdgeID eid = edgeRecord._edgeID;
 
             // If the source or target are deleted, we must also delete this edge
-            if (std::ranges::binary_search(thisDPNodesToDelete, src)
-                || std::ranges::binary_search(thisDPNodesToDelete, tgt)) {
+            if (std::ranges::binary_search(possiblyIncidentDeletedNodes, src)
+                || std::ranges::binary_search(possiblyIncidentDeletedNodes, tgt)) {
                 addDeletedEdges({eid});
             }
         }
@@ -218,31 +223,31 @@ void CommitWriteBuffer::fillPerDataPartDeletions() {
         return;
     }
 
-    DataPartSpan dataparts = _commitBuilder->_commitData->allDataparts();
+    const DataPartSpan dataparts = _commitBuilder->_commitData->allDataparts();
 
     _perDataPartDeletedNodes.reserve(dataparts.size());
     _perDataPartDeletedEdges.reserve(dataparts.size());
 
     for (const auto& [idx, part] : rv::enumerate(dataparts)) {
         // Consider the range of NodeIDs that exist in this datapart
-        NodeID smallestNodeID = part->getFirstNodeID();
-        NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
+        const NodeID smallestNodeID = part->getFirstNodeID();
+        const NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
 
         // The nodes to be deleted from this datapart are in the interval [nlb, nub)
-        auto nlb = std::ranges::lower_bound(_deletedNodes, smallestNodeID);
-        auto nub = std::ranges::upper_bound(_deletedNodes, largestNodeID);
+        const auto nlb = std::ranges::lower_bound(_deletedNodes, smallestNodeID);
+        const auto nub = std::ranges::upper_bound(_deletedNodes, largestNodeID);
 
         // Consider the range of EdgeIDs that exist in this datapart
-        EdgeID smallestEdgeID = part->getFirstEdgeID();
-        EdgeID largestEdgeID = part->getFirstEdgeID() + part->getEdgeCount() - 1;
+        const EdgeID smallestEdgeID = part->getFirstEdgeID();
+        const EdgeID largestEdgeID = part->getFirstEdgeID() + part->getEdgeCount() - 1;
 
         // The edges to be deleted from this datapart are in the interval [elb, eub)
-        auto elb = std::ranges::lower_bound(_deletedEdges, smallestEdgeID);
-        auto eub = std::ranges::upper_bound(_deletedEdges, largestEdgeID);
+        const auto elb = std::ranges::lower_bound(_deletedEdges, smallestEdgeID);
+        const auto eub = std::ranges::upper_bound(_deletedEdges, largestEdgeID);
 
         // Subspans reduce the search space of what we need delete from this datapart
-        std::span thisDPDeletedNodes(nlb, nub);
-        std::span thisDPDeletedEdges(elb, eub);
+        const std::span thisDPDeletedNodes(nlb, nub);
+        const std::span thisDPDeletedEdges(elb, eub);
 
         // Index @ref idx = nodes/edges to be deleted from DataPart @ @ref idx
         _perDataPartDeletedNodes.emplace_back(thisDPDeletedNodes);

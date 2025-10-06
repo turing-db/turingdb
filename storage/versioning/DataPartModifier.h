@@ -6,7 +6,6 @@
 
 #include "ArcManager.h"
 #include "metadata/SupportedType.h"
-#include "spdlog/spdlog.h"
 #include "writers/DataPartBuilder.h"
 
 namespace db {

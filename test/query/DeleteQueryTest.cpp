@@ -74,8 +74,10 @@ TEST_F(DeleteQueryTest, deleteRemy) {
     tester.query("delete nodes 0")
         .execute();
 
-    tester.query("commit")
+    tester.query("change submit")
           .execute();
+
+    tester.setChangeID(ChangeID::head());
 
     tester.query("match (n)-[e]-(m) return n, n.name")
         // nodes in 1st DP << 1, node 6 missing
@@ -98,4 +100,8 @@ TEST_F(DeleteQueryTest, deleteRemy) {
         })
 
         .execute();
+}
+
+TEST_F(DeleteQueryTest, deleteWithRebase) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
 }

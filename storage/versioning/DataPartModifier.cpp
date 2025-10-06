@@ -58,8 +58,8 @@ void DataPartModifier::applyModifications(size_t index) {
             && !std::ranges::binary_search(_nodesToDelete, tgt)) {
             EdgeTypeID typeID = edgeRecord._edgeTypeID;
             // Update source and target nodes to their new ID
-            NodeID newSrc = nodeIDMapping(edgeRecord._nodeID);
-            NodeID newTgt = nodeIDMapping(edgeRecord._otherID);
+            NodeID newSrc = nodeIDMapping(src);
+            NodeID newTgt = nodeIDMapping(tgt);
             oldIdsToNewRecords[edgeID] = _builder->addEdge(typeID, newSrc, newTgt);
         }
     }
