@@ -1,5 +1,6 @@
 #include "ASTContext.h"
 
+#include "DeletedIDs.h"
 #include "Expr.h"
 #include "ExprConstraint.h"
 #include "MatchTarget.h"
@@ -50,6 +51,14 @@ ASTContext::~ASTContext() {
 
     for (InjectedIDs* ids : _injectedIDs) {
         delete ids;
+    }
+
+    for (DeletedIDs<NodeID>* nodeIDs : _deletedNodeIDs) {
+        delete nodeIDs;
+    }
+
+    for (DeletedIDs<EdgeID>* edgeIDs : _deletedEdgeIDs) {
+        delete edgeIDs;
     }
 
     for (ExprConstraint* constr : _exprConstraints) {
