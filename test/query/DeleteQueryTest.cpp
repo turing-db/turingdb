@@ -18,7 +18,7 @@ public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
 
-        Graph* graph = _env->getSystemManager().createGraph("simpledb");
+        Graph* graph = _env->getSystemManager().createGraph("simple");
         SimpleGraph::createSimpleGraph(graph);
 
         _interp = std::make_unique<QueryInterpreter>(&_env->getSystemManager(),
@@ -42,11 +42,32 @@ protected:
 };
 
 TEST_F(DeleteQueryTest, deleteRemy) {
-    QueryTester tester {_env->getMem(), *_interp, "simpledb"};
+    QueryTester tester {_env->getMem(), *_interp};
 
-    tester.query("match (n) return n")
-          .expectVector<NodeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
-          .execute();
+    tester.query("match (n) return n, n.name")
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectOptVector<types::String::Primitive>(
+            {"Remy", "Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts",
+             "Paddle", "Maxime", "Luc", "Animals", "Martina", "Suhas"});
+
+    tester.query("match (n)-[e]-(m) return e, e.name")
+        .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+        .expectOptVector<types::String::Primitive>({
+            "Remy -> Adam",
+            "Remy -> Ghosts",
+            "Remy -> Computers",
+            "Remy -> Eighties",
+            "Adam -> Remy",
+            "Adam -> Bio",
+            "Adam -> Cooking",
+            "Ghosts -> Remy",
+            "Maxime -> Bio",
+            "Maxime -> Paddle",
+            "Luc -> Animals",
+            "Luc -> Computers",
+            "Martina -> Cooking",
+        })
+        .execute();
 
     newChange(tester);
 
@@ -56,7 +77,25 @@ TEST_F(DeleteQueryTest, deleteRemy) {
     tester.query("commit")
           .execute();
 
-    tester.query("match (n) return n")
+    tester.query("match (n)-[e]-(m) return n, n.name")
+        // nodes in 1st DP << 1, node 6 missing
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12})
+        // Remy gone
+        .expectOptVector<types::String::Primitive>(
+            {"Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts", "Paddle",
+             "Maxime", "Luc", "Animals", "Martina", "Suhas"});
+        // edges incident to remy are gone
+    tester.query("match (n)-[e]-(m) return e, e.name")
+        .expectVector<EdgeID>({0, 1, 8, 9, 10, 11, 12})
+        .expectOptVector<types::String::Primitive>({
+            "Adam -> Bio",
+            "Adam -> Cooking",
+            "Maxime -> Bio",
+            "Maxime -> Paddle",
+            "Luc -> Animals",
+            "Luc -> Computers",
+            "Martina -> Cooking",
+        })
+
         .execute();
 }
