@@ -116,6 +116,8 @@ public:
 
     std::string* createString();
 
+    std::string createErrorString(std::string_view msg, const void* obj) const;
+
 private:
     std::string_view _queryStr;
     bool _debugLocations {true};

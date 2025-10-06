@@ -3,10 +3,10 @@
 #include "views/GraphView.h"
 
 #include "CypherAST.h"
-#include "CypherError.h"
 #include "PlanGraph.h"
 #include "PlanGraphTopology.h"
 #include "ReadStatementGenerator.h"
+#include "WriteStatementGenerator.h"
 
 #include "nodes/JoinNode.h"
 #include "nodes/CartesianProductNode.h"
@@ -72,7 +72,11 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate update statements (optional)
     if (updateStmts) {
-        throwError("Update statements are not supported yet", query);
+        WriteStatementGenerator writeGenerator(_ast, &_tree, &_variables);
+
+        for (const Stmt* stmt : updateStmts->stmts()) {
+            writeGenerator.generateStmt(stmt);
+        }
     } else {
         if (!returnStmt) {
             // Return statement is mandatory if there are no update statements
@@ -183,19 +187,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
     ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
     rhsNode->connectOut(results);
 }
+
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
-    const SourceLocation* location = _ast->getLocation(obj);
-    std::string errorMsg;
-
-    CypherError err {_ast->getQueryString()};
-    err.setTitle("Query plan error");
-    err.setErrorMsg(msg);
-
-    if (location) {
-        err.setLocation(*location);
-    }
-
-    err.generate(errorMsg);
-
-    throw PlannerException(std::move(errorMsg));
+    throw PlannerException(_ast->createErrorString(msg, obj));
 }

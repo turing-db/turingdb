@@ -1,5 +1,6 @@
 #include "CypherAST.h"
 
+#include "CypherError.h"
 #include "Symbol.h"
 #include "QualifiedName.h"
 #include "expr/Literal.h"
@@ -188,4 +189,21 @@ void CypherAST::addNodePatternData(NodePatternData* data) {
 
 void CypherAST::addEdgePatternData(EdgePatternData* data) {
     _edgePatternDatas.push_back(data);
+}
+
+std::string CypherAST::createErrorString(std::string_view msg, const void* obj) const {
+    const SourceLocation* location = getLocation(obj);
+    std::string errorMsg;
+
+    CypherError err {getQueryString()};
+    err.setTitle("Query plan error");
+    err.setErrorMsg(msg);
+
+    if (location) {
+        err.setLocation(*location);
+    }
+
+    err.generate(errorMsg);
+
+    return errorMsg;
 }
