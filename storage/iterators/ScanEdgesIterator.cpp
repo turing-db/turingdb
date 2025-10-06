@@ -106,7 +106,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
             const auto partOutEdges = _partIt.get()->edges().getOuts();
             const auto partOutEnd = partOutEdges.end();
             const size_t availInPart = std::distance(_edgeIt, partOutEnd);
-            const size_t rangeSize = std::min(maxCount, availInPart);
+            const size_t rangeSize = std::min(remainingToMax, availInPart);
             const size_t prevSize = getPrevSize();
             const size_t newSize = prevSize + rangeSize;
 

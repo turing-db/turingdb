@@ -39,7 +39,7 @@ void ScanNodesIterator::fill(ColumnNodeIDs* column, size_t maxNodes) {
 
     while (isValid() && remainingToMax > 0) {
         const size_t availableInPart = _partEnd.getValue() - _currentNodeID.getValue();
-        const size_t rangeSize = std::min(maxNodes, availableInPart);
+        const size_t rangeSize = std::min(remainingToMax, availableInPart);
         const size_t prevSize = column->size();
         const size_t newSize = prevSize + rangeSize;
         column->resize(newSize);
