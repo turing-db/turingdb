@@ -48,8 +48,7 @@ void ReadStatementGenerator::generateStmt(const Stmt* stmt) {
             break;
 
         default:
-            // TODO fix
-            // throwError(fmt::format("Unsupported read statement type: {}", (uint64_t)stmt->getKind()), stmt);
+            throwError(fmt::format("Unsupported read statement type: {}", (uint64_t)stmt->getKind()), stmt);
             break;
     }
 }
@@ -77,16 +76,12 @@ void ReadStatementGenerator::generateWhereClause(const WhereClause* where) {
 
 void ReadStatementGenerator::generatePatternElement(const PatternElement* element) {
     if (element->size() == 0) {
-        // TODO fix
-        throw std::runtime_error("Empty match pattern element");
-        // throwError("Empty match pattern element", element);
+        throwError("Empty match pattern element", element);
     }
 
     const NodePattern* origin = dynamic_cast<const NodePattern*>(element->getRootEntity());
     if (!origin) {
-        // TODO fix
-        throw std::runtime_error("Pattern element origin must be a node pattern");
-        // throwError("Pattern element origin must be a node pattern", element);
+        throwError("Pattern element origin must be a node pattern", element);
     }
 
     // Reset the decl order of variables (each branch starts at 0)
@@ -98,18 +93,14 @@ void ReadStatementGenerator::generatePatternElement(const PatternElement* elemen
     for (const auto& [edge, node] : chain) {
         const EdgePattern* e = dynamic_cast<const EdgePattern*>(edge);
         if (!edge) {
-            // TODO fix
-            throw std::runtime_error("Pattern element edge must be an edge pattern");
-            // throwError("Pattern element edge must be an edge pattern", element);
+            throwError("Pattern element edge must be an edge pattern", element);
         }
 
         currentNode = generatePatternElementEdge(currentNode, e);
 
         const NodePattern* n = dynamic_cast<const NodePattern*>(node);
         if (!node) {
-            // TODO fix
-            throw std::runtime_error("Pattern element node must be a node pattern");
-            // throwError("Pattern element node must be a node pattern", element);
+            throwError("Pattern element node must be a node pattern", element);
         }
 
         currentNode = generatePatternElementTarget(currentNode, n);
@@ -171,18 +162,14 @@ VarNode* ReadStatementGenerator::generatePatternElementEdge(VarNode* prevNode,
     const VarDecl* decl = edge->getDecl();
 
     if (edgeTypes.size() > 1) {
-        // TODO fix
-        throw std::runtime_error("Only one edge type constraint is supported for now");
-        // throwError("Only one edge type constraint is supported for now", edge);
+        throwError("Only one edge type constraint is supported for now", edge);
     }
 
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
     } else {
-        // TODO fix
-        throw std::runtime_error("Re-using the same edge variable, this is not supported yet");
-        // throwError("Re-using the same edge variable, this is not supported yet", edge);
+        throwError("Re-using the same edge variable, this is not supported yet", edge);
     }
 
     currentNode->connectOut(filter);
@@ -221,10 +208,7 @@ VarNode* ReadStatementGenerator::generatePatternElementTarget(VarNode* prevNode,
 
         // Detect loops
         if (PlanGraphTopology::detectLoops(filter)) {
-            // TODO fix
-            throw std::runtime_error("Loop detected. This is not supported yet");
-            // throwError("Loop detected. This is not supported yet", target);
-            // throwError("Loop detected. This is not supported yet", target);
+            throwError("Loop detected. This is not supported yet", target);
         }
     }
 
@@ -262,9 +246,7 @@ void ReadStatementGenerator::unwrapWhereExpr(const Expr* expr) {
             EdgeFilterNode* edgeFilter = static_cast<EdgeFilterNode*>(filter);
 
             if (entityTypeExpr->labels().size() != 1) {
-                // TODO fix
-                throw std::runtime_error("Only one edge type constraint is supported for now");
-                // throwError("Only one edge type constraint is supported for now", expr);
+                throwError("Only one edge type constraint is supported for now", expr);
             }
 
             // TODO: Fix, this is ugly, we make the NodeLabel expression Node/Edge agnostic
@@ -302,9 +284,7 @@ void ReadStatementGenerator::unwrapWhereExpr(const Expr* expr) {
 
     const auto& dependencies = predicate->getDependencies();
     if (dependencies.empty()) {
-        // TODO fix
-        throw std::runtime_error("Where clauses without dependencies are not supported yet");
-        // throwError("Where clauses without dependencies are not supported yet", expr);
+        throwError("Where clauses without dependencies are not supported yet", expr);
     }
 
     const VarNode* firstVar = dependencies.begin()->_var;
@@ -435,3 +415,6 @@ void ReadStatementGenerator::insertDataFlowNode(const VarNode* node, VarNode* de
     }
 }
 
+void ReadStatementGenerator::throwError(std::string_view msg, const void* obj) const {
+    throw PlannerException(_ast->createErrorString(msg, obj));
+}

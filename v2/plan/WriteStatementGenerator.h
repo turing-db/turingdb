@@ -1,8 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <vector>
+#include <string_view>
 
 namespace db::v2 {
 
@@ -11,46 +9,33 @@ class PlanGraph;
 class PlanGraphNode;
 class PlanGraphVariables;
 class Stmt;
-class MatchStmt;
-class WhereClause;
+class CreateStmt;
 class PatternElement;
 class Expr;
 class VarNode;
 class NodePattern;
 class EdgePattern;
-struct PropertyConstraint;
 
-class ReadStatementGenerator {
+class WriteStatementGenerator {
 public:
-    ReadStatementGenerator(const CypherAST* ast,
+    WriteStatementGenerator(const CypherAST* ast,
                            PlanGraph* tree,
                            PlanGraphVariables* variables);
 
-    ~ReadStatementGenerator();
+    ~WriteStatementGenerator();
 
     void generateStmt(const Stmt* stmt);
-    void generateMatchStmt(const MatchStmt* stmt);
-    void generateWhereClause(const WhereClause* where);
+    void generateCreateStmt(const CreateStmt* stmt);
     void generatePatternElement(const PatternElement* element);
 
     VarNode* generatePatternElementOrigin(const NodePattern* origin);
     VarNode* generatePatternElementEdge(VarNode* prevNode, const EdgePattern* edge);
     VarNode* generatePatternElementTarget(VarNode* prevNode, const NodePattern* target);
 
-    void unwrapWhereExpr(const Expr*);
-
-    void incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin);
-    void placeJoinsOnVars();
-    void placePropertyExprJoins();
-    void placePredicateJoins();
-    void insertDataFlowNode(const VarNode* node, VarNode* dependency);
-
 private:
     const CypherAST* _ast {nullptr};
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
-
-    std::vector<std::unique_ptr<PropertyConstraint>> _propConstraints;
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };
