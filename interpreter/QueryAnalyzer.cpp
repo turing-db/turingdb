@@ -221,7 +221,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
             // Check that the variable exists in the declContext
             VarDecl* decl = declContext->getDecl(name);
             if (!decl) {
-                std::string error = fmt::format(
+                const std::string error = fmt::format(
                     "Variable {} was used in return field, but not defined.", name);
                 throw AnalyzeException(std::move(error));
             }
