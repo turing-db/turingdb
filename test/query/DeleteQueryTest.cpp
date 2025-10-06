@@ -8,6 +8,7 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 #include "SimpleGraph.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 
 using namespace db;
@@ -102,6 +103,84 @@ TEST_F(DeleteQueryTest, deleteRemy) {
         .execute();
 }
 
-TEST_F(DeleteQueryTest, deleteWithRebase) {
+TEST_F(DeleteQueryTest, tryDeleteErrors) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    // Not in change
+    tester.query("delete nodes 0")
+        .expectError()
+        .expectErrorMessage("DeleteStep: Cannot perform deletion outside of a write transaction")
+        .execute();
+    tester.query("delete edges 0")
+        .expectError()
+        .expectErrorMessage("DeleteStep: Cannot perform deletion outside of a write transaction")
+        .execute();
+
+    newChange(tester);
+
+    // Node does not exist nor in write buffer
+    tester.query("delete nodes 0")
+        .expectError()
+        .expectErrorMessage("Graph does not contain node with ID: 0.")
+        .execute();
+    tester.query("delete edges 0")
+        .expectError()
+        .expectErrorMessage("Graph does not contain edge with ID: 0.")
+        .execute();
+
+    tester.query("create (n:EphemeralNode)")
+        .execute();
+
+    // Node does not exist, but it is in pending commit
+    tester.query("delete nodes 0")
+        .expectError()
+        .expectErrorMessage("Graph does not contain node with ID: 0.")
+        .execute();
+
+    tester.query("create (s:EphemeralNode)-[e:EphemeralEdge]-(t:EphemeralNode)")
+        .execute();
+
+    tester.query("delete edges 0")
+        .expectError()
+        .expectErrorMessage("Graph does not contain edge with ID: 0.")
+        .execute();
+
+    tester.query("delete nodes 1,2")
+        .expectError()
+        .expectErrorMessage("Graph does not contain node with ID: 1.")
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, commitThenDelete) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    newChange(tester);
+
+    tester.query("create (n:NewNode{deleted=false})")
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n) return n, n.deleted")
+        .expectVector<NodeID>({0})
+        .expectOptVector<types::Bool::Primitive>({false})
+        .execute();
+
+    newChange(tester);
+
+    tester.query("delete nodes 0")
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n) return n, n.deleted")
+        .expectVector<NodeID>({})
+        .expectOptVector<types::Bool::Primitive>({})
+        .execute();
 }
