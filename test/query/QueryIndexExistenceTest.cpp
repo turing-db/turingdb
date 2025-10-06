@@ -20,7 +20,7 @@ public:
     void initialize() override {
         _env = TuringTestEnv::createSyncedOnDisk(fs::Path {_outDir} / "turing");
 
-        _builtGraph = _env->getSystemManager().createGraph("simple");
+        _builtGraph = _env->getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_builtGraph);
         _interp = std::make_unique<QueryInterpreter>(&_env->getSystemManager(),
                                                      &_env->getJobSystem());
@@ -35,7 +35,7 @@ protected:
 // Dump graph, load it: index should be present
 TEST_F(QueryIndexExistenceTest, noStringIndex) {
     {
-        ASSERT_TRUE(_env->getSystemManager().dumpGraph("simple"));
+        ASSERT_TRUE(_env->getSystemManager().dumpGraph("simpledb"));
     }
 
     // Create a new environment pointing to the same directory
@@ -43,10 +43,10 @@ TEST_F(QueryIndexExistenceTest, noStringIndex) {
     auto newInterp = std::make_unique<QueryInterpreter>(&env2->getSystemManager(),
                                                         &env2->getJobSystem());
 
-    ASSERT_TRUE(env2->getSystemManager().loadGraph("simple"));
+    ASSERT_TRUE(env2->getSystemManager().loadGraph("simpledb"));
 
     QueryTester tester {env2->getMem(), *newInterp};
-    tester.setGraphName("simple");
+    tester.setGraphName("simpledb");
 
     tester.query("MATCH (n{name=\"Remy\"}) return n")
         .expectVector<NodeID>({0})
