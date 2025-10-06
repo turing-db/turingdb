@@ -245,6 +245,9 @@ void CommitWriteBuffer::fillPerDataPartDeletions() {
         const auto elb = std::ranges::lower_bound(_deletedEdges, smallestEdgeID);
         const auto eub = std::ranges::upper_bound(_deletedEdges, largestEdgeID);
 
+        bioassert(!(nlb > nub));
+        bioassert(!(elb > eub));
+
         // Subspans reduce the search space of what we need delete from this datapart
         const std::span thisDPDeletedNodes(nlb, nub);
         const std::span thisDPDeletedEdges(elb, eub);

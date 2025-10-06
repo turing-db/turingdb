@@ -72,15 +72,14 @@ void StringPropertyIndexer::buildIndex(
 }
 
 template <TypedInternalID IDT>
-void StringPropertyIndexer::addStringPropertyToIndex(
-    PropertyTypeID propertyID,
-    const TypedPropertyContainer<types::String>& stringPropertyContainer,
-    const TempIDMap<IDT>& tempIDMap) {
+void StringPropertyIndexer::addStringPropertyToIndex(PropertyTypeID propertyID,
+                                                     const TypedPropertyContainer<types::String>& stringPropertyContainer,
+                                                     const TempIDMap<IDT>& tempIDMap) {
     // Get the index map for this property type
     StringIndex* trie = _indexer.at(propertyID).get();
     if (!trie) {
-     throw TuringException("Tree is nullpointer at property index "
-                           + std::to_string(propertyID.getValue()));
+        throw TuringException("Tree is nullpointer at property index "
+                              + std::to_string(propertyID.getValue()));
     }
 
     // Get [ID, stringValue] pairs
