@@ -3,6 +3,7 @@
 #include <bits/ranges_algo.h>
 #include <range/v3/view/enumerate.hpp>
 
+#include "EdgeContainer.h"
 #include "EnumerateFrom.h"
 #include "JobSystem.h"
 #include "reader/GraphReader.h"
@@ -167,12 +168,15 @@ void CommitBuilder::applyDeletions() {
 
         // If there is nothing to delete from this datapart, we may only skip in the case
         // that this datapart contains no edges which are incident to a node which is
-        // effected by a deleted node. For instance, an edge may be incident to a Node 101
-        // in DataPart x. If Node 98 which is also in DataPart x, Node 101 will have its
-        // ID shifted, and therefore we need to update any DataParts which have an edge
-        // incident to Node 101.
+        // effected by a deleted node. For instance, an edge in DataPart y may be incident
+        // to a Node 101 in DataPart x. If Node 98, which is also in DataPart x, is
+        // deleted, then Node 101 will have its ID shifted, and therefore we need to
+        // update DataPart y with the updated ID of node 101.
         // TODO: Currently this is a naive check of just any nodes to delete, but should
         // check if incident nodes are effected.
+
+        // Lowest NodeID in this DataPart which is incident to an edge in this DataPart
+        [[maybe_unused]] const NodeID firstIncidentNodeID = part->edges().getFirstNodeID();
         if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()
             && delNodes.empty()) {
             continue;
