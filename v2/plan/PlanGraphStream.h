@@ -41,8 +41,8 @@ public:
     NodeStream& getNodeStream() { return std::get<NodeStream>(_stream); }
     EdgeStream& getEdgeStream() { return std::get<EdgeStream>(_stream); }
 
-    void set(Stream stream) {
-        _stream = stream;
+    void set(Stream&& stream) {
+        _stream = std::move(stream);
     }
 
 private:
