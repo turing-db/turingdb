@@ -13,6 +13,10 @@ SkipProcessor::SkipProcessor(size_t skipCount)
 SkipProcessor::~SkipProcessor() {
 }
 
+std::string_view SkipProcessor::getName() const {
+    return "SkipProcessor";
+}
+
 SkipProcessor* SkipProcessor::create(PipelineV2* pipeline, size_t skipCount) {
     SkipProcessor* skip = new SkipProcessor(skipCount);
 

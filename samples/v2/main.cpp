@@ -20,6 +20,7 @@
 #include "PipelineGenerator.h"
 #include "PipelineV2.h"
 #include "LocalMemory.h"
+#include "PipelineDebug.h"
 
 using namespace db;
 using namespace db::v2;
@@ -120,6 +121,8 @@ int main(int argc, char** argv) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;
         }
+
+        PipelineDebug::dumpMermaid(std::cout, &pipeline);
     }
 
     return EXIT_SUCCESS;

@@ -21,6 +21,10 @@ GetOutEdgesProcessor::GetOutEdgesProcessor()
 GetOutEdgesProcessor::~GetOutEdgesProcessor() {
 }
 
+std::string_view GetOutEdgesProcessor::getName() const {
+    return "GetOutEdgesProcessor";
+}
+
 GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
     GetOutEdgesProcessor* getOutEdges = new GetOutEdgesProcessor();
 

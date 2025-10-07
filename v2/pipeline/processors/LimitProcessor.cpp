@@ -10,6 +10,10 @@ LimitProcessor::LimitProcessor(size_t limit)
 LimitProcessor::~LimitProcessor() {
 }
 
+std::string_view LimitProcessor::getName() const {
+    return "LimitProcessor";
+}
+
 LimitProcessor* LimitProcessor::create(PipelineV2* pipeline, size_t limit) {
     LimitProcessor* processor = new LimitProcessor(limit);
 

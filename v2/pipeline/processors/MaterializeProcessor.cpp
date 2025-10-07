@@ -81,6 +81,10 @@ MaterializeProcessor::MaterializeProcessor(LocalMemory* mem)
 MaterializeProcessor::~MaterializeProcessor() {
 }
 
+std::string_view MaterializeProcessor::getName() const {
+    return "MaterializeProcessor";
+}
+
 MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMemory* mem) {
     MaterializeProcessor* materialize = new MaterializeProcessor(mem);
 

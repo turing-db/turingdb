@@ -10,6 +10,10 @@ LambdaSourceProcessor::LambdaSourceProcessor(Callback callback)
 LambdaSourceProcessor::~LambdaSourceProcessor() {
 }
 
+std::string_view LambdaSourceProcessor::getName() const {
+    return "LambdaSourceProcessor";
+}
+
 void LambdaSourceProcessor::prepare(ExecutionContext* ctxt) {
     bool isFinished = false;
     _callback(_output->getBuffer()->getBlock(), isFinished, Operation::PREPARE);

@@ -76,6 +76,8 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
                 throw PlannerException(fmt::format("GET_OUT_EDGES node requires a node stream"));
             }
             GetOutEdgesProcessor* proc = GetOutEdgesProcessor::create(_pipeline);
+            stream.getNodeStream().nodeIDs->connectTo(proc->inNodeIDs());
+            
             PipelineOutputPort* outEdgeIDs = proc->outEdgeIDs();
             PipelineOutputPort* outTargetIDs = proc->outTargetNodes();
             stream.set(PlanGraphStream::EdgeStream{outEdgeIDs, outTargetIDs});

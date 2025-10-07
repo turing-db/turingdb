@@ -8,6 +8,8 @@ class LimitProcessor : public Processor {
 public:
     static LimitProcessor* create(PipelineV2* pipeline, size_t limit);
 
+    std::string_view getName() const override;
+
     PipelineInputPort* input() const { return _input; }
     PipelineOutputPort* output() const { return _output; }
 

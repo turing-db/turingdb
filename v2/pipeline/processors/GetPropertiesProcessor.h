@@ -23,6 +23,8 @@ class PipelineV2;
 template <typename PropertyChunkWriter>
 class GetPropertiesProcessor : public Processor {
 public:
+    std::string_view getName() const override { return "GetPropertiesProcessor"; }
+
     PipelineInputPort* inIDs() { return _inIDs; }
     PipelineOutputPort* outIndices() { return _outIndices; }
     PipelineOutputPort* outValues() { return _outValues; }

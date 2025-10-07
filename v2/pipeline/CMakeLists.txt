@@ -1,6 +1,7 @@
 
 set(pipeline_sources
     PipelineV2.cpp
+    PipelineDebug.cpp
     Processor.cpp
     PipelineBuffer.cpp
     PipelinePort.cpp

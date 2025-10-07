@@ -17,6 +17,8 @@ class MaterializeProcessor : public Processor {
 public:
     static MaterializeProcessor* create(PipelineV2* pipeline, LocalMemory* mem);
 
+    std::string_view getName() const override;
+
     MaterializeData& getMaterializeData() { return _matData; }
 
     void prepare(ExecutionContext* ctxt) override;

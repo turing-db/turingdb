@@ -13,6 +13,10 @@ CountProcessor::CountProcessor()
 CountProcessor::~CountProcessor() {
 }
 
+std::string_view CountProcessor::getName() const {
+    return "CountProcessor";
+}
+
 CountProcessor* CountProcessor::create(PipelineV2* pipeline) {
     CountProcessor* count = new CountProcessor();
 

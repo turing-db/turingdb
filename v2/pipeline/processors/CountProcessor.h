@@ -10,6 +10,8 @@ class CountProcessor : public Processor {
 public:
     static CountProcessor* create(PipelineV2* pipeline);
 
+    std::string_view getName() const override;
+
     PipelineInputPort* input() const { return _input; }
     PipelineOutputPort* output() const { return _output; }
 
