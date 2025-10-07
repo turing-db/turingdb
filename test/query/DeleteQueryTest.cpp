@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <gtest/gtest.h>
 
 #include "Path.h"
@@ -39,6 +40,11 @@ protected:
         const ChangeID id = res.value()->back()->id();
         tester.setChangeID(id);
         return id;
+    };
+    inline static const auto submitChange = [](QueryTester& tester) {
+        tester.query("change submit")
+            .execute();
+        tester.setChangeID(ChangeID::head());
     };
 };
 
@@ -87,7 +93,7 @@ TEST_F(DeleteQueryTest, deleteRemy) {
         .expectOptVector<types::String::Primitive>(
             {"Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts", "Paddle",
              "Maxime", "Luc", "Animals", "Martina", "Suhas"});
-        // edges incident to remy are gone
+    // edges incident to remy are gone
     tester.query("match (n)-[e]-(m) return e, e.name")
         .expectVector<EdgeID>({0, 1, 8, 9, 10, 11, 12})
         .expectOptVector<types::String::Primitive>({
@@ -99,7 +105,6 @@ TEST_F(DeleteQueryTest, deleteRemy) {
             "Luc -> Computers",
             "Martina -> Cooking",
         })
-
         .execute();
 }
 
@@ -185,6 +190,7 @@ TEST_F(DeleteQueryTest, commitThenDelete) {
         .execute();
 }
 
+// NOTE @Cyrus @Remy agree to *not* delete label sets upon final owning node being deleted
 TEST_F(DeleteQueryTest, deleteLabelSet) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
     newChange(tester);
@@ -198,13 +204,13 @@ TEST_F(DeleteQueryTest, deleteLabelSet) {
         .expectVector<types::String::Primitive>({"NewNode"})
         .execute();
 
-    // Should labelset be deleted?
     newChange(tester);
     tester.query("delete nodes 0")
         .execute();
     tester.query("change submit")
         .execute();
     tester.setChangeID(ChangeID::head());
+    // Labelset still exist
     tester.query("call labelsets ()")
         .expectVector<LabelSetID>({})
         .expectVector<types::String::Primitive>({})
@@ -255,4 +261,51 @@ TEST_F(DeleteQueryTest, starPattern) {
             .expectOptVector<types::Bool::Primitive>({})
             .execute();
     }
+}
+
+TEST_F(DeleteQueryTest, inAndOutEdges) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    newChange(tester);
+
+    // s - p - t
+    // p has in and out edges
+    tester.query("create (s:SOURCE{capacity=100}), (t:SINK{capacity=100}), (p:NODE{capacity=10}), (s)-[e:PIPE{rusty=true}]-(p), (p)-[e:PIPE{rusty=true}]-(t)")
+        .execute();
+    tester.query("change submit")
+        .execute();
+
+    constexpr uint64_t SOURCEID = 0;
+    constexpr uint64_t NODEID = 2;
+    constexpr uint64_t SINKID = 1;
+    constexpr uint64_t FIRSTEDGE = 0;
+    constexpr uint64_t SECONDEDGE = 1;
+
+    tester.setChangeID(ChangeID::head());
+
+    tester.query("match (n)-[e]-(m) return n,e,m, n.capacity, e.rusty, m.capacity")
+        .expectVector<NodeID>({SOURCEID, NODEID})
+        .expectVector<EdgeID>({FIRSTEDGE, SECONDEDGE})
+        .expectVector<NodeID>({NODEID, SINKID})
+        .expectOptVector<types::Int64::Primitive>({100, 10})
+        .expectOptVector<types::Bool::Primitive>({true, true})
+        .expectOptVector<types::Int64::Primitive>({10, 100})
+        .execute();
+
+    // Delete the middle node (p)
+    newChange(tester);
+    tester.query("delete nodes " + std::to_string(NODEID))
+        .execute();
+    submitChange(tester);
+
+    // Should be no edges
+    tester.query("match (n)-[e]-(m) return e")
+        .expectVector<EdgeID>({})
+        .execute();
+
+    // Should just have source and sink
+    tester.query("match (n) return n, n.capacity")
+        .expectVector<NodeID>({SOURCEID, SINKID})
+        .expectOptVector<types::Int64::Primitive>({100,100})
+        .execute();
 }
