@@ -184,3 +184,75 @@ TEST_F(DeleteQueryTest, commitThenDelete) {
         .expectOptVector<types::Bool::Primitive>({})
         .execute();
 }
+
+TEST_F(DeleteQueryTest, deleteLabelSet) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+    newChange(tester);
+    tester.query("create (n:NewNode{deleted=false})")
+        .execute();
+    tester.query("change submit")
+        .execute();
+    tester.setChangeID(ChangeID::head());
+    tester.query("call labelsets ()")
+        .expectVector<LabelSetID>({0})
+        .expectVector<types::String::Primitive>({"NewNode"})
+        .execute();
+
+    // Should labelset be deleted?
+    newChange(tester);
+    tester.query("delete nodes 0")
+        .execute();
+    tester.query("change submit")
+        .execute();
+    tester.setChangeID(ChangeID::head());
+    tester.query("call labelsets ()")
+        .expectVector<LabelSetID>({})
+        .expectVector<types::String::Primitive>({})
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, starPattern) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+    const std::string CREATE_STAR_QUERY =
+        "CREATE (a:Node {name: 'A'}), (b:Node {name: 'B'}), (c:Node {name: 'C'}), "
+        "(d:Node {name: 'D'}), (e:Node {name: 'E'}), (center:Node {name: 'Center'}), "
+        "(a)-[:CONNECTED_TO{edge=true}]-(center), (b)-[:CONNECTED_TO{edge=true}]-(center), "
+        "(c)-[:CONNECTED_TO{edge=true}]-(center), (d)-[:CONNECTED_TO{edge=true}]-(center), "
+        "(e)-[:CONNECTED_TO{edge=true}]-(center)";
+    const NodeID CENTRE_ID = 5;
+
+    newChange(tester);
+    tester.query(CREATE_STAR_QUERY)
+        .execute();
+    tester.query("change submit")
+        .execute();
+    tester.setChangeID(ChangeID::head());
+
+    auto matchNode = [](const char name) {
+        return fmt::format("MATCH (n:Node {{name: '{}'}})-[e]-(m) RETURN e.edge", name);
+    };
+
+    constexpr std::array<char, 5> names = {'A', 'B', 'C', 'D', 'E'};
+    // Expect each node to have one edge
+    for (char name : names) {
+        tester.query(matchNode(name))
+            .expectOptVector<types::Bool::Primitive>({true})
+            .execute();
+    }
+
+    newChange(tester);
+    // Delete the centre node
+    tester.query("delete nodes " + std::to_string(CENTRE_ID.getValue()))
+        .execute();
+
+    tester.query("change submit")
+        .execute();
+    tester.setChangeID(ChangeID::head());
+
+    // Expect each node to have no edges
+    for (char name : names) {
+        tester.query(matchNode(name))
+            .expectOptVector<types::Bool::Primitive>({})
+            .execute();
+    }
+}
