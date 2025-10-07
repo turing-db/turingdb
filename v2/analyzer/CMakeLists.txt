@@ -1,5 +1,9 @@
 set(analyzer_sources
     CypherAnalyzer.cpp
+    AnalyzerVariables.cpp
+    ExprAnalyzer.cpp
+    ReadStmtAnalyzer.cpp
+    WriteStmtAnalyzer.cpp
     AnalyzeException.cpp)
 
 add_library(turing_db_v2_analyzer_s

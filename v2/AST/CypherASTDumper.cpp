@@ -291,7 +291,7 @@ void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
     }
 
     for (const Symbol* type : edge->types()) {
-            out << "        EdgeType " << type << "\n";
+            out << "        EdgeType _" << type << "\n";
     }
 
     if (const MapLiteral* properties = edge->getProperties()) {
@@ -487,37 +487,37 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
         case Literal::Kind::BOOL:
         {
             const BoolLiteral* boolLiteral = dynamic_cast<const BoolLiteral*>(literal);
-            out << "        BoolLiteral " << boolLiteral->getValue() << "\n";
+            out << "        BoolLiteral _" << boolLiteral->getValue() << "\n";
             break;
         }
         case Literal::Kind::INTEGER:
         {
             const IntegerLiteral* integerLiteral = dynamic_cast<const IntegerLiteral*>(literal);
-            out << "        IntLiteral " << integerLiteral->getValue() << "\n";
+            out << "        IntLiteral _" << integerLiteral->getValue() << "\n";
             break;
         }
         case Literal::Kind::DOUBLE:
         {
             const DoubleLiteral* doubleLiteral = dynamic_cast<const DoubleLiteral*>(literal);
-            out << "        DoubleLiteral " << doubleLiteral->getValue() << "\n";
+            out << "        DoubleLiteral _" << doubleLiteral->getValue() << "\n";
             break;
         }
         case Literal::Kind::STRING:
         {
             const StringLiteral* stringLiteral = dynamic_cast<const StringLiteral*>(literal);
-            out << "        StringLiteral " << stringLiteral->getValue() << "\n";
+            out << "        StringLiteral '" << stringLiteral->getValue() << "'\n";
             break;
         }
         case Literal::Kind::CHAR:
         {
             const CharLiteral* charLiteral = dynamic_cast<const CharLiteral*>(literal);
-            out << "        CharLiteral " << charLiteral->getValue() << "\n";
+            out << "        CharLiteral '" << charLiteral->getValue() << "'\n";
             break;
         }
         case Literal::Kind::MAP:
         {
             const MapLiteral* mapLiteral = dynamic_cast<const MapLiteral*>(literal);
-            out << "        MapLiteral " << mapLiteral << "\n";
+            out << "        MapLiteral _" << mapLiteral << "\n";
             break;
         }
         default:
@@ -596,7 +596,7 @@ void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
     out << "        QualifiedName ";
 
     size_t i = 0;
-    for (const Symbol* name : expr->getName()->names()) {
+    for (const Symbol* name : expr->getFullName()->names()) {
         if (i != 0) {
             out << "_";
         }

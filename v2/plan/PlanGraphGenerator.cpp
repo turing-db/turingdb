@@ -28,8 +28,7 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view)
     : _ast(&ast),
       _view(view),
-      _variables(&_tree)
-{
+      _variables(&_tree) {
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {
@@ -54,7 +53,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate read statements (optional)
     if (readStmts) {
-        ReadStatementGenerator readGenerator(_ast, &_tree, &_variables);
+        ReadStatementGenerator readGenerator(_ast, _view, &_tree, &_variables);
 
         for (const Stmt* stmt : readStmts->stmts()) {
             readGenerator.generateStmt(stmt);
@@ -76,11 +75,6 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
         for (const Stmt* stmt : updateStmts->stmts()) {
             writeGenerator.generateStmt(stmt);
-        }
-    } else {
-        if (!returnStmt) {
-            // Return statement is mandatory if there are no update statements
-            throwError("Return statement is missing", query);
         }
     }
 

@@ -23,7 +23,7 @@ public:
     };
 
     struct PropertyDependency {
-        const PropertyTypeID _propTypeID;
+        std::string_view _propertyType;
     };
 
     using Dependency = std::variant<LabelDependency, PropertyDependency>;
@@ -104,7 +104,7 @@ private:
 
     void genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr* expr) {
         _dependencies.emplace_back(variables.getVarNode(expr->getDecl()),
-                                   PropertyDependency {expr->getPropertyType()});
+                                   PropertyDependency {expr->getPropName()});
     }
 };
 

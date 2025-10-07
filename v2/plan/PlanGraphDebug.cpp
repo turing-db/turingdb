@@ -71,11 +71,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
                             output << "_labels\n";
                         } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            std::optional name = propTypeMap.getName(p->_propTypeID);
-                            if (!name) {
-                                name = std::to_string(p->_propTypeID);
-                            }
-                            output << "_" << name.value() << "\n";
+                            output << "_" << p->_propertyType << "\n";
                         }
                     }
                 }
@@ -88,11 +84,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
                             output << "_labels\n";
                         } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            std::optional name = propTypeMap.getName(p->_propTypeID);
-                            if (!name) {
-                                name = std::to_string(p->_propTypeID);
-                            }
-                            output << "_" << name.value() << "\n";
+                            output << "_" << p->_propertyType << "\n";
                         }
                     }
                 }
@@ -119,11 +111,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
                             output << "_labels\n";
                         } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            std::optional name = propTypeMap.getName(p->_propTypeID);
-                            if (!name) {
-                                name = std::to_string(p->_propTypeID);
-                            }
-                            output << "_" << name.value() << "\n";
+                            output << "_" << p->_propertyType << "\n";
                         }
                     }
                 }

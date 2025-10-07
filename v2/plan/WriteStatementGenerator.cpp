@@ -1,6 +1,5 @@
 #include "WriteStatementGenerator.h"
 
-#include <queue>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
@@ -9,24 +8,15 @@
 #include "PlanGraph.h"
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
-#include "PlanGraphTopology.h"
 
 #include "decl/VarDecl.h"
 #include "nodes/FilterNode.h"
-#include "nodes/GetEdgeTargetNode.h"
-#include "nodes/GetEdgesNode.h"
-#include "nodes/GetInEdgesNode.h"
-#include "nodes/GetOutEdgesNode.h"
-#include "nodes/JoinNode.h"
-#include "nodes/MaterializeNode.h"
-#include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
 
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
 
 #include "decl/PatternData.h"
-#include "metadata/LabelSet.h"
 
 using namespace db::v2;
 
@@ -97,21 +87,57 @@ void WriteStatementGenerator::generatePatternElement(const PatternElement* eleme
 }
 
 VarNode* WriteStatementGenerator::generatePatternElementOrigin(const NodePattern* origin) {
-    throwError("Nodes are not supported yet", origin);
+    // const VarDecl* decl = origin->getDecl();
+    // VarNode* var = _variables->getVarNode(decl);
+
+    // if (!var) {
+    //     // Create a new node
+    //     var = _tree->create<VarNode>(decl, _nextDeclOrder++);
+    //     _nodeMap.insert({decl, var});
+    // } else {
+    //     // The node is an input to the write query
+    //     _inputs.insert(var);
+    // }
+
+    // return var;
     return nullptr;
 }
 
 VarNode* WriteStatementGenerator::generatePatternElementEdge(VarNode* prevNode,
                                                              const EdgePattern* edge) {
-    // Expand edge based on direction
+    // const VarDecl* decl = edge->getDecl();
+    // VarNode* var = _variables->getVarNode(decl);
 
-    throwError("Edges are not supported yet", edge);
+    // if (var) {
+    //     throwError(fmt::format("Edge {} already declared", decl->getName()), edge);
+    // }
+
+    // var = _tree->create<VarNode>(decl, _nextDeclOrder++);
+    // _nodeMap.insert({decl, var});
+
+    // prevNode->connectOut(var);
+
+    // return var;
     return nullptr;
 }
 
 VarNode* WriteStatementGenerator::generatePatternElementTarget(VarNode* prevNode,
                                                                const NodePattern* target) {
-    throwError("Nodes are not supported yet", target);
+    // const VarDecl* decl = target->getDecl();
+    // VarNode* var = _variables->getVarNode(decl);
+
+    // if (!var) {
+    //     // Create a new node
+    //     var = _tree->create<VarNode>(decl, _nextDeclOrder++);
+    //     _nodeMap.insert({decl, var});
+    // } else {
+    //     // The node is an input to the write query
+    //     _inputs.insert(var);
+    // }
+
+    // prevNode->connectOut(var);
+
+    // return var;
     return nullptr;
 }
 

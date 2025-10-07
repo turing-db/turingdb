@@ -1,10 +1,10 @@
 #include "AnalyzeException.h"
+#include "ExprAnalyzer.h"
 #include "TuringTest.h"
 
 #include "CypherAST.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
-#include "CypherAnalyzer.h"
 #include "expr/All.h"
 #include "expr/Literal.h"
 #include "versioning/Transaction.h"
@@ -21,12 +21,12 @@ public:
         auto tx = _graph->openTransaction();
         auto view = tx.viewGraph();
 
-        _analyzer = std::make_unique<CypherAnalyzer>(&_ast, view);
+        _analyzer = std::make_unique<ExprAnalyzer>(&_ast, view);
     }
 
 protected:
     std::unique_ptr<Graph> _graph;
-    std::unique_ptr<CypherAnalyzer> _analyzer;
+    std::unique_ptr<ExprAnalyzer> _analyzer;
 
     CypherAST _ast {""};
 };
