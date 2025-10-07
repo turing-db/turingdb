@@ -118,8 +118,6 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
                                       newNextEdgeID);
         wbRb.rebaseIncidentNodeIDs();
 
-
-
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.
         // These values will be used when creating new dataparts at time of submit.

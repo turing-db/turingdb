@@ -11,7 +11,6 @@
 
 using namespace db;
 
-
 S3PullStep::S3PullStep(std::string_view s3Bucket, std::string_view s3Prefix, std::string_view s3File, const std::string& localPath)
     : _s3Bucket(s3Bucket),
     _s3Prefix(s3Prefix),
