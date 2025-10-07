@@ -38,6 +38,8 @@ public:
     bool isNodeStream() const { return std::holds_alternative<NodeStream>(_stream); }
     bool isEdgeStream() const { return std::holds_alternative<EdgeStream>(_stream); }
 
+    const Stream& getStream() const { return _stream; }
+
     NodeStream& getNodeStream() { return std::get<NodeStream>(_stream); }
     EdgeStream& getEdgeStream() { return std::get<EdgeStream>(_stream); }
 

@@ -11,6 +11,8 @@
 
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
+#include "processors/MaterializeProcessor.h"
+#include "processors/LambdaProcessor.h"
 
 #include "columns/Block.h"
 #include "columns/ColumnIDs.h"
@@ -75,6 +77,7 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             if (!stream.isNodeStream()) {
                 throw PlannerException(fmt::format("GET_OUT_EDGES node requires a node stream"));
             }
+
             GetOutEdgesProcessor* proc = GetOutEdgesProcessor::create(_pipeline);
             stream.getNodeStream().nodeIDs->connectTo(proc->inNodeIDs());
             
@@ -94,7 +97,18 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         }
         break;
         case PlanGraphOpcode::MATERIALIZE: {
-            // Do nothing
+            MaterializeProcessor* proc = MaterializeProcessor::create(_pipeline, _mem);
+
+            if (stream.isNodeStream()) {
+                stream.getNodeStream().nodeIDs->connectTo(proc->input());
+            } else if (stream.isEdgeStream()) {
+                stream.getEdgeStream().edgeIDs->connectTo(proc->input());
+            } else {
+                throw PlannerException(fmt::format("MATERIALIZE node requires a node or edge stream"));
+            }
+
+            PipelineOutputPort* outNodeIDs = proc->output();
+            stream.set(PlanGraphStream::NodeStream{outNodeIDs});
         }
         break;
         case PlanGraphOpcode::FILTER_NODE: {
@@ -112,7 +126,19 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         }
         break;
         case PlanGraphOpcode::PRODUCE_RESULTS: {
-            // Do nothing
+            auto callback = [](const Block& block, LambdaProcessor::Operation operation) {
+                // Do nothing
+            };
+
+            LambdaProcessor* proc = LambdaProcessor::create(_pipeline, callback);
+
+            if (stream.isNodeStream()) {
+                stream.getNodeStream().nodeIDs->connectTo(proc->input());
+            } else if (stream.isEdgeStream()) {
+                stream.getEdgeStream().edgeIDs->connectTo(proc->input());
+            } else {
+                throw PlannerException(fmt::format("PRODUCE_RESULTS node requires a node or edge stream"));
+            }
         }
         break;
 
