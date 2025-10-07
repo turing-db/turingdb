@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <unordered_map>
 #include <memory>
 #include <span>
@@ -32,6 +33,17 @@ public:
     EdgeID getFirstEdgeID() const { return _firstEdgeID; }
     NodeID getFirstNodeID() const { return _firstNodeID; }
     size_t size() const { return _outEdges.size(); }
+
+    /**
+     * @brief Returns the smallest NodeID which this container holds an edge incident to.
+     * @detail Since @ref _outEdges and @ref _inEdges are sorted in NodeID ascending
+     * order, we can make the following claim:
+     * Let NodeID x = min(src of 1st edge in _outEdges, tgt of 1st edge in _inEdges)
+     * then, x is such that for all other edges, e, in this container, the following hold:
+     * a) x <= e.src
+     * b) x <= e.tgt
+     */
+    std::optional<NodeID> getSmallestIncidentNodeID() const;
 
     std::span<const EdgeRecord> getOuts() const {
         return _outEdges;

@@ -34,12 +34,16 @@ public:
 
     void applyModifications(size_t index);
 
+    /**
+    * @brief Returns the DataPart index that @param node exists in.
+    */
+    size_t getDataPartIndex(NodeID node);
+
 private:
-    using DataPartIndex = size_t;
     // Maps old EdgeIDs to new EdgeRecords
     using EdgeIDToRecordMap = std::unordered_map<EdgeID, EdgeRecord>;
     // Memoisation of nodes to the datapart they are contained in
-    using NodeToDataPartMap = std::unordered_map<NodeID, DataPartIndex>;
+    using NodeToDataPartMap = std::unordered_map<NodeID, size_t>;
 
     // Old DP to apply modifications to
     const WeakArc<DataPart> _oldDP;
@@ -48,7 +52,7 @@ private:
     // Write buffer which specifies what nodes/edges to be deleted
     const CommitWriteBuffer& _writeBuffer;
     // The index of the datapart which is being modified in its parent commit
-    DataPartIndex _dpIndex {std::numeric_limits<DataPartIndex>::max()};
+    size_t _dpIndex {std::numeric_limits<size_t>::max()};
 
     NodeToDataPartMap _nodeToDPMap;
 
@@ -63,7 +67,7 @@ private:
     // node (edge). Thus, the new ID of a node (edge), x, is equal to the number of
     // deleted nodes (edges) in this datapart which have an ID smaller than x.
     inline NodeID nodeIDMapping(NodeID x) {
-        DataPartIndex dpIndex = getDataPartIndex(x);
+        size_t dpIndex = getDataPartIndex(x);
         std::span<NodeID> relevantDeletedNodes =
             _writeBuffer.deletedNodesFromDataPart(dpIndex);
 
@@ -84,11 +88,6 @@ private:
         size_t numSmallerEdges = std::distance(_edgesToDelete.begin(), smallerEdgesIt);
         return x - numSmallerEdges;
     }
-
-    /**
-    * @brief Returns the DataPart index that @param node exists in.
-    */
-    DataPartIndex getDataPartIndex(NodeID node);
 
     /**
      * @brief Given a map of [property ID, property container<T>], iterates through the

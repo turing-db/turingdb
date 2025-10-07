@@ -62,6 +62,7 @@ public:
     bool isEmpty() const { return _datapartCount == 0; }
     size_t dpCount() const { return _datapartCount; }
 
+    size_t getDataPartIndex(NodeID node);
 private:
     friend CommitWriteBuffer;
     friend VersionController;
@@ -99,6 +100,8 @@ private:
                                              const GraphView view,
                                              DataPartBuilder* builder,
                                              CommitHistoryBuilder& historyBuilder);
+
+    bool dataPartContainsEffectedEdge(const WeakArc<DataPart>& part, size_t partIndex);
 
     void initialize();
     };

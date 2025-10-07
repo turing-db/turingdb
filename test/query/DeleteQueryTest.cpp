@@ -212,8 +212,8 @@ TEST_F(DeleteQueryTest, deleteLabelSet) {
     tester.setChangeID(ChangeID::head());
     // Labelset still exist
     tester.query("call labelsets ()")
-        .expectVector<LabelSetID>({})
-        .expectVector<types::String::Primitive>({})
+        .expectVector<LabelSetID>({0})
+        .expectVector<types::String::Primitive>({"NewNode"})
         .execute();
 }
 

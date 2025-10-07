@@ -10,7 +10,7 @@
 namespace rv = ranges::views;
 namespace rg = ranges;
 
-namespace db {
+using namespace db;
 
 EdgeContainer::EdgeContainer(EdgeContainer&&) noexcept = default;
 EdgeContainer& EdgeContainer::operator=(EdgeContainer&&) noexcept = default;
@@ -73,4 +73,12 @@ EdgeContainer::EdgeContainer(NodeID firstNodeID,
 {
 }
 
+std::optional<NodeID> EdgeContainer::getSmallestIncidentNodeID() const{
+    if (size() == 0) {
+        return std::nullopt;
+    }
+    const NodeID smallestSource = _outEdges.front()._nodeID;
+    const NodeID smallestTarget = _inEdges.front()._otherID;
+
+    return std::min(smallestSource, smallestTarget);
 }

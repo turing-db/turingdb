@@ -160,6 +160,9 @@ void CommitWriteBuffer::detectHangingEdges() {
 
     for (const WeakArc<DataPart>& part : parts) {
         const EdgeContainer& edgeContainer = part->edges();
+        if (edgeContainer.size() == 0) {
+            continue; // Empty container => no hanging edges
+        }
 
         // Edges in this part can only be between nodes which exist in this datapart or a
         // previous datapart. Hence, when checking whether an edge is incident to a node
@@ -167,12 +170,15 @@ void CommitWriteBuffer::detectHangingEdges() {
         // deleted which is incident to an edge in this part (@ref nlb), to the largest
         // node ID in this datapart
         // (@ref nub).
-
-        const NodeID firstIncidentNodeID = part->edges().getFirstNodeID();
+        const auto firstIncidentOpt = edgeContainer.getSmallestIncidentNodeID();
+        if (firstIncidentOpt == std::nullopt) {
+            continue; // Empty container => no hanging edges (checked explicitly above)
+        }
+        const NodeID smallestIncidentID = firstIncidentOpt.value();
         const NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
 
         // The nodes to be deleted from this datapart are in the interval [nlb, nub)
-        const auto nlb = std::ranges::lower_bound(delNodes, firstIncidentNodeID);
+        const auto nlb = std::ranges::lower_bound(delNodes, smallestIncidentID);
         const auto nub = std::ranges::upper_bound(delNodes, largestNodeID);
 
         // Subspan to reduce the search space

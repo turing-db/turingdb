@@ -5,7 +5,6 @@
 #include "NodeContainer.h"
 #include "metadata/PropertyType.h"
 #include "CommitBuilder.h"
-#include "range/v3/view/enumerate.hpp"
 
 using namespace db;
 
@@ -79,20 +78,7 @@ void DataPartModifier::applyModifications(size_t index) {
     copyEdgeProps<types::Bool>(edgePropManager._bools, oldIdsToNewRecords);
 }
 
-DataPartModifier::DataPartIndex DataPartModifier::getDataPartIndex(NodeID node) {
-    auto it = _nodeToDPMap.find(node);
-    if (it != _nodeToDPMap.end()) {
-        return it->second;
-    }
-
-    DataPartSpan dataparts = _writeBuffer._commitBuilder->commitData().allDataparts();
-
-    // TODO:: Binary search-esque
-    for (const auto& [index, part] : rv::enumerate(dataparts)) {
-        if (part->hasNode(node)) {
-            _nodeToDPMap[node] = index;
-            return index;
-        }
-    }
-    panic("Node {} does not exist in dataparts.", node);
+size_t DataPartModifier::getDataPartIndex(NodeID node) {
+    // TODO: Memoisation
+    return _writeBuffer._commitBuilder->getDataPartIndex(node);
 }
