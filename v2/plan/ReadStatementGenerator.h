@@ -1,8 +1,13 @@
 #pragma once
 
+#include "views/GraphView.h"
 #include <cstdint>
 #include <memory>
 #include <vector>
+
+namespace db {
+class GraphMetadata;
+}
 
 namespace db::v2 {
 
@@ -23,10 +28,16 @@ struct PropertyConstraint;
 class ReadStatementGenerator {
 public:
     ReadStatementGenerator(const CypherAST* ast,
+                           GraphView graphView,
                            PlanGraph* tree,
                            PlanGraphVariables* variables);
 
     ~ReadStatementGenerator();
+
+    ReadStatementGenerator(const ReadStatementGenerator&) = delete;
+    ReadStatementGenerator(ReadStatementGenerator&&) = delete;
+    ReadStatementGenerator& operator=(const ReadStatementGenerator&) = delete;
+    ReadStatementGenerator& operator=(ReadStatementGenerator&&) = delete;
 
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
@@ -47,6 +58,8 @@ public:
 
 private:
     const CypherAST* _ast {nullptr};
+    GraphView _graphView;
+    const GraphMetadata& _graphMetadata;
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
 

@@ -31,9 +31,12 @@
 using namespace db::v2;
 
 ReadStatementGenerator::ReadStatementGenerator(const CypherAST* ast,
+                                               GraphView graphView,
                                                PlanGraph* tree,
                                                PlanGraphVariables* variables)
     : _ast(ast),
+      _graphView(graphView),
+      _graphMetadata(graphView.metadata()),
       _tree(tree),
       _variables(variables) {
 }
@@ -109,9 +112,11 @@ void ReadStatementGenerator::generatePatternElement(const PatternElement* elemen
 
 VarNode* ReadStatementGenerator::generatePatternElementOrigin(const NodePattern* origin) {
     const NodePatternData* data = origin->getData();
-    const LabelSet& labelset = data->labelConstraints();
+    const std::span labels = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
     const VarDecl* decl = origin->getDecl();
+    const LabelMap& labelMap = _graphMetadata.labels();
+    const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
 
@@ -128,11 +133,26 @@ VarNode* ReadStatementGenerator::generatePatternElementOrigin(const NodePattern*
     NodeFilterNode* nodeFilter = filter->asNodeFilter();
 
     // Type constraints
+    LabelSet labelset;
+
+    for (const std::string_view label : labels) {
+        const auto labelID = labelMap.get(label);
+        if (!labelID) {
+            throwError(fmt::format("Unknown label: {}", label), origin);
+        }
+        labelset.set(labelID.value());
+    }
+
     nodeFilter->addLabelConstraints(labelset);
 
     // Property constraints
-    for (const auto& [propType, expr] : exprConstraints) {
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
+    for (const auto& constraint : exprConstraints) {
+        const std::optional propType = propTypeMap.get(constraint._propTypeName);
+        if (!propType) {
+            throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
+        }
+
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType->_id, constraint._expr));
     }
 
     return var;
@@ -157,8 +177,10 @@ VarNode* ReadStatementGenerator::generatePatternElementEdge(VarNode* prevNode,
 
     // Edge constraints
     const EdgePatternData* data = edge->getData();
-    const auto& edgeTypes = data->edgeTypeConstraints();
+    const std::span edgeTypes = data->edgeTypeConstraints();
     const auto& exprConstraints = data->exprConstraints();
+    const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
+    const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
     const VarDecl* decl = edge->getDecl();
 
     if (edgeTypes.size() > 1) {
@@ -176,13 +198,23 @@ VarNode* ReadStatementGenerator::generatePatternElementEdge(VarNode* prevNode,
     EdgeFilterNode* edgeFilter = filter->asEdgeFilter();
 
     // Type constraints
-    for (const EdgeTypeID edgeTypeID : edgeTypes) {
-        edgeFilter->addEdgeTypeConstraint(edgeTypeID);
+    for (std::string_view edgeTypeName : edgeTypes) {
+        const std::optional edgeType = edgeTypeMap.get(edgeTypeName);
+        if (!edgeType) {
+            throwError(fmt::format("Unknown edge type: {}", edgeTypeName), edge);
+        }
+
+        edgeFilter->addEdgeTypeConstraint(edgeType.value());
     }
 
     // Property constraints
-    for (const auto& [propType, expr] : exprConstraints) {
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
+    for (const auto& constraint : exprConstraints) {
+        const std::optional propType = propTypeMap.get(constraint._propTypeName);
+        if (!propType) {
+            throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
+        }
+
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType->_id, constraint._expr));
     }
 
     return var;
@@ -192,9 +224,11 @@ VarNode* ReadStatementGenerator::generatePatternElementTarget(VarNode* prevNode,
                                                               const NodePattern* target) {
     // Target nodes
     const NodePatternData* data = target->getData();
-    const auto& labelset = data->labelConstraints();
+    const std::span labels = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
     const VarDecl* decl = target->getDecl();
+    const LabelMap& labelMap = _graphMetadata.labels();
+    const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
     PlanGraphNode* currentNode = _tree->newOut<GetEdgeTargetNode>(prevNode);
 
@@ -212,14 +246,29 @@ VarNode* ReadStatementGenerator::generatePatternElementTarget(VarNode* prevNode,
         }
     }
 
-    auto* typedFilter = static_cast<NodeFilterNode*>(filter);
+    auto* nodeFilter = static_cast<NodeFilterNode*>(filter);
 
-    // Type constraintsj
-    typedFilter->addLabelConstraints(labelset);
+    // Type constraints
+    LabelSet labelset;
+
+    for (const std::string_view label : labels) {
+        const auto labelID = labelMap.get(label);
+        if (!labelID) {
+            throwError(fmt::format("Unknown label: {}", label), target);
+        }
+        labelset.set(labelID.value());
+    }
+
+    nodeFilter->addLabelConstraints(labelset);
 
     // Property constraints
-    for (const auto& [propType, expr] : exprConstraints) {
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType._id, expr));
+    for (const auto& constraint : exprConstraints) {
+        const std::optional propType = propTypeMap.get(constraint._propTypeName);
+        if (!propType) {
+            throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
+        }
+
+        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType->_id, constraint._expr));
     }
 
     return var;
@@ -350,16 +399,16 @@ void ReadStatementGenerator::placePropertyExprJoins() {
             }
         }
 
-        // Step 2: Place the constraint
-        auto* filter = _variables->getNodeFilter(var);
-        filter->addPropertyConstraint(prop.get());
-
-        // Step 3: place joins
+        // Step 2: place joins
         insertDataFlowNode(var, prop->var);
 
         for (const auto& dep : deps.getDependencies()) {
             insertDataFlowNode(var, dep._var);
         }
+
+        // Step 3: Place the constraint
+        auto* filter = _variables->getNodeFilter(var);
+        filter->addPropertyConstraint(std::move(prop));
     }
 }
 

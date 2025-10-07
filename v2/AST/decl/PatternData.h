@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <utility>
 
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
@@ -11,13 +10,19 @@ namespace db::v2 {
 class CypherAST;
 class Expr;
 
+struct EntityPropertyConstraint {
+    std::string_view _propTypeName;
+    ValueType _valueType;
+    Expr* _expr {nullptr};
+};
+
 class PatternData {
 public:
-    using ExprConstraints = std::vector<std::pair<PropertyType, Expr*>>;
+    using ExprConstraints = std::vector<EntityPropertyConstraint>;
 
     const ExprConstraints& exprConstraints() const { return _exprConstraints; }
 
-    void addExprConstraint(PropertyType propType, Expr* expr);
+    void addExprConstraint(std::string_view typeName, ValueType valueType, Expr* expr);
 
 protected:
     PatternData();
@@ -32,12 +37,12 @@ public:
 
     static NodePatternData* create(CypherAST* ast);
 
-    const LabelSet& labelConstraints() const { return _labelConstraints; }
+    std::span<const std::string_view> labelConstraints() const { return _labelConstraints; }
 
-    void addLabelConstraint(LabelID labelID);
+    void addLabelConstraint(std::string_view label);
 
 private:
-    LabelSet _labelConstraints;
+    std::vector<std::string_view> _labelConstraints;
 
     NodePatternData();
     ~NodePatternData() override;
@@ -45,17 +50,16 @@ private:
 
 class EdgePatternData : public PatternData {
 public:
-    using EdgeTypes = std::vector<EdgeTypeID>;
     friend CypherAST;
 
     static EdgePatternData* create(CypherAST* ast);
 
-    const EdgeTypes& edgeTypeConstraints() const { return _edgeTypeConstraints; }
+    std::span<const std::string_view> edgeTypeConstraints() const { return _edgeTypeConstraints; }
 
-    void addEdgeTypeConstraint(EdgeTypeID edgeTypeID);
+    void addEdgeTypeConstraint(std::string_view edgeType);
 
 private:
-    EdgeTypes _edgeTypeConstraints;
+    std::vector<std::string_view> _edgeTypeConstraints;
 
     EdgePatternData();
     ~EdgePatternData() override;

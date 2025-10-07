@@ -12,8 +12,8 @@ PatternData::PatternData()
 PatternData::~PatternData() {
 }
 
-void PatternData::addExprConstraint(PropertyType propType, Expr* expr) {
-    _exprConstraints.emplace_back(propType, expr);
+void PatternData::addExprConstraint(std::string_view typeName, ValueType valueType, Expr* expr) {
+    _exprConstraints.emplace_back(typeName, valueType, expr);
 }
 
 // NodePatternData
@@ -31,8 +31,8 @@ NodePatternData* NodePatternData::create(CypherAST* ast) {
     return data;
 }
 
-void NodePatternData::addLabelConstraint(LabelID labelID) {
-    _labelConstraints.set(labelID);
+void NodePatternData::addLabelConstraint(std::string_view label) {
+    _labelConstraints.push_back(label);
 }
 
 // EdgePatternData
@@ -49,6 +49,6 @@ EdgePatternData* EdgePatternData::create(CypherAST* ast) {
     return data;
 }
 
-void EdgePatternData::addEdgeTypeConstraint(EdgeTypeID edgeTypeID) {
-    _edgeTypeConstraints.push_back(edgeTypeID);
+void EdgePatternData::addEdgeTypeConstraint(std::string_view edgeType) {
+    _edgeTypeConstraints.push_back(edgeType);
 }
