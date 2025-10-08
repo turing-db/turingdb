@@ -261,8 +261,12 @@ void CommitWriteBuffer::fillPerDataPartDeletions() {
         bioassert(!(elb > eub));
 
         // Subspans reduce the search space of what we need delete from this datapart
-        const std::span thisDPDeletedNodes(nlb, nub);
-        const std::span thisDPDeletedEdges(elb, eub);
+        const std::span thisDPDeletedNodes = part->getNodeCount() == 0
+                                               ? std::span<NodeID>(nlb, nlb)
+                                               : std::span<NodeID>(nlb, nub);
+        const std::span thisDPDeletedEdges = part->getEdgeCount() == 0
+                                               ? std::span<EdgeID>(elb, elb)
+                                               : std::span<EdgeID>(elb, eub);
 
         // Index @ref idx = nodes/edges to be deleted from DataPart @ @ref idx
         _perDataPartDeletedNodes.emplace_back(thisDPDeletedNodes);
