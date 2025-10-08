@@ -31,8 +31,9 @@ using namespace db::v2;
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(graphView.metadata())
+{
 }
 
 ReadStmtAnalyzer::~ReadStmtAnalyzer() {
@@ -204,7 +205,6 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             }
 
             data->addExprConstraint(propName->getName(), propType->_valueType, expr);
-
         }
     }
 }

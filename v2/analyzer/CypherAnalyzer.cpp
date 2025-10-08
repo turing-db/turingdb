@@ -32,12 +32,12 @@ using namespace db::v2;
 
 CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(graphView.metadata()),
-      _variables(std::make_unique<AnalyzerVariables>(_ast)),
-      _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
-      _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
-      _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
+    _graphView(graphView),
+    _graphMetadata(graphView.metadata()),
+    _variables(std::make_unique<AnalyzerVariables>(_ast)),
+    _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
+    _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
+    _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
 {
     _exprAnalyzer->setVariables(_variables.get());
     _readAnalyzer->setVariables(_variables.get());

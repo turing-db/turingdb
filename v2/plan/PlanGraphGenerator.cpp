@@ -4,12 +4,10 @@
 
 #include "CypherAST.h"
 #include "PlanGraph.h"
-#include "PlanGraphTopology.h"
-#include "ReadStatementGenerator.h"
-#include "WriteStatementGenerator.h"
+#include "ReadStmtGenerator.h"
+#include "WriteStmtGenerator.h"
 
-#include "nodes/JoinNode.h"
-#include "nodes/CartesianProductNode.h"
+#include "nodes/WriteNode.h"
 #include "nodes/ProduceResultsNode.h"
 
 #include "QueryCommand.h"
@@ -27,8 +25,9 @@ using namespace db;
 PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view)
     : _ast(&ast),
-      _view(view),
-      _variables(&_tree) {
+    _view(view),
+    _variables(&_tree)
+{
 }
 
 PlanGraphGenerator::~PlanGraphGenerator() {
@@ -51,9 +50,11 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     const StmtContainer* updateStmts = query->getUpdateStmts();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
+    PlanGraphNode* currentNode = nullptr;
+
     // Generate read statements (optional)
     if (readStmts) {
-        ReadStatementGenerator readGenerator(_ast, _view, &_tree, &_variables);
+        ReadStmtGenerator readGenerator(_ast, _view, &_tree, &_variables);
 
         for (const Stmt* stmt : readStmts->stmts()) {
             readGenerator.generateStmt(stmt);
@@ -67,119 +68,32 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
         // Place joins based on where predicates
         readGenerator.placePredicateJoins();
+
+        // Place joins that generate the endpoint, and retrieve it
+        currentNode = readGenerator.generateEndpoint();
     }
 
     // Generate update statements (optional)
     if (updateStmts) {
-        WriteStatementGenerator writeGenerator(_ast, &_tree, &_variables);
+        WriteStmtGenerator writeGenerator(_ast, &_tree, &_variables);
 
         for (const Stmt* stmt : updateStmts->stmts()) {
-            writeGenerator.generateStmt(stmt);
+            currentNode = writeGenerator.generateStmt(stmt, currentNode);
         }
     }
 
     // Generate return statement
     if (returnStmt) {
-        generateReturnStmt(returnStmt);
+        generateReturnStmt(returnStmt, currentNode);
     }
 }
 
-void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt) {
-    // Step 1: Find all end points
-    std::vector<PlanGraphNode*> ends;
-    for (const auto& node : _tree.nodes()) {
-        if (node->outputs().empty()) {
-            ends.push_back(node.get());
-        }
+void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
+    if (prevNode == nullptr) {
+        throwError("Return statement without previous node", stmt);
     }
 
-    if (ends.empty()) {
-        /* Right now (a)-->(b)-->(c)-->(a) is a loop, which means that we
-         * cannot define an endpoint.
-         *
-         * This needs to be explictely handled,
-         * probably using "loop unrolling". When we detect a loop, we actually
-         * define a new variable (a') in this example, and add a constraint,
-         * WHERE a == a'.
-         *
-         * To implement this, we need to:
-         *
-         * - Allow comparing entities (e.g. a == b) and test the query:
-         *   `MATCH (a)-->(b) WHERE a == b RETURN *`
-         * - Then, add the unrolling logic to the query planner. This may
-         *   be as simple as: in planOrigin and planTarget, if the
-         *   node already exists, detect if we can come back to the same
-         *   position by going backwards. If so, create a new unnamed variable
-         *   and add the constraint.
-         * */
-
-        throwError("No endpoints found, loops are not supported yet", stmt);
-    }
-
-    if (ends.size() == 1) {
-        // No joins needed, just generate the last ProduceResultsNode
-        ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
-        ends.back()->connectOut(results);
-        return;
-    }
-
-    // Step 2: Generate all joins
-    // Algorithm:
-    // - Pick the first endpoint (= rhs)
-    // - For each other endpoint (= lhs):
-    //     - Find the shortest path between the lhs and rhs
-    //     - If the path is undirected, JOIN the two endpoints
-    //     - If no path is found, CARTESIAN_PRODUCT the two endpoints
-    //     - rhs becomes the join node
-    /*       A              A              A
-     *      / \            / \            / \
-     *     B   C          B   C          B   C
-     *    /     \    ->  /     \    ->  /     \
-     *   D       F      D       F      D       F
-     *    \     / \      \     / \      \     / \
-     *     H   I   J      H   I   J      H   I   J
-     *                         \ /        \   \ /
-     *                         [u]         \  [u]
-     *                                      \ /
-     *                                      [u]   */
-
-    PlanGraphNode* rhsNode = ends[0];
-
-    for (size_t i = 1; i < ends.size(); i++) {
-        PlanGraphNode* lhsNode = ends[i];
-
-        const auto path = PlanGraphTopology::getShortestPath(rhsNode, lhsNode);
-
-        switch (path) {
-            case PlanGraphTopology::PathToDependency::SameVar:
-            case PlanGraphTopology::PathToDependency::BackwardPath: {
-                // Should not happen
-                throwError("Unknown error", rhsNode);
-                continue;
-            } break;
-
-            case PlanGraphTopology::PathToDependency::UndirectedPath: {
-                // Join
-                JoinNode* join = _tree.create<JoinNode>();
-                rhsNode->connectOut(join);
-                lhsNode->connectOut(join);
-
-                rhsNode = join;
-            } break;
-            case PlanGraphTopology::PathToDependency::NoPath: {
-                // Cartesian product
-                CartesianProductNode* join = _tree.create<CartesianProductNode>();
-                rhsNode->connectOut(join);
-                lhsNode->connectOut(join);
-
-                rhsNode = join;
-            } break;
-        }
-    }
-
-    // Step 3: Connect the last node to the output
-    ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
-    rhsNode->connectOut(results);
+    _tree.newOut<ProduceResultsNode>(prevNode);
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {

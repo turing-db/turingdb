@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <unordered_set>
 
 #include "decl/EvaluatedType.h"
 #include "views/GraphView.h"
@@ -8,6 +9,7 @@
 namespace db::v2 {
 
 class CypherAST;
+class VarDecl;
 class AnalyzerVariables;
 class ExprAnalyzer;
 class Stmt;
@@ -48,9 +50,8 @@ private:
     GraphView _graphView;
     AnalyzerVariables* _variables {nullptr};
     ExprAnalyzer* _exprAnalyzer {nullptr};
+    std::unordered_set<const VarDecl*> _alreadyDefined;
     const GraphMetadata& _graphMetadata;
-
-    std::vector<std::pair<NodeID, std::string_view>> _additionalNodeLabels;
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <vector>
 #include <string_view>
-#include <memory>
 
 #include "PlanGraphVariables.h"
 
@@ -38,7 +36,7 @@ private:
     PlanGraphVariables _variables;
 
     void generateSinglePartQuery(const SinglePartQuery* query);
-    void generateReturnStmt(const ReturnStmt* stmt);
+    void generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };

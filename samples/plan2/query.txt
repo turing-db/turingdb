@@ -1,8 +1,9 @@
-//CREATE (a:Person { name: "Luc" })
-//CREATE (a:Person { name: "Luc" }) RETURN a
-//CREATE (a:Person { name: "Luc" })-[e:INTERESTED_IN]->(b:Interest { name: "Chess" })
-//CREATE (a:Person { name: "Luc" })-[e:INTERESTED_IN]->(b:Interest { name: "Chess" }) RETURN a, b
-//MATCH (a:Person { name: "Luc" }) CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" })
-//MATCH (a:Person { name: "Luc" }) CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" }) RETURN a, b
-//MATCH (a:Person { name: "Luc" }) WHERE a.isFrench = true CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" })
-MATCH (a:Person { name: "Luc" }) WHERE a.isFrench = true CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" }) RETURN a, b
+// CREATE (a:Person { name: "Luc" });
+// CREATE (a:Person { name: "Luc" }) RETURN a;
+// CREATE (a:Person { name: "Luc" })-[e:INTERESTED_IN]->(b:Interest { name: "Chess" });
+// CREATE (a:Person { name: "Luc" })-[e:INTERESTED_IN]->(b:Interest { name: "Chess" }) RETURN a, b;
+// MATCH (a:Person { name: "Luc" }) CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" });
+// MATCH (a:Person { name: "Luc" }) CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" }) RETURN a, b;
+// MATCH (a:Person { name: "Luc" }) WHERE a.isFrench = true CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" });
+//MATCH (a:Person { name: "Luc" }) WHERE a.isFrench = true CREATE (a)-[e:INTERESTED_IN]->(b:Interest { name: "Chess" }) RETURN a, b;
+MATCH (a:Person { name: "Luc" }) WHERE a.isFrench = true CREATE (a)-[e1:KNOWS_WELL]->(b:Person { name: "John" })-[e2:INTERESTED_IN]->(c:Interest { name: "Chess" }) RETURN a, b, c;

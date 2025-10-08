@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
 
 namespace db::v2 {

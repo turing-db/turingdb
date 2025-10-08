@@ -1,4 +1,4 @@
-#include "ReadStatementGenerator.h"
+#include "ReadStmtGenerator.h"
 
 #include <queue>
 #include <spdlog/fmt/bundled/format.h>
@@ -12,6 +12,7 @@
 #include "PlanGraphTopology.h"
 
 #include "decl/VarDecl.h"
+#include "nodes/CartesianProductNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/GetEdgeTargetNode.h"
 #include "nodes/GetEdgesNode.h"
@@ -30,21 +31,22 @@
 
 using namespace db::v2;
 
-ReadStatementGenerator::ReadStatementGenerator(const CypherAST* ast,
-                                               GraphView graphView,
-                                               PlanGraph* tree,
-                                               PlanGraphVariables* variables)
+ReadStmtGenerator::ReadStmtGenerator(const CypherAST* ast,
+                                     GraphView graphView,
+                                     PlanGraph* tree,
+                                     PlanGraphVariables* variables)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(graphView.metadata()),
-      _tree(tree),
-      _variables(variables) {
+    _graphView(graphView),
+    _graphMetadata(graphView.metadata()),
+    _tree(tree),
+    _variables(variables)
+{
 }
 
-ReadStatementGenerator::~ReadStatementGenerator() {
+ReadStmtGenerator::~ReadStmtGenerator() {
 }
 
-void ReadStatementGenerator::generateStmt(const Stmt* stmt) {
+void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             generateMatchStmt(static_cast<const MatchStmt*>(stmt));
@@ -56,7 +58,7 @@ void ReadStatementGenerator::generateStmt(const Stmt* stmt) {
     }
 }
 
-void ReadStatementGenerator::generateMatchStmt(const MatchStmt* stmt) {
+void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
     const Pattern* pattern = stmt->getPattern();
 
     // Each PatternElement is a target of the match
@@ -71,13 +73,13 @@ void ReadStatementGenerator::generateMatchStmt(const MatchStmt* stmt) {
     }
 }
 
-void ReadStatementGenerator::generateWhereClause(const WhereClause* where) {
+void ReadStmtGenerator::generateWhereClause(const WhereClause* where) {
     const Expr* expr = where->getExpr();
 
     unwrapWhereExpr(expr);
 }
 
-void ReadStatementGenerator::generatePatternElement(const PatternElement* element) {
+void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
     if (element->size() == 0) {
         throwError("Empty match pattern element", element);
     }
@@ -110,7 +112,7 @@ void ReadStatementGenerator::generatePatternElement(const PatternElement* elemen
     }
 }
 
-VarNode* ReadStatementGenerator::generatePatternElementOrigin(const NodePattern* origin) {
+VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* origin) {
     const NodePatternData* data = origin->getData();
     const std::span labels = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
@@ -158,8 +160,8 @@ VarNode* ReadStatementGenerator::generatePatternElementOrigin(const NodePattern*
     return var;
 }
 
-VarNode* ReadStatementGenerator::generatePatternElementEdge(VarNode* prevNode,
-                                                            const EdgePattern* edge) {
+VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
+                                                       const EdgePattern* edge) {
     // Expand edge based on direction
 
     PlanGraphNode* currentNode = nullptr;
@@ -220,8 +222,8 @@ VarNode* ReadStatementGenerator::generatePatternElementEdge(VarNode* prevNode,
     return var;
 }
 
-VarNode* ReadStatementGenerator::generatePatternElementTarget(VarNode* prevNode,
-                                                              const NodePattern* target) {
+VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
+                                                         const NodePattern* target) {
     // Target nodes
     const NodePatternData* data = target->getData();
     const std::span labels = data->labelConstraints();
@@ -274,7 +276,7 @@ VarNode* ReadStatementGenerator::generatePatternElementTarget(VarNode* prevNode,
     return var;
 }
 
-void ReadStatementGenerator::unwrapWhereExpr(const Expr* expr) {
+void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
     if (expr->getKind() == Expr::Kind::NODE_LABEL) {
         // Node label expression can be pushed down to the var node
         //
@@ -352,7 +354,7 @@ void ReadStatementGenerator::unwrapWhereExpr(const Expr* expr) {
     predicate->setFilterNode(filterNode);
 }
 
-void ReadStatementGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin) {
+void ReadStmtGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin) {
     std::queue<PlanGraphNode*> q;
     q.push(origin);
 
@@ -371,7 +373,7 @@ void ReadStatementGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNo
     }
 }
 
-void ReadStatementGenerator::placeJoinsOnVars() {
+void ReadStmtGenerator::placeJoinsOnVars() {
     for (auto [var, filter] : _variables->getNodeFiltersMap()) {
         if (filter->inputs().size() > 1) {
             _tree->insertBefore<JoinNode>(filter);
@@ -379,7 +381,7 @@ void ReadStatementGenerator::placeJoinsOnVars() {
     }
 }
 
-void ReadStatementGenerator::placePropertyExprJoins() {
+void ReadStmtGenerator::placePropertyExprJoins() {
     for (auto& prop : _propConstraints) {
         auto& deps = prop->dependencies;
         const auto& depContainer = deps.getDependencies();
@@ -412,7 +414,7 @@ void ReadStatementGenerator::placePropertyExprJoins() {
     }
 }
 
-void ReadStatementGenerator::placePredicateJoins() {
+void ReadStmtGenerator::placePredicateJoins() {
     for (const auto& pred : _tree->wherePredicates()) {
         FilterNode* filterNode = pred->getFilterNode();
         const VarNode* var = filterNode->getVarNode();
@@ -427,7 +429,104 @@ void ReadStatementGenerator::placePredicateJoins() {
     }
 }
 
-void ReadStatementGenerator::insertDataFlowNode(const VarNode* node, VarNode* dependency) {
+PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
+    // Step 1: Find all end points
+    std::vector<PlanGraphNode*> ends;
+    for (const auto& node : _tree->nodes()) {
+        if (node->outputs().empty()) {
+            ends.push_back(node.get());
+        }
+    }
+
+    if (ends.empty()) {
+        /* Right now (a)-->(b)-->(c)-->(a) is a loop, which means that we
+         * cannot define an endpoint.
+         *
+         * This needs to be explictely handled,
+         * probably using "loop unrolling". When we detect a loop, we actually
+         * define a new variable (a') in this example, and add a constraint,
+         * WHERE a == a'.
+         *
+         * To implement this, we need to:
+         *
+         * - Allow comparing entities (e.g. a == b) and test the query:
+         *   `MATCH (a)-->(b) WHERE a == b RETURN *`
+         * - Then, add the unrolling logic to the query planner. This may
+         *   be as simple as: in planOrigin and planTarget, if the
+         *   node already exists, detect if we can come back to the same
+         *   position by going backwards. If so, create a new unnamed variable
+         *   and add the constraint.
+         * */
+
+        throwError("No endpoints found, loops are not supported yet");
+    }
+
+    if (ends.size() == 1) {
+        // No joins needed, this endpoint can be connected to the next stage of
+        // the query pipeline
+        return ends[0];
+    }
+
+    // Step 2: Generate all joins
+    // Algorithm:
+    // - Pick the first endpoint (= rhs)
+    // - For each other endpoint (= lhs):
+    //     - Find the shortest path between the lhs and rhs
+    //     - If the path is undirected, JOIN the two endpoints
+    //     - If no path is found, CARTESIAN_PRODUCT the two endpoints
+    //     - rhs becomes the join node
+    /*       A              A              A
+     *      / \            / \            / \
+     *     B   C          B   C          B   C
+     *    /     \    ->  /     \    ->  /     \
+     *   D       F      D       F      D       F
+     *    \     / \      \     / \      \     / \
+     *     H   I   J      H   I   J      H   I   J
+     *                         \ /        \   \ /
+     *                         [u]         \  [u]
+     *                                      \ /
+     *                                      [u]   */
+
+    PlanGraphNode* rhsNode = ends[0];
+
+    for (size_t i = 1; i < ends.size(); i++) {
+        PlanGraphNode* lhsNode = ends[i];
+
+        const auto path = PlanGraphTopology::getShortestPath(rhsNode, lhsNode);
+
+        switch (path) {
+            case PlanGraphTopology::PathToDependency::SameVar:
+            case PlanGraphTopology::PathToDependency::BackwardPath: {
+                // Should not happen
+                throwError("Unknown error", rhsNode);
+                continue;
+            } break;
+
+            case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                // Join
+                JoinNode* join = _tree->create<JoinNode>();
+                rhsNode->connectOut(join);
+                lhsNode->connectOut(join);
+
+                rhsNode = join;
+            } break;
+            case PlanGraphTopology::PathToDependency::NoPath: {
+                // Cartesian product
+                CartesianProductNode* join = _tree->create<CartesianProductNode>();
+                rhsNode->connectOut(join);
+                lhsNode->connectOut(join);
+
+                rhsNode = join;
+            } break;
+        }
+    }
+
+    // From here, there is only one endpoint remaining which can be connected
+    // to the next stage of the query pipeline
+    return rhsNode;
+}
+
+void ReadStmtGenerator::insertDataFlowNode(const VarNode* node, VarNode* dependency) {
     FilterNode* filter = _variables->getNodeFilter(node);
     const auto path = PlanGraphTopology::getShortestPath(node, dependency);
 
@@ -464,6 +563,6 @@ void ReadStatementGenerator::insertDataFlowNode(const VarNode* node, VarNode* de
     }
 }
 
-void ReadStatementGenerator::throwError(std::string_view msg, const void* obj) const {
+void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {
     throw PlannerException(_ast->createErrorString(msg, obj));
 }

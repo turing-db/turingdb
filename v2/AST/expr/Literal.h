@@ -166,6 +166,9 @@ public:
 
     void set(Symbol* key, Expr* value);
 
+    bool empty() const { return _map.empty(); }
+    size_t size() const { return _map.size(); }
+
     ExprMapConstIterator begin() const { return _map.cbegin(); }
     ExprMapConstIterator end() const { return _map.cend(); }
 

@@ -196,7 +196,7 @@ std::string CypherAST::createErrorString(std::string_view msg, const void* obj) 
     std::string errorMsg;
 
     CypherError err {getQueryString()};
-    err.setTitle("Query plan error");
+    err.setTitle("Query error");
     err.setErrorMsg(msg);
 
     if (location) {

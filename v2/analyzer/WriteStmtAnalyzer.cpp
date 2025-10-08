@@ -14,9 +14,9 @@
 #include "Symbol.h"
 #include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
+#include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/Literal.h"
-#include "metadata/LabelMap.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
 
@@ -24,8 +24,9 @@ using namespace db::v2;
 
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 WriteStmtAnalyzer::~WriteStmtAnalyzer() {
@@ -73,14 +74,37 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
+        decl = _variables->getDecl(symbol->getName());
+        if (decl) {
+            if (_alreadyDefined.contains(decl)) {
+                // Already defined in the write statement
+                throwError("Variable already defined", nodePattern);
+            }
+
+            // Node is an input to the write query
+            if (decl->getType() != EvaluatedType::NodePattern) {
+                throwError(fmt::format("Type mismatch. Expected NodePattern but is {} instead ",
+                                       EvaluatedTypeName::value(decl->getType())),
+                           nodePattern);
+            }
+
+            if (nodePattern->getData() != nullptr || !nodePattern->labels().empty()) {
+                throwError("Input nodes to write statements cannot have constraints", nodePattern);
+            }
+
+            nodePattern->setDecl(decl);
+            return;
+        }
         decl = _variables->getOrCreateNamedVariable(EvaluatedType::NodePattern, symbol->getName());
-        nodePattern->setDecl(decl);
     } else {
         decl = _variables->createUnnamedVariable(EvaluatedType::NodePattern);
-        nodePattern->setDecl(decl);
     }
 
+    _alreadyDefined.insert(decl);
+
     NodePatternData* data = NodePatternData::create(_ast);
+
+    nodePattern->setDecl(decl);
     nodePattern->setData(data);
 
     const auto& labels = nodePattern->labels();
@@ -124,21 +148,28 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
+        decl = _variables->getDecl(symbol->getName());
+        if (decl) {
+            throwError("Edges cannot be inputs to write queries", edgePattern);
+        }
+
         decl = _variables->getOrCreateNamedVariable(EvaluatedType::EdgePattern, symbol->getName());
-        edgePattern->setDecl(decl);
     } else {
         decl = _variables->createUnnamedVariable(EvaluatedType::EdgePattern);
-        edgePattern->setDecl(decl);
     }
 
     EdgePatternData* data = EdgePatternData::create(_ast);
+
+    edgePattern->setDecl(decl);
     edgePattern->setData(data);
 
     const auto& types = edgePattern->types();
     if (!types.empty()) {
-        for (const Symbol* edgeTypeSymbol : types) {
-            data->addEdgeTypeConstraint(edgeTypeSymbol->getName());
+        if (types.size() > 1) {
+            throwError("An edge cannot have more than one edge type", edgePattern);
         }
+
+        data->addEdgeTypeConstraint(types.front()->getName());
     }
 
     const MapLiteral* properties = edgePattern->getProperties();

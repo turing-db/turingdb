@@ -25,19 +25,19 @@ class NodePattern;
 class EdgePattern;
 struct PropertyConstraint;
 
-class ReadStatementGenerator {
+class ReadStmtGenerator {
 public:
-    ReadStatementGenerator(const CypherAST* ast,
-                           GraphView graphView,
-                           PlanGraph* tree,
-                           PlanGraphVariables* variables);
+    ReadStmtGenerator(const CypherAST* ast,
+                      GraphView graphView,
+                      PlanGraph* tree,
+                      PlanGraphVariables* variables);
 
-    ~ReadStatementGenerator();
+    ~ReadStmtGenerator();
 
-    ReadStatementGenerator(const ReadStatementGenerator&) = delete;
-    ReadStatementGenerator(ReadStatementGenerator&&) = delete;
-    ReadStatementGenerator& operator=(const ReadStatementGenerator&) = delete;
-    ReadStatementGenerator& operator=(ReadStatementGenerator&&) = delete;
+    ReadStmtGenerator(const ReadStmtGenerator&) = delete;
+    ReadStmtGenerator(ReadStmtGenerator&&) = delete;
+    ReadStmtGenerator& operator=(const ReadStmtGenerator&) = delete;
+    ReadStmtGenerator& operator=(ReadStmtGenerator&&) = delete;
 
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
@@ -54,6 +54,7 @@ public:
     void placeJoinsOnVars();
     void placePropertyExprJoins();
     void placePredicateJoins();
+    PlanGraphNode* generateEndpoint();
     void insertDataFlowNode(const VarNode* node, VarNode* dependency);
 
 private:
