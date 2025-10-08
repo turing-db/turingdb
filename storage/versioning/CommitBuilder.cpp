@@ -7,7 +7,6 @@
 #include "EdgeContainer.h"
 #include "EnumerateFrom.h"
 #include "JobSystem.h"
-#include "NodeContainer.h"
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"

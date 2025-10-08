@@ -152,6 +152,11 @@ void CommitWriteBuffer::detectHangingEdges() {
 
     auto& delNodes = deletedNodes();
 
+    // If no nodes are deleted, there can be no hanging edges
+    if (delNodes.empty()) {
+        return;
+    }
+
     // Sort deleted nodes and remove duplicates for logn lookup with binary search
     if (!std::ranges::is_sorted(delNodes)) {
         std::ranges::sort(delNodes);
@@ -170,16 +175,21 @@ void CommitWriteBuffer::detectHangingEdges() {
         // deleted which is incident to an edge in this part (@ref nlb), to the largest
         // node ID in this datapart
         // (@ref nub).
-        const auto firstIncidentOpt = edgeContainer.getSmallestIncidentNodeID();
-        if (firstIncidentOpt == std::nullopt) {
+        const auto smallestIncidentOpt = edgeContainer.getSmallestIncidentNodeID();
+        if (smallestIncidentOpt == std::nullopt) {
             continue; // Empty container => no hanging edges (checked explicitly above)
         }
-        const NodeID smallestIncidentID = firstIncidentOpt.value();
-        const NodeID largestNodeID = part->getFirstNodeID() + part->getNodeCount() - 1;
+        const NodeID smallestIncidentID = smallestIncidentOpt.value();
+
+        const auto largestIncidentOpt = edgeContainer.getLargestIncidentNodeID();
+        if (largestIncidentOpt == std::nullopt) {
+            continue; // Empty container => no hanging edges (checked explicitly above)
+        }
+        const NodeID largestIncidentID = largestIncidentOpt.value();
 
         // The nodes to be deleted from this datapart are in the interval [nlb, nub)
         const auto nlb = std::ranges::lower_bound(delNodes, smallestIncidentID);
-        const auto nub = std::ranges::upper_bound(delNodes, largestNodeID);
+        const auto nub = std::ranges::upper_bound(delNodes, largestIncidentID);
 
         // Subspan to reduce the search space
         const std::span possiblyIncidentDeletedNodes(nlb, nub);
@@ -262,11 +272,11 @@ void CommitWriteBuffer::fillPerDataPartDeletions() {
 
         // Subspans reduce the search space of what we need delete from this datapart
         const std::span thisDPDeletedNodes = part->getNodeCount() == 0
-                                               ? std::span<NodeID>(nlb, nlb)
+                                               ? std::span<NodeID>(nlb,nlb)
                                                : std::span<NodeID>(nlb, nub);
         const std::span thisDPDeletedEdges = part->getEdgeCount() == 0
-                                               ? std::span<EdgeID>(elb, elb)
-                                               : std::span<EdgeID>(elb, eub);
+                                             ? std::span<EdgeID>(elb,elb)
+                                             : std::span<EdgeID>(elb, eub);
 
         // Index @ref idx = nodes/edges to be deleted from DataPart @ @ref idx
         _perDataPartDeletedNodes.emplace_back(thisDPDeletedNodes);

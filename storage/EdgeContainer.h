@@ -45,6 +45,18 @@ public:
      */
     std::optional<NodeID> getSmallestIncidentNodeID() const;
 
+    /**
+     * @brief Returns the largest NodeID which this container holds an edge incident to.
+     * @detail Since @ref _outEdges and @ref _inEdges are sorted in NodeID ascending
+     * order, we can make the following claim:
+     * Let NodeID x = max(src of last edge in _outEdges, tgt of last edge in _inEdges)
+     * then, x is such that for all other edges, e, in this container, the following hold:
+     * a) e.src <= x
+     * b) e.tgt <= x
+     */
+    std::optional<NodeID> getLargestIncidentNodeID() const;
+
+
     std::span<const EdgeRecord> getOuts() const {
         return _outEdges;
     }
