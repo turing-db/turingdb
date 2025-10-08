@@ -150,7 +150,7 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 }
 
 // NOTE: this still produces false positives, but should produce no false negatives
-// TODO: more accurate solution
+// TODO: more accurate solution/BM against a more intrusive solution 
 bool CommitBuilder::dataPartContainsEffectedEdge(const WeakArc<DataPart>& part, size_t partIndex) {
     // Lowest NodeID which is incident to an edge in this DataPart
     const auto smallestIncidentOpt = part->edges().getSmallestIncidentNodeID();
@@ -241,8 +241,6 @@ void CommitBuilder::applyDeletions() {
 
 void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
-
-    // If there is nothing to flush, return early without creating a new builder
     if (wb.empty()) {
         return;
     }
@@ -251,6 +249,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     // CommitBuilder::buildAllPending
     applyDeletions();
 
+    // We applied any deletions, but if nothing to CREATE, exit
     if (wb.pendingNodes().empty() && wb.pendingEdges().empty()) {
         return;
     }

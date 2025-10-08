@@ -309,3 +309,59 @@ TEST_F(DeleteQueryTest, inAndOutEdges) {
         .expectOptVector<types::Int64::Primitive>({100,100})
         .execute();
 }
+
+TEST_F(DeleteQueryTest, deleteThenCreate) {
+    QueryTester tester{_env->getMem(), *_interp, "simple"};
+
+    newChange(tester);
+    tester.query("delete nodes 0")
+        .execute();
+    tester.query("change submit")
+          .execute();
+    tester.setChangeID(ChangeID::head());
+    // See @ref deleteRemy for validation of the above behaviour
+
+    newChange(tester);
+    tester.query("create (n:Person{name=\"Cyrus\", age=22, isFrench=false, hasPhd=true})")
+        .execute();
+    tester.query("commit")
+        .execute();
+
+    tester.query("match (n @ 13) return n, n.name")
+        .expectVector<NodeID>({13})
+        .expectOptVector<types::String::Primitive>({"Cyrus"})
+        .execute();
+    auto animalIDOpt = tester.query("match (n{name=\"Animals\"} return n)")
+        .expectVector<NodeID>({333}, false)
+        .execute()
+        .outputColumnVector<NodeID>(0);
+    ASSERT_TRUE(animalIDOpt.has_value());
+    NodeID animalID = animalIDOpt.value()->at(0);
+
+    auto newEdgeQuery = fmt::format("create (n @ 13)-[e:LOVES{{name=\"Cyrus->Animals\"}}]-(m @ {})", animalID.getValue());
+    tester.query(newEdgeQuery);
+    submitChange(tester);
+
+    tester.query("match (n)-[e]-(m) return n, n.name")
+        // nodes in 1st DP << 1, node 6 missing, 13 added
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13})
+        // Remy gone, cyrus here
+        .expectOptVector<types::String::Primitive>(
+            {"Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts", "Paddle",
+             "Maxime", "Luc", "Animals", "Martina", "Suhas", "Cyrus"});
+
+    tester.query("match (n)-[e]-(m) return e, e.name")
+        // Remy edges gone, cyrus edge here
+        .expectVector<EdgeID>({0, 1, 8, 9, 10, 11, 12, 13})
+        .expectOptVector<types::String::Primitive>({
+            "Adam -> Bio",
+            "Adam -> Cooking",
+            "Maxime -> Bio",
+            "Maxime -> Paddle",
+            "Luc -> Animals",
+            "Luc -> Computers",
+            "Martina -> Cooking",
+            "Cyrus -> Animals",
+        })
+        .execute();
+}
