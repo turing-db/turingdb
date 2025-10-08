@@ -41,10 +41,8 @@ int main(int argc, const char** argv) {
         auto* graph = db.getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(graph);
 
-        const Graph* defaultGraph = db.getSystemManager().getGraph("simpledb");
-
         spdlog::info("Graph created");
-        const FrozenCommitTx tx = defaultGraph->openTransaction();
+        const FrozenCommitTx tx = graph->openTransaction();
         {
             std::stringstream sstream;
             GraphReport::getReport(tx.readGraph(), sstream);
@@ -52,7 +50,7 @@ int main(int argc, const char** argv) {
         }
 
         spdlog::info("Dump graph into {}", outDir.c_str());
-        const auto dumpRes = GraphDumper::dump(*defaultGraph, outDir);
+        const auto dumpRes = GraphDumper::dump(*graph, outDir);
         if (!dumpRes) {
             spdlog::error("{}", dumpRes.error().fmtMessage());
             return EXIT_FAILURE;
