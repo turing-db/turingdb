@@ -32,15 +32,16 @@ int main(int argc, const char** argv) {
 
     TuringConfig config = TuringConfig::createDefault();
     config.setTuringDirectory(fs::Path(SAMPLE_DIR) / ".turing");
+
     TuringDB db(&config);
     db.run();
 
     {
         spdlog::info("Create company graph");
-        auto* graph = db.getSystemManager().getDefaultGraph();
+        auto* graph = db.getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(graph);
 
-        const Graph* defaultGraph = db.getSystemManager().getDefaultGraph();
+        const Graph* defaultGraph = db.getSystemManager().getGraph("simpledb");
 
         spdlog::info("Graph created");
         const FrozenCommitTx tx = defaultGraph->openTransaction();
