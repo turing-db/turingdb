@@ -2,24 +2,20 @@
 
 #include "Processor.h"
 
-#include "processors/MaterializeData.h"
 #include "columns/ColumnVector.h"
-
-namespace db {
-class LocalMemory;
-}
 
 namespace db::v2 {
 
 class PipelinePort;
+class MaterializeData;
 
 class MaterializeProcessor : public Processor {
 public:
-    static MaterializeProcessor* create(PipelineV2* pipeline, LocalMemory* mem);
+    static MaterializeProcessor* create(PipelineV2* pipeline, MaterializeData* matData);
 
     std::string_view getName() const override;
 
-    MaterializeData& getMaterializeData() { return _matData; }
+    MaterializeData* getMaterializeData() { return _matData; }
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
@@ -31,10 +27,10 @@ public:
 private:
     PipelineInputPort* _input {nullptr};
     PipelineOutputPort* _output {nullptr};
-    MaterializeData _matData;
+    MaterializeData* _matData {nullptr};
     ColumnVector<size_t> _transform;
 
-    MaterializeProcessor(LocalMemory* mem);
+    MaterializeProcessor(MaterializeData* matData);
     ~MaterializeProcessor();
 };
 

@@ -73,8 +73,8 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
 
 }
 
-MaterializeProcessor::MaterializeProcessor(LocalMemory* mem)
-    : _matData(mem)
+MaterializeProcessor::MaterializeProcessor(MaterializeData* matData)
+    : _matData(matData)
 {
 }
 
@@ -85,8 +85,8 @@ std::string_view MaterializeProcessor::getName() const {
     return "MaterializeProcessor";
 }
 
-MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMemory* mem) {
-    MaterializeProcessor* materialize = new MaterializeProcessor(mem);
+MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, MaterializeData* matData) {
+    MaterializeProcessor* materialize = new MaterializeProcessor(matData);
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, materialize);
     materialize->_input = input;
@@ -96,7 +96,7 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
     materialize->_output = output;
     materialize->addOutput(output);
 
-    materialize->_matData.setOutput(&output->getBuffer()->getBlock());
+    materialize->_matData->setOutput(&output->getBuffer()->getBlock());
 
     materialize->postCreate(pipeline);
     return materialize;
@@ -116,9 +116,9 @@ void MaterializeProcessor::execute() {
     finish();
 
     Block& output = _output->getBuffer()->getBlock();
-    const MaterializeData::Indices& indices = _matData.getIndices();
-    const MaterializeData::ColumnsPerStep& columnsPerStep = _matData.getColumnsPerStep();
-    const size_t colCount = _matData.getColumnCount();
+    const MaterializeData::Indices& indices = _matData->getIndices();
+    const MaterializeData::ColumnsPerStep& columnsPerStep = _matData->getColumnsPerStep();
+    const size_t colCount = _matData->getColumnCount();
 
     // Handle the simplest case in which no indices were provided
     if (indices.empty()) {

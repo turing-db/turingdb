@@ -11,14 +11,17 @@ class Block;
 
 namespace db::v2 {
 
+class PipelineV2;
+
 class MaterializeData {
 public:
+    friend PipelineV2;
+
     using Columns = std::vector<const Column*>;
     using ColumnsPerStep = std::vector<Columns>;
     using Indices = std::vector<const ColumnIndices*>;
 
-    explicit MaterializeData(LocalMemory* mem);
-    ~MaterializeData();
+    static MaterializeData* create(PipelineV2* pipeline, LocalMemory* mem);
 
     MaterializeData(const MaterializeData& other) = delete;
     MaterializeData& operator=(const MaterializeData& other) = delete;
@@ -45,6 +48,9 @@ private:
     Indices _indices;
     ColumnsPerStep _columnsPerStep;
     size_t _colCount {0};
+
+    MaterializeData(LocalMemory* mem);
+    ~MaterializeData();
 };
 
 }

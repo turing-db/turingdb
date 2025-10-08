@@ -36,3 +36,7 @@ void PipelineV2::addBuffer(PipelineBuffer* buffer) {
 void PipelineV2::addPort(PipelinePort* port) {
     _ports.push_back(port);
 }
+
+void PipelineV2::addMaterializeData(MaterializeData* data) {
+    _materializeDatas.push_back(data);
+}

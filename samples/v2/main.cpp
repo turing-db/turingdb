@@ -1,6 +1,8 @@
 #include <iostream>
 #include <memory>
 
+#include <valgrind/callgrind.h>
+
 #include "CypherASTDumper.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
@@ -114,7 +116,9 @@ int main(int argc, char** argv) {
         PipelineGenerator pipelineGenerator(&planGraph, &pipeline, &localMem);
         try {
             auto t0 = Clock::now();
+            CALLGRIND_START_INSTRUMENTATION;
             pipelineGenerator.generate();
+            CALLGRIND_STOP_INSTRUMENTATION;
             auto t1 = Clock::now();
             fmt::print("Pipeline generated in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const PlannerException& e) {

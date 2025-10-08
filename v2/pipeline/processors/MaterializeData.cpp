@@ -1,5 +1,7 @@
 #include "MaterializeData.h"
 
+#include "PipelineV2.h"
+
 #include "columns/Block.h"
 #include "columns/ColumnVector.h"
 
@@ -15,6 +17,12 @@ MaterializeData::MaterializeData(LocalMemory* mem)
 }
 
 MaterializeData::~MaterializeData() {
+}
+
+MaterializeData* MaterializeData::create(PipelineV2* pipeline, LocalMemory* mem) {
+    MaterializeData* data = new MaterializeData(mem);
+    pipeline->addMaterializeData(data);
+    return data;
 }
 
 void MaterializeData::createStep(const ColumnIndices* indices) {

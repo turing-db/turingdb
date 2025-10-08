@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vector>
 #include <string_view>
 
 #include "PipelinePort.h"
+#include "SmallVector.h"
 
 namespace db::v2 {
 
@@ -14,8 +14,10 @@ class ExecutionContext;
 class Processor {
 public:
     friend PipelineV2;
-    using InputPorts = std::vector<PipelineInputPort*>;
-    using OutputPorts = std::vector<PipelineOutputPort*>;
+    constexpr static size_t DEFAULT_INPUTS_CAPACITY = 2;
+    constexpr static size_t DEFAULT_OUTPUTS_CAPACITY = 2;
+    using InputPorts = SmallVector<PipelineInputPort*, DEFAULT_INPUTS_CAPACITY>;
+    using OutputPorts = SmallVector<PipelineOutputPort*, DEFAULT_OUTPUTS_CAPACITY>;
 
     virtual std::string_view getName() const = 0;
 

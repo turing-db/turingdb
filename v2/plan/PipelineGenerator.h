@@ -10,6 +10,7 @@ class PlanGraph;
 class PipelineV2;
 class PlanGraphNode;
 class PlanGraphStream;
+class PipelineInputPort;
 
 class PipelineGenerator {
 public:
@@ -32,6 +33,13 @@ private:
     LocalMemory* _mem {nullptr};
 
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
+    void connectNodeStream(PlanGraphStream& stream,
+                           PipelineInputPort* target);
+    void connectEdgeStream(PlanGraphStream& stream,
+                           PipelineInputPort* edgeIDsTarget,
+                           PipelineInputPort* targetIDsTarget);
+    void connectEdgeIDStream(PlanGraphStream& stream, PipelineInputPort* edgeIDsTarget);
+    void connectEdgeTargetIDStream(PlanGraphStream& stream, PipelineInputPort* targetIDsTarget);
 };
 
 }

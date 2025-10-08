@@ -5,6 +5,7 @@
 namespace db::v2 {
 
 class PipelineOutputPort;
+class MaterializeData;
 
 class PlanGraphStream {
 public:
@@ -43,12 +44,19 @@ public:
     NodeStream& getNodeStream() { return std::get<NodeStream>(_stream); }
     EdgeStream& getEdgeStream() { return std::get<EdgeStream>(_stream); }
 
+    MaterializeData* getMaterializeData() const { return _matData; }
+
+    void setMaterializeData(MaterializeData* data) { _matData = data; }
+
+    void closeMaterializeData() { _matData = nullptr; }
+
     void set(Stream&& stream) {
         _stream = std::move(stream);
     }
 
 private:
     Stream _stream;
+    MaterializeData* _matData {nullptr};
 };
 
 }
