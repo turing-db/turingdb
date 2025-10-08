@@ -145,6 +145,9 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
         return res.get_unexpected();
     }
 
+    // Update the journal entry with the deletions that have taken place
+    _commit->history()._journal = CommitJournal::newJournal(writeBuffer());
+
     return std::move(_commit);
 }
 

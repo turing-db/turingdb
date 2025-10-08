@@ -3,7 +3,6 @@
 #include <vector>
 
 #include "ID.h"
-#include "NodeRange.h"
 #include "versioning/CommitWriteBuffer.h"
 
 namespace db {
@@ -20,9 +19,17 @@ public:
      * @brief Creates a new journal entry which outlines the deletions specified by the
      * provided @param wb
      */
-    [[nodiscard]] static CommitJournal* newJournal(const CommitWriteBuffer& wb);
+    [[nodiscard]] static std::unique_ptr<CommitJournal> newJournal(CommitWriteBuffer& wb);
+
 private:
-    std::vector<NodeRange> _deletedNodeRanges;
+    bool _initialised {false};
+
+    std::vector<NodeID> _deletedNodes;
     std::vector<EdgeID> _deletedEdges;
+
+    std::vector<std::span<NodeID>> _perDataPartDeletedNodes;
+    std::vector<std::span<EdgeID>> _perDataPartDeletedEdges;
+
+    CommitJournal() = default;
 };
 }

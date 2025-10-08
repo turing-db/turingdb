@@ -311,7 +311,7 @@ TEST_F(DeleteQueryTest, inAndOutEdges) {
 }
 
 TEST_F(DeleteQueryTest, deleteThenCreate) {
-    QueryTester tester{_env->getMem(), *_interp, "simple"};
+    QueryTester tester{_env->getMem(), *_interp};
 
     newChange(tester);
     tester.query("delete nodes 0")
@@ -331,7 +331,7 @@ TEST_F(DeleteQueryTest, deleteThenCreate) {
         .expectVector<NodeID>({13})
         .expectOptVector<types::String::Primitive>({"Cyrus"})
         .execute();
-    auto animalIDOpt = tester.query("match (n{name=\"Animals\"} return n)")
+    auto animalIDOpt = tester.query("match (n{name=\"Animals\"}) return n")
         .expectVector<NodeID>({333}, false)
         .execute()
         .outputColumnVector<NodeID>(0);

@@ -3,6 +3,7 @@
 #include "ArcManager.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitData.h"
+#include "versioning/CommitJournal.h"
 
 namespace db {
 
@@ -33,6 +34,7 @@ public:
 
     [[nodiscard]] const VersionController& controller() const { return *_controller; }
     [[nodiscard]] const CommitData& data() const { return *_data; }
+    [[nodiscard]] CommitJournal& journal() { return _data->history().journal();}
     [[nodiscard]] bool hasData() const { return _data != nullptr; }
     [[nodiscard]] const CommitHistory& history() const { return _data->history(); }
     [[nodiscard]] CommitHistory& history() { return _data->history(); }

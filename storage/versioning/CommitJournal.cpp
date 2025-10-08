@@ -1,35 +1,20 @@
 #include "CommitJournal.h"
 
 #include "versioning/CommitWriteBuffer.h"
+#include <memory>
 
 using namespace db;
 
-CommitJournal* CommitJournal::newJournal(const CommitWriteBuffer& wb) {
-    const std::set<NodeID>& deletedNodes = wb.deletedNodes();
-    const std::set<EdgeID>& deletedEdges = wb.deletedEdges();
+std::unique_ptr<CommitJournal> CommitJournal::newJournal(CommitWriteBuffer& wb) {
+    CommitJournal* newJournal = new CommitJournal();
 
-    CommitJournal* journal = new CommitJournal;
+    newJournal->_deletedNodes = std::move(wb._deletedNodes);
+    newJournal->_deletedEdges = std::move(wb._deletedEdges);
 
-    // 1. Generate _deletedNodeRanges
-    const auto contiguousIDs = [](NodeID a, NodeID b) { return !(b == a + 1); };
+    newJournal->_perDataPartDeletedNodes = std::move(wb._perDataPartDeletedNodes);
+    newJournal->_perDataPartDeletedEdges = std::move(wb._perDataPartDeletedEdges);
 
-    auto rangeStartIt = deletedNodes.begin();
-    auto rangeEndIt = std::adjacent_find(deletedNodes.begin(), deletedNodes.end(), contiguousIDs);
+    newJournal->_initialised = true;
 
-    while (rangeEndIt != deletedNodes.end()) {
-        size_t count = (*rangeEndIt - *rangeStartIt).getValue();
-
-        journal->_deletedNodeRanges.emplace_back(*rangeStartIt, count);
-
-        rangeStartIt = rangeEndIt;
-
-        rangeEndIt = std::adjacent_find(rangeStartIt, deletedNodes.end(), contiguousIDs);
-    }
-
-    // 2. Generate _deletedEdges
-    // From set, so already sorted in EdgeID asc.
-    std::vector<EdgeID> journalDelEdges(deletedEdges.begin(), deletedEdges.end());
-    journal->_deletedEdges = std::move(journalDelEdges);
-
-    return journal;
+    return std::unique_ptr<CommitJournal>(newJournal);
 }

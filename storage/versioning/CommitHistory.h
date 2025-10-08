@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "ArcManager.h"
@@ -8,6 +9,8 @@
 #include "versioning/CommitView.h"
 
 namespace db {
+
+class CommitBuilder;
 
 class CommitHistory {
 public:
@@ -24,6 +27,8 @@ public:
     DataPartSpan commitDataparts() { return _commitDataparts; }
     std::span<const CommitView> commits() const;
 
+    [[nodiscard]] CommitJournal& journal() { return *_journal; }
+
     void pushPreviousCommits(std::span<const CommitView> commits) {
         const size_t prevSize = _commits.size();
         _commits.resize(prevSize + commits.size());
@@ -39,6 +44,7 @@ public:
 private:
     friend class CommitHistoryBuilder;
     friend class CommitHistoryRebaser;
+    friend class CommitBuilder;
 
     /// Stores all the data parts that are part of the commit history.
     std::vector<WeakArc<DataPart>> _allDataparts;
@@ -49,7 +55,7 @@ private:
     /// Stores the whole history up to (including) this commit.
     std::vector<CommitView> _commits;
 
-    WeakArc<CommitJournal> _journal;
+    std::unique_ptr<CommitJournal> _journal;
 };
 
 class CommitHistoryBuilder {

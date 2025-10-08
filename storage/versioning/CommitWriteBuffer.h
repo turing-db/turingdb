@@ -14,6 +14,7 @@ class CommitWriteBufferRebaser;
 class MetadataBuilder;
 class CommitBuilder;
 class DataPartModifier;
+class CommitJournal;
 
 class CommitWriteBuffer {
 struct PendingEdge;
@@ -101,6 +102,7 @@ private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
     friend DataPartModifier;
+    friend CommitJournal;
 
     struct PendingEdge {
          ExistingOrPendingNode src;
