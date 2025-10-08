@@ -62,6 +62,7 @@ set(storage_sources
         versioning/CommitHistory.cpp
 
         versioning/CommitWriteBuffer.cpp
+        versioning/CommitJournal.cpp
         versioning/DataPartModifier.cpp
 
         comparators/DataPartComparator.cpp

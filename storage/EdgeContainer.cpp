@@ -87,9 +87,9 @@ std::optional<NodeID> EdgeContainer::getLargestIncidentNodeID() const{
     if (size() == 0) {
         return std::nullopt;
     }
-    const NodeID smallestSource = _outEdges.back()._nodeID;
-    const NodeID smallestTarget = _inEdges.back()._nodeID;
+    const NodeID largestSource = _outEdges.back()._nodeID;
+    const NodeID largestTarget = _inEdges.back()._nodeID;
 
-    return std::min(smallestSource, smallestTarget);
+    return std::max(largestSource, largestTarget);
 }
 
