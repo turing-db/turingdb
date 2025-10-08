@@ -2,40 +2,23 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "PipelinePort.h"
 #include "PlanGraph.h"
 #include "PlanGraphStream.h"
 #include "TranslateToken.h"
 
-#include "PipelineBuffer.h"
+#include "nodes/FilterNode.h"
+
+#include "PipelinePort.h"
 
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
 #include "processors/MaterializeProcessor.h"
 #include "processors/LambdaProcessor.h"
 
-#include "columns/Block.h"
-#include "columns/ColumnIDs.h"
-
-#include "LocalMemory.h"
 #include "PlannerException.h"
 
 using namespace db::v2;
 using namespace db;
-
-namespace {
-
-/*
-template <typename ColumnType>
-PipelineOutputPort* addColumnInPort(LocalMemory* mem, PipelineOutputPort* outPort) {
-    auto* col = mem->alloc<ColumnType>();
-    PipelineBuffer* buffer = outPort->getBuffer();
-    buffer->getBlock().addColumn(col);
-    return outPort;
-}
-*/
-
-}
 
 void PipelineGenerator::generate() {
     TranslateTokenStack nodeStack;

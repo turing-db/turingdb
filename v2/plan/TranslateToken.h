@@ -9,7 +9,7 @@ namespace db::v2 {
 class PlanGraphNode;
 
 struct TranslateToken {
-    PlanGraphNode* node;
+    PlanGraphNode* node {nullptr};
     PlanGraphStream stream;
 };
 
