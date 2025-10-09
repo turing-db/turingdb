@@ -59,8 +59,6 @@ void runPlan2(std::string_view query) {
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    auto callback = [](const Block& block) {};
-
     CypherAST ast(query);
     CypherParser parser(&ast);
 
@@ -85,7 +83,7 @@ void runPlan2(std::string_view query) {
         return;
     }
 
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     try {
         auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
