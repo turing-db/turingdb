@@ -88,7 +88,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     // NodeIDs to the user upon deletion.
     if (!sorted) {
         // Sorting based on the labelset
-        rg::stable_sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
+        rg::sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
                         [](const auto& data1, const auto& data2) {
                             const LabelSetHandle& lset1 = std::get<0>(data1);
                             const LabelSetHandle& lset2 = std::get<0>(data2);
