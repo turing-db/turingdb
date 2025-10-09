@@ -4,6 +4,7 @@
 #include "SourceManager.h"
 #include "Symbol.h"
 #include "QualifiedName.h"
+#include "expr/ExprChain.h"
 #include "expr/Literal.h"
 #include "expr/Expr.h"
 #include "Pattern.h"
@@ -102,6 +103,10 @@ CypherAST::~CypherAST() {
     for (std::string* name : _unnamedVarIdentifiers) {
         delete name;
     }
+
+    for (ExprChain* chain : _exprChains) {
+        delete chain;
+    }
 }
 
 std::string* CypherAST::createString() {
@@ -121,6 +126,10 @@ void CypherAST::addQualifiedName(QualifiedName* name) {
 
 void CypherAST::addLiteral(Literal* literal) {
     _literals.push_back(literal);
+}
+
+void CypherAST::addExprChain(ExprChain* exprChain) {
+    _exprChains.push_back(exprChain);
 }
 
 void CypherAST::addExpr(Expr* expr) {

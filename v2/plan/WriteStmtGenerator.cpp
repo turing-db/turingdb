@@ -12,11 +12,14 @@
 #include "PlanGraphVariables.h"
 
 #include "decl/VarDecl.h"
+#include "expr/ExprChain.h"
+#include "nodes/FilterNode.h"
 #include "nodes/VarNode.h"
 
 #include "nodes/WriteNode.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/DeleteStmt.h"
 
 #include "decl/PatternData.h"
 
@@ -40,6 +43,10 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
             generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);
             break;
 
+        case Stmt::Kind::DELETE:
+            generateDeleteStmt(static_cast<const DeleteStmt*>(stmt), prevNode);
+            break;
+
         default:
             throwError(fmt::format("Unsupported write statement type: {}", (uint64_t)stmt->getKind()), stmt);
             break;
@@ -57,6 +64,24 @@ void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNod
 
     for (const PatternElement* element : pattern->elements()) {
         generatePatternElement(element);
+    }
+}
+
+void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode) {
+    _currentNode = prevNode
+                     ? _tree->newOut<WriteNode>(prevNode)
+                     : _tree->create<WriteNode>();
+
+    const ExprChain* exprs = stmt->getExpressions();
+
+    for (Expr* expr : *exprs) {
+        if ([[maybe_unused]] const auto* node = dynamic_cast<const NodePattern*>(expr)) {
+        } else if ([[maybe_unused]] const auto* edge = dynamic_cast<const EdgePattern*>(expr)) {
+        } else {
+            throwError(fmt::format("Can only delete nodes or edges, not '{}'",
+                                   EvaluatedTypeName::value(expr->getType())),
+                       expr);
+        }
     }
 }
 

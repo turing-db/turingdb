@@ -9,4 +9,4 @@
 #include "expr/StringExpr.h"
 #include "expr/NodeLabelExpr.h"
 #include "expr/PathExpr.h"
-
+#include "expr/ExprChain.h"

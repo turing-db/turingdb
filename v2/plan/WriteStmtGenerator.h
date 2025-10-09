@@ -12,6 +12,7 @@ class PlanGraphNode;
 class PlanGraphVariables;
 class Stmt;
 class CreateStmt;
+class DeleteStmt;
 class PatternElement;
 class Expr;
 class VarNode;
@@ -33,6 +34,7 @@ public:
 
     WriteNode* generateStmt(const Stmt* stmt, PlanGraphNode* prevNode = nullptr);
     void generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode);
+    void generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode);
     void generatePatternElement(const PatternElement* element);
 
     void generatePatternElementNode(NodePattern* origin);

@@ -17,7 +17,9 @@
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
+#include "expr/ExprChain.h"
 #include "expr/Literal.h"
+#include "stmt/DeleteStmt.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
 
@@ -25,9 +27,8 @@ using namespace db::v2;
 
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 WriteStmtAnalyzer::~WriteStmtAnalyzer() {
@@ -39,8 +40,14 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
             analyze(static_cast<const CreateStmt*>(stmt));
             break;
 
+        case Stmt::Kind::DELETE:
+            analyze(static_cast<const DeleteStmt*>(stmt));
+            break;
+
         default:
-            throwError(fmt::format("Unsupported write statement type: {}", (uint64_t)stmt->getKind()), stmt);
+            throwError(fmt::format("Unsupported write statement type: {}",
+                                   (uint64_t)stmt->getKind()),
+                       stmt);
             break;
     }
 }
@@ -48,6 +55,13 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     if (createStmt->getPattern()) {
         analyze(createStmt->getPattern());
+    }
+}
+
+void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
+    const ExprChain* exprs = deleteStmt->getExpressions();
+    for (Expr* expr : *exprs) {
+        _exprAnalyzer->analyze(expr);
     }
 }
 

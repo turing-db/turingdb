@@ -14,6 +14,7 @@ class DeclContext;
 class ExprAnalyzer;
 class Stmt;
 class CreateStmt;
+class DeleteStmt;
 class Pattern;
 class PatternElement;
 class NodePattern;
@@ -40,6 +41,7 @@ public:
     // Statements
     void analyze(const Stmt* stmt);
     void analyze(const CreateStmt* createStmt);
+    void analyze(const DeleteStmt* deleteStmt);
     void analyze(const Pattern* pattern);
     void analyze(const PatternElement* element);
     void analyze(NodePattern* node);

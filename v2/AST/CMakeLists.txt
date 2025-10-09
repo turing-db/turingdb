@@ -9,6 +9,7 @@ set(ast_sources
     decl/PatternData.cpp
     decl/VarDecl.cpp
 
+    expr/ExprChain.cpp
     expr/BinaryExpr.cpp
     expr/LiteralExpr.cpp
     expr/NodeLabelExpr.cpp
@@ -23,6 +24,7 @@ set(ast_sources
     stmt/StmtContainer.cpp
     stmt/MatchStmt.cpp
     stmt/CreateStmt.cpp
+    stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
     stmt/Limit.cpp
     stmt/Skip.cpp

@@ -19,6 +19,7 @@ class StringLiteral;
 class CharLiteral;
 class MapLiteral;
 class Expr;
+class ExprChain;
 class BinaryExpr;
 class LiteralExpr;
 class NodeLabelExpr;
@@ -41,6 +42,7 @@ class Skip;
 class StmtContainer;
 class MatchStmt;
 class CreateStmt;
+class DeleteStmt;
 class QueryCommand;
 class SinglePartQuery;
 class ReturnStmt;
@@ -64,6 +66,7 @@ public:
     friend StringLiteral;
     friend CharLiteral;
     friend MapLiteral;
+    friend ExprChain;
     friend BinaryExpr;
     friend LiteralExpr;
     friend NodeLabelExpr;
@@ -83,6 +86,7 @@ public:
     friend StmtContainer;
     friend MatchStmt;
     friend CreateStmt;
+    friend DeleteStmt;
     friend ReturnStmt;
     friend WhereClause;
     friend SinglePartQuery;
@@ -120,6 +124,7 @@ private:
     std::vector<QualifiedName*> _qualifiedNames;
     std::vector<Literal*> _literals;
     std::vector<Expr*> _expressions;
+    std::vector<ExprChain*> _exprChains;
     std::vector<Pattern*> _patterns;
     std::vector<PatternElement*> _patternElems;
     std::vector<EntityPattern*> _entityPatterns;
@@ -138,6 +143,7 @@ private:
     void addSymbol(Symbol* symbol);
     void addQualifiedName(QualifiedName* name);
     void addLiteral(Literal* literal);
+    void addExprChain(ExprChain* exprChain);
     void addExpr(Expr* expr);
     void addPattern(Pattern* pattern);
     void addPatternElement(PatternElement* element);

@@ -29,6 +29,7 @@
     #include "stmt/ReturnStmt.h"
     #include "stmt/MatchStmt.h"
     #include "stmt/CreateStmt.h"
+    #include "stmt/DeleteStmt.h"
     #include "expr/All.h"
     #include "expr/Literal.h"
     #include "Symbol.h"
@@ -193,7 +194,8 @@
 %type<db::v2::MapLiteral*> opt_properties
 %type<std::optional<std::vector<db::v2::Symbol*>>> opt_edgeTypes
 
-%type<db::v2::Expr*> Expr
+%type<db::v2::ExprChain*> exprChain
+%type<db::v2::Expr*> expr
 %type<db::v2::Expr*> xorExpr
 %type<db::v2::Expr*> andExpr
 %type<db::v2::Expr*> notExpr
@@ -239,6 +241,7 @@
 %type<db::v2::StmtContainer*> updatingStatements
 %type<db::v2::MatchStmt*> matchSt
 %type<db::v2::CreateStmt*> createSt
+%type<db::v2::DeleteStmt*> deleteSt
 %type<db::v2::Skip*> skipSSt
 %type<db::v2::Limit*> limitSSt
 %type<db::v2::ReturnStmt*> returnSt
@@ -290,11 +293,11 @@ withSt
     ;
 
 skipSSt
-    : SKIP Expr { $$ = Skip::create(ast, $2); LOC($$, @$); }
+    : SKIP expr { $$ = Skip::create(ast, $2); LOC($$, @$); }
     ;
 
 limitSSt
-    : LIMIT Expr { $$ = Limit::create(ast, $2); LOC($$, @$); }
+    : LIMIT expr { $$ = Limit::create(ast, $2); LOC($$, @$); }
     ;
 
 projectionBody
@@ -333,16 +336,16 @@ projectionItems
     ;
 
 projectionItem
-    : Expr
-    | Expr AS name { scanner.notImplemented(@$, "AS"); }
+    : expr
+    | expr AS name { scanner.notImplemented(@$, "AS"); }
     ;
 
 orderItem
-    : Expr
-    | Expr ASCENDING { scanner.notImplemented(@$, "ASCENDING"); }
-    | Expr ASC { scanner.notImplemented(@$, "ASC"); }
-    | Expr DESCENDING { scanner.notImplemented(@$, "DESCENDING"); }
-    | Expr DESC { scanner.notImplemented(@$, "DESC"); }
+    : expr
+    | expr ASCENDING { scanner.notImplemented(@$, "ASCENDING"); }
+    | expr ASC { scanner.notImplemented(@$, "ASC"); }
+    | expr DESCENDING { scanner.notImplemented(@$, "DESCENDING"); }
+    | expr DESC { scanner.notImplemented(@$, "DESC"); }
     ;
 
 orderSSt
@@ -387,7 +390,7 @@ matchSt
     ;
 
 unwindSt
-    : UNWIND Expr AS symbol { scanner.notImplemented(@$, "UNWIND"); }
+    : UNWIND expr AS symbol { scanner.notImplemented(@$, "UNWIND"); }
     ;
 
 readingStatement
@@ -399,14 +402,14 @@ readingStatement
 updatingStatement
     : createSt { $$ = $1; }
     | mergeSt { scanner.notImplemented(@$, "MERGE"); }
-    | deleteSt { scanner.notImplemented(@$, "DELETE"); }
+    | deleteSt { $$ = $1; }
     | setSt { scanner.notImplemented(@$, "SET"); }
     | removeSt { scanner.notImplemented(@$, "REMOVE"); }
     ;
  
 deleteSt
-    : DELETE ExprChain { scanner.notImplemented(@$, "DELETE"); }
-    | DETACH DELETE ExprChain { scanner.notImplemented(@$, "DETACH DELETE"); }
+    : DELETE exprChain { $$ = DeleteStmt::create(ast, $2); LOC($$, @$); }
+    | DETACH DELETE exprChain { $$ = DeleteStmt::create(ast, $3); $$->setDetaching(true); LOC($$, @$); }
     ;
 
 removeSt
@@ -440,9 +443,9 @@ callCapture
     | callCapture COMMA symbol AS symbol { scanner.notImplemented(@$, "CALL capture"); }
     ;
 
-ExprChain
-    : Expr
-    | ExprChain COMMA Expr
+exprChain
+    : expr { $$ = ExprChain::create(ast); $$->add($1); }
+    | exprChain COMMA expr { $$ = $1; $$->add($3); }
     ;
 
 yieldClause
@@ -451,7 +454,7 @@ yieldClause
     ;
 
 parenExprChain
-    : OPAREN ExprChain CPAREN
+    : OPAREN exprChain CPAREN
     | OPAREN CPAREN
     ;
 
@@ -491,8 +494,8 @@ setSt
     ;
 
 setItem
-    : propertyExpr ASSIGN Expr
-    | symbol ADD_ASSIGN Expr
+    : propertyExpr ASSIGN expr
+    | symbol ADD_ASSIGN expr
     | symbol nodeLabels
     ;
 
@@ -513,7 +516,7 @@ patternWhere
     ;
 
 where
-    : WHERE Expr { $$ = WhereClause::create(ast, $2); LOC($$, @$); }
+    : WHERE expr { $$ = WhereClause::create(ast, $2); LOC($$, @$); }
     ;
 
 pattern
@@ -521,9 +524,9 @@ pattern
     | pattern COMMA patternPart { $$ = $1, $$->addElement($3); LOC($$, @$); }
     ;
 
-Expr
+expr
     : xorExpr { $$ = $1; }
-    | Expr OR xorExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Or, $1, $3); LOC($$, @$); }
+    | expr OR xorExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Or, $1, $3); LOC($$, @$); }
     ;
 
 xorExpr
@@ -600,10 +603,10 @@ atomicExpr
     ;
 
 listExpr
-    : OBRACK Expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK Expr CBRACK"); }
-    | OBRACK Expr RANGE Expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK Expr RANGE Expr CBRACK"); }
-    | OBRACK RANGE Expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE Expr CBRACK"); }
-    | OBRACK Expr RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK Expr RANGE CBRACK"); }
+    : OBRACK expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr CBRACK"); }
+    | OBRACK expr RANGE expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr RANGE expr CBRACK"); }
+    | OBRACK RANGE expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE expr CBRACK"); }
+    | OBRACK expr RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr RANGE CBRACK"); }
     | OBRACK RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE CBRACK"); }
     ;
 
@@ -640,8 +643,8 @@ atomExpr
 
 collectExpr
     : COLLECT OBRACE readingStatements returnSt CBRACE { scanner.notImplemented(@$, "COLLECT"); }
-    | COLLECT OPAREN Expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
-    | COLLECT OPAREN DISTINCT Expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
+    | COLLECT OPAREN expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
+    | COLLECT OPAREN DISTINCT expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
     ;
 
 patternPart
@@ -758,8 +761,8 @@ invocationName
 functionInvocation
     : invocationName OPAREN CPAREN { scanner.notImplemented(@$, "Function invocations"); }
     | invocationName OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN ExprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN DISTINCT ExprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
+    | invocationName OPAREN exprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
+    | invocationName OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
     ;
 
 pathExpr
@@ -800,26 +803,26 @@ pathExpr
         LOC(node, @$);
       }
 
-    // Those three Exprs are tricky and cause conflicts with 'OPAREN Expr CPAREN'
+    // Those three exprs are tricky and cause conflicts with 'OPAREN expr CPAREN'
 
-    //| OPAREN symbol nodeLabels CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized Exprs"); }
-    // Causes conflicts because 'symbol nodeLabels' is a valid Expr (propertyOrLabelExpr)
+    //| OPAREN symbol nodeLabels CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized exprs"); }
+    // Causes conflicts because 'symbol nodeLabels' is a valid expr (propertyOrLabelExpr)
 
-    //| OPAREN symbol CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized Exprs"); }
-    // Causes conflicts because 'symbol' is a valid Expr (atomExpr)
+    //| OPAREN symbol CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized exprs"); }
+    // Causes conflicts because 'symbol' is a valid expr (atomExpr)
 
     //| OPAREN properties CPAREN patternElemChain { scanner.notImplemented(@$, "Parenthesized Exprs"); }
-    // Causes conflicts because 'properties' is a valid Expr (map literal)
+    // Causes conflicts because 'properties' is a valid expr (map literal)
 
     // Instead, they are handled by the rule below
 
-    | OPAREN Expr CPAREN pathExprElem {
+    | OPAREN expr CPAREN pathExprElem {
           $$ = PathExpr::create(ast, $4);
 
           if (NodePattern* nodePattern = NodePattern::fromExpr(ast, $2)) {
               $4->addRootEntity(nodePattern);
           } else {
-              error(@1, "Invalid path Expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
+              error(@1, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
           }
 
           LOC($$, @$);
@@ -832,7 +835,7 @@ pathExprElem
 ;
 
 parenthesizedExpr
-    : OPAREN Expr CPAREN { $$ = $2; }
+    : OPAREN expr CPAREN { $$ = $2; }
     ;
 
 filterWith
@@ -847,10 +850,10 @@ filterKeyword
     ;
 
 //patternComprehension
-//    : OBRACK edgesChainPattern PIPE Expr CBRACK
-//    | OBRACK lhs edgesChainPattern PIPE Expr CBRACK
-//    | OBRACK edgesChainPattern where PIPE Expr CBRACK
-//    | OBRACK lhs edgesChainPattern where PIPE Expr CBRACK
+//    : OBRACK edgesChainPattern PIPE expr CBRACK
+//    | OBRACK lhs edgesChainPattern PIPE expr CBRACK
+//    | OBRACK edgesChainPattern where PIPE expr CBRACK
+//    | OBRACK lhs edgesChainPattern where PIPE expr CBRACK
 //    ;
 
 //edgesChainPattern
@@ -860,20 +863,20 @@ filterKeyword
 
 listComprehension
     : OBRACK filterExpr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
-    | OBRACK filterExpr PIPE Expr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
+    | OBRACK filterExpr PIPE expr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
     ;
 
 filterExpr
-    : symbol IN Expr { scanner.notImplemented(@$, "IN"); }
-    | symbol IN Expr where { scanner.notImplemented(@$, "IN"); }
+    : symbol IN expr { scanner.notImplemented(@$, "IN"); }
+    | symbol IN expr where { scanner.notImplemented(@$, "IN"); }
     ;
 
 countFunc
     : COUNT OPAREN MULT CPAREN { scanner.notImplemented(@$, "COUNT"); }
     | COUNT OPAREN CPAREN { scanner.notImplemented(@$, "COUNT"); }
     | COUNT OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN ExprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN DISTINCT ExprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
+    | COUNT OPAREN exprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
+    | COUNT OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
     | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "COUNT"); }
 
     // Here, returnSt is mandatory for MATCH subqueries, as opposed to Neo4j's Cypher parser
@@ -882,9 +885,9 @@ countFunc
 
 caseExpr
     : CASE whenThenChain END { scanner.notImplemented(@$, "CASE"); }
-    | CASE Expr whenThenChain END  { scanner.notImplemented(@$, "CASE"); }
-    | CASE whenThenChain ELSE Expr END { scanner.notImplemented(@$, "CASE"); }
-    | CASE Expr whenThenChain ELSE Expr END { scanner.notImplemented(@$, "CASE"); }
+    | CASE expr whenThenChain END  { scanner.notImplemented(@$, "CASE"); }
+    | CASE whenThenChain ELSE expr END { scanner.notImplemented(@$, "CASE"); }
+    | CASE expr whenThenChain ELSE expr END { scanner.notImplemented(@$, "CASE"); }
     ;
 
 whenThenChain
@@ -893,7 +896,7 @@ whenThenChain
     ;
 
 whenThen
-    : WHEN Expr THEN Expr
+    : WHEN expr THEN expr
     ;
 
 parameter
@@ -940,7 +943,7 @@ charLit
 
 listLit
     : OBRACK CBRACK { scanner.notImplemented(@$, "Lists"); }
-    //| OBRACK ExprChain CBRACK // Enabling this causes conflicts
+    //| OBRACK exprChain CBRACK // Enabling this causes conflicts
     // Instead using this: (simpler, too simple?)
     | OBRACK listLitItems CBRACK { scanner.notImplemented(@$, "Lists"); }
     ;
@@ -975,7 +978,7 @@ mapPairChain
     ;
 
 mapPair
-    : name COLON Expr { $$ = std::make_pair($1, $3); }
+    : name COLON expr { $$ = std::make_pair($1, $3); }
     ;
 
 name
