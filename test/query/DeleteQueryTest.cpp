@@ -55,7 +55,8 @@ TEST_F(DeleteQueryTest, deleteRemy) {
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
         .expectOptVector<types::String::Primitive>(
             {"Remy", "Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts",
-             "Paddle", "Maxime", "Luc", "Animals", "Martina", "Suhas"});
+             "Paddle", "Maxime", "Luc", "Animals", "Martina", "Suhas"})
+        .execute();
 
     tester.query("match (n)-[e]-(m) return e, e.name")
         .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
@@ -82,7 +83,7 @@ TEST_F(DeleteQueryTest, deleteRemy) {
         .execute();
 
     tester.query("change submit")
-          .execute();
+        .execute();
 
     tester.setChangeID(ChangeID::head());
 
@@ -92,7 +93,9 @@ TEST_F(DeleteQueryTest, deleteRemy) {
         // Remy gone
         .expectOptVector<types::String::Primitive>(
             {"Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts", "Paddle",
-             "Maxime", "Luc", "Animals", "Martina", "Suhas"});
+             "Maxime", "Luc", "Animals", "Martina", "Suhas"})
+        .execute();
+
     // edges incident to remy are gone
     tester.query("match (n)-[e]-(m) return e, e.name")
         .expectVector<EdgeID>({0, 1, 8, 9, 10, 11, 12})
@@ -350,7 +353,8 @@ TEST_F(DeleteQueryTest, deleteThenCreate) {
         // Remy gone, cyrus here
         .expectOptVector<types::String::Primitive>(
             {"Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts", "Paddle",
-             "Maxime", "Luc", "Animals", "Martina", "Suhas", "Cyrus"});
+             "Maxime", "Luc", "Animals", "Martina", "Suhas", "Cyrus"})
+        .execute();
 
     tester.query("match (n)-[e]-(m) return e, e.name")
         // Remy edges gone, cyrus edge here
@@ -366,4 +370,90 @@ TEST_F(DeleteQueryTest, deleteThenCreate) {
             "Cyrus -> Animals",
         })
         .execute();
+}
+
+TEST_F(DeleteQueryTest, delNodesOneLocalCommitThenSubmit) {
+    QueryTester tester{_env->getMem(), *_interp};
+
+    // Check the correct deletion of nodes 4 and 7
+    const auto verifyDeletions = [&]() {
+        tester.query("match (n) return n, n.name")
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12})
+        .expectOptVector<types::String::Primitive>(
+            {"Remy", "Adam", "Computers", "Eighties", "Cooking", "Ghosts", "Maxime",
+             "Luc", "Animals", "Martina", "Suhas"})
+        .execute();
+        tester.query("match (n)-[e]-(m) return e, e.name")
+            .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 10, 11, 12})
+            .expectOptVector<types::String::Primitive>({
+                "Remy -> Adam",
+                "Remy -> Ghosts",
+                "Remy -> Computers",
+                "Remy -> Eighties",
+                "Adam -> Remy",
+                // "Adam -> Bio",
+                "Adam -> Cooking",
+                "Ghosts -> Remy",
+                // "Maxime -> Bio",
+                // "Maxime -> Paddle",
+                "Luc -> Animals",
+                "Luc -> Computers",
+                "Martina -> Cooking",
+            })
+            .execute();
+    };
+
+    newChange(tester);
+    // Delete Paddle and Bio
+    tester.query("delete nodes 4, 7")
+        .execute();
+    tester.query("commit")
+        .execute();
+
+    // Verify deletes were applied correctly
+    verifyDeletions();
+
+    // Submit, but we have already committed deletes locally
+    submitChange(tester);
+
+    // Verify deletes were applied correctly again
+    verifyDeletions();
+}
+
+TEST_F(DeleteQueryTest, delEdgesOneLocalCommitThenSubmit) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    const auto verifyDeletions = [&]() {
+        // No nodes deleted
+        tester.query("match (n) return n, n.name")
+            .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+            .expectOptVector<types::String::Primitive>(
+                {"Remy", "Adam", "Computers", "Eighties", "Bio", "Cooking", "Ghosts",
+                 "Paddle", "Maxime", "Luc", "Animals", "Martina", "Suhas"})
+            .execute();
+        tester.query("match (n)-[e]-(m) return e, e.name")
+            .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+            .expectOptVector<types::String::Primitive>({
+                "Remy -> Adam", "Remy -> Ghosts", "Remy -> Computers", "Remy -> Eighties",
+                "Adam -> Remy", "Adam -> Bio", "Adam -> Cooking", "Ghosts -> Remy",
+                "Maxime -> Bio", "Maxime -> Paddle",
+                // "Luc -> Animals",
+                "Luc -> Computers",
+                // "Martina -> Cooking",
+            })
+            .execute();
+    };
+
+    newChange(tester);
+    // Delete Luc->Animals and Martina->Cooking
+    tester.query("delete edges 10, 12")
+        .execute();
+    tester.query("commit")
+        .execute();
+
+    verifyDeletions();
+
+    submitChange(tester);
+
+    verifyDeletions();
 }
