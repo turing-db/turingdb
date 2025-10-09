@@ -211,8 +211,9 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
             const auto& injectedNodes = entityPattern->getInjectedIDs()->getIDs();
             for (const auto& node : injectedNodes) {
                 if (!_view.read().graphHasNode(node)) {
-                    throw AnalyzeException("Could Not Find Injected Node In Graph:'"
-                                           + std::to_string(node.getValue()) + "'");
+                    throw AnalyzeException("Requested node with ID "
+                                           + std::to_string(node.getValue())
+                                           + " was not found graph.");
                 }
             }
         }

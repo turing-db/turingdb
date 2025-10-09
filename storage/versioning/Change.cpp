@@ -76,8 +76,8 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // Get the next Edge and Node IDs at the time this change branched
     const GraphReader branchTimeReader =
         _base->commits().back().openTransaction().readGraph();
-    NodeID branchTimeNextNodeID = branchTimeReader.getNodeCount();
-    EdgeID branchTimeNextEdgeID = branchTimeReader.getEdgeCount();
+    NodeID branchTimeNextNodeID = branchTimeReader.nextNodeID();
+    EdgeID branchTimeNextEdgeID = branchTimeReader.nextEdgeID();
 
     // Get current state of main
     auto mainTx = _versionController->openTransaction();

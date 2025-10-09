@@ -338,9 +338,11 @@ TEST_F(DeleteQueryTest, deleteThenCreate) {
     ASSERT_TRUE(animalIDOpt.has_value());
     NodeID animalID = animalIDOpt.value()->at(0);
 
-    auto newEdgeQuery = fmt::format("create (n @ 13)-[e:LOVES{{name=\"Cyrus->Animals\"}}]-(m @ {})", animalID.getValue());
-    tester.query(newEdgeQuery);
-    submitChange(tester);
+    auto newEdgeQuery = fmt::format("create (n @ 13)-[e:LOVES{{name=\"Cyrus -> Animals\"}}]-(m @ {})", animalID.getValue());
+    tester.query(newEdgeQuery)
+        .execute();
+    tester.query("commit")
+        .execute();
 
     tester.query("match (n)-[e]-(m) return n, n.name")
         // nodes in 1st DP << 1, node 6 missing, 13 added

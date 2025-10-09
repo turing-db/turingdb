@@ -108,6 +108,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     }
 
     // Converting temp to final source/target IDs
+    // NOTE: This *may* be unneeded in the case @ref _coreNodeLabelSet is already sorted
     for (auto& out : outEdges) {
         if (out._nodeID >= firstTmpNodeID) {
             out._nodeID = _tmpToFinalNodeIDs.at(out._nodeID);

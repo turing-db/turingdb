@@ -279,14 +279,11 @@ void CommitBuilder::initialize() {
     auto reader = _view.read();
 
     // The first ID of this commit will be one more than the max ID in the graph
-    _firstNodeID = reader.getNodeCount();
-    _firstEdgeID = reader.getEdgeCount();
-
     // Update the 'next' ID values for use when creating dataparts
     // NOTE: In the case of @ref Change::submit, these values will be resynced to be
     // the next ID in the graph on main at the time of submission.
-    _nextNodeID = reader.getNodeCount();
-    _nextEdgeID = reader.getEdgeCount();
+    _nextNodeID = _firstNodeID = reader.nextNodeID();
+    _nextEdgeID = _firstEdgeID = reader.nextEdgeID();
 
     const CommitView prevCommit = reader.commits().back();
 
