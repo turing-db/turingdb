@@ -120,9 +120,11 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
 
         // If we are rebasing, there have been changes on main. We need to undo our
         // deletes as they need to be rebased and reapplied on the new state.
-        CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
-        historyBuilder.undoLocalDeletes(*prevCommitData);
-        commitBuilder->writeBuffer().setUnapplied();
+        if (commitBuilder->writeBuffer().deletesApplied()) {
+            CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
+            historyBuilder.undoLocalDeletes(*prevCommitData);
+            commitBuilder->writeBuffer().setUnapplied();
+        }
 
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.
