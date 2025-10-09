@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "ArcManager.h"
+#include "BioAssert.h"
 #include "metadata/SupportedType.h"
 #include "writers/DataPartBuilder.h"
 
@@ -134,6 +135,8 @@ void DataPartModifier::copyEdgeProps(const PropertyManager::PropertyContainerRef
 
         for (const auto [entityID, propValue] : container.zipped()) {
             const EdgeID oldEdgeID = entityID.getValue();
+
+            bioassert(std::ranges::is_sorted(_edgesToDelete));
 
             if (std::ranges::binary_search(_edgesToDelete, oldEdgeID)) {
                 continue;

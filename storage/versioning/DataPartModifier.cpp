@@ -63,6 +63,7 @@ void DataPartModifier::applyModifications(size_t index) {
         }
     }
 
+    // Copy the properties of nodes which are not deleted
     const PropertyManager& nodePropManager = _oldDP->nodeProperties();
     copyNodeProps<types::Int64>(nodePropManager._int64s);
     copyNodeProps<types::UInt64>(nodePropManager._uint64s);
