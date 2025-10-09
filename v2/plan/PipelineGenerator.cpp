@@ -50,6 +50,11 @@ void PipelineGenerator::generate() {
         auto [node, stream] = nodeStack.top();
         nodeStack.pop();
 
+        // Create materialize data here, TO IMPROVE LATER
+        if (!stream.getMaterializeData()) {
+            stream.setMaterializeData(MaterializeData::create(_pipeline, _mem));
+        }
+
         translateNode(node, stream);
 
         for (PlanGraphNode* nextNode : node->outputs()) {
