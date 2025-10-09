@@ -1,10 +1,12 @@
 #include "CommitWriteBuffer.h"
 
+#include <algorithm>
 #include <range/v3/view/enumerate.hpp>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include "BioAssert.h"
 #include "DataPartSpan.h"
 #include "EdgeContainer.h"
 #include "ID.h"
@@ -158,9 +160,7 @@ void CommitWriteBuffer::detectHangingEdges() {
     }
 
     // Sort deleted nodes and remove duplicates for logn lookup with binary search
-    // if (!std::ranges::is_sorted(delNodes)) {
     std::ranges::sort(delNodes);
-    // }
     delNodes.erase(std::ranges::unique(delNodes).end(), delNodes.end());
 
     for (const WeakArc<DataPart>& part : parts) {
@@ -172,24 +172,24 @@ void CommitWriteBuffer::detectHangingEdges() {
         // Edges in this part can only be between nodes which exist in this datapart or a
         // previous datapart. Hence, when checking whether an edge is incident to a node
         // which is deleted, we check nodes in the range from the smallest node ID to be
-        // deleted which is incident to an edge in this part (@ref nlb), to the largest
-        // node ID in this datapart
-        // (@ref nub).
+        // deleted which is incident to an edge in this part (@ref smallestIncidentNode),
+        // to the largest node ID which is incident to an edge in this part
+        // (@ref largestIncidentNode).
         const auto smallestIncidentOpt = edgeContainer.getSmallestIncidentNodeID();
         if (smallestIncidentOpt == std::nullopt) {
             continue; // Empty container => no hanging edges (checked explicitly above)
         }
-        const NodeID smallestIncidentID = smallestIncidentOpt.value();
+        const NodeID smallestIncidentNode = smallestIncidentOpt.value();
 
         const auto largestIncidentOpt = edgeContainer.getLargestIncidentNodeID();
         if (largestIncidentOpt == std::nullopt) {
             continue; // Empty container => no hanging edges (checked explicitly above)
         }
-        const NodeID largestIncidentID = largestIncidentOpt.value();
+        const NodeID largestIncidentNode = largestIncidentOpt.value();
 
-        // The nodes to be deleted from this datapart are in the interval [nlb, nub)
-        const auto nlb = std::ranges::lower_bound(delNodes, smallestIncidentID);
-        const auto nub = std::ranges::upper_bound(delNodes, largestIncidentID);
+        // The nodes which may leave hanging edges are in the interval [nlb, nub)
+        const auto nlb = std::ranges::lower_bound(delNodes, smallestIncidentNode);
+        const auto nub = std::ranges::upper_bound(delNodes, largestIncidentNode);
 
         // Subspan to reduce the search space
         const std::span possiblyIncidentDeletedNodes(nlb, nub);
@@ -230,20 +230,30 @@ void CommitWriteBuffer::sortDeletions() {
     // cache-friendly than a std::set, and allowing O(1) std::distance
     // NOTE: Since deletes are idempotent within a commit, we do not care about
     // duplicates
-    // if (!std::ranges::is_sorted(_deletedNodes)) {
-    std::ranges::sort(_deletedNodes); // TODO: benchmark radix sort
-    // }
-    _deletedNodes.erase(std::ranges::unique(_deletedNodes).end(), _deletedNodes.end());
-    // if (!std::ranges::is_sorted(_deletedEdges)) {
-    std::ranges::sort(_deletedEdges); // TODO: benchmark radix sort
-    // }
-    _deletedEdges.erase(std::ranges::unique(_deletedEdges).end(), _deletedEdges.end());
+
+    // TODO: benchmark radix sort and is_sorted precheck
+    {
+        std::ranges::sort(_deletedNodes);
+        auto [new_end, last] = std::ranges::unique(_deletedNodes);
+        _deletedNodes.erase(new_end, last);
+    }
+    {
+        std::ranges::sort(_deletedEdges);
+        auto [new_end, last] = std::ranges::unique(_deletedEdges);
+        _deletedEdges.erase(new_end, last);
+    }
 }
 
 void CommitWriteBuffer::fillPerDataPartDeletions() {
     if (_deletedNodes.empty() && _deletedEdges.empty()) {
         return;
     }
+
+    // Sorted and unique
+    bioassert(std::ranges::is_sorted(_deletedNodes));
+    bioassert(std::ranges::is_sorted(_deletedEdges));
+    bioassert(std::ranges::adjacent_find(_deletedNodes) == _deletedNodes.end());
+    bioassert(std::ranges::adjacent_find(_deletedEdges) == _deletedEdges.end());
 
     const DataPartSpan dataparts = _commitBuilder->_commitData->allDataparts();
 
@@ -272,11 +282,11 @@ void CommitWriteBuffer::fillPerDataPartDeletions() {
 
         // Subspans reduce the search space of what we need delete from this datapart
         const std::span thisDPDeletedNodes = part->getNodeCount() == 0
-                                               ? std::span<NodeID>(nlb,nlb)
+                                               ? std::span<NodeID>(nlb,nlb) // Empty span
                                                : std::span<NodeID>(nlb, nub);
         const std::span thisDPDeletedEdges = part->getEdgeCount() == 0
-                                             ? std::span<EdgeID>(elb,elb)
-                                             : std::span<EdgeID>(elb, eub);
+                                               ? std::span<EdgeID>(elb, elb) // Empty span
+                                               : std::span<EdgeID>(elb, eub);
 
         // Index @ref idx = nodes/edges to be deleted from DataPart @ @ref idx
         _perDataPartDeletedNodes.emplace_back(thisDPDeletedNodes);

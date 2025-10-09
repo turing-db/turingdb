@@ -87,7 +87,7 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     _base = mainTx.commitData();
 
     // Get the current next Edge and Node IDs on main
-    const GraphReader mainReader = _versionController->openTransaction().readGraph();
+    const GraphReader mainReader = mainTx.readGraph();
     NodeID newNextNodeID = mainReader.getNodeCount();
     EdgeID newNextEdgeID = mainReader.getEdgeCount();
 

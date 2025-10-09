@@ -17,7 +17,7 @@ public:
     size_t size() { return _deletedIDs.size(); }
 
     void addID(IDT id);
-    
+
     std::vector<IDT>& getIDs() { return _deletedIDs; }
 
 private:

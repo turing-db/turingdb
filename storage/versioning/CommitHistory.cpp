@@ -55,6 +55,18 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
     }
 }
 
+void CommitHistoryBuilder::undoLocalCreates() {
+    // Total number of dataparts in the view of this commit
+    const size_t totalDPs = _history._allDataparts.size();
+    // Total number of datapart which were created as part of this commit, as a result
+    // of Change::commit (1 commit = 1 datapart).
+    const size_t committedDPs = _history._commitDataparts.size();
+    // Just delete the most recent committedDPs number of DPs
+    resizeDataParts(totalDPs - committedDPs);
+    // Reset this commit to have no locally created DPs
+    setCommitDatapartCount(0);
+}
+
 void CommitHistoryBuilder::undoLocalDeletes(const CommitData& base) {
     const std::span unmodifiedDataParts = base.allDataparts(); // Original base
     std::span modifiedDataParts = _history.allDataPartsMutVec(); // Modified versions

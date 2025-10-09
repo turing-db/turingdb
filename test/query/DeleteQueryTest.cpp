@@ -87,7 +87,7 @@ TEST_F(DeleteQueryTest, deleteRemy) {
 
     tester.setChangeID(ChangeID::head());
 
-    tester.query("match (n)-[e]-(m) return n, n.name")
+    tester.query("match (n) return n, n.name")
         // nodes in 1st DP << 1, node 6 missing
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12})
         // Remy gone
@@ -347,7 +347,7 @@ TEST_F(DeleteQueryTest, deleteThenCreate) {
     tester.query("commit")
         .execute();
 
-    tester.query("match (n)-[e]-(m) return n, n.name")
+    tester.query("match (n) return n, n.name")
         // nodes in 1st DP << 1, node 6 missing, 13 added
         .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13})
         // Remy gone, cyrus here
@@ -512,3 +512,5 @@ TEST_F(DeleteQueryTest, delNodesAndEdgesCommitThenSubmit) {
 
     verifyDeletions();
 }
+
+// TODO: Create and Delete in same commit

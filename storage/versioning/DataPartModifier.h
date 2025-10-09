@@ -4,7 +4,6 @@
 #include <span>
 #include <unordered_map>
 
-#include "ArcManager.h"
 #include "BioAssert.h"
 #include "metadata/SupportedType.h"
 #include "writers/DataPartBuilder.h"
@@ -12,6 +11,8 @@
 namespace db {
 
 class DataPart;
+template <typename T>
+class WeakArc;
 
 class DataPartModifier {
 public:

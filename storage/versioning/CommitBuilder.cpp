@@ -1,6 +1,6 @@
 #include "CommitBuilder.h"
 
-#include <bits/ranges_algo.h>
+#include <algorithm>
 #include <optional>
 #include <range/v3/view/enumerate.hpp>
 
@@ -85,6 +85,7 @@ CommitResult<void> CommitBuilder::buildNewDataPart(JobSystem& jobsystem,
     }
 
     historyBuilder.addDatapart(part);
+    // Increment datapart count: we have added a new datapart to this commit
     _datapartCount++;
 
     return {};
@@ -123,6 +124,8 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
+        // Determine if this is a new datapart (result of CREATE) or a modified datapart
+        // (result of DELETE)
         auto res =
             builder->getPartIndex() < numExistingDataparts
                 ? buildModifiedDataPart(jobsystem, view, builder.get(), historyBuilder)
@@ -153,9 +156,9 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     return std::move(_commit);
 }
 
-// NOTE: this still produces false positives, but should produce no false negatives
-// TODO: more accurate solution/BM against a more intrusive solution 
 bool CommitBuilder::dataPartContainsEffectedEdge(const WeakArc<DataPart>& part, size_t partIndex) {
+    // NOTE: this still produces false positives, but should produce no false negatives
+    // TODO: more accurate solution/BM against a more intrusive solution
     // Lowest NodeID which is incident to an edge in this DataPart
     const auto smallestIncidentOpt = part->edges().getSmallestIncidentNodeID();
     // Returns nullopt if this EdgeContainer is empty
@@ -164,7 +167,7 @@ bool CommitBuilder::dataPartContainsEffectedEdge(const WeakArc<DataPart>& part, 
     }
 
     const NodeID smallestIncidentNode = smallestIncidentOpt.value();
-    // The nodes which are deleted from the DataPart in which @ref firstIncidentNodeID
+    // The nodes which are deleted from the DataPart in which @ref smallestIncidentNode
     // occurs in
     const size_t smallestIncidentDPIdx = getDataPartIndex(smallestIncidentNode);
     bioassert(smallestIncidentDPIdx <= partIndex);
@@ -206,12 +209,16 @@ void CommitBuilder::applyDeletions() {
     // Performs various set up tasks to ensure deletions are performed correctly
     wb.prepare(this);
 
-    // Both the below should be sorted and contain no duplicates
     auto& delNodes = wb.deletedNodes();
     auto& delEdges = wb.deletedEdges();
 
+    // Unique and sorted
+    bioassert(std::ranges::is_sorted(delNodes) && std::ranges::is_sorted(delEdges));
+    bioassert(std::ranges::adjacent_find(delNodes) == delNodes.end()
+              && std::ranges::adjacent_find(delEdges) == delEdges.end());
+
     if (delNodes.empty() && delEdges.empty()) {
-        // wb.setApplied();
+        // NOTE: Do not set @ref CommitWriteBuffer::_deletesApplied to true here
         return;
     }
 
@@ -219,21 +226,13 @@ void CommitBuilder::applyDeletions() {
         std::span thisDPDeletedNodes = wb.deletedNodesFromDataPart(idx);
         std::span thisDPDeletedEdges = wb.deletedEdgesFromDataPart(idx);
 
-        // If there is nothing to delete from this datapart, we may only skip in the case
-        // that this datapart contains no edges which are incident to a node which is
-        // effected by a deleted node. For instance, an edge in DataPart y may be incident
-        // to a Node 101 in DataPart x. If Node 98, which is also in DataPart x, is
-        // deleted, then Node 101 will have its ID shifted, and therefore we need to
-        // update DataPart y with the updated ID of node 101, despite possibly no
-        // deletions occuring in DataPart y.
-        bool containsEffectedEdges = dataPartContainsEffectedEdge(part, idx);
-
         // If no nodes or edges to delete from this datapart, and all nodes which are
         // incident to an edge in this datapart are unaffected by deletes, then we don't
         // need to make any modifications.
-        if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()
-            && !containsEffectedEdges) {
-            continue;
+        if (thisDPDeletedNodes.empty() && thisDPDeletedEdges.empty()) {
+            if (!dataPartContainsEffectedEdge(part, idx)) {
+                continue;
+            }
         }
 
         // Otherwise, we need to rebuild a new datapart with possibly deleted nodes/edges
@@ -306,7 +305,6 @@ void CommitBuilder::initialize() {
 
 size_t CommitBuilder::getDataPartIndex(NodeID node) {
     // TOOD: Memoisation
-    // If not seen, find the datapart this node belongs to and memoise it
     DataPartSpan dataparts = commitData().allDataparts();
 
     // TODO:: Binary search-esque using DP node range

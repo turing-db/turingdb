@@ -204,9 +204,6 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> call_cmd
 
-%type<db::QueryCommand*> s3connect_cmd
-%type<db::QueryCommand*> s3transfer_cmd
-
 %start query_unit
 
 %%
@@ -650,14 +647,6 @@ change_cmd: CHANGE change_subcmd {
 commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
           ;
 
-s3connect_cmd : S3_CONNECT STRING_CONSTANT STRING_CONSTANT STRING_CONSTANT{ $$ = S3ConnectCommand::create(ctxt,$2,$3,$4); }
-          ;
-
-//                       <LOCAL_DIR>     <S3URL>
-s3transfer_cmd : S3_PUSH STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PUSH,$3,$2); }
-//                       <S3URL>         <LOCAL_DIR>
-               | S3_PULL STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PULL,$2,$3); }
-          ;
 %%
 
 

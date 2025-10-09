@@ -89,18 +89,18 @@ public:
         };
     }
 
-    void undoLocalCreates() {
-        // Total number of dataparts in the view of this commit
-        const size_t totalDPs =_history._allDataparts.size();
-        // Total number of datapart which were created as part of this commit, as a result
-        // of Change::commit (1 commit = 1 datapart).
-        const size_t committedDPs = _history._commitDataparts.size();
-        // Just delete the most recent committedDPs number of DPs
-        resizeDataParts(totalDPs - committedDPs);
-        // Reset this commit to have no locally created DPs
-        setCommitDatapartCount(0);
-    }
+    /**
+     * @brief Removes any dataparts that were created locally as the result of a `commit`
+     * command on a Change.
+     * @detail Calls @ref std::vector::resize to truncate the new dataparts.
+     */
+    void undoLocalCreates();
 
+    /**
+     * @brief Replaces all dataparts in the @ref _allDataParts vector with those of the
+     * base commit provided in @param base.
+     * @warn Potential error if @ref undoLocalCreates is not also called. TODO @cyrus
+     */
     void undoLocalDeletes(const CommitData& base);
 
     void replaceDataPartAtIndex(const WeakArc<DataPart>& newDP, size_t index) {

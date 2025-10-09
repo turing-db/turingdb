@@ -58,6 +58,13 @@ public:
     [[nodiscard]] bool graphHasNode(NodeID nodeID) const;
     [[nodiscard]] bool graphHasEdge(EdgeID edgeID) const;
 
+    /**
+     * @brief Used when creating new DataPartBuilders/CommitBuilders.
+     * @detail Previously, next node/edge ID was determined by the node/edge count of the
+     * graph. However, due to deletions, node/edge IDs are only guaranteed to be
+     * datapart-wise contiguous, not absolutely contiguous. Therefore, we now need to
+     * explicitly check the last datapart for the largest ID.
+     */
     NodeID nextNodeID() const;
     EdgeID nextEdgeID() const;
 

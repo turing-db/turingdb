@@ -31,7 +31,6 @@ void S3PushStep::prepare(ExecutionContext* ctxt) {
 void S3PushStep::execute() {
     Profile profile {"S3PushStep::execute"};
     if (!_s3File.empty()) {
-
         auto awsRes = _s3Client->uploadFile(_localPath, std::string(_s3Bucket), std::string(_s3File));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());

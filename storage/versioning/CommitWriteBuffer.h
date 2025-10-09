@@ -145,7 +145,6 @@ private:
     * @breif Performs the following operations to @ref _deletedNodes and @ref _deletedEdges:
     * 1. Sort
     * 2. Remove duplicates
-    * @detail Uses @ref std::ranges::sort i.e. quicksort
     */
     void sortDeletions();
 
@@ -153,7 +152,6 @@ private:
      * @brief Using @ref _commitBuilder->commitData as the state of the graph, checks for edges which are
      * incident to a node with an ID which appears in @ref _deletedNodes
      * vector. EdgeIDs which are found to be incident are appended to @ref _deletedEdges.
-     * @warn Assumes that both @ref _deletedNodes and @ref _deletedEdges are sorted.
      */
     void detectHangingEdges();
 
@@ -162,7 +160,8 @@ private:
      * _perDataPartDeletedNodes and @ref _perDataPartDeletedEdges at index `i` with the
      * subspan of nodes to be deleted which are contained in the DataPart at index `i` of
      * @ref _commitBuilder->commitData->allDataparts.
-     * @warn Assumes that both @ref _deletedNodes and @ref _deletedEdges are sorted.
+     * @warn Assumes that both @ref _deletedNodes and @ref _deletedEdges are sorted and
+     * contain no duplicates.
      */
     void fillPerDataPartDeletions();
 };

@@ -20,12 +20,9 @@ void DataPartModifier::applyModifications(size_t index) {
         return;
     }
 
-    // The first node/edge ID differs if some block of IDs starting with the first is
-    // deleted
+    // We are reconstructing the new datapart in the same ID space
     NodeID oldFirstNodeID = _oldDP->getFirstNodeID();
     EdgeID oldFirstEdgeID = _oldDP->getFirstEdgeID();
-
-    // We are reconstructing the new datapart in the same ID space
     _builder->_firstNodeID = _builder->_nextNodeID = oldFirstNodeID;
     _builder->_firstEdgeID = _builder->_nextEdgeID = oldFirstEdgeID;
 

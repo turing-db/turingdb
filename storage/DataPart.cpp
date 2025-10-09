@@ -3,7 +3,6 @@
 #include <memory>
 #include <numeric>
 #include <range/v3/action/sort.hpp>
-#include <range/v3/action/stable_sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
 #include <string>
@@ -69,13 +68,10 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     std::vector<NodeID> tmpNodeIDs(coreNodeLabelSets.size());
     std::iota(tmpNodeIDs.begin(), tmpNodeIDs.end(), firstTmpNodeID);
 
-    // NOTE: With the below change from @ref rg::sort to @ref rg::stable_sort, the
-    // underlying algorithm is changed from a variant of quicksort (in rg::sort) to a
-    // variant of merge sort (rg::stable_sort). rg::stable_sort allocates a large amount
-    // of memory, even in the case of an already-sorted array. In the case of deletions,
-    // it is always the case that the nodes are already sorted. To avoid this guaranteed
-    // extra memory allocation, we add this is_sorted check to reduce the overhead for
-    // deletions.
+    // NOTE: For deletions, @ref coreNodeLabelSets is always sorted. Preliminary check
+    // prevents sorting the already-sorted label sets, which for deletes causes IDs to be
+    // scattered (not uniformally shifted) due to the non-stable implementation of @ref
+    // ranges::sort. Also, often O(n) to avoid O(nlogn).
     bool sorted = rg::is_sorted(rv::zip(coreNodeLabelSets, tmpNodeIDs),
                                 [](const auto& data1, const auto& data2) {
                                     const LabelSetHandle& lset1 = std::get<0>(data1);
@@ -83,9 +79,6 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
                                     return lset1.getID() < lset2.getID();
                                 });
 
-    // NOTE: stable_sort ensures that nodes are mapped to expected of @ref
-    // DataPartModifier::nodeIDMapping, which provides a much more consistent view of
-    // NodeIDs to the user upon deletion.
     if (!sorted) {
         // Sorting based on the labelset
         rg::sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),

@@ -101,6 +101,17 @@ private:
                                              DataPartBuilder* builder,
                                              CommitHistoryBuilder& historyBuilder);
 
+    /**
+     * @brief Returns `true` if a datapart contains an edge whose incident nodes are
+     * shifted as the result of a deletion.
+     * @detail  If there is nothing to delete from this datapart, we may only skip in the
+     * case that this datapart contains no edges which are incident to a node which is
+     * effected by a deleted node. For instance, an edge in DataPart y may be incident
+     * to a Node 101 in DataPart x. If Node 98, which is also in DataPart x, is
+     * deleted, then Node 101 will have its ID shifted, and therefore we need to
+     * update DataPart y with the updated ID of node 101, despite possibly no
+     * deletions occuring in DataPart y.
+     */
     bool dataPartContainsEffectedEdge(const WeakArc<DataPart>& part, size_t partIndex);
 
     void initialize();
