@@ -1,0 +1,51 @@
+/// QUERY
+MATCH (n:Person { name: "Remy" })
+MATCH (m:Person { name: "Adam" })
+CREATE (n)-[e:IS_FRIEND]->(m)
+RETURN n;
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __label__: Person
+        __prop__ _n_.name
+    `"]
+    3["`
+        __SCAN_NODES__
+    `"]
+    4["`
+        __VAR__
+        __name__: m
+    `"]
+    5["`
+        __FILTER_NODE__
+        __label__: Person
+        __prop__ _m_.name
+    `"]
+    6["`
+        __CARTESIAN_PRODUCT__
+    `"]
+    7["`
+        __WRITE__
+        __edge__ (n)-[0:IS_FRIEND]->(m)
+    `"]
+    8["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->6
+    2-->1
+    3-->5
+    4-->6
+    5-->4
+    6-->7
+    7-->8

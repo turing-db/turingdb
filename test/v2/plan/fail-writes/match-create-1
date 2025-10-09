@@ -1,0 +1,11 @@
+/// QUERY
+MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;
+       |                            ^^^^^^
+-------* Edge pattern must have at least one edge type
+

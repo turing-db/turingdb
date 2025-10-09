@@ -193,7 +193,7 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
     } else {
-        throwError("Re-using the same edge variable, this is not supported yet", edge);
+        throwError("Re-using the same edge variable, this is not supported", edge);
     }
 
     currentNode->connectOut(filter);

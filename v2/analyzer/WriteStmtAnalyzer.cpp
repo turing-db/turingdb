@@ -76,7 +76,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     if (Symbol* symbol = nodePattern->getSymbol()) {
         decl = _variables->getDecl(symbol->getName());
         if (decl) {
-            if (_alreadyDefined.contains(decl)) {
+            if (_toBeCreated.contains(decl)) {
                 // Already defined in the write statement
                 throwError("Variable already defined", nodePattern);
             }
@@ -100,7 +100,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
         decl = _variables->createUnnamedVariable(EvaluatedType::NodePattern);
     }
 
-    _alreadyDefined.insert(decl);
+    _toBeCreated.insert(decl);
 
     NodePatternData* data = NodePatternData::create(_ast);
 
@@ -108,10 +108,12 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     nodePattern->setData(data);
 
     const auto& labels = nodePattern->labels();
-    if (!labels.empty()) {
-        for (const Symbol* label : labels) {
-            data->addLabelConstraint(label->getName());
-        }
+    if (labels.empty()) {
+        throwError("Node pattern must have at least one label", nodePattern);
+    }
+
+    for (const Symbol* label : labels) {
+        data->addLabelConstraint(label->getName());
     }
 
     const MapLiteral* properties = nodePattern->getProperties();
@@ -164,13 +166,15 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     edgePattern->setData(data);
 
     const auto& types = edgePattern->types();
-    if (!types.empty()) {
-        if (types.size() > 1) {
-            throwError("An edge cannot have more than one edge type", edgePattern);
-        }
-
-        data->addEdgeTypeConstraint(types.front()->getName());
+    if (types.empty()) {
+        throwError("Edge pattern must have at least one edge type", edgePattern);
     }
+
+    if (types.size() > 1) {
+        throwError("An edge cannot have more than one edge type", edgePattern);
+    }
+
+    data->addEdgeTypeConstraint(types.front()->getName());
 
     const MapLiteral* properties = edgePattern->getProperties();
     if (properties) {

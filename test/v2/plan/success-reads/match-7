@@ -1,0 +1,42 @@
+/// QUERY
+MATCH (n) MATCH (m) WHERE n.duration = m.duration RETURN n, m;
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __has predicate__
+        __dep__: n.duration
+        __dep__: m.duration
+    `"]
+    3["`
+        __SCAN_NODES__
+    `"]
+    4["`
+        __VAR__
+        __name__: m
+    `"]
+    5["`
+        __FILTER_NODE__
+    `"]
+    6["`
+        __JOIN__
+    `"]
+    7["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->6
+    1-->7
+    2-->1
+    3-->5
+    4-->6
+    5-->4
+    6-->2

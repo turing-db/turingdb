@@ -1,0 +1,15 @@
+/// QUERY
+MATCH (n:Person)-->(m:Person)
+WHERE n.name = "Remy" AND n.name = "Adam"
+CREATE (n)-[e:IS_FRIEND]->(m:Person)
+RETURN n;
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     2 | WHERE n.name = "Remy" AND n.name = "Adam"
+     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)
+       |                           ^^^^^^^^^^
+-------* Input nodes to write statements cannot have constraints
+

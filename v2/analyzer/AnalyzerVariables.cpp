@@ -30,8 +30,7 @@ VarDecl* AnalyzerVariables::getOrCreateNamedVariable(EvaluatedType type, std::st
     if (decl->getType() != type) {
         throwError(fmt::format("Variable '{}' is already declared with type '{}'",
                                name,
-                               EvaluatedTypeName::value(decl->getType())),
-                   decl);
+                               EvaluatedTypeName::value(decl->getType())));
     }
 
     return decl;

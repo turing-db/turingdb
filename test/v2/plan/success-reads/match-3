@@ -1,0 +1,52 @@
+/// QUERY
+MATCH (n: Person { name: "Luc" })-[e:KNOWS_WELL { name: "Whatever" }]-(m) RETURN n, e, m;
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __label__: Person
+        __prop__ _n_.name
+    `"]
+    3["`
+        __GET_EDGES__
+    `"]
+    4["`
+        __VAR__
+        __name__: e
+    `"]
+    5["`
+        __FILTER_EDGE__
+        __edge_type__: KNOWS_WELL
+        __prop__ _e_: name
+    `"]
+    6["`
+        __GET_EDGE_TARGET__
+    `"]
+    7["`
+        __VAR__
+        __name__: m
+    `"]
+    8["`
+        __FILTER_NODE__
+    `"]
+    9["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->5
+    4-->6
+    5-->4
+    6-->8
+    7-->9
+    8-->7

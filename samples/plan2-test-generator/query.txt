@@ -1,0 +1,4 @@
+MATCH (n:Person { name: "Remy" })
+MATCH (m:Person { name: "Adam" })
+CREATE (n)-[e:IS_FRIEND]->(m)
+RETURN n;

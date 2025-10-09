@@ -1,0 +1,12 @@
+/// QUERY
+CREATE (n) RETURN n;
+
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | CREATE (n) RETURN n;
+       |        ^^^
+-------* Node pattern must have at least one label
+

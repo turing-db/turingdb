@@ -1,0 +1,14 @@
+/// QUERY
+MATCH (a { name: "Remy" })-[e:KNOWS_WELL]-(m { name: "Adam" })
+WHERE a:Person AND m:Person AND e.dration > 10 
+RETURN a;
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (a { name: "Remy" })-[e:KNOWS_WELL]-(m { name: "Adam" })
+     2 | WHERE a:Person AND m:Person AND e.dration > 10 
+       |                                 ^^^^^^^^^
+-------* Property type 'dration' not found
+

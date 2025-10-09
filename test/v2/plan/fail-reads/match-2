@@ -1,0 +1,12 @@
+/// QUERY
+MATCH (n:Person)-[e]->(m:Person)-[e]->(m)
+RETURN n;
+
+
+/// RESULT
+PLAN ERROR
+-------* Query error
+     1 | MATCH (n:Person)-[e]->(m:Person)-[e]->(m)
+       |                                 ^^^^^^
+-------* Re-using the same edge variable, this is not supported
+

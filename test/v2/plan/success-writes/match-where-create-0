@@ -1,0 +1,33 @@
+/// QUERY
+MATCH (n:Person)
+WHERE n.name = "Luc"
+CREATE (n)-[e:KNOWS_WELL]->(m:Person) RETURN n;
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __label__: Person
+        __has predicate__
+        __dep__: n.name
+    `"]
+    3["`
+        __WRITE__
+        __node__ (0:Person)
+        __edge__ (n)-[0:KNOWS_WELL]->(0)
+    `"]
+    4["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->4

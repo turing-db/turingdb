@@ -1,0 +1,12 @@
+/// QUERY
+MATCH (a)-->(b)-->(a) RETURN a, b;
+
+
+
+/// RESULT
+PLAN ERROR
+-------* Query error
+     1 | MATCH (a)-->(b)-->(a) RETURN a, b;
+       |                   ^^^
+-------* Loop detected. This is not supported yet
+

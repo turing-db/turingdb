@@ -1,0 +1,9 @@
+/// QUERY
+MATCH (n: Person { name: "Luc" })-[e:KNOWS_WELL { name: "Whatever" }]->(m)-[e2]->(c:Person)
+MATCH (a)-->(b)-->(e)
+RETURN n, e, m;
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+       | Variable 'e' is already declared with type 'EdgePattern'

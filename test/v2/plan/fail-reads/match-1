@@ -1,0 +1,11 @@
+/// QUERY
+MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;
+       |                                        ^^^^^^^^^^
+-------* Variable 'a' not found
+

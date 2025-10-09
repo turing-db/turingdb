@@ -1,0 +1,25 @@
+/// QUERY
+MATCH (a { name: "Remy", duration: 10 }) RETURN a;
+
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: a
+    `"]
+    2["`
+        __FILTER_NODE__
+        __prop__ _a_.duration
+        __prop__ _a_.name
+    `"]
+    3["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1

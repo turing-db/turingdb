@@ -1,0 +1,11 @@
+/// QUERY
+MATCH (n:Person) CREATE (n:Officer) RETURN n;
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;
+       |                         ^^^^^^^^^^^
+-------* Input nodes to write statements cannot have constraints
+

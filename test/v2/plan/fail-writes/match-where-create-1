@@ -1,0 +1,15 @@
+/// QUERY
+MATCH (n:Person)-[e]->(m:Person)
+WHERE n.name = "Remy" AND n.name = "Adam"
+CREATE (n)-[e]->(m)
+RETURN n;
+
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     2 | WHERE n.name = "Remy" AND n.name = "Adam"
+     3 | CREATE (n)-[e]->(m)
+       |           ^^^^^^
+-------* Edges cannot be inputs to write queries
+

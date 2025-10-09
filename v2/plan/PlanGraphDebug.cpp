@@ -19,12 +19,7 @@
 using namespace db;
 using namespace db::v2;
 
-void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, const PlanGraph& planGraph) {
-    const auto& metadata = view.metadata();
-    const auto& edgeTypeMap = metadata.edgeTypes();
-    const auto& labelMap = metadata.labels();
-    const auto& propTypeMap = metadata.propTypes();
-
+void PlanGraphDebug::dumpMermaidConfig(std::ostream& output) {
     output << R"(
 %%{ init: {"theme": "default",
            "themeVariables": { "wrap": "false" },
@@ -34,20 +29,31 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
            }
 }%%
 )";
+}
+
+void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& view, const PlanGraph& planGraph) {
+    const auto& metadata = view.metadata();
+    const auto& edgeTypeMap = metadata.edgeTypes();
+    const auto& labelMap = metadata.labels();
+    const auto& propTypeMap = metadata.propTypes();
+
+    std::unordered_map<const PlanGraphNode*, size_t> nodeOrder;
+
     output << "flowchart TD\n";
 
-    for (const auto& node : planGraph._nodes) {
+    for (size_t i = 0; i < planGraph._nodes.size(); i++) {
+        const auto& node = planGraph._nodes[i];
+        nodeOrder[node.get()] = i;
+
         // Writing node definition
-        output << fmt::format("    {}[\"`\n", fmt::ptr(node.get()));
-        output << fmt::format("        __{}__\n\n", PlanGraphOpcodeDescription::value(node->getOpcode()));
+        output << fmt::format("    {}[\"`\n", i);
+        output << fmt::format("        __{}__\n", PlanGraphOpcodeDescription::value(node->getOpcode()));
 
         switch (node->getOpcode()) {
             case PlanGraphOpcode::VAR: {
                 const auto* n = dynamic_cast<VarNode*>(node.get());
                 bioassert(n->getVarDecl());
                 output << fmt::format("        __name__: {}\n", n->getVarDecl()->getName());
-                output << fmt::format("        __name__: {}\n", n->getVarDecl()->getName());
-                output << fmt::format("        __order__: {}\n", n->getDeclOrder());
             } break;
             case PlanGraphOpcode::SCAN_NODES: {
             } break;
@@ -73,7 +79,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         name = std::to_string(propType);
                     }
 
-                    output << fmt::format("        __prop__ _{}_: {}\n", var->getVarDecl()->getName(), name.value());
+                    output << fmt::format("        __prop__ _{}_.{}\n", var->getVarDecl()->getName(), name.value());
 
                     for (const auto& dep : deps.getDependencies()) {
                         output << "        __dep__: " << dep._var->getVarDecl()->getName();
@@ -86,7 +92,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                 }
 
                 for (const auto& pred : n->getWherePredicates()) {
-                    output << "        __predicate__: " << fmt::ptr(pred) << "\n";
+                    output << "        __has predicate__" << "\n";
 
                     for (const auto& dep : pred->getDependencies()) {
                         output << "        __dep__: " << dep._var->getVarDecl()->getName();
@@ -100,12 +106,12 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
             } break;
 
             case PlanGraphOpcode::FILTER_EDGE: {
-                const auto* n = dynamic_cast<EdgeFilterNode*>(node.get());
-                for (const auto& edgeType : n->getEdgeTypeConstraints()) {
+                const auto* e = dynamic_cast<EdgeFilterNode*>(node.get());
+                for (const auto& edgeType : e->getEdgeTypeConstraints()) {
                     output << "        __edge_type__: " << edgeTypeMap.getName(edgeType).value() << "\n";
                 }
 
-                for (const auto& constraint : n->getPropertyConstraints()) {
+                for (const auto& constraint : e->getPropertyConstraints()) {
                     const auto& [var, propType, expr, deps] = *constraint;
 
                     std::optional name = propTypeMap.getName(propType);
@@ -124,14 +130,27 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         }
                     }
                 }
+
+                for (const auto& pred : e->getWherePredicates()) {
+                    output << "        __has predicate__" << "\n";
+
+                    for (const auto& dep : pred->getDependencies()) {
+                        output << "        __dep__: " << dep._var->getVarDecl()->getName();
+                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
+                            output << ": __labels__\n";
+                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
+                            output << "." << p->_propertyType << "\n";
+                        }
+                    }
+                }
             } break;
 
             case PlanGraphOpcode::WRITE: {
                 const auto* n = dynamic_cast<WriteNode*>(node.get());
 
-                size_t i = 0;
+                size_t j = 0;
                 for (const auto& node : n->pendingNodes()) {
-                    output << "        __node__ (" << i;
+                    output << "        __node__ (" << j;
 
                     std::span labels = node._data->labelConstraints();
                     for (const auto& label : labels) {
@@ -140,9 +159,9 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
 
                     if (!node._data->exprConstraints().empty()) {
                         output << " {";
-                        size_t i = 0;
+                        size_t k = 0;
                         for (const auto& [propName, vt, expr] : node._data->exprConstraints()) {
-                            if (i++ > 0) {
+                            if (k++ > 0) {
                                 output << ", ";
                             }
 
@@ -154,10 +173,10 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         output << " }";
                     }
                     output << ")\n";
-                    i++;
+                    j++;
                 }
 
-                i = 0;
+                j = 0;
                 for (const auto& edge : n->pendingEdges()) {
                     const auto& data = edge._data;
 
@@ -169,14 +188,14 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                         output << "(" << edge._src.asPendingNodeOffset() << ")";
                     }
 
-                    output << "-[" << i;                                  // Edge ID
+                    output << "-[" << j;                                  // Edge ID
                     output << ":" << data->edgeTypeConstraints().front(); // Edge type
 
                     if (!data->exprConstraints().empty()) {
                         output << " {";
-                        size_t i = 0;
+                        size_t k = 0;
                         for (const auto& [propName, vt, expr] : data->exprConstraints()) {
-                            if (i++ > 0) {
+                            if (k++ > 0) {
                                 output << ", ";
                             }
 
@@ -194,7 +213,7 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
                     } else {
                         output << "(" << edge._tgt.asPendingNodeOffset() << ")\n";
                     }
-                    i++;
+                    j++;
                 }
             } break;
 
@@ -203,10 +222,20 @@ void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, co
         }
 
         output << "    `\"]\n";
+    }
 
+    for (const auto& node : planGraph._nodes) {
         // Writing connections
+        const size_t a = nodeOrder.at(node.get());
+
         for (const PlanGraphNode* out : node->outputs()) {
-            output << fmt::format("    {}-->{}\n", fmt::ptr(node.get()), fmt::ptr(out));
+            const size_t b = nodeOrder.at(out);
+            output << fmt::format("    {}-->{}\n", a, b);
         }
     }
+}
+
+void PlanGraphDebug::dumpMermaid(std::ostream& output, const GraphView& view, const PlanGraph& planGraph) {
+    dumpMermaidConfig(output);
+    dumpMermaidContent(output, view, planGraph);
 }

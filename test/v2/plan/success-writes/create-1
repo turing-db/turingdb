@@ -1,0 +1,14 @@
+/// QUERY
+CREATE (n:Person:Officer) RETURN n;
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __WRITE__
+        __node__ (0:Person:Officer)
+    `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1
