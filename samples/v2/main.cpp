@@ -1,7 +1,8 @@
 #include <iostream>
 #include <memory>
+#include <regex>
 
-#include <valgrind/callgrind.h>
+#include <tabulate/table.hpp>
 
 #include "CypherASTDumper.h"
 #include "CypherAnalyzer.h"
@@ -23,9 +24,61 @@
 #include "PipelineV2.h"
 #include "LocalMemory.h"
 #include "PipelineDebug.h"
+#include "ExecutionContext.h"
+#include "PipelineExecutor.h"
+#include "versioning/Change.h"
+#include "versioning/CommitBuilder.h"
+
+#include "Panic.h"
 
 using namespace db;
 using namespace db::v2;
+
+// ====== Tabulate Utils ======
+template <typename T>
+void tabulateWrite(tabulate::RowStream& rs, const T& value) {
+    // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
+    // if the `/query -d "history"` endpoint is hit. When writing to CLI we replace double
+    // escaped with single escape so that it is rendered in terminal correctly.
+    if constexpr (std::same_as<T, std::string>) {
+        std::regex re(R"(\\n)");  
+        rs << std::regex_replace(value, re, "\n");
+        return;
+    }
+    rs << value;
+}
+
+template <typename T>
+void tabulateWrite(tabulate::RowStream& rs, const std::optional<T>& value) {
+    if (value) {
+        rs << *value;
+    } else {
+        rs << "null";
+    }
+}
+
+void tabulateWrite(tabulate::RowStream& rs, const CommitBuilder* commit) {
+    rs << fmt::format("{:x}", commit->hash().get());
+}
+
+void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
+    rs << fmt::format("{:x}", change->id().get());
+}
+
+#define TABULATE_COL_CASE(Type, i)                        \
+    case Type::staticKind(): {                            \
+        const Type& src = *static_cast<const Type*>(col); \
+        tabulateWrite(rs, src[i]);                        \
+    } break;
+
+#define TABULATE_COL_CONST_CASE(Type)                     \
+    case Type::staticKind(): {                            \
+        const Type& src = *static_cast<const Type*>(col); \
+        tabulateWrite(rs, src.getRaw());                  \
+    } break;
+
+// ====== End Tabulate Utils ======
+
 
 int main(int argc, char** argv) {
     std::string queryStr;
@@ -53,7 +106,51 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    auto callback = [](const Block& block) {};
+    tabulate::Table table;
+
+    auto queryCallback = [&table](const Block& block) {
+        const size_t rowCount = block.getBlockRowCount();
+
+        for (size_t i = 0; i < rowCount; ++i) {
+            tabulate::RowStream rs;
+            for (const Column* col : block.columns()) {
+                switch (col->getKind()) {
+                    TABULATE_COL_CASE(ColumnVector<EntityID>, i)
+                    TABULATE_COL_CASE(ColumnVector<NodeID>, i)
+                    TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
+                    TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
+                    TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
+                    TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
+                    TABULATE_COL_CASE(ColumnVector<std::string>, i)
+                    TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
+                    TABULATE_COL_CASE(ColumnVector<const Change*>, i)
+                    TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
+                    TABULATE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
+
+                    default: {
+                        panic("can not print columns of kind {}", col->getKind());
+                    }
+                }
+            }
+
+            table.add_row(std::move(rs));
+        }
+    };
 
     CypherAST ast(queryStr);
     ast.setDebugLocations(true);
@@ -91,7 +188,7 @@ int main(int argc, char** argv) {
     }
 
     fmt::print("\n========== Plan Graph Generation ==========\n");
-    PlanGraphGenerator planGen(ast, view, callback);
+    PlanGraphGenerator planGen(ast, view);
     PlanGraph& planGraph = planGen.getPlanGraph();
     {
         try {
@@ -113,12 +210,10 @@ int main(int argc, char** argv) {
 
     fmt::print("\n========== Pipeline Generation ==========\n");
     {
-        PipelineGenerator pipelineGenerator(&planGraph, &pipeline, &localMem);
+        PipelineGenerator pipelineGenerator(&planGraph, &pipeline, &localMem, queryCallback);
         try {
             auto t0 = Clock::now();
-            CALLGRIND_START_INSTRUMENTATION;
             pipelineGenerator.generate();
-            CALLGRIND_STOP_INSTRUMENTATION;
             auto t1 = Clock::now();
             fmt::print("Pipeline generated in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const PlannerException& e) {
@@ -128,6 +223,18 @@ int main(int argc, char** argv) {
 
         PipelineDebug::dumpMermaid(std::cout, &pipeline);
     }
+
+    fmt::print("\n========== Pipeline Execution ==========\n");
+    {
+        auto t0 = Clock::now();
+        ExecutionContext execCtxt(view);
+        PipelineExecutor executor(&pipeline, &execCtxt);
+        executor.execute();
+        auto t1 = Clock::now();
+        fmt::print("Pipeline executed in {} us\n", duration<Microseconds>(t0, t1));
+    }
+
+    std::cout << table << "\n";
 
     return EXIT_SUCCESS;
 }

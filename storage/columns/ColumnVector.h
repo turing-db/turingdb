@@ -126,12 +126,12 @@ public:
     std::vector<T>& getRaw() { return _data; }
     const std::vector<T>& getRaw() const { return _data; }
 
-    static consteval auto staticKind() { return _staticKind; }
+    static consteval ColumnKind::ColumnKindCode staticKind() { return _staticKind; }
 
 private:
     std::vector<T> _data;
 
-    static constexpr auto _staticKind = ColumnKind::getColumnKind<ColumnVector<T>>();
+    static constexpr ColumnKind::ColumnKindCode _staticKind = ColumnKind::getColumnKind<ColumnVector<T>>();
 };
 
 }

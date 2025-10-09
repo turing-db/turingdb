@@ -6,12 +6,10 @@
 #include <unordered_map>
 #include <memory>
 
-#include "PlanGraphVariables.h"
-#include "QueryCallback.h"
-#include "metadata/LabelSet.h"
-
 #include "PlanGraph.h"
+#include "PlanGraphVariables.h"
 
+#include "metadata/LabelSet.h"
 #include "VectorHash.h"
 #include "metadata/PropertyType.h"
 
@@ -51,8 +49,7 @@ class PropertyConstraint;
 class PlanGraphGenerator {
 public:
     PlanGraphGenerator(const CypherAST& ast,
-                       const GraphView& view,
-                       const QueryCallback& callback);
+                       const GraphView& view);
     ~PlanGraphGenerator();
 
     PlanGraph& getPlanGraph() { return _tree; }

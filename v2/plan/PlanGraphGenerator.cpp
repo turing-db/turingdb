@@ -51,8 +51,7 @@ using namespace db::v2;
 using namespace db;
 
 PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
-                                       const GraphView& view,
-                                       const QueryCallback& callback)
+                                       const GraphView& view)
     : _ast(&ast),
     _view(view),
     _variables(&_tree)

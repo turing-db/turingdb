@@ -116,6 +116,7 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             }
 
             PipelineOutputPort* outNodeIDs = proc->output();
+            // TODO: needs to be the post materialize column
             stream.set(PlanGraphStream::NodeStream{outNodeIDs});
             stream.closeMaterializeData();
         }
@@ -135,19 +136,22 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         }
         break;
         case PlanGraphOpcode::PRODUCE_RESULTS: {
-            auto callback = [](const Block& block, LambdaProcessor::Operation operation) {
-                // Do nothing
+            MaterializeProcessor* materializeProc = MaterializeProcessor::create(_pipeline, stream.getMaterializeData());
+            const bool isNodeStream = stream.isNodeStream();
+            if (isNodeStream) {
+                connectNodeStream(stream, materializeProc->input());
+            } else {
+                connectEdgeTargetIDStream(stream, materializeProc->input());
+            }
+
+            auto callback = [this](const Block& block, LambdaProcessor::Operation operation) {
+                _callback(block);
             };
 
-            LambdaProcessor* proc = LambdaProcessor::create(_pipeline, callback);
+            LambdaProcessor* lambdaProc = LambdaProcessor::create(_pipeline, callback);
+            materializeProc->output()->connectTo(lambdaProc->input());
 
-            if (stream.isNodeStream()) {
-                connectNodeStream(stream, proc->input());
-            } else if (stream.isEdgeStream()) {
-                connectEdgeTargetIDStream(stream, proc->input());
-            } else {
-                throw PlannerException(fmt::format("PRODUCE_RESULTS node requires a node or edge stream"));
-            }
+            stream.closeMaterializeData();
         }
         break;
 

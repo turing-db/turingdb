@@ -1,5 +1,7 @@
 #pragma once
 
+#include "QueryCallback.h"
+
 namespace db {
 class LocalMemory;
 }
@@ -16,10 +18,12 @@ class PipelineGenerator {
 public:
     PipelineGenerator(const PlanGraph* graph,
                       PipelineV2* pipeline,
-                      LocalMemory* mem)
+                      LocalMemory* mem,
+                      const QueryCallback& callback)
         : _graph(graph),
         _pipeline(pipeline),
-        _mem(mem)
+        _mem(mem),
+        _callback(callback)
     {
     }
 
@@ -31,6 +35,7 @@ private:
     const PlanGraph* _graph {nullptr};
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
+    QueryCallback _callback;
 
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
     void connectNodeStream(PlanGraphStream& stream,
