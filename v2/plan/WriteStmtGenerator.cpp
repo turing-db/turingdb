@@ -6,11 +6,11 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "PlanGraph.h"
+#include "PlannerException.h"
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
 
 #include "decl/VarDecl.h"
-#include "nodes/FilterNode.h"
 #include "nodes/VarNode.h"
 
 #include "nodes/WriteNode.h"
@@ -74,10 +74,7 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
     WriteNode::EdgeNeighbour lhs;
     WriteNode::EdgeNeighbour rhs;
 
-    if (VarNode* var = _variables->getVarNode(originDecl)) {
-        // Node already exists, this is an input to the write query
-        // The execution will have to use the columns corresponding to it
-        _inputs.insert(var);
+    if (_variables->getVarNode(originDecl) != nullptr) {
         lhs.emplace<const VarDecl*>(originDecl);
     } else {
         // Create a new node
@@ -92,8 +89,7 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
         const VarDecl* rhsDecl = rhsNode->getDecl();
         const NodePatternData* rhsData = rhsNode->getData();
 
-        if (VarNode* var = _variables->getVarNode(rhsDecl)) {
-            _inputs.insert(var);
+        if (_variables->getVarNode(rhsDecl) != nullptr) {
             rhs.emplace<const VarDecl*>(rhsDecl);
         } else {
             const size_t rhsOffset = _currentNode->addNode(rhsData);

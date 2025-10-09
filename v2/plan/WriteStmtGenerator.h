@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string_view>
-#include <unordered_set>
 
 namespace db::v2 {
 
@@ -41,15 +40,11 @@ public:
                                     EdgePattern* edge,
                                     const NodePattern* dst);
 
-    const std::unordered_set<const VarNode*>& getInputs() const { return _inputs; }
-
 private:
     const CypherAST* _ast {nullptr};
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
     WriteNode* _currentNode {nullptr};
-
-    std::unordered_set<const VarNode*> _inputs;
 
     void throwError(std::string_view msg, const void* obj = 0) const;
 };
