@@ -51,34 +51,6 @@ const T* enforceType(const Expr* exp) {
     return castedExp;
 }
 
-void parseS3Url(std::string_view s3URL, std::string_view& bucket, std::string_view& prefix, std::string_view& fileName) {
-    if (s3URL.substr(0, 5) != "s3://") {
-        throw AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
-    }
-    s3URL.remove_prefix(5);
-    const auto bucketEnd = s3URL.find('/');
-
-    if (bucketEnd == std::string_view::npos) {
-        throw AnalyzeException(fmt::format("S3 Bucket Not Found: {}", s3URL));
-    }
-
-    bucket = s3URL.substr(0, bucketEnd);
-    s3URL.remove_prefix(bucketEnd + 1);
-
-    if (s3URL.empty()) {
-        throw AnalyzeException(fmt::format("S3 Prefix/Folder not found: {}", s3URL));
-    }
-
-    if (s3URL.back() != '/') {
-        // S3 'file' resource
-        fileName = s3URL;
-        return;
-    }
-
-    // S3 Directory Resource
-    prefix = s3URL;
-}
-
 }
 
 QueryAnalyzer::QueryAnalyzer(const GraphView& view, ASTContext* ctxt)
@@ -484,6 +456,34 @@ void QueryAnalyzer::analyzeLoadGraph(LoadGraphCommand* cmd) {
                             c));
         }
     }
+}
+
+void parseS3Url(std::string_view s3URL, std::string_view& bucket, std::string_view& prefix, std::string_view& fileName) {
+    if (s3URL.substr(0, 5) != "s3://") {
+        throw AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
+    }
+    s3URL.remove_prefix(5);
+    const auto bucketEnd = s3URL.find('/');
+
+    if (bucketEnd == std::string_view::npos) {
+        throw AnalyzeException(fmt::format("S3 Bucket Not Found: {}", s3URL));
+    }
+
+    bucket = s3URL.substr(0, bucketEnd);
+    s3URL.remove_prefix(bucketEnd + 1);
+
+    if (s3URL.empty()) {
+        throw AnalyzeException(fmt::format("S3 Prefix/Folder not found: {}", s3URL));
+    }
+
+    if (s3URL.back() != '/') {
+        // S3 'file' resource
+        fileName = s3URL;
+        return;
+    }
+
+    // S3 Directory Resource
+    prefix = s3URL;
 }
 
 void QueryAnalyzer::analyzeS3Transfer(S3TransferCommand* cmd) {
