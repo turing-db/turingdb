@@ -80,12 +80,12 @@ TEST_F(PipelineTest, scanNodes) {
     auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
 
     // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, matData);
     scanNodes->outNodeIDs()->connectTo(materialize->input());
 
     // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep(scanNodesOutNodeIDs);
+    matData->addToStep(scanNodesOutNodeIDs);
 
     // Lambda
 
@@ -135,14 +135,14 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     scanNodes->outNodeIDs()->connectTo(getOutEdges->inNodeIDs());
 
     // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, matData);
     getOutEdges->outTargetNodes()->connectTo(materialize->input());
 
     // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep(scanNodesOutNodeIDs);
-    matData.createStep(indices);
-    matData.addToStep(targetNodes);
+    matData->addToStep(scanNodesOutNodeIDs);
+    matData->createStep(indices);
+    matData->addToStep(targetNodes);
 
     // Lambda
 
@@ -212,14 +212,14 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     scanNodes->outNodeIDs()->connectTo(getOutEdges->inNodeIDs());
 
     // Materialize 1
-    MaterializeProcessor* materialize1 = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData1 = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize1 = MaterializeProcessor::create(&pipeline, matData1);
     getOutEdges->outTargetNodes()->connectTo(materialize1->input());
 
     {
-        MaterializeData& matData = materialize1->getMaterializeData();
-        matData.addToStep(scanNodesOutNodeIDs);
-        matData.createStep(indices);
-        matData.addToStep(targetNodes);
+        matData1->addToStep(scanNodesOutNodeIDs);
+        matData1->createStep(indices);
+        matData1->addToStep(targetNodes);
     }
 
     // Get properties on materialized targets
@@ -231,13 +231,13 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     materialize1->output()->connectTo(getNodeProperties->inIDs());
 
     // Materialize 2
-    MaterializeProcessor* materialize2 = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData2 = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize2 = MaterializeProcessor::create(&pipeline, matData2);
     getNodeProperties->outValues()->connectTo(materialize2->input());
     {
-        MaterializeData& matData = materialize2->getMaterializeData();
-        matData.addToStep(dynamic_cast<ColumnNodeIDs*>(materialize1->output()->getBuffer()->getBlock()[0]));
-        matData.createStep(indicesProps);
-        matData.addToStep(properties);
+        matData2->addToStep(dynamic_cast<ColumnNodeIDs*>(materialize1->output()->getBuffer()->getBlock()[0]));
+        matData2->createStep(indicesProps);
+        matData2->addToStep(properties);
     }
 
     // Lambda
@@ -319,16 +319,16 @@ TEST_F(PipelineTest, scanNodesExpand2) {
     getOutEdges1->outTargetNodes()->connectTo(getOutEdges2->inNodeIDs());
 
     // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, matData);
     getOutEdges2->outTargetNodes()->connectTo(materialize->input());
 
     // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep(scanNodesOutNodeIDs);
-    matData.createStep(indices1);
-    matData.addToStep(targetNodes1);
-    matData.createStep(indices2);
-    matData.addToStep(targetNodes2);
+    matData->addToStep(scanNodesOutNodeIDs);
+    matData->createStep(indices1);
+    matData->addToStep(targetNodes1);
+    matData->createStep(indices2);
+    matData->addToStep(targetNodes2);
 
     // Lambda
     auto callback = [&](const Block& block, LambdaProcessor::Operation operation) {
@@ -406,12 +406,10 @@ TEST_F(PipelineTest, scanNodesLimit) {
     auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
 
     // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, matData);
     scanNodes->outNodeIDs()->connectTo(materialize->input());
-    {
-        MaterializeData& matData = materialize->getMaterializeData();
-        matData.addToStep(scanNodesOutNodeIDs);
-    }
+    matData->addToStep(scanNodesOutNodeIDs);
 
     // Limit
     constexpr size_t limitCount = 4;
@@ -466,12 +464,10 @@ TEST_F(PipelineTest, scanNodesSkip) {
     auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
 
     // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, matData);
     scanNodes->outNodeIDs()->connectTo(materialize->input());
-    {
-        MaterializeData& matData = materialize->getMaterializeData();
-        matData.addToStep(scanNodesOutNodeIDs);
-    }
+    matData->addToStep(scanNodesOutNodeIDs);
 
     // Skip
     constexpr size_t skipCount = 4;
@@ -526,12 +522,12 @@ TEST_F(PipelineTest, scanNodesCount) {
     auto* scanNodesOutNodeIDs = addColumnInBuffer<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs()->getBuffer());
 
     // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
+    MaterializeData* matData = MaterializeData::create(&pipeline, &mem);
+    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, matData);
     scanNodes->outNodeIDs()->connectTo(materialize->input());
 
     // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep(scanNodesOutNodeIDs);
+    matData->addToStep(scanNodesOutNodeIDs);
 
     // Count
     CountProcessor* count = CountProcessor::create(&pipeline);
