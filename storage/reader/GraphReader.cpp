@@ -35,6 +35,22 @@ size_t GraphReader::getEdgeCount() const {
         [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getEdgeCount(); });
 }
 
+NodeID GraphReader::nextNodeID() const {
+    if (_view.dataparts().empty()) {
+        return 0;
+    }
+    auto& lastDataPart = _view.dataparts().back();
+    return lastDataPart->getFirstNodeID() + lastDataPart->getNodeCount();
+}
+
+EdgeID GraphReader::nextEdgeID() const {
+    if (_view.dataparts().empty()) {
+        return 0;
+    }
+    auto& lastDataPart = _view.dataparts().back();
+    return lastDataPart->getFirstEdgeID() + lastDataPart->getEdgeCount();
+}
+
 LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
         if (part->hasNode(nodeID)) {

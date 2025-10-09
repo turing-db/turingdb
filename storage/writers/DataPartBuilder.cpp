@@ -19,8 +19,8 @@ std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metad
 
     ptr->_view = view;
     ptr->_metadata = &metadata;
-    ptr->_firstNodeID = reader.getNodeCount();
-    ptr->_firstEdgeID = reader.getEdgeCount();
+    ptr->_firstNodeID = reader.nextNodeID(); // prepare is called in locked-context
+    ptr->_firstEdgeID = reader.nextEdgeID();
     ptr->_nextNodeID = ptr->_firstNodeID;
     ptr->_nextEdgeID = ptr->_firstEdgeID;
     ptr->_nodeProperties = std::make_unique<PropertyManager>();

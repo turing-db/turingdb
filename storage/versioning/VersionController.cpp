@@ -68,14 +68,19 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     // atomic load main
     Commit* mainState = _head.load();
 
+    // bool undoDeletes {false};
+
     // rebase if main has changed under us
     if (mainState->hash() != change->baseHash()) {
+        // undoDeletes = true;
         if (auto res = change->rebase(jobSystem); !res) {
             return res;
         }
     }
 
     for (auto& commitBuilder : change->_commits) {
+        CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
+        historyBuilder.undoLocalDeletes(*change->_base);
         // Undo any commits that were made locally
 
         // Only check those with an non-empty writebuffer, as other sources e.g.
@@ -84,8 +89,7 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (!commitBuilder->writeBuffer().empty()) {
             // Only undo those which have committed, denoted by having a datapart
             if (commitBuilder->_datapartCount != 0) {
-                CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
-                historyBuilder.undoLocalCommits();
+                historyBuilder.undoLocalCreates();
                 // We have deleted all created DPs: reset this number
                 commitBuilder->_datapartCount = 0;
             }

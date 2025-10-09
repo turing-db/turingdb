@@ -209,6 +209,7 @@ void CommitBuilder::applyDeletions() {
     auto& delEdges = wb.deletedEdges();
 
     if (delNodes.empty() && delEdges.empty()) {
+        // wb.setApplied();
         return;
     }
 
@@ -238,19 +239,22 @@ void CommitBuilder::applyDeletions() {
         auto& newDataPartBuilder = newBuilder(idx);
         auto modifier = DataPartModifier(part, newDataPartBuilder, wb);
         modifier.applyModifications(idx);
+        // wb.setApplied();
     }
 }
 
 void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
+
     if (wb.empty()) {
         return;
     }
 
     // Adds DataPartBuilders to @ref _builders to be built by @ref
     // CommitBuilder::buildAllPending
+    // if (!wb.deletesApplied()) {
     applyDeletions();
-
+    // }
     // We applied any deletions, but if nothing to CREATE, exit
     if (wb.pendingNodes().empty() && wb.pendingEdges().empty()) {
         return;

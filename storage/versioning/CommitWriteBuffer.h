@@ -98,6 +98,9 @@ public:
 
     void prepare(CommitBuilder* commitBuilder);
 
+    // bool deletesApplied() const { return _deletesApplied; }
+    // void setApplied() { _deletesApplied = true; }
+
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
@@ -110,6 +113,8 @@ private:
          EdgeTypeID edgeType;
          UntypedProperties properties;
     };
+
+    // bool _deletesApplied {false};
 
     CommitBuilder* _commitBuilder {nullptr};
 

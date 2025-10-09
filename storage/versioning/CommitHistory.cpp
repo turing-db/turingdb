@@ -1,7 +1,9 @@
 #include "CommitHistory.h"
 
+#include "BioAssert.h"
 #include "DataPartRebaser.h"
 #include "CommitView.h"
+#include "CommitData.h"
 
 using namespace db;
 
@@ -51,4 +53,12 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
             prevPart = part.get();
         }
     }
+}
+
+void CommitHistoryBuilder::undoLocalDeletes(const CommitData& base) {
+    const std::span unmodifiedDataParts = base.allDataparts(); // Original base
+    std::span modifiedDataParts = _history.allDataPartsMutVec(); // Modified versions
+    bioassert(modifiedDataParts.size() >= unmodifiedDataParts.size());
+
+    std::copy(unmodifiedDataParts.begin(), unmodifiedDataParts.end(), modifiedDataParts.begin());
 }

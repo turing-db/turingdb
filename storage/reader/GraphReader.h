@@ -58,6 +58,9 @@ public:
     [[nodiscard]] bool graphHasNode(NodeID nodeID) const;
     [[nodiscard]] bool graphHasEdge(EdgeID edgeID) const;
 
+    NodeID nextNodeID() const;
+    EdgeID nextEdgeID() const;
+
     template <SupportedType T>
     [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const;
 

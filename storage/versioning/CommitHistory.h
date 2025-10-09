@@ -11,6 +11,7 @@
 namespace db {
 
 class CommitBuilder;
+class CommitData;
 
 class CommitHistory {
 public:
@@ -41,6 +42,8 @@ public:
 
     void newFromPrevious(const CommitHistory& base);
 
+    std::vector<WeakArc<DataPart>>& allDataPartsMutVec() { return _allDataparts;}
+    const std::vector<WeakArc<DataPart>>& allDataPartsVec() const { return _allDataparts;}
 private:
     friend class CommitHistoryBuilder;
     friend class CommitHistoryRebaser;
@@ -56,6 +59,7 @@ private:
     std::vector<CommitView> _commits;
 
     std::unique_ptr<CommitJournal> _journal;
+
 };
 
 class CommitHistoryBuilder {
@@ -85,7 +89,7 @@ public:
         };
     }
 
-    void undoLocalCommits() {
+    void undoLocalCreates() {
         // Total number of dataparts in the view of this commit
         const size_t totalDPs =_history._allDataparts.size();
         // Total number of datapart which were created as part of this commit, as a result
@@ -96,6 +100,8 @@ public:
         // Reset this commit to have no locally created DPs
         setCommitDatapartCount(0);
     }
+
+    void undoLocalDeletes(const CommitData& base);
 
     void replaceDataPartAtIndex(const WeakArc<DataPart>& newDP, size_t index) {
         _history._allDataparts.at(index) = newDP;

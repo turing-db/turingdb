@@ -28,6 +28,7 @@ public:
     CommitData& operator=(CommitData&&) = delete;
 
     [[nodiscard]] DataPartSpan allDataparts() const { return _history.allDataparts(); }
+    [[nodiscard]] const auto& allDataPartsVec() const { return _history.allDataPartsVec(); }
     [[nodiscard]] DataPartSpan commitDataparts() const { return _history.commitDataparts(); }
     [[nodiscard]] const GraphMetadata& metadata() const { return _metadata; }
     [[nodiscard]] std::span<const CommitView> commits() const { return _history.commits(); }
