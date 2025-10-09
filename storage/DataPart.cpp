@@ -3,6 +3,7 @@
 #include <memory>
 #include <numeric>
 #include <range/v3/action/sort.hpp>
+#include <range/v3/action/stable_sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
 #include <string>
@@ -13,9 +14,9 @@
 #include "TuringException.h"
 #include "indexers/EdgeIndexer.h"
 #include "indexers/StringPropertyIndexer.h"
-#include "indexes/StringIndex.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyContainer.h"
+#include "range/v3/algorithm/is_sorted.hpp"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
@@ -68,13 +69,32 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     std::vector<NodeID> tmpNodeIDs(coreNodeLabelSets.size());
     std::iota(tmpNodeIDs.begin(), tmpNodeIDs.end(), firstTmpNodeID);
 
-    // Sorting based on the labelset
-    rg::sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
-             [](const auto& data1, const auto& data2) {
-                 const LabelSetHandle& lset1 = std::get<0>(data1);
-                 const LabelSetHandle& lset2 = std::get<0>(data2);
-                 return lset1.getID() < lset2.getID();
-             });
+    // NOTE: With the below change from @ref rg::sort to @ref rg::stable_sort, the
+    // underlying algorithm is changed from a variant of quicksort (in rg::sort) to a
+    // variant of merge sort (rg::stable_sort). rg::stable_sort allocates a large amount
+    // of memory, even in the case of an already-sorted array. In the case of deletions,
+    // it is always the case that the nodes are already sorted. To avoid this guaranteed
+    // extra memory allocation, we add this is_sorted check to reduce the overhead for
+    // deletions.
+    bool sorted = rg::is_sorted(rv::zip(coreNodeLabelSets, tmpNodeIDs),
+                                [](const auto& data1, const auto& data2) {
+                                    const LabelSetHandle& lset1 = std::get<0>(data1);
+                                    const LabelSetHandle& lset2 = std::get<0>(data2);
+                                    return lset1.getID() < lset2.getID();
+                                });
+
+    // NOTE: stable_sort ensures that nodes are mapped to expected of @ref
+    // DataPartModifier::nodeIDMapping, which provides a much more consistent view of
+    // NodeIDs to the user upon deletion.
+    if (!sorted) {
+        // Sorting based on the labelset
+        rg::stable_sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
+                        [](const auto& data1, const auto& data2) {
+                            const LabelSetHandle& lset1 = std::get<0>(data1);
+                            const LabelSetHandle& lset2 = std::get<0>(data2);
+                            return lset1.getID() < lset2.getID();
+                        });
+    }
 
     _nodes = NodeContainer::create(_firstNodeID, coreNodeLabelSets);
     if (!_nodes) {

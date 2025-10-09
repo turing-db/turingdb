@@ -79,6 +79,7 @@ private:
         size_t numSmallerNodes = std::distance(relevantDeletedNodes.begin(), smallerNodesIt);
         return x - numSmallerNodes;
     }
+
     inline EdgeID edgeIDMapping(EdgeID x) {
         if (std::ranges::binary_search(_edgesToDelete, x)) [[unlikely]] {
             panic("Attempted to get mapped id of deleted edge: {}.", x);
