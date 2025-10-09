@@ -86,7 +86,8 @@ public:
 
     void connectTo(PipelineInputPort* other);
 
-    static PipelineOutputPort* create(PipelineV2* pipeline, Processor* processor);
+
+    static PipelineOutputPort* create(PipelineV2* pipeline, Processor* processor, PipelineBuffer* buffer=nullptr);
 
 private:
     PipelineOutputPort(Processor* processor)

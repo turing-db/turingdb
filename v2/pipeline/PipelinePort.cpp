@@ -15,10 +15,14 @@ PipelineInputPort* PipelineInputPort::create(PipelineV2* pipeline, Processor* pr
     return port;
 }
 
-PipelineOutputPort* PipelineOutputPort::create(PipelineV2* pipeline, Processor* processor) {
+PipelineOutputPort* PipelineOutputPort::create(PipelineV2* pipeline, Processor* processor, PipelineBuffer* buffer) {
     PipelineOutputPort* port = new PipelineOutputPort(processor);
 
-    port->_buffer = PipelineBuffer::create(pipeline);
+    if (buffer) {
+        port->_buffer = buffer;
+    } else {
+        port->_buffer = PipelineBuffer::create(pipeline);
+    }
 
     port->postCreate(pipeline);
     return port;

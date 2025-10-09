@@ -6,12 +6,12 @@
 
 namespace db {
 class LocalMemory;
-class Block;
 }
 
 namespace db::v2 {
 
 class PipelineV2;
+class PipelineBuffer;
 
 class MaterializeData {
 public:
@@ -23,12 +23,7 @@ public:
 
     static MaterializeData* create(PipelineV2* pipeline, LocalMemory* mem);
 
-    MaterializeData(const MaterializeData& other) = delete;
-    MaterializeData& operator=(const MaterializeData& other) = delete;
-    MaterializeData(MaterializeData&& other) = delete;
-    MaterializeData& operator=(MaterializeData&& other) = delete;
-
-    void setOutput(Block* output) { _output = output; }
+    PipelineBuffer* getOutput() { return _output; }
 
     const Indices& getIndices() const { return _indices; }
     const ColumnsPerStep& getColumnsPerStep() const { return _columnsPerStep; }
@@ -43,13 +38,13 @@ public:
 
 private:
     LocalMemory* _mem {nullptr};
-    Block* _output {nullptr};
+    PipelineBuffer* _output {nullptr};
     size_t _step {0};
     Indices _indices;
     ColumnsPerStep _columnsPerStep;
     size_t _colCount {0};
 
-    MaterializeData(LocalMemory* mem);
+    MaterializeData(LocalMemory* mem, PipelineBuffer* buffer);
     ~MaterializeData();
 };
 

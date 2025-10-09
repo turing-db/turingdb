@@ -1,17 +1,16 @@
 #include "MaterializeData.h"
 
 #include "PipelineV2.h"
-
-#include "columns/Block.h"
-#include "columns/ColumnVector.h"
+#include "PipelineBuffer.h"
 
 #include "LocalMemory.h"
 
 using namespace db::v2;
 using namespace db;
 
-MaterializeData::MaterializeData(LocalMemory* mem)
+MaterializeData::MaterializeData(LocalMemory* mem, PipelineBuffer* buffer)
     : _mem(mem),
+    _output(buffer),
     _columnsPerStep(1)
 {
 }
@@ -20,7 +19,8 @@ MaterializeData::~MaterializeData() {
 }
 
 MaterializeData* MaterializeData::create(PipelineV2* pipeline, LocalMemory* mem) {
-    MaterializeData* data = new MaterializeData(mem);
+    PipelineBuffer* buffer = PipelineBuffer::create(pipeline);
+    MaterializeData* data = new MaterializeData(mem, buffer);
     pipeline->addMaterializeData(data);
     return data;
 }
@@ -37,7 +37,7 @@ void MaterializeData::addToStep(const T* col) {
     _columnsPerStep[_step].push_back(col);
 
     Column* outCol = _mem->alloc<T>();
-    _output->addColumn(outCol);
+    _output->getBlock().addColumn(outCol);
 }
 
 #define INSTANTIATE(Type) \

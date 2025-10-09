@@ -92,11 +92,9 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, Materia
     materialize->_input = input;
     materialize->addInput(input);
 
-    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, materialize);
+    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, materialize, matData->getOutput());
     materialize->_output = output;
     materialize->addOutput(output);
-
-    materialize->_matData->setOutput(&output->getBuffer()->getBlock());
 
     materialize->postCreate(pipeline);
     return materialize;
