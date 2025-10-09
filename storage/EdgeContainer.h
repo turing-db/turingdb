@@ -56,7 +56,6 @@ public:
      */
     std::optional<NodeID> getLargestIncidentNodeID() const;
 
-
     std::span<const EdgeRecord> getOuts() const {
         return _outEdges;
     }

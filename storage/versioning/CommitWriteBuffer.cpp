@@ -158,9 +158,9 @@ void CommitWriteBuffer::detectHangingEdges() {
     }
 
     // Sort deleted nodes and remove duplicates for logn lookup with binary search
-    if (!std::ranges::is_sorted(delNodes)) {
-        std::ranges::sort(delNodes);
-    }
+    // if (!std::ranges::is_sorted(delNodes)) {
+    std::ranges::sort(delNodes);
+    // }
     delNodes.erase(std::ranges::unique(delNodes).end(), delNodes.end());
 
     for (const WeakArc<DataPart>& part : parts) {
@@ -227,16 +227,16 @@ void CommitWriteBuffer::prepare(CommitBuilder* commitBuilder) {
 
 void CommitWriteBuffer::sortDeletions() {
     // Sort our vectors and remove duplicates for O(logn) lookup whilst being more
-    // cache-friendly than a std::set
+    // cache-friendly than a std::set, and allowing O(1) std::distance
     // NOTE: Since deletes are idempotent within a commit, we do not care about
     // duplicates
-    if (!std::ranges::is_sorted(_deletedNodes)) {
-        std::ranges::sort(_deletedNodes); // TODO: benchmark radix sort
-    }
+    // if (!std::ranges::is_sorted(_deletedNodes)) {
+    std::ranges::sort(_deletedNodes); // TODO: benchmark radix sort
+    // }
     _deletedNodes.erase(std::ranges::unique(_deletedNodes).end(), _deletedNodes.end());
-    if (!std::ranges::is_sorted(_deletedEdges)) {
-        std::ranges::sort(_deletedEdges); // TODO: benchmark radix sort
-    }
+    // if (!std::ranges::is_sorted(_deletedEdges)) {
+    std::ranges::sort(_deletedEdges); // TODO: benchmark radix sort
+    // }
     _deletedEdges.erase(std::ranges::unique(_deletedEdges).end(), _deletedEdges.end());
 }
 

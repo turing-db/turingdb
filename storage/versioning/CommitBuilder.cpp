@@ -85,6 +85,7 @@ CommitResult<void> CommitBuilder::buildNewDataPart(JobSystem& jobsystem,
     }
 
     historyBuilder.addDatapart(part);
+    _datapartCount++;
 
     return {};
 }
@@ -132,7 +133,8 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
         }
     }
 
-    _datapartCount += _builders.size();
+    // We increment datapart count only in @ref buildNewDataPart
+    // _datapartCount += _builders.size();
     historyBuilder.setCommitDatapartCount(_datapartCount);
 
     _builders.clear();
@@ -239,7 +241,7 @@ void CommitBuilder::applyDeletions() {
         auto& newDataPartBuilder = newBuilder(idx);
         auto modifier = DataPartModifier(part, newDataPartBuilder, wb);
         modifier.applyModifications(idx);
-        // wb.setApplied();
+        wb.setApplied();
     }
 }
 
@@ -250,11 +252,15 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         return;
     }
 
-    // Adds DataPartBuilders to @ref _builders to be built by @ref
-    // CommitBuilder::buildAllPending
-    // if (!wb.deletesApplied()) {
-    applyDeletions();
-    // }
+    // We may have committed locally, and therefore applied any deletes. If so, and there
+    // have been no changes on main, we do not need to reapply our deletes.
+    // NOTE: @ref Change::rebase sets write buffer "applied" to false in case of rebase
+    if (!wb.deletesApplied()) {
+        // Adds DataPartBuilders to @ref _builders to be built by @ref
+        // CommitBuilder::buildAllPending
+        applyDeletions();
+    }
+
     // We applied any deletions, but if nothing to CREATE, exit
     if (wb.pendingNodes().empty() && wb.pendingEdges().empty()) {
         return;

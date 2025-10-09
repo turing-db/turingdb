@@ -85,21 +85,22 @@ public:
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
      * _deletedNodes
-     * @detail Calls std::set::insert
+     * @detail Calls std::vector::reserve then std::vector::insert
      */
     void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes);
 
     /**
-     * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
-     * _deletedNodes
-     * @detail Calls std::set::insert
+     * @brief Adds EdgeIDs contained in @param newDeletedEdges to the member @ref
+     * _deletedEdges
+     * @detail Calls std::vector::reserve then std::vector::insert
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
     void prepare(CommitBuilder* commitBuilder);
 
-    // bool deletesApplied() const { return _deletesApplied; }
-    // void setApplied() { _deletesApplied = true; }
+    bool deletesApplied() const { return _deletesApplied; }
+    void setApplied() { _deletesApplied = true; }
+    void setUnapplied() { _deletesApplied = false; }
 
 private:
     friend DataPartBuilder;
@@ -114,7 +115,7 @@ private:
          UntypedProperties properties;
     };
 
-    // bool _deletesApplied {false};
+    bool _deletesApplied {false};
 
     CommitBuilder* _commitBuilder {nullptr};
 

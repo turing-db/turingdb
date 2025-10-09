@@ -118,6 +118,12 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
                                       newNextEdgeID);
         wbRb.rebaseIncidentNodeIDs();
 
+        // If we are rebasing, there have been changes on main. We need to undo our
+        // deletes as they need to be rebased and reapplied on the new state.
+        CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
+        historyBuilder.undoLocalDeletes(*prevCommitData);
+        commitBuilder->writeBuffer().setUnapplied();
+
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.
         // These values will be used when creating new dataparts at time of submit.
