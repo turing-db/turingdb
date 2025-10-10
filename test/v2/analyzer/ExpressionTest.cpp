@@ -2,11 +2,11 @@
 #include "ExprAnalyzer.h"
 #include "TuringTest.h"
 
+#include "Literal.h"
 #include "CypherAST.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "expr/All.h"
-#include "expr/Literal.h"
 #include "versioning/Transaction.h"
 
 using namespace db;

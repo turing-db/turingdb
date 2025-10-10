@@ -2,11 +2,12 @@
 
 #include "DiagnosticsManager.h"
 #include "SourceManager.h"
+#include "FunctionInvocation.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
+#include "Literal.h"
 #include "QualifiedName.h"
 #include "expr/ExprChain.h"
-#include "expr/Literal.h"
 #include "expr/Expr.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -117,6 +118,10 @@ CypherAST::~CypherAST() {
     for (ExprChain* chain : _exprChains) {
         delete chain;
     }
+
+    for (FunctionInvocation* invocation : _functionInvocations) {
+        delete invocation;
+    }
 }
 
 std::string* CypherAST::createString() {
@@ -204,4 +209,8 @@ void CypherAST::addNodePatternData(NodePatternData* data) {
 
 void CypherAST::addEdgePatternData(EdgePatternData* data) {
     _edgePatternDatas.push_back(data);
+}
+
+void CypherAST::addFunctionInvocation(FunctionInvocation* invocation) {
+    _functionInvocations.push_back(invocation);
 }

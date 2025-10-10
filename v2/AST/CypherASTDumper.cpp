@@ -15,7 +15,7 @@
 #include "NodePattern.h"
 #include "EdgePattern.h"
 #include "Symbol.h"
-#include "expr/Literal.h"
+#include "Literal.h"
 #include "decl/VarDecl.h"
 #include "QualifiedName.h"
 

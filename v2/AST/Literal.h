@@ -45,7 +45,7 @@ public:
 
 private:
     NullLiteral() = default;
-    ~NullLiteral() = default;
+    ~NullLiteral() override = default;
 };
 
 class BoolLiteral : public Literal {
@@ -66,7 +66,7 @@ private:
     {
     }
 
-    ~BoolLiteral() = default;
+    ~BoolLiteral() override = default;
 };
 
 class IntegerLiteral : public Literal {
@@ -87,7 +87,7 @@ private:
     {
     }
 
-    ~IntegerLiteral() = default;
+    ~IntegerLiteral() override = default;
 };
 
 class DoubleLiteral : public Literal {
@@ -108,7 +108,7 @@ private:
     {
     }
 
-    ~DoubleLiteral() = default;
+    ~DoubleLiteral() override = default;
 };
 
 class StringLiteral : public Literal {
@@ -129,7 +129,7 @@ private:
     {
     }
 
-    ~StringLiteral() = default;
+    ~StringLiteral() override = default;
 };
 
 class CharLiteral : public Literal {
@@ -150,7 +150,7 @@ private:
     {
     }
 
-    ~CharLiteral() = default;
+    ~CharLiteral() override = default;
 };
 
 class MapLiteral : public Literal {
@@ -176,7 +176,7 @@ private:
     ExprMap _map;
 
     MapLiteral();
-    ~MapLiteral();
+    ~MapLiteral() override;
 };
 
 }

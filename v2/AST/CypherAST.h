@@ -11,6 +11,7 @@ class DiagnosticsManager;
 class Symbol;
 class SymbolChain;
 class QualifiedName;
+class FunctionInvocation;
 class Literal;
 class NullLiteral;
 class BoolLiteral;
@@ -30,6 +31,7 @@ class PropertyExpr;
 class StringExpr;
 class SymbolExpr;
 class UnaryExpr;
+class FunctionInvocationExpr;
 class Pattern;
 class PatternElement;
 class EntityPattern;
@@ -62,6 +64,7 @@ public:
     friend Symbol;
     friend SymbolChain;
     friend QualifiedName;
+    friend FunctionInvocation;
     friend Literal;
     friend NullLiteral;
     friend BoolLiteral;
@@ -80,6 +83,7 @@ public:
     friend StringExpr;
     friend SymbolExpr;
     friend UnaryExpr;
+    friend FunctionInvocationExpr;
     friend Pattern;
     friend PatternElement;
     friend NodePattern;
@@ -129,6 +133,7 @@ private:
     std::vector<Symbol*> _symbols;
     std::vector<SymbolChain*> _symbolChains;
     std::vector<QualifiedName*> _qualifiedNames;
+    std::vector<FunctionInvocation*> _functionInvocations;
     std::vector<Literal*> _literals;
     std::vector<Expr*> _expressions;
     std::vector<ExprChain*> _exprChains;
@@ -169,6 +174,7 @@ private:
     void addVarDecl(VarDecl* decl);
     void addNodePatternData(NodePatternData* data);
     void addEdgePatternData(EdgePatternData* data);
+    void addFunctionInvocation(FunctionInvocation* invocation);
 };
 
 }

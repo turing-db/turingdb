@@ -10,3 +10,5 @@
 #include "expr/EntityTypeExpr.h"
 #include "expr/PathExpr.h"
 #include "expr/ExprChain.h"
+#include "expr/FunctionInvocationExpr.h"
+

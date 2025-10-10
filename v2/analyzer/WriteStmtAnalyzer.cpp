@@ -6,6 +6,7 @@
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 
+#include "Literal.h"
 #include "EdgePattern.h"
 #include "ExprAnalyzer.h"
 #include "NodePattern.h"
@@ -19,7 +20,6 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
-#include "expr/Literal.h"
 #include "stmt/DeleteStmt.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"

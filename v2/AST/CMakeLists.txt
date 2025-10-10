@@ -18,7 +18,7 @@ set(ast_sources
     expr/StringExpr.cpp
     expr/SymbolExpr.cpp
     expr/UnaryExpr.cpp
-    expr/Literal.cpp
+    expr/FunctionInvocationExpr.cpp
 
     stmt/Stmt.cpp
     stmt/StmtContainer.cpp
@@ -41,7 +41,9 @@ set(ast_sources
     EdgePattern.cpp
     Symbol.cpp
     SymbolChain.cpp
+    Literal.cpp
     QualifiedName.cpp
+    FunctionInvocation.cpp
     WhereClause.cpp
 
     CompilerException.cpp)

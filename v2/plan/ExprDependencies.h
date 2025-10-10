@@ -82,6 +82,12 @@ public:
             case Expr::Kind::LITERAL:
                 // Reached end
                 break;
+
+            case Expr::Kind::FUNCTION_INVOCATION:
+                // throwError("Function invocation expression not supported yet", expr);
+                // TODO Find a way to get access to throwError
+                throw PlannerException("Function invocation expression not supported yet");
+                break;
         }
     }
 

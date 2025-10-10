@@ -5,10 +5,9 @@
 #include "CypherParser.h"
 #include "CypherAnalyzer.h"
 #include "Graph.h"
+#include "Literal.h"
 #include "SimpleGraph.h"
-#include "CypherAnalyzer.h"
 #include "expr/All.h"
-#include "expr/Literal.h"
 #include "versioning/Transaction.h"
 
 using namespace db;

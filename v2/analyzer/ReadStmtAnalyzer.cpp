@@ -19,11 +19,11 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Symbol.h"
+#include "Literal.h"
 #include "WhereClause.h"
 
 #include "expr/Expr.h"
 #include "expr/BinaryExpr.h"
-#include "expr/Literal.h"
 #include "expr/LiteralExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/PathExpr.h"

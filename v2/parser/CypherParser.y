@@ -31,9 +31,10 @@
     #include "stmt/CreateStmt.h"
     #include "stmt/DeleteStmt.h"
     #include "expr/All.h"
-    #include "expr/Literal.h"
+    #include "Literal.h"
     #include "Symbol.h"
     #include "SymbolChain.h"
+    #include "FunctionInvocation.h"
     #include "WhereClause.h"
     #include "Pattern.h"
     #include "NodePattern.h"
@@ -187,6 +188,7 @@
 %type<db::v2::QualifiedName*> invocationName
 %type<db::v2::Symbol*> name
 %type<db::v2::Symbol*> reservedWord
+%type<db::v2::FunctionInvocation*> functionInvocation
 
 %type<db::v2::SymbolChain*> nodeLabels
 %type<db::v2::SymbolChain*> edgeTypes
@@ -655,7 +657,7 @@ atomExpr
     | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
-    | functionInvocation { scanner.notImplemented(@$, "Function invocations"); }
+    | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
     | collectExpr
     ;
@@ -772,10 +774,10 @@ invocationName
     ;
 
 functionInvocation
-    : invocationName OPAREN CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN exprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
-    | invocationName OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "Function invocations"); }
+    : invocationName OPAREN CPAREN { $$ = FunctionInvocation::create(ast, $1); LOC($$, @$); }
+    | invocationName OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "Function invocations with DISTINCT"); }
+    | invocationName OPAREN exprChain CPAREN { $$ = FunctionInvocation::create(ast, $1); $$->setArguments($3); LOC($$, @$); }
+    | invocationName OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "Function invocations with DISTINCT"); }
     ;
 
 pathExpr

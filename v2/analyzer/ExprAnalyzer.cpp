@@ -5,19 +5,11 @@
 #include "CypherAST.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
+#include "Literal.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 
-#include "expr/Expr.h"
-#include "expr/BinaryExpr.h"
-#include "expr/Literal.h"
-#include "expr/LiteralExpr.h"
-#include "expr/EntityTypeExpr.h"
-#include "expr/PathExpr.h"
-#include "expr/PropertyExpr.h"
-#include "expr/StringExpr.h"
-#include "expr/SymbolExpr.h"
-#include "expr/UnaryExpr.h"
+#include "expr/All.h"
 
 using namespace db::v2;
 
@@ -56,6 +48,9 @@ void ExprAnalyzer::analyze(Expr* expr) {
             break;
         case Expr::Kind::LITERAL:
             analyze(static_cast<LiteralExpr*>(expr));
+            break;
+        case Expr::Kind::FUNCTION_INVOCATION:
+            analyze(static_cast<FunctionInvocationExpr*>(expr));
             break;
     }
 }
@@ -370,6 +365,10 @@ void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
 
 void ExprAnalyzer::analyze(PathExpr* expr) {
     throwError("Path expressions not supported", expr);
+}
+
+void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
+    throwError("Function invocations not supported", expr);
 }
 
 bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {

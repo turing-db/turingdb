@@ -1,10 +1,10 @@
 #include "NodePattern.h"
 
 #include "CypherAST.h"
+#include "Literal.h"
 #include "expr/SymbolExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/EntityTypeExpr.h"
-#include "expr/Literal.h"
 
 using namespace db::v2;
 

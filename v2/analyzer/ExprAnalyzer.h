@@ -24,6 +24,7 @@ class PropertyExpr;
 class StringExpr;
 class EntityTypeExpr;
 class PathExpr;
+class FunctionInvocationExpr;
 
 class ExprAnalyzer {
 public:
@@ -47,6 +48,7 @@ public:
     void analyze(StringExpr* expr);
     void analyze(EntityTypeExpr* expr);
     void analyze(PathExpr* expr);
+    void analyze(FunctionInvocationExpr* expr);
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
