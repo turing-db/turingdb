@@ -1,16 +1,22 @@
 #include "QueryInterpreterV2.h"
 
-#include "InterpreterContext.h"
 #include "SystemManager.h"
 #include "JobSystem.h"
 #include "versioning/Transaction.h"
+#include "InterpreterContext.h"
 #include "CypherParser.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "PlanGraphGenerator.h"
+#include "PipelineGenerator.h"
+#include "PipelineV2.h"
+#include "PipelineExecutor.h"
+#include "ExecutionContext.h"
+
 #include "ParserException.h"
 #include "AnalyzeException.h"
 #include "PlannerException.h"
+#include "PipelineException.h"
 
 #include "Profiler.h"
 
@@ -88,6 +94,38 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     } catch (...) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR,
                            "Unknown exception occurred");
+    }
+
+    // Generate pipeline
+    PipelineV2 pipeline;
+    PipelineGenerator pipelineGen(&planGen.getPlanGraph(),
+                                  &pipeline,
+                                  ctxt.getLocalMemory(),
+                                  ctxt.getQueryCallback());
+    try {
+        pipelineGen.generate();
+    } catch (const PlannerException& e) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
+    } catch (const std::exception& e) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
+                         std::string("Unexpected exception: ") + e.what());
+    } catch (...) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR, "Unknown exception occurred");
+    }
+
+    // Execute pipeline
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+
+    try {
+        executor.execute();
+    } catch (const PipelineException& e) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
+    } catch (const std::exception& e) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
+                           std::string("Unexpected exception: ") + e.what());
+    } catch (...) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR, "Unknown exception occurred");
     }
 
     const auto end = Clock::now();

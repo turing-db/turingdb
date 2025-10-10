@@ -13,6 +13,14 @@ class PipelineV2;
 class PlanGraphNode;
 class PlanGraphStream;
 class PipelineInputPort;
+class VarNode;
+class ScanNodesNode;
+class GetOutEdgesNode;
+class GetEdgeTargetNode;
+class MaterializeNode;
+class NodeFilterNode;
+class EdgeFilterNode;
+class ProduceResultsNode;
 
 class PipelineGenerator {
 public:
@@ -38,6 +46,15 @@ private:
     QueryCallback _callback;
 
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
+    void translateVarNode(VarNode* node, PlanGraphStream& stream);
+    void translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream);
+    void translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream);
+    void translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream);
+    void translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream);
+    void translateFilterNode(NodeFilterNode* node, PlanGraphStream& stream);
+    void translateFilterEdgeNode(EdgeFilterNode* node, PlanGraphStream& stream);
+    void translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream);
+
     void connectNodeStream(PlanGraphStream& stream,
                            PipelineInputPort* target);
     void connectEdgeStream(PlanGraphStream& stream,

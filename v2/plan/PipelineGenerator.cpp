@@ -3,6 +3,14 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PlanGraph.h"
+#include "nodes/VarNode.h"
+#include "nodes/ScanNodesNode.h"
+#include "nodes/GetOutEdgesNode.h"
+#include "nodes/GetEdgeTargetNode.h"
+#include "nodes/MaterializeNode.h"
+#include "nodes/FilterNode.h"
+#include "nodes/ProduceResultsNode.h"
+
 #include "PlanGraphStream.h"
 #include "TranslateToken.h"
 
@@ -66,98 +74,39 @@ void PipelineGenerator::generate() {
 void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stream) {
     switch (node->getOpcode()) {
         case PlanGraphOpcode::VAR:
-            // Do nothing
+            translateVarNode(static_cast<VarNode*>(node), stream);
         break;
-        case PlanGraphOpcode::SCAN_NODES: {
-            ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
-            PipelineOutputPort* outNodes = proc->outNodeIDs();
 
-            stream.set(PlanGraphStream::NodeStream{outNodes});
-        }
+        case PlanGraphOpcode::SCAN_NODES:
+            translateScanNodesNode(static_cast<ScanNodesNode*>(node), stream);
         break;
-        case PlanGraphOpcode::GET_OUT_EDGES: {
-            // Require a node stream
-            if (!stream.isNodeStream()) {
-                throw PlannerException(fmt::format("GET_OUT_EDGES node requires a node stream"));
-            }
 
-            GetOutEdgesProcessor* proc = GetOutEdgesProcessor::create(_pipeline);
-            connectNodeStream(stream, proc->inNodeIDs());
-            
-            PipelineOutputPort* outIndices = proc->outIndices();
-            ColumnIndices* indicesCol = addColumnToBlock<ColumnIndices>(outIndices->getBuffer()->getBlock(), _mem);
-            stream.getMaterializeData()->createStep(indicesCol);
-
-            PipelineOutputPort* outEdgeIDs = proc->outEdgeIDs();
-            PipelineOutputPort* outTargetIDs = proc->outTargetNodes();
-            stream.set(PlanGraphStream::EdgeStream{outEdgeIDs, outTargetIDs});
-        }
+        case PlanGraphOpcode::GET_OUT_EDGES:
+            translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node), stream);
         break;
-        case PlanGraphOpcode::GET_EDGE_TARGET: {
-            // Require an edge stream
-            if (!stream.isEdgeStream()) {
-                throw PlannerException(fmt::format("GET_EDGE_TARGET node requires an edge stream"));
-            }
 
-            PipelineOutputPort* targetIDs = stream.getEdgeStream().targetIDs;
-            stream.set(PlanGraphStream::NodeStream{targetIDs});
-        }
+        case PlanGraphOpcode::GET_EDGE_TARGET:
+            translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node), stream);
         break;
-        case PlanGraphOpcode::MATERIALIZE: {
-            MaterializeData* matData = stream.getMaterializeData();
-            MaterializeProcessor* proc = MaterializeProcessor::create(_pipeline, matData);
 
-            if (stream.isNodeStream()) {
-                connectNodeStream(stream, proc->input());
-            } else if (stream.isEdgeStream()) {
-                connectEdgeTargetIDStream(stream, proc->input());
-            } else {
-                throw PlannerException(fmt::format("MATERIALIZE node requires a node or edge stream"));
-            }
-
-            PipelineOutputPort* outNodeIDs = proc->output();
-            // TODO: needs to be the post materialize column
-            stream.set(PlanGraphStream::NodeStream{outNodeIDs});
-            stream.closeMaterializeData();
-        }
+        case PlanGraphOpcode::MATERIALIZE:
+            translateMaterializeNode(static_cast<MaterializeNode*>(node), stream);
         break;
-        case PlanGraphOpcode::FILTER_NODE: {
-            // Require a node stream
-            if (!stream.isNodeStream()) {
-                throw PlannerException(fmt::format("FILTER_NODE node requires a node stream"));
-            }
-        }
+
+        case PlanGraphOpcode::FILTER_NODE:
+            translateFilterNode(static_cast<NodeFilterNode*>(node), stream);
         break;
-        case PlanGraphOpcode::FILTER_EDGE: {
-            // Require an edge stream
-            if (!stream.isEdgeStream()) {
-                throw PlannerException(fmt::format("FILTER_EDGE node requires an edge stream"));
-            }
-        }
+
+        case PlanGraphOpcode::FILTER_EDGE:
+            translateFilterEdgeNode(static_cast<EdgeFilterNode*>(node), stream);
         break;
-        case PlanGraphOpcode::PRODUCE_RESULTS: {
-            MaterializeProcessor* materializeProc = MaterializeProcessor::create(_pipeline, stream.getMaterializeData());
-            const bool isNodeStream = stream.isNodeStream();
-            if (isNodeStream) {
-                connectNodeStream(stream, materializeProc->input());
-            } else {
-                connectEdgeTargetIDStream(stream, materializeProc->input());
-            }
 
-            auto callback = [this](const Block& block, LambdaProcessor::Operation operation) {
-                _callback(block);
-            };
-
-            LambdaProcessor* lambdaProc = LambdaProcessor::create(_pipeline, callback);
-            materializeProc->output()->connectTo(lambdaProc->input());
-
-            stream.closeMaterializeData();
-        }
+        case PlanGraphOpcode::PRODUCE_RESULTS:
+            translateProduceResultsNode(static_cast<ProduceResultsNode*>(node), stream);
         break;
 
         case PlanGraphOpcode::GET_IN_EDGES:
-        case PlanGraphOpcode::GET_EDGES:
-        
+        case PlanGraphOpcode::GET_EDGES: 
         case PlanGraphOpcode::CREATE_NODE:
         case PlanGraphOpcode::CREATE_EDGE:
         case PlanGraphOpcode::CREATE_GRAPH:
@@ -171,48 +120,155 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
     }
 }
 
-void PipelineGenerator::connectNodeStream(PlanGraphStream& stream, PipelineInputPort* target) {
-    stream.getNodeStream().nodeIDs->connectTo(target);
+void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream) {
+    // Do nothing
+}
 
-    ColumnNodeIDs* nodeIDs = addColumnToBlock<ColumnNodeIDs>(target->getBuffer()->getBlock(), _mem);
+void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
+    ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
+    PipelineOutputPort* outNodes = proc->outNodeIDs();
+
+    stream.set(PlanGraphStream::NodeStream{outNodes});
+}
+
+void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
+    // Require a node stream
+    if (!stream.isNodeStream()) {
+        throw PlannerException(fmt::format("GET_OUT_EDGES node requires a node stream"));
+    }
+
+    GetOutEdgesProcessor* proc = GetOutEdgesProcessor::create(_pipeline);
+    connectNodeStream(stream, proc->inNodeIDs());
+    
+    PipelineOutputPort* outIndices = proc->outIndices();
+    ColumnIndices* indicesCol = addColumnToBlock<ColumnIndices>(outIndices->getBuffer()->getBlock(), _mem);
+    stream.getMaterializeData()->createStep(indicesCol);
+
+    PipelineOutputPort* outEdgeIDs = proc->outEdgeIDs();
+    PipelineOutputPort* outTargetIDs = proc->outTargetNodes();
+    stream.set(PlanGraphStream::EdgeStream{outEdgeIDs, outTargetIDs});
+}
+
+void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
+    // Require an edge stream
+    if (!stream.isEdgeStream()) {
+        throw PlannerException(fmt::format("GET_EDGE_TARGET node requires an edge stream"));
+    }
+
+    PipelineOutputPort* targetIDs = stream.getEdgeStream().targetIDs;
+    stream.set(PlanGraphStream::NodeStream{targetIDs});
+}
+
+void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {
+    MaterializeData* matData = stream.getMaterializeData();
+    MaterializeProcessor* proc = MaterializeProcessor::create(_pipeline, matData);
+
+    if (stream.isNodeStream()) {
+        connectNodeStream(stream, proc->input());
+    } else if (stream.isEdgeStream()) {
+        connectEdgeTargetIDStream(stream, proc->input());
+    } else {
+        throw PlannerException(fmt::format("MATERIALIZE node requires a node or edge stream"));
+    }
+
+    PipelineOutputPort* outNodeIDs = proc->output();
+    // TODO: needs to be the post materialize column
+    stream.set(PlanGraphStream::NodeStream{outNodeIDs});
+    stream.closeMaterializeData();
+}
+
+void PipelineGenerator::translateFilterNode(NodeFilterNode* node, PlanGraphStream& stream) {
+    // Require a node stream
+    if (!stream.isNodeStream()) {
+        throw PlannerException(fmt::format("FILTER_NODE node requires a node stream"));
+    }
+}
+
+void PipelineGenerator::translateFilterEdgeNode(EdgeFilterNode* node, PlanGraphStream& stream) {
+    // Require an edge stream
+    if (!stream.isEdgeStream()) {
+        throw PlannerException(fmt::format("FILTER_EDGE node requires an edge stream"));
+    }
+}
+
+void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
+    MaterializeProcessor* materializeProc = MaterializeProcessor::create(_pipeline, stream.getMaterializeData());
+    const bool isNodeStream = stream.isNodeStream();
+    if (isNodeStream) {
+        connectNodeStream(stream, materializeProc->input());
+    } else {
+        connectEdgeTargetIDStream(stream, materializeProc->input());
+    }
+
+    auto callback = [this](const Block& block, LambdaProcessor::Operation operation) {
+        _callback(block);
+    };
+
+    LambdaProcessor* lambdaProc = LambdaProcessor::create(_pipeline, callback);
+    materializeProc->output()->connectTo(lambdaProc->input());
+
+    stream.closeMaterializeData();
+}
+
+void PipelineGenerator::connectNodeStream(PlanGraphStream& stream, PipelineInputPort* target) {
+    // Connect the output port generating the stream to target port
+    PlanGraphStream::NodeStream& nodeStream = stream.getNodeStream();
+    PipelineOutputPort* nodeIDsPort = nodeStream.nodeIDs;
+    nodeIDsPort->connectTo(target);
+
+    // Allocate column in the bufer of the output port generating the stream
+    // because it is used
+    PipelineBuffer* nodeIDsBuffer = nodeIDsPort->getBuffer();
+    ColumnNodeIDs* nodeIDs = addColumnToBlock<ColumnNodeIDs>(nodeIDsBuffer->getBlock(), _mem);
+
+    // Add the column to the materialize data
     stream.getMaterializeData()->addToStep(nodeIDs);
 }
 
 void PipelineGenerator::connectEdgeStream(PlanGraphStream& stream,
-                                          PipelineInputPort* edgeIDsTarget,
-                                          PipelineInputPort* targetIDsTarget) {
+                                          PipelineInputPort* edgeIDsDest,
+                                          PipelineInputPort* targetIDsDest) {
+    // Connect the output ports generating the stream to target ports
     PlanGraphStream::EdgeStream& edgeStream = stream.getEdgeStream();
-    edgeStream.edgeIDs->connectTo(edgeIDsTarget);
-    edgeStream.targetIDs->connectTo(targetIDsTarget);
+    PipelineOutputPort* edgeIDsPort = edgeStream.edgeIDs;
+    PipelineOutputPort* targetIDsPort = edgeStream.targetIDs;
+    edgeIDsPort->connectTo(edgeIDsDest);
+    targetIDsPort->connectTo(targetIDsDest);
 
-    ColumnEdgeIDs* edgeIDs = addColumnToBlock<ColumnEdgeIDs>(edgeIDsTarget->getBuffer()->getBlock(), _mem);
-    ColumnNodeIDs* targetIDs = addColumnToBlock<ColumnNodeIDs>(targetIDsTarget->getBuffer()->getBlock(), _mem);
+    // Allocate an edgeID and a targetID column in the buffer of the output ports generating the stream
+    PipelineBuffer* edgeIDsBuffer = edgeIDsPort->getBuffer();
+    PipelineBuffer* targetIDsBuffer = targetIDsPort->getBuffer();
+    ColumnEdgeIDs* edgeIDs = addColumnToBlock<ColumnEdgeIDs>(edgeIDsBuffer->getBlock(), _mem);
+    ColumnNodeIDs* targetIDs = addColumnToBlock<ColumnNodeIDs>(targetIDsBuffer->getBlock(), _mem);
 
+    // Add columns to the materialize data
     MaterializeData* matData = stream.getMaterializeData();
-    if (matData) {
-        matData->addToStep(edgeIDs);
-        matData->addToStep(targetIDs);
-    }
+    matData->addToStep(edgeIDs);
+    matData->addToStep(targetIDs);
 }
 
-void PipelineGenerator::connectEdgeIDStream(PlanGraphStream& stream, PipelineInputPort* edgeIDsTarget) {
+void PipelineGenerator::connectEdgeIDStream(PlanGraphStream& stream, PipelineInputPort* edgeIDsDest) {
+    // Connect the edgeID output port of the stream to the target port
     PlanGraphStream::EdgeStream& edgeStream = stream.getEdgeStream();
-    edgeStream.edgeIDs->connectTo(edgeIDsTarget);
+    PipelineOutputPort* edgeIDsPort = edgeStream.edgeIDs;
+    edgeIDsPort->connectTo(edgeIDsDest);
 
-    ColumnEdgeIDs* edgeIDs = addColumnToBlock<ColumnEdgeIDs>(edgeIDsTarget->getBuffer()->getBlock(), _mem);
-    MaterializeData* matData = stream.getMaterializeData();
-    if (matData) {
-        matData->addToStep(edgeIDs);
-    }
+    // Allocate an edgeID column in the buffer of the used output port
+    PipelineBuffer* edgeIDsBuffer = edgeIDsPort->getBuffer();
+    ColumnEdgeIDs* edgeIDs = addColumnToBlock<ColumnEdgeIDs>(edgeIDsBuffer->getBlock(), _mem);
+
+    // Add the column to the materialize data
+    stream.getMaterializeData()->addToStep(edgeIDs);
 }
 
-void PipelineGenerator::connectEdgeTargetIDStream(PlanGraphStream& stream, PipelineInputPort* targetIDsTarget) {
+void PipelineGenerator::connectEdgeTargetIDStream(PlanGraphStream& stream, PipelineInputPort* targetIDsDest) {
+    // Connect the targetID output port of the stream to the target port
     PlanGraphStream::EdgeStream& edgeStream = stream.getEdgeStream();
-    edgeStream.targetIDs->connectTo(targetIDsTarget);
+    PipelineOutputPort* targetIDsPort = edgeStream.targetIDs;
+    targetIDsPort->connectTo(targetIDsDest);
 
-    ColumnNodeIDs* targetIDs = addColumnToBlock<ColumnNodeIDs>(targetIDsTarget->getBuffer()->getBlock(), _mem);
-    MaterializeData* matData = stream.getMaterializeData();
-    if (matData) {
-        matData->addToStep(targetIDs);
-    }
+    // Allocate a targetID column in the buffer of the used output port
+    PipelineBuffer* targetIDsBuffer = targetIDsPort->getBuffer();
+    ColumnNodeIDs* targetIDs = addColumnToBlock<ColumnNodeIDs>(targetIDsBuffer->getBlock(), _mem);
+    stream.getMaterializeData()->addToStep(targetIDs);
 }
