@@ -17,7 +17,6 @@
 #include "expr/ExprChain.h"
 #include "expr/SymbolExpr.h"
 
-#include "nodes/FilterNode.h"
 #include "nodes/WriteNode.h"
 #include "nodes/VarNode.h"
 
