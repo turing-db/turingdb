@@ -215,6 +215,18 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     }
                     j++;
                 }
+
+                j = 0;
+                for (const auto& node : n->toDeleteNodes()) {
+                    output << "        __delete_node__ " << node->getName() << "\n";
+                    j++;
+                }
+
+                j = 0;
+                for (const auto& edge : n->toDeleteEdges()) {
+                    output << "        __delete_edge__ " << edge->getName() << "\n";
+                    j++;
+                }
             } break;
 
             default: {

@@ -12,16 +12,18 @@
 #include "PlanGraphVariables.h"
 
 #include "decl/VarDecl.h"
+#include "decl/PatternData.h"
+
 #include "expr/ExprChain.h"
+#include "expr/SymbolExpr.h"
+
 #include "nodes/FilterNode.h"
+#include "nodes/WriteNode.h"
 #include "nodes/VarNode.h"
 
-#include "nodes/WriteNode.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
 #include "stmt/DeleteStmt.h"
-
-#include "decl/PatternData.h"
 
 using namespace db::v2;
 
@@ -75,8 +77,23 @@ void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNod
     const ExprChain* exprs = stmt->getExpressions();
 
     for (Expr* expr : *exprs) {
-        if ([[maybe_unused]] const auto* node = dynamic_cast<const NodePattern*>(expr)) {
-        } else if ([[maybe_unused]] const auto* edge = dynamic_cast<const EdgePattern*>(expr)) {
+        if (expr->getKind() != Expr::Kind::SYMBOL) {
+            throwError("Expressions in DELETE statements can only be symbols", expr);
+        }
+
+        const SymbolExpr* symbol = static_cast<const SymbolExpr*>(expr);
+        const VarDecl* decl = symbol->getDecl();
+
+        if (!decl) [[unlikely]] {
+            throwError("Cannot delete entity that does not exist", symbol);
+        }
+
+        const EvaluatedType type = symbol->getType();
+
+        if (type == EvaluatedType::NodePattern) {
+            _currentNode->deleteNode(decl);
+        } else if (type == EvaluatedType::EdgePattern) {
+            _currentNode->deleteEdge(decl);
         } else {
             throwError(fmt::format("Can only delete nodes or edges, not '{}'",
                                    EvaluatedTypeName::value(expr->getType())),
