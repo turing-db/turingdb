@@ -1,0 +1,12 @@
+/// QUERY
+MATCH (n:Person { name: "Remy" })
+DELETE n.name
+
+
+/// RESULT
+PLAN ERROR
+-------* Query error
+     1 | MATCH (n:Person { name: "Remy" })
+     2 | DELETE n.name
+       |        ^^^^^^
+-------* Expressions in DELETE statements can only be symbols

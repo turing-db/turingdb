@@ -65,8 +65,8 @@ public:
     }
 
     size_t addNode(const NodePatternData* data) {
-        const size_t offset = _nodes.size();
-        _nodes.emplace_back(data, offset);
+        const size_t offset = _newNodes.size();
+        _newNodes.emplace_back(data, offset);
 
         return offset;
     }
@@ -74,22 +74,34 @@ public:
     size_t addEdge(const EdgeNeighbour& src,
                    const EdgePatternData* data,
                    const EdgeNeighbour& tgt) {
-        const size_t offset = _edges.size();
-        _edges.emplace_back(src, tgt, data);
+        const size_t offset = _newEdges.size();
+        _newEdges.emplace_back(src, tgt, data);
 
         return offset;
     }
 
-    const PendingNode& getPendingNode(size_t offset) const {
-        return _nodes.at(offset);
+    void deleteNode(const VarDecl* decl) {
+        _toDeleteNodes.push_back(decl);
     }
 
-    std::span<const PendingNode> pendingNodes() const { return _nodes; }
-    std::span<const PendingEdge> pendingEdges() const { return _edges; }
+    void deleteEdge(const VarDecl* decl) {
+        _toDeleteEdges.push_back(decl);
+    }
+
+    const PendingNode& getPendingNode(size_t offset) const {
+        return _newNodes.at(offset);
+    }
+
+    std::span<const PendingNode> pendingNodes() const { return _newNodes; }
+    std::span<const PendingEdge> pendingEdges() const { return _newEdges; }
+    std::span<const VarDecl* const> toDeleteNodes() const { return _toDeleteNodes; }
+    std::span<const VarDecl* const> toDeleteEdges() const { return _toDeleteEdges; }
 
 private:
-    std::vector<PendingNode> _nodes;
-    std::vector<PendingEdge> _edges;
+    std::vector<PendingNode> _newNodes;
+    std::vector<PendingEdge> _newEdges;
+    std::vector<const VarDecl*> _toDeleteNodes;
+    std::vector<const VarDecl*> _toDeleteEdges;
 };
 
 }
