@@ -45,7 +45,8 @@ public:
     };
 
     WriteNode()
-        : PlanGraphNode(PlanGraphOpcode::WRITE) {
+        : PlanGraphNode(PlanGraphOpcode::WRITE)
+    {
     }
 
     size_t addNode(const NodePatternData* data) {

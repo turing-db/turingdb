@@ -1,9 +1,10 @@
 #pragma once
 
-#include "views/GraphView.h"
 #include <cstdint>
 #include <memory>
 #include <vector>
+
+#include "views/GraphView.h"
 
 namespace db {
 class GraphMetadata;
