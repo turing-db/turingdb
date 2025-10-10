@@ -11,6 +11,7 @@ public:
     static Skip* create(CypherAST* ast, Expr* expr);
 
     const Expr* getExpr() const { return _expr; }
+    Expr* getExpr() { return _expr; }
 
     void setExpr(Expr* expr) { _expr = expr; }
 

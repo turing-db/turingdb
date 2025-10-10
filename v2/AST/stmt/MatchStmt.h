@@ -21,9 +21,8 @@ public:
 
     bool hasSkip() const { return _skip != nullptr; }
 
-    const Limit* getLimit() const { return _limit; }
-
-    const Skip* getSkip() const { return _skip; }
+    Limit* getLimit() const { return _limit; }
+    Skip* getSkip() const { return _skip; }
 
     const Pattern* getPattern() const { return _pattern; }
 

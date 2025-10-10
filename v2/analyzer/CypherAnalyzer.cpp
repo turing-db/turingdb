@@ -11,9 +11,12 @@
 #include "ExprAnalyzer.h"
 #include "WriteStmtAnalyzer.h"
 #include "SinglePartQuery.h"
+#include "expr/Expr.h"
+#include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CreateStmt.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "Projection.h"
 #include "WhereClause.h"
@@ -98,11 +101,11 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     }
 
     if (projection->hasSkip()) {
-        throwError("SKIP not supported", returnSt);
+        analyze(projection->getSkip());
     }
 
     if (projection->hasLimit()) {
-        throwError("LIMIT not supported", returnSt);
+        analyze(projection->getLimit());
     }
 
     if (projection->isAll()) {
@@ -111,6 +114,24 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
     for (Expr* item : projection->items()) {
         _exprAnalyzer->analyze(item);
+    }
+}
+
+void CypherAnalyzer::analyze(Skip* skipSt) {
+    Expr* expr = skipSt->getExpr();
+    _exprAnalyzer->analyze(expr);
+    
+    if (expr->getType() != EvaluatedType::Integer) {
+        throwError("SKIP expression must be an integer", skipSt);
+    }
+}
+
+void CypherAnalyzer::analyze(Limit* limitSt) {
+    Expr* expr = limitSt->getExpr();
+    _exprAnalyzer->analyze(expr);
+
+    if (expr->getType() != EvaluatedType::Integer) {
+        throwError("LIMIT expression must be an integer", limitSt);
     }
 }
 

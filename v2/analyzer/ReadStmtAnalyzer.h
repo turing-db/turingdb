@@ -46,8 +46,8 @@ public:
     // Statements
     void analyze(const Stmt* stmt);
     void analyze(const MatchStmt* matchSt);
-    void analyze(const Skip* skipSt);
-    void analyze(const Limit* limitSt);
+    void analyze(Skip* skipSt);
+    void analyze(Limit* limitSt);
 
     // Pattern
     void analyze(const Pattern* pattern);

@@ -61,6 +61,18 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 
 void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
     const Pattern* pattern = stmt->getPattern();
+    
+    if (stmt->hasSkip()) {
+        throwError("MATCH ... SKIP ... is not supported yet."
+                   "Please use RETURN ... SKIP ... instead",
+                   stmt);
+    }
+
+    if (stmt->hasLimit()) {
+        throwError("MATCH ... LIMIT ... is not supported yet."
+                   "Please use RETURN ... LIMIT ... instead",
+                   stmt);
+    }
 
     // Each PatternElement is a target of the match
     // and contains a chain of EntityPatterns

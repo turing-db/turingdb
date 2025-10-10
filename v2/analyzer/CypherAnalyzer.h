@@ -51,6 +51,10 @@ public:
     void analyze(const SinglePartQuery* query);
     void analyze(const ReturnStmt* returnSt);
 
+    // Sub-statements
+    void analyze(Skip* skipSt);
+    void analyze(Limit* limitSt);
+
 private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;

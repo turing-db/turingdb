@@ -18,6 +18,8 @@ class PlanGraphNode;
 class PlanGraphVariables;
 class Stmt;
 class MatchStmt;
+class Skip;
+class Limit;
 class WhereClause;
 class PatternElement;
 class Expr;

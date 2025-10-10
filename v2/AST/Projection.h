@@ -36,9 +36,8 @@ public:
         return std::holds_alternative<All>(_items);
     }
 
-    const Limit* getLimit() const { return _limit; }
-
-    const Skip* getSkip() const { return _skip; }
+    Limit* getLimit() const { return _limit; }
+    Skip* getSkip() const { return _skip; }
 
     const Items& items() const {
         return std::get<Items>(_items);

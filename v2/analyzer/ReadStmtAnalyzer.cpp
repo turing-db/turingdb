@@ -9,6 +9,7 @@
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
+#include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "QualifiedName.h"
 #include "Pattern.h"
@@ -26,6 +27,7 @@
 #include "expr/StringExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
+#include "stmt/Skip.h"
 
 using namespace db::v2;
 
@@ -64,20 +66,30 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
     analyze(pattern);
 
     if (matchSt->hasLimit()) {
-        throwError("LIMIT not supported", matchSt);
+        analyze(matchSt->getLimit());
     }
 
     if (matchSt->hasSkip()) {
-        throwError("SKIP not supported", matchSt);
+        analyze(matchSt->getSkip());
     }
 }
 
-void ReadStmtAnalyzer::analyze(const Skip* skip) {
-    throwError("SKIP not supported", skip);
+void ReadStmtAnalyzer::analyze(Skip* skip) {
+    Expr* expr = skip->getExpr();
+    _exprAnalyzer->analyze(expr);
+
+    if (expr->getType() != EvaluatedType::Integer) {
+        throwError("SKIP expression must be an integer", skip);
+    }
 }
 
-void ReadStmtAnalyzer::analyze(const Limit* limit) {
-    throwError("LIMIT not supported", limit);
+void ReadStmtAnalyzer::analyze(Limit* limit) {
+    Expr* expr = limit->getExpr();
+    _exprAnalyzer->analyze(expr);
+
+    if (expr->getType() != EvaluatedType::Integer) {
+        throwError("LIMIT expression must be an integer", limit);
+    }
 }
 
 void ReadStmtAnalyzer::analyze(const Pattern* pattern) {

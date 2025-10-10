@@ -1,5 +1,7 @@
 #include "PlanGraphGenerator.h"
 
+#include "Projection.h"
+#include "stmt/ReturnStmt.h"
 #include "views/GraphView.h"
 
 #include "DiagnosticsManager.h"
@@ -92,6 +94,16 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
     if (prevNode == nullptr) {
         throwError("Return statement without previous node", stmt);
+    }
+
+    const Projection* proj = stmt->getProjection();
+
+    if (proj->hasLimit()) {
+        // Create limit node?
+    }
+
+    if (proj->hasSkip()) {
+        // Create skip node?
     }
 
     _tree.newOut<ProduceResultsNode>(prevNode);
