@@ -4,7 +4,6 @@
 
 #include "AnalyzeException.h"
 
-#include "AnalyzerVariables.h"
 #include "CypherAST.h"
 #include "QueryCommand.h"
 #include "ReadStmtAnalyzer.h"
@@ -34,15 +33,11 @@ CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
     _graphView(graphView),
     _graphMetadata(graphView.metadata()),
-    _variables(std::make_unique<AnalyzerVariables>(_ast)),
     _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
     _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
     _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
 {
-    _exprAnalyzer->setVariables(_variables.get());
-    _readAnalyzer->setVariables(_variables.get());
     _readAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
-    _writeAnalyzer->setVariables(_variables.get());
     _writeAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
 }
 
@@ -51,7 +46,11 @@ CypherAnalyzer::~CypherAnalyzer() {
 
 void CypherAnalyzer::analyze() {
     for (const QueryCommand* query : _ast->queries()) {
-        _variables->setContext(query->getDeclContext());
+        DeclContext* ctxt = query->getDeclContext();
+
+        _exprAnalyzer->setDeclContext(ctxt);
+        _readAnalyzer->setDeclContext(ctxt);
+        _writeAnalyzer->setDeclContext(ctxt);
 
         if (const SinglePartQuery* q = dynamic_cast<const SinglePartQuery*>(query)) {
             analyze(q);

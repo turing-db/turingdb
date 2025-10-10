@@ -14,7 +14,6 @@ class GraphMetadata;
 
 namespace db::v2 {
 class CypherAST;
-class AnalyzerVariables;
 class DeclContext;
 class Expr;
 class BinaryExpr;
@@ -36,7 +35,7 @@ public:
     ExprAnalyzer& operator=(const ExprAnalyzer&) = delete;
     ExprAnalyzer& operator=(ExprAnalyzer&&) = delete;
 
-    void setVariables(AnalyzerVariables* variables) { _variables = variables; }
+    void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
 
     // Expressions
     void analyze(Expr* expr);
@@ -54,7 +53,7 @@ public:
 private:
     const CypherAST* _ast {nullptr};
     GraphView _graphView;
-    AnalyzerVariables* _variables {nullptr};
+    DeclContext* _ctxt {nullptr};
     const GraphMetadata& _graphMetadata;
 
     std::unordered_map<std::string_view, ValueType> _typeMap;

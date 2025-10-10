@@ -1,7 +1,6 @@
 #include "ExprAnalyzer.h"
 
 #include "AnalyzeException.h"
-#include "AnalyzerVariables.h"
 #include "CypherAST.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
@@ -214,7 +213,7 @@ void ExprAnalyzer::analyze(UnaryExpr* expr) {
 }
 
 void ExprAnalyzer::analyze(SymbolExpr* expr) {
-    VarDecl* varDecl = _variables->getDecl(expr->getSymbol()->getName());
+    VarDecl* varDecl = _ctxt->getDecl(expr->getSymbol()->getName());
     if (!varDecl) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
@@ -263,7 +262,7 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
     const Symbol* varName = qualifiedName->get(0);
     const Symbol* propName = qualifiedName->get(1);
 
-    VarDecl* varDecl = _variables->getDecl(varName->getName());
+    VarDecl* varDecl = _ctxt->getDecl(varName->getName());
     if (!varDecl) {
         throwError(fmt::format("Variable '{}' not found", varName->getName()), expr);
     }
@@ -351,7 +350,7 @@ void ExprAnalyzer::analyze(NodeLabelExpr* expr) {
     const LabelMap& labelMap = _graphMetadata.labels();
     expr->setType(EvaluatedType::Bool);
 
-    VarDecl* decl = _variables->getDecl(expr->getSymbol()->getName());
+    VarDecl* decl = _ctxt->getDecl(expr->getSymbol()->getName());
 
     if (!decl) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);

@@ -1,6 +1,5 @@
 set(analyzer_sources
     CypherAnalyzer.cpp
-    AnalyzerVariables.cpp
     ExprAnalyzer.cpp
     ReadStmtAnalyzer.cpp
     WriteStmtAnalyzer.cpp

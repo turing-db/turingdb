@@ -10,7 +10,7 @@ namespace db::v2 {
 
 class CypherAST;
 class VarDecl;
-class AnalyzerVariables;
+class DeclContext;
 class ExprAnalyzer;
 class Stmt;
 class CreateStmt;
@@ -29,8 +29,8 @@ public:
     WriteStmtAnalyzer& operator=(const WriteStmtAnalyzer&) = delete;
     WriteStmtAnalyzer& operator=(WriteStmtAnalyzer&&) = delete;
 
-    void setVariables(AnalyzerVariables* variables) {
-        _variables = variables;
+    void setDeclContext(DeclContext* ctxt) {
+        _ctxt = ctxt;
     }
 
     void setExprAnalyzer(ExprAnalyzer* exprAnalyzer) {
@@ -48,7 +48,7 @@ public:
 private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
-    AnalyzerVariables* _variables {nullptr};
+    DeclContext* _ctxt {nullptr};
     ExprAnalyzer* _exprAnalyzer {nullptr};
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;

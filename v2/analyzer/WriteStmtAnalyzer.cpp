@@ -3,7 +3,6 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "AnalyzeException.h"
-#include "AnalyzerVariables.h"
 #include "CypherAST.h"
 
 #include "EdgePattern.h"
@@ -12,6 +11,7 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Symbol.h"
+#include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
@@ -74,7 +74,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
-        decl = _variables->getDecl(symbol->getName());
+        decl = _ctxt->getDecl(symbol->getName());
         if (decl) {
             if (_toBeCreated.contains(decl)) {
                 // Already defined in the write statement
@@ -95,9 +95,9 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
             nodePattern->setDecl(decl);
             return;
         }
-        decl = _variables->getOrCreateNamedVariable(EvaluatedType::NodePattern, symbol->getName());
+        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, symbol->getName());
     } else {
-        decl = _variables->createUnnamedVariable(EvaluatedType::NodePattern);
+        decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
     }
 
     _toBeCreated.insert(decl);
@@ -150,14 +150,14 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
-        decl = _variables->getDecl(symbol->getName());
+        decl = _ctxt->getDecl(symbol->getName());
         if (decl) {
             throwError("Edges cannot be inputs to write queries", edgePattern);
         }
 
-        decl = _variables->getOrCreateNamedVariable(EvaluatedType::EdgePattern, symbol->getName());
+        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
     } else {
-        decl = _variables->createUnnamedVariable(EvaluatedType::EdgePattern);
+        decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
     }
 
     EdgePatternData* data = EdgePatternData::create(_ast);

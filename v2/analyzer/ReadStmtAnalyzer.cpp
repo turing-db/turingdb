@@ -1,7 +1,6 @@
 #include "ReadStmtAnalyzer.h"
 
 #include "AnalyzeException.h"
-#include "AnalyzerVariables.h"
 #include "ExprAnalyzer.h"
 #include "metadata/GraphMetadata.h"
 
@@ -111,10 +110,10 @@ void ReadStmtAnalyzer::analyze(const PatternElement* element) {
 
 void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     if (Symbol* symbol = nodePattern->getSymbol()) {
-        VarDecl* decl = _variables->getOrCreateNamedVariable(EvaluatedType::NodePattern, symbol->getName());
+        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, symbol->getName());
         nodePattern->setDecl(decl);
     } else {
-        VarDecl* decl = _variables->createUnnamedVariable(EvaluatedType::NodePattern);
+        VarDecl* decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
         nodePattern->setDecl(decl);
     }
 
@@ -161,10 +160,10 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
 void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     if (Symbol* symbol = edgePattern->getSymbol()) {
-        VarDecl* decl = _variables->getOrCreateNamedVariable(EvaluatedType::EdgePattern, symbol->getName());
+        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
         edgePattern->setDecl(decl);
     } else {
-        VarDecl* decl = _variables->createUnnamedVariable(EvaluatedType::EdgePattern);
+        VarDecl* decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
         edgePattern->setDecl(decl);
     }
 

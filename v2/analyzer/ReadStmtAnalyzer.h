@@ -1,6 +1,5 @@
 #pragma once
 
-#include "decl/EvaluatedType.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -10,7 +9,6 @@ class GraphMetadata;
 namespace db::v2 {
 
 class CypherAST;
-class AnalyzerVariables;
 class ExprAnalyzer;
 class DeclContext;
 class VarDecl;
@@ -42,7 +40,7 @@ public:
     ReadStmtAnalyzer& operator=(const ReadStmtAnalyzer&) = delete;
     ReadStmtAnalyzer& operator=(ReadStmtAnalyzer&&) = delete;
 
-    void setVariables(AnalyzerVariables* variables) { _variables = variables; }
+    void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
     void setExprAnalyzer(ExprAnalyzer* exprAnalyzer) { _exprAnalyzer = exprAnalyzer; }
 
     // Statements
@@ -60,7 +58,7 @@ public:
 private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
-    AnalyzerVariables* _variables {nullptr};
+    DeclContext* _ctxt {nullptr};
     ExprAnalyzer* _exprAnalyzer {nullptr};
     const GraphMetadata& _graphMetadata;
 

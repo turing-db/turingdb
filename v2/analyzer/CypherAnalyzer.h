@@ -5,7 +5,6 @@
 namespace db::v2 {
 
 class CypherAST;
-class AnalyzerVariables;
 class ReadStmtAnalyzer;
 class WriteStmtAnalyzer;
 class ExprAnalyzer;
@@ -57,7 +56,6 @@ private:
     GraphView _graphView;
     const GraphMetadata& _graphMetadata;
 
-    std::unique_ptr<AnalyzerVariables> _variables;
     std::unique_ptr<ExprAnalyzer> _exprAnalyzer;
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
