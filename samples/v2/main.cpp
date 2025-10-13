@@ -5,13 +5,11 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "Graph.h"
-#include "PlannerException.h"
 #include "TuringTime.h"
-#include "ParserException.h"
 #include "FileReader.h"
 #include "SimpleGraph.h"
 #include "CypherAST.h"
-#include "AnalyzeException.h"
+#include "ASTException.h"
 #include "versioning/Transaction.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
@@ -58,7 +56,7 @@ int main(int argc, char** argv) {
             parser.parse(queryStr);
             auto t1 = Clock::now();
             fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const ParserException& e) {
+        } catch (const ASTException& e) {
             fmt::print("{}\n", e.what());
             return 0;
         }
@@ -70,7 +68,7 @@ int main(int argc, char** argv) {
             analyzer.analyze();
             auto t1 = Clock::now();
             fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const AnalyzeException& e) {
+        } catch (const ASTException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;
         }
@@ -87,7 +85,7 @@ int main(int argc, char** argv) {
             planGen.generate(ast.queries().front());
             auto t1 = Clock::now();
             fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const PlannerException& e) {
+        } catch (const ASTException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;
         }

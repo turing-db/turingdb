@@ -3,7 +3,7 @@
 using namespace db::v2;
 
 ParserException::ParserException(std::string&& msg)
-    : TuringException(std::move(msg))
+    : ASTException(std::move(msg))
 {
 }
 

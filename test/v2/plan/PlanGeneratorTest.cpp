@@ -1,10 +1,8 @@
-#include "AnalyzeException.h"
 #include "File.h"
 
 #include <sstream>
 
-#include "ParserException.h"
-#include "PlannerException.h"
+#include "ASTException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -44,7 +42,7 @@ public:
 
         try {
             parser.parse(query);
-        } catch (const ParserException& e) {
+        } catch (const ASTException& e) {
             fmt::println(out, "PARSE ERROR");
             fmt::println(out, "{}", e.what());
             return;
@@ -52,7 +50,7 @@ public:
 
         try {
             analyzer.analyze();
-        } catch (const AnalyzeException& e) {
+        } catch (const ASTException& e) {
             fmt::println(out, "ANALYZE ERROR");
             fmt::println(out, "{}", e.what());
             return;
@@ -60,7 +58,7 @@ public:
 
         try {
             planGen.generate(ast.queries().front());
-        } catch (const PlannerException& e) {
+        } catch (const ASTException& e) {
             fmt::println(out, "PLAN ERROR");
             fmt::println(out, "{}", e.what());
             return;
