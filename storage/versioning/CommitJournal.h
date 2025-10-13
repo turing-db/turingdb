@@ -16,10 +16,14 @@ namespace db {
 class CommitJournal {
 public:
     /**
-     * @brief Creates a new journal entry which outlines the deletions specified by the
-     * provided @param wb
+     * @brief Creates a new journal entry based on the contents of the provided @param wb
      */
     [[nodiscard]] static std::unique_ptr<CommitJournal> newJournal(CommitWriteBuffer& wb);
+
+    /**
+    * @brief Creates a new journal with an empty write set
+    */
+    [[nodiscard]] static std::unique_ptr<CommitJournal> emptyJournal();
 
 private:
     bool _initialised {false};

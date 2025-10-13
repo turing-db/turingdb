@@ -86,6 +86,10 @@ public:
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
+    void setFlushed() { _flushed = true; }
+    void setUnflushed() { _flushed = false; }
+    bool isFlushed() const { return _flushed; }
+
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
@@ -96,6 +100,8 @@ private:
          EdgeTypeID edgeType;
          UntypedProperties properties;
     };
+
+    bool _flushed {false};
 
     // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
@@ -119,27 +125,15 @@ private:
 
 class CommitWriteBufferRebaser {
 public:
-    explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer, NodeID entryNextNodeID,
-                                      EdgeID entryNextEdgeID, NodeID currentNextNodeID,
-                                      EdgeID currentNextEdgeID)
-        : _buffer(&buffer),
-          _entryNextNodeID(entryNextNodeID),
-          _currentNextNodeID(currentNextNodeID),
-          _entryNextEdgeID(entryNextEdgeID),
-          _currentNextEdgeID(currentNextEdgeID)
+    explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer)
+        : _buffer(&buffer)
         {
         }
 
-    void rebaseIncidentNodeIDs();
+    void rebaseIncidentNodeIDs(NodeID entryNextNodeID, NodeID currentNextNodeID);
 
 private:
     CommitWriteBuffer* _buffer;
-
-    NodeID _entryNextNodeID;
-    NodeID _currentNextNodeID;
-
-    EdgeID _entryNextEdgeID;
-    EdgeID _currentNextEdgeID;
 };
 
 }

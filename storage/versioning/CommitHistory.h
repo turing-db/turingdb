@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "ArcManager.h"
+#include "BioAssert.h"
 #include "DataPartSpan.h"
 #include "versioning/CommitView.h"
 #include "versioning/CommitJournal.h"
@@ -65,10 +66,6 @@ public:
         _history._allDataparts.push_back(datapart);
     }
 
-    void resizeDataParts(size_t newSize) {
-        _history._allDataparts.resize(newSize);
-    }
-
     void setCommitDatapartCount(size_t count) {
         auto* begin = _history._allDataparts.data();
         const size_t totalCount = _history._allDataparts.size();
@@ -79,18 +76,6 @@ public:
             ptr,
             count,
         };
-    }
-
-    void undoLocalCommits() {
-        // Total number of dataparts in the view of this commit
-        const size_t totalDPs =_history._allDataparts.size();
-        // Total number of datapart which were created as part of this commit, as a result
-        // of Change::commit (1 commit = 1 datapart).
-        const size_t committedDPs = _history._commitDataparts.size();
-        // Just delete the most recent committedDPs number of DPs
-        resizeDataParts(totalDPs - committedDPs);
-        // Reset this commit to have no locally created DPs
-        setCommitDatapartCount(0);
     }
 
 private:
@@ -111,8 +96,30 @@ public:
                 DataPartRebaser& dataPartRebaser,
                 const CommitHistory& prevHistory);
 
+    void undoLocalCommits() {
+        // Total number of dataparts in the view of this commit
+        const size_t totalDPs = _history._allDataparts.size();
+        // Total number of datapart which were created as part of this commit, as a result
+        // of Change::commit (1 commit = 1 datapart).
+        const size_t committedDPs = _history._commitDataparts.size();
+        // Just delete the most recent committedDPs number of DPs
+        resizeDataParts(totalDPs - committedDPs);
+        // Reset this commit to have no locally created DPs
+        resetCommitDataParts();
+    }
+
 private:
     CommitHistory& _history;
+
+    void resizeDataParts(size_t newSize) {
+        bioassert(_history._allDataparts.size() >= newSize);
+        _history._allDataparts.resize(newSize);
+    }
+
+    void resetCommitDataParts() {
+        // Set _commitDataparts to be an empty span, but from the same address
+        _history._commitDataparts = {_history._commitDataparts.data(), 0};
+    }
 };
 
 }

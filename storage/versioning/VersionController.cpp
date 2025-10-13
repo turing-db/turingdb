@@ -76,23 +76,12 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commitBuilder : change->_commits) {
-        // Undo any commits that were made locally
-
-        // Only check those with an non-empty writebuffer, as other sources e.g.
-        // GraphWriter will create multiple dataparts from builders at commit-time but not
-        // at submit time, and so should not be erased
-        if (!commitBuilder->writeBuffer().empty()) {
-            // Only undo those which have committed, denoted by having a datapart
-            if (commitBuilder->_datapartCount != 0) {
-                CommitHistoryBuilder historyBuilder {commitBuilder->_commitData->_history};
-                historyBuilder.undoLocalCommits();
-                // We have deleted all created DPs: reset this number
-                commitBuilder->_datapartCount = 0;
-            }
+        // Creates a new builder to execute CREATE/DELETE commands.
+        // If locally `Change::commit` all changes, and no rebase, then no need to flush
+        // again. Otherwise flush again.
+        if (!commitBuilder->writeBuffer().isFlushed()) {
+            commitBuilder->flushWriteBuffer(jobSystem);
         }
-
-        // Creates a new builder to execute CREATE/DELETE commands
-        commitBuilder->flushWriteBuffer(jobSystem);
 
         auto buildRes = commitBuilder->build(jobSystem);
         if (!buildRes) {

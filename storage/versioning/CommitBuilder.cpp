@@ -5,6 +5,7 @@
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
+#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
@@ -94,6 +95,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
 
     if (wb.empty()) {
+        wb.setFlushed();
         return;
     }
 
@@ -104,6 +106,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     // the metadata provided when rebasing main
     DataPartBuilder& dpBuilder = newBuilder();
     wb.buildPending(dpBuilder);
+    wb.setFlushed();
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)

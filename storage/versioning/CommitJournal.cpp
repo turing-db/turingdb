@@ -8,3 +8,8 @@ std::unique_ptr<CommitJournal> CommitJournal::newJournal([[maybe_unused]] Commit
     CommitJournal* journal = new CommitJournal;
     return std::unique_ptr<CommitJournal>(journal);
 }
+
+std::unique_ptr<CommitJournal> CommitJournal::emptyJournal() {
+    CommitJournal* journal = new CommitJournal;
+    return std::unique_ptr<CommitJournal>(journal);
+}

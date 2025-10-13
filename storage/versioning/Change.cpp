@@ -88,17 +88,15 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     EdgeID newNextEdgeID = mainReader.getEdgeCount();
 
     MetadataRebaser metadataRebaser;
-    DataPartRebaser dataPartRebaser(branchTimeNextNodeID, branchTimeNextEdgeID, newNextNodeID,
+    DataPartRebaser dataPartRebaser(branchTimeNextNodeID,
+                                    branchTimeNextEdgeID,
+                                    newNextNodeID,
                                     newNextEdgeID);
 
     // CommitData of main
     const CommitData* prevCommitData = _base.get();
     // CommitHistory of main
     const CommitHistory* prevHistory = &_base->history();
-
-    // Get the Node/EdgeIDs which these commits should start from
-    NodeID nextNodeID = _versionController->openTransaction().readGraph().getNodeCount();
-    EdgeID nextEdgeID = _versionController->openTransaction().readGraph().getEdgeCount();
 
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
@@ -107,31 +105,37 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         // 2. Get all commits/dataparts from the previous commit history
         // 3. Add back dataparts of current commit and rebase them
 
-        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer(),
-                                      branchTimeNextNodeID,
-                                      branchTimeNextEdgeID,
-                                      nextNodeID,
-                                      nextEdgeID);
-        wbRb.rebaseIncidentNodeIDs();
+        CommitData& data = commitBuilder->commitData();
+        CommitHistory& history = data.history();
+
+        CommitHistoryRebaser historyRebaser {history};
+        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer());
+
+        wbRb.rebaseIncidentNodeIDs(branchTimeNextNodeID, newNextNodeID);
+
+        // Undo any commits that were made locally
+        // Only check those with an non-empty writebuffer, as other sources e.g.
+        // GraphWriter will create multiple dataparts from builders at commit-time but not
+        // at submit time, and so should not be erased
+        if (!commitBuilder->writeBuffer().isFlushed()) {
+            historyRebaser.undoLocalCommits();
+            // We have deleted all created DPs: reset this number
+            commitBuilder->_datapartCount = 0;
+            commitBuilder->writeBuffer().setUnflushed();
+        }
 
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.
         // These values will be used when creating new dataparts at time of submit.
-        commitBuilder->_firstNodeID = nextNodeID;
-        commitBuilder->_firstEdgeID = nextEdgeID;
-
-        commitBuilder->_nextNodeID = nextNodeID;
-        commitBuilder->_nextEdgeID = nextEdgeID;
+        commitBuilder->_nextNodeID = commitBuilder->_firstNodeID = newNextNodeID;
+        commitBuilder->_nextEdgeID = commitBuilder->_firstEdgeID = newNextEdgeID;
 
         metadataRebaser.clear();
         metadataRebaser.rebase(prevCommitData->metadata(),
                                commitBuilder->metadata(),
                                commitBuilder->writeBuffer());
 
-        CommitData& data = commitBuilder->commitData();
-        CommitHistory& history = data.history();
 
-        CommitHistoryRebaser historyRebaser {history};
         historyRebaser.rebase(metadataRebaser, dataPartRebaser, *prevHistory);
 
         prevCommitData = &commitBuilder->commitData();

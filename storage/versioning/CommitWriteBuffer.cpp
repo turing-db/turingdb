@@ -141,7 +141,8 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingEdges(builder);
 }
 
-void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
+void CommitWriteBufferRebaser::rebaseIncidentNodeIDs(NodeID entryNextNodeID,
+                                                     NodeID currentNextNodeID) {
     // If a @ref Change makes commits locally, it will create nodes according to what it
     // thinks the next NodeID should be. This view is determined by the next node ID at
     // the time the change branched from main. In subsequent commits on the Change, it is
@@ -164,8 +165,8 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs() {
     // NodeID which is greater than the nextNodeID at time of Change creation, as these
     // are edges between locally created nodes.
     const auto rebaseNodeID = [&](NodeID wbID) {
-        if (wbID >= _entryNextNodeID) {
-            return wbID + _currentNextNodeID - _entryNextNodeID;
+        if (wbID >= entryNextNodeID) {
+            return wbID + currentNextNodeID - entryNextNodeID;
         }
         return wbID;
     };
