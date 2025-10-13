@@ -2,11 +2,11 @@
 
 #include <string>
 
-#include "TuringException.h"
+#include "ASTException.h"
 
 namespace db::v2 {
 
-class ParserException : public TuringException {
+class ParserException : public ASTException {
 public:
     ParserException(const ParserException&) = default;
     ParserException(ParserException&&) = default;

@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "PlannerException.h"
+#include "ASTException.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
 #include "TuringTime.h"
@@ -16,8 +16,6 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "CypherAST.h"
-#include "ParserException.h"
-#include "AnalyzeException.h"
 #include "FileReader.h"
 #include "TuringConfig.h"
 
@@ -75,7 +73,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         parser.parse(query);
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ParserException& e) {
+    } catch (const ASTException& e) {
         std::cerr << "Syntax error:\n"
                   << e.what() << std::endl;
         return;
@@ -86,7 +84,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         analyzer.analyze();
         fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const AnalyzeException& e) {
+    } catch (const ASTException& e) {
         std::cerr << "Analyze error:\n"
                   << e.what() << std::endl;
         return;
@@ -97,7 +95,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
         fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const PlannerException& e) {
+    } catch (const ASTException& e) {
         std::cerr << "Plan error:\n"
                   << e.what() << std::endl;
         return;

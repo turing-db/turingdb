@@ -2,14 +2,14 @@
 
 #include <string>
 
-#include "TuringException.h"
+#include "ASTException.h"
 
 namespace db::v2 {
 
-class PlannerException : public TuringException {
+class PlannerException : public ASTException {
 public:
     explicit PlannerException(std::string&& msg)
-        : TuringException(std::move(msg))
+        : ASTException(std::move(msg))
     {
     }
 };

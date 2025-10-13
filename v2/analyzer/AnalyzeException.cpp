@@ -3,7 +3,7 @@
 using namespace db::v2;
 
 AnalyzeException::AnalyzeException(std::string&& msg)
-    : TuringException(std::move(msg))
+    : ASTException(std::move(msg))
 {
 }
 

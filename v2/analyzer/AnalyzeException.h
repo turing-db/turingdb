@@ -2,11 +2,11 @@
 
 #include <string>
 
-#include "TuringException.h"
+#include "ASTException.h"
 
 namespace db::v2 {
 
-class AnalyzeException : public TuringException {
+class AnalyzeException : public ASTException {
 public:
     AnalyzeException(const AnalyzeException&) = default;
     AnalyzeException(AnalyzeException&&) = default;
