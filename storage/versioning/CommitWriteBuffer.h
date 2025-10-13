@@ -66,7 +66,8 @@ public:
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
-     const std::set<NodeID>& deletedNodes() const { return _deletedNodes; }
+     std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
+     std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
 
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
@@ -76,10 +77,14 @@ public:
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
      * _deletedNodes
-     * @detail Calls std::vector::reserve for the additional space before calling
-     * std::vector::insert
      */
     void addDeletedNodes(const std::vector<NodeID>& newDeletedNodes);
+
+    /**
+     * @brief Adds EdgeIDs contained in @param newDeletedEdges to the member @ref
+     * _deletedEdges
+     */
+    void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
 private:
     friend DataPartBuilder;
@@ -99,10 +104,10 @@ private:
     std::vector<PendingEdge> _pendingEdges;
 
     // Nodes to be deleted when this commit commits
-    std::set<NodeID> _deletedNodes;
+    std::vector<NodeID> _deletedNodes;
 
     // Edges to be deleted when this commit commits
-    std::set<EdgeID> _deletedEdges;
+    std::vector<EdgeID> _deletedEdges;
 
     // Collection of methods to write the buffer to the provided datapart builder
     void buildPendingNodes(DataPartBuilder& builder);
