@@ -90,16 +90,15 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     return std::move(_commit);
 }
 
-void CommitBuilder::flushWriteBuffer(JobSystem& jobsystem) {
+void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
 
-    std::ranges::sort(wb.deletedNodes());
-    std::ranges::sort(wb.deletedEdges());
-
-    // If there is nothing to flush, return early without creating a new builder
     if (wb.empty()) {
         return;
     }
+
+    std::ranges::sort(wb.deletedNodes());
+    std::ranges::sort(wb.deletedEdges());
 
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main

@@ -137,8 +137,6 @@ void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
 }
 
 void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
-    std::unordered_map<CommitWriteBuffer::PendingNodeOffset, NodeID> tempIDMap;
-
     buildPendingNodes(builder);
     buildPendingEdges(builder);
 }
