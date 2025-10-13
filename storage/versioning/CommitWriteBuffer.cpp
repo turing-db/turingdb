@@ -23,7 +23,13 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
 }
 
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
-    _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
+    _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
+    _deletedNodes.insert(_deletedNodes.end(), newDeletedNodes.begin(), newDeletedNodes.end());
+}
+
+void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
+    _deletedEdges.reserve(_deletedEdges.size() + newDeletedEdges.size());
+    _deletedEdges.insert(_deletedEdges.end(), newDeletedEdges.begin(), newDeletedEdges.end());
 }
 
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
@@ -61,18 +67,22 @@ void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
 
 void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                          const PendingEdge& edge) {
+    bioassert(std::ranges::is_sorted(deletedNodes()));
+    bioassert(std::ranges::is_sorted(deletedEdges()));
+
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted. NOTE: Deletes currently not implemented
     if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
-        if (deletedNodes().contains(*srcID)) {
+        if (std::ranges::binary_search(deletedNodes(), *srcID)) {
             return;
         }
     }
     if (const NodeID* tgtID = std::get_if<NodeID>(&edge.tgt)) {
-        if (deletedNodes().contains(*tgtID)) {
+        if (std::ranges::binary_search(deletedNodes(), *tgtID)) {
             return;
         }
     }
+
     // Otherwise: source and target are either non-deleted existing nodes, or nodes
     // created in this commit
     // WARN: PendingNodes have their IDs computed based on their offset in the
