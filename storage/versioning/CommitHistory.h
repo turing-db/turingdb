@@ -38,9 +38,12 @@ public:
 
     void newFromPrevious(const CommitHistory& base);
 
+    CommitJournal& journal() { return *_journal; }
+
 private:
     friend class CommitHistoryBuilder;
     friend class CommitHistoryRebaser;
+    friend class CommitBuilder;
 
     /// Stores all the data parts that are part of the commit history.
     std::vector<WeakArc<DataPart>> _allDataparts;

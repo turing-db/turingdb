@@ -5,13 +5,13 @@
 #include "reader/GraphReader.h"
 #include "Profiler.h"
 #include "Graph.h"
-#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
+#include "CommitJournal.h"
 
 using namespace db;
 
@@ -93,6 +93,9 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 
 void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
+    CommitJournal& journal = _commit->history().journal();
+
+    bioassert(journal.empty());
 
     if (wb.empty()) {
         wb.setFlushed();
@@ -107,6 +110,9 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     DataPartBuilder& dpBuilder = newBuilder();
     wb.buildPending(dpBuilder);
     wb.setFlushed();
+
+    journal.addWrittenNodes(wb.deletedNodes());
+    journal.addWrittenEdges(wb.deletedEdges());
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
@@ -142,4 +148,6 @@ void CommitBuilder::initialize() {
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>();
+
+    _commitData->_history._journal = CommitJournal::emptyJournal();
 }
