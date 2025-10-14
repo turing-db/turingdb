@@ -105,6 +105,9 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         // 2. Get all commits/dataparts from the previous commit history
         // 3. Add back dataparts of current commit and rebase them
 
+        // TODO Walk algorithm from base commit to current head of main for conflict
+        // checking
+
         CommitData& data = commitBuilder->commitData();
         CommitHistory& history = data.history();
 
@@ -137,7 +140,6 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         metadataRebaser.rebase(prevCommitData->metadata(),
                                commitBuilder->metadata(),
                                commitBuilder->writeBuffer());
-
 
         historyRebaser.rebase(metadataRebaser, dataPartRebaser, *prevHistory);
 
