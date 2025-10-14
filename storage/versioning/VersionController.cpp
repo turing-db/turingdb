@@ -69,6 +69,7 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     Commit* mainState = _head.load();
 
     // rebase if main has changed under us
+    // TODO: Get union of WriteSets since branch time
     if (mainState->hash() != change->baseHash()) {
         if (auto res = change->rebase(jobSystem); !res) {
             return res;
@@ -82,6 +83,8 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (!commitBuilder->writeBuffer().isFlushed()) {
             commitBuilder->flushWriteBuffer(jobSystem);
         }
+
+        // TODO: Compare WriteSet of current builder with union created at rebase
 
         auto buildRes = commitBuilder->build(jobSystem);
         if (!buildRes) {
