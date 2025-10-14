@@ -16,11 +16,6 @@ class CommitWriteBuffer;
 class CommitJournal {
 public:
     /**
-     * @brief Creates a new journal entry based on the contents of the provided @param wb
-     */
-    [[nodiscard]] static std::unique_ptr<CommitJournal> newJournal(CommitWriteBuffer& wb);
-
-    /**
      * @brief Creates a new journal with an empty write set
      */
     [[nodiscard]] static std::unique_ptr<CommitJournal> emptyJournal();
@@ -28,8 +23,16 @@ public:
     void clear();
     bool empty();
 
+    void addWrittenNode(NodeID node);
+    void addWrittenEdge(EdgeID edge);
+
     void addWrittenNodes(const std::vector<NodeID>& nodes);
     void addWrittenEdges(const std::vector<EdgeID>& edges);
+
+    auto& nodeWriteSet() { return _nodeWriteSet; }
+    auto& edgeWriteSet() { return _edgeWriteSet; }
+
+    void finalise();
 
 private:
     bool _initialised {false};
