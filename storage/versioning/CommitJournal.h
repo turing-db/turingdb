@@ -1,11 +1,11 @@
 #pragma once
 
-#include <vector>
-
+#include "versioning/WriteSet.h"
 #include "ID.h"
-#include "versioning/CommitWriteBuffer.h"
 
 namespace db {
+
+class CommitWriteBuffer;
 
 /**
  * @brief Stores information as to the modifications (updates/deletes) that occured in
@@ -21,15 +21,21 @@ public:
     [[nodiscard]] static std::unique_ptr<CommitJournal> newJournal(CommitWriteBuffer& wb);
 
     /**
-    * @brief Creates a new journal with an empty write set
-    */
+     * @brief Creates a new journal with an empty write set
+     */
     [[nodiscard]] static std::unique_ptr<CommitJournal> emptyJournal();
+
+    void clear();
+    bool empty();
+
+    void addWrittenNodes(const std::vector<NodeID>& nodes);
+    void addWrittenEdges(const std::vector<EdgeID>& edges);
 
 private:
     bool _initialised {false};
 
-    std::vector<NodeID> _nodeWriteSet;
-    std::vector<EdgeID> _edgeWriteSet;
+    WriteSet<NodeID> _nodeWriteSet;
+    WriteSet<EdgeID> _edgeWriteSet;
 
     CommitJournal() = default;
 };
