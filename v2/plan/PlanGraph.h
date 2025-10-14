@@ -11,6 +11,7 @@ class VarDecl;
 class Expr;
 class ExprConstraint;
 class WherePredicate;
+class PropertyConstraint;
 
 class PlanGraph {
 public:
@@ -54,9 +55,14 @@ public:
     }
 
     WherePredicate* createWherePredicate(const Expr* expr);
+    PropertyConstraint* createPropertyConstraint();
 
     std::span<const std::unique_ptr<WherePredicate>> wherePredicates() const {
         return _wherePredicates;
+    }
+
+    std::span<const std::unique_ptr<PropertyConstraint>> propConstraints() const {
+        return _propConstraints;
     }
 
 private:
@@ -64,6 +70,7 @@ private:
 
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
     std::vector<std::unique_ptr<WherePredicate>> _wherePredicates;
+    std::vector<std::unique_ptr<PropertyConstraint>> _propConstraints;
 };
 
 }

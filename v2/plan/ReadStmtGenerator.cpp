@@ -155,7 +155,10 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
         }
 
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType->_id, constraint._expr));
+        PropertyConstraint* c = _tree->createPropertyConstraint();
+        c->var = var;
+        c->type = propType->_id;
+        c->expr = constraint._expr;
     }
 
     return var;
@@ -217,7 +220,10 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
         }
 
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType->_id, constraint._expr));
+        PropertyConstraint* c = _tree->createPropertyConstraint();
+        c->var = var;
+        c->type = propType->_id;
+        c->expr = constraint._expr;
     }
 
     return var;
@@ -271,7 +277,10 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
         }
 
-        _propConstraints.push_back(std::make_unique<PropertyConstraint>(var, propType->_id, constraint._expr));
+        PropertyConstraint* c = _tree->createPropertyConstraint();
+        c->var = var;
+        c->type = propType->_id;
+        c->expr = constraint._expr;
     }
 
     return var;
@@ -383,7 +392,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 }
 
 void ReadStmtGenerator::placePropertyExprJoins() {
-    for (auto& prop : _propConstraints) {
+    for (const auto& prop : _tree->propConstraints()) {
         auto& deps = prop->dependencies;
         const auto& depContainer = deps.getDependencies();
 
@@ -411,7 +420,7 @@ void ReadStmtGenerator::placePropertyExprJoins() {
 
         // Step 3: Place the constraint
         auto* filter = _variables->getNodeFilter(var);
-        filter->addPropertyConstraint(std::move(prop));
+        filter->addPropertyConstraint(prop.get());
     }
 }
 
