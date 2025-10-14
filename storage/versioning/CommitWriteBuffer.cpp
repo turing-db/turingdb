@@ -1,5 +1,6 @@
 #include "CommitWriteBuffer.h"
 
+#include <algorithm>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -9,6 +10,11 @@
 #include "writers/DataPartBuilder.h"
 
 using namespace db;
+
+CommitWriteBuffer::CommitWriteBuffer(CommitJournal& journal)
+    : _journal(journal)
+{
+}
 
 CommitWriteBuffer::PendingNode& CommitWriteBuffer::newPendingNode() {
     return _pendingNodes.emplace_back();
@@ -22,11 +28,13 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
     return pendingEdge; 
 }
 
+// Called when executing a DELETE NODES query
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
     _deletedNodes.insert(_deletedNodes.end(), newDeletedNodes.begin(), newDeletedNodes.end());
 }
 
+// Called when executing a DELETE EDGES query
 void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
     _deletedEdges.reserve(_deletedEdges.size() + newDeletedEdges.size());
     _deletedEdges.insert(_deletedEdges.end(), newDeletedEdges.begin(), newDeletedEdges.end());
@@ -57,6 +65,8 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
             },
             value);
     }
+
+    _journal.addWrittenNode(nodeID);
 }
 
 void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
@@ -67,8 +77,11 @@ void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
 
 void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                          const PendingEdge& edge) {
+    // Sorted and unique
     bioassert(std::ranges::is_sorted(deletedNodes()));
     bioassert(std::ranges::is_sorted(deletedEdges()));
+    bioassert(std::ranges::adjacent_find(deletedNodes()) == deletedNodes().end());
+    bioassert(std::ranges::adjacent_find(deletedEdges()) == deletedEdges().end());
 
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted. NOTE: Deletes currently not implemented
@@ -128,6 +141,8 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
             },
             value);
     }
+
+    _journal.addWrittenEdge(newEdgeID);
 }
 
 void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
@@ -139,6 +154,19 @@ void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
 void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingNodes(builder);
     buildPendingEdges(builder);
+}
+
+void CommitWriteBuffer::finaliseDeletions() {
+    {
+        std::ranges::sort(_deletedNodes);
+        auto [newEnd, oldEnd] = std::ranges::unique(_deletedNodes);
+        _deletedNodes.erase(newEnd, oldEnd);
+    }
+    {
+        std::ranges::sort(_deletedEdges);
+        auto [newEnd, oldEnd] = std::ranges::unique(_deletedEdges);
+        _deletedEdges.erase(newEnd, oldEnd);
+    }
 }
 
 void CommitWriteBufferRebaser::rebaseIncidentNodeIDs(NodeID entryNextNodeID,

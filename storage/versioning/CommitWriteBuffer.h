@@ -1,6 +1,5 @@
 #pragma once
 
-#include <set>
 #include <string>
 #include <variant>
 #include <vector>
@@ -13,13 +12,14 @@ namespace db {
 
 class CommitWriteBufferRebaser;
 class MetadataBuilder;
+class CommitJournal;
 
 class CommitWriteBuffer {
 
 struct PendingEdge;
 
 public:
-    CommitWriteBuffer() = default;
+    CommitWriteBuffer(CommitJournal& journal);
 
     using SupportedTypeVariant =
         std::variant<types::Int64::Primitive, types::UInt64::Primitive,
@@ -59,7 +59,9 @@ public:
      PendingEdge& newPendingEdge(ExistingOrPendingNode src, ExistingOrPendingNode tgt);
 
      /**
-      * @brief Adds the pending nodes and edges to the provided datapart builder
+      * @brief Adds the pending nodes and edges to the provided datapart builder, as well
+      * as registering all newly created nodes/edges in the associated @ref WriteSet of
+      * @ref _journal
       */
      void buildPending(DataPartBuilder& builder);
 
@@ -85,6 +87,12 @@ public:
      * _deletedEdges
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
+
+    /**
+     * @brief Ensures @ref _deletedNodes and @ref _deletedEdges are sorted and unique,
+     * ready for lookups for local conflict checks in @ref buildPending
+     */
+    void finaliseDeletions();
 
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
@@ -114,6 +122,8 @@ private:
 
     // Edges to be deleted when this commit commits
     std::vector<EdgeID> _deletedEdges;
+
+    CommitJournal& _journal;
 
     // Collection of methods to write the buffer to the provided datapart builder
     void buildPendingNodes(DataPartBuilder& builder);

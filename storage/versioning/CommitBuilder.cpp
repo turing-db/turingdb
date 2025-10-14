@@ -102,17 +102,19 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         return;
     }
 
-    std::ranges::sort(wb.deletedNodes());
-    std::ranges::sort(wb.deletedEdges());
+    // Ensure deletions are unique and sorted
+    wb.finaliseDeletions();
 
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
     DataPartBuilder& dpBuilder = newBuilder();
-    wb.buildPending(dpBuilder);
-    wb.setFlushed();
+    wb.buildPending(dpBuilder); // Adds CREATEd nodes/edges to journal WriteSet
 
+    // Delete nodes/edges should be in the "write set" of this commit
     journal.addWrittenNodes(wb.deletedNodes());
     journal.addWrittenEdges(wb.deletedEdges());
+
+    wb.setFlushed();
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
@@ -146,8 +148,8 @@ void CommitBuilder::initialize() {
     // Create metadata builder
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
 
-    // Create the write buffer for this commit
-    _writeBuffer = std::make_unique<CommitWriteBuffer>();
-
     _commitData->_history._journal = CommitJournal::emptyJournal();
+
+    // Create the write buffer for this commit
+    _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
 }

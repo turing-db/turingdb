@@ -4,6 +4,7 @@
 #include "metadata/LabelSetMap.h"
 #include "versioning/MetadataRebaser.h"
 #include "metadata/GraphMetadata.h"
+#include "versioning/CommitJournal.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "writers/MetadataBuilder.h"
 
@@ -17,7 +18,8 @@ protected:
 TEST_F(MetadataRebaserTest, labels) {
     GraphMetadata dataA;
     GraphMetadata dataB;
-    CommitWriteBuffer cwb;
+    CommitJournal journal = *CommitJournal::emptyJournal();
+    CommitWriteBuffer cwb(journal);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -49,7 +51,8 @@ TEST_F(MetadataRebaserTest, labels) {
 TEST_F(MetadataRebaserTest, edgeTypes) {
     GraphMetadata dataA;
     GraphMetadata dataB;
-    CommitWriteBuffer cwb;
+    CommitJournal journal = *CommitJournal::emptyJournal();
+    CommitWriteBuffer cwb(journal);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -86,7 +89,8 @@ TEST_F(MetadataRebaserTest, edgeTypes) {
 TEST_F(MetadataRebaserTest, propertyTypes) {
     GraphMetadata dataA;
     GraphMetadata dataB;
-    CommitWriteBuffer cwb;
+    CommitJournal journal = *CommitJournal::emptyJournal();
+    CommitWriteBuffer cwb(journal);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -123,7 +127,8 @@ TEST_F(MetadataRebaserTest, propertyTypes) {
 TEST_F(MetadataRebaserTest, labelsets) {
     GraphMetadata dataA;
     GraphMetadata dataB;
-    CommitWriteBuffer cwb;
+    CommitJournal journal = *CommitJournal::emptyJournal();
+    CommitWriteBuffer cwb(journal);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
