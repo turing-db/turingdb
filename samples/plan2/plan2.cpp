@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "ASTException.h"
+#include "CompilerException.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
 #include "TuringTime.h"
@@ -73,7 +73,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         parser.parse(query);
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         std::cerr << "Syntax error:\n"
                   << e.what() << std::endl;
         return;
@@ -84,7 +84,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         analyzer.analyze();
         fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         std::cerr << "Analyze error:\n"
                   << e.what() << std::endl;
         return;
@@ -95,7 +95,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
         fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         std::cerr << "Plan error:\n"
                   << e.what() << std::endl;
         return;

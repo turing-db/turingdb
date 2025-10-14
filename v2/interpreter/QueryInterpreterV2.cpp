@@ -8,7 +8,7 @@
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "PlanGraphGenerator.h"
-#include "ASTException.h"
+#include "CompilerException.h"
 
 #include "Profiler.h"
 
@@ -50,7 +50,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     CypherParser parser(&ast);
     try {
         parser.parse(query);
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         return QueryStatus(QueryStatus::Status::PARSE_ERROR, e.what());
     } catch (const std::exception& e) {
         return QueryStatus(QueryStatus::Status::PARSE_ERROR,
@@ -64,7 +64,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     CypherAnalyzer analyzer(&ast, view);
     try {
         analyzer.analyze();
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR, e.what());
     } catch (const std::exception& e) {
         return QueryStatus(QueryStatus::Status::ANALYZE_ERROR,
@@ -78,7 +78,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     PlanGraphGenerator planGen(ast, view);
     try {
         planGen.generate(ast.queries().front());
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
     } catch (const std::exception& e) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR,

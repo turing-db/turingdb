@@ -10,7 +10,7 @@
 #include "FileReader.h"
 #include "SimpleGraph.h"
 #include "CypherAST.h"
-#include "ASTException.h"
+#include "CompilerException.h"
 #include "versioning/Transaction.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
             parser.parse(queryStr);
             auto t1 = Clock::now();
             fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const ASTException& e) {
+        } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
             return 0;
         }
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
             analyzer.analyze();
             auto t1 = Clock::now();
             fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const ASTException& e) {
+        } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;
         }
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
             planGen.generate(ast.queries().front());
             auto t1 = Clock::now();
             fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const ASTException& e) {
+        } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;
         }

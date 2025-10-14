@@ -15,7 +15,7 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "CypherAST.h"
-#include "ASTException.h"
+#include "CompilerException.h"
 #include "FileReader.h"
 #include "TuringConfig.h"
 
@@ -73,7 +73,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         parser.parse(query);
         fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         fmt::println(std::cerr, "/// QUERY\n{}\n", query);
         fmt::println(std::cerr, "/// RESULT");
         fmt::println(std::cerr, "PARSE ERROR");
@@ -86,7 +86,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         analyzer.analyze();
         fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         fmt::println(std::cerr, "/// QUERY\n{}\n", query);
         fmt::println(std::cerr, "/// RESULT");
         fmt::println(std::cerr, "ANALYZE ERROR");
@@ -100,7 +100,7 @@ void runPlan2(std::string_view query) {
         auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
         fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, Clock::now()));
-    } catch (const ASTException& e) {
+    } catch (const CompilerException& e) {
         fmt::println(std::cerr, "/// QUERY\n{}\n", query);
         fmt::println(std::cerr, "/// RESULT");
         fmt::println(std::cerr, "PLAN ERROR");
