@@ -27,8 +27,9 @@ using namespace db::v2;
 
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 WriteStmtAnalyzer::~WriteStmtAnalyzer() {
