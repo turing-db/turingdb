@@ -2,6 +2,7 @@
 
 #include "views/GraphView.h"
 
+#include "DiagnosticsManager.h"
 #include "CypherAST.h"
 #include "PlanGraph.h"
 #include "ReadStmtGenerator.h"
@@ -97,5 +98,5 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
-    throw PlannerException(_ast->createErrorString(msg, obj));
+    throw PlannerException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }

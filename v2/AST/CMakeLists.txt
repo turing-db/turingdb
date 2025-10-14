@@ -2,6 +2,8 @@ set(ast_sources
     CypherAST.cpp
     CypherASTDumper.cpp
     CypherError.cpp
+    SourceManager.cpp
+    DiagnosticsManager.cpp
 
     decl/DeclContext.cpp
     decl/PatternData.cpp

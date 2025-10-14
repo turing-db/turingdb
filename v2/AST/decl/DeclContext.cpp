@@ -3,6 +3,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "ASTException.h"
+#include "DiagnosticsManager.h"
 #include "CypherAST.h"
 #include "VarDecl.h"
 
@@ -40,7 +41,7 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
         std::string msg = fmt::format("Variable '{}' is already declared with type '{}'",
                                       name,
                                       EvaluatedTypeName::value(decl->getType()));
-        throw ASTException(ast->createErrorString(msg, nullptr));
+        throw ASTException(ast->getDiagnosticsManager()->createErrorString(msg, nullptr));
     }
 
     return decl;

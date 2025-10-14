@@ -19,23 +19,38 @@ public:
         size_t _offset {0};
     };
 
-    class EdgeNeighbour : public std::variant<const VarDecl*, size_t> {
+    class EdgeNeighbour {
     public:
+        EdgeNeighbour() = default;
+
+        explicit EdgeNeighbour(const VarDecl* var)
+            : _data(var)
+        {
+        }
+
+        explicit EdgeNeighbour(size_t offset)
+            : _data(offset)
+        {
+        }
+
         bool isPendingNodeOffset() const {
-            return std::holds_alternative<size_t>(*this);
+            return std::holds_alternative<size_t>(_data);
         }
 
         bool isInput() const {
-            return std::holds_alternative<const VarDecl*>(*this);
+            return std::holds_alternative<const VarDecl*>(_data);
         }
 
         const VarDecl* asInput() const {
-            return std::get<const VarDecl*>(*this);
+            return std::get<const VarDecl*>(_data);
         }
 
         size_t asPendingNodeOffset() const {
-            return std::get<size_t>(*this);
+            return std::get<size_t>(_data);
         }
+
+    private:
+        std::variant<const VarDecl*, size_t> _data;
     };
 
     struct PendingEdge {

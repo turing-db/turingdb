@@ -1,15 +1,13 @@
 #pragma once
 
-#include <span>
 #include <vector>
-#include <unordered_map>
 #include <stdint.h>
 #include <string_view>
 
-#include "SourceLocation.h"
-
 namespace db::v2 {
 
+class SourceManager;
+class DiagnosticsManager;
 class Symbol;
 class QualifiedName;
 class Literal;
@@ -104,24 +102,20 @@ public:
     CypherAST& operator=(const CypherAST&) = delete;
     CypherAST& operator=(CypherAST&&) = delete;
 
-    std::string_view getQueryString() const { return _queryStr; }
-
     const QueryCommands& queries() const { return _queries; }
-
-    void setDebugLocations(bool debugLocations) { _debugLocations = debugLocations; }
-
-    template <typename T>
-    const SourceLocation* getLocation(T* obj) const {
-        return getLocation((uintptr_t)obj);
-    }
 
     std::string* createString();
 
-    std::string createErrorString(std::string_view msg, const void* obj) const;
+    SourceManager* getSourceManager() { return _sourceManager; }
+    const SourceManager* getSourceManager() const { return _sourceManager; }
+
+    DiagnosticsManager* getDiagnosticsManager() { return _diagnosticsManager; }
+    const DiagnosticsManager* getDiagnosticsManager() const { return _diagnosticsManager; }
 
 private:
-    std::string_view _queryStr;
-    bool _debugLocations {true};
+    SourceManager* _sourceManager {nullptr};
+    DiagnosticsManager* _diagnosticsManager {nullptr};
+
     std::vector<Symbol*> _symbols;
     std::vector<QualifiedName*> _qualifiedNames;
     std::vector<Literal*> _literals;
@@ -140,17 +134,6 @@ private:
     std::vector<NodePatternData*> _nodePatternDatas;
     std::vector<EdgePatternData*> _edgePatternDatas;
     std::vector<std::string*> _unnamedVarIdentifiers;
-
-    // Locations
-    std::unordered_map<uintptr_t, SourceLocation> _locations;
-
-    template <typename T>
-    void setLocation(T* obj, const SourceLocation& loc) {
-        setLocation((uintptr_t)obj, loc);
-    }
-
-    void setLocation(uintptr_t obj, const SourceLocation& loc);
-    const SourceLocation* getLocation(uintptr_t obj) const;
 
     void addSymbol(Symbol* symbol);
     void addQualifiedName(QualifiedName* name);

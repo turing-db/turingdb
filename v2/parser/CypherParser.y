@@ -20,9 +20,10 @@
 
     // Inspired by https://github.com/antlr/grammars-v4/blob/master/cypher/CypherParser.g4
 
-    #define LOC(obj, loc) ast->setLocation(obj, loc)
+    #define LOC(obj, loc) ast->getSourceManager()->setLocation(obj, loc)
 
     #include "SourceLocation.h"
+    #include "SourceManager.h"
 
     #include "stmt/StmtContainer.h"
     #include "stmt/ReturnStmt.h"

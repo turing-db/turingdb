@@ -5,6 +5,7 @@
 #include "AnalyzeException.h"
 
 #include "CypherAST.h"
+#include "DiagnosticsManager.h"
 #include "QueryCommand.h"
 #include "ReadStmtAnalyzer.h"
 #include "ExprAnalyzer.h"
@@ -114,5 +115,5 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    throw AnalyzeException(_ast->createErrorString(msg, obj));
+    throw AnalyzeException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }

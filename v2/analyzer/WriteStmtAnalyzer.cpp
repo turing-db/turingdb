@@ -4,6 +4,7 @@
 
 #include "AnalyzeException.h"
 #include "CypherAST.h"
+#include "DiagnosticsManager.h"
 
 #include "EdgePattern.h"
 #include "ExprAnalyzer.h"
@@ -207,7 +208,7 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 }
 
 void WriteStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    throw AnalyzeException(_ast->createErrorString(msg, obj));
+    throw AnalyzeException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }
 
 db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {

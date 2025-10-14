@@ -3,6 +3,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
+#include "DiagnosticsManager.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "PlanGraph.h"
@@ -75,11 +76,11 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
     WriteNode::EdgeNeighbour rhs;
 
     if (_variables->getVarNode(originDecl) != nullptr) {
-        lhs.emplace<const VarDecl*>(originDecl);
+        lhs = WriteNode::EdgeNeighbour {originDecl};
     } else {
         // Create a new node
         const size_t offset = _currentNode->addNode(data);
-        lhs.emplace<size_t>(offset);
+        lhs = WriteNode::EdgeNeighbour {offset};
     }
 
     // Step 2. Handle the [edge-rhs] chains
@@ -90,10 +91,10 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
         const NodePatternData* rhsData = rhsNode->getData();
 
         if (_variables->getVarNode(rhsDecl) != nullptr) {
-            rhs.emplace<const VarDecl*>(rhsDecl);
+            rhs = WriteNode::EdgeNeighbour {rhsDecl};
         } else {
             const size_t rhsOffset = _currentNode->addNode(rhsData);
-            rhs.emplace<size_t>(rhsOffset);
+            rhs = WriteNode::EdgeNeighbour {rhsOffset};
         }
 
         // - Create the new edge
@@ -113,5 +114,5 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
 }
 
 void WriteStmtGenerator::throwError(std::string_view msg, const void* obj) const {
-    throw PlannerException(_ast->createErrorString(msg, obj));
+    throw PlannerException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }

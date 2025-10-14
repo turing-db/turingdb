@@ -1,5 +1,6 @@
 #include "ExprAnalyzer.h"
 
+#include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "CypherAST.h"
 #include "QualifiedName.h"
@@ -405,5 +406,5 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
 }
 
 void ExprAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    throw AnalyzeException(_ast->createErrorString(msg, obj));
+    throw AnalyzeException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }

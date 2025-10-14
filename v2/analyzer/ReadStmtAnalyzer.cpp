@@ -4,6 +4,7 @@
 #include "ExprAnalyzer.h"
 #include "metadata/GraphMetadata.h"
 
+#include "DiagnosticsManager.h"
 #include "CypherAST.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
@@ -209,5 +210,5 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    throw AnalyzeException(_ast->createErrorString(msg, obj));
+    throw AnalyzeException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }

@@ -5,6 +5,7 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "Graph.h"
+#include "SourceManager.h"
 #include "TuringTime.h"
 #include "FileReader.h"
 #include "SimpleGraph.h"
@@ -42,7 +43,7 @@ int main(int argc, char** argv) {
     }
 
     CypherAST ast(queryStr);
-    ast.setDebugLocations(true);
+    ast.getSourceManager()->setDebugLocations(true);
 
     {
         CypherParser parser(&ast);

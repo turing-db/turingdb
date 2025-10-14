@@ -4,6 +4,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
+#include "DiagnosticsManager.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "PlanGraph.h"
@@ -564,5 +565,5 @@ void ReadStmtGenerator::insertDataFlowNode(const VarNode* node, VarNode* depende
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {
-    throw PlannerException(_ast->createErrorString(msg, obj));
+    throw PlannerException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
 }

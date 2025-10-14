@@ -1,6 +1,7 @@
 #include "CypherAST.h"
 
-#include "CypherError.h"
+#include "DiagnosticsManager.h"
+#include "SourceManager.h"
 #include "Symbol.h"
 #include "QualifiedName.h"
 #include "expr/Literal.h"
@@ -21,11 +22,15 @@
 using namespace db::v2;
 
 CypherAST::CypherAST(std::string_view queryString)
-    : _queryStr(queryString)
+    : _sourceManager(new SourceManager(queryString)),
+    _diagnosticsManager(new DiagnosticsManager(_sourceManager))
 {
 }
 
 CypherAST::~CypherAST() {
+    delete _sourceManager;
+    delete _diagnosticsManager;
+
     for (Symbol* symbol : _symbols) {
         delete symbol;
     }
@@ -106,23 +111,6 @@ std::string* CypherAST::createString() {
     return name;
 }
 
-void CypherAST::setLocation(uintptr_t obj, const SourceLocation& loc) {
-    if (!_debugLocations) {
-        return;
-    }
-
-    _locations[obj] = loc;
-}
-
-const SourceLocation* CypherAST::getLocation(uintptr_t obj) const {
-    const auto it = _locations.find(obj);
-    if (it == _locations.end()) {
-        return nullptr;
-    }
-
-    return &it->second;
-}
-
 void CypherAST::addSymbol(Symbol* symbol) {
     _symbols.push_back(symbol);
 }
@@ -189,21 +177,4 @@ void CypherAST::addNodePatternData(NodePatternData* data) {
 
 void CypherAST::addEdgePatternData(EdgePatternData* data) {
     _edgePatternDatas.push_back(data);
-}
-
-std::string CypherAST::createErrorString(std::string_view msg, const void* obj) const {
-    const SourceLocation* location = getLocation(obj);
-    std::string errorMsg;
-
-    CypherError err {getQueryString()};
-    err.setTitle("Query error");
-    err.setErrorMsg(msg);
-
-    if (location) {
-        err.setLocation(*location);
-    }
-
-    err.generate(errorMsg);
-
-    return errorMsg;
 }
