@@ -110,6 +110,8 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     DataPartBuilder& dpBuilder = newBuilder();
     wb.buildPending(dpBuilder); // Adds CREATEd nodes/edges to journal WriteSet
 
+    // TODO: Add tombstone registration of deleted nodes
+
     // Delete nodes/edges should be in the "write set" of this commit
     journal.addWrittenNodes(wb.deletedNodes());
     journal.addWrittenEdges(wb.deletedEdges());

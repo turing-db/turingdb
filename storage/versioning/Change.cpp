@@ -82,6 +82,8 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // Get current state of main
     _base = _versionController->openTransaction().commitData();
 
+    // TODO: Generate union of WriteSets since branch time
+
     // Get the current next Edge and Node IDs on main
     const GraphReader mainReader = _base->commits().back().openTransaction().readGraph();
     NodeID newNextNodeID = mainReader.getNodeCount();
@@ -104,9 +106,6 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         // 1. Rebase the metadata
         // 2. Get all commits/dataparts from the previous commit history
         // 3. Add back dataparts of current commit and rebase them
-
-        // TODO Walk algorithm from base commit to current head of main for conflict
-        // checking
 
         CommitData& data = commitBuilder->commitData();
         CommitHistory& history = data.history();
