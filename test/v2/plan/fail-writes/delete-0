@@ -10,3 +10,4 @@ PLAN ERROR
      2 | DELETE n.name
        |        ^^^^^^
 -------* Expressions in DELETE statements can only be symbols
+
