@@ -3,6 +3,7 @@
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "CypherAST.h"
+#include "FunctionInvocation.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
@@ -368,6 +369,7 @@ void ExprAnalyzer::analyze(PathExpr* expr) {
 }
 
 void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
+    const FunctionInvocation* invocation = expr->getFunctionInvocation();
     throwError("Function invocations not supported", expr);
 }
 

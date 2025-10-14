@@ -14,6 +14,7 @@
 #include "EntityPattern.h"
 #include "Projection.h"
 #include "WhereClause.h"
+#include "FunctionDecls.h"
 #include "stmt/Stmt.h"
 #include "stmt/SubStmt.h"
 #include "stmt/StmtContainer.h"
@@ -27,8 +28,10 @@ using namespace db::v2;
 
 CypherAST::CypherAST(std::string_view queryString)
     : _sourceManager(new SourceManager(queryString)),
-    _diagnosticsManager(new DiagnosticsManager(_sourceManager))
+    _diagnosticsManager(new DiagnosticsManager(_sourceManager)),
+    _functionDecls(std::make_unique<FunctionDecls>())
 {
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::Integer});
 }
 
 CypherAST::~CypherAST() {

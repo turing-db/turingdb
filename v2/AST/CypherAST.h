@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 #include <stdint.h>
 #include <string_view>
@@ -58,6 +59,7 @@ class NodePatternData;
 class EdgePatternData;
 class CypherParserState;
 class YCypherParser;
+class FunctionDecls;
 
 class CypherAST {
 public:
@@ -118,6 +120,9 @@ public:
 
     const QueryCommands& queries() const { return _queries; }
 
+    FunctionDecls& functionDecls() { return *_functionDecls; }
+    const FunctionDecls& functionDecls() const { return *_functionDecls; }
+
     std::string* createString();
 
     SourceManager* getSourceManager() { return _sourceManager; }
@@ -153,6 +158,8 @@ private:
     std::vector<NodePatternData*> _nodePatternDatas;
     std::vector<EdgePatternData*> _edgePatternDatas;
     std::vector<std::string*> _unnamedVarIdentifiers;
+
+    std::unique_ptr<FunctionDecls> _functionDecls;
 
     void addSymbol(Symbol* symbol);
     void addSymbolChain(SymbolChain* symbol);
