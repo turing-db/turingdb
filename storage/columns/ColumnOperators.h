@@ -164,6 +164,27 @@ public:
         }
     }
 
+    /**
+     * @brief Fills a mask corresponding to mask[i] = lhs[i] \nin rhs
+     *
+     * @param mask The mask to fill
+     * @param lhs Vector of possible candidates
+     * @param rhs Lookup set
+     */
+    template <typename T, typename U>
+    requires (Stringy<T,U> || std::same_as<T,U>)
+    static void notInOp(ColumnMask& mask,
+                     const ColumnVector<T>& lhs,
+                     const ColumnSet<U>& rhs) {
+        mask.resize(lhs.size());
+        auto* maskd = mask.data();
+        const auto size = lhs.size();
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = !rhs.contains(lhs[i]);
+        }
+    }
+
+
     static void projectOp(ColumnMask& mask,
                           const ColumnVector<size_t>& lhs,
                           const ColumnMask& rhs) {

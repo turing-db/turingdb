@@ -106,6 +106,14 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op, Lhs::staticKi
         break;                                    \
     }
 
+#define NOT_IN_CASE(Lhs, Rhs)                     \
+    case OpCase<OP_NOT_IN, Lhs, Rhs>: {           \
+        ColumnOperators::notInOp(                 \
+            *expr._mask,                          \
+            *static_cast<const Lhs*>(expr._lhs),  \
+            *static_cast<const Rhs*>(expr._rhs)); \
+        break;                                    \
+    }
 
 void FilterStep::compute() {
     for (const Expression& expr : _expressions) {
