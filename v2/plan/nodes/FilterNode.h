@@ -2,7 +2,6 @@
 
 #include "PlanGraphNode.h"
 #include "ID.h"
-#include "expr/Operators.h"
 #include "metadata/LabelSet.h"
 #include "WherePredicate.h"
 #include "PropertyConstraint.h"
@@ -28,19 +27,19 @@ public:
         return _varNode;
     }
 
-    void addPropertyConstraint(std::unique_ptr<PropertyConstraint> constraint) {
-        _propConstraints.push_back(std::move(constraint));
+    void addPropertyConstraint(PropertyConstraint* constraint) {
+        _propConstraints.push_back(constraint);
     }
 
     void addWherePredicate(WherePredicate* pred) {
         _wherePredicates.push_back(pred);
     }
 
-    std::span<const std::unique_ptr<PropertyConstraint>> getPropertyConstraints() const {
+    std::span<const PropertyConstraint* const> getPropertyConstraints() const {
         return _propConstraints;
     }
 
-    std::span<std::unique_ptr<PropertyConstraint>> getPropertyConstraints() {
+    std::span<PropertyConstraint*> getPropertyConstraints() {
         return _propConstraints;
     }
 
@@ -56,7 +55,7 @@ public:
 
 private:
     VarNode* _varNode {nullptr};
-    std::vector<std::unique_ptr<PropertyConstraint>> _propConstraints;
+    std::vector<PropertyConstraint*> _propConstraints;
     std::vector<WherePredicate*> _wherePredicates;
 };
 

@@ -65,8 +65,6 @@ private:
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
 
-    std::vector<std::unique_ptr<PropertyConstraint>> _propConstraints;
-
     void throwError(std::string_view msg, const void* obj = 0) const;
 };
 
