@@ -4,7 +4,7 @@
 #include "CypherASTDumper.h"
 #include "CypherParser.h"
 #include "TuringTime.h"
-#include "ASTException.h"
+#include "CompilerException.h"
 #include "FileReader.h"
 
 using namespace db;
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
             parser.parse(queryStr);
             auto t1 = Clock::now();
             fmt::print("Full query parsed in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const ASTException& e) {
+        } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE; // Should always succeed unless there's a bug
         }
@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
             parser.parse(queryStr);
             auto t1 = Clock::now();
             fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const ASTException& e) {
+        } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
             return 0; // Do not return error, user might test not implemented features
         }

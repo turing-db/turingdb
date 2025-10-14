@@ -20,7 +20,7 @@
 
 #include "expr/All.h"
 
-#include "ASTException.h"
+#include "CompilerException.h"
 
 using namespace db::v2;
 
@@ -60,7 +60,7 @@ void CypherASTDumper::dump(std::ostream& out) {
             continue;
         }
 
-        throw ASTException("Only single part queries are supported");
+        throw CompilerException("Only single part queries are supported");
     }
 }
 
@@ -77,7 +77,7 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
 
                 dump(out, matchSt);
             } else {
-                throw ASTException("Unknown statement type");
+                throw CompilerException("Unknown statement type");
             }
         }
     };
@@ -353,7 +353,7 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
             break;
 
         default:
-            throw ASTException("Unknown expression type");
+            throw CompilerException("Unknown expression type");
             break;
     }
 }
@@ -413,7 +413,7 @@ void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
             out << "        Operator IN\n";
             break;
         default:
-            throw ASTException("Unknown binary operator");
+            throw CompilerException("Unknown binary operator");
             break;
     }
 
@@ -447,7 +447,7 @@ void CypherASTDumper::dump(std::ostream& out, const UnaryExpr* expr) {
             out << "        Operator PLUS\n";
             break;
         default:
-            throw ASTException("Unknown unary operator");
+            throw CompilerException("Unknown unary operator");
             break;
     }
 
@@ -522,7 +522,7 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
         }
         default:
         {
-            throw ASTException("Unknown literal type");
+            throw CompilerException("Unknown literal type");
             break;
         }
     }
@@ -571,7 +571,7 @@ void CypherASTDumper::dump(std::ostream& out, const StringExpr* expr) {
             out << "        Operator CONTAINS\n";
             break;
         default:
-            throw ASTException("Unknown string operator");
+            throw CompilerException("Unknown string operator");
             break;
     }
 

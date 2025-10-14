@@ -2,11 +2,11 @@
 
 #include <string>
 
-#include "ASTException.h"
+#include "CompilerException.h"
 
 namespace db::v2 {
 
-class AnalyzeException : public ASTException {
+class AnalyzeException : public CompilerException {
 public:
     AnalyzeException(const AnalyzeException&) = default;
     AnalyzeException(AnalyzeException&&) = default;

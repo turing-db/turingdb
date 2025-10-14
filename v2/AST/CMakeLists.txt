@@ -39,7 +39,7 @@ set(ast_sources
     QualifiedName.cpp
     WhereClause.cpp
 
-    ASTException.cpp)
+    CompilerException.cpp)
 
 add_library(turing_db_v2_ast_s STATIC ${ast_sources})
 

@@ -2,14 +2,14 @@
 
 #include <string>
 
-#include "ASTException.h"
+#include "CompilerException.h"
 
 namespace db::v2 {
 
-class PlannerException : public ASTException {
+class PlannerException : public CompilerException {
 public:
     explicit PlannerException(std::string&& msg)
-        : ASTException(std::move(msg))
+        : CompilerException(std::move(msg))
     {
     }
 };
