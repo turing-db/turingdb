@@ -157,19 +157,6 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingEdges(builder);
 }
 
-void CommitWriteBuffer::finaliseDeletions() {
-    {
-        std::ranges::sort(_deletedNodes);
-        auto [newEnd, oldEnd] = std::ranges::unique(_deletedNodes);
-        _deletedNodes.erase(newEnd, oldEnd);
-    }
-    {
-        std::ranges::sort(_deletedEdges);
-        auto [newEnd, oldEnd] = std::ranges::unique(_deletedEdges);
-        _deletedEdges.erase(newEnd, oldEnd);
-    }
-}
-
 void CommitWriteBufferRebaser::rebase() {
     bioassert(_idRebaser);
     // We only need to rebase things which refer to a concrete NodeID or EdgeID.
@@ -186,5 +173,23 @@ void CommitWriteBufferRebaser::rebase() {
         }
     }
 
-    // TODO: Rebase the deleted edges/nodes as well
+    // Rebase delete sets: iterators may be invalidated if we do insert/erase in a loop
+    // over unordered_set, so instead construct the rebased sets as temporaries, and then
+    // assign back to the write buffer
+    {
+        auto& deletedEdges = _buffer->deletedEdges();
+        std::remove_reference_t<decltype(deletedEdges)> temp(deletedEdges.size());
+        for (const EdgeID edge : deletedEdges) {
+            temp.insert(_idRebaser->rebaseEdgeID(edge));
+        }
+        deletedEdges.swap(temp);
+    }
+    {
+        auto& deletedNodes = _buffer->deletedNodes();
+        std::remove_reference_t<decltype(deletedNodes)> temp(deletedNodes.size());
+        for (const NodeID node : deletedNodes) {
+            temp.insert(_idRebaser->rebaseNodeID(node));
+        }
+        deletedNodes.swap(temp);
+    }
 }

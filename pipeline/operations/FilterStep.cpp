@@ -24,7 +24,6 @@ constexpr ColumnKind::ColumnKindCode getInternalFromKind(ColumnKind::ColumnKindC
     return kind % ColumnKind::getInternalTypeKindCount();
 }
 
-
 constexpr ColumnKind::ColumnKindCode getPairKind(ColumnKind::ColumnKindCode lhs, ColumnKind::ColumnKindCode rhs) {
     // Comparing each pair of the same internal type (ex: Vector<size_t> and Const<size_t>
     const auto baseLhs = getBaseFromKind(lhs);
@@ -100,15 +99,6 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op, Lhs::staticKi
 #define IN_CASE(Lhs, Rhs)                         \
     case OpCase<OP_IN, Lhs, Rhs>: {               \
         ColumnOperators::inOp(                    \
-            *expr._mask,                          \
-            *static_cast<const Lhs*>(expr._lhs),  \
-            *static_cast<const Rhs*>(expr._rhs)); \
-        break;                                    \
-    }
-
-#define NOT_IN_CASE(Lhs, Rhs)                     \
-    case OpCase<OP_NOT_IN, Lhs, Rhs>: {           \
-        ColumnOperators::notInOp(                 \
             *expr._mask,                          \
             *static_cast<const Lhs*>(expr._lhs),  \
             *static_cast<const Rhs*>(expr._rhs)); \
