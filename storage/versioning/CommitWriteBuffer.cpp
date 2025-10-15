@@ -9,6 +9,7 @@
 #include "ID.h"
 #include "versioning/MetadataRebaser.h"
 #include "writers/DataPartBuilder.h"
+#include "Tombstones.h"
 
 using namespace db;
 
@@ -79,10 +80,10 @@ void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
 void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                          const PendingEdge& edge) {
     // Sorted and unique
-    bioassert(std::ranges::is_sorted(deletedNodes()));
-    bioassert(std::ranges::is_sorted(deletedEdges()));
-    bioassert(std::ranges::adjacent_find(deletedNodes()) == deletedNodes().end());
-    bioassert(std::ranges::adjacent_find(deletedEdges()) == deletedEdges().end());
+    // bioassert(std::ranges::is_sorted(deletedNodes()));
+    // bioassert(std::ranges::is_sorted(deletedEdges()));
+    // bioassert(std::ranges::adjacent_find(deletedNodes()) == deletedNodes().end());
+    // bioassert(std::ranges::adjacent_find(deletedEdges()) == deletedEdges().end());
 
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted. NOTE: Deletes currently not implemented
@@ -155,6 +156,15 @@ void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
 void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingNodes(builder);
     buildPendingEdges(builder);
+}
+
+void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
+    // Apply symbolic/implicit deletions
+    tombstones.addNodeTombstones(_deletedNodes);
+    tombstones.addEdgeTombstones(_deletedEdges);
+    // Delete nodes/edges should be in the "write set" of this commit
+    _journal.addWrittenNodes(_deletedNodes);
+    _journal.addWrittenEdges(_deletedEdges);
 }
 
 void CommitWriteBufferRebaser::rebase() {

@@ -32,7 +32,7 @@ public:
     bool hasEdges() const { return !_edgeTombstones.empty(); }
 
 private:
-    friend class CommitBuilder;
+    friend class CommitWriteBuffer;
 
     /**
      * @brief Given a range over NodeIDs, calls @ref TombstoneSet::insert over that range

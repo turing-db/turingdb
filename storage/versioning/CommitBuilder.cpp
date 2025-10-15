@@ -106,13 +106,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     if (wb.containsDeletes()) {
         // At this point, conflict checking should have already been done in @ref
         // Change::rebase, so all deletes are valid
-        const auto& deletedNodes = wb.deletedNodes();
-        const auto& deletedEdges = wb.deletedEdges();
-        tombstones.addNodeTombstones(deletedNodes);
-        tombstones.addEdgeTombstones(deletedEdges);
-        // Delete nodes/edges should be in the "write set" of this commit
-        journal.addWrittenNodes(deletedNodes);
-        journal.addWrittenEdges(deletedEdges);
+        wb.applyDeletions(tombstones);
     }
 
     if (wb.containsCreates()) {
