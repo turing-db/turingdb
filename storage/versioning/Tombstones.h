@@ -48,16 +48,15 @@ private:
     EdgeTombstones _edgeTombstones;
 };
 
-template<std::ranges::input_range Range>
-requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
+template <std::ranges::input_range Range>
+    requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
 void Tombstones::addNodeTombstones(Range&& nodes) {
     _nodeTombstones.insert(std::forward<Range>(nodes));
 }
 
-template<std::ranges::input_range Range>
-requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
+template <std::ranges::input_range Range>
+    requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
 void Tombstones::addEdgeTombstones(Range&& edges) {
     _edgeTombstones.insert(std::forward<Range>(edges));
 }
-
 }
