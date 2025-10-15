@@ -3,6 +3,7 @@
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistory.h"
 #include "metadata/GraphMetadata.h"
+#include "versioning/Tombstones.h"
 
 namespace db {
 
@@ -46,6 +47,7 @@ private:
     CommitHash _hash;
     CommitHistory _history;
     GraphMetadata _metadata;
+    Tombstones _tombstones;
 };
 
 }
