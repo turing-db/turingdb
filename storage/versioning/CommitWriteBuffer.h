@@ -89,6 +89,12 @@ public:
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
              && _deletedEdges.empty();
      }
+     bool containsCreates() const {
+         return !_pendingNodes.empty() || !_pendingEdges.empty();
+     }
+     bool containsDeletes() const {
+         return !_deletedNodes.empty() || !_deletedEdges.empty();
+     }
 
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref

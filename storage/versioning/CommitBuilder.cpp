@@ -102,36 +102,26 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
 
     bioassert(journal.empty());
 
-    if (wb.empty()) {
-        wb.setFlushed();
-        return;
+    if (wb.containsDeletes()) {
+        // At this point, conflict checking should have already been done in @ref
+        // Change::rebase, so all deletes are valid
+        Tombstones& tombstones = _commitData->_tombstones;
+        const auto& deletedNodes = wb.deletedNodes();
+        const auto& deletedEdges = wb.deletedEdges();
+        tombstones.addNodeTombstones(deletedNodes);
+        tombstones.addEdgeTombstones(deletedEdges);
+        // Delete nodes/edges should be in the "write set" of this commit
+        journal.addWrittenNodes(wb.deletedNodes());
+        journal.addWrittenEdges(wb.deletedEdges());
+
     }
 
-<<<<<<< HEAD
-    // Ensure deletions are unique and sorted
-    wb.finaliseDeletions();
-
-||||||| parent of 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
-=======
-    // At this point, conflict checking should have already been done in @ref
-    // Change::rebase, so all deletes are valid
-    Tombstones& tombstones = _commitData->_tombstones;
-    const auto& deletedNodes = wb.deletedNodes();
-    const auto& deletedEdges = wb.deletedEdges();
-    tombstones.addNodeTombstones(deletedNodes);
-    tombstones.addEdgeTombstones(deletedEdges);
-
->>>>>>> 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
-    // We create a single datapart when flushing the buffer, to ensure it is synced with
-    // the metadata provided when rebasing main
-    DataPartBuilder& dpBuilder = newBuilder();
-    wb.buildPending(dpBuilder); // Adds CREATEd nodes/edges to journal WriteSet
-
-    // TODO: Add tombstone registration of deleted nodes
-
-    // Delete nodes/edges should be in the "write set" of this commit
-    journal.addWrittenNodes(wb.deletedNodes());
-    journal.addWrittenEdges(wb.deletedEdges());
+    if (wb.containsCreates()) {
+        // We create a single datapart when flushing the buffer,
+        // to ensure it is synced with the metadata provided when rebasing main
+        DataPartBuilder& dpBuilder = newBuilder();
+        wb.buildPending(dpBuilder);
+    }
 
     wb.setFlushed();
 }

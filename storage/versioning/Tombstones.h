@@ -1,7 +1,8 @@
 #pragma once
 
-#include "versioning/TombstoneSet.h"
 #include <ranges>
+
+#include "versioning/TombstoneSet.h"
 
 namespace db {
 
@@ -21,11 +22,14 @@ public:
     Tombstones(Tombstones&&) = delete;
     Tombstones& operator=(Tombstones&&) = delete;
 
-    bool containsNode(NodeID nodeID) { return _nodeTombstones.contains(nodeID); }
-    bool containsEdge(EdgeID edgeID) { return _edgeTombstones.contains(edgeID); }
+    bool containsNode(NodeID nodeID) const { return _nodeTombstones.contains(nodeID); }
+    bool containsEdge(EdgeID edgeID) const { return _edgeTombstones.contains(edgeID); }
 
     size_t numNodes() const { return _nodeTombstones.size(); }
     size_t numEdges() const { return _edgeTombstones.size(); }
+
+    bool hasNodes() const { return !_nodeTombstones.empty(); }
+    bool hasEdges() const { return !_edgeTombstones.empty(); }
 
 private:
     friend class CommitBuilder;
