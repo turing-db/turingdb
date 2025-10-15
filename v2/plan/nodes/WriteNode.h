@@ -92,10 +92,15 @@ public:
         return _newNodes.at(offset);
     }
 
-    std::span<const PendingNode> pendingNodes() const { return _newNodes; }
-    std::span<const PendingEdge> pendingEdges() const { return _newEdges; }
-    std::span<const VarDecl* const> toDeleteNodes() const { return _toDeleteNodes; }
-    std::span<const VarDecl* const> toDeleteEdges() const { return _toDeleteEdges; }
+    using PendingNodeSpan = std::span<const PendingNode>;
+    using PendingEdgeSpan = std::span<const PendingEdge>;
+    using ToDeleteNodeSpan = std::span<const VarDecl* const>;
+    using ToDeleteEdgeSpan = std::span<const VarDecl* const>;
+
+    PendingNodeSpan pendingNodes() const { return _newNodes; }
+    PendingEdgeSpan pendingEdges() const { return _newEdges; }
+    ToDeleteNodeSpan toDeleteNodes() const { return _toDeleteNodes; }
+    ToDeleteEdgeSpan toDeleteEdges() const { return _toDeleteEdges; }
 
 private:
     std::vector<PendingNode> _newNodes;
