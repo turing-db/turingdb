@@ -26,8 +26,13 @@ public:
     void addWrittenNode(NodeID node);
     void addWrittenEdge(EdgeID edge);
 
-    void addWrittenNodes(const std::vector<NodeID>& nodes);
-    void addWrittenEdges(const std::vector<EdgeID>& edges);
+    template <std::ranges::input_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
+    void addWrittenNodes(const Range& nodes);
+
+    template <std::ranges::input_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
+    void addWrittenEdges(const Range& edges);
 
     auto& nodeWriteSet() { return _nodeWriteSet; }
     auto& edgeWriteSet() { return _edgeWriteSet; }
@@ -42,4 +47,17 @@ private:
 
     CommitJournal() = default;
 };
+
+template <std::ranges::input_range Range>
+    requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
+void CommitJournal::addWrittenNodes(const Range& nodes) {
+    _nodeWriteSet.insert(nodes);
+}
+
+template <std::ranges::input_range Range>
+    requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
+void CommitJournal::addWrittenEdges(const Range& edges) {
+    _edgeWriteSet.insert(edges);
+}
+
 }

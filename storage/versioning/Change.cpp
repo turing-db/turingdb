@@ -126,12 +126,9 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
 
         // Clear the journal: WriteSets may change on reflush after rebase
         history.journal().clear();
-        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer(),
-                                      branchTimeNextNodeID,
-                                      branchTimeNextEdgeID,
-                                      newNextNodeID,
-                                      newNextEdgeID);
-        wbRb.rebase();
+        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer());
+        wbRb.rebase(branchTimeNextNodeID, branchTimeNextEdgeID, newNextNodeID,
+                    newNextEdgeID);
 
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.

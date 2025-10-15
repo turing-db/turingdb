@@ -31,13 +31,13 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
 // Called when executing a DELETE NODES query
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
-    _deletedNodes.insert(_deletedNodes.end(), newDeletedNodes.begin(), newDeletedNodes.end());
+    _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
 }
 
 // Called when executing a DELETE EDGES query
 void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
     _deletedEdges.reserve(_deletedEdges.size() + newDeletedEdges.size());
-    _deletedEdges.insert(_deletedEdges.end(), newDeletedEdges.begin(), newDeletedEdges.end());
+    _deletedEdges.insert(newDeletedEdges.begin(), newDeletedEdges.end());
 }
 
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
@@ -156,7 +156,10 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingEdges(builder);
 }
 
-void CommitWriteBufferRebaser::rebase() {
+void CommitWriteBufferRebaser::rebase(NodeID entryNextNodeID,
+                                      EdgeID entryNextEdgeID,
+                                      NodeID newNextNodeID,
+                                      EdgeID newNextEdgeID) {
     // If a @ref Change makes commits locally, it will create nodes according to what it
     // thinks the next NodeID should be. This view is determined by the next node ID at
     // the time the change branched from main. In subsequent commits on the Change, it is
@@ -183,14 +186,14 @@ void CommitWriteBufferRebaser::rebase() {
     // (instead of a "Pending" thing) needs to be rebased
     const auto rebaseNodeID = [&](NodeID wbID) {
         if (wbID >= entryNextNodeID) {
-            return wbID + currentNextNodeID - entryNextNodeID;
+            return wbID + newNextNodeID - entryNextNodeID;
         }
         return wbID;
     };
 
     const auto rebaseEdgeID = [&](EdgeID wbID) {
-        if (wbID >= _entryNextEdgeID) {
-            return wbID + _currentNextEdgeID - _entryNextEdgeID;
+        if (wbID >= entryNextEdgeID) {
+            return wbID + newNextEdgeID - entryNextEdgeID;
         }
         return wbID;
     };

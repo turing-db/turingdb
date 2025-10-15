@@ -119,6 +119,8 @@ private:
 
     bool _flushed {false};
 
+    CommitJournal& _journal;
+
     // Nodes to be created when this commit commits
     std::vector<PendingNode> _pendingNodes;
 
@@ -146,7 +148,10 @@ public:
         {
         }
 
-    void rebase();
+    void rebase(NodeID branchTimeNextNodeID,
+                EdgeID branchTimeNextEdgeID,
+                NodeID newNextNodeID,
+                EdgeID newNextEdgeID);
 
 private:
     CommitWriteBuffer* _buffer;
