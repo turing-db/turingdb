@@ -316,3 +316,7 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
 
     PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
 }
+
+int main(int argc, char** argv) {
+    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 3; });
+}
