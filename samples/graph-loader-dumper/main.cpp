@@ -125,6 +125,7 @@ int main() {
         }
     }
 
+        /*
     {
         // Dump reactome
         auto t0 = Clock::now();
@@ -163,6 +164,7 @@ int main() {
             return 1;
         }
     }
+    */
 
     // {
     //     // Dump ckg
