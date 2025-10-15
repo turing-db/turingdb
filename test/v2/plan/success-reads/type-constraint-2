@@ -1,0 +1,23 @@
+/// QUERY
+MATCH (n) WHERE n:Person:SoftwareEngineering RETURN n
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __label__: Person
+        __label__: SoftwareEngineering
+    `"]
+    3["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1

@@ -91,7 +91,6 @@ void runPlan2(std::string_view query) {
         fmt::println(std::cerr, "/// RESULT");
         fmt::println(std::cerr, "ANALYZE ERROR");
         fmt::println(std::cerr, "{}", e.what());
-
         return;
     }
 

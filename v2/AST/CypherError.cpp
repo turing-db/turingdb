@@ -118,7 +118,6 @@ void CypherError::generateSingleLine(std::string& errorOutput) {
     errorOutput += errorBars<UP_ERR_CHAR>(errLineLoc);
     errorOutput += META_PREFIX;
     errorOutput += _errorMsg;
-    errorOutput += "\n";
 }
 
 void CypherError::generateMultiLine(std::string& errorOutput) {
@@ -155,5 +154,4 @@ void CypherError::generateMultiLine(std::string& errorOutput) {
     errorOutput += errorBars<UP_ERR_CHAR>(lastLineLoc);
     errorOutput += META_PREFIX;
     errorOutput += _errorMsg;
-    errorOutput += "\n";
 }
