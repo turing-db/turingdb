@@ -4,7 +4,6 @@ MATCH (m:Person { name: "Adam" })
 CREATE (n)-[e:IS_FRIEND]->(m)
 RETURN n;
 
-
 /// RESULT
 flowchart TD
     0["`
@@ -17,7 +16,7 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ _n_.name
+        __prop__ n._name_
     `"]
     3["`
         __SCAN_NODES__
@@ -29,7 +28,7 @@ flowchart TD
     5["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ _m_.name
+        __prop__ m._name_
     `"]
     6["`
         __CARTESIAN_PRODUCT__

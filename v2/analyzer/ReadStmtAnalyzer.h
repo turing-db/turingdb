@@ -28,7 +28,7 @@ class SymbolExpr;
 class LiteralExpr;
 class PropertyExpr;
 class StringExpr;
-class NodeLabelExpr;
+class EntityTypeExpr;
 class PathExpr;
 
 class ReadStmtAnalyzer {

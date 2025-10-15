@@ -336,8 +336,8 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::STRING:
             dump(out, dynamic_cast<const StringExpr*>(expr));
             break;
-        case Expr::Kind::NODE_LABEL:
-            dump(out, dynamic_cast<const NodeLabelExpr*>(expr));
+        case Expr::Kind::ENTITY_TYPES:
+            dump(out, dynamic_cast<const EntityTypeExpr*>(expr));
             break;
         case Expr::Kind::PROPERTY:
             dump(out, dynamic_cast<const PropertyExpr*>(expr));
@@ -536,12 +536,12 @@ void CypherASTDumper::dump(std::ostream& out, const PathExpr* expr) {
     out << "    }\n";
 }
 
-void CypherASTDumper::dump(std::ostream& out, const NodeLabelExpr* expr) {
+void CypherASTDumper::dump(std::ostream& out, const EntityTypeExpr* expr) {
     out << "    _" << std::hex << expr << " {\n";
     out << "        ASTType NodeLabelExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
-    const auto& labels = expr->labels();
+    const auto& labels = expr->getTypes();
     for (const auto& label : labels) {
         out << "        Label " << label->getName() << "\n";
     }

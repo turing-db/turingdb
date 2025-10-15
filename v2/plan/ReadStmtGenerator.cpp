@@ -8,10 +8,13 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "PlanGraph.h"
+#include "PropertyConstraint.h"
+#include "Symbol.h"
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
 #include "PlanGraphTopology.h"
 
+#include "WherePredicate.h"
 #include "decl/VarDecl.h"
 #include "nodes/CartesianProductNode.h"
 #include "nodes/FilterNode.h"
@@ -305,36 +308,51 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
 }
 
 void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
-    if (expr->getKind() == Expr::Kind::NODE_LABEL) {
-        // Node label expression can be pushed down to the var node
-        //
-        // WARNING
-        // NODE_LABEL is missleading
-        // It can also refer to an edge type such as: e:KNOWS
+    if (expr->getKind() == Expr::Kind::ENTITY_TYPES) {
+        // Entity type expressions can be pushed down to the var (node or edge)
 
-        const NodeLabelExpr* entityTypeExpr = static_cast<const NodeLabelExpr*>(expr);
+        const EntityTypeExpr* entityTypeExpr = static_cast<const EntityTypeExpr*>(expr);
         const VarDecl* decl = entityTypeExpr->getDecl();
         const VarNode* varNode = _variables->getVarNode(decl);
         FilterNode* filter = _variables->getNodeFilter(varNode);
 
+        const LabelMap& labelMap = _graphMetadata.labels();
+        const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
+
         if (decl->getType() == EvaluatedType::NodePattern) {
             NodeFilterNode* nodeFilter = static_cast<NodeFilterNode*>(filter);
-            nodeFilter->addLabelConstraints(entityTypeExpr->labelSet());
+
+            LabelSet labelset;
+            for (const Symbol* symbol : entityTypeExpr->getTypes()) {
+                const std::string_view label = symbol->getName();
+                const std::optional labelID = labelMap.get(label);
+
+                if (!labelID) {
+                    throwError(fmt::format("Unknown label: {}", label), entityTypeExpr);
+                }
+
+                labelset.set(labelID.value());
+            }
+
+            nodeFilter->addLabelConstraints(labelset);
 
         } else if (decl->getType() == EvaluatedType::EdgePattern) {
             EdgeFilterNode* edgeFilter = static_cast<EdgeFilterNode*>(filter);
 
-            if (entityTypeExpr->labels().size() != 1) {
+            const auto& edgeTypes = entityTypeExpr->getTypes();
+
+            if (edgeTypes.size() != 1) {
                 throwError("Only one edge type constraint is supported for now", expr);
             }
 
-            // TODO: Fix, this is ugly, we make the NodeLabel expression Node/Edge agnostic
-            // Right now we have to interprete "Label ids" as edge types
-            std::vector<LabelID> edgeTypes;
-            entityTypeExpr->labelSet().decompose(edgeTypes);
-            for (const auto& edgeType : edgeTypes) {
-                edgeFilter->addEdgeTypeConstraint(edgeType);
+            const std::string_view edgeTypeName = edgeTypes.front()->getName();
+            const std::optional edgeType = edgeTypeMap.get(edgeTypeName);
+
+            if (!edgeType) {
+                throwError(fmt::format("Unknown edge type: {}", edgeTypeName), entityTypeExpr);
             }
+
+            edgeFilter->addEdgeTypeConstraint(edgeType.value());
         }
 
         return;

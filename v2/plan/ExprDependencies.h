@@ -26,7 +26,7 @@ public:
         std::string_view _propertyType;
     };
 
-    using Dependency = std::variant<LabelDependency, PropertyDependency>;
+    using Dependency = std::variant<const EntityTypeExpr*, const PropertyExpr*>;
 
     struct ExprDependency {
         VarNode* _var {nullptr};
@@ -53,8 +53,8 @@ public:
                 genExprDependencies(variables, static_cast<const StringExpr*>(expr));
                 break;
 
-            case Expr::Kind::NODE_LABEL:
-                genExprDependencies(variables, static_cast<const NodeLabelExpr*>(expr));
+            case Expr::Kind::ENTITY_TYPES:
+                genExprDependencies(variables, static_cast<const EntityTypeExpr*>(expr));
                 break;
 
             case Expr::Kind::PROPERTY:
@@ -96,15 +96,12 @@ private:
         genExprDependencies(variables, expr->getRHS());
     }
 
-    void genExprDependencies(const PlanGraphVariables& variables, const NodeLabelExpr* expr) {
-        _dependencies.emplace_back(
-            variables.getVarNode(expr->getDecl()),
-            LabelDependency {&expr->labelSet()});
+    void genExprDependencies(const PlanGraphVariables& variables, const EntityTypeExpr* expr) {
+        _dependencies.emplace_back(variables.getVarNode(expr->getDecl()), expr);
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr* expr) {
-        _dependencies.emplace_back(variables.getVarNode(expr->getDecl()),
-                                   PropertyDependency {expr->getPropName()});
+        _dependencies.emplace_back(variables.getVarNode(expr->getDecl()), expr);
     }
 };
 

@@ -635,7 +635,7 @@ propertyOrLabelExpr
     // This seems too permissive, it allows 'n.name:Person' which is weird
 
     // Replaced by this more specific rule
-    | symbol nodeLabels { $$ = NodeLabelExpr::create(ast, $1, std::move($2)); LOC($$, @$); }
+    | symbol nodeLabels { $$ = EntityTypeExpr::create(ast, $1, std::move($2)); LOC($$, @$); }
     ;
 
 propertyExpr

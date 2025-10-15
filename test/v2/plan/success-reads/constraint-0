@@ -1,8 +1,6 @@
 /// QUERY
 MATCH (b)-->(c), (a { name: c.name })-->(b) RETURN a, b, c;
 
-
-
 /// RESULT
 flowchart TD
     0["`
@@ -34,8 +32,8 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _a_.name
-        __dep__: c.name
+        __prop__ a._name_
+        __dep__ c._name_
     `"]
     9["`
         __SCAN_NODES__

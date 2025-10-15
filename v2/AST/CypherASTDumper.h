@@ -25,7 +25,7 @@ class SymbolExpr;
 class LiteralExpr;
 class ParameterExpr;
 class PathExpr;
-class NodeLabelExpr;
+class EntityTypeExpr;
 class StringExpr;
 class PropertyExpr;
 class VarDecl;
@@ -67,7 +67,7 @@ private:
     void dump(std::ostream& out, const SymbolExpr* expr);
     void dump(std::ostream& out, const LiteralExpr* expr);
     void dump(std::ostream& out, const PathExpr* expr);
-    void dump(std::ostream& out, const NodeLabelExpr* expr);
+    void dump(std::ostream& out, const EntityTypeExpr* expr);
     void dump(std::ostream& out, const StringExpr* expr);
     void dump(std::ostream& out, const PropertyExpr* expr);
     void dump(std::ostream& out, const VarDecl* decl);

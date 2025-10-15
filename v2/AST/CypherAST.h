@@ -22,7 +22,7 @@ class Expr;
 class ExprChain;
 class BinaryExpr;
 class LiteralExpr;
-class NodeLabelExpr;
+class EntityTypeExpr;
 class ParameterExpr;
 class PathExpr;
 class PropertyExpr;
@@ -71,7 +71,7 @@ public:
     friend ExprChain;
     friend BinaryExpr;
     friend LiteralExpr;
-    friend NodeLabelExpr;
+    friend EntityTypeExpr;
     friend ParameterExpr;
     friend PathExpr;
     friend PropertyExpr;

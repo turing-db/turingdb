@@ -3,7 +3,6 @@ MATCH (n:Person)
 WHERE n.name = "Luc"
 CREATE (n)-[e:KNOWS_WELL]->(m:Person) RETURN n;
 
-
 /// RESULT
 flowchart TD
     0["`
@@ -17,7 +16,7 @@ flowchart TD
         __FILTER_NODE__
         __label__: Person
         __has predicate__
-        __dep__: n.name
+        __dep__ n._name_
     `"]
     3["`
         __WRITE__

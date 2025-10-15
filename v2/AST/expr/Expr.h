@@ -14,7 +14,7 @@ public:
         BINARY = 0,
         UNARY,
         STRING,
-        NODE_LABEL,
+        ENTITY_TYPES,
         PROPERTY,
         PATH,
         SYMBOL,

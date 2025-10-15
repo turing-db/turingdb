@@ -22,7 +22,7 @@ class SymbolExpr;
 class LiteralExpr;
 class PropertyExpr;
 class StringExpr;
-class NodeLabelExpr;
+class EntityTypeExpr;
 class PathExpr;
 
 class ExprAnalyzer {
@@ -45,7 +45,7 @@ public:
     void analyze(LiteralExpr* expr);
     void analyze(PropertyExpr* expr);
     void analyze(StringExpr* expr);
-    void analyze(NodeLabelExpr* expr);
+    void analyze(EntityTypeExpr* expr);
     void analyze(PathExpr* expr);
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);

@@ -28,7 +28,7 @@ class LiteralExpr;
 class ParameterExpr;
 class PropertyExpr;
 class StringExpr;
-class NodeLabelExpr;
+class EntityTypeExpr;
 class PathExpr;
 class DeclContext;
 class VarDecl;

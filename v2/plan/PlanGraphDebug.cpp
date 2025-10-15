@@ -1,6 +1,5 @@
 #include "PlanGraphDebug.h"
 
-#include "decl/PatternData.h"
 #include "nodes/FilterNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/VarNode.h"
@@ -11,7 +10,11 @@
 #include "views/GraphView.h"
 
 #include "PlanGraph.h"
+#include "WherePredicate.h"
+#include "Symbol.h"
+#include "PropertyConstraint.h"
 
+#include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 
 #include "metadata/LabelSet.h"
@@ -42,6 +45,25 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
     std::unordered_map<const PlanGraphNode*, size_t> nodeOrder;
 
     output << "flowchart TD\n";
+
+    static constexpr auto outputDependency = [](std::ostream& output, const ExprDependencies::ExprDependency& dep) {
+        output << "        __dep__ " << dep._var->getVarDecl()->getName();
+        if (const auto* expr = std::get_if<const EntityTypeExpr*>(&dep._dep)) {
+            for (const auto& type : (*expr)->getTypes()) {
+                output << ":_ " << type->getName() << "_\n";
+            }
+        } else if (const auto* expr = std::get_if<const PropertyExpr*>(&dep._dep)) {
+            output << "._" << (*expr)->getPropName() << "_\n";
+        }
+    };
+
+    static constexpr auto outputPredicate = [](std::ostream& output, const WherePredicate* pred) {
+        output << "        __has predicate__" << "\n";
+
+        for (const auto& dep : pred->getDependencies()) {
+            outputDependency(output, dep);
+        }
+    };
 
     for (size_t i = 0; i < planGraph._nodes.size(); i++) {
         const auto& node = planGraph._nodes[i];
@@ -92,29 +114,15 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                         name = std::to_string(propType);
                     }
 
-                    output << fmt::format("        __prop__ _{}_.{}\n", var->getVarDecl()->getName(), name.value());
+                    output << fmt::format("        __prop__ {}._{}_\n", var->getVarDecl()->getName(), name.value());
 
                     for (const auto& dep : deps.getDependencies()) {
-                        output << "        __dep__: " << dep._var->getVarDecl()->getName();
-                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << " __labels__\n";
-                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            output << "." << p->_propertyType << "\n";
-                        }
+                        outputDependency(output, dep);
                     }
                 }
 
                 for (const auto& pred : n->getWherePredicates()) {
-                    output << "        __has predicate__" << "\n";
-
-                    for (const auto& dep : pred->getDependencies()) {
-                        output << "        __dep__: " << dep._var->getVarDecl()->getName();
-                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << ": __labels__\n";
-                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            output << "." << p->_propertyType << "\n";
-                        }
-                    }
+                    outputPredicate(output, pred);
                 }
             } break;
 
@@ -135,26 +143,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << fmt::format("        __prop__ _{}_: {}\n", var->getVarDecl()->getName(), name.value());
 
                     for (const auto& dep : deps.getDependencies()) {
-                        output << "        __dep__: " << dep._var->getVarDecl()->getName();
-                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << "__labels__\n";
-                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            output << "." << p->_propertyType << "\n";
-                        }
+                        outputDependency(output, dep);
                     }
                 }
 
                 for (const auto& pred : e->getWherePredicates()) {
-                    output << "        __has predicate__" << "\n";
-
-                    for (const auto& dep : pred->getDependencies()) {
-                        output << "        __dep__: " << dep._var->getVarDecl()->getName();
-                        if (std::holds_alternative<ExprDependencies::LabelDependency>(dep._dep)) {
-                            output << ": __labels__\n";
-                        } else if (const auto* p = std::get_if<ExprDependencies::PropertyDependency>(&dep._dep)) {
-                            output << "." << p->_propertyType << "\n";
-                        }
-                    }
+                    outputPredicate(output, pred);
                 }
             } break;
 

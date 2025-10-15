@@ -4,20 +4,20 @@
 
 using namespace db::v2;
 
-NodeLabelExpr::NodeLabelExpr(Symbol* symbol, Labels&& labels)
-    : Expr(Kind::NODE_LABEL),
+EntityTypeExpr::EntityTypeExpr(Symbol* symbol, Types&& types)
+    : Expr(Kind::ENTITY_TYPES),
     _symbol(symbol),
-    _labels(std::move(labels))
+    _types(std::move(types))
 {
 }
 
-NodeLabelExpr::~NodeLabelExpr() {
+EntityTypeExpr::~EntityTypeExpr() {
 }
 
-NodeLabelExpr* NodeLabelExpr::create(CypherAST* ast, 
+EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, 
                                      Symbol* symbol,
-                                     Labels&& labels) {
-    NodeLabelExpr* expr = new NodeLabelExpr(symbol, std::move(labels));
+                                     Types&& types) {
+    EntityTypeExpr* expr = new EntityTypeExpr(symbol, std::move(types));
     ast->addExpr(expr);
     return expr;
 }

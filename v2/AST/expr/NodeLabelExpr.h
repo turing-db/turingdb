@@ -4,39 +4,34 @@
 
 #include <vector>
 
-#include "metadata/LabelSet.h"
-
 namespace db::v2 {
 
 class CypherAST;
 class Symbol;
 class VarDecl;
 
-class NodeLabelExpr : public Expr {
+class EntityTypeExpr : public Expr {
 public:
-    using Labels = std::vector<Symbol*>;
+    using Types = std::vector<Symbol*>;
 
     Symbol* getSymbol() const { return _symbol; }
-    const Labels& labels() const { return _labels; }
+    const Types& getTypes() const { return _types; }
 
-    static NodeLabelExpr* create(CypherAST* ast, 
+    static EntityTypeExpr* create(CypherAST* ast, 
                                  Symbol* symbol,
-                                 Labels&& labels);
+                                 Types&& types);
 
     VarDecl* getDecl() const { return _decl; }
-    const LabelSet& labelSet() const { return _labelSet; }
 
     void setDecl(VarDecl* decl) { _decl = decl; }
-    void setLabelID(LabelID labelID) { _labelSet.set(labelID); }
 
 private:
     Symbol* _symbol {nullptr};
-    Labels _labels;
+    Types _types;
     VarDecl* _decl {nullptr};
-    LabelSet _labelSet;
 
-    NodeLabelExpr(Symbol* symbol, Labels&& labels);
-    ~NodeLabelExpr() override;
+    EntityTypeExpr(Symbol* symbol, Types&& types);
+    ~EntityTypeExpr() override;
 };
 
 }

@@ -23,9 +23,8 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
@@ -42,8 +41,8 @@ void ExprAnalyzer::analyze(Expr* expr) {
         case Expr::Kind::STRING:
             analyze(static_cast<StringExpr*>(expr));
             break;
-        case Expr::Kind::NODE_LABEL:
-            analyze(static_cast<NodeLabelExpr*>(expr));
+        case Expr::Kind::ENTITY_TYPES:
+            analyze(static_cast<EntityTypeExpr*>(expr));
             break;
         case Expr::Kind::PROPERTY:
             analyze(static_cast<PropertyExpr*>(expr));
@@ -89,7 +88,7 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 
-            throwError(std::move(error), expr);
+            throwError(error, expr);
         } break;
 
         case BinaryOperator::NotEqual:
@@ -109,7 +108,7 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 
-            throwError(std::move(error), expr);
+            throwError(error, expr);
         } break;
         case BinaryOperator::LessThan:
         case BinaryOperator::GreaterThan:
@@ -129,7 +128,7 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 
-            throwError(std::move(error), expr);
+            throwError(error, expr);
         } break;
 
         case BinaryOperator::Add:
@@ -154,7 +153,7 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 
-            throwError(std::move(error), expr);
+            throwError(error, expr);
         } break;
 
         case BinaryOperator::In: {
@@ -163,13 +162,13 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
             if (b != EvaluatedType::List && b != EvaluatedType::Map) {
                 const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
                                                       EvaluatedTypeName::value(b));
-                throwError(std::move(error), expr);
+                throwError(error, expr);
             }
 
             if (a == EvaluatedType::List || a == EvaluatedType::Map) {
                 const std::string error = fmt::format("Left operand must be a scalar, not '{}'",
                                                       EvaluatedTypeName::value(a));
-                throwError(std::move(error), expr);
+                throwError(error, expr);
             }
         } break;
     }
@@ -188,7 +187,7 @@ void ExprAnalyzer::analyze(UnaryExpr* expr) {
             if (operand->getType() != EvaluatedType::Bool) {
                 const std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
                                                       EvaluatedTypeName::value(operand->getType()));
-                throwError(std::move(error), expr);
+                throwError(error, expr);
             }
 
             type = EvaluatedType::Bool;
@@ -204,7 +203,7 @@ void ExprAnalyzer::analyze(UnaryExpr* expr) {
             } else {
                 const std::string error = fmt::format("Operand must be an integer or double, not '{}'",
                                                       EvaluatedTypeName::value(operandType));
-                throwError(std::move(error), expr);
+                throwError(error, expr);
             }
 
         } break;
@@ -257,7 +256,7 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
     if (qualifiedName->size() != 2) {
         const std::string error = fmt::format("Only length 2 property expressions are supported, not '{}'",
                                               qualifiedName->size());
-        throwError(std::move(error), expr);
+        throwError(error, expr);
     }
 
     const Symbol* varName = qualifiedName->get(0);
@@ -274,7 +273,7 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
             "Variable '{}' is '{}' it must be a node or edge",
             varName->getName(), EvaluatedTypeName::value(varDecl->getType()));
 
-        throwError(std::move(error), expr);
+        throwError(error, expr);
     }
 
     const auto propTypeFound = _graphMetadata.propTypes().get(propName->getName());
@@ -290,7 +289,7 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
         if (it == _typeMap.end()) {
             // Property does not exist and is not meant to be created in this query
             const std::string error = fmt::format("Property type '{}' not found", propName->getName());
-            throwError(std::move(error), expr);
+            throwError(error, expr);
         }
 
         // Property is meant to be created in this query
@@ -320,7 +319,7 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
         } break;
         default: {
             const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
-            throwError(std::move(error), expr);
+            throwError(error, expr);
         } break;
     }
 
@@ -341,14 +340,13 @@ void ExprAnalyzer::analyze(StringExpr* expr) {
             EvaluatedTypeName::value(lhs->getType()),
             EvaluatedTypeName::value(rhs->getType()));
 
-        throwError(std::move(error), expr);
+        throwError(error, expr);
     }
 
     expr->setType(EvaluatedType::Bool);
 }
 
-void ExprAnalyzer::analyze(NodeLabelExpr* expr) {
-    const LabelMap& labelMap = _graphMetadata.labels();
+void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
     expr->setType(EvaluatedType::Bool);
 
     VarDecl* decl = _ctxt->getDecl(expr->getSymbol()->getName());
@@ -359,21 +357,14 @@ void ExprAnalyzer::analyze(NodeLabelExpr* expr) {
 
     expr->setDecl(decl);
 
-    if (decl->getType() != EvaluatedType::NodePattern) {
-        const std::string error = fmt::format("Variable '{}' is '{}' it must be a node",
-                                              decl->getName(), EvaluatedTypeName::value(decl->getType()));
-        throwError(std::move(error), expr);
+    if (decl->getType() == EvaluatedType::NodePattern
+        || decl->getType() == EvaluatedType::EdgePattern) {
+        return;
     }
 
-    for (const Symbol* label : expr->labels()) {
-        const std::optional<LabelID> labelID = labelMap.get(label->getName());
-        if (!labelID) {
-            const std::string error = fmt::format("Unknown label '{}'", label->getName());
-            throwError(std::move(error), expr);
-        }
-
-        expr->setLabelID(labelID.value());
-    }
+    const std::string error = fmt::format("Variable '{}' is '{}'. Must be NodePattern or EdgePattern",
+                                          decl->getName(), EvaluatedTypeName::value(decl->getType()));
+    throwError(error, expr);
 }
 
 void ExprAnalyzer::analyze(PathExpr* expr) {

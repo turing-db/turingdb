@@ -3,14 +3,14 @@
 #include "PlanGraphNode.h"
 #include "ID.h"
 #include "metadata/LabelSet.h"
-#include "WherePredicate.h"
-#include "PropertyConstraint.h"
 
 namespace db::v2 {
 
 class VarNode;
 class NodeFilterNode;
 class EdgeFilterNode;
+class PropertyConstraint;
+class WherePredicate;
 
 class FilterNode : public PlanGraphNode {
 public:

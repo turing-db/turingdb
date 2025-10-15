@@ -1,9 +1,8 @@
 /// QUERY
 MATCH (n:Person)-->(m:Person)
-WHERE n.name = "Remy" AND n.name = "Adam"
+WHERE n.name = "Remy" AND m.name = "Adam"
 CREATE (n)-[e:IS_FRIEND]->(m)
 RETURN n;
-
 
 /// RESULT
 flowchart TD
@@ -18,9 +17,7 @@ flowchart TD
         __FILTER_NODE__
         __label__: Person
         __has predicate__
-        __dep__: n.name
-        __has predicate__
-        __dep__: n.name
+        __dep__ n._name_
     `"]
     3["`
         __GET_OUT_EDGES__
@@ -42,6 +39,8 @@ flowchart TD
     8["`
         __FILTER_NODE__
         __label__: Person
+        __has predicate__
+        __dep__ m._name_
     `"]
     9["`
         __WRITE__
