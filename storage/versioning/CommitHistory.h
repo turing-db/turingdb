@@ -12,6 +12,8 @@ namespace db {
 
 class CommitHistory {
 public:
+    using CommitViewSpan = std::span<const CommitView>;
+
     CommitHistory();
     ~CommitHistory();
 
@@ -23,7 +25,7 @@ public:
     DataPartSpan allDataparts() const { return _allDataparts; }
     DataPartSpan commitDataparts() const { return _commitDataparts; }
     DataPartSpan commitDataparts() { return _commitDataparts; }
-    std::span<const CommitView> commits() const;
+    CommitViewSpan commits() const;
 
     void pushPreviousCommits(std::span<const CommitView> commits) {
         const size_t prevSize = _commits.size();
@@ -35,7 +37,7 @@ public:
         _commits.push_back(commit);
     }
 
-    void newFromPrevious(const CommitHistory& base);
+    void newCommitHistoryFromPrevious(const CommitHistory& previous);
 
     CommitJournal& journal() { return *_journal; }
 

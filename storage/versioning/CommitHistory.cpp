@@ -13,9 +13,9 @@ std::span<const CommitView> CommitHistory::commits() const {
     return std::span<const CommitView>(_commits);
 }
 
-void CommitHistory::newFromPrevious(const CommitHistory& base) {
-    _commits = base._commits;
-    _allDataparts = base._allDataparts;
+void CommitHistory::newCommitHistoryFromPrevious(const CommitHistory& previous) {
+    _commits = previous._commits;
+    _allDataparts = previous._allDataparts;
     _commitDataparts = {};
 }
 

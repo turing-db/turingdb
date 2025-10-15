@@ -34,7 +34,7 @@ std::unique_ptr<Commit> Commit::createNextCommit(VersionController* controller,
     auto* ptr = new Commit {controller, data};
 
     // Copy previous commit history and metadata
-    ptr->_data->_history.newFromPrevious(prevCommit.history());
+    ptr->_data->_history.newCommitHistoryFromPrevious(prevCommit.history());
     ptr->_data->_history.pushCommit(ptr->view());
     ptr->_data->_metadata = prevCommit.metadata();
 
