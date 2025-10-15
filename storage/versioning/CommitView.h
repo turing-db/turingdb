@@ -10,6 +10,7 @@ class CommitHistory;
 class VersionController;
 class GraphMetadata;
 class FrozenCommitTx;
+class Tombstones;
 
 class CommitView {
 public:
@@ -34,6 +35,7 @@ public:
     [[nodiscard]] DataPartSpan dataparts() const;
     [[nodiscard]] const CommitHistory& history() const;
     [[nodiscard]] const GraphMetadata& metadata() const;
+    [[nodiscard]] const Tombstones& tombstones() const;
 
     [[nodiscard]] FrozenCommitTx openTransaction() const;
 

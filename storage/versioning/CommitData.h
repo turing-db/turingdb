@@ -35,6 +35,7 @@ public:
     [[nodiscard]] const CommitHistory& history() const { return _history; }
     [[nodiscard]] CommitHistory& history() { return _history; }
     [[nodiscard]] CommitHash hash() const { return _hash; }
+    [[nodiscard]] const Tombstones& tombstones() const { return _tombstones; }
 
 private:
     friend CommitBuilder;
