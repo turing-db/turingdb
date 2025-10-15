@@ -1,7 +1,6 @@
 /// QUERY
 MATCH (n) MATCH (m) WHERE n.duration = m.duration RETURN n, m;
 
-
 /// RESULT
 flowchart TD
     0["`
@@ -14,8 +13,8 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __has predicate__
-        __dep__: n.duration
-        __dep__: m.duration
+        __dep__ n._duration_
+        __dep__ m._duration_
     `"]
     3["`
         __SCAN_NODES__

@@ -12,7 +12,7 @@ function(add_v2_plan_gtest exe_name cpp_file)
                 tabulate)
 endfunction()
 
-#add_v2_plan_gtest(test_v2_plangen PlanGenTest.cpp)
+add_v2_plan_gtest(test_v2_plangen PlanGenTest.cpp)
 
 add_v2_plan_gtest(test_v2_plangenerator PlanGeneratorTest.cpp)
 
