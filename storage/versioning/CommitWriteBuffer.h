@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_set>
 #include <string>
 #include <variant>
 #include <vector>
@@ -53,8 +54,8 @@ public:
      // or to be created in this commit (materialised as PendingNodeOffset)
      using PendingNodes = std::vector<PendingNode>;
      using PendingEdges = std::vector<PendingEdge>;
-     using DeletedNodes = std::vector<NodeID>;
-     using DeletedEdges = std::vector<EdgeID>;
+     using DeletedNodes = std::unordered_set<NodeID>;
+     using DeletedEdges = std::unordered_set<EdgeID>;
 
      /**
       * @brief Adds a pending node to this WriteBuffer with empty properties and
@@ -83,6 +84,7 @@ public:
 
      DeletedNodes& deletedNodes() { return _deletedNodes; }
      DeletedEdges& deletedEdges() { return _deletedEdges; }
+
 
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
@@ -125,12 +127,10 @@ private:
     std::vector<PendingEdge> _pendingEdges;
 
     // Nodes to be deleted when this commit commits
-    std::vector<NodeID> _deletedNodes;
+    std::unordered_set<NodeID> _deletedNodes;
 
     // Edges to be deleted when this commit commits
-    std::vector<EdgeID> _deletedEdges;
-
-    CommitJournal& _journal;
+    std::unordered_set<EdgeID> _deletedEdges;
 
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }

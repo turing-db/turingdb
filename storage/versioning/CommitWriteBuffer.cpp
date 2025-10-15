@@ -185,4 +185,6 @@ void CommitWriteBufferRebaser::rebase() {
             edge.tgt = NodeID {_idRebaser->rebaseNodeID(*oldTgtID)};
         }
     }
+
+    // TODO: Rebase the deleted edges/nodes as well
 }

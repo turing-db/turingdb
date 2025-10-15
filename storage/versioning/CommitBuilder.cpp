@@ -6,7 +6,12 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
+<<<<<<< HEAD
 #include "versioning/CommitHistoryBuilder.h"
+||||||| parent of 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
+=======
+#include "versioning/Tombstones.h"
+>>>>>>> 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -106,9 +111,21 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         return;
     }
 
+<<<<<<< HEAD
     // Ensure deletions are unique and sorted
     wb.finaliseDeletions();
 
+||||||| parent of 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
+=======
+    // At this point, conflict checking should have already been done in @ref
+    // Change::rebase, so all deletes are valid
+    Tombstones& tombstones = _commitData->_tombstones;
+    const auto& deletedNodes = wb.deletedNodes();
+    const auto& deletedEdges = wb.deletedEdges();
+    tombstones.addNodeTombstones(deletedNodes);
+    tombstones.addEdgeTombstones(deletedEdges);
+
+>>>>>>> 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
     // We create a single datapart when flushing the buffer, to ensure it is synced with
     // the metadata provided when rebasing main
     DataPartBuilder& dpBuilder = newBuilder();
