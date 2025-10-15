@@ -32,13 +32,13 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
 // Called when executing a DELETE NODES query
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
     _deletedNodes.reserve(_deletedNodes.size() + newDeletedNodes.size());
-    _deletedNodes.insert(_deletedNodes.end(), newDeletedNodes.begin(), newDeletedNodes.end());
+    _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
 }
 
 // Called when executing a DELETE EDGES query
 void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
     _deletedEdges.reserve(_deletedEdges.size() + newDeletedEdges.size());
-    _deletedEdges.insert(_deletedEdges.end(), newDeletedEdges.begin(), newDeletedEdges.end());
+    _deletedEdges.insert(newDeletedEdges.begin(), newDeletedEdges.end());
 }
 
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,

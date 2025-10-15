@@ -15,7 +15,9 @@ public:
 
     void insert(IDT id);
 
-    void insert(const std::vector<IDT>& elements);
+    template <std::ranges::input_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, IDT>
+    void insert(Range&& range);
 
     void clear() { _set.clear(); }
 
@@ -61,9 +63,10 @@ void WriteSet<IDT>::insert(IDT id) {
 }
 
 template <TypedInternalID IDT>
-void WriteSet<IDT>::insert(const std::vector<IDT>& elements) {
-    _set.reserve(_set.size() + elements.size());
-    _set.insert(_set.end(), elements.begin(), elements.end());
+template <std::ranges::input_range Range>
+    requires std::same_as<std::ranges::range_value_t<Range>, IDT>
+void WriteSet<IDT>::insert(Range&& range) {
+    _set.insert(_set.begin(), std::ranges::begin(range), std::ranges::end(range));
 }
 
 template <TypedInternalID IDT>

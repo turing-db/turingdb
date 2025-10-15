@@ -99,21 +99,20 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
     CommitJournal& journal = _commit->history().journal();
+    Tombstones& tombstones = _commitData->_tombstones;
 
     bioassert(journal.empty());
 
     if (wb.containsDeletes()) {
         // At this point, conflict checking should have already been done in @ref
         // Change::rebase, so all deletes are valid
-        Tombstones& tombstones = _commitData->_tombstones;
         const auto& deletedNodes = wb.deletedNodes();
         const auto& deletedEdges = wb.deletedEdges();
         tombstones.addNodeTombstones(deletedNodes);
         tombstones.addEdgeTombstones(deletedEdges);
         // Delete nodes/edges should be in the "write set" of this commit
-        journal.addWrittenNodes(wb.deletedNodes());
-        journal.addWrittenEdges(wb.deletedEdges());
-
+        journal.addWrittenNodes(deletedNodes);
+        journal.addWrittenEdges(deletedEdges);
     }
 
     if (wb.containsCreates()) {

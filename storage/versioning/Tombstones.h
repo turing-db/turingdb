@@ -39,14 +39,14 @@ private:
      */
     template <std::ranges::input_range Range>
         requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
-    void addNodeTombstones(Range&& nodes);
+    void addNodeTombstones(Range& nodes);
 
     /**
      * @brief Given a range over EdgeIDs, calls @ref TombstoneSet::insert over that range
      */
     template <std::ranges::input_range Range>
         requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
-    void addEdgeTombstones(Range&& edges);
+    void addEdgeTombstones(Range& edges);
 
     NodeTombstones _nodeTombstones;
     EdgeTombstones _edgeTombstones;
@@ -54,13 +54,13 @@ private:
 
 template <std::ranges::input_range Range>
     requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
-void Tombstones::addNodeTombstones(Range&& nodes) {
-    _nodeTombstones.insert(std::forward<Range>(nodes));
+void Tombstones::addNodeTombstones(Range& nodes) {
+    _nodeTombstones.insert(nodes);
 }
 
 template <std::ranges::input_range Range>
     requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
-void Tombstones::addEdgeTombstones(Range&& edges) {
-    _edgeTombstones.insert(std::forward<Range>(edges));
+void Tombstones::addEdgeTombstones(Range& edges) {
+    _edgeTombstones.insert(edges);
 }
 }

@@ -26,14 +26,6 @@ void CommitJournal::addWrittenEdge(EdgeID edge) {
     _edgeWriteSet.insert(edge);
 }
 
-void CommitJournal::addWrittenNodes(const std::vector<NodeID>& nodes) {
-    _nodeWriteSet.insert(nodes);
-}
-
-void CommitJournal::addWrittenEdges(const std::vector<EdgeID>& edges) {
-    _edgeWriteSet.insert(edges);
-}
-
 void CommitJournal::finalise() {
     _nodeWriteSet.finalise();
     _edgeWriteSet.finalise();
