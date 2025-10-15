@@ -1,5 +1,6 @@
 #include "CommitView.h"
 #include "versioning/Commit.h"
+#include "versioning/Tombstones.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -34,6 +35,10 @@ const CommitHistory& CommitView::history() const {
 
 const GraphMetadata& CommitView::metadata() const {
     return _commit->data().metadata();
+}
+
+const Tombstones& CommitView::tombstones() const {
+    return _commit->data().tombstones();
 }
 
 FrozenCommitTx CommitView::openTransaction() const {

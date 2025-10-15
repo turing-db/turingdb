@@ -6,12 +6,8 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
-<<<<<<< HEAD
 #include "versioning/CommitHistoryBuilder.h"
-||||||| parent of 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
-=======
 #include "versioning/Tombstones.h"
->>>>>>> 85d4a7963 (Populate tombstones on CommitWriteBuffer flush (!tombstones))
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
@@ -175,4 +171,6 @@ void CommitBuilder::initialize() {
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
+    // Copy tombstones from previous commit
+    _commitData->_tombstones = prevCommit.tombstones();
 }
