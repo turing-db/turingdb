@@ -1,0 +1,41 @@
+/// QUERY
+MATCH (n), (m {isFrench: n:Person}) RETURN n
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __SCAN_NODES__
+    `"]
+    4["`
+        __VAR__
+        __name__: m
+    `"]
+    5["`
+        __FILTER_NODE__
+        __prop__ m._isFrench_
+        __dep__ n:_Person_
+    `"]
+    6["`
+        __JOIN__
+    `"]
+    7["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->6
+    2-->1
+    3-->6
+    4-->7
+    5-->4
+    6-->5
+

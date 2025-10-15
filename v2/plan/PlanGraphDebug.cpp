@@ -50,7 +50,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
         output << "        __dep__ " << dep._var->getVarDecl()->getName();
         if (const auto* expr = std::get_if<const EntityTypeExpr*>(&dep._dep)) {
             for (const auto& type : (*expr)->getTypes()) {
-                output << ":_ " << type->getName() << "_\n";
+                output << ":_" << type->getName() << "_\n";
             }
         } else if (const auto* expr = std::get_if<const PropertyExpr*>(&dep._dep)) {
             output << "._" << (*expr)->getPropName() << "_\n";
