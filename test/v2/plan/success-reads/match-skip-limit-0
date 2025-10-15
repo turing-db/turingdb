@@ -1,0 +1,149 @@
+/// QUERY
+MATCH (n: Person { name: "Luc" })-[e:KNOWS_WELL { name: "Whatever" }]->(m)-[e2]->(c:Person)
+MATCH (a)-->(b)-->(c)
+RETURN n, e, m SKIP 3 LIMIT 5;
+
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __label__: Person
+        __prop__ _n_.name
+    `"]
+    3["`
+        __GET_OUT_EDGES__
+    `"]
+    4["`
+        __VAR__
+        __name__: e
+    `"]
+    5["`
+        __FILTER_EDGE__
+        __edge_type__: KNOWS_WELL
+        __prop__ _e_: name
+    `"]
+    6["`
+        __GET_EDGE_TARGET__
+    `"]
+    7["`
+        __VAR__
+        __name__: m
+    `"]
+    8["`
+        __FILTER_NODE__
+    `"]
+    9["`
+        __GET_OUT_EDGES__
+    `"]
+    10["`
+        __VAR__
+        __name__: e2
+    `"]
+    11["`
+        __FILTER_EDGE__
+    `"]
+    12["`
+        __GET_EDGE_TARGET__
+    `"]
+    13["`
+        __VAR__
+        __name__: c
+    `"]
+    14["`
+        __FILTER_NODE__
+        __label__: Person
+    `"]
+    15["`
+        __SCAN_NODES__
+    `"]
+    16["`
+        __VAR__
+        __name__: a
+    `"]
+    17["`
+        __FILTER_NODE__
+    `"]
+    18["`
+        __GET_OUT_EDGES__
+    `"]
+    19["`
+        __VAR__
+        __name__: v0
+    `"]
+    20["`
+        __FILTER_EDGE__
+    `"]
+    21["`
+        __GET_EDGE_TARGET__
+    `"]
+    22["`
+        __VAR__
+        __name__: b
+    `"]
+    23["`
+        __FILTER_NODE__
+    `"]
+    24["`
+        __GET_OUT_EDGES__
+    `"]
+    25["`
+        __VAR__
+        __name__: v1
+    `"]
+    26["`
+        __FILTER_EDGE__
+    `"]
+    27["`
+        __GET_EDGE_TARGET__
+    `"]
+    28["`
+        __JOIN__
+    `"]
+    29["`
+        __LIMIT__
+    `"]
+    30["`
+        __SKIP__
+    `"]
+    31["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->5
+    4-->6
+    5-->4
+    6-->8
+    7-->9
+    8-->7
+    9-->11
+    10-->12
+    11-->10
+    12-->28
+    13-->29
+    14-->13
+    15-->17
+    16-->18
+    17-->16
+    18-->20
+    19-->21
+    20-->19
+    21-->23
+    22-->24
+    23-->22
+    24-->26
+    25-->27
+    26-->25
+    27-->28
+    28-->14
+    29-->30
+    30-->31

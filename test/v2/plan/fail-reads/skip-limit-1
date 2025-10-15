@@ -1,0 +1,14 @@
+/// QUERY
+MATCH (n: Person { name: "Luc" })-[e:KNOWS_WELL { name: "Whatever" }]->(m)-[e2]->(c:Person)
+MATCH (a)-->(b)-->(c)
+RETURN n, e, m LIMIT 3 SKIP 2;
+
+
+/// RESULT
+PARSE ERROR
+-------* Cypher parser
+     2 | MATCH (a)-->(b)-->(c)
+     3 | RETURN n, e, m LIMIT 3 SKIP 2;
+       |                        ^^^^
+-------* syntax error, unexpected SKIP, expecting PROG_END
+

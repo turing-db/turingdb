@@ -10,6 +10,8 @@
 #include "ReadStmtGenerator.h"
 #include "WriteStmtGenerator.h"
 
+#include "nodes/LimitNode.h"
+#include "nodes/SkipNode.h"
 #include "nodes/WriteNode.h"
 #include "nodes/ProduceResultsNode.h"
 
@@ -99,11 +101,11 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
     const Projection* proj = stmt->getProjection();
 
     if (proj->hasLimit()) {
-        // Create limit node?
+        prevNode = _tree.newOut<LimitNode>(prevNode);
     }
 
     if (proj->hasSkip()) {
-        // Create skip node?
+        prevNode = _tree.newOut<SkipNode>(prevNode);
     }
 
     _tree.newOut<ProduceResultsNode>(prevNode);
