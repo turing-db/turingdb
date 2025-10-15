@@ -70,8 +70,8 @@ public:
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
-     const auto& deletedNodes() const { return _deletedNodes; }
-     const auto& deletedEdges() const { return _deletedEdges; }
+     auto& deletedNodes() { return _deletedNodes; }
+     auto& deletedEdges() { return _deletedEdges; }
 
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
@@ -140,7 +140,7 @@ public:
         {
         }
 
-    void rebaseIncidentNodeIDs(NodeID entryNextNodeID, NodeID currentNextNodeID);
+    void rebase();
 
 private:
     CommitWriteBuffer* _buffer;

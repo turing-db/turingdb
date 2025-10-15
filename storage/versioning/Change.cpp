@@ -112,9 +112,6 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         CommitHistory& history = data.history();
 
         CommitHistoryRebaser historyRebaser {history};
-        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer());
-
-        wbRb.rebaseIncidentNodeIDs(branchTimeNextNodeID, newNextNodeID);
 
         // Undo any commits that were made locally
         // Only check those with an non-empty writebuffer, as other sources e.g.
@@ -129,6 +126,12 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
 
         // Clear the journal: WriteSets may change on reflush after rebase
         history.journal().clear();
+        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer(),
+                                      branchTimeNextNodeID,
+                                      branchTimeNextEdgeID,
+                                      newNextNodeID,
+                                      newNextEdgeID);
+        wbRb.rebase();
 
         // These values are initially set at time of the creation of this Change, however
         // they need to be updated to point to the next ID on the current state of main.
