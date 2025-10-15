@@ -1,20 +1,18 @@
 #pragma once
 
-
 #include <unordered_set>
-#include <string>
 #include <variant>
 #include <vector>
 
 #include "DataPart.h"
 #include "ID.h"
-#include "metadata/PropertyType.h"
 
 namespace db {
 
 class CommitWriteBufferRebaser;
 class MetadataBuilder;
 class CommitJournal;
+class Tombstones;
 
 class CommitWriteBuffer {
 
@@ -67,6 +65,8 @@ public:
       */
      void buildPending(DataPartBuilder& builder);
 
+     void applyDeletions(Tombstones& tombstones);
+
      PendingNodes& pendingNodes() { return _pendingNodes; }
      PendingEdges& pendingEdges() { return _pendingEdges; }
 
@@ -77,9 +77,11 @@ public:
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
              && _deletedEdges.empty();
      }
+
      bool containsCreates() const {
          return !_pendingNodes.empty() || !_pendingEdges.empty();
      }
+
      bool containsDeletes() const {
          return !_deletedNodes.empty() || !_deletedEdges.empty();
      }
@@ -95,12 +97,6 @@ public:
      * _deletedEdges
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
-
-    /**
-     * @brief Ensures @ref _deletedNodes and @ref _deletedEdges are sorted and unique,
-     * ready for lookups for local conflict checks in @ref buildPending
-     */
-    void finaliseDeletions();
 
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
