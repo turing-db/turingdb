@@ -248,6 +248,10 @@ bool GraphReader::graphHasNode(NodeID nodeID) const {
     return (nodeID < getNodeCount());
 }
 
+bool GraphReader::graphHasEdge(EdgeID edgeID) const {
+    return (edgeID < getEdgeCount());
+}
+
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {

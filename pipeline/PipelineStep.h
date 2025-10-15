@@ -10,6 +10,7 @@
 
 #include "ScanNodesStringApproxStep.h"
 #include "WriteStep.h"
+#include "DeleteStep.h"
 #include "operations/ScanNodesStep.h"
 #include "operations/ScanNodesByLabelStep.h"
 #include "operations/ScanNodesByPropertyStep.h"
@@ -138,6 +139,10 @@ public:
                  const std::string& strQuery);
 
     PipelineStep(WriteStep::Tag, const CreateTargets* targets);
+
+    PipelineStep(DeleteStep<NodeID>::Tag, std::vector<NodeID>&& deletedIDs);
+    PipelineStep(DeleteStep<EdgeID>::Tag, std::vector<EdgeID>&& deletedIDs);
+
     PipelineStep(CommitStep::Tag);
     PipelineStep(CallPropertyStep::Tag,
                  ColumnVector<PropertyTypeID>* id,
@@ -244,6 +249,8 @@ private:
                  HistoryStep,
                  ChangeStep,
                  WriteStep,
+                 DeleteStep<NodeID>,
+                 DeleteStep<EdgeID>,
                  CommitStep,
                  CallPropertyStep,
                  CallLabelStep,

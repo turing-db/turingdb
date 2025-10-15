@@ -56,6 +56,7 @@ public:
     [[nodiscard]] MatchLabelSetIterator matchLabelSets(const LabelSetHandle& labelSet) const;
     [[nodiscard]] bool nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const;
     [[nodiscard]] bool graphHasNode(NodeID nodeID) const;
+    [[nodiscard]] bool graphHasEdge(EdgeID edgeID) const;
 
     template <SupportedType T>
     [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const;
