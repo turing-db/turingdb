@@ -20,6 +20,7 @@ public:
     Tombstones(Tombstones&&) = delete;
     Tombstones& operator=(Tombstones&&) = delete;
 
+    // XXX: Is it dangerous to have this overloaded on both Node and Edge IDs?
     bool contains(NodeID nodeID) { return _nodeTombstones.contains(nodeID); }
     bool contains(EdgeID edgeID) { return _edgeTombstones.contains(edgeID); }
 
