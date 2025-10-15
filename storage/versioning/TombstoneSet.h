@@ -10,9 +10,11 @@ namespace db {
 template <TypedInternalID IDT>
 class TombstoneSet {
 public:
-    bool contains(IDT id);
+    bool contains(IDT id) const;
     auto insert(IDT id);
     size_t size() const;
+
+    bool empty() const { return _set.empty(); }
 
     template <std::ranges::input_range Range>
         requires std::same_as<std::ranges::range_value_t<Range>, IDT>
@@ -23,7 +25,7 @@ private:
 };
 
 template <TypedInternalID IDT>
-bool TombstoneSet<IDT>::contains(IDT id) {
+bool TombstoneSet<IDT>::contains(IDT id) const {
     return _set.contains(id);
 }
 
