@@ -7,4 +7,3 @@ PARSE ERROR
      1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n
        |             ^^^^^^^^^^^^^^^^^^^^^^^^^
 -------* Not implemented: EdgeType | EdgeType | ...
-
