@@ -192,6 +192,9 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs(NodeID entryNextNodeID,
     // creation and submission. We therefore need to readjust any edges which reference a
     // NodeID which is greater than the nextNodeID at time of Change creation, as these
     // are edges between locally created nodes.
+    //
+    // Deletions also need to be rebased: in summary, anything which uses a Node/EdgeID
+    // (instead of a "Pending" thing) needs to be rebased
     const auto rebaseNodeID = [&](NodeID wbID) {
         if (wbID >= entryNextNodeID) {
             return wbID + currentNextNodeID - entryNextNodeID;
@@ -208,4 +211,6 @@ void CommitWriteBufferRebaser::rebaseIncidentNodeIDs(NodeID entryNextNodeID,
             edge.tgt = NodeID {rebaseNodeID(*oldTgtID)};
         }
     }
+
+    // TODO: Rebase the deleted edges/nodes as well
 }
