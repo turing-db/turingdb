@@ -10,7 +10,6 @@ enum ColumnOperator {
     OP_OR,
     OP_PROJECT,
     OP_IN,
-    OP_NOT_IN,
     _SIZE
 };
 
@@ -19,6 +18,5 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_AND, "AND">,
     EnumStringPair<ColumnOperator::OP_OR, "OR">,
     EnumStringPair<ColumnOperator::OP_PROJECT, "PROJECT">,
-    EnumStringPair<ColumnOperator::OP_IN, "IN">,
-    EnumStringPair<ColumnOperator::OP_NOT_IN, "NOT_IN">>;
+    EnumStringPair<ColumnOperator::OP_IN, "IN">>;
 }
