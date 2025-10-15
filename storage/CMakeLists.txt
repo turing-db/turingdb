@@ -60,6 +60,8 @@ set(storage_sources
         versioning/DataPartRebaser.cpp
         versioning/Transaction.cpp
         versioning/CommitHistory.cpp
+        versioning/CommitHistoryBuilder.cpp
+        versioning/CommitHistoryRebaser.cpp
         versioning/CommitWriteBuffer.cpp
         versioning/CommitJournal.cpp
 

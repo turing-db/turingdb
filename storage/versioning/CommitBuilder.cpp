@@ -6,6 +6,7 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
+#include "versioning/CommitHistoryBuilder.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
