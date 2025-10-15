@@ -12,7 +12,9 @@ class WeakArc;
 class CommitHistoryBuilder {
 public:
     explicit CommitHistoryBuilder(CommitHistory& history)
-        : _history(history) {}
+        : _history(history)
+    {
+    }
 
     void addDatapart(const WeakArc<DataPart>& datapart);
 

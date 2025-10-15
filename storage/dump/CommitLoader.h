@@ -63,7 +63,6 @@ public:
             }
         }
 
-
         std::map<uint64_t, fs::Path> datapartPaths;
         for (auto& child : files.value()) {
             const auto& childStr = child.filename();
