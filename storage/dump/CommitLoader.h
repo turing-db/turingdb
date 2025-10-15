@@ -12,6 +12,7 @@
 #include "DumpResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
+#include "versioning/CommitHistoryBuilder.h"
 #include "versioning/VersionController.h"
 
 namespace db {
