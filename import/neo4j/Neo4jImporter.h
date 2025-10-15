@@ -47,6 +47,24 @@ public:
 
 private:
     std::mutex _mutex;
+
+    bool fromUrlToJsonDirImpl(JobSystem& jobSystem,
+                              Graph* graph,
+                              std::size_t nodeCountPerQuery,
+                              std::size_t edgeCountPerQuery,
+                              const UrlToJsonDirArgs& args);
+
+    bool importJsonDirImpl(JobSystem& jobSystem,
+                           Graph* graph,
+                           std::size_t nodeCountPerFile,
+                           std::size_t edgeCountPerFile,
+                           const ImportJsonDirArgs& args);
+
+    bool fromDumpFileToJsonDirImpl(JobSystem& jobSystem,
+                                   Graph* graph,
+                                   std::size_t nodeCountPerQuery,
+                                   std::size_t edgeCountPerQuery,
+                                   const DumpFileToJsonDirArgs& args);
 };
 
 }

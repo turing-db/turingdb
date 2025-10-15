@@ -4,7 +4,6 @@
 #include <vector>
 #include <optional>
 
-#include "Neo4jImporter.h"
 #include "RWSpinLock.h"
 #include "GraphLoadStatus.h"
 #include "TuringS3Client.h"
@@ -17,6 +16,7 @@
 
 namespace db {
 
+class Neo4jImporter;
 class TuringConfig;
 class Graph;
 class ChangeManager;
@@ -91,8 +91,8 @@ private:
     std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
+    std::unique_ptr<Neo4jImporter> _neo4JImporter;
     GraphLoadStatus _graphLoadStatus;
-    Neo4jImporter _neo4JImporter;
 
     bool loadNeo4jJsonDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadNeo4jDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);

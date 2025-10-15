@@ -22,7 +22,8 @@ using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
     : _config(config),
-    _changes(std::make_unique<ChangeManager>())
+    _changes(std::make_unique<ChangeManager>()),
+    _neo4JImporter(std::make_unique<Neo4jImporter>())
 {
 }
 
@@ -261,11 +262,11 @@ bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dbPath.c_str()};
 
-    if (!_neo4JImporter.importJsonDir(jobsystem,
-                                      graph.get(),
-                                      db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                      db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                      args)) {
+    if (!_neo4JImporter->importJsonDir(jobsystem,
+                                       graph.get(),
+                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                       args)) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -304,11 +305,11 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
     dumpArgs._workDir = "/tmp";
     dumpArgs._dumpFilePath = dbPath.c_str();
 
-    if (!_neo4JImporter.fromDumpFileToJsonDir(jobsystem,
-                                              graph.get(),
-                                              db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                              db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                              dumpArgs)) {
+    if (!_neo4JImporter->fromDumpFileToJsonDir(jobsystem,
+                                               graph.get(),
+                                               db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                               db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                               dumpArgs)) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -316,11 +317,11 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
     Neo4jImporter::ImportJsonDirArgs args;
     args._jsonDir = FileUtils::Path {dumpArgs._workDir / "json"};
 
-    if (!_neo4JImporter.importJsonDir(jobsystem,
-                                      graph.get(),
-                                      db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                      db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                      args)) {
+    if (!_neo4JImporter->importJsonDir(jobsystem,
+                                       graph.get(),
+                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
+                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
+                                       args)) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
