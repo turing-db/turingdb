@@ -7,4 +7,3 @@ PARSE ERROR
      1 | MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL|INTERESTED_IN RETURN n
        |                                     ^
 -------* syntax error, unexpected PIPE
-
