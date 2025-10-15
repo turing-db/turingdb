@@ -9,19 +9,21 @@ class Expr;
 
 class ExprChain {
 public:
+    using ExprVector = std::vector<Expr*>;
+
     ~ExprChain();
 
     static ExprChain* create(CypherAST* ast);
 
     void add(Expr* expr) { _exprs.push_back(expr); }
 
-    const std::vector<Expr*>& getExprs() const { return _exprs; }
+    const ExprVector& getExprs() const { return _exprs; }
 
-    std::vector<Expr*>::const_iterator begin() const { return _exprs.begin(); }
-    std::vector<Expr*>::const_iterator end() const { return _exprs.end(); }
+    ExprVector::const_iterator begin() const { return _exprs.begin(); }
+    ExprVector::const_iterator end() const { return _exprs.end(); }
 
 private:
-    std::vector<Expr*> _exprs;
+    ExprVector _exprs;
 
     ExprChain();
 };
