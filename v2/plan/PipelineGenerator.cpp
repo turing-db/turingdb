@@ -128,7 +128,7 @@ void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStr
     ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
     PipelineOutputPort* outNodes = proc->outNodeIDs();
 
-    stream.set(PlanGraphStream::NodeStream{outNodes});
+    stream.setStream(PlanGraphStream::NodeStream{outNodes});
 }
 
 void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
@@ -146,7 +146,7 @@ void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGrap
 
     PipelineOutputPort* outEdgeIDs = proc->outEdgeIDs();
     PipelineOutputPort* outTargetIDs = proc->outTargetNodes();
-    stream.set(PlanGraphStream::EdgeStream{outEdgeIDs, outTargetIDs});
+    stream.setStream(PlanGraphStream::EdgeStream{outEdgeIDs, outTargetIDs});
 }
 
 void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
@@ -156,7 +156,7 @@ void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, Plan
     }
 
     PipelineOutputPort* targetIDs = stream.getEdgeStream().targetIDs;
-    stream.set(PlanGraphStream::NodeStream{targetIDs});
+    stream.setStream(PlanGraphStream::NodeStream{targetIDs});
 }
 
 void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {
@@ -173,7 +173,7 @@ void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGrap
 
     PipelineOutputPort* outNodeIDs = proc->output();
     // TODO: needs to be the post materialize column
-    stream.set(PlanGraphStream::NodeStream{outNodeIDs});
+    stream.setStream(PlanGraphStream::NodeStream{outNodeIDs});
     stream.closeMaterializeData();
 }
 

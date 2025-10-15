@@ -50,7 +50,7 @@ public:
 
     void closeMaterializeData() { _matData = nullptr; }
 
-    void set(Stream&& stream) {
+    void setStream(Stream&& stream) {
         _stream = std::move(stream);
     }
 
