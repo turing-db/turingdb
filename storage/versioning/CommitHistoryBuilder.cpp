@@ -9,7 +9,7 @@ void CommitHistoryBuilder::addDatapart(const WeakArc<DataPart>& datapart) {
     }
 
 void CommitHistoryBuilder::setCommitDatapartCount(size_t count) {
-    auto* begin = _history._allDataparts.data();
+    WeakArc<DataPart>* begin = _history._allDataparts.data();
     const size_t totalCount = _history._allDataparts.size();
     const size_t offset = totalCount - count;
     auto* ptr = begin + offset;

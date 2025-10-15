@@ -43,7 +43,7 @@ public:
             versionController->createCommitData(hash));
 
         if (prevHistory) {
-            commit->_data->_history.newFromPrevious(*prevHistory);
+            commit->_data->_history.newCommitHistoryFromPrevious(*prevHistory);
         }
         commit->_data->_history.pushCommit(commit->view());
 
