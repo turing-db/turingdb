@@ -14,6 +14,11 @@ public:
     auto insert(IDT id);
     size_t size() const;
 
+    auto begin() { return _set.begin(); }
+    auto end() { return _set.end(); }
+    auto begin() const { return _set.begin(); }
+    auto end() const { return _set.end(); }
+
     bool empty() const { return _set.empty(); }
 
     template <std::ranges::input_range Range>

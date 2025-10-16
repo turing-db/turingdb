@@ -77,14 +77,14 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commitBuilder : change->_commits) {
+        // TODO: Compare WriteSet of current builder with union created at rebase
+
         // Creates a new builder to execute CREATE/DELETE commands.
         // If locally `Change::commit` all changes, and no rebase, then no need to flush
         // again. Otherwise flush again.
         if (!commitBuilder->writeBuffer().isFlushed()) {
             commitBuilder->flushWriteBuffer(jobSystem);
         }
-
-        // TODO: Compare WriteSet of current builder with union created at rebase
 
         auto buildRes = commitBuilder->build(jobSystem);
         if (!buildRes) {
