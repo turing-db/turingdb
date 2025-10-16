@@ -3,7 +3,6 @@ MATCH (n: Person { name: "Luc" })-[e:KNOWS_WELL { name: "Whatever" }]->(m)-[e2]-
 MATCH (a)-->(b)-->(c)
 RETURN n, e, m SKIP 2.5 LIMIT 3;
 
-
 /// RESULT
 ANALYZE ERROR
 -------* Query error
@@ -11,4 +10,3 @@ ANALYZE ERROR
      3 | RETURN n, e, m SKIP 2.5 LIMIT 3;
        |                ^^^^^^^^
 -------* SKIP expression must be an integer
-

@@ -3,7 +3,6 @@ MATCH (n: Person { name: "Luc" })-[e:KNOWS_WELL { name: "Whatever" }]->(m)-[e2]-
 MATCH (a)-->(b)-->(c)
 RETURN n, e, m LIMIT 5;
 
-
 /// RESULT
 flowchart TD
     0["`
@@ -16,7 +15,7 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ _n_.name
+        __prop__ n._name_
     `"]
     3["`
         __GET_OUT_EDGES__
