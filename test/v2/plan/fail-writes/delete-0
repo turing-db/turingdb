@@ -2,7 +2,6 @@
 MATCH (n:Person { name: "Remy" })
 DELETE n.name
 
-
 /// RESULT
 PLAN ERROR
 -------* Query error
@@ -10,4 +9,3 @@ PLAN ERROR
      2 | DELETE n.name
        |        ^^^^^^
 -------* Expressions in DELETE statements can only be symbols
-
