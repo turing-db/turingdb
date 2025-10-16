@@ -41,6 +41,11 @@ const Tombstones& CommitView::tombstones() const {
     return _commit->data().tombstones();
 }
 
+bool CommitView::hasTombstones() const {
+    return _commit->data().tombstones().hasNodes()
+        || _commit->data().tombstones().hasEdges();
+}
+
 FrozenCommitTx CommitView::openTransaction() const {
     return _commit->openTransaction();
 }

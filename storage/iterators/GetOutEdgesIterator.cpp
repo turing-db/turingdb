@@ -1,7 +1,10 @@
 #include "GetOutEdgesIterator.h"
 
 #include <algorithm>
+#include <vector>
 
+#include "BioAssert.h"
+#include "ID.h"
 #include "indexers/EdgeIndexer.h"
 #include "DataPart.h"
 #include "IteratorUtils.h"
@@ -160,6 +163,106 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         CASE(6);
         CASE(7);
     }
+
+    // NOTE: Is it always right to check the `back` commit?
+    if (_view.commits().back().hasTombstones()) {
+        filterTombstones();
+    }
 }
 
+void GetOutEdgesChunkWriter::filterTombstones() {
+    // Filtering
+    std::unordered_set<size_t> indexesToRemove;
+    getIndexesToRemove(indexesToRemove);
+    size_t initialSize = _indices->size();
+    removeDeletedIndexes(indexesToRemove, initialSize);
+
+    if (_tgts) {
+        bioassert(_tgts->size() == _indices->size());
+    }
+    if (_edgeIDs) {
+        bioassert(_edgeIDs->size() == _indices->size());
+    }
+    if (_types) {
+        bioassert(_types->size() == _indices->size());
+    }
+}
+
+void GetOutEdgesChunkWriter::getIndexesToRemove(std::unordered_set<size_t>& indexesToRemove) {
+    const Tombstones& tombstones = _view.commits().back().tombstones();
+
+    size_t n = _indices->size();
+
+    if (_edgeIDs) {
+        bioassert(_edgeIDs->size() == n);
+        // Find indexes to delete based on deleted edges
+        for (size_t i = 0; i < _edgeIDs->size(); i++) {
+            EdgeID edge = _edgeIDs->getRaw()[i];
+            if (tombstones.containsEdge(edge)) {
+                indexesToRemove.insert(i);
+            }
+        }
+    }
+    if (_tgts) {
+        bioassert(_tgts->size() == n);
+        // Find indexes to delete based on deleted nodes
+        for (size_t i = 0; i < _tgts->size(); i++) {
+            NodeID tgt = _tgts->getRaw()[i];
+            if (tombstones.containsNode(tgt)) {
+                indexesToRemove.insert(i);
+            }
+        }
+    }
+}
+
+void GetOutEdgesChunkWriter::removeDeletedIndexes(std::unordered_set<size_t> indexesToRemove,
+                                                  size_t initialSize) {
+    if (_edgeIDs) { // Remove deleted rows from the edge column
+        std::vector<EdgeID>& rawEdges = _edgeIDs->getRaw();
+        size_t write = 0;
+        for (size_t read = 0; read < initialSize; read++) {
+            if (!indexesToRemove.contains(read)) {
+                rawEdges[write] = rawEdges[read];
+                write++;
+            }
+        }
+        rawEdges.resize(write);
+    }
+
+    if (_tgts) { // Remove deleted rows from the target column
+        std::vector<NodeID>& rawTgts = _tgts->getRaw();
+        size_t write = 0;
+        for (size_t read = 0; read < initialSize; read++) {
+            if (!indexesToRemove.contains(read)) {
+                rawTgts[write] = rawTgts[read];
+                write++;
+            }
+        }
+        rawTgts.resize(write);
+    }
+
+    if (_types) { // Remove deleted rows from the types column
+        std::vector<EdgeTypeID>& rawTypes = _types->getRaw();
+        size_t write = 0;
+        for (size_t read = 0; read < initialSize; read++) {
+            if (!indexesToRemove.contains(read)) {
+                rawTypes[write] = rawTypes[read];
+                write++;
+            }
+        }
+        rawTypes.resize(write);
+    }
+
+    { // Remove deleted rows from the indices column
+        std::vector<size_t>& rawIndices = _indices->getRaw();
+        size_t write = 0;
+        for (size_t read = 0; read < initialSize; read++) {
+            if (!indexesToRemove.contains(read)) {
+                rawIndices[write] = rawIndices[read];
+                write++;
+            }
+        }
+        rawIndices.resize(write);
+    }
+}
 }

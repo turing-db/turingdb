@@ -36,6 +36,7 @@ public:
     [[nodiscard]] const CommitHistory& history() const;
     [[nodiscard]] const GraphMetadata& metadata() const;
     [[nodiscard]] const Tombstones& tombstones() const;
+    [[nodiscard]] bool hasTombstones() const;
 
     [[nodiscard]] FrozenCommitTx openTransaction() const;
 

@@ -3,6 +3,7 @@
 #include "Iterator.h"
 
 #include <span>
+#include <unordered_set>
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
@@ -69,6 +70,11 @@ private:
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
+
+    void filterTombstones();
+    void getIndexesToRemove(std::unordered_set<size_t>& indexesToRemove);
+    void removeDeletedIndexes(std::unordered_set<size_t> indexesToRemove,
+                              size_t initialSize);
 };
 
 struct GetOutEdgesRange {
