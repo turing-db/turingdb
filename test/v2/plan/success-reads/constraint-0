@@ -32,8 +32,8 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ a._name_
-        __dep__ c._name_
+        __prop__ _a_._name_
+        __dep__ _c_._name_
     `"]
     9["`
         __SCAN_NODES__

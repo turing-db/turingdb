@@ -13,7 +13,7 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ n._name_
+        __prop__ _n_._name_
     `"]
     3["`
         __GET_OUT_EDGES__
@@ -25,7 +25,7 @@ flowchart TD
     5["`
         __FILTER_EDGE__
         __edge_type__: KNOWS_WELL
-        __prop__ _e_: name
+        __prop__ _e_._name_
     `"]
     6["`
         __GET_EDGE_TARGET__

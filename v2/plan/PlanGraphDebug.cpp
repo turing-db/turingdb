@@ -24,6 +24,48 @@
 using namespace db;
 using namespace db::v2;
 
+namespace {
+
+void outputDependency(std::ostream& output, const ExprDependencies::ExprDependency& dep) {
+    output << "        __dep__ _" << dep._var->getVarDecl()->getName() << "_";
+    if (const auto* expr = std::get_if<const EntityTypeExpr*>(&dep._dep)) {
+        for (const auto& type : (*expr)->getTypes()) {
+            output << ":_" << type->getName() << "_\n";
+        }
+    } else if (const auto* expr = std::get_if<const PropertyExpr*>(&dep._dep)) {
+        output << "._" << (*expr)->getPropName() << "_\n";
+    }
+}
+
+void outputPredicate(std::ostream& output, const WherePredicate* pred) {
+    output << "        __has predicate__" << "\n";
+
+    for (const auto& dep : pred->getDependencies()) {
+        outputDependency(output, dep);
+    }
+}
+
+void outputPropertyConstraints(std::ostream& output,
+                               const PropertyTypeMap& propTypeMap,
+                               std::span<const PropertyConstraint* const> constraints) {
+    for (const auto& constraint : constraints) {
+        const auto& [var, propType, expr, deps] = *constraint;
+
+        std::optional name = propTypeMap.getName(propType);
+        if (!name) {
+            name = std::to_string(propType);
+        }
+
+        output << fmt::format("        __prop__ _{}_._{}_\n", var->getVarDecl()->getName(), name.value());
+
+        for (const auto& dep : deps.getDependencies()) {
+            outputDependency(output, dep);
+        }
+    }
+}
+
+}
+
 void PlanGraphDebug::dumpMermaidConfig(std::ostream& output) {
     output << R"(
 %%{ init: {"theme": "default",
@@ -45,25 +87,6 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
     std::unordered_map<const PlanGraphNode*, size_t> nodeOrder;
 
     output << "flowchart TD\n";
-
-    static constexpr auto outputDependency = [](std::ostream& output, const ExprDependencies::ExprDependency& dep) {
-        output << "        __dep__ " << dep._var->getVarDecl()->getName();
-        if (const auto* expr = std::get_if<const EntityTypeExpr*>(&dep._dep)) {
-            for (const auto& type : (*expr)->getTypes()) {
-                output << ":_" << type->getName() << "_\n";
-            }
-        } else if (const auto* expr = std::get_if<const PropertyExpr*>(&dep._dep)) {
-            output << "._" << (*expr)->getPropName() << "_\n";
-        }
-    };
-
-    static constexpr auto outputPredicate = [](std::ostream& output, const WherePredicate* pred) {
-        output << "        __has predicate__" << "\n";
-
-        for (const auto& dep : pred->getDependencies()) {
-            outputDependency(output, dep);
-        }
-    };
 
     for (size_t i = 0; i < planGraph._nodes.size(); i++) {
         const auto& node = planGraph._nodes[i];
@@ -106,20 +129,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << "        __label__: " << labelMap.getName(label).value() << "\n";
                 }
 
-                for (const auto& constraint : n->getPropertyConstraints()) {
-                    const auto& [var, propType, expr, deps] = *constraint;
-
-                    std::optional name = propTypeMap.getName(propType);
-                    if (!name) {
-                        name = std::to_string(propType);
-                    }
-
-                    output << fmt::format("        __prop__ {}._{}_\n", var->getVarDecl()->getName(), name.value());
-
-                    for (const auto& dep : deps.getDependencies()) {
-                        outputDependency(output, dep);
-                    }
-                }
+                outputPropertyConstraints(output, propTypeMap, n->getPropertyConstraints());
 
                 for (const auto& pred : n->getWherePredicates()) {
                     outputPredicate(output, pred);
@@ -132,20 +142,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << "        __edge_type__: " << edgeTypeMap.getName(edgeType).value() << "\n";
                 }
 
-                for (const auto& constraint : e->getPropertyConstraints()) {
-                    const auto& [var, propType, expr, deps] = *constraint;
-
-                    std::optional name = propTypeMap.getName(propType);
-                    if (!name) {
-                        name = std::to_string(propType);
-                    }
-
-                    output << fmt::format("        __prop__ _{}_: {}\n", var->getVarDecl()->getName(), name.value());
-
-                    for (const auto& dep : deps.getDependencies()) {
-                        outputDependency(output, dep);
-                    }
-                }
+                outputPropertyConstraints(output, propTypeMap, e->getPropertyConstraints());
 
                 for (const auto& pred : e->getWherePredicates()) {
                     outputPredicate(output, pred);

@@ -16,7 +16,7 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ n._name_
+        __prop__ _n_._name_
     `"]
     3["`
         __SCAN_NODES__
@@ -28,7 +28,7 @@ flowchart TD
     5["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ m._name_
+        __prop__ _m_._name_
     `"]
     6["`
         __CARTESIAN_PRODUCT__

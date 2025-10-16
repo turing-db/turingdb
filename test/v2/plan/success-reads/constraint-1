@@ -12,8 +12,8 @@ flowchart TD
     `"]
     2["`
         __FILTER_NODE__
-        __prop__ a._duration_
-        __prop__ a._name_
+        __prop__ _a_._duration_
+        __prop__ _a_._name_
     `"]
     3["`
         __PRODUCE_RESULTS__

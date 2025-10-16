@@ -15,7 +15,7 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ a._name_
+        __prop__ _a_._name_
     `"]
     3["`
         __GET_EDGES__
@@ -28,7 +28,7 @@ flowchart TD
         __FILTER_EDGE__
         __edge_type__: KNOWS_WELL
         __has predicate__
-        __dep__ e._duration_
+        __dep__ _e_._duration_
     `"]
     6["`
         __GET_EDGE_TARGET__
@@ -40,7 +40,7 @@ flowchart TD
     8["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ m._name_
+        __prop__ _m_._name_
     `"]
     9["`
         __PRODUCE_RESULTS__

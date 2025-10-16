@@ -7,4 +7,3 @@ ANALYZE ERROR
      1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC
        |                             ^^^^^
 -------* Property type 'nam' not found
-

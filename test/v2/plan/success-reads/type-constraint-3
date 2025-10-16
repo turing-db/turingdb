@@ -22,8 +22,8 @@ flowchart TD
     `"]
     5["`
         __FILTER_NODE__
-        __prop__ m._isFrench_
-        __dep__ n:_Person_
+        __prop__ _m_._isFrench_
+        __dep__ _n_:_Person_
     `"]
     6["`
         __JOIN__
