@@ -174,6 +174,11 @@ void GetOutEdgesChunkWriter::filterTombstones() {
     // Filtering
     std::unordered_set<size_t> indexesToRemove;
     getIndexesToRemove(indexesToRemove);
+
+    if (indexesToRemove.empty()) {
+        return;
+    }
+
     size_t initialSize = _indices->size();
     removeDeletedIndexes(indexesToRemove, initialSize);
 
@@ -193,7 +198,7 @@ void GetOutEdgesChunkWriter::getIndexesToRemove(std::unordered_set<size_t>& inde
 
     size_t n = _indices->size();
 
-    if (_edgeIDs) {
+    if (_edgeIDs && tombstones.hasEdges()) {
         bioassert(_edgeIDs->size() == n);
         // Find indexes to delete based on deleted edges
         for (size_t i = 0; i < _edgeIDs->size(); i++) {
@@ -203,7 +208,7 @@ void GetOutEdgesChunkWriter::getIndexesToRemove(std::unordered_set<size_t>& inde
             }
         }
     }
-    if (_tgts) {
+    if (_tgts && tombstones.hasNodes()) {
         bioassert(_tgts->size() == n);
         // Find indexes to delete based on deleted nodes
         for (size_t i = 0; i < _tgts->size(); i++) {
