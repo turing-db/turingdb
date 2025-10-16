@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ID.h"
+
 #include <vector>
 
 namespace db {
@@ -18,6 +20,8 @@ class ExprConstraint;
 class Expr;
 class VarDecl;
 class ReturnProjection;
+template <TypedInternalID IDT>
+class DeletedIDs;
 
 class ASTContext {
 public:
@@ -31,6 +35,8 @@ public:
     friend EntityPattern;
     friend TypeConstraint;
     friend InjectedIDs;
+    friend DeletedIDs<NodeID>;
+    friend DeletedIDs<EdgeID>;
     friend ExprConstraint;
     friend Expr;
     friend VarDecl;
@@ -62,6 +68,8 @@ private:
     std::vector<EntityPattern*> _entityPatterns;
     std::vector<TypeConstraint*> _typeConstraints;
     std::vector<InjectedIDs*> _injectedIDs;
+    std::vector<DeletedIDs<NodeID>*> _deletedNodeIDs;
+    std::vector<DeletedIDs<EdgeID>*> _deletedEdgeIDs;
     std::vector<ExprConstraint*> _exprConstraints;
     std::vector<CreateTarget*> _createTargets;
     std::vector<CreateTargets*> _createTargetVectors;
@@ -79,6 +87,8 @@ private:
     void addEntityPattern(EntityPattern* pattern);
     void addTypeConstraint(TypeConstraint* constr);
     void addInjectedIDs(InjectedIDs* injectedIDs);
+    void addDeletedNodes(DeletedIDs<NodeID>* deletedIDs);
+    void addDeletedEdges(DeletedIDs<EdgeID>* deletedIDs);
     void addExprConstraint(ExprConstraint* constr);
     void addExpr(Expr* expr);
     void addVarDecl(VarDecl* decl);
