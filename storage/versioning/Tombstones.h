@@ -31,6 +31,9 @@ public:
     bool hasNodes() const { return !_nodeTombstones.empty(); }
     bool hasEdges() const { return !_edgeTombstones.empty(); }
 
+    const NodeTombstones& nodeTombstones() { return _nodeTombstones; }
+    const EdgeTombstones& edgeTombstones() { return _edgeTombstones; }
+
 private:
     friend class CommitWriteBuffer;
 
@@ -63,4 +66,5 @@ template <std::ranges::input_range Range>
 void Tombstones::addEdgeTombstones(Range& edges) {
     _edgeTombstones.insert(edges);
 }
+
 }

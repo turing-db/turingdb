@@ -9,7 +9,7 @@ namespace db {
 
 template <TypedInternalID IDT>
 void DeleteStep<IDT>::addDeletions(std::vector<IDT>&& deletedIDs) {
-    bioassert(_deletions.empty());
+    bioassert(!_deletions.empty());
     _deletions = std::move(deletedIDs);
 }
 
