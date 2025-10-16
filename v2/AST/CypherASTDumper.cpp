@@ -538,7 +538,7 @@ void CypherASTDumper::dump(std::ostream& out, const PathExpr* expr) {
 
 void CypherASTDumper::dump(std::ostream& out, const EntityTypeExpr* expr) {
     out << "    _" << std::hex << expr << " {\n";
-    out << "        ASTType NodeLabelExpr\n";
+    out << "        ASTType EntityTypeExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
     const auto& labels = expr->getTypes();

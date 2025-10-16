@@ -1,4 +1,4 @@
-#include "NodeLabelExpr.h"
+#include "EntityTypeExpr.h"
 
 #include "CypherAST.h"
 
@@ -15,8 +15,8 @@ EntityTypeExpr::~EntityTypeExpr() {
 }
 
 EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, 
-                                     Symbol* symbol,
-                                     Types&& types) {
+                                       Symbol* symbol,
+                                       Types&& types) {
     EntityTypeExpr* expr = new EntityTypeExpr(symbol, std::move(types));
     ast->addExpr(expr);
     return expr;

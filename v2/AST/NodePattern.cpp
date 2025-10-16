@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "expr/SymbolExpr.h"
 #include "expr/LiteralExpr.h"
-#include "expr/NodeLabelExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/Literal.h"
 
 using namespace db::v2;

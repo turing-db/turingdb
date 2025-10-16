@@ -24,7 +24,7 @@
 #include "expr/BinaryExpr.h"
 #include "expr/Literal.h"
 #include "expr/LiteralExpr.h"
-#include "expr/NodeLabelExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/PathExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"

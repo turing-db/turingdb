@@ -9,7 +9,7 @@
 
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
-#include "expr/NodeLabelExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/UnaryExpr.h"

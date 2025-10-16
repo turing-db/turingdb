@@ -7,6 +7,6 @@
 #include "expr/UnaryExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"
-#include "expr/NodeLabelExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/PathExpr.h"
 #include "expr/ExprChain.h"

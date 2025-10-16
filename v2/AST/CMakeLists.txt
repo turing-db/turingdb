@@ -12,7 +12,7 @@ set(ast_sources
     expr/ExprChain.cpp
     expr/BinaryExpr.cpp
     expr/LiteralExpr.cpp
-    expr/NodeLabelExpr.cpp
+    expr/EntityTypeExpr.cpp
     expr/PathExpr.cpp
     expr/PropertyExpr.cpp
     expr/StringExpr.cpp

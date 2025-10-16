@@ -12,7 +12,7 @@
 #include "expr/BinaryExpr.h"
 #include "expr/Literal.h"
 #include "expr/LiteralExpr.h"
-#include "expr/NodeLabelExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/PathExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"
@@ -23,8 +23,9 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
