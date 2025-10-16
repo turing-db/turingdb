@@ -41,6 +41,8 @@ using namespace db;
 "new"|"NEW" { return YParser::make_NEW(getLocation()); }
 "submit"|"SUBMIT" { return YParser::make_SUBMIT(getLocation()); }
 "delete"|"DELETE" { return YParser::make_DELETE(getLocation()); }
+"nodes"|"NODES" { return YParser::make_NODES(getLocation()); }
+"edges"|"EDGES" { return YParser::make_EDGES(getLocation()); }
 "call"|"CALL" { return YParser::make_CALL(getLocation()); }
 "@"|"at"|"AT" { return YParser::make_AT(getLocation()); }
 

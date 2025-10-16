@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 
+#include "ID.h"
 #include "Path.h"
 #include "metadata/PropertyType.h"
 
@@ -16,6 +17,9 @@ class MatchTargets;
 class CreateTarget;
 class CreateTargets;
 
+template<TypedInternalID IDT>
+class DeletedIDs;
+
 class QueryCommand {
 public:
     friend ASTContext;
@@ -23,6 +27,8 @@ public:
     enum class Kind {
         MATCH_COMMAND = 0,
         CREATE_COMMAND,
+        DELETE_NODES_COMMAND,
+        DELETE_EDGES_COMMAND,
         COMMIT_COMMAND,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
@@ -82,6 +88,24 @@ private:
 
     explicit CreateCommand(CreateTargets* targets);
     ~CreateCommand() override;
+};
+
+
+// DELETE command
+template <TypedInternalID IDT>
+class DeleteCommand : public QueryCommand {
+public:
+    static DeleteCommand<IDT>* create(ASTContext* ctxt, DeletedIDs<IDT>* deletedIDs);
+
+    std::vector<IDT>& deletions() const;
+
+    Kind getKind() const override;
+
+    ~DeleteCommand() override;
+private:
+    DeletedIDs<IDT>* _deletedIDs {nullptr};
+
+    explicit DeleteCommand(DeletedIDs<IDT>* deletions);
 };
 
 class CommitCommand : public QueryCommand {

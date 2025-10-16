@@ -3,6 +3,8 @@
 #include "ASTContext.h"
 #include "DeclContext.h"
 #include "ChangeCommand.h"
+#include "DeletedIDs.h"
+#include "ID.h"
 
 using namespace db;
 
@@ -41,6 +43,46 @@ CreateCommand* CreateCommand::create(ASTContext* ctxt, CreateTargets* targets) {
     CreateCommand* cmd = new CreateCommand(targets);
     cmd->registerCmd(ctxt);
     return cmd;
+}
+
+// DeleteCommand
+template <TypedInternalID IDT>
+DeleteCommand<IDT>::DeleteCommand(DeletedIDs<IDT>* deletions)
+    : _deletedIDs(deletions) {
+}
+
+template <TypedInternalID IDT>
+DeleteCommand<IDT>::~DeleteCommand()
+{
+}
+
+template <TypedInternalID IDT>
+DeleteCommand<IDT>* DeleteCommand<IDT>::create(ASTContext* ctxt,
+                                               DeletedIDs<IDT>* deletedIDs) {
+    DeleteCommand<IDT>* delCmd = new DeleteCommand<IDT>(deletedIDs);
+    delCmd->registerCmd(ctxt);
+    return delCmd;
+}
+
+template <TypedInternalID IDT>
+std::vector<IDT>& DeleteCommand<IDT>::deletions() const {
+    return _deletedIDs->getIDs();
+}
+
+template <TypedInternalID IDT>
+QueryCommand::Kind DeleteCommand<IDT>::getKind() const {
+    if constexpr (std::is_same_v<IDT, NodeID>) {
+        return QueryCommand::Kind::DELETE_NODES_COMMAND;
+    } else {
+        return QueryCommand::Kind::DELETE_EDGES_COMMAND;
+    }
+}
+
+namespace db {
+    template class DeleteCommand<NodeID>;
+    template class DeleteCommand<EdgeID>;
+    template class DeletedIDs<NodeID>;
+    template class DeletedIDs<EdgeID>;
 }
 
 // CommitCommand 
