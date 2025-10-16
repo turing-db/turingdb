@@ -11,6 +11,7 @@
 #include "ReturnProjection.h"
 #include "TypeConstraint.h"
 #include "InjectedIDs.h"
+#include "DeletedIDs.h"
 #include "VarDecl.h"
 
 using namespace db;
@@ -50,6 +51,14 @@ ASTContext::~ASTContext() {
 
     for (InjectedIDs* ids : _injectedIDs) {
         delete ids;
+    }
+
+    for (DeletedIDs<NodeID>* nodeIDs : _deletedNodeIDs) {
+        delete nodeIDs;
+    }
+
+    for (DeletedIDs<EdgeID>* edgeIDs : _deletedEdgeIDs) {
+        delete edgeIDs;
     }
 
     for (ExprConstraint* constr : _exprConstraints) {
@@ -119,6 +128,14 @@ void ASTContext::addTypeConstraint(TypeConstraint* constr) {
 
 void ASTContext::addInjectedIDs(InjectedIDs* injectedIDs) {
     _injectedIDs.push_back(injectedIDs);
+}
+
+void ASTContext::addDeletedNodes(DeletedIDs<NodeID>* deletedIDs) {
+    _deletedNodeIDs.emplace_back(deletedIDs);
+}
+
+void ASTContext::addDeletedEdges(DeletedIDs<EdgeID>* deletedIDs) {
+    _deletedEdgeIDs.emplace_back(deletedIDs);
 }
 
 void ASTContext::addExprConstraint(ExprConstraint* constr) {

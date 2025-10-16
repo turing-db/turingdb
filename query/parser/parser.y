@@ -19,6 +19,7 @@
 
 #include "ChangeOpType.h"
 #include "CreateTarget.h"
+#include "ID.h"
 
 namespace db {
 class YScanner;
@@ -33,6 +34,8 @@ class PathPattern;
 class EntityPattern;
 class TypeConstraint;
 class InjectedIDs;
+template <TypedInternalID IDT>
+class DeletedIDs;
 class ExprConstraint;
 class VarExpr;
 class BinExpr;
@@ -61,6 +64,7 @@ class ReturnProjection;
 #include "Expr.h"
 #include "TypeConstraint.h"
 #include "InjectedIDs.h"
+#include "DeletedIDs.h"
 #include "ExprConstraint.h"
 #include "ReturnProjection.h"
 
@@ -116,6 +120,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token LABELS       "'LABELS'"
 %token EDGETYPES    "'EDGETYPES'" 
 %token LABELSETS    "'LABELSETS'"
+%token NODES        "'NODES'"
+%token EDGES        "'EDGES'"
 
 %token S3_CONNECT "'S3_CONNECT'"
 %token S3_PUSH "'S3_PUSH'"
@@ -152,6 +158,7 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 
 %type<db::QueryCommand*> match_cmd
 %type<db::QueryCommand*> create_cmd
+%type<db::QueryCommand*> delete_cmd
 %type<db::ReturnProjection*> return_fields
 %type<db::ReturnField*> return_field
 %type<db::MatchTarget*> match_target
@@ -161,6 +168,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::PathPattern*> create_path_pattern
 %type<db::PathPattern*> path_pattern
 %type<db::InjectedIDs*> injected_nodes
+%type<db::DeletedIDs<NodeID>*> deleted_nodes
+%type<db::DeletedIDs<EdgeID>*> deleted_edges
 %type<db::EntityPattern*> create_node_pattern
 %type<db::EntityPattern*> node_pattern
 %type<db::EntityPattern*> edge_pattern
@@ -207,6 +216,7 @@ query_unit: cmd { $$ = $1; }
           
 cmd: match_cmd { ctxt->setRoot($1); }
    | create_cmd { ctxt->setRoot($1); }
+   | delete_cmd { ctxt->setRoot($1); }
    | create_graph_cmd { ctxt->setRoot($1); }
    | list_graph_cmd { ctxt->setRoot($1); }
    | load_graph_cmd { ctxt->setRoot($1); }
@@ -259,6 +269,10 @@ create_cmd: CREATE create_targets
               $$ = CreateCommand::create(ctxt, $2);
           }
           ;
+
+delete_cmd: DELETE NODES deleted_nodes { $$ = DeleteCommand<NodeID>::create(ctxt, $3); }
+          | DELETE EDGES deleted_edges { $$ = DeleteCommand<EdgeID>::create(ctxt, $3); }
+		  ;
 
 return_field: STAR {
                         auto field = ReturnField::create(ctxt);
@@ -351,7 +365,33 @@ injected_nodes: INT_CONSTANT
                         $1->addID(std::stoull($3));
                         $$ = $1;
                    }
-                   
+
+deleted_nodes : INT_CONSTANT
+                   {
+                        auto deletedIDs = DeletedIDs<NodeID>::create(ctxt);
+                        deletedIDs->addID(std::stoull($1));
+                        $$ = deletedIDs;
+                   }
+                   | deleted_nodes COMMA INT_CONSTANT
+                   {
+                        $1->addID(std::stoull($3));
+                        $$ = $1;
+                   }
+				   ;
+
+deleted_edges : INT_CONSTANT
+                   {
+                        auto deletedIDs = DeletedIDs<EdgeID>::create(ctxt);
+                        deletedIDs->addID(std::stoull($1));
+                        $$ = deletedIDs;
+                   }
+                   | deleted_edges COMMA INT_CONSTANT
+                   {
+                        $1->addID(std::stoull($3));
+                        $$ = $1;
+                   }
+				   ;
+
 create_node_pattern: OPAR entity_pattern CPAR
                    {
                         $2->setKind(DeclKind::NODE_DECL);
