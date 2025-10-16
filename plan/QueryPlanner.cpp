@@ -94,6 +94,11 @@ bool QueryPlanner::plan(const QueryCommand* query) {
         case QueryCommand::Kind::CREATE_COMMAND:
             return planCreate(static_cast<const CreateCommand*>(query));
 
+        case QueryCommand::Kind::DELETE_NODES_COMMAND:
+            return planDeleteNodes(static_cast<const DeleteCommand<NodeID>*>(query));
+        case QueryCommand::Kind::DELETE_EDGES_COMMAND:
+            return planDeleteEdges(static_cast<const DeleteCommand<EdgeID>*>(query));
+
         case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             return planCreateGraph(static_cast<const CreateGraphCommand*>(query));
 

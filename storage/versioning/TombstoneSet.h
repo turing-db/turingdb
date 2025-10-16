@@ -25,21 +25,6 @@ private:
 };
 
 template <TypedInternalID IDT>
-bool TombstoneSet<IDT>::contains(IDT id) const {
-    return _set.contains(id);
-}
-
-template <TypedInternalID IDT>
-auto TombstoneSet<IDT>::insert(IDT id) {
-    return _set.insert(id);
-}
-
-template <TypedInternalID IDT>
-size_t TombstoneSet<IDT>::size() const {
-    return _set.size();
-}
-
-template <TypedInternalID IDT>
 template <std::ranges::input_range Range>
     requires std::same_as<std::ranges::range_value_t<Range>, IDT>
 void TombstoneSet<IDT>::insert(Range& range) {
