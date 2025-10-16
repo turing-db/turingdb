@@ -13,6 +13,7 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
+#include "versioning/WriteSet.h"
 
 namespace db {
 
@@ -80,6 +81,12 @@ private:
     void addCommit(std::unique_ptr<Commit> commit);
 
     [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
+
+    /**
+     * @brief Accumulates all node and edge IDs that appear in each Commit in the range
+     * [from, head]
+     */
+    [[nodiscard]] CommitWrites getWritesSinceCommit(CommitHash from) const;
 };
 
 }

@@ -39,7 +39,6 @@ public:
 
     void newCommitHistoryFromPrevious(const CommitHistory& previous);
 
-    CommitJournal& journal() { return *_journal; }
     CommitJournal& journal() const { return *_journal; }
 
 private:
@@ -59,6 +58,8 @@ private:
 
     /// Stores the write information of this commit
     std::unique_ptr<CommitJournal> _journal {CommitJournal::emptyJournal()};
+
+    CommitJournal& journal() { return *_journal; }
 };
 
 }

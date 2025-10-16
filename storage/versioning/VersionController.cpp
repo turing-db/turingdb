@@ -2,14 +2,18 @@
 
 #include <range/v3/view/enumerate.hpp>
 
+#include "BioAssert.h"
 #include "JobSystem.h"
+#include "Panic.h"
 #include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
+#include "versioning/CommitHash.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/Transaction.h"
+#include "CommitJournal.h"
 
 using namespace db;
 
@@ -120,4 +124,26 @@ long VersionController::getCommitIndex(CommitHash hash) const {
     }
 
     return it->second;
+}
+
+// NOTE: Called within locked-context
+[[nodiscard]] CommitWrites VersionController::getWritesSinceCommit(CommitHash from) const {
+    bioassert(from != CommitHash::head());
+
+    auto start = getCommitIndex(from);
+    if (start == -1) {
+        panic("Could not find Commit with hash {}", from.get());
+    }
+
+    CommitWrites writes;
+
+    auto commitIterator = _commits.begin() + start;
+    for (; commitIterator < _commits.end(); commitIterator++) {
+        const Commit& commit = **commitIterator;
+        const CommitJournal& journal = commit.history().journal();
+        WriteSet<NodeID>::setUnion(writes.writtenNodes, journal.nodeWriteSet());
+        WriteSet<EdgeID>::setUnion(writes.writtenEdges, journal.edgeWriteSet());
+    }
+
+    return writes;
 }

@@ -43,6 +43,10 @@ public:
     const NodeWriteSet& nodeWriteSet() const { return _nodeWriteSet; }
     const EdgeWriteSet& edgeWriteSet() const { return _edgeWriteSet; }
 
+    auto& nodeWriteSet() const { return _nodeWriteSet; }
+    auto& edgeWriteSet() const { return _edgeWriteSet; }
+
+
     void finalise();
 
 private:

@@ -92,6 +92,8 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
     rebaser.init(mainReader, branchTimeReader);
 
+    auto writes = _versionController->getWritesSinceCommit(_base->hash());
+
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
         rebaser.rebaseCommitBuilder(*commitBuilder);
