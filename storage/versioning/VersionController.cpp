@@ -77,6 +77,8 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commitBuilder : change->_commits) {
+        // TODO: Compare WriteSet of current builder with union created at rebase
+
         // Creates a new builder to execute CREATE/DELETE commands.
         // If locally `Change::commit` all changes, and no rebase, then no need to flush
         // again. Otherwise flush again.
@@ -84,15 +86,12 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
             commitBuilder->flushWriteBuffer(jobSystem);
         }
 
-        // TODO: Compare WriteSet of current builder with union created at rebase
-
         auto buildRes = commitBuilder->build(jobSystem);
         if (!buildRes) {
             return buildRes.get_unexpected();
         }
 
         auto& newCommit = buildRes.value();
-        // auto& tombstones = newCommit->data().tombstones();
 
         _commits.emplace_back(std::move(newCommit));
     }

@@ -31,8 +31,8 @@ public:
     bool hasNodes() const { return !_nodeTombstones.empty(); }
     bool hasEdges() const { return !_edgeTombstones.empty(); }
 
-    const NodeTombstones& nodeTombstones() { return _nodeTombstones; }
-    const EdgeTombstones& edgeTombstones() { return _edgeTombstones; }
+    const NodeTombstones& nodeTombstones() const { return _nodeTombstones; }
+    const EdgeTombstones& edgeTombstones() const { return _edgeTombstones; }
 
 private:
     friend class CommitWriteBuffer;
