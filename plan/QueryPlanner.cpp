@@ -199,6 +199,36 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
     return true;
 }
 
+bool QueryPlanner::planDeleteNodes(const DeleteCommand<NodeID>* delCmd) {
+    std::vector<NodeID>& deletions = delCmd->deletions();
+
+    _pipeline->add<StopStep>();
+
+    DeleteStep<NodeID> step =
+        _pipeline->add<DeleteStep<NodeID>>().get<DeleteStep<NodeID>>();
+
+    step.addDeletions(std::move(deletions));
+
+    _pipeline->add<EndStep>();
+
+    return true;
+}
+
+bool QueryPlanner::planDeleteEdges(const DeleteCommand<EdgeID>* delCmd) {
+    std::vector<EdgeID>& deletions = delCmd->deletions();
+
+    _pipeline->add<StopStep>();
+
+    DeleteStep<EdgeID> step =
+        _pipeline->add<DeleteStep<EdgeID>>().get<DeleteStep<EdgeID>>();
+
+    step.addDeletions(std::move(deletions));
+
+    _pipeline->add<EndStep>();
+
+    return true;
+}
+
 void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
     const auto& injectedNodes = path[0]->getInjectedIDs();
     _result = _mem->alloc<ColumnNodeIDs>(injectedNodes->getIDs());

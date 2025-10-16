@@ -85,6 +85,9 @@ private:
     bool planMatch(const MatchCommand* matchCmd);
     bool planCreate(const CreateCommand* createCmd);
 
+    bool planDeleteNodes(const DeleteCommand<NodeID>* delCmd);
+    bool planDeleteEdges(const DeleteCommand<EdgeID>* delCmd);
+
     void planInjectNodes(const std::vector<EntityPattern*>& path);
     void planPath(const std::vector<EntityPattern*>& path);
 
