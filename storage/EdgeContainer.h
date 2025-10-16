@@ -14,6 +14,7 @@ class DataPartLoader;
 class EdgeIndexer;
 class EdgeContainerLoader;
 class DataPartRebaser;
+class DataPartMerger;
 
 class EdgeContainer {
 public:
@@ -72,8 +73,9 @@ private:
     friend DataPartLoader;
     friend EdgeContainerLoader;
     friend DataPartRebaser;
+    friend DataPartMerger;
 
-    NodeID  _firstNodeID = 0;
+    NodeID _firstNodeID = 0;
     EdgeID _firstEdgeID = 0;
 
     EdgeRecords _outEdges;
@@ -87,5 +89,4 @@ private:
                   std::vector<EdgeRecord>&& outEdges,
                   std::vector<EdgeRecord>&& inEdges);
 };
-
 }

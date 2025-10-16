@@ -9,6 +9,7 @@
 #include "StringBucket.h"
 
 namespace db {
+class DataPartMerger;
 
 class StringContainer {
 public:
@@ -112,6 +113,8 @@ public:
     ViewVector::const_iterator end() const { return _views.end(); }
 
 private:
+    friend DataPartMerger;
+
     BucketVector _buckets;
     ViewVector _views;
 };

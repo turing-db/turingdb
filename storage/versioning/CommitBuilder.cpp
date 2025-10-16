@@ -44,7 +44,10 @@ DataPartBuilder& CommitBuilder::newBuilder() {
     std::scoped_lock lock {_mutex};
     GraphView view {*_commitData};
     const size_t partIndex = view.dataparts().size() + _builders.size();
-    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder, view, partIndex));
+    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder,
+                                                                    view.read().getNodeCount(),
+                                                                    view.read().getEdgeCount(),
+                                                                    partIndex));
 
     return *builder;
 }

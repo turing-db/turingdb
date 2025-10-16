@@ -15,6 +15,7 @@ class ConcurrentWriter;
 class EdgeContainer;
 class PropertyManager;
 class DataPart;
+class DataPartMerger;
 class CommitBuilder;
 class Graph;
 class JobSystem;
@@ -31,7 +32,8 @@ public:
 
     [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(
         MetadataBuilder& metadata,
-        const GraphView& view,
+        size_t firstNodeId,
+        size_t firstEdgeId,
         size_t partIndex);
 
     NodeID addNode(const LabelSetHandle& labelset);
@@ -57,12 +59,12 @@ public:
     size_t getInPatchEdgeCount() const { return _inPatchEdgeCount; };
     size_t getPartIndex() const { return _partIndex; };
 
-    const GraphView& getView() const { return _view; }
     MetadataBuilder& getMetadata() { return *_metadata; }
 
 private:
     friend ConcurrentWriter;
     friend DataPart;
+    friend DataPartMerger;
     friend CommitBuilder;
 
     NodeID _firstNodeID {0};

@@ -152,6 +152,9 @@ public:
             });
     }
 
+    Values& values() { return _values; }
+    const Values& values() const { return _values; }
+
 private:
     friend TrivialPropertyContainerLoader<T>;
 
@@ -273,8 +276,8 @@ public:
 
 private:
     friend StringPropertyContainerLoader;
+    friend DataPartMerger;
 
     StringContainer _values;
 };
-
 }
