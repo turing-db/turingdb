@@ -1,5 +1,5 @@
 #include "QueryPlanner.h"
-
+;
 #include <span>
 #include <spdlog/spdlog.h>
 #include <range/v3/view/drop.hpp>
@@ -209,7 +209,7 @@ bool QueryPlanner::planDeleteNodes(const DeleteCommand<NodeID>* delCmd) {
 
     _pipeline->add<StopStep>();
 
-    DeleteStep<NodeID> step =
+    DeleteStep<NodeID>& step =
         _pipeline->add<DeleteStep<NodeID>>().get<DeleteStep<NodeID>>();
 
     step.addDeletions(std::move(deletions));
@@ -224,7 +224,7 @@ bool QueryPlanner::planDeleteEdges(const DeleteCommand<EdgeID>* delCmd) {
 
     _pipeline->add<StopStep>();
 
-    DeleteStep<EdgeID> step =
+    DeleteStep<EdgeID>& step =
         _pipeline->add<DeleteStep<EdgeID>>().get<DeleteStep<EdgeID>>();
 
     step.addDeletions(std::move(deletions));
