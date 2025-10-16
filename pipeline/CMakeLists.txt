@@ -28,6 +28,7 @@ set(pipeline_sources
         operations/S3PushStep.cpp
         operations/S3PullStep.cpp
         operations/WriteStep.cpp
+        operations/DeleteStep.cpp
         
         PipelineStep.cpp
         Pipeline.cpp

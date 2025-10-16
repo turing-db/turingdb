@@ -140,8 +140,8 @@ public:
 
     PipelineStep(WriteStep::Tag, const CreateTargets* targets);
 
-    PipelineStep(DeleteStep<NodeID>::Tag, std::vector<NodeID>&& deletedIDs);
-    PipelineStep(DeleteStep<EdgeID>::Tag, std::vector<EdgeID>&& deletedIDs);
+    PipelineStep(DeleteStep<NodeID>::Tag);
+    PipelineStep(DeleteStep<EdgeID>::Tag);
 
     PipelineStep(CommitStep::Tag);
     PipelineStep(CallPropertyStep::Tag,
