@@ -9,6 +9,9 @@ using namespace db;
 void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
                                   DataPartRebaser& dataPartRebaser,
                                   const CommitHistory& prevHistory) {
+    // Clear the journal: WriteSets may change on reflush after rebase
+    _history.journal().clear();
+
     // Commits
     const CommitView tip = _history._commits.back();
     _history._commits = prevHistory._commits;

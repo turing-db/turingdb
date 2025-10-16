@@ -37,11 +37,9 @@ public:
     static bool emptyIntersection(const WriteSet<IDT>& set1,
                                   const WriteSet<IDT>& set2) = delete;
 
-    static WriteSet<IDT> setUnion(const WriteSet<IDT>& set1,
-                                  const WriteSet<IDT>& set2) = delete;
+    static void setUnion(WriteSet<IDT>& set1, const WriteSet<IDT>& set2);
 
-    static WriteSet<IDT> setIntersection(const WriteSet<IDT>& set1,
-                                         const WriteSet<IDT>& set2) = delete;
+    static void setIntersection(WriteSet<IDT>& set1, WriteSet<IDT>& set2) = delete;
 
 private:
     friend class CommitJournal;
@@ -52,28 +50,15 @@ private:
 };
 
 template <TypedInternalID IDT>
-bool WriteSet<IDT>::contains(IDT id) const {
-    bioassert(std::ranges::is_sorted(_set));
-    return std::ranges::binary_search(_set, id);
-}
-
-template <TypedInternalID IDT>
-void WriteSet<IDT>::insert(IDT id) {
-    _set.push_back(id);
-}
-
-template <TypedInternalID IDT>
 template <std::ranges::input_range Range>
     requires std::same_as<std::ranges::range_value_t<Range>, IDT>
 void WriteSet<IDT>::insert(Range&& range) {
     _set.insert(_set.begin(), std::ranges::begin(range), std::ranges::end(range));
 }
 
-template <TypedInternalID IDT>
-void WriteSet<IDT>::finalise() {
-    std::ranges::sort(_set);
-    auto [newEnd, oldEnd] = std::ranges::unique(_set);
-    _set.erase(newEnd, oldEnd);
-}
+struct CommitWrites {
+    WriteSet<NodeID> writtenNodes;
+    WriteSet<EdgeID> writtenEdges;
+};
 
 }
