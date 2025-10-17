@@ -90,7 +90,6 @@ private:
     ~CreateCommand() override;
 };
 
-
 // DELETE command
 template <TypedInternalID IDT>
 class DeleteCommand : public QueryCommand {

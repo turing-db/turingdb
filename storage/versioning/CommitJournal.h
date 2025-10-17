@@ -46,7 +46,6 @@ public:
     auto& nodeWriteSet() const { return _nodeWriteSet; }
     auto& edgeWriteSet() const { return _edgeWriteSet; }
 
-
     void finalise();
 
 private:

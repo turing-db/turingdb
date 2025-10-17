@@ -31,7 +31,6 @@ public:
     auto begin() const { return _set.begin(); }
     auto end() const { return _set.end(); }
 
-
     void swap(WriteSet<IDT>& other);
 
     void finalise();

@@ -1,5 +1,5 @@
 #include "QueryPlanner.h"
-;
+
 #include <span>
 #include <spdlog/spdlog.h>
 #include <range/v3/view/drop.hpp>
