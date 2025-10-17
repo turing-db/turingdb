@@ -21,7 +21,7 @@ int main(int argc, const char** argv) {
 
     bool noServer = false;
     bool nodemon = false;
-    bool inMemory = false;
+    bool inMemory = true;
     unsigned port = 6666;
     std::string address {"127.0.0.1"};
     std::string turingDir;

@@ -32,10 +32,11 @@ public:
     auto end() const { return _set.end(); }
 
 
+    void swap(WriteSet<IDT>& other);
+
     void finalise();
 
-    static bool emptyIntersection(const WriteSet<IDT>& set1,
-                                  const WriteSet<IDT>& set2) = delete;
+    static bool emptyIntersection(const WriteSet<IDT>& set1, const WriteSet<IDT>& set2);
 
     static void setUnion(WriteSet<IDT>& set1, const WriteSet<IDT>& set2);
 
@@ -56,7 +57,7 @@ void WriteSet<IDT>::insert(Range&& range) {
     _set.insert(_set.begin(), std::ranges::begin(range), std::ranges::end(range));
 }
 
-struct CommitWrites {
+struct ConflictCheckSets {
     WriteSet<NodeID> writtenNodes;
     WriteSet<EdgeID> writtenEdges;
 };

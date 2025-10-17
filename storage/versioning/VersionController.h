@@ -86,7 +86,7 @@ private:
      * @brief Accumulates all node and edge IDs that appear in each Commit in the range
      * [from, head]
      */
-    [[nodiscard]] CommitWrites getWritesSinceCommit(CommitHash from) const;
+    [[nodiscard]] ConflictCheckSets getWritesSinceCommit(CommitHash from) const;
 };
 
 }

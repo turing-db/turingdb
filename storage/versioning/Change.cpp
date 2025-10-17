@@ -6,8 +6,10 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitHistoryRebaser.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
+#include "versioning/WriteSet.h"
 #include "writers/DataPartBuilder.h"
 
 using namespace db;
@@ -92,7 +94,8 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
     rebaser.init(mainReader, branchTimeReader);
 
-    auto writes = _versionController->getWritesSinceCommit(_base->hash());
+    // Generate union of WriteSets since branch time
+    ConflictCheckSets writes = _versionController->getWritesSinceCommit(baseHash());
 
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {

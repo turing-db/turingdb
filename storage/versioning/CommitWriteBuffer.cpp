@@ -8,6 +8,7 @@
 #include "ChangeRebaser.h"
 #include "ID.h"
 #include "versioning/MetadataRebaser.h"
+#include "versioning/WriteSet.h"
 #include "writers/DataPartBuilder.h"
 #include "Tombstones.h"
 
@@ -201,3 +202,9 @@ void CommitWriteBufferRebaser::rebase() {
         deletedNodes.swap(temp);
     }
 }
+
+bool CommitWriteBufferRebaser::checkConflicts(const ConflictCheckSets& conflictSet) const {
+
+    return false;
+}
+

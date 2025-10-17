@@ -48,6 +48,7 @@ private:
     friend ChangeManager;
     friend ChangeAccessor;
     friend VersionController;
+    friend class ChangeRebaser;
 
     ChangeID _id;
     VersionController* _versionController {nullptr};
@@ -64,6 +65,8 @@ private:
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
+
+    bool hasConflicts(const ConflictCheckSets& conflictSet);
 
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash) const;
 };

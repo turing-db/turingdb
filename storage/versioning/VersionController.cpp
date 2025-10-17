@@ -94,7 +94,10 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (!buildRes) {
             return buildRes.get_unexpected();
         }
-        addCommit(std::move(buildRes.value()));
+
+        auto& newCommit = buildRes.value();
+
+        addCommit(std::move(newCommit));
     }
 
     return {};
@@ -127,20 +130,21 @@ long VersionController::getCommitIndex(CommitHash hash) const {
 }
 
 // NOTE: Called within locked-context
-[[nodiscard]] CommitWrites VersionController::getWritesSinceCommit(CommitHash from) const {
+[[nodiscard]] ConflictCheckSets VersionController::getWritesSinceCommit(CommitHash from) const {
+    // Should not be trying to check conflicts if we are not rebasing
     bioassert(from != CommitHash::head());
-
     auto start = getCommitIndex(from);
     if (start == -1) {
-        panic("Could not find Commit with hash {}", from.get());
+        panic("Could not find Commit with hash {:x}", from.get());
     }
 
-    CommitWrites writes;
+    ConflictCheckSets writes;
 
     auto commitIterator = _commits.begin() + start;
     for (; commitIterator < _commits.end(); commitIterator++) {
         const Commit& commit = **commitIterator;
         const CommitJournal& journal = commit.history().journal();
+        bioassert(&journal);
         WriteSet<NodeID>::setUnion(writes.writtenNodes, journal.nodeWriteSet());
         WriteSet<EdgeID>::setUnion(writes.writtenEdges, journal.edgeWriteSet());
     }

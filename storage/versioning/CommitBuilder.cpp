@@ -151,6 +151,7 @@ void CommitBuilder::initialize() {
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
 
     _commitData->_history._journal = CommitJournal::emptyJournal();
+    bioassert(_commitData->_history._journal);
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());

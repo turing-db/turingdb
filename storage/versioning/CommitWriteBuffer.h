@@ -15,6 +15,7 @@ class MetadataBuilder;
 class CommitJournal;
 class MetadataRebaser;
 class Tombstones;
+class ConflictCheckSets;
 
 class CommitWriteBuffer {
 
