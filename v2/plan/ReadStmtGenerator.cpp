@@ -428,8 +428,25 @@ void ReadStmtGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* o
 
 void ReadStmtGenerator::placeJoinsOnVars() {
     for (auto [var, filter] : _variables->getNodeFiltersMap()) {
-        if (filter->inputs().size() > 1) {
-            _tree->insertBefore<JoinNode>(filter);
+        std::span inputs = filter->inputs();
+
+        if (inputs.size() <= 1) {
+            continue;
+        }
+
+        PlanGraphNode* rhsNode = inputs[0];
+
+        for (size_t i = 1; i < inputs.size(); i++) {
+            PlanGraphNode* lhsNode = inputs[i];
+            lhsNode->clearOutputs();
+            rhsNode->clearOutputs();
+
+            JoinNode* join = _tree->create<JoinNode>();
+            lhsNode->connectOut(join);
+            rhsNode->connectOut(join);
+            join->connectOut(filter);
+
+            rhsNode = join;
         }
     }
 }
