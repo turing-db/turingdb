@@ -1,0 +1,10 @@
+/// QUERY
+MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC
+       |                             ^^^^^
+-------* Property type 'nam' not found
+
