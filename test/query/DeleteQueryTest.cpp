@@ -150,3 +150,23 @@ TEST_F(DeleteQueryTest, deleteEdgeConflict) {
             "Edge 10 on main) which has been modified on main.")
         .execute();
 }
+
+TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID fstChange = newChange(tester);
+    ChangeID sndChange = newChange(tester);
+
+    tester.setChangeID(fstChange);
+    tester.query("create (n @ 12)-[e:WORKS_WITH]-(m:Person{name=\"Cyrus\"})")
+        .execute();
+    submitChange(tester);
+
+    tester.setChangeID(sndChange);
+    tester.query("delete nodes 12")
+        .execute();
+    tester.query("change submit")
+        .expectError()
+        .expectErrorMessage("ERRR")
+        .execute();
+}

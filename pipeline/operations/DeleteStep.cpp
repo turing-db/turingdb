@@ -1,4 +1,8 @@
 #include "DeleteStep.h"
+#include <type_traits>
+
+// TODO: for v2
+constexpr bool DETACH = true;
 
 using namespace db;
 
@@ -53,6 +57,10 @@ void DeleteStep<IDT>::execute() {
         _writeBuffer->addDeletedNodes(_deletions);
     } else if constexpr (std::is_same_v<IDT, EdgeID>) {
         _writeBuffer->addDeletedEdges(_deletions);
+    }
+
+    if constexpr(std::is_same_v<IDT, NodeID> && DETACH) {
+        // TODO: Detect hanging edges
     }
 }
 
