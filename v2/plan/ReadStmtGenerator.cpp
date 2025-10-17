@@ -491,20 +491,35 @@ void ReadStmtGenerator::placePropertyExprJoins() {
         uint32_t order = var->getDeclOrder();
 
         for (; it != depContainer.end(); ++it) {
-            if (order < it->_var->getDeclOrder()) {
-                order = it->_var->getDeclOrder();
-                var = it->_var;
+            if (order <= it->_var->getDeclOrder()) {
+                //   Check if we can find a common successor
+                //   if so, the join would create a loop. Instead
+                //   we need to join on the successor
+                // e.g. (a)-->(x), (b { name: a.name })-->(x)
+
+                const PlanGraphNode* commonSuccessor = PlanGraphTopology::findCommonSuccessor(var, it->_var);
+                if (commonSuccessor) {
+                    fmt::print("Found common successor: {}\n", PlanGraphOpcodeDescription::value(commonSuccessor->getOpcode()));
+                    var = PlanGraphTopology::findNextVar(commonSuccessor);
+
+                    if (!var) {
+                        throwError("error. Cannot find next var");
+                    }
+                } else {
+                    order = it->_var->getDeclOrder();
+                    var = it->_var;
+                }
             }
         }
 
-        // Step 2: place joins
+        // Step 3: place joins
         insertDataFlowNode(var, prop->var);
 
         for (const auto& dep : deps.getDependencies()) {
             insertDataFlowNode(var, dep._var);
         }
 
-        // Step 3: Place the constraint
+        // Step 4: Place the constraint
         auto* filter = _variables->getNodeFilter(var);
         filter->addPropertyConstraint(prop.get());
     }

@@ -1,0 +1,141 @@
+/// QUERY
+MATCH (a)-->(x), (b { name: a.name})-->(x), (c {name: b.name})-->(x { name: a.name }) RETURN a
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: a
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __GET_OUT_EDGES__
+    `"]
+    4["`
+        __VAR__
+        __name__: v0
+    `"]
+    5["`
+        __FILTER_EDGE__
+    `"]
+    6["`
+        __GET_EDGE_TARGET__
+    `"]
+    7["`
+        __VAR__
+        __name__: x
+    `"]
+    8["`
+        __FILTER_NODE__
+        __prop__ _b_.name
+        __dep__: a.name
+        __prop__ _c_.name
+        __dep__: b.name
+        __prop__ _x_.name
+        __dep__: a.name
+    `"]
+    9["`
+        __SCAN_NODES__
+    `"]
+    10["`
+        __VAR__
+        __name__: b
+    `"]
+    11["`
+        __FILTER_NODE__
+    `"]
+    12["`
+        __GET_OUT_EDGES__
+    `"]
+    13["`
+        __VAR__
+        __name__: v1
+    `"]
+    14["`
+        __FILTER_EDGE__
+    `"]
+    15["`
+        __GET_EDGE_TARGET__
+    `"]
+    16["`
+        __SCAN_NODES__
+    `"]
+    17["`
+        __VAR__
+        __name__: c
+    `"]
+    18["`
+        __FILTER_NODE__
+    `"]
+    19["`
+        __GET_OUT_EDGES__
+    `"]
+    20["`
+        __VAR__
+        __name__: v2
+    `"]
+    21["`
+        __FILTER_EDGE__
+    `"]
+    22["`
+        __GET_EDGE_TARGET__
+    `"]
+    23["`
+        __CARTESIAN_PRODUCT__
+    `"]
+    24["`
+        __CARTESIAN_PRODUCT__
+    `"]
+    25["`
+        __MATERIALIZE__
+    `"]
+    26["`
+        __MATERIALIZE__
+    `"]
+    27["`
+        __MATERIALIZE__
+    `"]
+    28["`
+        __MATERIALIZE__
+    `"]
+    29["`
+        __MATERIALIZE__
+    `"]
+    30["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->5
+    4-->6
+    5-->4
+    6-->23
+    7-->30
+    8-->7
+    9-->11
+    10-->12
+    11-->10
+    12-->14
+    13-->15
+    14-->13
+    15-->23
+    16-->18
+    17-->19
+    18-->17
+    19-->21
+    20-->22
+    21-->20
+    22-->24
+    23-->24
+    24-->25
+    25-->26
+    26-->27
+    27-->28
+    28-->29
+    29-->8

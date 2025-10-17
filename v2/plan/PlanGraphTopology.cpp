@@ -3,6 +3,9 @@
 #include <queue>
 #include <unordered_set>
 
+#include "nodes/VarNode.h"
+#include "spdlog/fmt/bundled/base.h"
+
 using namespace db::v2;
 
 PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const PlanGraphNode* origin,
@@ -129,4 +132,103 @@ bool PlanGraphTopology::detectLoops(const PlanGraphNode* origin) {
     }
 
     return false;
+}
+
+const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode* a, const PlanGraphNode* b) {
+    fmt::println("Trying to find common successor");
+    if (a == b) {
+        return a;
+    }
+
+    std::unordered_set<const PlanGraphNode*> visited;
+    std::queue<const PlanGraphNode*> outputs;
+    std::queue<const PlanGraphNode*> inputs;
+
+    outputs.push(a);
+    visited.insert(a);
+
+    while (!outputs.empty()) {
+        fmt::println("- Testing output");
+        const PlanGraphNode* node = outputs.front();
+        outputs.pop();
+
+        inputs = {}; // Reset the input queue
+
+        for (const auto& out : node->outputs()) {
+            if (!visited.insert(out).second) {
+                continue; // Already visited
+            }
+
+            outputs.push(out);
+        }
+
+        if (node == a) {
+            fmt::println("First node tested, ignored");
+            // We need to follow at least one output node
+            continue;
+        }
+
+        if (node == b) {
+            fmt::println("Found the successor by only following outputs");
+            return node;
+        }
+
+        for (const auto& in : node->inputs()) {
+            if (!visited.insert(in).second) {
+                continue; // Already visited
+            }
+
+            inputs.push(in);
+        }
+
+        fmt::println("- Testing inputs");
+        while (!inputs.empty()) {
+            fmt::println("    - Testing input");
+            const PlanGraphNode* in = inputs.front();
+            inputs.pop();
+
+            if (in == b) {
+                fmt::println("Found the successor by following inputs");
+                return node; // Found the node through a common successor
+            }
+
+            for (const auto& nextIn : in->inputs()) {
+                if (!visited.insert(nextIn).second) {
+                    continue; // Already visited
+                }
+
+                inputs.push(nextIn);
+            }
+        }
+    }
+
+    fmt::println("No successor found");
+    return nullptr;
+}
+
+const VarNode* PlanGraphTopology::findNextVar(const PlanGraphNode* node) {
+    std::queue<const PlanGraphNode*> q;
+    std::unordered_set<const PlanGraphNode*> visited;
+
+    q.push(node);
+    visited.insert(node);
+
+    while (!q.empty()) {
+        const PlanGraphNode* current = q.front();
+        q.pop();
+
+        if (current->getOpcode() == PlanGraphOpcode::VAR) {
+            return static_cast<const VarNode*>(current);
+        }
+
+        for (const auto& out : current->outputs()) {
+            if (!visited.insert(out).second) {
+                continue; // Already visited
+            }
+
+            q.push(out);
+        }
+    }
+
+    return nullptr;
 }
