@@ -87,7 +87,25 @@ public:
             }
         }
 
+        // Clear inputs
         _inputs.clear();
+    }
+
+    void clearOutputs() {
+        // Remove self from the inputs of our outputs
+        for (PlanGraphNode* output : _outputs) {
+            auto& inputs = output->_inputs;
+
+            for (auto it = inputs.begin(); it != inputs.end(); ++it) {
+                if (*it == this) {
+                    inputs.erase(it);
+                    break;
+                }
+            }
+        }
+
+        // Clear outputs
+        _outputs.clear();
     }
 
 protected:
