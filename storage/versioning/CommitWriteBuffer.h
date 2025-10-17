@@ -89,7 +89,6 @@ public:
      const auto& deletedNodes() const { return _deletedNodes; }
      const auto& deletedEdges() const { return _deletedEdges; }
 
-
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
              && _deletedEdges.empty();
@@ -160,6 +159,8 @@ public:
     }
 
     void rebase();
+
+    bool checkConflicts(const ConflictCheckSets& conflictSet) const;
 
 private:
     EntityIDRebaser* _idRebaser {nullptr};

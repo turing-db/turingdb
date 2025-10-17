@@ -66,8 +66,6 @@ private:
     [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
 
-    bool hasConflicts(const ConflictCheckSets& conflictSet);
-
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash) const;
 };
 

@@ -27,7 +27,7 @@ ChangeRebaser::ChangeRebaser(Change& change,
 }
 
 void ChangeRebaser::init(const GraphReader& mainReader,
-                               const GraphReader& branchTimeReader) {
+                         const GraphReader& branchTimeReader) {
     bioassert(_branchTimeReader == nullptr);
     bioassert(_newMainReader == nullptr);
 
