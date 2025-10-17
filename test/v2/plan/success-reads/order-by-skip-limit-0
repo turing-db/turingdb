@@ -1,0 +1,35 @@
+/// QUERY
+MATCH (n) RETURN n ORDER BY n.name DESC, n.duration ASC SKIP 0 LIMIT 5
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __ORDER_BY__
+        __item__: DESC
+        __item__: ASC
+    `"]
+    4["`
+        __SKIP__
+    `"]
+    5["`
+        __LIMIT__
+    `"]
+    6["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->4
+    4-->5
+    5-->6

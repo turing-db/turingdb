@@ -1,0 +1,26 @@
+/// QUERY
+MATCH (n) RETURN n ORDER BY n.name DESC
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __ORDER_BY__
+        __item__: DESC
+    `"]
+    4["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->4

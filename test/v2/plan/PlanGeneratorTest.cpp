@@ -116,7 +116,7 @@ public:
                 fmt::println("== Generated result differ for query:\n{}", queryStr);
                 fmt::println("== Expected:\n{}", resStr);
                 fmt::println("== Actual:\n{}", generatedPlan);
-                ASSERT_FALSE(true);
+                EXPECT_FALSE(true);
             }
         }
     }

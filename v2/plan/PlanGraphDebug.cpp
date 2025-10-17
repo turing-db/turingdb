@@ -2,10 +2,12 @@
 
 #include "decl/PatternData.h"
 #include "nodes/FilterNode.h"
+#include "nodes/OrderByNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
-
 #include "nodes/WriteNode.h"
+
+#include "stmt/OrderByItem.h"
 #include "views/GraphView.h"
 
 #include "PlanGraph.h"
@@ -55,11 +57,22 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 bioassert(n->getVarDecl());
                 output << fmt::format("        __name__: {}\n", n->getVarDecl()->getName());
             } break;
+
             case PlanGraphOpcode::SCAN_NODES: {
             } break;
+
             case PlanGraphOpcode::CREATE_GRAPH: {
                 const auto* n = dynamic_cast<CreateGraphNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
+            } break;
+
+            case PlanGraphOpcode::ORDER_BY: {
+                const auto* n = dynamic_cast<OrderByNode*>(node.get());
+                for (const auto& item : n->items()) {
+                    output << "        __item__: ";
+                    const OrderByType type = item->getType();
+                    output << (type == OrderByType::ASC ? "ASC\n" : "DESC\n");
+                }
             } break;
 
             case PlanGraphOpcode::FILTER_NODE: {

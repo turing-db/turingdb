@@ -1,0 +1,10 @@
+/// QUERY
+MATCH (n) ORDER BY n.name RETURN n
+
+/// RESULT
+PLAN ERROR
+-------* Query error
+     1 | MATCH (n) ORDER BY n.name RETURN n
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^
+-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead
+

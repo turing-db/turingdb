@@ -17,6 +17,7 @@ public:
     static OrderByItem* create(CypherAST* ast, Expr* expr, OrderByType type = OrderByType::ASC);
 
     Expr* getExpr() const { return _expr; }
+    OrderByType getType() const { return _type; }
 
 private:
     Expr* _expr {nullptr};
