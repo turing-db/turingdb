@@ -97,6 +97,9 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // Generate union of WriteSets since branch time
     ConflictCheckSets writes = _versionController->getWritesSinceCommit(baseHash());
 
+    // Check the write buffer for each commit to be made for write conflicts
+    rebaser.checkConflicts(writes);
+
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
         rebaser.rebaseCommitBuilder(*commitBuilder);

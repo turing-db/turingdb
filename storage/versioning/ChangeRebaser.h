@@ -41,6 +41,14 @@ private:
     DataPartRebaser _dataPartRebaser;
     EntityIDRebaser _entityIDRebaser;
 
+    void checkPendingEdgeConflicts(const ConflictCheckSets& writes,
+                                   const CommitWriteBuffer& writeBuffer);
+
+    void checkDeletedNodeConflicts(const ConflictCheckSets& writes,
+                                   const CommitWriteBuffer& writeBuffer);
+    void checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
+                                   const CommitWriteBuffer& writeBuffer);
+
     NodeID _newNextNodeID {std::numeric_limits<NodeID>::max()};
     EdgeID _newNextEdgeID {std::numeric_limits<EdgeID>::max()};
 };

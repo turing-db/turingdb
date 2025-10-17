@@ -9,6 +9,11 @@
 #include "DataPartRebaser.h"
 #include "reader/GraphReader.h"
 #include "BioAssert.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/CommitHistory.h"
+#include "versioning/CommitHistoryRebaser.h"
+#include "versioning/CommitWriteBuffer.h"
+#include "versioning/DataPartRebaser.h"
 
 using namespace db;
 
@@ -77,4 +82,65 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
 
     _currentHeadCommitData = &commitBuilder.commitData();
     _currentHeadHistory = &_currentHeadCommitData->history();
+}
+
+void ChangeRebaser::checkPendingEdgeConflicts(const ConflictCheckSets& writes,
+                                              const CommitWriteBuffer& writeBuffer) {
+    // Check for pending edges to see if their source or target has write conflict
+    const auto& pendingEdges = writeBuffer.pendingEdges();
+    for (const auto& edge : pendingEdges) {
+        // Check if source node was modified
+        if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
+            NodeID newSrc = {rebaseNodeID(*oldSrcID)};
+            if (writes.writtenNodes.contains(newSrc)) {
+                panic("This change attempted to create an edge with source Node {} "
+                      "(which is now Node {} on main) which has been modified on main.",
+                      *oldSrcID, newSrc);
+            }
+        }
+        // Check if target node was modified
+        if (const NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
+            NodeID newTgt = {rebaseNodeID(*oldTgtID)};
+            if (writes.writtenNodes.contains(newTgt)) {
+                panic("This change attempted to create an edge with target Node {} "
+                      "(which is now Node {} on main) which has been modified on main.",
+                      *oldTgtID, newTgt);
+            }
+        }
+    }
+}
+
+void ChangeRebaser::checkDeletedNodeConflicts(const ConflictCheckSets& writes,
+                                              const CommitWriteBuffer& writeBuffer) {
+    const auto& deletedNodes = writeBuffer.deletedNodes();
+    for (const NodeID deletedNode : deletedNodes) {
+        NodeID newID = rebaseNodeID(deletedNode);
+        if (writes.writtenNodes.contains(newID)) {
+            panic("This change attempted to delete Node {} "
+                  "(which is now Node {} on main) which has been modified on main.",
+                  deletedNode, newID);
+        }
+    }
+}
+
+void ChangeRebaser::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
+                                              const CommitWriteBuffer& writeBuffer) {
+    const auto& deletedEdges = writeBuffer.deletedEdges();
+    for (const EdgeID deletedEdge : deletedEdges) {
+        EdgeID newID = rebaseEdgeID(deletedEdge);
+        if (writes.writtenEdges.contains(newID)) {
+            panic("This change attempted to delete Node {} "
+                  "(which is now Node {} on main) which has been modified on main.",
+                  deletedEdge, newID);
+        }
+    }
+}
+
+void ChangeRebaser::checkConflicts(const ConflictCheckSets& writes) {
+    for (const auto& commitBuilder : _change->_commits) {
+        const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
+        checkPendingEdgeConflicts(writes, writeBuffer);
+        checkDeletedNodeConflicts(writes, writeBuffer);
+        checkDeletedNodeConflicts(writes, writeBuffer);
+    }
 }
