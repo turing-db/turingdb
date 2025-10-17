@@ -129,8 +129,8 @@ void ChangeRebaser::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
     for (const EdgeID deletedEdge : deletedEdges) {
         EdgeID newID = rebaseEdgeID(deletedEdge);
         if (writes.writtenEdges.contains(newID)) {
-            panic("This change attempted to delete Node {} "
-                  "(which is now Node {} on main) which has been modified on main.",
+            panic("This change attempted to delete Edge {} "
+                  "(which is now Edge {} on main) which has been modified on main.",
                   deletedEdge, newID);
         }
     }
@@ -141,6 +141,6 @@ void ChangeRebaser::checkConflicts(const ConflictCheckSets& writes) {
         const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
         checkPendingEdgeConflicts(writes, writeBuffer);
         checkDeletedNodeConflicts(writes, writeBuffer);
-        checkDeletedNodeConflicts(writes, writeBuffer);
+        checkDeletedEdgeConflicts(writes, writeBuffer);
     }
 }

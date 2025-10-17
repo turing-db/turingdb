@@ -121,3 +121,32 @@ TEST_F(DeleteQueryTest, deletedNodeConflict) {
             "Node 0 on main) which has been modified on main.")
         .execute();
 }
+
+TEST_F(DeleteQueryTest, deleteEdgeConflict) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID firstID = newChange(tester);
+
+    // Delete edge 10
+    tester.query("delete edges 10")
+        .execute();
+
+    newChange(tester);
+
+    // Also delete edge 10
+    tester.query("delete edges 10")
+        .execute();
+
+    // Second change deletes edge 10
+    submitChange(tester);
+
+    tester.setChangeID(firstID);
+
+    // First change also tries to delete edge 10
+    tester.query("change submit")
+        .expectError()
+        .expectErrorMessage(
+            "Unexpected exception: This change attempted to delete Edge 10 (which is now "
+            "Edge 10 on main) which has been modified on main.")
+        .execute();
+}
