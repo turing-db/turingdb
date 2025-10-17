@@ -39,6 +39,8 @@ class Stmt;
 class SubStmt;
 class Limit;
 class Skip;
+class OrderBy;
+class OrderByItem;
 class StmtContainer;
 class MatchStmt;
 class CreateStmt;
@@ -83,6 +85,8 @@ public:
     friend Projection;
     friend Limit;
     friend Skip;
+    friend OrderBy;
+    friend OrderByItem;
     friend StmtContainer;
     friend MatchStmt;
     friend CreateStmt;
@@ -132,6 +136,8 @@ private:
     std::vector<WhereClause*> _whereClauses;
     std::vector<Stmt*> _stmts;
     std::vector<SubStmt*> _subStmts;
+    std::vector<OrderBy*> _orderBys;
+    std::vector<OrderByItem*> _orderByItems;
     std::vector<StmtContainer*> _stmtContainers;
     QueryCommands _queries;
     std::vector<DeclContext*> _declContexts;
@@ -152,6 +158,7 @@ private:
     void addWhereClause(WhereClause* clause);
     void addStmt(Stmt* stmt);
     void addSubStmt(SubStmt* subStmt);
+    void addOrderByItem(OrderByItem* item);
     void addStmtContainer(StmtContainer* container);
     void addQuery(QueryCommand* query);
     void addDeclContext(DeclContext* ctxt);

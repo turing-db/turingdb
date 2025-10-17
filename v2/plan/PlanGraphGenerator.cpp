@@ -1,7 +1,10 @@
 #include "PlanGraphGenerator.h"
 
 #include "Projection.h"
+#include "stmt/Limit.h"
+#include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/Skip.h"
 #include "views/GraphView.h"
 
 #include "DiagnosticsManager.h"
@@ -10,6 +13,7 @@
 #include "ReadStmtGenerator.h"
 #include "WriteStmtGenerator.h"
 
+#include "nodes/OrderByNode.h"
 #include "nodes/LimitNode.h"
 #include "nodes/SkipNode.h"
 #include "nodes/WriteNode.h"
@@ -100,12 +104,26 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
 
     const Projection* proj = stmt->getProjection();
 
-    if (proj->hasLimit()) {
-        prevNode = _tree.newOut<LimitNode>(prevNode);
+    if (proj->isDistinct()) {
+        throwError("DISTINCT not supported", stmt);
+    }
+
+    if (proj->hasOrderBy()) {
+        OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
+        orderBy->setItems(proj->getOrderBy()->getItems());
+        prevNode = orderBy;
     }
 
     if (proj->hasSkip()) {
-        prevNode = _tree.newOut<SkipNode>(prevNode);
+        SkipNode* skip = _tree.newOut<SkipNode>(prevNode);
+        skip->setExpr(proj->getSkip()->getExpr());
+        prevNode = skip;
+    }
+
+    if (proj->hasLimit()) {
+        LimitNode* limit = _tree.newOut<LimitNode>(prevNode);
+        limit->setExpr(proj->getLimit()->getExpr());
+        prevNode = limit;
     }
 
     _tree.newOut<ProduceResultsNode>(prevNode);

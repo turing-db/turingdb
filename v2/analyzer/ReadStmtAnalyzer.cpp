@@ -9,6 +9,9 @@
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
+#include "stmt/OrderBy.h"
+#include "stmt/OrderByItem.h"
+#include "stmt/Skip.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "QualifiedName.h"
@@ -27,7 +30,6 @@
 #include "expr/StringExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
-#include "stmt/Skip.h"
 
 using namespace db::v2;
 
@@ -65,12 +67,22 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 
     analyze(pattern);
 
-    if (matchSt->hasLimit()) {
-        analyze(matchSt->getLimit());
+    if (matchSt->hasOrderBy()) {
+        analyze(matchSt->getOrderBy());
     }
 
     if (matchSt->hasSkip()) {
         analyze(matchSt->getSkip());
+    }
+
+    if (matchSt->hasLimit()) {
+        analyze(matchSt->getLimit());
+    }
+}
+
+void ReadStmtAnalyzer::analyze(OrderBy* orderBySt) {
+    for (OrderByItem* item : orderBySt->getItems()) {
+        _exprAnalyzer->analyze(item->getExpr());
     }
 }
 

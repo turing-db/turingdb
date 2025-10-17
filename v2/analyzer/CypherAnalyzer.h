@@ -11,6 +11,7 @@ class ExprAnalyzer;
 class SinglePartQuery;
 class MatchStmt;
 class CreateStmt;
+class OrderBy;
 class Skip;
 class Limit;
 class ReturnStmt;
@@ -52,6 +53,7 @@ public:
     void analyze(const ReturnStmt* returnSt);
 
     // Sub-statements
+    void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
 

@@ -42,6 +42,8 @@
     #include "PatternElement.h"
     #include "stmt/Skip.h"
     #include "stmt/Limit.h"
+    #include "stmt/OrderBy.h"
+    #include "stmt/OrderByItem.h"
 
     namespace db::v2 {
         class YCypherScanner;
@@ -242,12 +244,14 @@
 %type<db::v2::MatchStmt*> matchSt
 %type<db::v2::CreateStmt*> createSt
 %type<db::v2::DeleteStmt*> deleteSt
+%type<db::v2::ReturnStmt*> returnSt
 %type<db::v2::Skip*> skipSSt
 %type<db::v2::Limit*> limitSSt
-%type<db::v2::ReturnStmt*> returnSt
-
+%type<db::v2::OrderBy*> orderBySSt
 %type<db::v2::Skip*> opt_skipSSt
 %type<db::v2::Limit*> opt_limitSSt
+%type<db::v2::OrderBy*> opt_orderBySSt
+%type<db::v2::OrderByItem*> orderByItem
 %type<bool> opt_distinct
 
 %expect 0
@@ -301,9 +305,10 @@ limitSSt
     ;
 
 projectionBody
-    : opt_distinct projectionItems opt_orderSSt opt_skipSSt opt_limitSSt {
+    : opt_distinct projectionItems opt_orderBySSt opt_skipSSt opt_limitSSt {
         $$ = $2;
         $$->setDistinct($1);
+        $$->setOrderBy($3);
         $$->setSkip($4);
         $$->setLimit($5);
       }
@@ -314,9 +319,9 @@ opt_distinct
     | { $$ = false; }
     ;
 
-opt_orderSSt
-    : orderSSt { scanner.notImplemented(@$, "ORDER BY"); }
-    | /* empty */
+opt_orderBySSt
+    : orderBySSt { $$ = $1; }
+    | { $$ = nullptr; }
     ;
 
 opt_skipSSt
@@ -340,17 +345,17 @@ projectionItem
     | expr AS name { scanner.notImplemented(@$, "AS"); }
     ;
 
-orderItem
-    : expr
-    | expr ASCENDING { scanner.notImplemented(@$, "ASCENDING"); }
-    | expr ASC { scanner.notImplemented(@$, "ASC"); }
-    | expr DESCENDING { scanner.notImplemented(@$, "DESCENDING"); }
-    | expr DESC { scanner.notImplemented(@$, "DESC"); }
+orderByItem
+    : expr { $$ = OrderByItem::create(ast, $1); LOC($$, @$); }
+    | expr ASCENDING { $$ = OrderByItem::create(ast, $1, OrderByType::ASC); LOC($$, @$); }
+    | expr ASC { $$ = OrderByItem::create(ast, $1, OrderByType::ASC); LOC($$, @$); }
+    | expr DESCENDING { $$ = OrderByItem::create(ast, $1, OrderByType::DESC); LOC($$, @$); }
+    | expr DESC { $$ = OrderByItem::create(ast, $1, OrderByType::DESC); LOC($$, @$); }
     ;
 
-orderSSt
-    : ORDER BY orderItem { scanner.notImplemented(@$, "ORDER BY"); }
-    | orderSSt COMMA orderItem
+orderBySSt
+    : ORDER BY orderByItem { $$ = OrderBy::create(ast); $$->addItem($3); LOC($$, @$); }
+    | orderBySSt COMMA orderByItem { $$ = $1; $$->addItem($3); }
     ;
 
 singlePartQuery
@@ -385,8 +390,21 @@ updateWithSt
     ;
 
 matchSt
-    : MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = MatchStmt::create(ast, $2); $$->setSkip($4); $$->setLimit($5); LOC($$, @$); }
-    | OPTIONAL MATCH patternWhere opt_orderSSt opt_skipSSt opt_limitSSt { $$ = MatchStmt::create(ast, $3); $$->setSkip($5); $$->setLimit($6); $$->setOptional(true); LOC($$, @$); }
+    : MATCH patternWhere opt_orderBySSt opt_skipSSt opt_limitSSt {
+        $$ = MatchStmt::create(ast, $2);
+        $$->setOrderBy($3);
+        $$->setSkip($4);
+        $$->setLimit($5);
+        LOC($$, @$);
+      }
+    | OPTIONAL MATCH patternWhere opt_orderBySSt opt_skipSSt opt_limitSSt {
+        $$ = MatchStmt::create(ast, $3);
+        $$->setOrderBy($4);
+        $$->setSkip($5);
+        $$->setLimit($6);
+        $$->setOptional(true);
+        LOC($$, @$);
+      }
     ;
 
 unwindSt

@@ -9,6 +9,7 @@ namespace db::v2 {
 
 class Limit;
 class Skip;
+class OrderBy;
 class Expr;
 class CypherAST;
 
@@ -22,6 +23,8 @@ public:
 
     bool isDistinct() const { return _distinct; }
 
+    bool hasOrderBy() const { return _orderBy; }
+
     bool hasLimit() const { return _limit; }
 
     bool hasSkip() const { return _skip; }
@@ -32,12 +35,15 @@ public:
 
     void setSkip(Skip* skip) { _skip = skip; }
 
+    void setOrderBy(OrderBy* orderBy) { _orderBy = orderBy; }
+
     bool isAll() const {
         return std::holds_alternative<All>(_items);
     }
 
     Limit* getLimit() const { return _limit; }
     Skip* getSkip() const { return _skip; }
+    OrderBy* getOrderBy() const { return _orderBy; }
 
     const Items& items() const {
         return std::get<Items>(_items);
@@ -57,6 +63,7 @@ public:
 private:
     Limit* _limit {nullptr};
     Skip* _skip {nullptr};
+    OrderBy* _orderBy {nullptr};
     bool _distinct {false};
 
     std::variant<Items, All> _items;

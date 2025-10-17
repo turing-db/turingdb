@@ -15,7 +15,9 @@
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/OrderByItem.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/OrderBy.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "Projection.h"
@@ -100,6 +102,10 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         throwError("DISTINCT not supported", returnSt);
     }
 
+    if (projection->hasOrderBy()) {
+        analyze(projection->getOrderBy());
+    }
+
     if (projection->hasSkip()) {
         analyze(projection->getSkip());
     }
@@ -114,6 +120,12 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
     for (Expr* item : projection->items()) {
         _exprAnalyzer->analyze(item);
+    }
+}
+
+void CypherAnalyzer::analyze(OrderBy* orderBySt) {
+    for (OrderByItem* item : orderBySt->getItems()) {
+        _exprAnalyzer->analyze(item->getExpr());
     }
 }
 

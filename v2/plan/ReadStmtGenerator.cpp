@@ -62,6 +62,12 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
     const Pattern* pattern = stmt->getPattern();
     
+    if (stmt->hasOrderBy()) {
+        throwError("MATCH ... ORDER BY ... is not supported yet."
+                   "Please use RETURN ... ORDER BY ... instead",
+                   stmt);
+    }
+    
     if (stmt->hasSkip()) {
         throwError("MATCH ... SKIP ... is not supported yet."
                    "Please use RETURN ... SKIP ... instead",

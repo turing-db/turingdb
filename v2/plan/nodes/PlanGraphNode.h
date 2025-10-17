@@ -24,6 +24,7 @@ enum class PlanGraphOpcode {
     JOIN,
     MATERIALIZE,
     WRITE,
+    ORDER_BY,
     SKIP,
     LIMIT,
     PRODUCE_RESULTS,
@@ -48,6 +49,7 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::JOIN, "JOIN">,
     EnumStringPair<PlanGraphOpcode::MATERIALIZE, "MATERIALIZE">,
     EnumStringPair<PlanGraphOpcode::WRITE, "WRITE">,
+    EnumStringPair<PlanGraphOpcode::ORDER_BY, "ORDER_BY">,
     EnumStringPair<PlanGraphOpcode::SKIP, "SKIP">,
     EnumStringPair<PlanGraphOpcode::LIMIT, "LIMIT">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">>;

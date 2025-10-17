@@ -26,6 +26,8 @@ set(ast_sources
     stmt/CreateStmt.cpp
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
+    stmt/OrderByItem.cpp
+    stmt/OrderBy.cpp
     stmt/Limit.cpp
     stmt/Skip.cpp
 
