@@ -98,10 +98,9 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
 
 void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
-    CommitJournal& journal = _commit->history().journal();
     Tombstones& tombstones = _commitData->_tombstones;
 
-    bioassert(journal.empty());
+    bioassert(_commit->history().journal().empty());
 
     if (wb.containsDeletes()) {
         // At this point, conflict checking should have already been done in @ref
