@@ -1,19 +1,16 @@
 #pragma once
 
-#include <vector>
-
 #include "EntityPattern.h"
 
 namespace db::v2 {
 
 class CypherAST;
 class Symbol;
+class SymbolChain;
 class EdgePatternData;
 
 class EdgePattern : public EntityPattern {
 public:
-    using EdgeTypes = std::vector<Symbol*>;
-
     enum class Direction {
         Undirected = 0,
         Backward,
@@ -24,19 +21,19 @@ public:
 
     Direction getDirection() const { return _direction; }
 
-    const EdgeTypes& types() const { return _types; }
+    const SymbolChain* types() const { return _types; }
 
     EdgePatternData* getData() const { return _data; }
 
     void setDirection(Direction direction) { _direction = direction; }
 
-    void setTypes(EdgeTypes&& types) { _types = std::move(types); }
+    void setTypes(SymbolChain* types) { _types = types; }
 
     void setData(EdgePatternData* data) { _data = data; }
 
 private:
     Direction _direction {Direction::Undirected};
-    EdgeTypes _types;
+    SymbolChain* _types {nullptr};
     EdgePatternData* _data {nullptr};
 
     EdgePattern(Direction direction);

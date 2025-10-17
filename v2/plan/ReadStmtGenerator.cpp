@@ -10,6 +10,7 @@
 #include "PlanGraph.h"
 #include "PropertyConstraint.h"
 #include "Symbol.h"
+#include "SymbolChain.h"
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
 #include "PlanGraphTopology.h"
@@ -64,13 +65,13 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 
 void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
     const Pattern* pattern = stmt->getPattern();
-    
+
     if (stmt->hasOrderBy()) {
         throwError("MATCH ... ORDER BY ... is not supported yet. "
                    "Please use RETURN ... ORDER BY ... instead",
                    stmt);
     }
-    
+
     if (stmt->hasSkip()) {
         throwError("MATCH ... SKIP ... is not supported yet. "
                    "Please use RETURN ... SKIP ... instead",
@@ -322,37 +323,43 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
         if (decl->getType() == EvaluatedType::NodePattern) {
             NodeFilterNode* nodeFilter = static_cast<NodeFilterNode*>(filter);
 
-            LabelSet labelset;
-            for (const Symbol* symbol : entityTypeExpr->getTypes()) {
-                const std::string_view label = symbol->getName();
-                const std::optional labelID = labelMap.get(label);
+            const auto& labels = entityTypeExpr->getTypes();
 
-                if (!labelID) {
-                    throwError(fmt::format("Unknown label: {}", label), entityTypeExpr);
+            if (labels) {
+                LabelSet labelset;
+                for (const Symbol* symbol : *labels) {
+                    const std::string_view label = symbol->getName();
+                    const std::optional labelID = labelMap.get(label);
+
+                    if (!labelID) {
+                        throwError(fmt::format("Unknown label: {}", label), entityTypeExpr);
+                    }
+
+                    labelset.set(labelID.value());
                 }
 
-                labelset.set(labelID.value());
+                nodeFilter->addLabelConstraints(labelset);
             }
-
-            nodeFilter->addLabelConstraints(labelset);
 
         } else if (decl->getType() == EvaluatedType::EdgePattern) {
             EdgeFilterNode* edgeFilter = static_cast<EdgeFilterNode*>(filter);
 
             const auto& edgeTypes = entityTypeExpr->getTypes();
 
-            if (edgeTypes.size() != 1) {
-                throwError("Only one edge type constraint is supported for now", expr);
+            if (edgeTypes) {
+                if (edgeTypes->size() != 1) {
+                    throwError("Only one edge type constraint is supported for now", expr);
+                }
+
+                const std::string_view edgeTypeName = edgeTypes->front()->getName();
+                const std::optional edgeType = edgeTypeMap.get(edgeTypeName);
+
+                if (!edgeType) {
+                    throwError(fmt::format("Unknown edge type: {}", edgeTypeName), entityTypeExpr);
+                }
+
+                edgeFilter->addEdgeTypeConstraint(edgeType.value());
             }
-
-            const std::string_view edgeTypeName = edgeTypes.front()->getName();
-            const std::optional edgeType = edgeTypeMap.get(edgeTypeName);
-
-            if (!edgeType) {
-                throwError(fmt::format("Unknown edge type: {}", edgeTypeName), entityTypeExpr);
-            }
-
-            edgeFilter->addEdgeTypeConstraint(edgeType.value());
         }
 
         return;

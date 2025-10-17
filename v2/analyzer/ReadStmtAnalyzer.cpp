@@ -2,6 +2,7 @@
 
 #include "AnalyzeException.h"
 #include "ExprAnalyzer.h"
+#include "SymbolChain.h"
 #include "metadata/GraphMetadata.h"
 
 #include "DiagnosticsManager.h"
@@ -146,10 +147,10 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     nodePattern->setData(data);
 
     const auto& labels = nodePattern->labels();
-    if (!labels.empty()) {
+    if (labels && !labels->empty()) {
         const LabelMap& labelMap = _graphMetadata.labels();
 
-        for (const Symbol* label : labels) {
+        for (const Symbol* label : *labels) {
             const std::optional<LabelID> labelID = labelMap.get(label->getName());
             if (!labelID) {
                 throwError(fmt::format("Unknown label: {}", label->getName()), nodePattern);
@@ -196,10 +197,10 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     edgePattern->setData(data);
 
     const auto& types = edgePattern->types();
-    if (!types.empty()) {
+    if (types && !types->empty()) {
         const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
 
-        for (const Symbol* edgeTypeSymbol : types) {
+        for (const Symbol* edgeTypeSymbol : *types) {
             const std::optional<EdgeTypeID> etID = edgeTypeMap.get(edgeTypeSymbol->getName());
             if (!etID) {
                 throwError(fmt::format("Unknown edge type: {}", edgeTypeSymbol->getName()), edgePattern);

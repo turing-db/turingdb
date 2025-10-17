@@ -9,6 +9,7 @@ namespace db::v2 {
 class SourceManager;
 class DiagnosticsManager;
 class Symbol;
+class SymbolChain;
 class QualifiedName;
 class Literal;
 class NullLiteral;
@@ -59,6 +60,7 @@ class YCypherParser;
 class CypherAST {
 public:
     friend Symbol;
+    friend SymbolChain;
     friend QualifiedName;
     friend Literal;
     friend NullLiteral;
@@ -125,6 +127,7 @@ private:
     DiagnosticsManager* _diagnosticsManager {nullptr};
 
     std::vector<Symbol*> _symbols;
+    std::vector<SymbolChain*> _symbolChains;
     std::vector<QualifiedName*> _qualifiedNames;
     std::vector<Literal*> _literals;
     std::vector<Expr*> _expressions;
@@ -147,6 +150,7 @@ private:
     std::vector<std::string*> _unnamedVarIdentifiers;
 
     void addSymbol(Symbol* symbol);
+    void addSymbolChain(SymbolChain* symbol);
     void addQualifiedName(QualifiedName* name);
     void addLiteral(Literal* literal);
     void addExprChain(ExprChain* exprChain);

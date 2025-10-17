@@ -4,10 +4,10 @@
 
 using namespace db::v2;
 
-EntityTypeExpr::EntityTypeExpr(Symbol* symbol, Types&& types)
+EntityTypeExpr::EntityTypeExpr(Symbol* symbol, SymbolChain* types)
     : Expr(Kind::ENTITY_TYPES),
     _symbol(symbol),
-    _types(std::move(types))
+    _types(types)
 {
 }
 
@@ -16,8 +16,8 @@ EntityTypeExpr::~EntityTypeExpr() {
 
 EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, 
                                        Symbol* symbol,
-                                       Types&& types) {
-    EntityTypeExpr* expr = new EntityTypeExpr(symbol, std::move(types));
+                                       SymbolChain* types) {
+    EntityTypeExpr* expr = new EntityTypeExpr(symbol, types);
     ast->addExpr(expr);
     return expr;
 }

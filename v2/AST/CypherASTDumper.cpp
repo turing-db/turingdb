@@ -2,6 +2,7 @@
 
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
+#include "SymbolChain.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
@@ -179,7 +180,6 @@ void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {
         out << "        Skip _" << std::hex << skip << "\n";
     }
 
-
     if (projection->isAll()) {
         out << "        ProjectAll true\n";
     } else {
@@ -263,8 +263,11 @@ void CypherASTDumper::dump(std::ostream& out, const NodePattern* node) {
         out << "        Symbol " << symbol->getName() << "\n";
     }
 
-    for (const Symbol* type : node->labels()) {
-        out << "        Label " << type->getName() << "\n";
+    const auto* labels = node->labels();
+    if (labels) {
+        for (const Symbol* type : *labels) {
+            out << "        Label " << type->getName() << "\n";
+        }
     }
 
     if (const MapLiteral* properties = node->getProperties()) {
@@ -290,8 +293,11 @@ void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
         out << "        Name " << symbol->getName() << "\n";
     }
 
-    for (const Symbol* type : edge->types()) {
+    const auto* types = edge->types();
+    if (types) {
+        for (const Symbol* type : *types) {
             out << "        EdgeType _" << type << "\n";
+        }
     }
 
     if (const MapLiteral* properties = edge->getProperties()) {
@@ -479,49 +485,41 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
 
     const Literal* literal = expr->getLiteral();
     switch (literal->getKind()) {
-        case Literal::Kind::NULL_LITERAL:
-        {
+        case Literal::Kind::NULL_LITERAL: {
             out << "        NullLiteral _\n";
             break;
         }
-        case Literal::Kind::BOOL:
-        {
+        case Literal::Kind::BOOL: {
             const BoolLiteral* boolLiteral = dynamic_cast<const BoolLiteral*>(literal);
             out << "        BoolLiteral _" << boolLiteral->getValue() << "\n";
             break;
         }
-        case Literal::Kind::INTEGER:
-        {
+        case Literal::Kind::INTEGER: {
             const IntegerLiteral* integerLiteral = dynamic_cast<const IntegerLiteral*>(literal);
             out << "        IntLiteral _" << integerLiteral->getValue() << "\n";
             break;
         }
-        case Literal::Kind::DOUBLE:
-        {
+        case Literal::Kind::DOUBLE: {
             const DoubleLiteral* doubleLiteral = dynamic_cast<const DoubleLiteral*>(literal);
             out << "        DoubleLiteral _" << doubleLiteral->getValue() << "\n";
             break;
         }
-        case Literal::Kind::STRING:
-        {
+        case Literal::Kind::STRING: {
             const StringLiteral* stringLiteral = dynamic_cast<const StringLiteral*>(literal);
             out << "        StringLiteral '" << stringLiteral->getValue() << "'\n";
             break;
         }
-        case Literal::Kind::CHAR:
-        {
+        case Literal::Kind::CHAR: {
             const CharLiteral* charLiteral = dynamic_cast<const CharLiteral*>(literal);
             out << "        CharLiteral '" << charLiteral->getValue() << "'\n";
             break;
         }
-        case Literal::Kind::MAP:
-        {
+        case Literal::Kind::MAP: {
             const MapLiteral* mapLiteral = dynamic_cast<const MapLiteral*>(literal);
             out << "        MapLiteral _" << mapLiteral << "\n";
             break;
         }
-        default:
-        {
+        default: {
             throw CompilerException("Unknown literal type");
             break;
         }
@@ -542,8 +540,10 @@ void CypherASTDumper::dump(std::ostream& out, const EntityTypeExpr* expr) {
     out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
     const auto& labels = expr->getTypes();
-    for (const auto& label : labels) {
-        out << "        Label " << label->getName() << "\n";
+    if (labels) {
+        for (const auto& label : *labels) {
+            out << "        Label " << label->getName() << "\n";
+        }
     }
 
     out << "    }\n";
@@ -618,7 +618,7 @@ void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {
     if (_dumpedVariables.contains(decl)) {
         return;
     }
-    
+
     out << "    VAR_" << decl << " {\n";
     out << "        ValueType " << EvaluatedTypeName::value(decl->getType()) << "\n";
 

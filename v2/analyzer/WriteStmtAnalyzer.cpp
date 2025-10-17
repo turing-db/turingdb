@@ -12,6 +12,7 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Symbol.h"
+#include "SymbolChain.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
@@ -104,7 +105,9 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
                            nodePattern);
             }
 
-            if (nodePattern->getData() != nullptr || !nodePattern->labels().empty()) {
+            const auto& labels = nodePattern->labels();
+
+            if (nodePattern->getData() != nullptr || labels != nullptr) {
                 throwError("Input nodes to write statements cannot have constraints", nodePattern);
             }
 
@@ -124,11 +127,11 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     nodePattern->setData(data);
 
     const auto& labels = nodePattern->labels();
-    if (labels.empty()) {
+    if (labels == nullptr) {
         throwError("Node pattern must have at least one label", nodePattern);
     }
 
-    for (const Symbol* label : labels) {
+    for (const Symbol* label : *labels) {
         data->addLabelConstraint(label->getName());
     }
 
@@ -181,16 +184,17 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     edgePattern->setDecl(decl);
     edgePattern->setData(data);
 
-    const auto& types = edgePattern->types();
-    if (types.empty()) {
+    if (edgePattern->types() == nullptr) {
         throwError("Edge pattern must have at least one edge type", edgePattern);
     }
 
-    if (types.size() > 1) {
+    const auto& types = edgePattern->types();
+
+    if (types->size() > 1) {
         throwError("An edge cannot have more than one edge type", edgePattern);
     }
 
-    data->addEdgeTypeConstraint(types.front()->getName());
+    data->addEdgeTypeConstraint(types->front()->getName());
 
     const MapLiteral* properties = edgePattern->getProperties();
     if (properties) {

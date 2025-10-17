@@ -40,6 +40,7 @@ set(ast_sources
     NodePattern.cpp
     EdgePattern.cpp
     Symbol.cpp
+    SymbolChain.cpp
     QualifiedName.cpp
     WhereClause.cpp
 

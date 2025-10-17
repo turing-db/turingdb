@@ -3,6 +3,7 @@
 #include "DiagnosticsManager.h"
 #include "SourceManager.h"
 #include "Symbol.h"
+#include "SymbolChain.h"
 #include "QualifiedName.h"
 #include "expr/ExprChain.h"
 #include "expr/Literal.h"
@@ -35,6 +36,10 @@ CypherAST::~CypherAST() {
 
     for (Symbol* symbol : _symbols) {
         delete symbol;
+    }
+
+    for (SymbolChain* chain : _symbolChains) {
+        delete chain;
     }
 
     for (QualifiedName* name : _qualifiedNames) {
@@ -123,6 +128,10 @@ std::string* CypherAST::createString() {
 
 void CypherAST::addSymbol(Symbol* symbol) {
     _symbols.push_back(symbol);
+}
+
+void CypherAST::addSymbolChain(SymbolChain* symbol) {
+    _symbolChains.push_back(symbol);
 }
 
 void CypherAST::addQualifiedName(QualifiedName* name) {

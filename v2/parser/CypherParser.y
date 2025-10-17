@@ -33,6 +33,7 @@
     #include "expr/All.h"
     #include "expr/Literal.h"
     #include "Symbol.h"
+    #include "SymbolChain.h"
     #include "WhereClause.h"
     #include "Pattern.h"
     #include "NodePattern.h"
@@ -187,14 +188,14 @@
 %type<db::v2::Symbol*> name
 %type<db::v2::Symbol*> reservedWord
 
-%type<std::vector<db::v2::Symbol*>> nodeLabels
-%type<std::vector<db::v2::Symbol*>> edgeTypes
+%type<db::v2::SymbolChain*> nodeLabels
+%type<db::v2::SymbolChain*> edgeTypes
 %type<db::v2::MapLiteral*> properties
 
 %type<db::v2::Symbol*> opt_symbol
-%type<std::optional<std::vector<db::v2::Symbol*>>> opt_nodeLabels
+%type<db::v2::SymbolChain*> opt_nodeLabels
 %type<db::v2::MapLiteral*> opt_properties
-%type<std::optional<std::vector<db::v2::Symbol*>>> opt_edgeTypes
+%type<db::v2::SymbolChain*> opt_edgeTypes
 
 %type<db::v2::ExprChain*> exprChain
 %type<db::v2::Expr*> expr
@@ -518,10 +519,10 @@ setItem
     ;
 
 nodeLabels
-    : COLON name { $$ = { $2 }; }
+    : COLON name { $$ = SymbolChain::create(ast); $$->add($2); }
     | COLON parameter { scanner.notImplemented(@$, "Parameters"); }
-    | nodeLabels COLON name { $$ = std::move($1); $$.push_back($3); }
-    | nodeLabels COLON parameter { $$ = std::move($1); scanner.notImplemented(@$, "Parameters"); }
+    | nodeLabels COLON name { $$ = $1; $$->add($3); }
+    | nodeLabels COLON parameter { $$ = $1; scanner.notImplemented(@$, "Parameters"); }
     ;
 
 createSt
@@ -635,7 +636,7 @@ propertyOrLabelExpr
     // This seems too permissive, it allows 'n.name:Person' which is weird
 
     // Replaced by this more specific rule
-    | symbol nodeLabels { $$ = EntityTypeExpr::create(ast, $1, std::move($2)); LOC($$, @$); }
+    | symbol nodeLabels { $$ = EntityTypeExpr::create(ast, $1, $2); LOC($$, @$); }
     ;
 
 propertyExpr
@@ -690,9 +691,7 @@ nodePattern
     : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN {
         $$ = NodePattern::create(ast);
         $$->setSymbol($2);
-        if ($3.has_value()) {
-            $$->setLabels(std::move($3.value()));
-        }
+        $$->setLabels($3);
         $$->setProperties($4);
         LOC($$, @$);
     }
@@ -704,8 +703,8 @@ opt_symbol
     ;
 
 opt_nodeLabels
-    : nodeLabels { $$ = std::move($1); }
-    | { $$ = std::nullopt; }
+    : nodeLabels { $$ = $1; }
+    | { $$ = nullptr; }
     ;
 
 opt_properties
@@ -714,8 +713,8 @@ opt_properties
     ;
 
 opt_edgeTypes
-    : edgeTypes { $$ = std::move($1); }
-    | { $$ = std::nullopt; }
+    : edgeTypes { $$ = $1; }
+    | { $$ = nullptr; }
     ;
 
 opt_rangeLit
@@ -741,18 +740,14 @@ edgeDetail
     : opt_symbol opt_edgeTypes opt_rangeLit opt_properties { 
         $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
-
-        if ($2.has_value()) {
-            $$->setTypes(std::move($2.value()));
-        }
-
+        $$->setTypes($2);
         $$->setProperties($4);
         LOC($$, @$); 
     }
     ;
 
 edgeTypes
-    : COLON name { $$ = { $2 }; }
+    : COLON name { $$ = SymbolChain::create(ast); $$->add($2); }
     | edgeTypes PIPE name { scanner.notImplemented(@$, "EdgeType | EdgeType | ..."); }
     | edgeTypes PIPE COLON name { scanner.notImplemented(@$, "EdgeType | EdgeType | ..."); }
     ;
@@ -797,7 +792,7 @@ pathExpr
     | OPAREN symbol nodeLabels properties CPAREN pathExprElem { 
         $$ = PathExpr::create(ast, $6);
         NodePattern* nodePattern = NodePattern::create(ast);
-        nodePattern->setLabels(std::move($3));
+        nodePattern->setLabels($3);
         nodePattern->setProperties($4);
         nodePattern->setSymbol($2);
         $6->addRootEntity(nodePattern);
@@ -806,7 +801,7 @@ pathExpr
     | OPAREN nodeLabels CPAREN pathExprElem {
         $$ = PathExpr::create(ast, $4);
         NodePattern* node = NodePattern::create(ast);
-        node->setLabels(std::move($2));
+        node->setLabels($2);
         $4->addRootEntity(node);
         LOC($$, @$);
         LOC(node, @$);
@@ -814,7 +809,7 @@ pathExpr
     | OPAREN nodeLabels properties CPAREN pathExprElem {
         $$ = PathExpr::create(ast, $5);
         NodePattern* node = NodePattern::create(ast);
-        node->setLabels(std::move($2));
+        node->setLabels($2);
         node->setProperties($3);
         $5->addRootEntity(node);
         LOC($$, @$);

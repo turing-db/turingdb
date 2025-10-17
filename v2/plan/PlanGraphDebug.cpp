@@ -12,6 +12,7 @@
 #include "PlanGraph.h"
 #include "WherePredicate.h"
 #include "Symbol.h"
+#include "SymbolChain.h"
 #include "PropertyConstraint.h"
 
 #include "decl/PatternData.h"
@@ -29,7 +30,10 @@ namespace {
 void outputDependency(std::ostream& output, const ExprDependencies::ExprDependency& dep) {
     output << "        __dep__ _" << dep._var->getVarDecl()->getName() << "_";
     if (const auto* expr = std::get_if<const EntityTypeExpr*>(&dep._dep)) {
-        for (const auto& type : (*expr)->getTypes()) {
+        const auto* types = (*expr)->getTypes();
+        bioassert(types);
+
+        for (const auto& type : *types) {
             output << ":_" << type->getName() << "_\n";
         }
     } else if (const auto* expr = std::get_if<const PropertyExpr*>(&dep._dep)) {
