@@ -1,8 +1,6 @@
 /// QUERY
 MATCH (b)-->(c), (a)-->(b) RETURN a, b, c;
 
-
-
 /// RESULT
 flowchart TD
     0["`
@@ -59,7 +57,7 @@ flowchart TD
         __GET_EDGE_TARGET__
     `"]
     16["`
-        __JOIN__
+        __CARTESIAN_PRODUCT__
     `"]
     17["`
         __PRODUCE_RESULTS__

@@ -53,6 +53,11 @@ public:
     EdgeFilterNode* asEdgeFilter();
     const EdgeFilterNode* asEdgeFilter() const;
 
+    virtual bool isEmpty() const {
+        return _propConstraints.empty()
+            && _wherePredicates.empty();
+    }
+
 private:
     VarNode* _varNode {nullptr};
     std::vector<PropertyConstraint*> _propConstraints;
@@ -74,6 +79,10 @@ public:
         return _labelConstraints;
     }
 
+    bool isEmpty() const override {
+        return FilterNode::isEmpty() && _labelConstraints.empty();
+    }
+
 private:
     LabelSet _labelConstraints;
 };
@@ -91,6 +100,10 @@ public:
 
     const std::vector<EdgeTypeID>& getEdgeTypeConstraints() const {
         return _edgeTypeConstraints;
+    }
+
+    bool isEmpty() const override {
+        return FilterNode::isEmpty() && _edgeTypeConstraints.empty();
     }
 
 private:

@@ -64,7 +64,7 @@ private:
     ExprAnalyzer* _exprAnalyzer {nullptr};
     const GraphMetadata& _graphMetadata;
 
-    void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 
 }

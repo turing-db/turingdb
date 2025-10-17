@@ -66,7 +66,7 @@ private:
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
 
-    void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 
 }

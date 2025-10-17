@@ -59,7 +59,7 @@ private:
     std::unordered_map<std::string_view, ValueType> _typeMap;
     std::vector<std::string_view> _toBeCreated;
 
-    void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 
 }

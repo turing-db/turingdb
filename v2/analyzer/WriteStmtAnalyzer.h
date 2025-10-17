@@ -55,7 +55,7 @@ private:
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
 
-    void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 
     static ValueType evaluatedToValueType(EvaluatedType type);
 };

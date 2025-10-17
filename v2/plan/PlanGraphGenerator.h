@@ -38,7 +38,7 @@ private:
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);
 
-    void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 
 }

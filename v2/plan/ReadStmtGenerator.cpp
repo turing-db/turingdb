@@ -427,8 +427,34 @@ void ReadStmtGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* o
 }
 
 void ReadStmtGenerator::placeJoinsOnVars() {
+    const auto createJoin = [this](PlanGraphNode* lhs, PlanGraphNode* rhs) -> PlanGraphNode* {
+        const auto path = PlanGraphTopology::getShortestPath(lhs, rhs);
+
+        switch (path) {
+            case PlanGraphTopology::PathToDependency::SameVar: {
+                throwError("Unknown error. Cannot join on the same var");
+            }
+            case PlanGraphTopology::PathToDependency::BackwardPath: {
+                // Should not happen
+                throwError("Unknown error. Cannot join if the lhs and rhs are on the same islands");
+            }
+
+            case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                // If had to walk both backward and forward, there's a common parent
+                return _tree->create<JoinNode>();
+            }
+
+            case PlanGraphTopology::PathToDependency::NoPath: {
+                return _tree->create<CartesianProductNode>();
+            }
+        }
+
+        throwError("Unknown error");
+    };
+
     for (auto [var, filter] : _variables->getNodeFiltersMap()) {
-        std::span inputs = filter->inputs();
+        // Make a copy of the inputs
+        std::vector inputs = filter->inputs();
 
         if (inputs.size() <= 1) {
             continue;
@@ -441,7 +467,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
             lhsNode->clearOutputs();
             rhsNode->clearOutputs();
 
-            JoinNode* join = _tree->create<JoinNode>();
+            PlanGraphNode* join = createJoin(lhsNode, rhsNode);
             lhsNode->connectOut(join);
             rhsNode->connectOut(join);
             join->connectOut(filter);
@@ -568,8 +594,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
             case PlanGraphTopology::PathToDependency::SameVar:
             case PlanGraphTopology::PathToDependency::BackwardPath: {
                 // Should not happen
-                throwError("Unknown error", rhsNode);
-                continue;
+                throwError("Unknown error");
             } break;
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {
