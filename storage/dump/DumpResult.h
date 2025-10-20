@@ -36,6 +36,7 @@ enum class DumpErrorType : uint8_t {
     CANNOT_OPEN_LABELSETS,
     CANNOT_OPEN_EDGE_TYPES,
     CANNOT_OPEN_PROPERTY_TYPES,
+    CANNOT_OPEN_JOURNAL,
 
     CANNOT_LIST_COMMITS,
     CANNOT_LIST_COMMIT_FILES,
@@ -81,6 +82,10 @@ enum class DumpErrorType : uint8_t {
     COULD_NOT_READ_PROPS,
     COULD_NOT_READ_PROP_INDEXER,
     COULD_NOT_READ_STR_PROP_INDEXER,
+    COULD_NOT_READ_JOURNAL,
+
+    COULD_NOT_READ_VECTOR,
+    COULD_NOT_READ_U_SET,
 
     _SIZE
 };
@@ -106,6 +111,7 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::CANNOT_OPEN_LABELSETS, "Cannot open graph labelsets">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_EDGE_TYPES, "Cannot open graph edge types">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, "Cannot open graph property types">,
+    EnumStringPair<DumpErrorType::CANNOT_OPEN_JOURNAL, "Cannot open commit journal">,
     EnumStringPair<DumpErrorType::CANNOT_LIST_COMMITS, "Cannot list commits">,
     EnumStringPair<DumpErrorType::CANNOT_LIST_COMMIT_FILES, "Cannot list commit files">,
     EnumStringPair<DumpErrorType::CANNOT_LIST_DATAPARTS, "Cannot list dataparts">,
@@ -143,7 +149,10 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::COULD_NOT_READ_EDGE_INDEXER, "Could not read edge indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_PROPS, "Could not read entity properties">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_INDEXER, "Could not read entity property indexer">,
-    EnumStringPair<DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER, "Could not read entity string property indexer">>;
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER, "Could not read entity string property indexer">,
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_JOURNAL, "Could not read commit journal">,
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_VECTOR, "Could not read vector">,
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_U_SET, "Could not read unordered set">>;
 
 class DumpError {
 public:

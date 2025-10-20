@@ -93,13 +93,13 @@ DumpResult<void> DumpUtils::dumpRange(const Range& rg, fs::FilePageWriter& wr) {
     const size_t remainingSpace = wr.buffer().avail();
     const size_t countThisPage = remainingSpace / TSize;
 
-    auto it = rg.cbegin();
-    for (size_t j = 0; j < countThisPage && it != rg.cend(); j++) {
+    auto it = rg.begin();
+    for (size_t j = 0; j < countThisPage && it != rg.end(); j++) {
         wr.writeToCurrentPage(*it);
         it++;
     }
 
-    if (it == rg.cend()) {
+    if (it == rg.end()) {
         return {};
     }
 

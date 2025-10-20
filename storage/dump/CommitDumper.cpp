@@ -2,13 +2,18 @@
 
 #include <range/v3/view/enumerate.hpp>
 
+#include "FilePageWriter.h"
 #include "LabelMapDumper.h"
 #include "LabelSetMapDumper.h"
 #include "EdgeTypeMapDumper.h"
 #include "Profiler.h"
 #include "PropertyTypeMapDumper.h"
+#include "dump/CommitJournalDumper.h"
+#include "dump/DumpConfig.h"
 #include "versioning/Commit.h"
 #include "DataPartDumper.h"
+#include "DumpUtils.h"
+#include "versioning/CommitJournal.h"
 
 using namespace db;
 
@@ -91,6 +96,24 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
         LabelSetMapDumper dumper {writer.value()};
 
         if (auto res = dumper.dump(metadata.labelsets()); !res) {
+            return res;
+        }
+    }
+
+    // Dumping Journal
+    {
+        Profile profile {"CommitDumper::dump <journal>"};
+        const fs::Path journalPath = path / "journal";
+
+        auto writerRes = fs::FilePageWriter::open(journalPath, DumpConfig::PAGE_SIZE);
+        if (!writerRes) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_JOURNAL, writerRes.error());
+        }
+
+        CommitJournal& journal = commit.history().journal();
+
+        CommitJournalDumper dumper(writerRes.value());
+        if (auto res = dumper.dump(journal); !res) {
             return res;
         }
     }

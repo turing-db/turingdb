@@ -5,11 +5,14 @@
 
 #include "DataPart.h"
 #include "DataPartLoader.h"
+#include "FilePageReader.h"
 #include "Graph.h"
 #include "GraphMetadataLoader.h"
 #include "Path.h"
 #include "GraphDumpHelper.h"
 #include "DumpResult.h"
+#include "dump/CommitJournalLoader.h"
+#include "dump/DumpConfig.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistoryBuilder.h"
@@ -59,6 +62,24 @@ public:
             auto res = GraphMetadataLoader::load(path, metadata);
 
             if (!res) {
+                return res.get_unexpected();
+            }
+        }
+
+        // Reading journal
+        {
+            CommitJournal& journal = *commit->_data->_history._journal;
+            bioassert(&journal); // Should be initialised in commit constructor
+
+            const fs::Path journalPath = path / "journal";
+
+            auto readerRes = fs::FilePageReader::open(journalPath, DumpConfig::PAGE_SIZE);
+            if (!readerRes) {
+                return DumpError::result(DumpErrorType::CANNOT_OPEN_JOURNAL, readerRes.error());
+            }
+
+            CommitJournalLoader loader(readerRes.value());
+            if (auto res = loader.load(journal); !res) {
                 return res.get_unexpected();
             }
         }

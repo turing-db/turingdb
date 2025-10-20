@@ -36,6 +36,8 @@ public:
                                          const WriteSet<IDT>& set2) = delete;
 
 private:
+    friend class CommitJournalLoader;
+
     std::vector<IDT> _set;
 };
 

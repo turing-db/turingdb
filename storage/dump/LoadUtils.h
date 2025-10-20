@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vector>
+#include <unordered_set>
+
 #include "AlignedBuffer.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"
@@ -22,10 +25,18 @@ public:
                                                      fs::FilePageReader& reader,
                                                      fs::AlignedBufferIterator& it);
 
+    template <Dumpable T>
+    [[nodiscard]] static DumpResult<void> loadUnorderedSet(std::unordered_set<T>& out,
+                                                           size_t sz,
+                                                           fs::FilePageReader& reader,
+                                                           fs::AlignedBufferIterator& it);
+
     /**
-    * @brief Moves @param rd to the next page, upating @ref it to the start of this new page.
-    * @detail Checks that upon turning the page, the iterator recieved the expected PAGE_SIZE.
-    */
+     * @brief Moves @param rd to the next page, upating @ref it to the start of this
+     * new page.
+     * @detail Checks that upon turning the page, the iterator recieved the expected
+     * PAGE_SIZE.
+     */
     static void newPage(fs::AlignedBufferIterator& it, fs::FilePageReader& rd);
 
     /**
@@ -97,7 +108,7 @@ DumpResult<void> LoadUtils::loadVector(std::vector<T>& out,
             out.emplace_back(it.get<WorkingT>());
         }
         if (reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER,
+            return DumpError::result(DumpErrorType::COULD_NOT_READ_VECTOR,
                                      reader.error().value());
         }
     }
@@ -111,7 +122,77 @@ DumpResult<void> LoadUtils::loadVector(std::vector<T>& out,
     }
 
     if (reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER,
+            return DumpError::result(DumpErrorType::COULD_NOT_READ_VECTOR,
+                                     reader.error().value());
+    }
+    return {};
+}
+
+template <Dumpable T>
+DumpResult<void> LoadUtils::loadUnorderedSet(std::unordered_set<T>& out,
+                                       size_t sz,
+                                       fs::FilePageReader& reader,
+                                       fs::AlignedBufferIterator& it) {
+    using WorkingT = WorkingType<T>;
+
+    out.clear();
+    out.reserve(sz);
+
+    size_t TSize = sizeof(WorkingT);
+    if (TSize > DumpConfig::PAGE_SIZE) {
+        std::string errMsg = fmt::format(
+            "Attempted to load object {} with size {}, which exceeds page size of {}.",
+            typeid(WorkingT).name(), TSize, DumpConfig::PAGE_SIZE);
+        throw TuringException("Illegal write: " + errMsg);
+    }
+
+    const size_t remainingSpace = it.remainingBytes();
+    size_t countThisPage = remainingSpace / TSize; // Truncates
+    countThisPage = std::min(sz, countThisPage);      // The amount that fit on this page
+
+    // Read the number on this page
+    for (size_t i = 0; i < countThisPage; i++) {
+        auto id = it.get<WorkingT>();
+        out.emplace_back(id);
+    }
+
+    // If we all were on a single page: done
+    if (sz == countThisPage) {
+        return {};
+    }
+
+    const size_t read = countThisPage;
+    const size_t remaining = sz - read;
+
+    const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
+
+    // Number of pages that were full
+    const size_t fullPagesNeeded = remaining / countPerPage;
+    // Remainder on last page: doesn't fill the whole page
+    const size_t leftOver = remaining % countPerPage;
+
+    // Get full pages
+    for (size_t p = 0; p < fullPagesNeeded; p++) {
+        LoadUtils::newPage(it, reader);
+        for (size_t j = 0; j < countPerPage; j++) {
+            out.insert(it.get<WorkingT>());
+        }
+        if (reader.errorOccured()) {
+            return DumpError::result(DumpErrorType::COULD_NOT_READ_U_SET,
+                                     reader.error().value());
+        }
+    }
+
+    if (leftOver != 0) {
+        LoadUtils::newPage(it, reader);
+
+        for (size_t j = 0; j < leftOver; j++) {
+            out.insert(it.get<WorkingT>());
+        }
+    }
+
+    if (reader.errorOccured()) {
+            return DumpError::result(DumpErrorType::COULD_NOT_READ_U_SET,
                                      reader.error().value());
     }
     return {};

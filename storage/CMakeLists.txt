@@ -80,7 +80,9 @@ set(storage_sources
         dump/DumpUtils.cpp
         dump/LoadUtils.cpp
         dump/StringIndexerDumper.cpp
-        dump/StringIndexerLoader.cpp)
+        dump/StringIndexerLoader.cpp
+        dump/CommitJournalDumper.cpp
+      )
 
 add_library(turing_db_storage_s STATIC ${storage_sources})
 
