@@ -30,8 +30,8 @@ public:
     void addWrittenNodes(const std::vector<NodeID>& nodes);
     void addWrittenEdges(const std::vector<EdgeID>& edges);
 
-    auto& nodeWriteSet() { return _nodeWriteSet; }
-    auto& edgeWriteSet() { return _edgeWriteSet; }
+    NodeWriteSet& nodeWriteSet() { return _nodeWriteSet; }
+    EdgeWriteSet& edgeWriteSet() { return _edgeWriteSet; }
 
     const NodeWriteSet& nodeWriteSet() const { return _nodeWriteSet; }
     const EdgeWriteSet& edgeWriteSet() const { return _edgeWriteSet; }
