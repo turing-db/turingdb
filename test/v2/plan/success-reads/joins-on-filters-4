@@ -126,16 +126,16 @@ flowchart TD
         __GET_EDGE_TARGET__
     `"]
     37["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     38["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     39["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     40["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     41["`
         __PRODUCE_RESULTS__

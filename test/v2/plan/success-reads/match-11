@@ -1,0 +1,40 @@
+/// QUERY
+MATCH (a), (b { name: a.name }) RETURN a, b
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: a
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __SCAN_NODES__
+    `"]
+    4["`
+        __VAR__
+        __name__: b
+    `"]
+    5["`
+        __FILTER_NODE__
+        __prop__ _b_.name
+        __dep__: a.name
+    `"]
+    6["`
+        __JOIN__
+    `"]
+    7["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->6
+    2-->1
+    3-->6
+    4-->7
+    5-->4
+    6-->5

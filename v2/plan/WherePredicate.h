@@ -24,8 +24,8 @@ public:
     WherePredicate& operator=(const WherePredicate&) = delete;
     WherePredicate& operator=(WherePredicate&&) noexcept = default;
 
-    const ExprDependencies::Container& getDependencies() const {
-        return _dependencies.getDependencies();
+    const ExprDependencies& getDependencies() const {
+        return _dependencies;
     }
 
     void generate(const PlanGraphVariables& variables) {
@@ -34,6 +34,10 @@ public:
 
     FilterNode* getFilterNode() const {
         return _filterNode;
+    }
+
+    const Expr* getExpr() const {
+        return _expr;
     }
 
     void setFilterNode(FilterNode* filterNode) {

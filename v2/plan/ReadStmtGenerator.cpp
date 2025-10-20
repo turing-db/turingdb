@@ -181,6 +181,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         c->var = var;
         c->type = propType->_id;
         c->expr = constraint._expr;
+        c->dependencies.genExprDependencies(*_variables, constraint._expr);
     }
 
     return var;
@@ -246,6 +247,7 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
         c->var = var;
         c->type = propType->_id;
         c->expr = constraint._expr;
+        c->dependencies.genExprDependencies(*_variables, constraint._expr);
     }
 
     return var;
@@ -303,6 +305,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
         c->var = var;
         c->type = propType->_id;
         c->expr = constraint._expr;
+        c->dependencies.genExprDependencies(*_variables, constraint._expr);
     }
 
     return var;
@@ -385,26 +388,6 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
     // Treating other cases as a whole Where predicate
     WherePredicate* predicate = _tree->createWherePredicate(expr);
     predicate->generate(*_variables);
-
-    const auto& dependencies = predicate->getDependencies();
-    if (dependencies.empty()) {
-        throwError("Where clauses without dependencies are not supported yet", expr);
-    }
-
-    const VarNode* firstVar = dependencies.begin()->_var;
-    uint32_t _lastDeclOrder = firstVar->getDeclOrder();
-    const VarNode* _lastDependency = firstVar;
-
-    for (const auto& dep : dependencies) {
-        if (_lastDeclOrder < dep._var->getDeclOrder()) {
-            _lastDeclOrder = dep._var->getDeclOrder();
-            _lastDependency = dep._var;
-        }
-    }
-
-    FilterNode* filterNode = _variables->getNodeFilter(_lastDependency);
-    filterNode->addWherePredicate(predicate);
-    predicate->setFilterNode(filterNode);
 }
 
 void ReadStmtGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin) {
@@ -439,13 +422,9 @@ void ReadStmtGenerator::placeJoinsOnVars() {
                 throwError("Unknown error. Cannot join if the lhs and rhs are on the same islands");
             }
 
-            case PlanGraphTopology::PathToDependency::UndirectedPath: {
-                // If had to walk both backward and forward, there's a common parent
-                return _tree->create<JoinNode>();
-            }
-
+            case PlanGraphTopology::PathToDependency::UndirectedPath:
             case PlanGraphTopology::PathToDependency::NoPath: {
-                return _tree->create<CartesianProductNode>();
+                return _tree->create<JoinNode>();
             }
         }
 
@@ -479,47 +458,23 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 
 void ReadStmtGenerator::placePropertyExprJoins() {
     for (const auto& prop : _tree->propConstraints()) {
-        auto& deps = prop->dependencies;
-        const auto& depContainer = deps.getDependencies();
 
-        // Generate missing dependencies
-        deps.genExprDependencies(*_variables, prop->expr);
+        // Step 1: find the earliest point on the graph where to place the join
+        const auto& dependencies = prop->dependencies;
+        const VarNode* var = dependencies.findCommonSuccessor(nullptr);
 
-        // Step 1: find the latest dependency
-        auto it = depContainer.begin();
-        const VarNode* var = prop->var;
-        uint32_t order = var->getDeclOrder();
-
-        for (; it != depContainer.end(); ++it) {
-            if (order <= it->_var->getDeclOrder()) {
-                //   Check if we can find a common successor
-                //   if so, the join would create a loop. Instead
-                //   we need to join on the successor
-                // e.g. (a)-->(x), (b { name: a.name })-->(x)
-
-                const PlanGraphNode* commonSuccessor = PlanGraphTopology::findCommonSuccessor(var, it->_var);
-                if (commonSuccessor) {
-                    fmt::print("Found common successor: {}\n", PlanGraphOpcodeDescription::value(commonSuccessor->getOpcode()));
-                    var = PlanGraphTopology::findNextVar(commonSuccessor);
-
-                    if (!var) {
-                        throwError("error. Cannot find next var");
-                    }
-                } else {
-                    order = it->_var->getDeclOrder();
-                    var = it->_var;
-                }
-            }
+        if (!var) [[unlikely]] {
+            throwError("Unknown error");
         }
 
-        // Step 3: place joins
+        // Step 2: place joins
         insertDataFlowNode(var, prop->var);
 
-        for (const auto& dep : deps.getDependencies()) {
+        for (const auto& dep : dependencies.getDependencies()) {
             insertDataFlowNode(var, dep._var);
         }
 
-        // Step 4: Place the constraint
+        // Step 3: Place the constraint
         auto* filter = _variables->getNodeFilter(var);
         filter->addPropertyConstraint(prop.get());
     }
@@ -527,16 +482,28 @@ void ReadStmtGenerator::placePropertyExprJoins() {
 
 void ReadStmtGenerator::placePredicateJoins() {
     for (const auto& pred : _tree->wherePredicates()) {
-        FilterNode* filterNode = pred->getFilterNode();
-        const VarNode* var = filterNode->getVarNode();
+        const auto& deps = pred->getDependencies();
 
-        for (const auto& dep : pred->getDependencies()) {
-            if (filterNode->getVarNode() == dep._var) {
-                continue;
-            }
+        if (deps.empty()) {
+            throwError("Where clauses without dependencies are not supported yet", pred->getExpr());
+        }
 
+        // Step 1: find the earliest point on the graph where to place the join
+        const VarNode* var = deps.findCommonSuccessor(nullptr);
+
+        if (!var) {
+            throwError("Unknown error");
+        }
+
+        // Step 2: Place joins
+        for (const auto& dep : deps.getDependencies()) {
             insertDataFlowNode(var, dep._var);
         }
+
+        // Step 3: Place the constraint
+        FilterNode* filterNode = _variables->getNodeFilter(var);
+        filterNode->addWherePredicate(pred.get());
+        pred->setFilterNode(filterNode);
     }
 }
 

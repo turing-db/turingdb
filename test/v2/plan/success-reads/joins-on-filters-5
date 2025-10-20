@@ -133,7 +133,7 @@ flowchart TD
         __JOIN__
     `"]
     39["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     40["`
         __PRODUCE_RESULTS__
