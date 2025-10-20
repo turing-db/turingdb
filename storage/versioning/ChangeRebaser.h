@@ -37,14 +37,6 @@ private:
     NodeID rebaseNodeID(NodeID old);
     EdgeID rebaseEdgeID(EdgeID old);
 
-    void checkPendingEdgeConflicts(const ConflictCheckSets& writes,
-                                   const CommitWriteBuffer& writeBuffer);
-
-    void checkDeletedNodeConflicts(const ConflictCheckSets& writes,
-                                   const CommitWriteBuffer& writeBuffer);
-    void checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
-                                   const CommitWriteBuffer& writeBuffer);
-
     NodeID _branchTimeNextNodeID {std::numeric_limits<NodeID>::max()};
     EdgeID _branchTimeNextEdgeID {std::numeric_limits<EdgeID>::max()};
     NodeID _newNextNodeID {std::numeric_limits<NodeID>::max()};
