@@ -1,16 +1,15 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "GraphDumper.h"
+#include "dump/GraphDumper.h"
 #include "Path.h"
 #include "SystemManager.h"
-#include "TuringConfig.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
 #include "SimpleGraph.h"
-#include "GraphLoader.h"
+#include "dump/GraphLoader.h"
 #include "TuringDB.h"
 #include "LocalMemory.h"
 #include "Graph.h"

@@ -7,7 +7,6 @@
 #include "TuringTest.h"
 
 #include "TuringDB.h"
-#include "LocalMemory.h"
 #include "Graph.h"
 #include "SystemManager.h"
 #include "indexers/StringPropertyIndexer.h"
@@ -26,13 +25,14 @@ class StringIndexSerialisationTest : public TuringTest {
 public:
     void initialize()  override {
         _config.setSyncedOnDisk(false);
+        _workingPath = fs::Path {_outDir + "/testfile"};
+        _config.setTuringDirectory(_workingPath);
         _db = std::make_unique<TuringDB>(&_config);
         _db->run();
 
         SystemManager& sysMan = _db->getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
-        _workingPath = fs::Path {_outDir + "/testfile"};
 
         // XXX: Need to remove the directory created in TuringTest.h SetUp() has
         // GraphDumper requires the directory does not exist
@@ -48,7 +48,6 @@ protected:
     std::unique_ptr<TuringDB> _db;
     Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
-    LocalMemory _mem;
     fs::Path _workingPath;
 
 private:
