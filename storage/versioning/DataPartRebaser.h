@@ -25,10 +25,10 @@ public:
     {
     }
 
-    DataPartRebaser(const DataPartRebaser&) = delete;
-    DataPartRebaser(DataPartRebaser&&) = delete;
-    DataPartRebaser& operator=(const DataPartRebaser&) = delete;
-    DataPartRebaser& operator=(DataPartRebaser&&) = delete;
+    DataPartRebaser(const DataPartRebaser&) = default;
+    DataPartRebaser& operator=(const DataPartRebaser&) = default;
+    DataPartRebaser(DataPartRebaser&&) = default;
+    DataPartRebaser& operator=(DataPartRebaser&&) = default;
 
     bool rebase(const MetadataRebaser& metadata,
                 const DataPart& prevPart,

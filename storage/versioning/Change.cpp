@@ -2,10 +2,10 @@
 
 #include "reader/GraphReader.h"
 #include <range/v3/view/enumerate.hpp>
+#include "versioning/ChangeRebaser.h"
+#include "versioning/Commit.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitHistoryRebaser.h"
-#include "versioning/DataPartRebaser.h"
-#include "versioning/MetadataRebaser.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "writers/DataPartBuilder.h"
@@ -74,78 +74,31 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
-    // Get the next Edge and Node IDs at the time this change branched
+    // Get the state of main at time of rebase
+    const WeakArc<const CommitData> currentMainHead =
+        _versionController->openTransaction().commitData();
+    // CommitData of current head of main
+    const CommitData* currentHeadCommitData = currentMainHead.get();
+    // CommitHistory of current head of main
+    const CommitHistory* currentHeadHistory = &currentMainHead->history();
+
+    // Read the graph as it was when this change was created
     const GraphReader branchTimeReader =
         _base->commits().back().openTransaction().readGraph();
-    NodeID branchTimeNextNodeID = branchTimeReader.getNodeCount();
-    EdgeID branchTimeNextEdgeID = branchTimeReader.getEdgeCount();
+    // Read the graph as it is now on main
+    const GraphReader mainReader =
+        currentMainHead->commits().back().openTransaction().readGraph();
 
-    // Get current state of main
-    _base = _versionController->openTransaction().commitData();
-
-    // TODO: Generate union of WriteSets since branch time
-
-    // Get the current next Edge and Node IDs on main
-    const GraphReader mainReader = _base->commits().back().openTransaction().readGraph();
-    NodeID newNextNodeID = mainReader.getNodeCount();
-    EdgeID newNextEdgeID = mainReader.getEdgeCount();
-
-    MetadataRebaser metadataRebaser;
-    DataPartRebaser dataPartRebaser(branchTimeNextNodeID,
-                                    branchTimeNextEdgeID,
-                                    newNextNodeID,
-                                    newNextEdgeID);
-
-    // CommitData of main
-    const CommitData* prevCommitData = _base.get();
-    // CommitHistory of main
-    const CommitHistory* prevHistory = &_base->history();
+    ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
+    rebaser.initialise(mainReader, branchTimeReader);
 
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
-        // Rebasing means:
-        // 1. Rebase the metadata
-        // 2. Get all commits/dataparts from the previous commit history
-        // 3. Add back dataparts of current commit and rebase them
-
-        CommitData& data = commitBuilder->commitData();
-        CommitHistory& history = data.history();
-
-        CommitHistoryRebaser historyRebaser {history};
-        CommitWriteBufferRebaser wbRb(commitBuilder->writeBuffer());
-
-        wbRb.rebaseIncidentNodeIDs(branchTimeNextNodeID, newNextNodeID);
-
-        // Undo any commits that were made locally
-        // Only check those with an non-empty writebuffer, as other sources e.g.
-        // GraphWriter will create multiple dataparts from builders at commit-time but not
-        // at submit time, and so should not be erased
-        if (!commitBuilder->writeBuffer().isFlushed()) {
-            historyRebaser.undoLocalCommits();
-            // We have deleted all created DPs: reset this number
-            commitBuilder->_datapartCount = 0;
-            commitBuilder->writeBuffer().setUnflushed();
-        }
-
-        // Clear the journal: WriteSets may change on reflush after rebase
-        history.journal().clear();
-
-        // These values are initially set at time of the creation of this Change, however
-        // they need to be updated to point to the next ID on the current state of main.
-        // These values will be used when creating new dataparts at time of submit.
-        commitBuilder->_nextNodeID = commitBuilder->_firstNodeID = newNextNodeID;
-        commitBuilder->_nextEdgeID = commitBuilder->_firstEdgeID = newNextEdgeID;
-
-        metadataRebaser.clear();
-        metadataRebaser.rebase(prevCommitData->metadata(),
-                               commitBuilder->metadata(),
-                               commitBuilder->writeBuffer());
-
-        historyRebaser.rebase(metadataRebaser, dataPartRebaser, *prevHistory);
-
-        prevCommitData = &commitBuilder->commitData();
-        prevHistory = &prevCommitData->history();
+        rebaser.rebaseCommitBuilder(*commitBuilder);
     }
+
+    // Update the base commit to be main
+    _base = currentMainHead;
 
     return {};
 }

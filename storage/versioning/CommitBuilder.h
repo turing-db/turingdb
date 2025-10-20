@@ -17,6 +17,7 @@ class VersionController;
 class JobSystem;
 class Commit;
 class Change;
+class ChangeRebaser;
 class FrozenCommitTx;
 
 class CommitBuilder {
@@ -65,6 +66,7 @@ private:
     friend CommitWriteBuffer;
     friend VersionController;
     friend Change;
+    friend ChangeRebaser;
 
     mutable std::mutex _mutex;
     std::unique_ptr<CommitWriteBuffer> _writeBuffer;

@@ -90,10 +90,8 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (!buildRes) {
             return buildRes.get_unexpected();
         }
-        _commits.emplace_back(std::move(buildRes.value()));
+        addCommit(std::move(buildRes.value()));
     }
-
-    _head.store(_commits.back().get());
 
     return {};
 }

@@ -13,6 +13,8 @@ namespace db {
 class CommitWriteBufferRebaser;
 class MetadataBuilder;
 class CommitJournal;
+class MetadataRebaser;
+class WriteStep;
 
 class CommitWriteBuffer {
 
@@ -65,8 +67,8 @@ public:
       */
      void buildPending(DataPartBuilder& builder);
 
-     PendingNodes& pendingNodes() { return _pendingNodes; }
-     PendingEdges& pendingEdges() { return _pendingEdges; }
+     const PendingNodes& pendingNodes() const { return _pendingNodes; }
+     const PendingEdges& pendingEdges() const { return _pendingEdges; }
 
      std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
      std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
@@ -101,6 +103,8 @@ public:
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
+    friend MetadataRebaser;
+    friend WriteStep;
 
     struct PendingEdge {
          ExistingOrPendingNode src;
@@ -124,6 +128,10 @@ private:
     std::vector<EdgeID> _deletedEdges;
 
     CommitJournal& _journal;
+
+    PendingNodes& pendingNodes() { return _pendingNodes; }
+    PendingEdges& pendingEdges() { return _pendingEdges; }
+
 
     // Collection of methods to write the buffer to the provided datapart builder
     void buildPendingNodes(DataPartBuilder& builder);
