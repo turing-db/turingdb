@@ -130,7 +130,7 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
 
     // Record this node's offset for later reference
     CommitWriteBuffer::PendingNodeOffset thisNodeOffset =
-        _writeBuffer->pendingNodes().size() - 1;
+        _writeBuffer->numPendingNodes() - 1;
     const VarDecl* nodeVarDecl = nodePattern->getVar()->getDecl();
 
     _varOffsetMap[nodeVarDecl] = thisNodeOffset;
