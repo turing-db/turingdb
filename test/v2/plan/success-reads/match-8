@@ -57,7 +57,7 @@ flowchart TD
         __GET_EDGE_TARGET__
     `"]
     16["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     17["`
         __PRODUCE_RESULTS__

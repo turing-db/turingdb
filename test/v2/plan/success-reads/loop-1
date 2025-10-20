@@ -84,10 +84,10 @@ flowchart TD
         __GET_EDGE_TARGET__
     `"]
     23["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     24["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     25["`
         __MATERIALIZE__

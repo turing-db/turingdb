@@ -1,5 +1,5 @@
 /// QUERY
-MATCH (a)-->(x), (b { name: a.name})-->(x) RETURN a
+MATCH (a)-->(x), (b)-->(x), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) RETURN a
 
 /// RESULT
 flowchart TD
@@ -32,8 +32,11 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _b_.name
+        __has predicate__
         __dep__: a.name
+        __dep__: b.name
+        __dep__: b.name
+        __dep__: c.name
     `"]
     9["`
         __SCAN_NODES__
@@ -59,15 +62,47 @@ flowchart TD
         __GET_EDGE_TARGET__
     `"]
     16["`
-        __JOIN__
+        __SCAN_NODES__
     `"]
     17["`
-        __MATERIALIZE__
+        __VAR__
+        __name__: c
     `"]
     18["`
-        __MATERIALIZE__
+        __FILTER_NODE__
     `"]
     19["`
+        __GET_OUT_EDGES__
+    `"]
+    20["`
+        __VAR__
+        __name__: v2
+    `"]
+    21["`
+        __FILTER_EDGE__
+    `"]
+    22["`
+        __GET_EDGE_TARGET__
+    `"]
+    23["`
+        __JOIN__
+    `"]
+    24["`
+        __JOIN__
+    `"]
+    25["`
+        __MATERIALIZE__
+    `"]
+    26["`
+        __MATERIALIZE__
+    `"]
+    27["`
+        __MATERIALIZE__
+    `"]
+    28["`
+        __MATERIALIZE__
+    `"]
+    29["`
         __PRODUCE_RESULTS__
     `"]
     0-->2
@@ -76,8 +111,8 @@ flowchart TD
     3-->5
     4-->6
     5-->4
-    6-->16
-    7-->19
+    6-->23
+    7-->29
     8-->7
     9-->11
     10-->12
@@ -85,7 +120,18 @@ flowchart TD
     12-->14
     13-->15
     14-->13
-    15-->16
-    16-->17
-    17-->18
-    18-->8
+    15-->23
+    16-->18
+    17-->19
+    18-->17
+    19-->21
+    20-->22
+    21-->20
+    22-->24
+    23-->24
+    24-->25
+    25-->26
+    26-->27
+    27-->28
+    28-->8
+

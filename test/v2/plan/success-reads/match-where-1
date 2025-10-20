@@ -1,5 +1,5 @@
 /// QUERY
-MATCH (a)-->(x), (b { name: a.name})-->(x) RETURN a
+MATCH (a)-->(x), (b)-->(x) WHERE a.name = b.name RETURN a
 
 /// RESULT
 flowchart TD
@@ -32,8 +32,9 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _b_.name
+        __has predicate__
         __dep__: a.name
+        __dep__: b.name
     `"]
     9["`
         __SCAN_NODES__
@@ -89,3 +90,4 @@ flowchart TD
     16-->17
     17-->18
     18-->8
+

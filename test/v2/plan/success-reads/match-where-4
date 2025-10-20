@@ -1,5 +1,5 @@
 /// QUERY
-MATCH (a)-->(x), (b { name: a.name})-->(x), (c {name: b.name})-->(x { name: a.name }) RETURN a
+MATCH (a)-->(x), (b { duration: a.duration })-->(x ), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) OR (b.name = x.name) RETURN a
 
 /// RESULT
 flowchart TD
@@ -32,12 +32,15 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _b_.name
+        __prop__ _b_.duration
+        __dep__: a.duration
+        __has predicate__
         __dep__: a.name
-        __prop__ _c_.name
         __dep__: b.name
-        __prop__ _x_.name
-        __dep__: a.name
+        __dep__: b.name
+        __dep__: c.name
+        __dep__: b.name
+        __dep__: x.name
     `"]
     9["`
         __SCAN_NODES__
@@ -107,6 +110,12 @@ flowchart TD
         __MATERIALIZE__
     `"]
     30["`
+        __MATERIALIZE__
+    `"]
+    31["`
+        __MATERIALIZE__
+    `"]
+    32["`
         __PRODUCE_RESULTS__
     `"]
     0-->2
@@ -116,7 +125,7 @@ flowchart TD
     4-->6
     5-->4
     6-->23
-    7-->30
+    7-->32
     8-->7
     9-->11
     10-->12
@@ -138,4 +147,7 @@ flowchart TD
     26-->27
     27-->28
     28-->29
-    29-->8
+    29-->30
+    30-->31
+    31-->8
+

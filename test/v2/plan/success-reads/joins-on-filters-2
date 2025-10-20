@@ -103,13 +103,13 @@ flowchart TD
         __GET_EDGE_TARGET__
     `"]
     30["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     31["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     32["`
-        __CARTESIAN_PRODUCT__
+        __JOIN__
     `"]
     33["`
         __PRODUCE_RESULTS__

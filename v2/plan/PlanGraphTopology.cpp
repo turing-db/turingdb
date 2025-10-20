@@ -4,7 +4,6 @@
 #include <unordered_set>
 
 #include "nodes/VarNode.h"
-#include "spdlog/fmt/bundled/base.h"
 
 using namespace db::v2;
 
@@ -135,9 +134,12 @@ bool PlanGraphTopology::detectLoops(const PlanGraphNode* origin) {
 }
 
 const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode* a, const PlanGraphNode* b) {
-    fmt::println("Trying to find common successor");
     if (a == b) {
         return a;
+    }
+
+    if (!a) {
+        return b;
     }
 
     std::unordered_set<const PlanGraphNode*> visited;
@@ -148,7 +150,6 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
     visited.insert(a);
 
     while (!outputs.empty()) {
-        fmt::println("- Testing output");
         const PlanGraphNode* node = outputs.front();
         outputs.pop();
 
@@ -163,13 +164,11 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
         }
 
         if (node == a) {
-            fmt::println("First node tested, ignored");
             // We need to follow at least one output node
             continue;
         }
 
         if (node == b) {
-            fmt::println("Found the successor by only following outputs");
             return node;
         }
 
@@ -181,14 +180,11 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
             inputs.push(in);
         }
 
-        fmt::println("- Testing inputs");
         while (!inputs.empty()) {
-            fmt::println("    - Testing input");
             const PlanGraphNode* in = inputs.front();
             inputs.pop();
 
             if (in == b) {
-                fmt::println("Found the successor by following inputs");
                 return node; // Found the node through a common successor
             }
 
@@ -202,7 +198,6 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
         }
     }
 
-    fmt::println("No successor found");
     return nullptr;
 }
 

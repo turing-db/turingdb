@@ -6,6 +6,8 @@
 
 #include "PlanGraphVariables.h"
 #include "PlannerException.h"
+#include "PlanGraphTopology.h"
+#include "nodes/VarNode.h"
 
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
@@ -37,6 +39,10 @@ public:
 
     const Container& getDependencies() const {
         return _dependencies;
+    }
+
+    bool empty() const {
+        return _dependencies.empty();
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const Expr* expr) {
@@ -77,6 +83,22 @@ public:
                 // Reached end
                 break;
         }
+    }
+
+    VarNode* findCommonSuccessor(const VarNode* var) const {
+        for (const auto& dep : _dependencies) {
+            const auto* successor = PlanGraphTopology::findCommonSuccessor(var, dep._var);
+
+            if (successor) {
+                var = PlanGraphTopology::findNextVar(successor);
+
+                if (!var) [[unlikely]] {
+                    throw PlannerException("Unknown error");
+                }
+            }
+        }
+
+        return nullptr;
     }
 
 private:
