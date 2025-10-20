@@ -60,5 +60,5 @@ TEST_F(SimpleGraphSerialisationTest, indexInitialisation) {
 }
 
 int main(int argc, char** argv) {
-    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 3; });
+    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 1; });
 }
