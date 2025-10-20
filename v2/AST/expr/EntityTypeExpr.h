@@ -2,8 +2,6 @@
 
 #include "Expr.h"
 
-#include <vector>
-
 namespace db::v2 {
 
 class CypherAST;

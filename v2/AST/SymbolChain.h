@@ -9,18 +9,13 @@ class Symbol;
 
 class SymbolChain {
 public:
-    using SymbolVector = std::vector<Symbol*>;
+    friend CypherAST;
 
-    ~SymbolChain();
+    using SymbolVector = std::vector<Symbol*>;
 
     static SymbolChain* create(CypherAST* ast);
 
     void add(Symbol* symbol);
-
-    SymbolChain(const SymbolChain&) = delete;
-    SymbolChain(SymbolChain&&) = delete;
-    SymbolChain& operator=(const SymbolChain&) = delete;
-    SymbolChain& operator=(SymbolChain&&) = delete;
 
     const SymbolVector& getVector() const { return _symbols; }
 
@@ -35,6 +30,7 @@ private:
     std::vector<Symbol*> _symbols;
 
     SymbolChain();
+    ~SymbolChain();
 };
 
 }
