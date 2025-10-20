@@ -83,6 +83,16 @@ Result<FileInfo> Path::getFileInfo() const {
     };
 }
 
+Result<void> Path::toCanonical() {
+    try {
+        _path = std::filesystem::weakly_canonical(_path).string();
+    } catch (const std::filesystem::filesystem_error& e) {
+        return Error::result(ErrorType::CANNOT_GET_CANONICAL_PATH, e.code().value());
+    }
+
+    return {};
+}
+
 Result<std::vector<Path>> Path::listDir() const {
     auto info = getFileInfo();
 

@@ -145,31 +145,47 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
 bool SystemManager::importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem) {
     const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
-    // Check if graph was already loaded || is already loading
+    // Step 1. Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
         return false;
     }
 
-    if (!graphPath.exists()) {
+    // Step 2. Validate the path. It should be within the data directory
+    fs::Path canonical = _config->getDataDir() / filePath;
+    if (auto res = canonical.toCanonical(); !res) {
+        spdlog::error(res.error().fmtMessage());
         return false;
     }
 
-    const auto fileType = getGraphFileType(graphPath);
+    if (!canonical.hasPrefix(_config->getDataDir())) {
+        spdlog::error("File is not within the data directory: {}", canonical.get());
+        return false;
+    }
+
+    if (!canonical.exists()) {
+        spdlog::error("File does not exist: {}", canonical.get());
+        return false;
+    }
+
+    // Step 3. Determine the file type
+    const auto fileType = getGraphFileType(canonical);
+
+    // Step 4. Load the graph
     if (!fileType) {
         // If we can not determine the file type, assume it is a Neo4j JSON graph
         // to be changed in the future
-        return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
+        return loadNeo4jJsonDB(graphName, canonical, jobSystem);
     }
 
     switch (*fileType) {
         case GraphFileType::GML:
-            return loadGmlDB(graphName, graphPath, jobSystem);
+            return loadGmlDB(graphName, canonical, jobSystem);
         case GraphFileType::NEO4J:
-            return loadNeo4jDB(graphName, graphPath, jobSystem);
+            return loadNeo4jDB(graphName, canonical, jobSystem);
         case GraphFileType::NEO4J_JSON:
-            return loadNeo4jJsonDB(graphName, graphPath, jobSystem);
+            return loadNeo4jJsonDB(graphName, canonical, jobSystem);
         case GraphFileType::BINARY:
-            return loadBinaryDB(graphName, graphPath, jobSystem);
+            return loadBinaryDB(graphName, canonical, jobSystem);
         default:
             return false;
     }
