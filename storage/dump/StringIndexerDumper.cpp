@@ -88,6 +88,6 @@ DumpResult<void> StringIndexerDumper::dumpOwners(const std::vector<EntityID>& ow
         return {};
     }
 
-    return DumpUtils::dumpVector(owners, _auxWriter);
+    return DumpUtils::dumpRange(owners, _auxWriter);
 }
 
