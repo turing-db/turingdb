@@ -25,6 +25,7 @@ public:
     [[nodiscard]] const std::string& get() const { return _path; }
     [[nodiscard]] const char* c_str() const { return _path.c_str(); }
     [[nodiscard]] Path copy() const { return Path(_path); }
+    [[nodiscard]] Path parent() const;
     [[nodiscard]] bool exists() const { return getFileInfo().has_value(); }
     [[nodiscard]] Result<std::vector<Path>> listDir() const;
     [[nodiscard]] std::string_view filename() const;
@@ -32,9 +33,9 @@ public:
     [[nodiscard]] std::string_view extension() const;
     [[nodiscard]] bool hasPrefix(const Path& prefix) const { return _path.starts_with(prefix._path); }
     [[nodiscard]] bool empty() const { return _path.empty(); }
+    [[nodiscard]] bool isSubDirectory(const Path& root) const;
     [[nodiscard]] Result<void> toCanonical() ;
 
-    static bool isSubDirectory(const Path& rootDirectory, const Path& subDirectory);
 
     friend Path operator/(const Path& lhs, const Path& rhs) {
         std::string p = lhs._path + "/";

@@ -6,6 +6,7 @@
 #include "PipelineException.h"
 #include "Profiler.h"
 #include "SystemManager.h"
+#include "TuringConfig.h"
 
 using namespace db;
 
@@ -23,6 +24,7 @@ S3PushStep::~S3PushStep() {
 void S3PushStep::prepare(ExecutionContext* ctxt) {
     _sysMan = ctxt->getSystemManager();
     _s3Client = _sysMan->getS3Client();
+
     if (_s3Client == nullptr) {
         throw PipelineException("TuringS3Client has not been created");
     }
@@ -30,13 +32,26 @@ void S3PushStep::prepare(ExecutionContext* ctxt) {
 
 void S3PushStep::execute() {
     Profile profile {"S3PushStep::execute"};
+
+    const fs::Path& dataDir = _sysMan->getConfig()->getDataDir();
+
+    // Validate the path
+    const fs::Path absolute = dataDir / _localPath;
+
+    if (!absolute.isSubDirectory(dataDir)) {
+        throw PipelineException("Invalid file path.");
+    }
+    if (!absolute.exists()) {
+        throw PipelineException("File does not exist");
+    }
+
     if (!_s3File.empty()) {
-        auto awsRes = _s3Client->uploadFile(_localPath, std::string(_s3Bucket), std::string(_s3File));
+        auto awsRes = _s3Client->uploadFile(absolute.get(), std::string(_s3Bucket), std::string(_s3File));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
         }
     } else {
-        auto awsRes = _s3Client->uploadDirectory(_localPath, std::string(_s3Bucket), std::string(_s3Prefix));
+        auto awsRes = _s3Client->uploadDirectory(absolute.get(), std::string(_s3Bucket), std::string(_s3Prefix));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
         }

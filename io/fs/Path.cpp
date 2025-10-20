@@ -85,12 +85,34 @@ Result<FileInfo> Path::getFileInfo() const {
 
 Result<void> Path::toCanonical() {
     try {
-        _path = std::filesystem::weakly_canonical(_path).string();
+        _path = std::filesystem::canonical(_path).string();
     } catch (const std::filesystem::filesystem_error& e) {
         return Error::result(ErrorType::CANNOT_GET_CANONICAL_PATH, e.code().value());
     }
 
     return {};
+}
+
+bool Path::isSubDirectory(const Path& root) const {
+    try {
+        const auto canonicalRoot = std::filesystem::weakly_canonical(root.c_str());
+        const auto canonicalSub = std::filesystem::weakly_canonical(_path);
+        const auto relative = canonicalSub.lexically_relative(canonicalRoot);
+
+        return !relative.empty() && relative.begin()->string() != "..";
+    } catch (const std::filesystem::filesystem_error& e) {
+        return false;
+    }
+}
+
+Path Path::parent() const {
+    const auto pos = _path.find_last_of('/');
+
+    if (pos == std::string::npos) {
+        return Path("");
+    }
+
+    return Path(_path.substr(0, pos));
 }
 
 Result<std::vector<Path>> Path::listDir() const {

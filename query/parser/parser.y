@@ -599,9 +599,9 @@ s3connect_cmd : S3_CONNECT STRING_CONSTANT STRING_CONSTANT STRING_CONSTANT{ $$ =
           ;
 
 //                       <LOCAL_DIR>     <S3URL>
-s3transfer_cmd : S3_PUSH STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PUSH,$3,$2); }
+s3transfer_cmd : S3_PUSH STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Direction::PUSH,$3,$2); }
 //                       <S3URL>         <LOCAL_DIR>
-               | S3_PULL STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Dir::PULL,$2,$3); }
+               | S3_PULL STRING_CONSTANT STRING_CONSTANT { $$ = S3TransferCommand::create(ctxt,S3TransferCommand::Direction::PULL,$2,$3); }
           ;
 
 %%

@@ -191,14 +191,14 @@ S3ConnectCommand* S3ConnectCommand::create(ASTContext* ctxt) {
     return cmd;
 }
 
-S3TransferCommand::S3TransferCommand(Dir transferDir,const std::string& s3URL, const std::string& localDir) 
-    :_transferDir(transferDir),
+S3TransferCommand::S3TransferCommand(Direction transferDir,const std::string& s3URL, const std::string& localDir) 
+    :_transferDirection(transferDir),
     _s3URL(s3URL),
     _localDir(localDir)
 {
 }
 
-S3TransferCommand* S3TransferCommand::create(ASTContext* ctxt, Dir transferDir, const std::string& s3URL, const std::string& localDir) {
+S3TransferCommand* S3TransferCommand::create(ASTContext* ctxt, Direction transferDir, const std::string& s3URL, const std::string& localDir) {
     S3TransferCommand* cmd = new S3TransferCommand(transferDir, s3URL, localDir);
     cmd->registerCmd(ctxt);
     return cmd;

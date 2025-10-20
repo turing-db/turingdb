@@ -5,9 +5,9 @@
 #include "ExecutionContext.h"
 #include "PipelineException.h"
 #include "Profiler.h"
+#include "TuringConfig.h"
 #include "TuringS3Client.h"
 #include "SystemManager.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -32,14 +32,24 @@ void S3PullStep::prepare(ExecutionContext* ctxt) {
 
 void S3PullStep::execute() {
     Profile profile {"S3PullStep::execute"};
+
+    const fs::Path& dataDir = _sysMan->getConfig()->getDataDir();
+    const fs::Path absolute = dataDir / _localPath;
+
+    if (!absolute.isSubDirectory(dataDir)) {
+        throw PipelineException("Invalid file path.");
+    }
+
+    const fs::Path parent = absolute.parent();
+    parent.mkdir();
+
     if (!_s3File.empty()) {
-        auto awsRes = _s3Client->downloadFile(_localPath, std::string(_s3Bucket), std::string(_s3File));
+        const auto awsRes = _s3Client->downloadFile(absolute.get(), std::string(_s3Bucket), std::string(_s3File));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
         }
     } else {
-        spdlog::info("Downloading file: {}", _s3Prefix);
-        auto awsRes = _s3Client->downloadDirectory(_localPath, std::string(_s3Bucket), std::string(_s3Prefix));
+        const auto awsRes = _s3Client->downloadDirectory(absolute.get(), std::string(_s3Bucket), std::string(_s3Prefix));
         if (!awsRes) {
             throw PipelineException(awsRes.error().fmtMessage());
         }
