@@ -70,6 +70,8 @@ set(storage_sources
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp
+        comparators/CommitViewComparator.cpp
+        comparators/WriteSetComparator.cpp
         comparators/GraphComparator.cpp
 
         dump/GraphLoader.cpp
