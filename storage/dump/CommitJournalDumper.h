@@ -1,7 +1,10 @@
 #pragma once
 
-#include "FilePageWriter.h"
 #include "dump/DumpResult.h"
+
+namespace fs {
+class FilePageWriter;
+}
 
 namespace db {
 

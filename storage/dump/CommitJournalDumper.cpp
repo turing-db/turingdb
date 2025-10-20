@@ -16,7 +16,7 @@ DumpResult<void> CommitJournalDumper::dump(const CommitJournal& journal) {
         const size_t nodesSize = writtenNodes.size();
 
         DumpUtils::ensureDumpSpace(sizeof(nodesSize), _writer);
-        _writer.writeToCurrentPage(writtenNodes.size());
+        _writer.writeToCurrentPage(nodesSize);
 
         DumpUtils::dumpRange(writtenNodes, _writer);
     }
@@ -26,7 +26,7 @@ DumpResult<void> CommitJournalDumper::dump(const CommitJournal& journal) {
         const size_t edgesSize = writtenEdges.size();
 
         DumpUtils::ensureDumpSpace(sizeof(edgesSize), _writer);
-        _writer.writeToCurrentPage(writtenEdges.size());
+        _writer.writeToCurrentPage(edgesSize);
 
         DumpUtils::dumpRange(writtenEdges, _writer);
     }

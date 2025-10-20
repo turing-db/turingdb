@@ -1,7 +1,10 @@
 #pragma once
 
-#include "FilePageReader.h"
 #include "dump/DumpResult.h"
+
+namespace fs {
+class FilePageReader;
+}
 
 namespace db {
 

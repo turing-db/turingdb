@@ -3,9 +3,7 @@
 #include "versioning/WriteSet.h"
 #include "ID.h"
 
-namespace db {
-
-class CommitWriteBuffer;
+namespace db { class CommitWriteBuffer;
 
 /**
  * @brief Stores information as to the modifications (updates/deletes) that occured in
@@ -15,6 +13,9 @@ class CommitWriteBuffer;
  */
 class CommitJournal {
 public:
+    using NodeWriteSet = WriteSet<NodeID>;
+    using EdgeWriteSet = WriteSet<EdgeID>;
+
     /**
      * @brief Creates a new journal with an empty write set
      */
@@ -32,8 +33,8 @@ public:
     auto& nodeWriteSet() { return _nodeWriteSet; }
     auto& edgeWriteSet() { return _edgeWriteSet; }
 
-    const auto& nodeWriteSet() const { return _nodeWriteSet; }
-    const auto& edgeWriteSet() const { return _edgeWriteSet; }
+    const NodeWriteSet& nodeWriteSet() const { return _nodeWriteSet; }
+    const EdgeWriteSet& edgeWriteSet() const { return _edgeWriteSet; }
 
     void finalise();
 
@@ -42,12 +43,12 @@ private:
 
     bool _initialised {false};
 
-    WriteSet<NodeID> _nodeWriteSet;
-    WriteSet<EdgeID> _edgeWriteSet;
+    NodeWriteSet _nodeWriteSet;
+    EdgeWriteSet _edgeWriteSet;
 
     CommitJournal() = default;
 
-    auto& rawNodeWriteSet() { return _nodeWriteSet.getRaw(); }
-    auto& rawEdgeWriteSet() { return _edgeWriteSet.getRaw(); }
+    std::vector<NodeID>& rawNodeWriteSet() { return _nodeWriteSet.getRaw(); }
+    std::vector<EdgeID>& rawEdgeWriteSet() { return _edgeWriteSet.getRaw(); }
 };
 }
