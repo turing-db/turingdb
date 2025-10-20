@@ -67,6 +67,9 @@ public:
       */
      void buildPending(DataPartBuilder& builder);
 
+     size_t numPendingNodes() const { return _pendingNodes.size(); }
+     size_t numPendingEdges() const { return _pendingEdges.size(); }
+
      const PendingNodes& pendingNodes() const { return _pendingNodes; }
      const PendingEdges& pendingEdges() const { return _pendingEdges; }
 
@@ -104,7 +107,6 @@ private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
     friend MetadataRebaser;
-    friend WriteStep;
 
     struct PendingEdge {
          ExistingOrPendingNode src;
