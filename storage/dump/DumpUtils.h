@@ -1,13 +1,13 @@
 #pragma once
 
+#include <ranges>
+
 #include "ID.h"
 #include "Primitives.h"
-#include "DumpConfig.h"
-#include "DumpResult.h"
 #include "FilePageWriter.h"
+#include "DumpResult.h"
+#include "DumpConfig.h"
 #include "TuringException.h"
-#include <concepts>
-#include <ranges>
 
 namespace fs {
 
