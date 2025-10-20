@@ -85,7 +85,6 @@ enum class DumpErrorType : uint8_t {
     COULD_NOT_READ_JOURNAL,
 
     COULD_NOT_READ_VECTOR,
-    COULD_NOT_READ_U_SET,
 
     _SIZE
 };
@@ -151,8 +150,7 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_INDEXER, "Could not read entity property indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER, "Could not read entity string property indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_JOURNAL, "Could not read commit journal">,
-    EnumStringPair<DumpErrorType::COULD_NOT_READ_VECTOR, "Could not read vector">,
-    EnumStringPair<DumpErrorType::COULD_NOT_READ_U_SET, "Could not read unordered set">>;
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_VECTOR, "Could not read vector">>;
 
 class DumpError {
 public:

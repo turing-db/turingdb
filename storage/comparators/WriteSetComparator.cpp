@@ -1,6 +1,8 @@
 #include "WriteSetComparator.h"
+
+#include <spdlog/spdlog.h>
+
 #include "ID.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
