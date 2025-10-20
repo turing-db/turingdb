@@ -4,7 +4,6 @@
 #include "GraphDumpHelper.h"
 #include "versioning/CommitJournal.h"
 
-
 using namespace db;
 
 DumpResult<void> CommitJournalLoader::load(CommitJournal& journal) {
