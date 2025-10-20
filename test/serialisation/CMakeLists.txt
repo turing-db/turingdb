@@ -9,6 +9,6 @@ function(add_db_serialisation_gtest exe_name cpp_file)
                 turing_testenv_s)
 endfunction()
 
-add_db_serialisation_gtest(
-    test_stringindexserialisation StringIndexSerialisationTest.cpp
-    test_simplegraphserialisation SimpleGraphSerialisationTest.cpp)
+add_db_serialisation_gtest(test_stringindex_serial StringIndexSerialisationTest.cpp)
+add_db_serialisation_gtest(test_simplegraph_serial SimpleGraphSerialisationTest.cpp)
+add_db_serialisation_gtest(test_journal_serial CommitJournalSerialisationTest.cpp)
