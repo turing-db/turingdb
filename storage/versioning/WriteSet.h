@@ -22,7 +22,7 @@ public:
 
     size_t size() const { return _set.size(); }
 
-    bool empty() { return _set.empty(); }
+    bool empty() const { return _set.empty(); }
 
     auto begin() { return _set.begin(); }
     auto end() { return _set.end(); }
