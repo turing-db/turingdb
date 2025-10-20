@@ -6,6 +6,8 @@
 #include "DumpResult.h"
 #include "FilePageWriter.h"
 #include "TuringException.h"
+#include <concepts>
+#include <ranges>
 
 namespace fs {
 
@@ -56,13 +58,14 @@ using WorkingType = typename WorkingTypeHelper<T, DumpableID<T>>::type;
 
 class DumpUtils {
 public:
-    /**
-     * @brief Uses @param wr to write @param vec to page. May write over multiple pages.
+    /** * @brief Uses @param wr to write the range @param rg to page. May write over
+     * multiple pages.
      * @detail sizeof(T) must be less than the page size. Empty space left per page is no
      * more than sizeof(T)
      */
-    template<Dumpable T>
-    static DumpResult<void> dumpVector(const std::vector<T>& vec, fs::FilePageWriter& wr);
+    template <std::ranges::input_range Range>
+        requires Dumpable<std::ranges::range_value_t<Range>>
+    static DumpResult<void> dumpRange(const Range& rg, fs::FilePageWriter& wr);
 
     /**
      * @brief Checks if there is at least @param requiredSpace on the page @param wr is
@@ -72,8 +75,10 @@ public:
     static void ensureDumpSpace(size_t requiredSpace, fs::FilePageWriter& wr);
 };
 
-template<Dumpable T>
-DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWriter& wr) {
+template <std::ranges::input_range Range>
+    requires Dumpable<std::ranges::range_value_t<Range>>
+DumpResult<void> DumpUtils::dumpRange(const Range& rg, fs::FilePageWriter& wr) {
+    using T = std::ranges::range_value_t<Range>;
     using WorkingT = WorkingType<T>;
 
     const size_t TSize = sizeof(WorkingT);
@@ -88,18 +93,18 @@ DumpResult<void> DumpUtils::dumpVector(const std::vector<T>& vec, fs::FilePageWr
     const size_t remainingSpace = wr.buffer().avail();
     const size_t countThisPage = remainingSpace / TSize;
 
-    auto it = vec.cbegin();
-    for (size_t j = 0; j < countThisPage && it != vec.cend(); j++) {
+    auto it = rg.cbegin();
+    for (size_t j = 0; j < countThisPage && it != rg.cend(); j++) {
         wr.writeToCurrentPage(*it);
         it++;
     }
 
-    if (it == vec.cend()) {
+    if (it == rg.cend()) {
         return {};
     }
 
     const size_t read = countThisPage;
-    const size_t remaining = vec.size() - read;
+    const size_t remaining = rg.size() - read;
 
     const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
 
