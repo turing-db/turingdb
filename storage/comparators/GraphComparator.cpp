@@ -11,7 +11,6 @@
 
 using namespace db;
 
-
 bool GraphComparator::same(const Graph& a, const Graph& b) {
     if (a.getName() != b.getName()) {
         return false;

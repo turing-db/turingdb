@@ -20,7 +20,6 @@
 using namespace db;
 using namespace turing::test;
 
-
 class StringIndexSerialisationTest : public TuringTest {
 public:
     void initialize()  override {

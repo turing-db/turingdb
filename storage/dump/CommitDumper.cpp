@@ -118,7 +118,6 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
         }
     }
 
-
     for (const auto& [i, part] : commit.data().commitDataparts() | rv::enumerate) {
         const fs::Path partPath = path / "datapart-" + std::to_string(i);
 

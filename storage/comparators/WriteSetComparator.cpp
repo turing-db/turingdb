@@ -9,7 +9,6 @@ namespace db {
     template class WriteSetComparator<EdgeID>;
 }
 
-
 template <TypedInternalID IDT>
 bool WriteSetComparator<IDT>::same(const WriteSet<IDT> setA , const WriteSet<IDT> setB) {
     if (setA.size() != setB.size()) {
