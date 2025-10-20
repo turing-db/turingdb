@@ -3,16 +3,17 @@
 #include <map>
 #include <memory>
 
-#include "DataPart.h"
-#include "DataPartLoader.h"
 #include "FilePageReader.h"
-#include "Graph.h"
+#include "DataPartLoader.h"
 #include "GraphMetadataLoader.h"
-#include "Path.h"
+#include "CommitJournalLoader.h"
 #include "GraphDumpHelper.h"
 #include "DumpResult.h"
-#include "dump/CommitJournalLoader.h"
-#include "dump/DumpConfig.h"
+#include "DumpConfig.h"
+
+#include "DataPart.h"
+#include "Graph.h"
+#include "Path.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistoryBuilder.h"

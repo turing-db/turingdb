@@ -3,17 +3,18 @@
 #include <range/v3/view/enumerate.hpp>
 
 #include "FilePageWriter.h"
+#include "DataPartDumper.h"
 #include "LabelMapDumper.h"
 #include "LabelSetMapDumper.h"
 #include "EdgeTypeMapDumper.h"
-#include "Profiler.h"
 #include "PropertyTypeMapDumper.h"
-#include "dump/CommitJournalDumper.h"
-#include "dump/DumpConfig.h"
+#include "CommitJournalDumper.h"
+#include "DumpConfig.h"
+
 #include "versioning/Commit.h"
-#include "DataPartDumper.h"
-#include "DumpUtils.h"
 #include "versioning/CommitJournal.h"
+
+#include "Profiler.h"
 
 using namespace db;
 

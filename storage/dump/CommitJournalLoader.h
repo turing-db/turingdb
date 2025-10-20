@@ -18,7 +18,6 @@ public:
 
 private:
     fs::FilePageReader& _reader;
-    
 };
-    
+
 }
