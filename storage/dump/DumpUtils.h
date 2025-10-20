@@ -58,7 +58,8 @@ using WorkingType = typename WorkingTypeHelper<T, DumpableID<T>>::type;
 
 class DumpUtils {
 public:
-    /** * @brief Uses @param wr to write the range @param rg to page. May write over
+    /**
+     * @brief Uses @param wr to write the range @param rg to page. May write over
      * multiple pages.
      * @detail sizeof(T) must be less than the page size. Empty space left per page is no
      * more than sizeof(T)

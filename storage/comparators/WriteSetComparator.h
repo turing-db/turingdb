@@ -7,7 +7,7 @@ namespace db {
 template <TypedInternalID IDT>
 class WriteSetComparator{
 public:
-    [[nodiscard]] static bool same( WriteSet<IDT> setA ,  WriteSet<IDT> setB);
+    [[nodiscard]] static bool same(WriteSet<IDT> setA, WriteSet<IDT> setB);
 };
 
 }
