@@ -32,14 +32,22 @@ public:
     auto& nodeWriteSet() { return _nodeWriteSet; }
     auto& edgeWriteSet() { return _edgeWriteSet; }
 
+    const auto& nodeWriteSet() const { return _nodeWriteSet; }
+    const auto& edgeWriteSet() const { return _edgeWriteSet; }
+
     void finalise();
 
 private:
+    friend class CommitJournalLoader;
+
     bool _initialised {false};
 
     WriteSet<NodeID> _nodeWriteSet;
     WriteSet<EdgeID> _edgeWriteSet;
 
     CommitJournal() = default;
+
+    auto& rawNodeWriteSet() { return _nodeWriteSet.getRaw(); }
+    auto& rawEdgeWriteSet() { return _edgeWriteSet.getRaw(); }
 };
 }

@@ -26,8 +26,8 @@ DumpResult<void> CommitJournalLoader::load(CommitJournal& journal) {
     { // Load node write set
         LoadUtils::ensureLoadSpace(sizeof(size_t), _reader, it);
         const size_t nodeCount = it.get<size_t>();
-        WriteSet<NodeID>& nodes = journal.nodeWriteSet();
-        if (auto res = LoadUtils::loadVector(nodes._set, nodeCount, _reader, it); !res) {
+        std::vector<NodeID>& nodes = journal.rawNodeWriteSet();
+        if (auto res = LoadUtils::loadVector(nodes, nodeCount, _reader, it); !res) {
             return res;
         }
     }
@@ -35,8 +35,8 @@ DumpResult<void> CommitJournalLoader::load(CommitJournal& journal) {
     { // Load edge write set
         LoadUtils::ensureLoadSpace(sizeof(size_t), _reader, it);
         const size_t edgeCount = it.get<size_t>();
-        WriteSet<EdgeID>& edges = journal.edgeWriteSet();
-        if (auto res = LoadUtils::loadVector(edges._set, edgeCount, _reader, it); !res) {
+        std::vector<EdgeID>& edges = journal.rawEdgeWriteSet();
+        if (auto res = LoadUtils::loadVector(edges, edgeCount, _reader, it); !res) {
             return res;
         }
     }
