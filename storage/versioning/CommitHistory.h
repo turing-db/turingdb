@@ -40,6 +40,7 @@ public:
     void newCommitHistoryFromPrevious(const CommitHistory& previous);
 
     CommitJournal& journal() { return *_journal; }
+    CommitJournal& journal() const { return *_journal; }
 
 private:
     friend class CommitHistoryBuilder;
@@ -57,7 +58,7 @@ private:
     std::vector<CommitView> _commits;
 
     /// Stores the write information of this commit
-    std::unique_ptr<CommitJournal> _journal;
+    std::unique_ptr<CommitJournal> _journal {CommitJournal::emptyJournal()};
 };
 
 }

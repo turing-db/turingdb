@@ -66,6 +66,7 @@ set(storage_sources
         versioning/CommitHistoryRebaser.cpp
         versioning/CommitWriteBuffer.cpp
         versioning/CommitJournal.cpp
+        versioning/WriteSet.cpp
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp
@@ -82,6 +83,7 @@ set(storage_sources
         dump/StringIndexerDumper.cpp
         dump/StringIndexerLoader.cpp
         dump/CommitJournalDumper.cpp
+        dump/CommitJournalLoader.cpp
       )
 
 add_library(turing_db_storage_s STATIC ${storage_sources})
