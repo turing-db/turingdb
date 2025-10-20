@@ -7,9 +7,11 @@
 #include "TuringTest.h"
 #include "TuringDB.h"
 #include "SimpleGraph.h"
+#include "TuringTestEnv.h"
 #include "dump/GraphDumper.h"
 #include "dump/GraphLoader.h"
 #include "reader/GraphReader.h"
+#include "versioning/CommitHash.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -20,6 +22,7 @@ public:
     void initialize()  override {
         _config.setSyncedOnDisk(false);
         _workingPath = fs::Path {_outDir + "/testfile"};
+        _env = TuringTestEnv::create(_workingPath);
         _config.setTuringDirectory(_workingPath);
         _db = std::make_unique<TuringDB>(&_config);
         _db->run();
@@ -41,6 +44,7 @@ protected:
     Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     fs::Path _workingPath;
+    std::unique_ptr<TuringTestEnv> _env;
 
     void dumpLoadSimpleDB() {
         auto res = GraphDumper::dump(*_builtGraph, _workingPath);
@@ -56,14 +60,35 @@ protected:
 };
 
 TEST_F(CommitJournalSerialisationTest, emptyOnCreation) {
-    const auto tx = _builtGraph->openTransaction();    
-    const auto reader = tx.readGraph();
-    const auto commitViews = reader.commits();
+    { // On creation
+        const auto tx = _builtGraph->openTransaction();
+        const auto reader = tx.readGraph();
+        const auto commitViews = reader.commits();
 
-    // Write sets should be empty when creating simple db
-    for (const auto& commitView : commitViews) {
-        const CommitJournal& journal = commitView.history().journal();
-        EXPECT_TRUE(journal.nodeWriteSet().empty());
-        EXPECT_TRUE(journal.edgeWriteSet().empty());
+        // Write sets should be empty when creating simple db
+        for (const auto& commitView : commitViews) {
+            const CommitJournal& journal = commitView.history().journal();
+            EXPECT_TRUE(journal.nodeWriteSet().empty());
+            EXPECT_TRUE(journal.edgeWriteSet().empty());
+        }
     }
+
+    dumpLoadSimpleDB();
+
+    { // After dumping and loading
+        const auto tx = _loadedGraph->openTransaction();
+        const auto reader = tx.readGraph();
+        const auto commitViews = reader.commits();
+
+        // Write sets should be empty when creating simple db
+        for (const auto& commitView : commitViews) {
+            const CommitJournal& journal = commitView.history().journal();
+            EXPECT_TRUE(journal.nodeWriteSet().empty());
+            EXPECT_TRUE(journal.edgeWriteSet().empty());
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 3; });
 }
