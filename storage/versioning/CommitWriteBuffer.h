@@ -132,7 +132,6 @@ private:
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }
 
-
     // Collection of methods to write the buffer to the provided datapart builder
     void buildPendingNodes(DataPartBuilder& builder);
     void buildPendingEdges(DataPartBuilder& builder);

@@ -20,11 +20,13 @@ ChangeRebaser::ChangeRebaser(Change& change, const CommitData* currentHeadCommit
 }
 
 NodeID ChangeRebaser::rebaseNodeID(NodeID old) {
+    bioassert(_branchTimeNextNodeID <= _newNextNodeID);
     return old >= _branchTimeNextNodeID ? old + _newNextNodeID - _branchTimeNextNodeID
                                         : old;
 }
 
 EdgeID ChangeRebaser::rebaseEdgeID(EdgeID old) {
+    bioassert(_branchTimeNextEdgeID <= _newNextEdgeID);
     return old >= _branchTimeNextEdgeID ? old + _newNextEdgeID - _branchTimeNextEdgeID
                                         : old;
 }
