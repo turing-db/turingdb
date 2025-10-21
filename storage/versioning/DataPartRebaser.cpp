@@ -1,13 +1,14 @@
 #include "DataPartRebaser.h"
 
-#include "Profiler.h"
+#include "ChangeRebaser.h"
+#include "MetadataRebaser.h"
 #include "DataPart.h"
 #include "EdgeContainer.h"
-#include "MetadataRebaser.h"
 #include "NodeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "properties/PropertyContainer.h"
 #include "properties/PropertyManager.h"
+#include "Profiler.h"
 
 using namespace db;
 
@@ -15,6 +16,8 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
                              const DataPart& prevPart,
                              DataPart& part) {
     Profile profile {"DataPartRebaser::rebase"};
+
+    bioassert(_changeRebaser);
 
     auto& nodes = part._nodes;
     auto& edges = part._edges;
@@ -49,12 +52,12 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             const auto newLabelSet = metadata.getLabelSetMapping(labelset.getID());
             auto& r = newRanges[newLabelSet];
             r = range;
-            r._first = rebaseNodeID(r._first);
+            r._first = _changeRebaser->rebaseNodeID(r._first);
         }
         nodes->_ranges = std::move(newRanges);
     } else {
         for (auto& [labelset, range] : nodes->_ranges) {
-            range._first = rebaseNodeID(range._first);
+            range._first = _changeRebaser->rebaseNodeID(range._first);
         }
     }
 
@@ -72,18 +75,18 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
 
     if (_nodeOffset != 0 && _edgeOffset != 0) {
         for (auto& e : edges->_outEdges) {
-            e._nodeID = rebaseNodeID(e._nodeID);
-            e._otherID = rebaseNodeID(e._otherID);
-            e._edgeID = rebaseEdgeID(e._edgeID);
+            e._nodeID = _changeRebaser->rebaseNodeID(e._nodeID);
+            e._otherID = _changeRebaser->rebaseNodeID(e._otherID);
+            e._edgeID = _changeRebaser->rebaseEdgeID(e._edgeID);
         }
     } else if (_nodeOffset != 0) {
         for (auto& e : edges->_outEdges) {
-            e._nodeID = rebaseNodeID(e._nodeID);
-            e._otherID = rebaseNodeID(e._otherID);
+            e._nodeID = _changeRebaser->rebaseNodeID(e._nodeID);
+            e._otherID = _changeRebaser->rebaseNodeID(e._otherID);
         }
     } else if (_edgeOffset != 0) {
         for (auto& e : edges->_outEdges) {
-            e._edgeID = rebaseEdgeID(e._edgeID);
+            e._edgeID = _changeRebaser->rebaseEdgeID(e._edgeID);
         }
     }
 
@@ -175,7 +178,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         if (_nodeOffset != 0) {
             for (auto& [ptID, container] : nodeProperties->_map) {
                 for (auto& id : container->ids()) {
-                    id = rebaseNodeID(id.getValue()).getValue();
+                    id = _changeRebaser->rebaseNodeID(id.getValue()).getValue();
                 }
                 container->sort();
             }
@@ -249,7 +252,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         if (_edgeOffset != 0) {
             for (auto& [ptID, container] : edgeProperties->_map) {
                 for (auto& id : container->ids()) {
-                    id = rebaseEdgeID(id.getValue()).getValue();
+                    id = _changeRebaser->rebaseEdgeID(id.getValue()).getValue();
                 }
                 container->sort();
             }

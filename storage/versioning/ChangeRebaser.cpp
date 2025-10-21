@@ -67,10 +67,7 @@ void ChangeRebaser::initialise(const GraphReader& mainReader,
     _newNextEdgeID = mainReader.getEdgeCount();
 
     // _metadataRebaser already intialised: requires no args
-    _dataPartRebaser = DataPartRebaser(_branchTimeNextNodeID,
-                                       _branchTimeNextEdgeID,
-                                       _newNextNodeID,
-                                       _newNextEdgeID);
+    _dataPartRebaser = DataPartRebaser(this);
 }
 
 void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
@@ -90,8 +87,8 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
         commitBuilder.writeBuffer().setUnflushed();
     }
 
-    CommitWriteBufferRebaser wbRb(commitBuilder.writeBuffer());
-    wbRb.rebaseIncidentNodeIDs(_branchTimeNextNodeID, _newNextNodeID);
+    CommitWriteBufferRebaser wbRb(this, commitBuilder.writeBuffer());
+    wbRb.rebase();
 
     // These values are initially set at time of the creation of this Change, however
     // they need to be updated to point to the next ID on the current state of main.

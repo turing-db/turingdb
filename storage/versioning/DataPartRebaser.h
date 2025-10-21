@@ -8,20 +8,15 @@ namespace db {
 
 class DataPart;
 class MetadataRebaser;
+class ChangeRebaser;
 
 class DataPartRebaser {
 public:
     DataPartRebaser() = default;
     ~DataPartRebaser() = default;
 
-    DataPartRebaser(NodeID baseNxtNodeID,
-                    EdgeID baseNxtEdgeID,
-                    NodeID tgtNxtNodeID,
-                    EdgeID tgtNxtEdgeID)
-        : _baseCommitNextNodeID(baseNxtNodeID),
-        _baseCommitNextEdgeID(baseNxtEdgeID),
-        _targetCommitNextNodeID(tgtNxtNodeID),
-        _targetCommitNextEdgeID(tgtNxtEdgeID)
+    DataPartRebaser(ChangeRebaser* changeRebaser)
+        : _changeRebaser(changeRebaser)
     {
     }
 
@@ -34,28 +29,13 @@ public:
                 const DataPart& prevPart,
                 DataPart& part);
 private:
+    ChangeRebaser* _changeRebaser {nullptr};
+
     NodeID _prevFirstNodeID {0};
     EdgeID _prevFirstEdgeID {0};
+
     size_t _nodeOffset {0};
     size_t _edgeOffset {0};
-
-    NodeID _baseCommitNextNodeID {0};
-    EdgeID _baseCommitNextEdgeID {0};
-
-    NodeID _targetCommitNextNodeID {0};
-    EdgeID _targetCommitNextEdgeID {0};
-
-    NodeID rebaseNodeID(const NodeID& id) const {
-        return id >= _baseCommitNextNodeID
-                 ? id + _targetCommitNextNodeID - _baseCommitNextNodeID
-                 : id;
-    }
-
-    EdgeID rebaseEdgeID(const EdgeID& id) const {
-        return id >= _baseCommitNextEdgeID
-                 ? id + _targetCommitNextEdgeID - _baseCommitNextEdgeID
-                 : id;
-    }
 };
 
 }
