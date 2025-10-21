@@ -28,8 +28,9 @@ using namespace db;
 DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
     : _writer(&connection.getWriter()),
-      _db(db),
-      _connection(connection) {
+    _db(db),
+    _connection(connection)
+{
 }
 
 DBServerProcessor::~DBServerProcessor() {
@@ -178,28 +179,10 @@ void DBServerProcessor::load_graph() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    const fs::Path graphPath {transactionInfo.graphName};
-
-    const auto graphType = sys.getGraphFileType(graphPath);
-    if (graphType == GraphFileType::BINARY) {
-        if (!sys.loadGraph(transactionInfo.graphName)) {
-            payload.key("error");
-            payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_LOAD_ERROR));
-            return;
-        }
-    } else {
-        if (!sys.importGraph(transactionInfo.graphName, graphPath, _db.getJobSystem())) {
-            payload.key("error");
-            // Try to determine the specific error
-            if (sys.getGraph(transactionInfo.graphName)) {
-                payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_ALREADY_EXISTS));
-            } else if (sys.isGraphLoading(transactionInfo.graphName)) {
-                payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_ALREADY_LOADING));
-            } else {
-                payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_LOAD_ERROR));
-            }
-            return;
-        }
+    if (!sys.loadGraph(transactionInfo.graphName)) {
+        payload.key("error");
+        payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_LOAD_ERROR));
+        return;
     }
 }
 
