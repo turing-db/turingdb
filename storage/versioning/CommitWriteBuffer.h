@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "DataPart.h"
+#include "DataPartSpan.h"
 #include "ID.h"
 
 namespace db {
@@ -114,6 +115,8 @@ public:
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
+    void addHangingEdges(DataPartSpan dataparts);
+
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
     bool isFlushed() const { return _flushed; }
@@ -159,8 +162,6 @@ public:
     }
 
     void rebase();
-
-    bool checkConflicts(const ConflictCheckSets& conflictSet) const;
 
 private:
     EntityIDRebaser* _idRebaser {nullptr};

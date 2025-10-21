@@ -93,6 +93,8 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
         return res.get_unexpected();
     }
 
+    _commit->history().journal().finalise();
+
     return std::move(_commit);
 }
 
@@ -105,6 +107,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     if (wb.containsDeletes()) {
         // At this point, conflict checking should have already been done in @ref
         // Change::rebase, so all deletes are valid
+        wb.addHangingEdges(_commitData->allDataparts());
         wb.applyDeletions(tombstones);
     }
 

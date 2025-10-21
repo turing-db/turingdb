@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "ID.h"
+#include "EdgeContainer.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
 #include "writers/DataPartBuilder.h"
@@ -37,6 +38,26 @@ void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNod
 // Called when executing a DELETE EDGES query
 void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
     _deletedEdges.insert(newDeletedEdges.begin(), newDeletedEdges.end());
+}
+
+void CommitWriteBuffer::addHangingEdges(const DataPartSpan dataparts) {
+    for (const WeakArc<DataPart>& part : dataparts) {
+        const EdgeContainer& edgeContainer = part->edges();
+        if (edgeContainer.size() == 0) {
+            continue;
+        }
+
+        for (const auto& edgeRecord : edgeContainer.getOuts()) {
+            const NodeID src = edgeRecord._nodeID;
+            const NodeID tgt = edgeRecord._otherID;
+            const EdgeID eid = edgeRecord._edgeID;
+
+            // If the source or target are deleted, we must also delete this edge
+            if (_deletedNodes.contains(src) || _deletedNodes.contains(tgt)) {
+                addDeletedEdges({eid});
+            }
+        }
+    }
 }
 
 void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,

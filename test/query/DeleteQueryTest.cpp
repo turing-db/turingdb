@@ -165,6 +165,7 @@ TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
     tester.setChangeID(sndChange);
     tester.query("delete nodes 12")
         .execute();
+
     tester.query("change submit")
         .expectError()
         .expectErrorMessage("ERRR")
