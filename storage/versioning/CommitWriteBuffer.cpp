@@ -5,6 +5,7 @@
 #include <variant>
 #include <vector>
 
+#include "ChangeRebaser.h"
 #include "ID.h"
 #include "versioning/MetadataRebaser.h"
 #include "writers/DataPartBuilder.h"
@@ -169,22 +170,19 @@ void CommitWriteBuffer::finaliseDeletions() {
     }
 }
 
-void CommitWriteBufferRebaser::rebaseIncidentNodeIDs(NodeID entryNextNodeID,
-                                                     NodeID currentNextNodeID) {
-    const auto rebaseNodeID = [&](NodeID wbID) {
-        if (wbID >= entryNextNodeID) {
-            return wbID + currentNextNodeID - entryNextNodeID;
-        }
-        return wbID;
-    };
-
+void CommitWriteBufferRebaser::rebase() {
+    bioassert(_changeRebaser);
+    // We only need to rebase things which refer to a concrete NodeID or EdgeID.
+    // Since pending nodes don't yet have an ID, we do not need to rebase them.
+    // Since pending edges don't yet have an ID, we do not need to rebase them.
+    // We need to rebase pending edges which have a concrete NodeID as src or tgt.
     for (auto&& edge : _buffer->pendingEdges()) {
         // We only care about edges that refer to NodeIDs
         if (NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
-            edge.src = NodeID {rebaseNodeID(*oldSrcID)};
+            edge.src = NodeID {_changeRebaser->rebaseNodeID(*oldSrcID)};
         }
         if (NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
-            edge.tgt = NodeID {rebaseNodeID(*oldTgtID)};
+            edge.tgt = NodeID {_changeRebaser->rebaseNodeID(*oldTgtID)};
         }
     }
 }

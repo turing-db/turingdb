@@ -11,6 +11,7 @@
 namespace db {
 
 class CommitWriteBufferRebaser;
+class ChangeRebaser;
 class MetadataBuilder;
 class CommitJournal;
 class MetadataRebaser;
@@ -144,14 +145,16 @@ private:
 
 class CommitWriteBufferRebaser {
 public:
-    explicit CommitWriteBufferRebaser(CommitWriteBuffer& buffer)
-        : _buffer(&buffer)
-        {
-        }
+    explicit CommitWriteBufferRebaser(ChangeRebaser* changeRebaser, CommitWriteBuffer& buffer)
+        : _changeRebaser(changeRebaser),
+        _buffer(&buffer)
+    {
+    }
 
-    void rebaseIncidentNodeIDs(NodeID entryNextNodeID, NodeID currentNextNodeID);
+    void rebase();
 
 private:
+    ChangeRebaser* _changeRebaser;
     CommitWriteBuffer* _buffer;
 };
 
