@@ -1,9 +1,10 @@
 #pragma once
 
-#include "ID.h"
+#include <limits>
+
 #include "versioning/DataPartRebaser.h"
 #include "versioning/MetadataRebaser.h"
-#include <limits>
+#include "ID.h"
 
 namespace db {
 
@@ -16,7 +17,8 @@ class GraphReader;
 
 class ChangeRebaser {
 public:
-    ChangeRebaser(Change& change, const CommitData* currentHeadCommitData,
+    ChangeRebaser(Change& change,
+                  const CommitData* currentHeadCommitData,
                   const CommitHistory* currentHeadHistory);
 
     void initialise(const GraphReader& mainReader, const GraphReader& branchTimeReader);
