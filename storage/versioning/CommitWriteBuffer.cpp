@@ -171,7 +171,7 @@ void CommitWriteBuffer::finaliseDeletions() {
 }
 
 void CommitWriteBufferRebaser::rebase() {
-    bioassert(_changeRebaser);
+    bioassert(_idRebaser);
     // We only need to rebase things which refer to a concrete NodeID or EdgeID.
     // Since pending nodes don't yet have an ID, we do not need to rebase them.
     // Since pending edges don't yet have an ID, we do not need to rebase them.
@@ -179,10 +179,10 @@ void CommitWriteBufferRebaser::rebase() {
     for (auto&& edge : _buffer->pendingEdges()) {
         // We only care about edges that refer to NodeIDs
         if (NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
-            edge.src = NodeID {_changeRebaser->rebaseNodeID(*oldSrcID)};
+            edge.src = NodeID {_idRebaser->rebaseNodeID(*oldSrcID)};
         }
         if (NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
-            edge.tgt = NodeID {_changeRebaser->rebaseNodeID(*oldTgtID)};
+            edge.tgt = NodeID {_idRebaser->rebaseNodeID(*oldTgtID)};
         }
     }
 }

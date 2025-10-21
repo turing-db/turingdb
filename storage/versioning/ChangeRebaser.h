@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "versioning/DataPartRebaser.h"
+#include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
 #include "ID.h"
 
@@ -38,9 +39,8 @@ private:
     const CommitHistory* _currentHeadHistory {nullptr};
     MetadataRebaser _metadataRebaser;
     DataPartRebaser _dataPartRebaser;
+    EntityIDRebaser _entityIDRebaser;
 
-    NodeID _branchTimeNextNodeID {std::numeric_limits<NodeID>::max()};
-    EdgeID _branchTimeNextEdgeID {std::numeric_limits<EdgeID>::max()};
     NodeID _newNextNodeID {std::numeric_limits<NodeID>::max()};
     EdgeID _newNextEdgeID {std::numeric_limits<EdgeID>::max()};
 };

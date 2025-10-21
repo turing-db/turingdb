@@ -8,15 +8,15 @@ namespace db {
 
 class DataPart;
 class MetadataRebaser;
-class ChangeRebaser;
+class EntityIDRebaser;
 
 class DataPartRebaser {
 public:
     DataPartRebaser() = default;
     ~DataPartRebaser() = default;
 
-    DataPartRebaser(ChangeRebaser* changeRebaser)
-        : _changeRebaser(changeRebaser)
+    DataPartRebaser(EntityIDRebaser* idRebaser)
+        : _idRebaser(idRebaser)
     {
     }
 
@@ -29,7 +29,7 @@ public:
                 const DataPart& prevPart,
                 DataPart& part);
 private:
-    ChangeRebaser* _changeRebaser {nullptr};
+    EntityIDRebaser* _idRebaser {nullptr};
 
     NodeID _prevFirstNodeID {0};
     EdgeID _prevFirstEdgeID {0};
