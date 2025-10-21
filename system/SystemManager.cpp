@@ -151,41 +151,36 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
     }
 
     // Step 2. Validate the path. It should be within the data directory
-    fs::Path canonical = _config->getDataDir() / filePath;
-    if (auto res = canonical.toCanonical(); !res) {
-        spdlog::error(res.error().fmtMessage());
+    fs::Path absolute = _config->getDataDir() / filePath;
+    if (!absolute.isSubDirectory(_config->getDataDir())) {
+        spdlog::error("File is not within the data directory: {}", absolute.get());
         return false;
     }
 
-    if (!canonical.hasPrefix(_config->getDataDir())) {
-        spdlog::error("File is not within the data directory: {}", canonical.get());
-        return false;
-    }
-
-    if (!canonical.exists()) {
-        spdlog::error("File does not exist: {}", canonical.get());
+    if (!absolute.exists()) {
+        spdlog::error("File does not exist: {}", absolute.get());
         return false;
     }
 
     // Step 3. Determine the file type
-    const auto fileType = getGraphFileType(canonical);
+    const auto fileType = getGraphFileType(absolute);
 
     // Step 4. Load the graph
     if (!fileType) {
         // If we can not determine the file type, assume it is a Neo4j JSON graph
         // to be changed in the future
-        return loadNeo4jJsonDB(graphName, canonical, jobSystem);
+        return loadNeo4jJsonDB(graphName, absolute, jobSystem);
     }
 
     switch (*fileType) {
         case GraphFileType::GML:
-            return loadGmlDB(graphName, canonical, jobSystem);
+            return loadGmlDB(graphName, absolute, jobSystem);
         case GraphFileType::NEO4J:
-            return loadNeo4jDB(graphName, canonical, jobSystem);
+            return loadNeo4jDB(graphName, absolute, jobSystem);
         case GraphFileType::NEO4J_JSON:
-            return loadNeo4jJsonDB(graphName, canonical, jobSystem);
+            return loadNeo4jJsonDB(graphName, absolute, jobSystem);
         case GraphFileType::BINARY:
-            return loadBinaryDB(graphName, canonical, jobSystem);
+            return loadBinaryDB(graphName, absolute, jobSystem);
         default:
             return false;
     }
