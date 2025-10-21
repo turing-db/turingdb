@@ -2,6 +2,7 @@
 
 #include "ID.h"
 #include "versioning/WriteSet.h"
+
 namespace db {
 
 template <TypedInternalID IDT>

@@ -3,7 +3,9 @@
 #include "versioning/WriteSet.h"
 #include "ID.h"
 
-namespace db { class CommitWriteBuffer;
+namespace db {
+
+class CommitWriteBuffer;
 
 /**
  * @brief Stores information as to the modifications (updates/deletes) that occured in

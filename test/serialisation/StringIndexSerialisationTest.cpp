@@ -33,12 +33,6 @@ public:
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
 
-        // XXX: Need to remove the directory created in TuringTest.h SetUp() has
-        // GraphDumper requires the directory does not exist
-        if (FileUtils::exists(_workingPath.filename())) {
-            FileUtils::removeDirectory(_workingPath.filename());
-        }
-
         loadDumpLoadSimpleDb();
     }
 

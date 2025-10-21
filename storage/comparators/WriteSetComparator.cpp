@@ -15,7 +15,7 @@ template <TypedInternalID IDT>
 bool WriteSetComparator<IDT>::same(const WriteSet<IDT> setA , const WriteSet<IDT> setB) {
     if (setA.size() != setB.size()) {
         spdlog::error(
-            "Node WriteSets in CommitJournal have sizes {} and {}, respecitvely.",
+            "Node WriteSets in CommitJournal have sizes {} and {}, respectively.",
             setA.size(), setB.size());
         return false;
     }
@@ -26,7 +26,7 @@ bool WriteSetComparator<IDT>::same(const WriteSet<IDT> setA , const WriteSet<IDT
     while (itA != setA.end() && itB != setB.end()) {
         if (*itA != *itB) {
             spdlog::error(
-                "Node WriteSets have values {} and {}, respecitvely, at index {}", *itA,
+                "Node WriteSets have values {} and {}, respectively, at index {}", *itA,
                 *itB, index);
             return false;
         }

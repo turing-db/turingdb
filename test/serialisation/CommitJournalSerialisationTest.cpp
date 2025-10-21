@@ -26,23 +26,14 @@ public:
         _workingPath = fs::Path {_outDir + "/testfile"};
         _env = TuringTestEnv::create(_workingPath);
         _config.setTuringDirectory(_workingPath);
-        _db = std::make_unique<TuringDB>(&_config);
-        _db->run();
 
-        SystemManager& sysMan = _db->getSystemManager();
+        SystemManager& sysMan = _env->getDB().getSystemManager();
         _builtGraph = sysMan.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
-
-        // XXX: Need to remove the directory created in TuringTest.h SetUp() has
-        // GraphDumper requires the directory does not exist
-        if (FileUtils::exists(_workingPath.filename())) {
-            FileUtils::removeDirectory(_workingPath.filename());
-        }
     }
 
 protected:
     TuringConfig _config;
-    std::unique_ptr<TuringDB> _db;
     Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     fs::Path _workingPath;
@@ -61,7 +52,7 @@ protected:
     }
 
     ChangeID newChange() {
-        auto changeRes = _db->getSystemManager().newChange("simple");
+        auto changeRes = _env->getDB().getSystemManager().newChange("simple");
         bioassert(changeRes);
         Change* change = changeRes.value();
         ChangeID changeID = change->id();
@@ -111,17 +102,17 @@ TEST_F(CommitJournalSerialisationTest, createNodeThenLoad) {
     // Make a change to the graph
     {
         ChangeID changeID = newChange();
-        auto res1 = _db->query("create (n:NEWNODE)", "simple", &_env->getMem(),
+        auto res1 = _env->getDB().query("create (n:NEWNODE)", "simple", &_env->getMem(),
                                CommitHash::head(), changeID);
         ASSERT_TRUE(res1);
 
-        auto res2 = _db->query("change submit", "simple", &_env->getMem(),
+        auto res2 = _env->getDB().query("change submit", "simple", &_env->getMem(),
                                CommitHash::head(), changeID);
         ASSERT_TRUE(res2);
     }
 
     { // Check the commits
-        const auto txRes = _db->getSystemManager().openTransaction(
+        const auto txRes = _env->getDB().getSystemManager().openTransaction(
             "simple", CommitHash::head(), ChangeID::head());
         ASSERT_TRUE(txRes.has_value());
 
@@ -171,15 +162,15 @@ TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
     // Make a change to the graph
     {
         ChangeID changeID = newChange();
-        auto res1 = _db->query("create (n:NEWNODE)", "simple", &_env->getMem(),
+        auto res1 = _env->getDB().query("create (n:NEWNODE)", "simple", &_env->getMem(),
                                CommitHash::head(), changeID);
 
         ASSERT_TRUE(res1);
-        auto res2 = _db->query("create (n:NEWNODE)-[e:NEWEDGE]-(m:NEWNODE)", "simple",
+        auto res2 = _env->getDB().query("create (n:NEWNODE)-[e:NEWEDGE]-(m:NEWNODE)", "simple",
                                &_env->getMem(), CommitHash::head(), changeID);
         ASSERT_TRUE(res2);
 
-        auto res3 = _db->query("change submit", "simple", &_env->getMem(),
+        auto res3 = _env->getDB().query("change submit", "simple", &_env->getMem(),
                                CommitHash::head(), changeID);
         ASSERT_TRUE(res3);
     }
@@ -198,7 +189,7 @@ TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
     };
 
     { // Check the commits
-        const auto txRes = _db->getSystemManager().openTransaction(
+        const auto txRes = _env->getDB().getSystemManager().openTransaction(
             "simple", CommitHash::head(), ChangeID::head());
         ASSERT_TRUE(txRes.has_value());
 
