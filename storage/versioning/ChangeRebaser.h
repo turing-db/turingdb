@@ -21,7 +21,7 @@ public:
                   const CommitData* currentHeadCommitData,
                   const CommitHistory* currentHeadHistory);
 
-    void initialise(const GraphReader& mainReader, const GraphReader& branchTimeReader);
+    void init(const GraphReader& mainReader, const GraphReader& branchTimeReader);
 
     void checkConflicts(const ConflictCheckSets& writes);
 

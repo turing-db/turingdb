@@ -53,7 +53,7 @@ EdgeID ChangeRebaser::rebaseEdgeID(EdgeID old) {
                                         : old;
 }
 
-void ChangeRebaser::initialise(const GraphReader& mainReader,
+void ChangeRebaser::init(const GraphReader& mainReader,
                                const GraphReader& branchTimeReader) {
     bioassert(_branchTimeReader == nullptr);
     bioassert(_newMainReader == nullptr);

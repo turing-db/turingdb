@@ -90,7 +90,7 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         currentMainHead->commits().back().openTransaction().readGraph();
 
     ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
-    rebaser.initialise(mainReader, branchTimeReader);
+    rebaser.init(mainReader, branchTimeReader);
 
     // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
