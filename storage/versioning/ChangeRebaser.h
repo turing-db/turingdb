@@ -28,9 +28,6 @@ public:
 
     void rebaseCommitBuilder(CommitBuilder& commitBuilder);
 
-    NodeID rebaseNodeID(NodeID old);
-    EdgeID rebaseEdgeID(EdgeID old);
-
 private:
     Change* _change {nullptr};
     const GraphReader* _branchTimeReader {nullptr};

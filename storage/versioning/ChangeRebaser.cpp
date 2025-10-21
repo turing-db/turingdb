@@ -91,7 +91,7 @@ void ChangeRebaser::checkPendingEdgeConflicts(const ConflictCheckSets& writes,
     for (const auto& edge : pendingEdges) {
         // Check if source node was modified
         if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
-            NodeID newSrc = {rebaseNodeID(*oldSrcID)};
+            NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};
             if (writes.writtenNodes.contains(newSrc)) {
                 panic("This change attempted to create an edge with source Node {} "
                       "(which is now Node {} on main) which has been modified on main.",
@@ -100,7 +100,7 @@ void ChangeRebaser::checkPendingEdgeConflicts(const ConflictCheckSets& writes,
         }
         // Check if target node was modified
         if (const NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
-            NodeID newTgt = {rebaseNodeID(*oldTgtID)};
+            NodeID newTgt = {_entityIDRebaser.rebaseNodeID(*oldTgtID)};
             if (writes.writtenNodes.contains(newTgt)) {
                 panic("This change attempted to create an edge with target Node {} "
                       "(which is now Node {} on main) which has been modified on main.",
@@ -114,7 +114,7 @@ void ChangeRebaser::checkDeletedNodeConflicts(const ConflictCheckSets& writes,
                                               const CommitWriteBuffer& writeBuffer) {
     const auto& deletedNodes = writeBuffer.deletedNodes();
     for (const NodeID deletedNode : deletedNodes) {
-        NodeID newID = rebaseNodeID(deletedNode);
+        NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
         if (writes.writtenNodes.contains(newID)) {
             panic("This change attempted to delete Node {} "
                   "(which is now Node {} on main) which has been modified on main.",
@@ -127,7 +127,7 @@ void ChangeRebaser::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
                                               const CommitWriteBuffer& writeBuffer) {
     const auto& deletedEdges = writeBuffer.deletedEdges();
     for (const EdgeID deletedEdge : deletedEdges) {
-        EdgeID newID = rebaseEdgeID(deletedEdge);
+        EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
         if (writes.writtenEdges.contains(newID)) {
             panic("This change attempted to delete Edge {} "
                   "(which is now Edge {} on main) which has been modified on main.",

@@ -6,6 +6,7 @@
 
 #include "ID.h"
 #include "versioning/MetadataRebaser.h"
+#include "versioning/EntityIDRebaser.h"
 #include "writers/DataPartBuilder.h"
 #include "Tombstones.h"
 
