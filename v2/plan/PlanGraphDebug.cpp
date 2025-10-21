@@ -44,7 +44,7 @@ void outputDependency(std::ostream& output, const ExprDependencies::ExprDependen
 void outputPredicate(std::ostream& output, const WherePredicate* pred) {
     output << "        __has predicate__" << "\n";
 
-    for (const auto& dep : pred->getDependencies()) {
+    for (const auto& dep : pred->getDependencies().getDependencies()) {
         outputDependency(output, dep);
     }
 }

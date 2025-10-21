@@ -458,10 +458,11 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 
 void ReadStmtGenerator::placePropertyExprJoins() {
     for (const auto& prop : _tree->propConstraints()) {
+        const VarNode* var = prop->var;
 
         // Step 1: find the earliest point on the graph where to place the join
         const auto& dependencies = prop->dependencies;
-        const VarNode* var = dependencies.findCommonSuccessor(nullptr);
+        var = dependencies.findCommonSuccessor(var);
 
         if (!var) [[unlikely]] {
             throwError("Unknown error");
@@ -576,7 +577,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
             case PlanGraphTopology::PathToDependency::SameVar:
             case PlanGraphTopology::PathToDependency::BackwardPath: {
                 // Should not happen
-                throwError("Unknown error");
+                throwError("Unknown error. A branch cannot have two endpoints.");
             } break;
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {

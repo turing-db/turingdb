@@ -22,8 +22,8 @@ flowchart TD
     `"]
     5["`
         __FILTER_NODE__
-        __prop__ _b_.name
-        __dep__: a.name
+        __prop__ _b_._name_
+        __dep__ _a_._name_
     `"]
     6["`
         __JOIN__
