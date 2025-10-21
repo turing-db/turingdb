@@ -19,8 +19,6 @@ class WriteStep;
 
 class CommitWriteBuffer {
 
-struct PendingEdge;
-
 public:
     CommitWriteBuffer(CommitJournal& journal);
 
@@ -35,17 +33,24 @@ public:
      };
 
      using UntypedProperties = std::vector<UntypedProperty>;
+     using PendingNodeOffset = size_t;
+     using ExistingOrPendingNode = std::variant<NodeID, PendingNodeOffset>;
 
      struct PendingNode {
          LabelSetHandle labelsetHandle;
          UntypedProperties properties;
      };
 
-     using PendingNodeOffset = size_t;
+     struct PendingEdge {
+         ExistingOrPendingNode src;
+         ExistingOrPendingNode tgt;
+         EdgeTypeID edgeType;
+         UntypedProperties properties;
+    };
+
 
      // A node: either exists in previous commit (materialised as NodeID),
      // or to be created in this commit (materialised as PendingNodeOffset)
-     using ExistingOrPendingNode = std::variant<NodeID, PendingNodeOffset>;
      using PendingNodes = std::vector<PendingNode>;
      using PendingEdges = std::vector<PendingEdge>;
      using DeletedNodes = std::vector<NodeID>;
@@ -110,13 +115,6 @@ private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
     friend MetadataRebaser;
-
-    struct PendingEdge {
-         ExistingOrPendingNode src;
-         ExistingOrPendingNode tgt;
-         EdgeTypeID edgeType;
-         UntypedProperties properties;
-    };
 
     bool _flushed {false};
 
