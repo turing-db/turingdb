@@ -13,6 +13,16 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         return PathToDependency::SameVar;
     }
 
+    // The algorithm is split into two phases:
+    // 1. Explore the graph breadth-first from the origin node, going upward
+    // 2. Explore the graph breadth-first from all encountered nodes, going downward
+    //
+    // If target is found in phase 1: BackwardPath
+    // Else if target is found in phase 2: UndirectedPath
+    // Else: NoPath
+    //
+    // TODO: Store the PlanGraphTopology as member, to allow to reuse the queues and hash maps
+
     std::queue<const PlanGraphNode*> phase1;
     std::queue<const PlanGraphNode*> phase2;
     std::unordered_set<const PlanGraphNode*> visited;
@@ -74,9 +84,17 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
 }
 
 PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
+    // Algorithm:
+    // 1. Explore the graph breadth-first from the origin node, going downwards
+    // 2. Once we find a node that has no successors, it means it's a branch tip
+    //
+    // Note: finds only one endpoint, so in this example:  x <-- origin --> y,
+    //       the algorithm will return either x or y, although both are valid
+    //       branch tips
+
     std::queue<PlanGraphNode*> q;
 
-    // Should not be needed since we should have loops
+    // Should not be needed since we should not have loops
     std::unordered_set<PlanGraphNode*> visited;
 
     q.push(origin);
@@ -105,6 +123,13 @@ PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
 }
 
 bool PlanGraphTopology::detectLoops(const PlanGraphNode* origin) {
+    // Algorithm:
+    // 1. Explore the graph breadth-first from the origin node, going upwards
+    // 2. If we encounter origin again, we have a loop 
+    //
+    // Note: The algorithm works because is not added to the visited set at the
+    //       beginning of the algorithm
+
     std::unordered_set<PlanGraphNode*> visited;
     std::queue<PlanGraphNode*> q;
 
@@ -134,12 +159,27 @@ bool PlanGraphTopology::detectLoops(const PlanGraphNode* origin) {
 }
 
 const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode* a, const PlanGraphNode* b) {
+    // Algorithm:
+    // 1. - If a == b: The node itself can be considered "a common successor"
+    // 2. - If !a OR !b: The other node can be considered "a common successor"
+    //
+    // Beginning of the actual algo
+    //
+    // 3. - Explore the graph breadth-first from the origin node, going downwards
+    // 4.   - For each node encountered (SUCCESSOR), explore the graph
+    //        breadth-first, going upwards
+    // 5.       - While going upwards, if we find b, return SUCCESSOR
+
     if (a == b) {
         return a;
     }
 
     if (!a) {
         return b;
+    }
+
+    if (!b) {
+        return a;
     }
 
     std::unordered_set<const PlanGraphNode*> visited;
@@ -202,6 +242,12 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
 }
 
 const VarNode* PlanGraphTopology::findNextVar(const PlanGraphNode* node) {
+    // This algorithm finds the first VarNode in the graph starting from the
+    // given node, going downwards.
+    //
+    // 1. Explore the graph breadth-first from the origin node, going downwards
+    // 2. If current node is a VarNode, return it
+
     std::queue<const PlanGraphNode*> q;
     std::unordered_set<const PlanGraphNode*> visited;
 
