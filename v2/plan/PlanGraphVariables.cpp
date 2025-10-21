@@ -44,7 +44,7 @@ std::tuple<VarNode*, FilterNode*> PlanGraphVariables::getVarNodeAndFilter(const 
 
 std::tuple<VarNode*, FilterNode*> PlanGraphVariables::createVarNodeAndFilter(const VarDecl* varDecl) {
     // Create varNode/filterNode pair
-    VarNode* varNode = _tree->create<VarNode>(varDecl, _nextDeclOrder++);
+    VarNode* varNode = _tree->create<VarNode>(varDecl);
     FilterNode* filterNode = nullptr;
 
     if (varDecl->getType() == EvaluatedType::NodePattern) {

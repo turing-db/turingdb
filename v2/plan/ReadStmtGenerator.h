@@ -1,9 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <vector>
-
 #include "views/GraphView.h"
 
 namespace db {
@@ -53,7 +49,6 @@ public:
 
     void unwrapWhereExpr(const Expr*);
 
-    void incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin);
     void placeJoinsOnVars();
     void placePropertyExprJoins();
     void placePredicateJoins();

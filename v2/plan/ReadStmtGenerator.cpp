@@ -1,6 +1,5 @@
 #include "ReadStmtGenerator.h"
 
-#include <queue>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
@@ -112,9 +111,6 @@ void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
         throwError("Pattern element origin must be a node pattern", element);
     }
 
-    // Reset the decl order of variables (each branch starts at 0)
-    _variables->resetDeclOrder();
-
     VarNode* currentNode = generatePatternElementOrigin(origin);
 
     const auto& chain = element->getElementChain();
@@ -151,8 +147,6 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
 
         scan->connectOut(filter);
-    } else {
-        _variables->setNextDeclOrder(var->getDeclOrder() + 1);
     }
 
     NodeFilterNode* nodeFilter = filter->asNodeFilter();
@@ -270,7 +264,6 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
         currentNode->connectOut(filter);
     } else {
-        incrementDeclOrders(prevNode->getDeclOrder(), filter);
         currentNode->connectOut(filter);
 
         // Detect loops
@@ -388,25 +381,6 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
     // Treating other cases as a whole Where predicate
     WherePredicate* predicate = _tree->createWherePredicate(expr);
     predicate->generate(*_variables);
-}
-
-void ReadStmtGenerator::incrementDeclOrders(uint32_t declOrder, PlanGraphNode* origin) {
-    std::queue<PlanGraphNode*> q;
-    q.push(origin);
-
-    while (!q.empty()) {
-        auto* node = q.front();
-        q.pop();
-
-        if (node->getOpcode() == PlanGraphOpcode::VAR) {
-            auto* varNode = static_cast<VarNode*>(node);
-            varNode->setDeclOrder(varNode->getDeclOrder() + declOrder + 1);
-        }
-
-        for (auto* out : node->outputs()) {
-            q.push(out);
-        }
-    }
 }
 
 void ReadStmtGenerator::placeJoinsOnVars() {
