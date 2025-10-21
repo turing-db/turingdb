@@ -48,6 +48,8 @@ public:
      using ExistingOrPendingNode = std::variant<NodeID, PendingNodeOffset>;
      using PendingNodes = std::vector<PendingNode>;
      using PendingEdges = std::vector<PendingEdge>;
+     using DeletedNodes = std::vector<NodeID>;
+     using DeletedEdges = std::vector<EdgeID>;
 
      /**
       * @brief Adds a pending node to this WriteBuffer with empty properties and
@@ -74,8 +76,8 @@ public:
      const PendingNodes& pendingNodes() const { return _pendingNodes; }
      const PendingEdges& pendingEdges() const { return _pendingEdges; }
 
-     std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
-     std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
+     DeletedNodes& deletedNodes() { return _deletedNodes; }
+     DeletedEdges& deletedEdges() { return _deletedEdges; }
 
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
