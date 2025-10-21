@@ -32,12 +32,12 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _b_.name
-        __dep__: a.name
-        __prop__ _c_.name
-        __dep__: b.name
-        __prop__ _x_.name
-        __dep__: a.name
+        __prop__ _b_._name_
+        __dep__ _a_._name_
+        __prop__ _c_._name_
+        __dep__ _b_._name_
+        __prop__ _x_._name_
+        __dep__ _a_._name_
     `"]
     9["`
         __SCAN_NODES__

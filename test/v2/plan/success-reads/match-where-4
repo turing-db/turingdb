@@ -32,15 +32,15 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _b_.duration
-        __dep__: a.duration
+        __prop__ _b_._duration_
+        __dep__ _a_._duration_
         __has predicate__
-        __dep__: a.name
-        __dep__: b.name
-        __dep__: b.name
-        __dep__: c.name
-        __dep__: b.name
-        __dep__: x.name
+        __dep__ _a_._name_
+        __dep__ _b_._name_
+        __dep__ _b_._name_
+        __dep__ _c_._name_
+        __dep__ _b_._name_
+        __dep__ _x_._name_
     `"]
     9["`
         __SCAN_NODES__
@@ -150,4 +150,3 @@ flowchart TD
     29-->30
     30-->31
     31-->8
-
