@@ -105,6 +105,8 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
         rebaser.rebaseCommitBuilder(*commitBuilder);
     }
 
+    // TODO detect hanging edges again here
+
     // Update the base commit to be main
     _base = currentMainHead;
 
