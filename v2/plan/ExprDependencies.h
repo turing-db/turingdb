@@ -85,12 +85,12 @@ public:
         }
     }
 
-    const VarNode* findCommonSuccessor(const VarNode* var) const {
-        for (const auto& dep : _dependencies) {
-            const auto* successor = PlanGraphTopology::findCommonSuccessor(var, dep._var);
+    VarNode* findCommonSuccessor(PlanGraphTopology* topology, VarNode* var) const {
+        for (const ExprDependency& dep : _dependencies) {
+            PlanGraphNode* successor = topology->findCommonSuccessor(var, dep._var);
 
             if (successor) {
-                var = PlanGraphTopology::findNextVar(successor);
+                var = topology->findNextVar(successor);
 
                 if (!var) [[unlikely]] {
                     throw PlannerException("Unknown error. Cannot find a common successor");

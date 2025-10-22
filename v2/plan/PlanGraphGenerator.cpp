@@ -9,7 +9,7 @@
 
 #include "DiagnosticsManager.h"
 #include "CypherAST.h"
-#include "PlanGraph.h"
+#include "PlanGraphVariables.h"
 #include "ReadStmtGenerator.h"
 #include "WriteStmtGenerator.h"
 
@@ -35,7 +35,7 @@ PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view)
     : _ast(&ast),
     _view(view),
-    _variables(&_tree)
+    _variables(std::make_unique<PlanGraphVariables>(&_tree))
 {
 }
 
@@ -63,7 +63,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate read statements (optional)
     if (readStmts) {
-        ReadStmtGenerator readGenerator(_ast, _view, &_tree, &_variables);
+        ReadStmtGenerator readGenerator(_ast, _view, &_tree, _variables.get());
 
         for (const Stmt* stmt : readStmts->stmts()) {
             readGenerator.generateStmt(stmt);
@@ -84,7 +84,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate update statements (optional)
     if (updateStmts) {
-        WriteStmtGenerator writeGenerator(_ast, &_tree, &_variables);
+        WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get());
 
         for (const Stmt* stmt : updateStmts->stmts()) {
             currentNode = writeGenerator.generateStmt(stmt, currentNode);

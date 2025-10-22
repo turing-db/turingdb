@@ -7,29 +7,33 @@
 
 using namespace db::v2;
 
-PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const PlanGraphNode* origin,
-                                                                       const PlanGraphNode* target) {
+PlanGraphTopology::PlanGraphTopology() = default;
+
+PlanGraphTopology::~PlanGraphTopology() = default;
+
+PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraphNode* origin,
+                                                                       PlanGraphNode* target) {
+    // Finds the shortest path type between two nodes
+
     if (target == origin) {
         return PathToDependency::SameVar;
     }
 
-    // The algorithm is split into two phases:
-    // 1. Explore the graph breadth-first from the origin node, going upward
-    // 2. Explore the graph breadth-first from all encountered nodes, going downward
-    //
-    // If target is found in phase 1: BackwardPath
-    // Else if target is found in phase 2: UndirectedPath
-    // Else: NoPath
-    //
-    // TODO: Store the PlanGraphTopology as member, to allow to reuse the queues and hash maps
+    // Step 1. Clear algorithm containers
+    _q1 = {};
+    _q2 = {};
+    _visited.clear();
 
-    std::queue<const PlanGraphNode*> phase1;
-    std::queue<const PlanGraphNode*> phase2;
-    std::unordered_set<const PlanGraphNode*> visited;
+    auto& phase1 = _q1;
+    auto& phase2 = _q2;
 
+    // Step 2. Add the origin to the queue
     phase1.push(origin);
-    visited.insert(origin);
+    _visited.insert(origin);
 
+    // Step 3. Phase 1 of the algorithm
+    //    - Explore the graph breadth-first from the origin node, going upward
+    //    - If target is found: BackwardPath
     while (!phase1.empty()) {
         const PlanGraphNode* node = phase1.front();
         phase1.pop();
@@ -39,7 +43,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         }
 
         for (const auto& in : node->inputs()) {
-            if (!visited.insert(in).second) {
+            if (!_visited.insert(in).second) {
                 continue; // Already visited
             }
 
@@ -47,7 +51,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         }
 
         for (const auto& out : node->outputs()) {
-            if (!visited.insert(out).second) {
+            if (!_visited.insert(out).second) {
                 continue; // Already visited
             }
 
@@ -55,6 +59,9 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         }
     }
 
+    // Step 4. Phase 2 of the algorithm
+    //    - Explore the graph breadth-first from all nodes encountered in phase 1, going downward
+    //    - If target is found: UndirectedPath
     while (!phase2.empty()) {
         const PlanGraphNode* node = phase2.front();
         phase2.pop();
@@ -64,7 +71,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         }
 
         for (const auto& out : node->outputs()) {
-            if (!visited.insert(out).second) {
+            if (!_visited.insert(out).second) {
                 continue; // Already visited
             }
 
@@ -72,7 +79,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         }
 
         for (const auto& in : node->inputs()) {
-            if (!visited.insert(in).second) {
+            if (!_visited.insert(in).second) {
                 continue; // Already visited
             }
 
@@ -80,29 +87,29 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(const Pla
         }
     }
 
+    // If we reach here, we did not find a path
     return PathToDependency::NoPath;
 }
 
 PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
-    // Algorithm:
-    // 1. Explore the graph breadth-first from the origin node, going downwards
-    // 2. Once we find a node that has no successors, it means it's a branch tip
-    //
-    // Note: finds only one endpoint, so in this example:  x <-- origin --> y,
-    //       the algorithm will return either x or y, although both are valid
-    //       branch tips
+    // Finds the first branch tip starting from origin
 
-    std::queue<PlanGraphNode*> q;
+    // Step 1. Clear algorithm containers
+    _q1 = {};
+    _visited.clear();
 
-    // Should not be needed since we should not have loops
-    std::unordered_set<PlanGraphNode*> visited;
+    // Step 2. Add the origin to the queue
+    _q1.push(origin);
+    _visited.insert(origin);
 
-    q.push(origin);
-    visited.insert(origin);
-
-    while (!q.empty()) {
-        PlanGraphNode* node = q.front();
-        q.pop();
+    // Step 3. Explore the graph breadth-first from the origin, going downwards
+    //         Once we find a node that has no successors, it means it's a branch tip
+    //         Note: finds only one endpoint, so in this example:  x <-- origin --> y,
+    //               the algorithm will return either x or y, although both are valid
+    //               branch tips
+    while (!_q1.empty()) {
+        PlanGraphNode* node = _q1.front();
+        _q1.pop();
 
         const auto& outputs = node->outputs();
 
@@ -111,65 +118,58 @@ PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
         }
 
         for (const auto& out : node->outputs()) {
-            if (!visited.insert(out).second) {
+            if (!_visited.insert(out).second) {
                 continue; // Already visited
             }
 
-            q.push(out);
+            _q1.push(out);
         }
     }
 
-    return nullptr; // Should not happen
+    return nullptr; // Should not happen since loops are not supposed to exist
 }
 
-bool PlanGraphTopology::detectLoops(const PlanGraphNode* origin) {
-    // Algorithm:
-    // 1. Explore the graph breadth-first from the origin node, going upwards
-    // 2. If we encounter origin again, we have a loop 
-    //
-    // Note: The algorithm works because is not added to the visited set at the
-    //       beginning of the algorithm
+bool PlanGraphTopology::detectLoopsFrom(PlanGraphNode* origin) {
+    // Detects if there are loops starting from origin
 
-    std::unordered_set<PlanGraphNode*> visited;
-    std::queue<PlanGraphNode*> q;
+    // Step 1. Clear algorithm containers
+    _q1 = {};
+    _visited.clear();
 
+    // Step 2. Add the inputs of origin to the queue
     for (const auto& in : origin->inputs()) {
-        q.push(in);
+        _q1.push(in);
     }
 
-    while (!q.empty()) {
-        PlanGraphNode* node = q.front();
-        q.pop();
+    // Step 3. Explore the graph breadth-first from the inputs of origin, going upwards
+    //         If we encounter origin again, we have a loop
+    while (!_q1.empty()) {
+        PlanGraphNode* node = _q1.front();
+        _q1.pop();
 
         if (node == origin) {
             return true;
         }
 
         for (const auto& in : node->inputs()) {
-            if (!visited.insert(in).second) {
+            if (!_visited.insert(in).second) {
                 // If a neighbor is already visited, we have a loop
                 continue;
             }
 
-            q.push(in);
+            _q1.push(in);
         }
     }
 
     return false;
 }
 
-const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode* a, const PlanGraphNode* b) {
-    // Algorithm:
-    // 1. - If a == b: The node itself can be considered "a common successor"
-    // 2. - If !a OR !b: The other node can be considered "a common successor"
-    //
-    // Beginning of the actual algo
-    //
-    // 3. - Explore the graph breadth-first from the origin node, going downwards
-    // 4.   - For each node encountered (SUCCESSOR), explore the graph
-    //        breadth-first, going upwards
-    // 5.       - While going upwards, if we find b, return SUCCESSOR
+PlanGraphNode* PlanGraphTopology::findCommonSuccessor(PlanGraphNode* a, PlanGraphNode* b) {
+    // Finds the first common successor between two nodes
 
+    // Step 1. Ensure valid initial conditions,
+    //         if a == b, a (or b) can be considered "a common successor"
+    //         if !a OR !b, the other node can be considered "a common successor"
     if (a == b) {
         return a;
     }
@@ -182,21 +182,31 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
         return a;
     }
 
-    std::unordered_set<const PlanGraphNode*> visited;
-    std::queue<const PlanGraphNode*> outputs;
-    std::queue<const PlanGraphNode*> inputs;
+    // Step 2. Clear algorithm containers
+    _q1 = {};
+    _q2 = {};
+    _visited.clear();
 
+    auto& outputs = _q1;
+    auto& inputs = _q2;
+
+    // Step 3. Add a to the queue (starting point of the algorithm)
     outputs.push(a);
-    visited.insert(a);
+    _visited.insert(a);
 
+    // Step 4. Actual algo:
+    //         - Explore the graph breadth-first from a, going downwards.
+    //         - For each node encountered (SUCCESSOR), explore the graph
+    //         breadth-first, going upwards.
+    //         - While going upwards, if we find b, return SUCCESSOR
     while (!outputs.empty()) {
-        const PlanGraphNode* node = outputs.front();
+        PlanGraphNode* node = outputs.front();
         outputs.pop();
 
         inputs = {}; // Reset the input queue
 
         for (const auto& out : node->outputs()) {
-            if (!visited.insert(out).second) {
+            if (!_visited.insert(out).second) {
                 continue; // Already visited
             }
 
@@ -213,13 +223,15 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
         }
 
         for (const auto& in : node->inputs()) {
-            if (!visited.insert(in).second) {
+            if (!_visited.insert(in).second) {
                 continue; // Already visited
             }
 
             inputs.push(in);
         }
 
+        // For each input node, explore the graph breadth-first, going upwards
+        // If we find b, return node (the common successor)
         while (!inputs.empty()) {
             const PlanGraphNode* in = inputs.front();
             inputs.pop();
@@ -229,7 +241,7 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
             }
 
             for (const auto& nextIn : in->inputs()) {
-                if (!visited.insert(nextIn).second) {
+                if (!_visited.insert(nextIn).second) {
                     continue; // Already visited
                 }
 
@@ -241,33 +253,33 @@ const PlanGraphNode* PlanGraphTopology::findCommonSuccessor(const PlanGraphNode*
     return nullptr;
 }
 
-const VarNode* PlanGraphTopology::findNextVar(const PlanGraphNode* node) {
-    // This algorithm finds the first VarNode in the graph starting from the
-    // given node, going downwards.
-    //
-    // 1. Explore the graph breadth-first from the origin node, going downwards
-    // 2. If current node is a VarNode, return it
+VarNode* PlanGraphTopology::findNextVar(PlanGraphNode* node) {
+    // Finds the first VarNode in the graph starting from the given node, going downwards.
 
-    std::queue<const PlanGraphNode*> q;
-    std::unordered_set<const PlanGraphNode*> visited;
+    // Step 1. Clear algorithm containers
+    _q1 = {};
+    _visited.clear();
 
-    q.push(node);
-    visited.insert(node);
+    // Step 2. Add the origin to the queue
+    _q1.push(node);
+    _visited.insert(node);
 
-    while (!q.empty()) {
-        const PlanGraphNode* current = q.front();
-        q.pop();
+    // Step 3. Explore the graph breadth-first from the origin, going downwards
+    //         If current node is a VarNode, return it
+    while (!_q1.empty()) {
+        PlanGraphNode* current = _q1.front();
+        _q1.pop();
 
         if (current->getOpcode() == PlanGraphOpcode::VAR) {
-            return static_cast<const VarNode*>(current);
+            return static_cast<VarNode*>(current);
         }
 
         for (const auto& out : current->outputs()) {
-            if (!visited.insert(out).second) {
+            if (!_visited.insert(out).second) {
                 continue; // Already visited
             }
 
-            q.push(out);
+            _q1.push(out);
         }
     }
 

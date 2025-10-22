@@ -43,7 +43,8 @@ ReadStmtGenerator::ReadStmtGenerator(const CypherAST* ast,
     _graphView(graphView),
     _graphMetadata(graphView.metadata()),
     _tree(tree),
-    _variables(variables)
+    _variables(variables),
+    _topology(std::make_unique<PlanGraphTopology>())
 {
 }
 
@@ -155,7 +156,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
     LabelSet labelset;
 
     for (const std::string_view label : labels) {
-        const auto labelID = labelMap.get(label);
+        const std::optional<LabelID> labelID = labelMap.get(label);
         if (!labelID) {
             throwError(fmt::format("Unknown label: {}", label), origin);
         }
@@ -165,7 +166,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
     nodeFilter->addLabelConstraints(labelset);
 
     // Property constraints
-    for (const auto& constraint : exprConstraints) {
+    for (const EntityPropertyConstraint& constraint : exprConstraints) {
         const std::optional propType = propTypeMap.get(constraint._propTypeName);
         if (!propType) {
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
@@ -231,7 +232,7 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     }
 
     // Property constraints
-    for (const auto& constraint : exprConstraints) {
+    for (const EntityPropertyConstraint& constraint : exprConstraints) {
         const std::optional propType = propTypeMap.get(constraint._propTypeName);
         if (!propType) {
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
@@ -267,7 +268,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
         currentNode->connectOut(filter);
 
         // Detect loops
-        if (PlanGraphTopology::detectLoops(filter)) {
+        if (_topology->detectLoopsFrom(filter)) {
             throwError("Loop detected. This is not supported yet", target);
         }
     }
@@ -278,7 +279,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     LabelSet labelset;
 
     for (const std::string_view label : labels) {
-        const auto labelID = labelMap.get(label);
+        const std::optional<LabelID> labelID = labelMap.get(label);
         if (!labelID) {
             throwError(fmt::format("Unknown label: {}", label), target);
         }
@@ -288,7 +289,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     nodeFilter->addLabelConstraints(labelset);
 
     // Property constraints
-    for (const auto& constraint : exprConstraints) {
+    for (const EntityPropertyConstraint& constraint : exprConstraints) {
         const std::optional propType = propTypeMap.get(constraint._propTypeName);
         if (!propType) {
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
@@ -319,7 +320,7 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
         if (decl->getType() == EvaluatedType::NodePattern) {
             NodeFilterNode* nodeFilter = static_cast<NodeFilterNode*>(filter);
 
-            const auto& labels = entityTypeExpr->getTypes();
+            const SymbolChain* labels = entityTypeExpr->getTypes();
 
             if (labels) {
                 LabelSet labelset;
@@ -340,7 +341,7 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
         } else if (decl->getType() == EvaluatedType::EdgePattern) {
             EdgeFilterNode* edgeFilter = static_cast<EdgeFilterNode*>(filter);
 
-            const auto& edgeTypes = entityTypeExpr->getTypes();
+            const SymbolChain* edgeTypes = entityTypeExpr->getTypes();
 
             if (edgeTypes) {
                 if (edgeTypes->size() != 1) {
@@ -385,7 +386,7 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
 
 void ReadStmtGenerator::placeJoinsOnVars() {
     const auto createJoin = [this](PlanGraphNode* lhs, PlanGraphNode* rhs) -> PlanGraphNode* {
-        const auto path = PlanGraphTopology::getShortestPath(lhs, rhs);
+        const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(lhs, rhs);
 
         switch (path) {
             case PlanGraphTopology::PathToDependency::SameVar: {
@@ -432,11 +433,11 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 
 void ReadStmtGenerator::placePropertyExprJoins() {
     for (const auto& prop : _tree->propConstraints()) {
-        const VarNode* var = prop->var;
+        VarNode* var = prop->var;
 
         // Step 1: find the earliest point on the graph where to place the join
-        const auto& dependencies = prop->dependencies;
-        var = dependencies.findCommonSuccessor(var);
+        const ExprDependencies& dependencies = prop->dependencies;
+        var = dependencies.findCommonSuccessor(_topology.get(), var);
 
         if (!var) [[unlikely]] {
             throwError("Unknown error");
@@ -445,33 +446,33 @@ void ReadStmtGenerator::placePropertyExprJoins() {
         // Step 2: place joins
         insertDataFlowNode(var, prop->var);
 
-        for (const auto& dep : dependencies.getDependencies()) {
+        for (const ExprDependencies::ExprDependency& dep : dependencies.getDependencies()) {
             insertDataFlowNode(var, dep._var);
         }
 
         // Step 3: Place the constraint
-        auto* filter = _variables->getNodeFilter(var);
+        FilterNode* filter = _variables->getNodeFilter(var);
         filter->addPropertyConstraint(prop.get());
     }
 }
 
 void ReadStmtGenerator::placePredicateJoins() {
     for (const auto& pred : _tree->wherePredicates()) {
-        const auto& deps = pred->getDependencies();
+        const ExprDependencies& deps = pred->getDependencies();
 
         if (deps.empty()) {
             throwError("Where clauses without dependencies are not supported yet", pred->getExpr());
         }
 
         // Step 1: find the earliest point on the graph where to place the join
-        const VarNode* var = deps.findCommonSuccessor(nullptr);
+        VarNode* var = deps.findCommonSuccessor(_topology.get(), nullptr);
 
         if (!var) {
             throwError("Unknown error");
         }
 
         // Step 2: Place joins
-        for (const auto& dep : deps.getDependencies()) {
+        for (const ExprDependencies::ExprDependency& dep : deps.getDependencies()) {
             insertDataFlowNode(var, dep._var);
         }
 
@@ -545,7 +546,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     for (size_t i = 1; i < ends.size(); i++) {
         PlanGraphNode* lhsNode = ends[i];
 
-        const auto path = PlanGraphTopology::getShortestPath(rhsNode, lhsNode);
+        const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(rhsNode, lhsNode);
 
         switch (path) {
             case PlanGraphTopology::PathToDependency::SameVar:
@@ -578,9 +579,9 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     return rhsNode;
 }
 
-void ReadStmtGenerator::insertDataFlowNode(const VarNode* node, VarNode* dependency) {
+void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
     FilterNode* filter = _variables->getNodeFilter(node);
-    const auto path = PlanGraphTopology::getShortestPath(node, dependency);
+    const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(node, dependency);
 
     switch (path) {
         case PlanGraphTopology::PathToDependency::SameVar: {
@@ -599,7 +600,7 @@ void ReadStmtGenerator::insertDataFlowNode(const VarNode* node, VarNode* depende
             // If had to walk both backward and forward
             // Join
             JoinNode* join = _tree->insertBefore<JoinNode>(filter);
-            auto* depBranchTip = PlanGraphTopology::getBranchTip(dependency);
+            PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
             return;
         }
@@ -608,7 +609,7 @@ void ReadStmtGenerator::insertDataFlowNode(const VarNode* node, VarNode* depende
             // If nodes are on two different islands
             // ValueHashJoin
             JoinNode* join = _tree->insertBefore<JoinNode>(filter);
-            auto* depBranchTip = PlanGraphTopology::getBranchTip(dependency);
+            PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
             return;
         }
