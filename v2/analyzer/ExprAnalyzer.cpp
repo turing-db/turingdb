@@ -8,6 +8,7 @@
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
+#include "expr/ExprTree.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 
@@ -17,11 +18,18 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
+}
+
+void ExprAnalyzer::analyzeRootExpr(ExprTree* tree, Expr* expr) {
+    _currentTree = tree;
+    analyze(expr);
+    _currentTree = nullptr;
 }
 
 void ExprAnalyzer::analyze(Expr* expr) {
@@ -170,6 +178,7 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
         } break;
     }
 
+    _currentTree->addExpr(expr);
     expr->setType(type);
 }
 
@@ -217,6 +226,10 @@ void ExprAnalyzer::analyze(SymbolExpr* expr) {
 
     expr->setDecl(varDecl);
     expr->setType(varDecl->getType());
+
+    // By default, variable expressions cannot be evaluated at compile time
+    // TODO: We could check if the variable is actually a constexpr
+    _currentTree->setDynamic();
 }
 
 void ExprAnalyzer::analyze(LiteralExpr* expr) {
@@ -322,6 +335,8 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
 
     expr->setDecl(varDecl);
     expr->setType(type);
+
+    _currentTree->setDynamic();
 }
 
 void ExprAnalyzer::analyze(StringExpr* expr) {
@@ -352,6 +367,7 @@ void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
 
+    _currentTree->setDynamic();
     expr->setDecl(decl);
 
     if (decl->getType() == EvaluatedType::NodePattern
@@ -361,6 +377,7 @@ void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
 
     const std::string error = fmt::format("Variable '{}' is '{}'. Must be NodePattern or EdgePattern",
                                           decl->getName(), EvaluatedTypeName::value(decl->getType()));
+
     throwError(error, expr);
 }
 
@@ -422,7 +439,13 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
         // Found a valid signature
         expr->setType(signature._returnType);
 
-        // TODO: check if aggregate function, and if so, check that it's allowed in this context
+        if (signature._isAggregate) {
+            _currentTree->setAggregate();
+        }
+
+        // By default, function evaluations cannot be evaluated at compile time
+        _currentTree->setDynamic();
+
         return;
     }
 

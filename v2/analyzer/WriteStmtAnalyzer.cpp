@@ -20,6 +20,7 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
+#include "expr/ExprTree.h"
 #include "stmt/DeleteStmt.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
@@ -63,7 +64,8 @@ void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
 void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
     const ExprChain* exprs = deleteStmt->getExpressions();
     for (Expr* expr : *exprs) {
-        _exprAnalyzer->analyze(expr);
+        ExprTree* exprTree = ExprTree::create(_ast, expr);
+        _exprAnalyzer->analyzeRootExpr(exprTree, expr);
     }
 }
 
@@ -140,7 +142,8 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyze(expr);
+            ExprTree* exprTree = ExprTree::create(_ast, expr);
+            _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
@@ -201,7 +204,8 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyze(expr);
+            ExprTree* exprTree = ExprTree::create(_ast, expr);
+            _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {

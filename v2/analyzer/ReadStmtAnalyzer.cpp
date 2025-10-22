@@ -3,6 +3,7 @@
 #include "AnalyzeException.h"
 #include "ExprAnalyzer.h"
 #include "SymbolChain.h"
+#include "expr/ExprTree.h"
 #include "metadata/GraphMetadata.h"
 
 #include "DiagnosticsManager.h"
@@ -83,13 +84,15 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 
 void ReadStmtAnalyzer::analyze(OrderBy* orderBySt) {
     for (OrderByItem* item : orderBySt->getItems()) {
-        _exprAnalyzer->analyze(item->getExpr());
+        ExprTree* exprTree = ExprTree::create(_ast, item->getExpr());
+        _exprAnalyzer->analyzeRootExpr(exprTree, item->getExpr());
     }
 }
 
 void ReadStmtAnalyzer::analyze(Skip* skip) {
     Expr* expr = skip->getExpr();
-    _exprAnalyzer->analyze(expr);
+    ExprTree* exprTree = ExprTree::create(_ast, expr);
+    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("SKIP expression must be an integer", skip);
@@ -98,7 +101,8 @@ void ReadStmtAnalyzer::analyze(Skip* skip) {
 
 void ReadStmtAnalyzer::analyze(Limit* limit) {
     Expr* expr = limit->getExpr();
-    _exprAnalyzer->analyze(expr);
+    ExprTree* exprTree = ExprTree::create(_ast, expr);
+    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("LIMIT expression must be an integer", limit);
@@ -112,7 +116,8 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
 
     if (const WhereClause* where = pattern->getWhere()) {
         Expr* whereExpr = where->getExpr();
-        _exprAnalyzer->analyze(whereExpr);
+        ExprTree* exprTree = ExprTree::create(_ast, whereExpr);
+        _exprAnalyzer->analyzeRootExpr(exprTree, whereExpr);
 
         if (whereExpr->getType() != EvaluatedType::Bool) {
             throwError("WHERE expression must be a boolean", pattern);
@@ -165,7 +170,8 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyze(expr);
+            ExprTree* exprTree = ExprTree::create(_ast, expr);
+            _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (!propType) {
@@ -215,7 +221,8 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyze(expr);
+            ExprTree* exprTree = ExprTree::create(_ast, expr);
+            _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (!propType) {

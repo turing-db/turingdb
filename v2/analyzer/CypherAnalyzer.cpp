@@ -12,6 +12,7 @@
 #include "WriteStmtAnalyzer.h"
 #include "SinglePartQuery.h"
 #include "expr/Expr.h"
+#include "expr/ExprTree.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CreateStmt.h"
@@ -119,19 +120,22 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     }
 
     for (Expr* item : projection->items()) {
-        _exprAnalyzer->analyze(item);
+        ExprTree* exprTree = ExprTree::create(_ast, item);
+        _exprAnalyzer->analyzeRootExpr(exprTree, item);
     }
 }
 
 void CypherAnalyzer::analyze(OrderBy* orderBySt) {
     for (OrderByItem* item : orderBySt->getItems()) {
-        _exprAnalyzer->analyze(item->getExpr());
+        ExprTree* exprTree = ExprTree::create(_ast, item->getExpr());
+        _exprAnalyzer->analyzeRootExpr(exprTree, item->getExpr());
     }
 }
 
 void CypherAnalyzer::analyze(Skip* skipSt) {
     Expr* expr = skipSt->getExpr();
-    _exprAnalyzer->analyze(expr);
+    ExprTree* exprTree = ExprTree::create(_ast, expr);
+    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
     
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("SKIP expression must be an integer", skipSt);
@@ -140,7 +144,8 @@ void CypherAnalyzer::analyze(Skip* skipSt) {
 
 void CypherAnalyzer::analyze(Limit* limitSt) {
     Expr* expr = limitSt->getExpr();
-    _exprAnalyzer->analyze(expr);
+    ExprTree* exprTree = ExprTree::create(_ast, expr);
+    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
 
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("LIMIT expression must be an integer", limitSt);

@@ -2,7 +2,6 @@
 
 #include <string_view>
 #include <unordered_map>
-#include <vector>
 
 #include "decl/EvaluatedType.h"
 #include "metadata/PropertyType.h"
@@ -13,9 +12,11 @@ class GraphMetadata;
 }
 
 namespace db::v2 {
+
 class CypherAST;
 class DeclContext;
 class Expr;
+class ExprTree;
 class BinaryExpr;
 class UnaryExpr;
 class SymbolExpr;
@@ -38,6 +39,18 @@ public:
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
 
+    void analyzeRootExpr(ExprTree* tree, Expr* expr);
+
+    static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
+
+private:
+    const CypherAST* _ast {nullptr};
+    GraphView _graphView;
+    DeclContext* _ctxt {nullptr};
+    const GraphMetadata& _graphMetadata;
+
+    std::unordered_map<std::string_view, ValueType> _typeMap;
+
     // Expressions
     void analyze(Expr* expr);
     void analyze(BinaryExpr* expr);
@@ -49,17 +62,6 @@ public:
     void analyze(EntityTypeExpr* expr);
     void analyze(PathExpr* expr);
     void analyze(FunctionInvocationExpr* expr);
-
-    static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
-
-private:
-    const CypherAST* _ast {nullptr};
-    GraphView _graphView;
-    DeclContext* _ctxt {nullptr};
-    const GraphMetadata& _graphMetadata;
-
-    std::unordered_map<std::string_view, ValueType> _typeMap;
-    std::vector<std::string_view> _toBeCreated;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

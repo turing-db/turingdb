@@ -7,6 +7,7 @@
 #include "SymbolChain.h"
 #include "Literal.h"
 #include "QualifiedName.h"
+#include "expr/ExprTree.h"
 #include "expr/ExprChain.h"
 #include "expr/Expr.h"
 #include "Pattern.h"
@@ -61,6 +62,10 @@ CypherAST::~CypherAST() {
 
     for (Literal* literal : _literals) {
         delete literal;
+    }
+
+    for (ExprTree* tree : _exprTrees) {
+        delete tree;
     }
 
     for (Expr* expr : _expressions) {
@@ -157,6 +162,10 @@ void CypherAST::addQualifiedName(QualifiedName* name) {
 
 void CypherAST::addLiteral(Literal* literal) {
     _literals.push_back(literal);
+}
+
+void CypherAST::addExprTree(ExprTree* tree) {
+    _exprTrees.push_back(tree);
 }
 
 void CypherAST::addExprChain(ExprChain* exprChain) {

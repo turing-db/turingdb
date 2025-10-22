@@ -7,6 +7,7 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "expr/All.h"
+#include "expr/ExprTree.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -44,11 +45,11 @@ TEST_F(ExpressionTest, LiteralExpressionTest) {
     ASSERT_TRUE(stringLiteral->getLiteral()->getKind() == Literal::Kind::STRING);
     ASSERT_TRUE(charLiteral->getLiteral()->getKind() == Literal::Kind::CHAR);
 
-    _analyzer->analyze(boolLiteral);
-    _analyzer->analyze(intLiteral);
-    _analyzer->analyze(doubleLiteral);
-    _analyzer->analyze(stringLiteral);
-    _analyzer->analyze(charLiteral);
+    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, boolLiteral), boolLiteral);
+    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, intLiteral), intLiteral);
+    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, doubleLiteral), doubleLiteral);
+    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, stringLiteral), stringLiteral);
+    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, charLiteral), charLiteral);
 
     EXPECT_EQ(boolLiteral->getType(), EvaluatedType::Bool);
     EXPECT_EQ(intLiteral->getType(), EvaluatedType::Integer);
@@ -57,21 +58,21 @@ TEST_F(ExpressionTest, LiteralExpressionTest) {
     EXPECT_EQ(charLiteral->getType(), EvaluatedType::Char);
 }
 
-#define EXPECT_BINARY_ISVALID(a, op, b, eval)                       \
-    {                                                               \
-        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);           \
-        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);           \
-        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs); \
-        EXPECT_NO_THROW(_analyzer->analyze(expr));                  \
-        EXPECT_EQ(expr->getType(), eval);                           \
+#define EXPECT_BINARY_ISVALID(a, op, b, eval)                                             \
+    {                                                                                     \
+        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                                 \
+        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                                 \
+        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs);                       \
+        EXPECT_NO_THROW(_analyzer->analyzeRootExpr(ExprTree::create(&_ast, expr), expr)); \
+        EXPECT_EQ(expr->getType(), eval);                                                 \
     }
 
-#define EXPECT_BINARY_INVALID(a, op, b)                             \
-    {                                                               \
-        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);           \
-        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);           \
-        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs); \
-        EXPECT_THROW(_analyzer->analyze(expr), AnalyzeException);   \
+#define EXPECT_BINARY_INVALID(a, op, b)                                                                  \
+    {                                                                                                    \
+        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                                                \
+        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                                                \
+        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs);                                      \
+        EXPECT_THROW(_analyzer->analyzeRootExpr(ExprTree::create(&_ast, expr), expr), AnalyzeException); \
     }
 
 TEST_F(ExpressionTest, BinaryExpressionTest) {
@@ -79,8 +80,8 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     {
         LiteralExpr* lhs = LiteralExpr::create(&_ast, db::v2::StringLiteral::create(&_ast, "test"));
         LiteralExpr* rhs = LiteralExpr::create(&_ast, BoolLiteral::create(&_ast, true));
-        _analyzer->analyze(lhs);
-        _analyzer->analyze(rhs);
+        _analyzer->analyzeRootExpr(ExprTree::create(&_ast, lhs), lhs);
+        _analyzer->analyzeRootExpr(ExprTree::create(&_ast, rhs), rhs);
         TypePairBitset pair {lhs->getType(), rhs->getType()};
         ASSERT_EQ(pair, TypePairBitset(EvaluatedType::String, EvaluatedType::Bool));
         ASSERT_EQ(pair, TypePairBitset(EvaluatedType::Bool, EvaluatedType::String));
@@ -88,7 +89,6 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
         ASSERT_NE(pair, TypePairBitset(EvaluatedType::String, EvaluatedType::Integer));
         ASSERT_NE(pair, TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool));
     }
-
 
     // Or - Xor - And (Boolean operations - only bool + bool allowed)
     /// Valid
@@ -219,7 +219,6 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     // EXPECT_BINARY_INVALID(MapLiteral {/* some map */}, BinaryOperator::In, Literal {"test"});
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, DoubleLiteral::create(&_ast, 5.3));
 }
-
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
