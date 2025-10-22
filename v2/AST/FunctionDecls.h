@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string_view>
-#include <unordered_map>
+#include <map>
 
 #include "decl/EvaluatedType.h"
 
@@ -13,7 +13,7 @@ public:
         std::string_view _fullName;
         std::vector<EvaluatedType> _argumentTypes;
         EvaluatedType _returnType {};
-        bool _isAggregate {};
+        bool _isAggregate {false};
     };
 
     FunctionDecls();
@@ -26,10 +26,12 @@ public:
 
     void add(const FunctionSignature& signature);
 
-    const FunctionSignature* get(std::string_view name) const;
+    auto get(std::string_view fullName) const {
+        return _decls.equal_range(fullName);
+    }
 
 private:
-    std::unordered_map<std::string_view, FunctionSignature> _decls;
+    std::multimap<std::string_view, FunctionSignature> _decls;
 };
 
 }

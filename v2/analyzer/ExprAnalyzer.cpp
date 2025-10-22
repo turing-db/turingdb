@@ -3,6 +3,7 @@
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "CypherAST.h"
+#include "FunctionDecls.h"
 #include "FunctionInvocation.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
@@ -16,9 +17,8 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
@@ -369,8 +369,64 @@ void ExprAnalyzer::analyze(PathExpr* expr) {
 }
 
 void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
-    const FunctionInvocation* invocation = expr->getFunctionInvocation();
-    throwError("Function invocations not supported", expr);
+    const FunctionDecls* funcs = _ast->getFunctionDecls();
+    const FunctionInvocation* invoc = expr->getFunctionInvocation();
+    const std::vector<Symbol*>& names = invoc->getName()->names();
+
+    std::string name;
+
+    for (size_t i = 0; i < names.size(); i++) {
+        const Symbol* symbol = names[i];
+        name += symbol->getName();
+
+        if (i < names.size() - 1) {
+            name += ".";
+        }
+    }
+
+    const auto signatures = funcs->get(name);
+
+    // Check if there is at least one overload matching the function name
+    if (signatures.first == signatures.second) {
+        throwError(fmt::format("Function '{}' does not exist", name), expr);
+    }
+
+    const auto& requestedArgs = invoc->getArguments()->getExprs();
+
+    for (Expr* arg : requestedArgs) {
+        analyze(arg);
+    }
+
+    // For each overload, check if the argument types match
+    for (auto it = signatures.first; it != signatures.second; it++) {
+        const FunctionDecls::FunctionSignature& signature = it->second;
+
+        const auto& expectedArgs = signature._argumentTypes;
+
+        if (requestedArgs.size() != expectedArgs.size()) {
+            // Number of arguments does not match
+            continue;
+        }
+
+        const bool matchingArgs = std::equal(
+            expectedArgs.begin(), expectedArgs.end(), requestedArgs.begin(),
+            [](const EvaluatedType& expected, const Expr* arg) {
+                return arg->getType() == expected;
+            });
+
+        if (!matchingArgs) {
+            // Argument types do not match
+            continue;
+        }
+
+        // Found a valid signature
+        expr->setType(signature._returnType);
+
+        // TODO: check if aggregate function, and if so, check that it's allowed in this context
+        return;
+    }
+
+    throwError(fmt::format("Invalid arguments for function '{}'", name), expr);
 }
 
 bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {

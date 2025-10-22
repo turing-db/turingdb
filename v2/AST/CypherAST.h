@@ -131,6 +131,9 @@ public:
     DiagnosticsManager* getDiagnosticsManager() { return _diagnosticsManager; }
     const DiagnosticsManager* getDiagnosticsManager() const { return _diagnosticsManager; }
 
+    FunctionDecls* getFunctionDecls() { return _functionDecls.get(); }
+    const FunctionDecls* getFunctionDecls() const { return _functionDecls.get(); }
+
 private:
     SourceManager* _sourceManager {nullptr};
     DiagnosticsManager* _diagnosticsManager {nullptr};

@@ -4,6 +4,7 @@ set(ast_sources
     CypherError.cpp
     SourceManager.cpp
     DiagnosticsManager.cpp
+    FunctionDecls.cpp
 
     decl/DeclContext.cpp
     decl/PatternData.cpp
