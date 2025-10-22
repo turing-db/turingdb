@@ -2,8 +2,6 @@
 
 #include <string_view>
 
-#include "PlanGraphVariables.h"
-
 #include "PlanGraph.h"
 
 namespace db {
@@ -14,6 +12,7 @@ namespace db::v2 {
 
 class CypherAST;
 class PlanGraph;
+class PlanGraphVariables;
 class PropertyConstraint;
 class SinglePartQuery;
 class ReturnStmt;
@@ -33,7 +32,7 @@ private:
     const CypherAST* _ast {nullptr};
     const GraphView& _view;
     PlanGraph _tree;
-    PlanGraphVariables _variables;
+    std::unique_ptr<PlanGraphVariables> _variables;
 
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);

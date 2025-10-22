@@ -12,6 +12,7 @@ class CypherAST;
 class PlanGraph;
 class PlanGraphNode;
 class PlanGraphVariables;
+class PlanGraphTopology;
 class Stmt;
 class MatchStmt;
 class Skip;
@@ -53,7 +54,7 @@ public:
     void placePropertyExprJoins();
     void placePredicateJoins();
     PlanGraphNode* generateEndpoint();
-    void insertDataFlowNode(const VarNode* node, VarNode* dependency);
+    void insertDataFlowNode(VarNode* node, VarNode* dependency);
 
 private:
     const CypherAST* _ast {nullptr};
@@ -61,6 +62,7 @@ private:
     const GraphMetadata& _graphMetadata;
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
+    std::unique_ptr<PlanGraphTopology> _topology;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
