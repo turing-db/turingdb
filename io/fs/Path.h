@@ -35,7 +35,6 @@ public:
     [[nodiscard]] bool isSubDirectory(const Path& root) const;
     [[nodiscard]] Result<void> toCanonical() ;
 
-
     friend Path operator/(const Path& lhs, const Path& rhs) {
         std::string p = lhs._path + "/";
         p += rhs._path;

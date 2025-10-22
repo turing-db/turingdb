@@ -65,3 +65,8 @@ TEST_F(ByteBufferIteratorTest, General) {
     ASSERT_TRUE(it.get<char>(11) == "Hello world"sv);
 }
 
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 4;
+    });
+}

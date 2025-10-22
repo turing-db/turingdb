@@ -188,7 +188,7 @@ Result<void> Path::mkdir() const {
     try {
         std::filesystem::create_directories(_path);
     } catch (const std::filesystem::filesystem_error& e) {
-        return Error::result(ErrorType::CANNOT_MKDIR);
+        return Error::result(ErrorType::CANNOT_MKDIR, e.code().value());
     }
 
     return {};

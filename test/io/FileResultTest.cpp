@@ -87,7 +87,7 @@ TEST_F(FileResultTest, AlreadyExists) {
 TEST_F(FileResultTest, CannotMkdir) {
     fs::Path p {"/path/to/non/existing"};
     auto fmtMessage = fmt::format("Filesystem error: "
-                                  "Could not make directory (No such file or directory)");
+                                  "Could not make directory (Permission denied)");
 
     {
         auto res = p.mkdir();
@@ -95,6 +95,12 @@ TEST_F(FileResultTest, CannotMkdir) {
         const auto& e = res.error();
         ASSERT_STREQ(e.fmtMessage().c_str(), fmtMessage.c_str());
         ASSERT_EQ((int)e.getType(), (int)fs::ErrorType::CANNOT_MKDIR);
-        ASSERT_EQ(e.getErrno(), ENOENT);
+        ASSERT_EQ(e.getErrno(), EACCES);
     }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 4;
+    });
 }

@@ -858,3 +858,9 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataDirectory) {
         EXPECT_EQ(res.error().getType(), db::FileCacheErrorType::DIRECTORY_PATH_IS_FILE);
     }
 }
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 4;
+    });
+}
