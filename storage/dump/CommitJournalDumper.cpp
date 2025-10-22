@@ -8,7 +8,6 @@
 using namespace db;
 
 DumpResult<void> CommitJournalDumper::dump(const CommitJournal& journal) {
-
     GraphDumpHelper::writeFileHeader(_writer);
 
     { // Dump node write set
