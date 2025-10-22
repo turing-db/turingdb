@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "spdlog/spdlog.h"
 #include "views/GraphView.h"
 #include "DataPartSpan.h"
 
@@ -22,9 +23,12 @@ public:
     inline DataPartIterator getIterator() const { return _it; }
     inline DataPartIterator getEndIterator() const { return _itEnd; }
 
-    inline void next() { ++_it; }
+    inline void next() {
+        spdlog::info("Advancing");
+        ++_it;
+    }
 
-    bool isValid() const {
+    bool isNotEnd() const {
         return _it != _itEnd;
     }
 

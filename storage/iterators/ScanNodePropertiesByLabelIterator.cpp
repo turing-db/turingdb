@@ -24,7 +24,7 @@ ScanNodePropertiesByLabelIterator<T>::~ScanNodePropertiesByLabelIterator() = def
 
 template <SupportedType T>
 void ScanNodePropertiesByLabelIterator<T>::init() {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const PropertyManager& nodeProperties = part->nodeProperties();
 
@@ -76,7 +76,7 @@ void ScanNodePropertiesByLabelIterator<T>::nextValid() {
             while (!_labelsetIt.isValid()) {
                 _partIt.next();
 
-                if (!_partIt.isValid()) {
+                if (!_partIt.isNotEnd()) {
                     return;
                 }
 

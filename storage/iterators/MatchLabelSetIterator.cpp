@@ -9,7 +9,7 @@ MatchLabelSetIterator::MatchLabelSetIterator(const GraphView& view, const LabelS
     : Iterator(view), 
     _targetLabelSet(labelSet)
 {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const NodeContainer& nodes = part->nodes();
         const auto& labelsetIndexer = nodes.getLabelSetIndexer();

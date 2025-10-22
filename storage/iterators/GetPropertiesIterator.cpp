@@ -25,7 +25,7 @@ void GetPropertiesIterator<ID, T>::init() {
     //   - Loop on input node IDs and try to get the node's property
     //   - When a property is found, the iterator is initialized. Return
 
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const PropertyManager& properties = (std::is_same_v<ID, NodeID>)
                                               ? part->nodeProperties()
@@ -67,7 +67,7 @@ void GetPropertiesIterator<ID, T>::next() {
         while (_entityIt == _inputIDs->end()) {
             _partIt.next();
 
-            if (!_partIt.isValid()) {
+            if (!_partIt.isNotEnd()) {
                 // No more part, found all properties -> STOP
                 return;
             }
@@ -135,7 +135,7 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
     }
 
     _entityIt = _inputIDs->cbegin();
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const PropertyManager& properties = std::is_same_v<ID, NodeID>
                                               ? part->nodeProperties()
@@ -168,7 +168,7 @@ void GetPropertiesIteratorWithNull<ID, T>::next() {
     }
 
     Iterator::reset();
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const PropertyManager& properties = std::is_same_v<ID, NodeID>
                                               ? part->nodeProperties()
