@@ -1,6 +1,5 @@
 #pragma once
 
-#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -28,10 +27,8 @@ public:
     VarNode* findNextVar(PlanGraphNode* node);
 
 private:
-    /// Containers used by the algorithms
+    /// Visited set used by the algorithms. Clear at the beginning of each algorithm
     std::unordered_set<PlanGraphNode*> _visited;
-    std::queue<PlanGraphNode*> _q1;
-    std::queue<PlanGraphNode*> _q2;
 
     /// Cache of the common successors
     struct NodePair {

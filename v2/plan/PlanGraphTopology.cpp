@@ -19,13 +19,10 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraph
         return PathToDependency::SameVar;
     }
 
-    // Step 1. Clear algorithm containers
-    _q1 = {};
-    _q2 = {};
+    // Step 1. Setup algorithm containers
+    std::queue<PlanGraphNode*> phase1;
+    std::queue<PlanGraphNode*> phase2;
     _visited.clear();
-
-    auto& phase1 = _q1;
-    auto& phase2 = _q2;
 
     // Step 2. Add the origin to the queue
     phase1.push(origin);
@@ -94,12 +91,12 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraph
 PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
     // Finds the first branch tip starting from origin
 
-    // Step 1. Clear algorithm containers
-    _q1 = {};
+    // Step 1. Setup algorithm containers
+    std::queue<PlanGraphNode*> q;
     _visited.clear();
 
     // Step 2. Add the origin to the queue
-    _q1.push(origin);
+    q.push(origin);
     _visited.insert(origin);
 
     // Step 3. Explore the graph breadth-first from the origin, going downwards
@@ -107,9 +104,9 @@ PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
     //         Note: finds only one endpoint, so in this example:  x <-- origin --> y,
     //               the algorithm will return either x or y, although both are valid
     //               branch tips
-    while (!_q1.empty()) {
-        PlanGraphNode* node = _q1.front();
-        _q1.pop();
+    while (!q.empty()) {
+        PlanGraphNode* node = q.front();
+        q.pop();
 
         const auto& outputs = node->outputs();
 
@@ -122,7 +119,7 @@ PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
                 continue; // Already visited
             }
 
-            _q1.push(out);
+            q.push(out);
         }
     }
 
@@ -132,20 +129,20 @@ PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {
 bool PlanGraphTopology::detectLoopsFrom(PlanGraphNode* origin) {
     // Detects if there are loops starting from origin
 
-    // Step 1. Clear algorithm containers
-    _q1 = {};
+    // Step 1. Setup algorithm containers
+    std::queue<PlanGraphNode*> q;
     _visited.clear();
 
     // Step 2. Add the inputs of origin to the queue
     for (const auto& in : origin->inputs()) {
-        _q1.push(in);
+        q.push(in);
     }
 
     // Step 3. Explore the graph breadth-first from the inputs of origin, going upwards
     //         If we encounter origin again, we have a loop
-    while (!_q1.empty()) {
-        PlanGraphNode* node = _q1.front();
-        _q1.pop();
+    while (!q.empty()) {
+        PlanGraphNode* node = q.front();
+        q.pop();
 
         if (node == origin) {
             return true;
@@ -157,7 +154,7 @@ bool PlanGraphTopology::detectLoopsFrom(PlanGraphNode* origin) {
                 continue;
             }
 
-            _q1.push(in);
+            q.push(in);
         }
     }
 
@@ -190,13 +187,10 @@ PlanGraphNode* PlanGraphTopology::findCommonSuccessor(PlanGraphNode* a, PlanGrap
         return it->second;
     }
 
-    // Step 3. Clear algorithm containers
-    _q1 = {};
-    _q2 = {};
+    // Step 3. Setup algorithm containers
+    std::queue<PlanGraphNode*> outputs;
+    std::queue<PlanGraphNode*> inputs;
     _visited.clear();
-
-    auto& outputs = _q1;
-    auto& inputs = _q2;
 
     // Step 4. Add a to the queue (starting point of the algorithm)
     outputs.push(a);
@@ -273,19 +267,19 @@ PlanGraphNode* PlanGraphTopology::findCommonSuccessor(PlanGraphNode* a, PlanGrap
 VarNode* PlanGraphTopology::findNextVar(PlanGraphNode* node) {
     // Finds the first VarNode in the graph starting from the given node, going downwards.
 
-    // Step 1. Clear algorithm containers
-    _q1 = {};
+    // Step 1. Setup algorithm containers
+    std::queue<PlanGraphNode*> q;
     _visited.clear();
 
     // Step 2. Add the origin to the queue
-    _q1.push(node);
+    q.push(node);
     _visited.insert(node);
 
     // Step 3. Explore the graph breadth-first from the origin, going downwards
     //         If current node is a VarNode, return it
-    while (!_q1.empty()) {
-        PlanGraphNode* current = _q1.front();
-        _q1.pop();
+    while (!q.empty()) {
+        PlanGraphNode* current = q.front();
+        q.pop();
 
         if (current->getOpcode() == PlanGraphOpcode::VAR) {
             return static_cast<VarNode*>(current);
@@ -296,7 +290,7 @@ VarNode* PlanGraphTopology::findNextVar(PlanGraphNode* node) {
                 continue; // Already visited
             }
 
-            _q1.push(out);
+            q.push(out);
         }
     }
 
