@@ -46,7 +46,7 @@ private:
 
     std::vector<IDT> _set;
 
-    auto& getRaw() { return _set; }
+    std::vector<IDT>& getRaw() { return _set; }
 };
 
 template <TypedInternalID IDT>

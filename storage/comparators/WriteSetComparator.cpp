@@ -7,8 +7,8 @@
 using namespace db;
 
 namespace db {
-    template class WriteSetComparator<NodeID>;
-    template class WriteSetComparator<EdgeID>;
+template class WriteSetComparator<NodeID>;
+template class WriteSetComparator<EdgeID>;
 }
 
 template <TypedInternalID IDT>
