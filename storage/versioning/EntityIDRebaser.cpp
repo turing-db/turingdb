@@ -33,13 +33,13 @@ EntityIDRebaser& EntityIDRebaser::operator=(EntityIDRebaser&& other) noexcept = 
 // creation and submission. We therefore need to readjust any edges which reference a
 // NodeID which is greater than the nextNodeID at time of Change creation, as these
 // are edges between locally created nodes.
-NodeID EntityIDRebaser::rebaseNodeID(NodeID old) {
+NodeID EntityIDRebaser::rebaseNodeID(NodeID old) const {
     bioassert(_branchTimeNextNodeID <= _newNextNodeID);
     return old >= _branchTimeNextNodeID ? old + _newNextNodeID - _branchTimeNextNodeID
                                         : old;
 }
 
-EdgeID EntityIDRebaser::rebaseEdgeID(EdgeID old) {
+EdgeID EntityIDRebaser::rebaseEdgeID(EdgeID old) const {
     bioassert(_branchTimeNextEdgeID <= _newNextEdgeID);
     return old >= _branchTimeNextEdgeID ? old + _newNextEdgeID - _branchTimeNextEdgeID
                                         : old;

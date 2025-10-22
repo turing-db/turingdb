@@ -62,6 +62,7 @@ set(storage_sources
         versioning/CommitView.cpp
         versioning/CommitBuilder.cpp
         versioning/ChangeRebaser.cpp
+        versioning/ChangeConflictChecker.cpp
         versioning/MetadataRebaser.cpp
         versioning/DataPartRebaser.cpp
         versioning/EntityIDRebaser.cpp

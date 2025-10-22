@@ -26,8 +26,8 @@ public:
     EntityIDRebaser(EntityIDRebaser&& other) noexcept;
     EntityIDRebaser& operator=(EntityIDRebaser&& other) noexcept;
 
-    NodeID rebaseNodeID(NodeID old);
-    EdgeID rebaseEdgeID(EdgeID old);
+    NodeID rebaseNodeID(NodeID old) const;
+    EdgeID rebaseEdgeID(EdgeID old) const;
 
 private:
     NodeID _branchTimeNextNodeID {std::numeric_limits<NodeID>::max()};
