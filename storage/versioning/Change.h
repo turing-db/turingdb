@@ -49,6 +49,7 @@ private:
     friend ChangeAccessor;
     friend VersionController;
     friend class ChangeRebaser;
+    friend class ChangeConflictChecker;
 
     ChangeID _id;
     VersionController* _versionController {nullptr};

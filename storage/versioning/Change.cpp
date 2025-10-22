@@ -6,10 +6,8 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitHistoryRebaser.h"
-#include "versioning/CommitWriteBuffer.h"
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
-#include "versioning/WriteSet.h"
 #include "writers/DataPartBuilder.h"
 
 using namespace db;

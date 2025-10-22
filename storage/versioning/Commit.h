@@ -28,10 +28,6 @@ public:
     Commit& operator=(const Commit&) = delete;
     Commit& operator=(Commit&&) = delete;
 
-    [[nodiscard]] bool holdsData() const {
-        return _data != nullptr;
-    }
-
     [[nodiscard]] FrozenCommitTx openTransaction() const;
 
     [[nodiscard]] CommitHash hash() const { return _hash; }
