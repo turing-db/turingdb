@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Commit.h"
+#include "columns/ColumnVector.h"
 
 namespace db {
 
@@ -21,9 +22,11 @@ private:
     const EntityIDRebaser& _entityIDRebaser;
     const Commit::CommitSpan _commits;
 
+    ColumnVector<NodeID> _deletedExistingNodes;
+
     void getWritesSinceCommit(ConflictCheckSets& writes);
 
-    void checkNewEdgesIncidentToDeleted(const std::unique_ptr<Commit>& mostRecentCommit);
+    void checkNewEdgesIncidentToDeleted(const CommitData& latestCommitData);
 
     void checkPendingEdgeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
 

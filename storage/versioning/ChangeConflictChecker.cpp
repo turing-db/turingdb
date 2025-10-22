@@ -3,9 +3,11 @@
 #include "Change.h"
 #include "CommitBuilder.h"
 #include "EntityIDRebaser.h"
+#include "columns/ColumnVector.h"
 
 #include "BioAssert.h"
 #include "Panic.h"
+#include "iterators/GetOutEdgesIterator.h"
 
 using namespace db;
 
@@ -37,14 +39,28 @@ void ChangeConflictChecker::checkConflicts() {
         checkDeletedNodeConflicts(writes, writeBuffer);
         checkDeletedEdgeConflicts(writes, writeBuffer);
     }
+
+    const auto& latestCommit = _commits.back();
+    const CommitData& latestCommitData = latestCommit->data();
+    checkNewEdgesIncidentToDeleted(latestCommitData);
 }
 
-// void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(
-//     const std::unique_ptr<Commit>& mostRecentCommit) {
-//     const GraphView mostRecentView(mostRecentCommit->data());
-//     ColumnVector<NodeID> possiblyNewlyIncidentNodes;
-//     for (const NodeID nonRebasedNode : )
-// }
+void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& latestCommitData) {
+    const GraphView mostRecentView(latestCommitData);
+    GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
+    // TODO: Only check from dataparts that were created in the commit span
+    for (const EdgeRecord& edge : outEdges) {
+        for (const auto& commitBuilder : _change._commits) {
+            const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
+            if (!writeBuffer.deletedEdges().contains(edge._edgeID)) {
+                panic("An edge (with source Node {} and target Node {}) has been created "
+                      "on main. This change attempts to delete either its source or "
+                      "target, which causes a write conflict on this edge (EdgeID {}).",
+                      edge._nodeID, edge._otherID, edge._edgeID);
+            }
+        }
+    }
+}
 
 void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& writes,
                                                       const CommitWriteBuffer& writeBuffer) {
@@ -77,6 +93,11 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
     const auto& deletedNodes = writeBuffer.deletedNodes();
     for (const NodeID deletedNode : deletedNodes) {
         NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
+        // if this is a node which existed before branching, we need to note it and do a
+        // GetOutEdges to check for conflicts
+        if (deletedNode == newID) {
+            _deletedExistingNodes.push_back(newID);
+        }
         if (writes.writtenNodes.contains(newID)) {
             panic("This change attempted to delete Node {} "
                   "(which is now Node {} on main) which has been modified on main.",
