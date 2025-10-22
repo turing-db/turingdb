@@ -1,7 +1,7 @@
 #include "DataPartMerger.h"
 
 #include "DataPart.h"
-#include "DataPartBuilder.h"
+#include "writers/DataPartBuilder.h"
 #include "EdgeContainer.h"
 #include "NodeContainer.h"
 #include "versioning/CommitBuilder.h"
@@ -9,7 +9,7 @@
 #include "properties/PropertyManager.h"
 #include "reader/GraphReader.h"
 #include "ID.h"
-
+#include <iostream>
 using namespace db;
 
 struct PropertyTypeDispatcher {
@@ -35,18 +35,12 @@ struct PropertyTypeDispatcher {
     }
 };
 
-DataPartMerger::DataPartMerger(VersionController* versionController,
-               CommitBuilder* commitBuilder,
-               GraphMetadata* graphMetadata)
-    :_versionController(versionController),
-    _commitBuilder(commitBuilder),
-    _graphMetadata(graphMetadata)
+DataPartMerger::DataPartMerger(CommitBuilder* commitBuilder)
+    :_commitBuilder(commitBuilder)
 {
 }
 
-void DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) {
-    WeakArc<DataPart> dataPart = _versionController->createDataPart(0, 0);
-
+std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) const {
     const auto& graphReader = _commitBuilder->viewGraph().read();
 
     const size_t nodeCount = graphReader.getNodeCount();
@@ -60,17 +54,29 @@ void DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) {
     std::vector<LabelSetHandle>& labelSets = datapartBuilder->coreNodeLabelSets();
     labelSets.reserve(nodeCount);
     std::vector<EdgeRecord>& edges = datapartBuilder->edges();
-    edges.reserve(edgeCount);
+    edges.resize(edgeCount);
     PropertyManager& nodePropertyManager = *datapartBuilder->nodeProperties();
+    PropertyManager& edgePropertyManager = *datapartBuilder->edgeProperties();
 
+    const auto& graphMetadata = _commitBuilder->commitData().metadata();
     size_t edgeOffset = 0;
     for (const auto& dataPart : dataParts) {
         for (const auto& record : dataPart->nodes().records()) {
-            labelSets.emplace_back(_graphMetadata->labelsets().getValue(record._labelset.getID()));
+            labelSets.emplace_back(*graphMetadata.labelsets().getValue(record._labelset.getID()));
+        }
+        std::memcpy(edges.data() + edgeOffset, dataPart->edges()._outEdges.data(), (dataPart->edges().size() * sizeof(EdgeRecord)));
+        edgeOffset += dataPart->edges().size();
+
+        std::unordered_map<PropertyTypeID, size_t> _nodePropertiesSize;
+        std::unordered_map<PropertyTypeID, size_t> _edgePropertiesSize;
+
+        for (const auto& it : dataPart->nodeProperties()) {
+            _nodePropertiesSize[it.first.getValue()] += it.second->size();
         }
 
-        std::memcpy(edges.data() + edgeOffset, dataPart->edges()._outEdges.data(), dataPart->edges().size());
-        edgeOffset += dataPart->edges().size();
+        for (const auto& it : dataPart->edgeProperties()) {
+            _edgePropertiesSize[it.first.getValue()] += it.second->size();
+        }
 
         for (const auto& it : dataPart->nodeProperties()) {
 
@@ -97,10 +103,10 @@ void DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) {
                                               oldContainer.ids().end());
                 } else {
                     if (!nodePropertyManager.hasPropertyType(it.first)) {
-                        nodePropertyManager.registerPropertyType<types::Int64>(it.first);
+                        nodePropertyManager.registerPropertyType<Type>(it.first);
                     }
-                    auto& oldContainer = it.second->cast<types::Int64>();
-                    auto& newContainer = nodePropertyManager.getMutableContainer<types::Int64>(it.first);
+                    auto& oldContainer = it.second->cast<Type>();
+                    auto& newContainer = nodePropertyManager.getMutableContainer<Type>(it.first);
 
                     newContainer.values().insert(newContainer.values().end(),
                                                  oldContainer.values().begin(),
@@ -118,11 +124,11 @@ void DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) {
 
             const auto process = [&]<SupportedType Type> {
                 if constexpr (std::is_same_v<Type, types::String>) {
-                    if (!nodePropertyManager.hasPropertyType(it.first)) {
-                        nodePropertyManager.registerPropertyType<types::String>(it.first);
+                    if (!edgePropertyManager.hasPropertyType(it.first)) {
+                        edgePropertyManager.registerPropertyType<types::String>(it.first);
                     }
                     auto& oldContainer = it.second->cast<types::String>();
-                    auto& newContainer = nodePropertyManager.getMutableContainer<types::String>(it.first);
+                    auto& newContainer = edgePropertyManager.getMutableContainer<types::String>(it.first);
 
                     newContainer._values._views.insert(newContainer._values._views.end(),
                                                        oldContainer._values._views.begin(),
@@ -132,11 +138,11 @@ void DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) {
                                               oldContainer.ids().begin(),
                                               oldContainer.ids().end());
                 } else {
-                    if (!nodePropertyManager.hasPropertyType(it.first)) {
-                        nodePropertyManager.registerPropertyType<types::Int64>(it.first);
+                    if (!edgePropertyManager.hasPropertyType(it.first)) {
+                        edgePropertyManager.registerPropertyType<Type>(it.first);
                     }
-                    auto& oldContainer = it.second->cast<types::Int64>();
-                    auto& newContainer = nodePropertyManager.getMutableContainer<types::Int64>(it.first);
+                    auto& oldContainer = it.second->cast<Type>();
+                    auto& newContainer = edgePropertyManager.getMutableContainer<Type>(it.first);
 
                     newContainer.values().insert(newContainer.values().end(),
                                                  oldContainer.values().begin(),
@@ -151,5 +157,5 @@ void DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) {
         }
     }
 
-    dataPart->load(_commitBuilder->viewGraph(), jobSystem, *datapartBuilder);
+    return datapartBuilder;
 }

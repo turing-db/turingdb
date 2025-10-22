@@ -23,6 +23,7 @@ add_storage_tests(test_storage_graphwriter GraphWriterTest.cpp)
 add_storage_tests(test_storage_iterator iterators/IteratorsTest.cpp)
 add_storage_tests(test_storage_scan_nodes_iterator iterators/ScanNodesIteratorTest.cpp)
 add_storage_tests(test_storage_metadatarebaser versioning/MetadataRebaserTest.cpp)
+add_storage_tests(test_storage_datapartmerger versioning/DatapartMergerTest.cpp)
 
 add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
 
