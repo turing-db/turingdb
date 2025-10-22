@@ -14,29 +14,27 @@ PlanGraphTopology::~PlanGraphTopology() = default;
 PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraphNode* origin,
                                                                        PlanGraphNode* target) {
     // Finds the shortest path type between two nodes
-
-    if (target == origin) {
+    if (origin == target) {
         return PathToDependency::SameVar;
     }
-
+    
     // Step 1. Setup algorithm containers
-    std::queue<PlanGraphNode*> phase1;
-    std::queue<PlanGraphNode*> phase2;
+    std::queue<std::pair<PlanGraphNode*, PathToDependency>> q;
     _visited.clear();
 
     // Step 2. Add the origin to the queue
-    phase1.push(origin);
+    q.emplace(origin, PathToDependency::BackwardPath);
     _visited.insert(origin);
 
     // Step 3. Phase 1 of the algorithm
     //    - Explore the graph breadth-first from the origin node, going upward
     //    - If target is found: BackwardPath
-    while (!phase1.empty()) {
-        const PlanGraphNode* node = phase1.front();
-        phase1.pop();
+    while (!q.empty()) {
+        auto [node, path] = q.front();
+        q.pop();
 
         if (node == target) {
-            return PathToDependency::BackwardPath;
+            return path;
         }
 
         for (const auto& in : node->inputs()) {
@@ -44,7 +42,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraph
                 continue; // Already visited
             }
 
-            phase1.push(in);
+            q.emplace(in, path);
         }
 
         for (const auto& out : node->outputs()) {
@@ -52,35 +50,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraph
                 continue; // Already visited
             }
 
-            phase2.push(out);
-        }
-    }
-
-    // Step 4. Phase 2 of the algorithm
-    //    - Explore the graph breadth-first from all nodes encountered in phase 1, going downward
-    //    - If target is found: UndirectedPath
-    while (!phase2.empty()) {
-        const PlanGraphNode* node = phase2.front();
-        phase2.pop();
-
-        if (node == target) {
-            return PathToDependency::UndirectedPath;
-        }
-
-        for (const auto& out : node->outputs()) {
-            if (!_visited.insert(out).second) {
-                continue; // Already visited
-            }
-
-            phase2.push(out);
-        }
-
-        for (const auto& in : node->inputs()) {
-            if (!_visited.insert(in).second) {
-                continue; // Already visited
-            }
-
-            phase2.push(in);
+            q.emplace(out, PathToDependency::UndirectedPath);
         }
     }
 
