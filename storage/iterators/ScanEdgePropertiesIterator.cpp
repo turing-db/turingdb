@@ -11,7 +11,7 @@ template <SupportedType T>
 ScanEdgePropertiesIterator<T>::ScanEdgePropertiesIterator(const GraphView& view, PropertyTypeID propTypeID)
     : Iterator(view),
       _propTypeID(propTypeID) {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const PropertyManager& properties = _partIt.get()->edgeProperties();
         if (properties.hasPropertyType(_propTypeID)) {
             _props = properties.template all<T>(_propTypeID);
@@ -40,7 +40,7 @@ const T::Primitive& ScanEdgePropertiesIterator<T>::get() const {
 template <SupportedType T>
 bool ScanEdgePropertiesIterator<T>::nextDatapart() {
     _partIt.next();
-    return _partIt.isValid();
+    return _partIt.isNotEnd();
 }
 
 template <SupportedType T>
@@ -56,7 +56,7 @@ template <SupportedType T>
 void ScanEdgePropertiesIterator<T>::nextValid() {
     while (_propIt == _props.end()) {
         _partIt.next();
-        if (!_partIt.isValid()) {
+        if (!_partIt.isNotEnd()) {
             return;
         }
 

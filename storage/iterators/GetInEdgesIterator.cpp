@@ -26,7 +26,7 @@ void GetInEdgesIterator::reset() {
 }
 
 void GetInEdgesIterator::init() {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         _nodeIt = _inputNodeIDs->cbegin();
 
         const DataPart* part = _partIt.get();
@@ -61,7 +61,7 @@ void GetInEdgesIterator::nextValid() {
             _partIt.next();
         }
 
-        if (!_partIt.isValid()) {
+        if (!_partIt.isNotEnd()) {
             return;
         }
 

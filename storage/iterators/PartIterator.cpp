@@ -11,7 +11,7 @@ PartIterator::PartIterator(const GraphView& view)
 }
 
 void PartIterator::skipEmptyParts() {
-    for (; isValid(); next()) {
+    for (; isNotEnd(); next()) {
         const DataPart* part = get();
         if (part->getNodeCount() != 0) {
             return;

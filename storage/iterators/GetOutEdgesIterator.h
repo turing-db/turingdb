@@ -31,6 +31,8 @@ public:
         return *_edgeIt;
     }
 
+    void advancePartIterator(size_t by);
+
     GetOutEdgesIterator& operator++() {
         next();
         return *this;

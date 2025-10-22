@@ -24,7 +24,7 @@ public:
     virtual void next() = 0;
 
     virtual bool isValid() const {
-        return _partIt.isValid();
+        return _partIt.isNotEnd();
     }
 
     const PartIterator& getPartIterator() const {

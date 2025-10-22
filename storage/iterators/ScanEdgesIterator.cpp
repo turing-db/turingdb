@@ -19,7 +19,7 @@ ScanEdgesIterator::~ScanEdgesIterator() {
 }
 
 void ScanEdgesIterator::init() {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         _edges = _partIt.get()->edges().getOuts();
         _edgeIt = _edges.begin();
 
@@ -41,11 +41,25 @@ void ScanEdgesIterator::next() {
     nextValid();
 }
 
+void ScanEdgesIterator::advancePartIterator(size_t by) {
+    // Advance n dataparts forward
+    for (; by > 0 && _partIt.isNotEnd(); by--) {
+        _partIt.next();
+    }
+    // If we have not reached the end, update the _edge members
+    if (_partIt.isNotEnd()) {
+        _edges = _partIt.get()->edges().getOuts();
+        _edgeIt = _edges.begin();
+        // This datapart might have no edges. Advance again until we are at a valid part
+        nextValid();
+    }
+}
+
 void ScanEdgesIterator::nextValid() {
     while (_edgeIt == _edges.end()) {
         _partIt.next();
 
-        if (!_partIt.isValid()) {
+        if (!_partIt.isNotEnd()) {
             // No more entry
             return;
         }

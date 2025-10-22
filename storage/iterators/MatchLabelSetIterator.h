@@ -14,7 +14,7 @@ public:
     ~MatchLabelSetIterator() override;
 
     bool isValid() const override {
-        return _partIt.isValid();
+        return _partIt.isNotEnd();
     }
 
     void next() override;

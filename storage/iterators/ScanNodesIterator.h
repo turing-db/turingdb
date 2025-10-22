@@ -28,6 +28,8 @@ public:
         return *this;
     }
 
+    void advancePartIterator(size_t by);
+
     void fill(ColumnNodeIDs* column, size_t maxNodes);
 
 protected:

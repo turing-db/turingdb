@@ -26,7 +26,7 @@ void GetOutEdgesIterator::reset() {
 }
 
 void GetOutEdgesIterator::init() {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         _nodeIt = _inputNodeIDs->cbegin();
 
         const DataPart* part = _partIt.get();
@@ -49,6 +49,27 @@ void GetOutEdgesIterator::next() {
     nextValid();
 }
 
+void GetOutEdgesIterator::advancePartIterator(size_t by) {
+    // Advance n dataparts forward
+    for (; by > 0 && _partIt.isNotEnd(); by--) {
+        spdlog::info("V this advance is in the loop");
+        _partIt.next();
+    }
+    // If we have not reached the end, update the _node members
+    if (_partIt.isNotEnd()) {
+        _nodeIt = _inputNodeIDs->cbegin();
+        const DataPart* part = _partIt.get();
+        const NodeID nodeID = *_nodeIt;
+        const EdgeIndexer& indexer = part->edgeIndexer();
+
+        _edges = indexer.getNodeOutEdges(nodeID);
+        _edgeIt = _edges.begin();
+
+        // This datapart might have no nodes. Advance again until we are at a valid part
+        // nextValid();
+    }
+}
+
 void GetOutEdgesIterator::nextValid() {
     while (_edgeIt == _edges.end()) {
         // No more edges for the current node -> next node
@@ -61,7 +82,7 @@ void GetOutEdgesIterator::nextValid() {
             _partIt.next();
         }
 
-        if (!_partIt.isValid()) {
+        if (!_partIt.isNotEnd()) {
             return;
         }
 

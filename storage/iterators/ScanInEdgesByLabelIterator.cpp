@@ -20,7 +20,7 @@ ScanInEdgesByLabelIterator::~ScanInEdgesByLabelIterator() {
 }
 
 void ScanInEdgesByLabelIterator::init() {
-    for (; _partIt.isValid(); _partIt.next()) {
+    for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const auto& indexer = part->edgeIndexer().getInsByLabelSet();
         _labelsetIt = indexer.matchIterate(_labelset);

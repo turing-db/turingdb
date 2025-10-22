@@ -37,6 +37,8 @@ public:
         return *this;
     }
 
+    void advancePartIterator(size_t by);
+
     const EdgeRecord& operator*() const {
         return get();
     }

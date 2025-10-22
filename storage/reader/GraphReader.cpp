@@ -153,7 +153,7 @@ NodeView GraphReader::getNodeView(NodeID id) const {
     LabelSetHandle labelset;
 
     // Find definition of the node
-    for (; partIt.isValid(); partIt.next()) {
+    for (; partIt.isNotEnd(); partIt.next()) {
         const auto* part = partIt.get();
         const NodeContainer& nodes = part->nodes();
 
@@ -172,7 +172,7 @@ NodeView GraphReader::getNodeView(NodeID id) const {
     // Once we found the labelset of a node,
     // it means we found the definition of the node
     // We can start gathering properties and edges
-    for (; partIt.isValid(); partIt.next()) {
+    for (; partIt.isNotEnd(); partIt.next()) {
         const auto* part = partIt.get();
         const EdgeIndexer& edgeIndexer = part->edgeIndexer();
         const PropertyManager& nodeProperties = part->nodeProperties();
@@ -191,7 +191,7 @@ EdgeView GraphReader::getEdgeView(EdgeID id) const {
     const EdgeRecord* edge {nullptr};
 
     // Find definition of the edge
-    for (; partIt.isValid(); partIt.next()) {
+    for (; partIt.isNotEnd(); partIt.next()) {
         const auto* part = partIt.get();
         const EdgeContainer& edges = part->edges();
         edge = edges.tryGet(id);
@@ -211,7 +211,7 @@ EdgeView GraphReader::getEdgeView(EdgeID id) const {
     }
 
     // Once we found the edge, we can start gathering its properties
-    for (; partIt.isValid(); partIt.next()) {
+    for (; partIt.isNotEnd(); partIt.next()) {
         const auto* part = partIt.get();
         const PropertyManager& edgeProperties = part->edgeProperties();
 
