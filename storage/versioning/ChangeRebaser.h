@@ -2,6 +2,7 @@
 
 #include <limits>
 
+#include "Commit.h"
 #include "versioning/DataPartRebaser.h"
 #include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
@@ -12,7 +13,7 @@ namespace db {
 class CommitBuilder;
 class CommitData;
 class CommitHistory;
-class ConflictCheckSets;
+struct ConflictCheckSets;
 class Change;
 class GraphReader;
 
@@ -24,7 +25,7 @@ public:
 
     void init(const GraphReader& mainReader, const GraphReader& branchTimeReader);
 
-    void checkConflicts(const ConflictCheckSets& writes);
+    void checkConflicts(const Commit::CommitSpan commits);
 
     void rebaseCommitBuilder(CommitBuilder& commitBuilder);
 
@@ -37,6 +38,9 @@ private:
     MetadataRebaser _metadataRebaser;
     DataPartRebaser _dataPartRebaser;
     EntityIDRebaser _entityIDRebaser;
+
+    static void getWritesSinceCommit(const Commit::CommitSpan commits,
+                                     ConflictCheckSets& writes);
 
     void checkPendingEdgeConflicts(const ConflictCheckSets& writes,
                                    const CommitWriteBuffer& writeBuffer);

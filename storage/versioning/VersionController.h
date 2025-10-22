@@ -30,7 +30,6 @@ struct EntityIDPair {
 
 class VersionController {
 public:
-    using CommitVector = std::vector<std::unique_ptr<Commit>>;
     using CommitMap = std::unordered_map<CommitHash, size_t>;
 
     explicit VersionController(Graph* graph);
@@ -48,7 +47,7 @@ public:
     [[nodiscard]] CommitHash getHeadHash() const;
     [[nodiscard]] const Graph* getGraph() const { return _graph; }
 
-    long getCommitIndex(CommitHash hash) const;
+    ssize_t getCommitIndex(CommitHash hash) const;
 
     WeakArc<CommitData> createCommitData(CommitHash hash) {
         Profile profile("VersionController::createCommitData");
@@ -71,7 +70,7 @@ private:
     std::atomic<uint64_t> _nextChangeID {0};
 
     mutable std::mutex _mutex;
-    CommitVector _commits;
+    Commit::CommitVector _commits;
     CommitMap _offsets;
     std::unique_ptr<ArcManager<CommitData>> _dataManager;
     std::unique_ptr<ArcManager<DataPart>> _partManager;
@@ -82,11 +81,7 @@ private:
 
     [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
 
-    /**
-     * @brief Accumulates all node and edge IDs that appear in each Commit in the range
-     * [from, head]
-     */
-    [[nodiscard]] ConflictCheckSets getWritesSinceCommit(CommitHash from) const;
+    [[nodiscard]] Commit::CommitSpan getCommitsSinceCommitHash(CommitHash from) const;
 };
 
 }

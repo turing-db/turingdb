@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "ArcManager.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitData.h"
@@ -14,6 +16,9 @@ class FrozenCommitTx;
 
 class Commit {
 public:
+    using CommitVector = std::vector<std::unique_ptr<Commit>>;
+    using CommitSpan = std::span<const std::unique_ptr<Commit>>;
+
     Commit();
     Commit(VersionController* controller, const WeakArc<CommitData>& data);
     ~Commit();

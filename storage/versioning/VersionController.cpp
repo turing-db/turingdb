@@ -119,7 +119,7 @@ void VersionController::addCommit(std::unique_ptr<Commit> commit) {
     _head.store(ptr);
 }
 
-long VersionController::getCommitIndex(CommitHash hash) const {
+ssize_t VersionController::getCommitIndex(CommitHash hash) const {
     auto it = _offsets.find(hash);
 
     if (it == _offsets.end()) {
@@ -130,24 +130,18 @@ long VersionController::getCommitIndex(CommitHash hash) const {
 }
 
 // NOTE: Called within locked-context
-[[nodiscard]] ConflictCheckSets VersionController::getWritesSinceCommit(CommitHash from) const {
+Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from) const {
     // Should not be trying to check conflicts if we are not rebasing
     bioassert(from != CommitHash::head());
-    auto start = getCommitIndex(from);
-    if (start == -1) {
+    ssize_t startIndex = getCommitIndex(from);
+    if (startIndex == -1) {
         panic("Could not find Commit with hash {:x}", from.get());
     }
+    bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size());
 
-    ConflictCheckSets writes;
+    // +1 to skip the commit we branched from
+    const auto* spanStart = _commits.data() + startIndex + 1;
+    const size_t numCommitsSinceFrom = _commits.size() - (startIndex + 1);
 
-    auto commitIterator = _commits.begin() + start;
-    for (; commitIterator < _commits.end(); commitIterator++) {
-        const Commit& commit = **commitIterator;
-        const CommitJournal& journal = commit.history().journal();
-        bioassert(&journal);
-        WriteSet<NodeID>::setUnion(writes.writtenNodes, journal.nodeWriteSet());
-        WriteSet<EdgeID>::setUnion(writes.writtenEdges, journal.edgeWriteSet());
-    }
-
-    return writes;
+    return {spanStart, numCommitsSinceFrom};
 }

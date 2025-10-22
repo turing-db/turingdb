@@ -1,6 +1,7 @@
 #include "ChangeRebaser.h"
 
 #include "Change.h"
+#include "Commit.h"
 #include "CommitBuilder.h"
 #include "CommitHistory.h"
 #include "CommitHistoryRebaser.h"
@@ -84,6 +85,29 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     _currentHeadHistory = &_currentHeadCommitData->history();
 }
 
+void ChangeRebaser::getWritesSinceCommit(const Commit::CommitSpan commits,
+                                         ConflictCheckSets& writes) {
+    for (const auto& commit : commits) {
+        const CommitHistory& history = commit->history();
+        const CommitJournal& journal = history.journal();
+        bioassert(&journal);
+        WriteSet<NodeID>::setUnion(writes.writtenNodes, journal.nodeWriteSet());
+        WriteSet<EdgeID>::setUnion(writes.writtenEdges, journal.edgeWriteSet());
+    }
+}
+
+void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
+    ConflictCheckSets writes;
+    getWritesSinceCommit(commits, writes);
+
+    for (const auto& commitBuilder : _change->_commits) {
+        const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
+        checkPendingEdgeConflicts(writes, writeBuffer);
+        checkDeletedNodeConflicts(writes, writeBuffer);
+        checkDeletedEdgeConflicts(writes, writeBuffer);
+    }
+}
+
 void ChangeRebaser::checkPendingEdgeConflicts(const ConflictCheckSets& writes,
                                               const CommitWriteBuffer& writeBuffer) {
     // Check for pending edges to see if their source or target has write conflict
@@ -136,11 +160,3 @@ void ChangeRebaser::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
     }
 }
 
-void ChangeRebaser::checkConflicts(const ConflictCheckSets& writes) {
-    for (const auto& commitBuilder : _change->_commits) {
-        const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
-        checkPendingEdgeConflicts(writes, writeBuffer);
-        checkDeletedNodeConflicts(writes, writeBuffer);
-        checkDeletedEdgeConflicts(writes, writeBuffer);
-    }
-}

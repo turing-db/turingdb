@@ -94,11 +94,12 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
     rebaser.init(mainReader, branchTimeReader);
 
-    // Generate union of WriteSets since branch time
-    ConflictCheckSets writes = _versionController->getWritesSinceCommit(baseHash());
+    // Get the commits that occured on main since branch time
+    const Commit::CommitSpan commitsSinceBranch =
+        _versionController->getCommitsSinceCommitHash(baseHash());
 
     // Check the write buffer for each commit to be made for write conflicts
-    rebaser.checkConflicts(writes);
+    rebaser.checkConflicts(commitsSinceBranch);
 
     // XXX We want to detect conflicts on new hanging edges before here, so the state
     // of the change is left the same on rejection

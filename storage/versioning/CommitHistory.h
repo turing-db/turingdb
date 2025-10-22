@@ -39,7 +39,7 @@ public:
 
     void newCommitHistoryFromPrevious(const CommitHistory& previous);
 
-    CommitJournal& journal() const { return *_journal; }
+    const CommitJournal& journal() const { return *_journal; }
 
 private:
     friend class CommitHistoryBuilder;
