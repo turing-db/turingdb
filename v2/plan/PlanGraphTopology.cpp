@@ -182,7 +182,15 @@ PlanGraphNode* PlanGraphTopology::findCommonSuccessor(PlanGraphNode* a, PlanGrap
         return a;
     }
 
-    // Step 2. Clear algorithm containers
+    // Step 2. Used the cached node if it was already computed
+    const auto& pair = NodePair {a, b};
+    auto it = _commonSuccessors.find(pair);
+
+    if (it != _commonSuccessors.end()) {
+        return it->second;
+    }
+
+    // Step 3. Clear algorithm containers
     _q1 = {};
     _q2 = {};
     _visited.clear();
@@ -190,67 +198,76 @@ PlanGraphNode* PlanGraphTopology::findCommonSuccessor(PlanGraphNode* a, PlanGrap
     auto& outputs = _q1;
     auto& inputs = _q2;
 
-    // Step 3. Add a to the queue (starting point of the algorithm)
+    // Step 4. Add a to the queue (starting point of the algorithm)
     outputs.push(a);
     _visited.insert(a);
 
-    // Step 4. Actual algo:
+    // Step 5. Actual algo:
     //         - Explore the graph breadth-first from a, going downwards.
     //         - For each node encountered (SUCCESSOR), explore the graph
     //         breadth-first, going upwards.
     //         - While going upwards, if we find b, return SUCCESSOR
-    while (!outputs.empty()) {
-        PlanGraphNode* node = outputs.front();
-        outputs.pop();
+    const auto getSuccessor = [&] -> PlanGraphNode* {
+        while (!outputs.empty()) {
+            PlanGraphNode* node = outputs.front();
+            outputs.pop();
 
-        inputs = {}; // Reset the input queue
+            inputs = {}; // Reset the input queue
 
-        for (const auto& out : node->outputs()) {
-            if (!_visited.insert(out).second) {
-                continue; // Already visited
-            }
-
-            outputs.push(out);
-        }
-
-        if (node == a) {
-            // We need to follow at least one output node
-            continue;
-        }
-
-        if (node == b) {
-            return node;
-        }
-
-        for (const auto& in : node->inputs()) {
-            if (!_visited.insert(in).second) {
-                continue; // Already visited
-            }
-
-            inputs.push(in);
-        }
-
-        // For each input node, explore the graph breadth-first, going upwards
-        // If we find b, return node (the common successor)
-        while (!inputs.empty()) {
-            const PlanGraphNode* in = inputs.front();
-            inputs.pop();
-
-            if (in == b) {
-                return node; // Found the node through a common successor
-            }
-
-            for (const auto& nextIn : in->inputs()) {
-                if (!_visited.insert(nextIn).second) {
+            for (const auto& out : node->outputs()) {
+                if (!_visited.insert(out).second) {
                     continue; // Already visited
                 }
 
-                inputs.push(nextIn);
+                outputs.push(out);
+            }
+
+            if (node == a) {
+                // We need to follow at least one output node
+                continue;
+            }
+
+            if (node == b) {
+                return node;
+            }
+
+            for (const auto& in : node->inputs()) {
+                if (!_visited.insert(in).second) {
+                    continue; // Already visited
+                }
+
+                inputs.push(in);
+            }
+
+            // For each input node, explore the graph breadth-first, going upwards
+            // If we find b, return node (the common successor)
+            while (!inputs.empty()) {
+                const PlanGraphNode* in = inputs.front();
+                inputs.pop();
+
+                if (in == b) {
+                    return node; // Found the node through a common successor
+                }
+
+                for (const auto& nextIn : in->inputs()) {
+                    if (!_visited.insert(nextIn).second) {
+                        continue; // Already visited
+                    }
+
+                    inputs.push(nextIn);
+                }
             }
         }
-    }
 
-    return nullptr;
+        return nullptr;
+    };
+
+    PlanGraphNode* successor = getSuccessor();
+
+    // Step 6. Cache the result
+    _commonSuccessors[pair] = successor;
+
+    return successor;
 }
 
 VarNode* PlanGraphTopology::findNextVar(PlanGraphNode* node) {

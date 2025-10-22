@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 namespace db::v2 {
 
@@ -18,19 +19,6 @@ public:
     using VarNodeMap = std::unordered_map<const VarDecl*, VarNode*>;
     using FilterNodeMap = std::unordered_map<const VarNode*, FilterNode*>;
 
-    struct FilterNodeMapRange {
-        FilterNodeMap::const_iterator _begin;
-        FilterNodeMap::const_iterator _end;
-
-        FilterNodeMap::const_iterator begin() const {
-            return _begin;
-        }
-
-        FilterNodeMap::const_iterator end() const {
-            return _end;
-        }
-    };
-
     PlanGraphVariables(const PlanGraphVariables&) = delete;
     PlanGraphVariables(PlanGraphVariables&&) = delete;
     PlanGraphVariables& operator=(const PlanGraphVariables&) = delete;
@@ -42,17 +30,20 @@ public:
     std::tuple<VarNode*, FilterNode*> getVarNodeAndFilter(const VarDecl* varDecl);
     std::tuple<VarNode*, FilterNode*> createVarNodeAndFilter(const VarDecl* varDecl);
 
-    FilterNodeMapRange getNodeFiltersMap() {
-        return {_nodeFiltersMap.begin(), _nodeFiltersMap.end()};
-    }
+    const std::vector<VarNode*>& getVarNodes() const {
+        return _varNodes;
+    };
 
 private:
     PlanGraph* _tree {nullptr};
 
-    // Map of variable nodes
+    // List of all var nodes. Used for predictable order iteration
+    std::vector<VarNode*> _varNodes;
+
+    // Map of VerDecl -> VarNode
     VarNodeMap _varNodesMap;
 
-    // Map of node filters
+    // Map of VarNode -> Filter
     FilterNodeMap _nodeFiltersMap;
 };
 

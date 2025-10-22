@@ -406,13 +406,15 @@ void ReadStmtGenerator::placeJoinsOnVars() {
         throwError("Unknown error");
     };
 
-    for (auto [var, filter] : _variables->getNodeFiltersMap()) {
-        // Make a copy of the inputs
-        std::vector inputs = filter->inputs();
+    for (VarNode* var : _variables->getVarNodes()) {
+        FilterNode* filter = _variables->getNodeFilter(var);
 
-        if (inputs.size() <= 1) {
+        if (filter->inputs().size() <= 1) {
             continue;
         }
+
+        // Make a copy of the inputs, because the inputs vector will be modified
+        std::vector inputs = filter->inputs();
 
         PlanGraphNode* rhsNode = inputs[0];
 

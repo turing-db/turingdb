@@ -55,6 +55,7 @@ std::tuple<VarNode*, FilterNode*> PlanGraphVariables::createVarNodeAndFilter(con
         throw PlannerException("Unsupported variable type");
     }
 
+    _varNodes.push_back(varNode);
     _varNodesMap[varDecl] = varNode;
     _nodeFiltersMap[varNode] = filterNode;
 
