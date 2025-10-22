@@ -106,13 +106,7 @@ bool Path::isSubDirectory(const Path& root) const {
 }
 
 Path Path::parent() const {
-    const auto pos = _path.find_last_of('/');
-
-    if (pos == std::string::npos) {
-        return Path("");
-    }
-
-    return Path(_path.substr(0, pos));
+    return Path(std::filesystem::path(_path).parent_path().string());
 }
 
 Result<std::vector<Path>> Path::listDir() const {
@@ -191,8 +185,10 @@ Result<void> Path::mkdir() const {
         return Error::result(ErrorType::ALREADY_EXISTS);
     }
 
-    if (::mkdir(_path.c_str(), 0700) < 0) {
-        return Error::result(ErrorType::CANNOT_MKDIR, errno);
+    try {
+        std::filesystem::create_directories(_path);
+    } catch (const std::filesystem::filesystem_error& e) {
+        return Error::result(ErrorType::CANNOT_MKDIR);
     }
 
     return {};

@@ -31,7 +31,6 @@ public:
     [[nodiscard]] std::string_view filename() const;
     [[nodiscard]] std::string_view basename() const;
     [[nodiscard]] std::string_view extension() const;
-    [[nodiscard]] bool hasPrefix(const Path& prefix) const { return _path.starts_with(prefix._path); }
     [[nodiscard]] bool empty() const { return _path.empty(); }
     [[nodiscard]] bool isSubDirectory(const Path& root) const;
     [[nodiscard]] Result<void> toCanonical() ;

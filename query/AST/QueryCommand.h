@@ -313,7 +313,7 @@ public:
         return _s3File;
     }
 
-    static S3TransferCommand* create(ASTContext* ctx, Direction _transferDir, const std::string& s3URL, const std::string& localDir);
+    static S3TransferCommand* create(ASTContext* ctx, Direction transferDir, const std::string& s3URL, const std::string& localDir);
 
     Kind getKind() const override {
         return QueryCommand::Kind::S3TRANSFER_COMMAND;
