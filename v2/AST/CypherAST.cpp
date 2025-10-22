@@ -31,7 +31,16 @@ CypherAST::CypherAST(std::string_view queryString)
     _diagnosticsManager(new DiagnosticsManager(_sourceManager)),
     _functionDecls(std::make_unique<FunctionDecls>())
 {
-    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::Integer});
+    // Metadata
+    _functionDecls->add({"db.labels", std::vector<EvaluatedType> {}, EvaluatedType::String});
+    _functionDecls->add({"db.propertyTypes", std::vector<EvaluatedType> {}, EvaluatedType::Map});
+    _functionDecls->add({"db.edgeTypes", std::vector<EvaluatedType> {}, EvaluatedType::String});
+
+    // Entity patterns
+    _functionDecls->add({"edgeTypes", std::vector<EvaluatedType> {EvaluatedType::EdgePattern}, EvaluatedType::String});
+    _functionDecls->add({"labels", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::String});
+    _functionDecls->add({"keys", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::String});
+    _functionDecls->add({"keys", std::vector<EvaluatedType> {EvaluatedType::EdgePattern}, EvaluatedType::String});
 }
 
 CypherAST::~CypherAST() {
