@@ -52,13 +52,15 @@ void ChangeConflictChecker::checkConflicts() {
 }
 
 void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& latestCommitData) {
+    // If we this change has not deleted any nodes that existed on main before branch
+    // time, then no other commit onto main can have write conflicts
     if (_deletedExistingNodes.empty()) {
         return;
     }
 
     const GraphView mostRecentView(latestCommitData);
-    // We only care about dataparts that have been created since we branched
-    // Work out how many dataparts are on the tip of main
+    // We only care about dataparts that have been created since we branched.
+    // Work out how many dataparts are on the tip of main.
     const size_t totalDPsOnMain = latestCommitData.allDataparts().size();
 
     // Helper to accumulate datapart counts from each commit
@@ -74,6 +76,13 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 
     bioassert(totalDPsOnMain >= numDPsCreatedSinceBranch);
 
+    // Check the case where commits were added onto main since this change branched, but
+    // no dataparts were created. This can happen if a commit only deletes nodes/edges, as
+    // this alters the tombstones, but does not create a DP
+    if (numDPsCreatedSinceBranch == 0) {
+        return;
+    }
+
     const size_t numDataPartsToCheck = totalDPsOnMain - numDPsCreatedSinceBranch;
     const size_t startingIndex = totalDPsOnMain - numDataPartsToCheck;
 
@@ -81,6 +90,13 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
     {
         GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
         GetOutEdgesIterator outEdgesIt = outEdges.begin();
+        // Skip all dataparts we have already seen, there cannot be conflicts here
+        // Try and advance to the first datapart that has been added since we branched
+        // If any dataparts in the range [startingIndex, end] contain out edges from a
+        // deleted node, @ref outEdgesIt will be valid. If there are such edges, then a
+        // commit on main has created an edge from a node this change is trying to delete:
+        // write conflict. Otherwise, @ref goToPart will advance to the `end` part
+        // iterator, and @ref outEdgesIt.isValid() will return false.
         outEdgesIt.goToPart(startingIndex);
         if (outEdgesIt.isValid()) {
             panic("Submit rejected: Commits on main have created an edge incident to a "
@@ -92,6 +108,13 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
     {
         GetInEdgesRange inEdges {mostRecentView, &_deletedExistingNodes};
         GetInEdgesIterator inEdgesIt = inEdges.begin();
+        // Skip all dataparts we have already seen, there cannot be conflicts here
+        // Try and advance to the first datapart that has been added since we branched
+        // If any dataparts in the range [startingIndex, end] contain in edges from a
+        // deleted node, @ref inEdgesIt will be valid. If there are such edges, then a
+        // commit on main has created an edge from a node this change is trying to delete:
+        // write conflict. Otherwise, @ref goToPart will advance to the `end` part
+        // iterator, and @ref inEdgesIt.isValid() will return false.
         inEdgesIt.goToPart(startingIndex);
         if (inEdgesIt.isValid()) {
             panic("Submit rejected: Commits on main have created an edge incident to a "
@@ -131,8 +154,8 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
     const auto& deletedNodes = writeBuffer.deletedNodes();
     for (const NodeID deletedNode : deletedNodes) {
         NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
-        // if this is a node which existed before branching, we need to note it and do a
-        // GetOutEdges to check for conflicts
+        // If this is a node which existed before branching, we need to note it and do a
+        // GetOut/InEdges to check for conflicts
         if (deletedNode == newID) {
             _deletedExistingNodes.push_back(newID);
         }

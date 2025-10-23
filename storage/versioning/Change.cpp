@@ -1,14 +1,14 @@
 #include "Change.h"
 
-#include "reader/GraphReader.h"
 #include <range/v3/view/enumerate.hpp>
-#include "versioning/ChangeRebaser.h"
-#include "versioning/Commit.h"
-#include "versioning/CommitBuilder.h"
-#include "versioning/CommitHistoryRebaser.h"
-#include "versioning/VersionController.h"
-#include "versioning/Transaction.h"
+
+#include "VersionController.h"
+#include "ChangeRebaser.h"
+#include "Commit.h"
+#include "CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
+#include "reader/GraphReader.h"
+#include "Transaction.h"
 
 using namespace db;
 
