@@ -24,7 +24,7 @@ public:
     [[nodiscard]] static std::unique_ptr<CommitJournal> emptyJournal();
 
     void clear();
-    bool empty();
+    bool empty() const;
 
     void addWrittenNode(NodeID node);
     void addWrittenEdge(EdgeID edge);
@@ -42,9 +42,6 @@ public:
 
     const NodeWriteSet& nodeWriteSet() const { return _nodeWriteSet; }
     const EdgeWriteSet& edgeWriteSet() const { return _edgeWriteSet; }
-
-    auto& nodeWriteSet() const { return _nodeWriteSet; }
-    auto& edgeWriteSet() const { return _edgeWriteSet; }
 
     void finalise();
 

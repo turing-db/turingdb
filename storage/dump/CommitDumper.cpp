@@ -111,7 +111,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
             return DumpError::result(DumpErrorType::CANNOT_OPEN_JOURNAL, writerRes.error());
         }
 
-        CommitJournal& journal = commit.history().journal();
+        const CommitJournal& journal = commit.history().journal();
 
         CommitJournalDumper dumper(writerRes.value());
         if (auto res = dumper.dump(journal); !res) {

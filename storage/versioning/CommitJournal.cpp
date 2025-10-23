@@ -14,7 +14,7 @@ void CommitJournal::clear() {
     _edgeWriteSet.clear();
 }
 
-bool CommitJournal::empty() {
+bool CommitJournal::empty() const {
     return _nodeWriteSet.empty() && _nodeWriteSet.empty();
 }
 
