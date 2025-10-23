@@ -4,8 +4,11 @@
 #include <variant>
 #include <vector>
 
+#include "Graph.h"
 #include "ID.h"
-#include "EdgeContainer.h"
+#include "columns/ColumnVector.h"
+#include "iterators/GetInEdgesIterator.h"
+#include "iterators/GetOutEdgesIterator.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
 #include "writers/DataPartBuilder.h"
@@ -40,22 +43,26 @@ void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdg
     _deletedEdges.insert(newDeletedEdges.begin(), newDeletedEdges.end());
 }
 
-void CommitWriteBuffer::addHangingEdges(const DataPartSpan dataparts) {
-    for (const WeakArc<DataPart>& part : dataparts) {
-        const EdgeContainer& edgeContainer = part->edges();
-        if (edgeContainer.size() == 0) {
-            continue;
+void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
+    ColumnVector<NodeID> deletedNodesCol;
+    deletedNodesCol.reserve(_deletedNodes.size());
+
+    // TODO: Is there a better way to construct this columns?
+    for (const NodeID deletedNode : _deletedNodes) {
+        deletedNodesCol.push_back(deletedNode);
+    }
+
+    { // Add the out edges of all deleted nodes
+        GetOutEdgesRange outEdgesRg {view, &deletedNodesCol};
+        for (const EdgeRecord& record : outEdgesRg) {
+            _deletedEdges.insert(record._edgeID);
         }
+    }
 
-        for (const auto& edgeRecord : edgeContainer.getOuts()) {
-            const NodeID src = edgeRecord._nodeID;
-            const NodeID tgt = edgeRecord._otherID;
-            const EdgeID eid = edgeRecord._edgeID;
-
-            // If the source or target are deleted, we must also delete this edge
-            if (_deletedNodes.contains(src) || _deletedNodes.contains(tgt)) {
-                addDeletedEdges({eid});
-            }
+    { // Add the in edges of all deleted nodes
+        GetInEdgesRange inEdgesRg {view, &deletedNodesCol};
+        for (const EdgeRecord& record : inEdgesRg) {
+            _deletedEdges.insert(record._edgeID);
         }
     }
 }
