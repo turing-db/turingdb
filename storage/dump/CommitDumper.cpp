@@ -7,10 +7,12 @@
 #include "LabelMapDumper.h"
 #include "LabelSetMapDumper.h"
 #include "EdgeTypeMapDumper.h"
+#include "Path.h"
 #include "PropertyTypeMapDumper.h"
 #include "CommitJournalDumper.h"
 #include "DumpConfig.h"
 
+#include "dump/TombstonesDumper.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitJournal.h"
 
@@ -117,6 +119,25 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
         if (auto res = dumper.dump(journal); !res) {
             return res;
         }
+    }
+
+    // Dumping tombstones
+    {
+        Profile profile {"CommitDumper::dump <tombstones>"};
+        const fs::Path tombstonesPath = path / "tombstones";
+
+        auto writerRes = fs::FilePageWriter::open(tombstonesPath, DumpConfig::PAGE_SIZE);
+        if (!writerRes) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_TOMBSTONES, writerRes.error());
+        }
+
+        const Tombstones& tombstones = commit.data().tombstones();
+
+        TombstonesDumper dumper(writerRes.value());
+        if (auto res = dumper.dump(tombstones); !res) {
+            return res;
+        }
+        
     }
 
     for (const auto& [i, part] : commit.data().commitDataparts() | rv::enumerate) {
