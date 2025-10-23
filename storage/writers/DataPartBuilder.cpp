@@ -2,8 +2,6 @@
 
 #include "Graph.h"
 #include "ID.h"
-#include "views/GraphView.h"
-#include "reader/GraphReader.h"
 #include "properties/PropertyManager.h"
 #include "writers/MetadataBuilder.h"
 

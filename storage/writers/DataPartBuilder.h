@@ -32,8 +32,8 @@ public:
 
     [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(
         MetadataBuilder& metadata,
-        size_t firstNodeId,
-        size_t firstEdgeId,
+        size_t nodeCount,
+        size_t edgeCount,
         size_t partIndex);
 
     NodeID addNode(const LabelSetHandle& labelset);

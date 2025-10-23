@@ -29,7 +29,7 @@ struct PropertyTypeDispatcher {
                 return executor.template operator()<types::String>();
             case ValueType::_SIZE:
             case ValueType::Invalid: {
-                // throw PlannerException("Unsupported property type");
+                throw TuringException("Unsupported property type");
             }
         }
     }
