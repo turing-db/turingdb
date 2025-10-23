@@ -49,7 +49,13 @@ void GetOutEdgesIterator::next() {
     nextValid();
 }
 
+void GetOutEdgesIterator::goToPart(size_t partIdx) {
+    Iterator::reset();
+    advancePartIterator(partIdx);
+}
+
 void GetOutEdgesIterator::advancePartIterator(size_t by) {
+    _partIt.getIterator();
     // Advance n dataparts forward
     for (; by > 0 && _partIt.isNotEnd(); by--) {
         spdlog::info("V this advance is in the loop");
@@ -66,7 +72,7 @@ void GetOutEdgesIterator::advancePartIterator(size_t by) {
         _edgeIt = _edges.begin();
 
         // This datapart might have no nodes. Advance again until we are at a valid part
-        // nextValid();
+        nextValid();
     }
 }
 

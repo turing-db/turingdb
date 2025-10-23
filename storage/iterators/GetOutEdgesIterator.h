@@ -31,7 +31,7 @@ public:
         return *_edgeIt;
     }
 
-    void advancePartIterator(size_t by);
+    void goToPart(size_t partIdx);
 
     GetOutEdgesIterator& operator++() {
         next();
@@ -51,6 +51,7 @@ protected:
 
     void init();
     void nextValid();
+    void advancePartIterator(size_t by);
 };
 
 class GetOutEdgesChunkWriter : public GetOutEdgesIterator {
