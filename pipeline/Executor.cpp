@@ -10,8 +10,8 @@
 
 using namespace db;
 
-using DeleteNodesStep = DeleteStep<NodeID>;
-using DeleteEdgesStep = DeleteStep<EdgeID>;
+using DeleteNodesStep = DeleteStep<NodeID>::DeleteNodesStep;
+using DeleteEdgesStep = DeleteStep<EdgeID>::DeleteEdgesStep;
 
 Executor::Executor() 
 {
