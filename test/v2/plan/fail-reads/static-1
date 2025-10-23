@@ -1,0 +1,10 @@
+/// QUERY
+MATCH (n) RETURN n LIMIT n.duration
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) RETURN n LIMIT n.duration
+       |                    ^^^^^^^^^^^^^^^^
+-------* LIMIT expression must be a value that can be evaluated at compile time
+

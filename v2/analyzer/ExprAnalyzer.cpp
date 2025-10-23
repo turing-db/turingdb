@@ -432,6 +432,7 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
 
     bool isDynamic = false;
     bool isAggregate = false;
+
     for (Expr* arg : requestedArgs) {
         analyze(arg);
 

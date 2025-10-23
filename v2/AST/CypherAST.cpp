@@ -41,6 +41,24 @@ CypherAST::CypherAST(std::string_view queryString)
     _functionDecls->add({"labels", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::String});
     _functionDecls->add({"keys", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::String});
     _functionDecls->add({"keys", std::vector<EvaluatedType> {EvaluatedType::EdgePattern}, EvaluatedType::String});
+
+    // Aggregate functions
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::NodePattern}, EvaluatedType::Integer, true});
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::EdgePattern}, EvaluatedType::Integer, true});
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::Integer}, EvaluatedType::Integer, true});
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::Double}, EvaluatedType::Integer, true});
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::String}, EvaluatedType::Integer, true});
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::Char}, EvaluatedType::Integer, true});
+    _functionDecls->add({"count", std::vector<EvaluatedType> {EvaluatedType::Bool}, EvaluatedType::Integer, true});
+
+    _functionDecls->add({"min", std::vector<EvaluatedType> {EvaluatedType::Integer}, EvaluatedType::Integer, true});
+    _functionDecls->add({"min", std::vector<EvaluatedType> {EvaluatedType::Double}, EvaluatedType::Double, true});
+
+    _functionDecls->add({"max", std::vector<EvaluatedType> {EvaluatedType::Integer}, EvaluatedType::Integer, true});
+    _functionDecls->add({"max", std::vector<EvaluatedType> {EvaluatedType::Double}, EvaluatedType::Double, true});
+
+    _functionDecls->add({"avg", std::vector<EvaluatedType> {EvaluatedType::Integer}, EvaluatedType::Double, true});
+    _functionDecls->add({"avg", std::vector<EvaluatedType> {EvaluatedType::Double}, EvaluatedType::Double, true});
 }
 
 CypherAST::~CypherAST() {

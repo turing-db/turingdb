@@ -1,0 +1,10 @@
+/// QUERY
+MATCH (n { name: count(n.duration)}) RETURN n
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n { name: count(n.duration)}) RETURN n
+       |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------* Invalid use of aggregate expression in this context
+

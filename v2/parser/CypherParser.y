@@ -189,6 +189,7 @@
 %type<db::v2::Symbol*> name
 %type<db::v2::Symbol*> reservedWord
 %type<db::v2::FunctionInvocation*> functionInvocation
+%type<db::v2::FunctionInvocation*> countFunc
 
 %type<db::v2::SymbolChain*> nodeLabels
 %type<db::v2::SymbolChain*> edgeTypes
@@ -653,7 +654,7 @@ atomExpr
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpr { scanner.notImplemented(@$, "CASE"); }
-    | countFunc { scanner.notImplemented(@$, "COUNT"); }
+    | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
@@ -887,15 +888,22 @@ filterExpr
     ;
 
 countFunc
-    : COUNT OPAREN MULT CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN exprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "COUNT"); }
-    | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "COUNT"); }
+    : COUNT OPAREN MULT CPAREN { scanner.notImplemented(@$, "count(*)"); }
+    | COUNT OPAREN CPAREN { scanner.notImplemented(@$, "count()"); }
+    | COUNT OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "count(DISTINCT)"); }
+    | COUNT OPAREN exprChain CPAREN {
+          Symbol* symbol = Symbol::create(ast, "count");
+          QualifiedName* name = QualifiedName::create(ast);
+          name->addName(symbol);
+          $$ = FunctionInvocation::create(ast, name);
+          $$->setArguments($3);
+          LOC($$, @$);
+    }
+    | COUNT OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "count(DISTINCT)"); }
+    | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "count(pattern WHERE)"); }
 
     // Here, returnSt is mandatory for MATCH subqueries, as opposed to Neo4j's Cypher parser
-    | COUNT OBRACE query CBRACE { scanner.notImplemented(@$, "COUNT"); }
+    | COUNT OBRACE query CBRACE { scanner.notImplemented(@$, "count {...}"); }
     ;
 
 caseExpr

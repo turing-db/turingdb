@@ -1,0 +1,10 @@
+/// QUERY
+MATCH (n) RETURN n, count(n)
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) RETURN n, count(n)
+       |                  ^
+-------* Grouping keys are not supported yet
+

@@ -1,0 +1,10 @@
+/// QUERY
+MATCH (n) WHERE n.duration = count(n) RETURN n
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) WHERE n.duration = count(n) RETURN n
+       |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------* Invalid use of aggregate expression in this context
+
