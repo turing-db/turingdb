@@ -31,6 +31,13 @@ public:
         return *_edgeIt;
     }
 
+    /**
+     * @brief Sets @ref _partIt to point to the first valid datapart in the range
+     * [partIdx, end]. Always leaves @ref _partIt pointint to a valid datapart, or
+     * pointing to the end iterator.
+     */
+    void goToPart(size_t partIdx);
+
     GetInEdgesIterator& operator++() {
         next();
         return *this;
@@ -49,6 +56,13 @@ protected:
 
     void init();
     void nextValid();
+
+    /**
+     * @brief Advances @ref _partIt by at least @param n steps, or precisely
+     * d = distance(_partIt._it, _partIt,._itEnd) steps if @ref n > d. Always leaves @ref
+     * _partIt pointing to a valid datapart, or pointing to the end iterator.
+     */
+    void advancePartIterator(size_t n);
 };
 
 class GetInEdgesChunkWriter : public GetInEdgesIterator {

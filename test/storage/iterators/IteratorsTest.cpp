@@ -437,6 +437,98 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
     }
 }
 
+TEST_F(IteratorsTest, goToPartGetInEdgesTest) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    ColumnVector<NodeID> nodes;
+
+    auto VERIFY = [&](auto& cmpSet, auto& it) -> bool {
+        auto cmpIt = cmpSet.begin();
+        size_t count = 0;
+        for (; it.isValid() && cmpIt != cmpSet.end(); it.next()) {
+            EdgeRecord er = *it;
+            EXPECT_EQ(cmpIt->_nodeID.getValue(), er._nodeID.getValue());
+            EXPECT_EQ(cmpIt->_otherID.getValue(), er._otherID.getValue());
+            count++;
+            cmpIt++;
+        }
+        EXPECT_EQ(count, cmpSet.size());
+        return true;
+    };
+
+    { // Skip the first datapart, check in edges on 0
+        std::vector<TestEdgeRecord> compareSet {}; // Should be no edges
+        nodes.clear();
+        nodes.push_back(0);
+        GetInEdgesRange rg = reader.getInEdges(&nodes);
+        GetInEdgesIterator it = rg.begin();
+        it.goToPart(1);
+        ASSERT_TRUE(VERIFY(compareSet, it));
+    }
+
+    { // Skip the first two dataparts - ends up pointing at empty DP : check that we
+      // advance again to a valid part. Check in edges of Node 8
+        std::vector<TestEdgeRecord> compareSet {
+            // {0, 1, 0},
+            // {1, 2, 0},
+            // {3, 3, 4},
+            // {4, 3, 4},
+            // {2, 4, 3},
+            // {6, 4, 5},
+            // {7, 7, 5},
+            // {8, 7, 6},
+            {5, 8, 2}
+        };
+        nodes.clear();
+        nodes.push_back(8);
+
+        GetInEdgesRange rg = reader.getInEdges(&nodes);
+        GetInEdgesIterator it = rg.begin();
+        it.goToPart(2);
+
+        ASSERT_TRUE(VERIFY(compareSet, it));
+    }
+
+    { // Skip all four dataparts, check all nodes
+        std::vector<TestEdgeRecord> compareSet {};
+        nodes.clear();
+        nodes.push_back(0);
+        nodes.push_back(1);
+        nodes.push_back(2);
+        nodes.push_back(3);
+        nodes.push_back(4);
+        nodes.push_back(5);
+        nodes.push_back(6);
+        nodes.push_back(7);
+
+        GetInEdgesRange rg = reader.getInEdges(&nodes);
+        GetInEdgesIterator it = rg.begin();
+        it.goToPart(4);
+
+        ASSERT_TRUE(VERIFY(compareSet, it));
+    }
+
+    { // Attempt to GOTO a part index which is greater than the number of parts that exist
+        std::vector<TestEdgeRecord> compareSet {};
+        nodes.clear();
+        nodes.push_back(0);
+        nodes.push_back(1);
+        nodes.push_back(2);
+        nodes.push_back(3);
+        nodes.push_back(4);
+        nodes.push_back(5);
+        nodes.push_back(6);
+        nodes.push_back(7);
+
+        GetInEdgesRange rg = reader.getInEdges(&nodes);
+        GetInEdgesIterator it = rg.begin();
+        it.goToPart(10);
+
+        ASSERT_TRUE(VERIFY(compareSet, it));
+        ASSERT_FALSE(it.isValid());
+    }
+}
+
 TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();

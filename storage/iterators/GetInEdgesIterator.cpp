@@ -49,6 +49,32 @@ void GetInEdgesIterator::next() {
     nextValid();
 }
 
+void GetInEdgesIterator::goToPart(size_t partIdx) {
+    Iterator::reset();
+    advancePartIterator(partIdx);
+}
+
+void GetInEdgesIterator::advancePartIterator(size_t n) {
+    // Advance n dataparts forward
+    for (; n > 0 && _partIt.isNotEnd(); n--) {
+        _partIt.next();
+    }
+    // If we have not reached the end, update the _node members
+    if (_partIt.isNotEnd()) {
+        _nodeIt = _inputNodeIDs->cbegin();
+        const DataPart* part = _partIt.get();
+        const NodeID nodeID = *_nodeIt;
+        const EdgeIndexer& indexer = part->edgeIndexer();
+
+        _edges = indexer.getNodeInEdges(nodeID);
+        _edgeIt = _edges.begin();
+
+        // This datapart might have no in edges for this NodeID. Advance again until we
+        // are at a valid part.
+        nextValid();
+    }
+}
+
 void GetInEdgesIterator::nextValid() {
     while (_edgeIt == _edges.end()) {
         // No more edges for the current node -> next node
