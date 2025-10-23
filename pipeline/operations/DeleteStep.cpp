@@ -1,5 +1,7 @@
 #include "DeleteStep.h"
-#include <type_traits>
+
+#include "PipelineException.h"
+#include "reader/GraphReader.h"
 
 // TODO: for v2
 constexpr bool DETACH = true;
@@ -39,9 +41,9 @@ void DeleteStep<IDT>::execute() {
     for (IDT id : _deletions) {
         bool has {false};
         if constexpr (std::is_same_v<IDT, NodeID>) {
-            has = reader.graphHasNode(id);
+            has = reader.graphHasNode(id) && !reader.nodeIsDeleted(id);
         } else if constexpr (std::is_same_v<IDT, EdgeID>) {
-            has = reader.graphHasEdge(id);
+            has = reader.graphHasEdge(id) && !reader.edgeIsDeleted(id);
         }
 
         if (!has) [[unlikely]] {
@@ -59,8 +61,8 @@ void DeleteStep<IDT>::execute() {
         _writeBuffer->addDeletedEdges(_deletions);
     }
 
-    if constexpr(std::is_same_v<IDT, NodeID> && DETACH) {
-        // TODO: Detect hanging edges
+    if constexpr(std::is_same_v<IDT, NodeID>) {
+        _writeBuffer->addHangingEdges(reader.getView());
     }
 }
 

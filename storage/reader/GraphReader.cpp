@@ -252,6 +252,20 @@ bool GraphReader::graphHasEdge(EdgeID edgeID) const {
     return (edgeID < getEdgeCount());
 }
 
+bool GraphReader::nodeIsDeleted(NodeID nodeID) const {
+    if (_view.commits().empty()) {
+        return false;
+    }
+    return _view.commits().back().tombstones().containsNode(nodeID);
+}
+
+bool GraphReader::edgeIsDeleted(EdgeID edgeID) const {
+    if (_view.commits().empty()) {
+        return false;
+    }
+    return _view.commits().back().tombstones().containsEdge(edgeID);
+}
+
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {

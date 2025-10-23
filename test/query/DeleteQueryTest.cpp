@@ -175,3 +175,171 @@ TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
         .expectErrorMessage(expectedError)
         .execute();
 }
+
+/*
+Testing the following flow:
+
+
+1. Change1 is created and creates two nodes, and an edge between them
+2. Submits
+3. Change2 is created deletes the source node
+4. Submits
+5. Change3 is created deletes the target node
+6. Submits
+
+This should be accepted
+*/
+TEST_F(DeleteQueryTest, noConflictOnDeletedEdge) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    newChange(tester);
+    //                    node 0    edge 0       node 1
+    tester.query("create (n:SOURCE)-[e:NEWEDGE]-(m:TARGET)")
+        .execute();
+    submitChange(tester);
+
+    newChange(tester);
+    // This should also delete the edge
+    tester.query("delete nodes 0")
+        .execute();
+    submitChange(tester);
+
+    newChange(tester);
+    tester.query("delete nodes 1")
+        .execute();
+    submitChange(tester);
+}
+
+/*
+Testing the following flow:
+
+
+1. Change1 is created and creates two nodes, and an edge between them
+2. Submits
+3. Change 2 is created
+4. Change 3 is created
+5. Change 2 deletes the source node
+6. Change 3 deletes the target node
+7. Change 2 submits -> accepted
+8 Change 3 submits -> rejected (write conflict on the edge)
+
+This should be accepted
+*/
+TEST_F(DeleteQueryTest, conflictOnDeletedEdge) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    newChange(tester);
+    //                    node 0    edge 0       node 1
+    tester.query("create (n:SOURCE)-[e:NEWEDGE]-(m:TARGET)")
+        .execute();
+    submitChange(tester);
+
+    ChangeID change2 = newChange(tester);
+    ChangeID change3 = newChange(tester);
+
+    tester.setChangeID(change2);
+    // This should also delete the edge
+    tester.query("delete nodes 0")
+        .execute();
+
+    tester.setChangeID(change3);
+    tester.query("delete nodes 1")
+        .execute();
+    submitChange(tester);
+
+    const std::string expectedError =
+        "Unexpected exception: This change attempted to delete Edge 0 (which is now Edge "
+        "0 on main) which has been modified on main.";
+
+    tester.setChangeID(change2);
+    tester.query("change submit")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, deleteTombstonedNode) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    newChange(tester);
+    tester.query("delete nodes 10")
+        .execute();
+    submitChange(tester);
+
+    newChange(tester);
+    tester.query("delete nodes 10")
+        .expectError() // already deleted: reject
+        .execute();
+    tester.query("delete nodes 9")
+        .execute(); // 9 still exists :accept
+    submitChange(tester);
+}
+
+TEST_F(DeleteQueryTest, deleteTombstonedEdge) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    newChange(tester);
+    tester.query("delete edges 7")
+        .execute();
+    submitChange(tester);
+
+    newChange(tester);
+    tester.query("delete edges 7")
+        .expectError() // already deleted: reject
+        .execute();
+    tester.query("delete edges 8")
+        .execute(); // 9 still exists :accept
+    submitChange(tester);
+}
+
+TEST_F(DeleteQueryTest, idempotentInCommit) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    newChange(tester);
+    tester.query("delete edges 7,7,7,7,7")
+        .execute();
+
+    tester.query("delete nodes 3,3,3,3,3")
+        .execute();
+
+    for (size_t i = 0; i < 5; i++) {
+        tester.query("delete edges 5")
+            .execute();
+        tester.query("delete nodes 4")
+            .execute();
+    }
+
+    submitChange(tester);
+
+    tester.query("deleted edges 7")
+        .expectError()
+        .execute();
+
+    tester.query("deleted edges 7,7,7,7")
+        .expectError()
+        .execute();
+
+    tester.query("deleted edges 5")
+        .expectError()
+        .execute();
+
+    tester.query("deleted edges 5,5,5,5")
+        .expectError()
+        .execute();
+
+    tester.query("deleted nodes 3")
+        .expectError()
+        .execute();
+
+    tester.query("deleted nodes 3,3,3,3")
+        .expectError()
+        .execute();
+
+    tester.query("deleted nodes 4")
+        .expectError()
+        .execute();
+
+    tester.query("deleted nodes 4,4,4,4")
+        .expectError()
+        .execute();
+}

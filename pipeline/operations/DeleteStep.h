@@ -1,10 +1,7 @@
 #pragma once
 
-#include "BioAssert.h"
 #include "ExecutionContext.h"
 #include "ID.h"
-#include "PipelineException.h"
-#include "reader/GraphReader.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"

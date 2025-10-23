@@ -24,6 +24,10 @@ private:
 
     ColumnVector<NodeID> _deletedExistingNodes;
 
+    /**
+     * @brief Folds over @ref _commitsSinceBranch, performing set theoretic union over the
+     * node and edge write sets, with the final result being stored in @param writes
+     */
     void getWritesSinceCommit(ConflictCheckSets& writes);
 
     /**

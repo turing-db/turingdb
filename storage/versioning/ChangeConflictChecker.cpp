@@ -6,14 +6,13 @@
 #include "Change.h"
 #include "CommitBuilder.h"
 #include "EntityIDRebaser.h"
+#include "ID.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "columns/ColumnVector.h"
 
 #include "BioAssert.h"
 #include "Panic.h"
-
-
 
 using namespace db;
 
@@ -46,6 +45,8 @@ void ChangeConflictChecker::checkConflicts() {
         checkDeletedEdgeConflicts(writes, writeBuffer);
     }
 
+    // Check the latest commit for newly created edges that are incident to nodes this
+    // change attempts to delete
     const auto& latestCommit = _commitsSinceBranch.back();
     const CommitData& latestCommitData = latestCommit->data();
     checkNewEdgesIncidentToDeleted(latestCommitData);

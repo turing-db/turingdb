@@ -99,10 +99,6 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // Check the write buffer for each commit to be made for write conflicts
     rebaser.checkConflicts(commitsSinceBranch);
 
-    // XXX We want to detect conflicts on new hanging edges before here, so the state
-    // of the change is left the same on rejection
-
-    // For each of the commits to build...
     for (auto& commitBuilder : _commits) {
         rebaser.rebaseCommitBuilder(*commitBuilder);
     }
