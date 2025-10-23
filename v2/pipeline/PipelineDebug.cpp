@@ -1,5 +1,7 @@
 #include "PipelineDebug.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "PipelineV2.h"
 #include "Processor.h"
 

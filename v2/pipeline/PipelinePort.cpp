@@ -5,6 +5,14 @@
 
 using namespace db::v2;
 
+PipelinePort::PipelinePort(Processor* processor)
+    : _processor(processor)
+{
+}
+
+PipelinePort::~PipelinePort() {
+}
+
 void PipelinePort::postCreate(PipelineV2* pipeline) {
     pipeline->addPort(this);
 }

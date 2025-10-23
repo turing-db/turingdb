@@ -5,6 +5,8 @@ set(pipeline_sources
     Processor.cpp
     PipelineBuffer.cpp
     PipelinePort.cpp
+    PipelineBlock.cpp
+    NamedColumn.cpp
     PipelineExecutor.cpp)
 
 set(processors_sources

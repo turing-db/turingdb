@@ -55,11 +55,8 @@ protected:
     PipelineBuffer* _buffer {nullptr};
     bool _open {true};
 
-    PipelinePort(Processor* processor)
-        : _processor(processor)
-    {}
-
-    ~PipelinePort() = default;
+    PipelinePort(Processor* processor);
+    ~PipelinePort();
 
     void postCreate(PipelineV2* pipeline);
 };

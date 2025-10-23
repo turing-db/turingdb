@@ -17,10 +17,10 @@ public:
     Block(Block&&) noexcept;
     Block& operator=(Block&&) noexcept;
 
-    ~Block();
-
     Block(const Block&) = delete;
     Block& operator=(const Block&) = delete;
+
+    ~Block();
 
     const Columns& columns() const { return _columns; }
     bool empty() const { return _columns.empty(); }
@@ -38,7 +38,7 @@ public:
 
     size_t getBlockRowCount() const;
 
-  private:
+private:
     Columns _columns;
 };
 

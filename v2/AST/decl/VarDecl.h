@@ -19,6 +19,7 @@ public:
                            EvaluatedType type);
 
     EvaluatedType getType() const { return _type; }
+
     const std::string_view& getName() const { return _name; }
 
 private:

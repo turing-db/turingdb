@@ -7,10 +7,12 @@ namespace db {
 class Column {
 public:
     Column() = delete;
+
     Column(const Column&) = default;
     Column(Column&&) noexcept = default;
     Column& operator=(const Column&) = default;
     Column& operator=(Column&&) noexcept = default;
+
     virtual ~Column();
 
     virtual size_t size() const = 0;

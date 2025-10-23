@@ -4,6 +4,8 @@
 
 #include "Processor.h"
 
+#include "PipelineInterface.h"
+
 namespace db {
 class GetOutEdgesChunkWriter;
 }
@@ -22,18 +24,12 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineInputPort* inNodeIDs() const { return _inNodeIDs; }
-    PipelineOutputPort* outIndices() const { return _outIndices; }
-    PipelineOutputPort* outEdgeIDs() const { return _outEdgeIDs; }
-    PipelineOutputPort* outTargetNodes() const { return _outTargetNodes; }
-    PipelineOutputPort* outEdgeTypes() const { return _outEdgeTypes; }
+    const PipelineInputInterface& inNodeIDs() const { return _inNodeIDs; }
+    const PipelineOutputInterface& outEdges() const { return _outEdges; }
 
 private:
-    PipelineInputPort* _inNodeIDs {nullptr};
-    PipelineOutputPort* _outIndices {nullptr};
-    PipelineOutputPort* _outEdgeIDs {nullptr};
-    PipelineOutputPort* _outTargetNodes {nullptr};
-    PipelineOutputPort* _outEdgeTypes {nullptr};
+    PipelineInputInterface _inNodeIDs;
+    PipelineOutputInterface _outEdges;
     std::unique_ptr<GetOutEdgesChunkWriter> _it;
 
     GetOutEdgesProcessor();

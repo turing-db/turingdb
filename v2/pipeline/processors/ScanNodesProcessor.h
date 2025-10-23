@@ -4,6 +4,8 @@
 
 #include "Processor.h"
 
+#include "PipelineInterface.h"
+
 namespace db {
 class ScanNodesChunkWriter;
 }
@@ -22,10 +24,10 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineOutputPort* outNodeIDs() const { return _outNodeIDs; }
+    PipelineOutputInterface& outNodeIDs() { return _outNodeIDs; }
 
 private:
-    PipelineOutputPort* _outNodeIDs {nullptr};
+    PipelineOutputInterface _outNodeIDs;
     std::unique_ptr<ScanNodesChunkWriter> _it;
 
     ScanNodesProcessor();

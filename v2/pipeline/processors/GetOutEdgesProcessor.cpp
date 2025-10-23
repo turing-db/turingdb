@@ -28,34 +28,17 @@ std::string_view GetOutEdgesProcessor::getName() const {
 GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
     GetOutEdgesProcessor* getOutEdges = new GetOutEdgesProcessor();
 
-    PipelineInputPort* inNodeIDs = PipelineInputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outIndices = PipelineOutputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outEdgeIDs = PipelineOutputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outTargetNodes = PipelineOutputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outEdgeTypes = PipelineOutputPort::create(pipeline, getOutEdges);
+    PipelineInputPort* input = PipelineInputPort::create(pipeline, getOutEdges);
+    getOutEdges->_inNodeIDs.setPort(input);
 
-    getOutEdges->_inNodeIDs = inNodeIDs;
-    getOutEdges->_outIndices = outIndices;
-    getOutEdges->_outEdgeIDs = outEdgeIDs;
-    getOutEdges->_outTargetNodes = outTargetNodes;
-    getOutEdges->_outEdgeTypes = outEdgeTypes;
-
-    getOutEdges->addInput(inNodeIDs);
-    getOutEdges->addOutput(outIndices);
-    getOutEdges->addOutput(outEdgeIDs);
-    getOutEdges->addOutput(outTargetNodes);
-    getOutEdges->addOutput(outEdgeTypes);
+    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, getOutEdges);
+    getOutEdges->_outEdges.setPort(output);
 
     getOutEdges->postCreate(pipeline);
     return getOutEdges;
 }
 
 void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
-    PipelineBuffer* nodeIDsBuffer = _inNodeIDs->getBuffer();
-    if (!nodeIDsBuffer) {
-        throw PipelineException("GetOutEdgesProcessor: Node IDs port not connected");
-    }
-
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(nodeIDsBuffer->getBlock()[0]);
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);

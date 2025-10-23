@@ -4,59 +4,46 @@
 
 namespace db::v2 {
 
-class PipelineOutputPort;
 class MaterializeData;
+class PipelineOutputInterface;
 
 class PlanGraphStream {
 public:
     enum class Mode {
-        UNKNOWN,
+        EMPTY,
         NODE_STREAM,
         EDGE_STREAM
     };
 
-    struct EmptyStream {
-    };
-
-    struct NodeStream {
-        PipelineOutputPort* nodeIDs {nullptr};
-    };
-
-    struct EdgeStream {
-        PipelineOutputPort* edgeIDs {nullptr};
-        PipelineOutputPort* targetIDs {nullptr};
-    };
-
-    using Stream = std::variant<EmptyStream, NodeStream, EdgeStream>;
-
-    explicit PlanGraphStream()
-        : _stream(EmptyStream())
-    {
-    }
-
+    PlanGraphStream() = default;
     ~PlanGraphStream() = default;
 
-    const Stream& getStream() const { return _stream; }
+    PipelineOutputInterface* getInterface() const { return _currentOut; }
 
-    bool isNodeStream() const { return std::holds_alternative<NodeStream>(_stream); }
-    bool isEdgeStream() const { return std::holds_alternative<EdgeStream>(_stream); }
+    // Stream mode
+    bool isNodeStream() const { return _mode == Mode::NODE_STREAM; }
+    bool isEdgeStream() const { return _mode == Mode::EDGE_STREAM; }
 
-    NodeStream& getNodeStream() { return std::get<NodeStream>(_stream); }
-    EdgeStream& getEdgeStream() { return std::get<EdgeStream>(_stream); }
+    void setNodes(PipelineOutputInterface& nodes) {
+        _mode = Mode::NODE_STREAM;
+        _currentOut = &nodes;
+    }
+    
+    void setEdges(PipelineOutputInterface& edges) {
+        _mode = Mode::EDGE_STREAM;
+        _currentOut = &edges;
+    }
 
+    // MaterializeData
     MaterializeData* getMaterializeData() const { return _matData; }
 
     void setMaterializeData(MaterializeData* data) { _matData = data; }
-
     void closeMaterializeData() { _matData = nullptr; }
 
-    void setStream(Stream&& stream) {
-        _stream = std::move(stream);
-    }
-
 private:
-    Stream _stream;
+    Mode _mode {Mode::EMPTY};
     MaterializeData* _matData {nullptr};
+    PipelineOutputInterface* _currentOut {nullptr};
 };
 
 }
