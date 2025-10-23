@@ -41,6 +41,10 @@ public:
 private:
     friend class CommitWriteBuffer;
     friend class ChangeRebaser;
+    friend class TombstonesLoader;
+
+    NodeTombstones _nodeTombstones;
+    EdgeTombstones _edgeTombstones;
 
     /**
      * @brief Given a range over NodeIDs, calls @ref TombstoneSet::insert over that range
@@ -56,8 +60,8 @@ private:
         requires std::same_as<std::ranges::range_value_t<Range>, EdgeID>
     void addEdgeTombstones(Range& edges);
 
-    NodeTombstones _nodeTombstones;
-    EdgeTombstones _edgeTombstones;
+    NodeTombstones& nodeTombstones() { return _nodeTombstones; }
+    EdgeTombstones& edgeTombstones() { return _edgeTombstones; }
 };
 
 template <TypedInternalID IDT>

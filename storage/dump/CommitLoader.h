@@ -14,6 +14,7 @@
 #include "DataPart.h"
 #include "Graph.h"
 #include "Path.h"
+#include "dump/TombstonesLoader.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistoryBuilder.h"
@@ -76,11 +77,31 @@ public:
 
             auto readerRes = fs::FilePageReader::open(journalPath, DumpConfig::PAGE_SIZE);
             if (!readerRes) {
-                return DumpError::result(DumpErrorType::CANNOT_OPEN_JOURNAL, readerRes.error());
+                return DumpError::result(DumpErrorType::CANNOT_OPEN_JOURNAL,
+                                         readerRes.error());
             }
 
             CommitJournalLoader loader(readerRes.value());
             if (auto res = loader.load(journal); !res) {
+                return res.get_unexpected();
+            }
+        }
+
+        // Reading tombstones
+        {
+            Tombstones& tombstones = commit->_data->_tombstones;
+
+            const fs::Path tombstonesPath = path / "tombstones";
+
+            auto readerRes =
+                fs::FilePageReader::open(tombstonesPath, DumpConfig::PAGE_SIZE);
+            if (!readerRes) {
+                return DumpError::result(DumpErrorType::CANNOT_OPEN_TOMBSTONES,
+                                         readerRes.error());
+            }
+
+            TombstonesLoader loader(readerRes.value());
+            if (auto res = loader.load(tombstones); !res) {
                 return res.get_unexpected();
             }
         }
