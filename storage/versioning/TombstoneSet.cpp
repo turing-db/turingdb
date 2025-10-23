@@ -20,6 +20,11 @@ void TombstoneSet<IDT>::insert(IDT id) {
 }
 
 template <TypedInternalID IDT>
+void TombstoneSet<IDT>::reserve(size_t size) {
+    return _set.reserve(size);
+}
+
+template <TypedInternalID IDT>
 size_t TombstoneSet<IDT>::size() const {
     return _set.size();
 }

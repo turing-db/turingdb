@@ -27,11 +27,14 @@ DumpResult<void> TombstonesLoader::load(Tombstones& tombstones) {
         const size_t nodeCount = it.get<size_t>();
 
         // Load into vector first
-        std::vector<NodeID> tempNodeVec(nodeCount);
+        std::vector<NodeID> tempNodeVec;
+        tempNodeVec.reserve(nodeCount);
         if (auto res = LoadUtils::loadVector(tempNodeVec, nodeCount, _reader, it); !res) {
             return res;
         }
+
         // Insert all elements of vector into the tombstones set in one go
+        tombstones.edgeTombstones().reserve(nodeCount);
         tombstones.nodeTombstones().insert(tempNodeVec);
     }
     
@@ -40,11 +43,14 @@ DumpResult<void> TombstonesLoader::load(Tombstones& tombstones) {
         const size_t edgeCount = it.get<size_t>();
 
         // Load into vector first
-        std::vector<EdgeID> tempEdgeVec(edgeCount);
+        std::vector<EdgeID> tempEdgeVec;
+        tempEdgeVec.reserve(edgeCount);
         if (auto res = LoadUtils::loadVector(tempEdgeVec, edgeCount, _reader, it); !res) {
             return res;
         }
+
         // Insert all elements of vector into the tombstones set in one go
+        tombstones.edgeTombstones().reserve(edgeCount);
         tombstones.edgeTombstones().insert(tempEdgeVec);
     }
 

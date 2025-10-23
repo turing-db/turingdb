@@ -18,15 +18,18 @@ template <TypedInternalID IDT>
 class TombstoneSet {
 public:
     bool contains(IDT id) const;
+
     void insert(IDT id);
+
+    void reserve(size_t size);
+
     size_t size() const;
+    bool empty() const { return _set.empty(); }
 
     auto begin() { return _set.begin(); }
     auto end() { return _set.end(); }
     auto begin() const { return _set.begin(); }
     auto end() const { return _set.end(); }
-
-    bool empty() const { return _set.empty(); }
 
     void swap(TombstoneSet<IDT>& other) noexcept;
 
