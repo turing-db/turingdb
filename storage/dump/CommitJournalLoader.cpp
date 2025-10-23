@@ -10,7 +10,7 @@ DumpResult<void> CommitJournalLoader::load(CommitJournal& journal) {
     _reader.nextPage();
 
     if (_reader.errorOccured()) {
-        return DumpError::result(DumpErrorType::COULD_NOT_READ_LABELSETS,
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_JOURNAL,
                                  _reader.error().value());
     }
 
