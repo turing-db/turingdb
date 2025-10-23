@@ -347,130 +347,7 @@ TEST_F(IteratorsTest, ScanNodesIteratorTest) {
     ASSERT_EQ(count, compareSet.size());
 }
 
-TEST_F(IteratorsTest, advancePartIteratorScanNodesTest) {
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    { // Skip the first datapart
-        std::vector<NodeID> compareSet {/*0, 1, 2,*/ 3, 4, 5, 6, 7, 8};
-        ScanNodesRange rg = reader.scanNodes();
-        ScanNodesIterator it = rg.begin();
-        auto cmpIt {compareSet.begin()};
-        size_t count {0};
-        it.advancePartIterator(1);
-
-        for (; it.isValid() && cmpIt != compareSet.end(); it.next()) {
-            NodeID id = *it;
-            fmt::print("node: {}\n", id.getValue());
-            EXPECT_EQ(cmpIt->getValue(), id.getValue());
-            count++;
-            cmpIt++;
-        }
-        EXPECT_EQ(count, compareSet.size());
-    }
-
-    { // Skip the first two dataparts
-        std::vector<NodeID> compareSet {/*0, 1, 2, 3, 4,*/ 5, 6, 7, 8};
-        ScanNodesRange rg = reader.scanNodes();
-        ScanNodesIterator it = rg.begin();
-        auto cmpIt {compareSet.begin()};
-        size_t count {0};
-        it.advancePartIterator(2);
-
-        for (; it.isValid() && cmpIt != compareSet.end(); it.next()) {
-            NodeID id = *it;
-            fmt::print("node: {}\n", id.getValue());
-            EXPECT_EQ(cmpIt->getValue(), id.getValue());
-            count++;
-            cmpIt++;
-        }
-        EXPECT_EQ(count, compareSet.size());
-    }
-
-    { // Skip the all four dataparts
-        std::vector<NodeID> compareSet {/*0, 1, 2, 3, 4, 5, 6, 7, 8*/};
-        ScanNodesRange rg = reader.scanNodes();
-        ScanNodesIterator it = rg.begin();
-        it.advancePartIterator(4);
-
-        ASSERT_FALSE(it.isValid());
-    }
-}
-
-TEST_F(IteratorsTest, advancePartIteratorScanEdgesTest) {
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    { // Skip the first datapart
-        std::vector<TestEdgeRecord> compareSet {
-            // {0, 0, 1},
-            // {1, 0, 2},
-            {2, 3, 4},
-            {3, 4, 3},
-            {4, 4, 3},
-            {5, 2, 8},
-            {6, 5, 4},
-            {7, 5, 7},
-            {8, 6, 7},
-        };
-        ScanEdgesRange rg = reader.scanOutEdges();
-        ScanEdgesIterator it = rg.begin();
-        auto cmpIt {compareSet.begin()};
-        size_t count {0};
-        it.advancePartIterator(1);
-
-        for (; it.isValid() && cmpIt != compareSet.end(); it.next()) {
-            EdgeRecord er = *it;
-            ASSERT_EQ(cmpIt->_nodeID.getValue(), er._nodeID.getValue());
-            ASSERT_EQ(cmpIt->_otherID.getValue(), er._otherID.getValue());
-            count++;
-            cmpIt++;
-        }
-        EXPECT_EQ(count, compareSet.size());
-    }
-
-    { // Skip the first two dataparts - ends up pointing at empty DP : check that we
-      // advance again to a valid part
-        std::vector<TestEdgeRecord> compareSet {
-            // {0, 0, 1},
-            // {1, 0, 2},
-            // {2, 3, 4},
-            // {3, 4, 3},
-            // {4, 4, 3},
-            {5, 2, 8},
-            {6, 5, 4},
-            {7, 5, 7},
-            {8, 6, 7},
-        };
-
-        ScanEdgesRange rg = reader.scanOutEdges();
-        ScanEdgesIterator it = rg.begin();
-        auto cmpIt {compareSet.begin()};
-        size_t count {0};
-        it.advancePartIterator(2);
-
-        for (; it.isValid() && cmpIt != compareSet.end(); it.next()) {
-            EdgeRecord er = *it;
-            ASSERT_EQ(cmpIt->_nodeID.getValue(), er._nodeID.getValue());
-            ASSERT_EQ(cmpIt->_otherID.getValue(), er._otherID.getValue());
-            count++;
-            cmpIt++;
-        }
-        EXPECT_EQ(count, compareSet.size());
-    }
-
-    { // Skip all four dataparts
-        std::vector<TestEdgeRecord> compareSet {};    
-
-        ScanEdgesRange rg = reader.scanOutEdges();
-        ScanEdgesIterator it = rg.begin();
-        it.advancePartIterator(4);
-
-        EXPECT_FALSE(it.isValid());
-    }
-}
-
-TEST_F(IteratorsTest, advancePartIteratorGetOutEdgesTest) {
+TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     ColumnVector<NodeID> nodes;
@@ -495,7 +372,7 @@ TEST_F(IteratorsTest, advancePartIteratorGetOutEdgesTest) {
         nodes.push_back(0);
         GetOutEdgesRange rg = reader.getOutEdges(&nodes);
         GetOutEdgesIterator it = rg.begin();
-        it.advancePartIterator(1);
+        it.goToPart(1);
         ASSERT_TRUE(VERIFY(compareSet, it));
     }
 
@@ -518,7 +395,7 @@ TEST_F(IteratorsTest, advancePartIteratorGetOutEdgesTest) {
 
         GetOutEdgesRange rg = reader.getOutEdges(&nodes);
         GetOutEdgesIterator it = rg.begin();
-        it.advancePartIterator(2);
+        it.goToPart(2);
 
         ASSERT_TRUE(VERIFY(compareSet, it));
     }
@@ -538,7 +415,7 @@ TEST_F(IteratorsTest, advancePartIteratorGetOutEdgesTest) {
 
         GetOutEdgesRange rg = reader.getOutEdges(&nodes);
         GetOutEdgesIterator it = rg.begin();
-        it.advancePartIterator(4);
+        it.goToPart(4);
 
         ASSERT_TRUE(VERIFY(compareSet, it));
     }
