@@ -59,7 +59,7 @@ protected:
 
     /**
      * @brief Advances @ref _partIt by at least @param n steps, or precisely
-     * d = distance(_partIt._it, _partIt,._itEnd) steps if @ref n > d. Always leaves @ref
+     * d = distance(_partIt._it, _partIt._itEnd) steps if @ref n > d. Always leaves @ref
      * _partIt pointing to a valid datapart, or pointing to the end iterator.
      */
     void advancePartIterator(size_t n);
