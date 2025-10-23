@@ -1,14 +1,16 @@
 #pragma once
 
 #include "ID.h"
-#include "versioning/WriteSet.h"
 
 namespace db {
 
 template <TypedInternalID IDT>
-class WriteSetComparator{
+class WriteSet;
+
+template <TypedInternalID IDT>
+class WriteSetComparator {
 public:
-    [[nodiscard]] static bool same(WriteSet<IDT> setA, WriteSet<IDT> setB);
+    [[nodiscard]] static bool same(const WriteSet<IDT>& setA, const WriteSet<IDT>& setB);
 };
 
 }

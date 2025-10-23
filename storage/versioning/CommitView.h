@@ -7,6 +7,7 @@ namespace db {
 
 class Commit;
 class CommitHistory;
+class CommitData;
 class VersionController;
 class GraphMetadata;
 class FrozenCommitTx;
@@ -29,6 +30,7 @@ public:
 
     [[nodiscard]] bool isValid() const;
     [[nodiscard]] bool hasData() const;
+    [[nodiscard]] const CommitData& data() const;
     [[nodiscard]] bool isHead() const;
     [[nodiscard]] CommitHash hash() const;
     [[nodiscard]] const VersionController& controller() const;

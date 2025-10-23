@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "ID.h"
+#include "versioning/WriteSet.h"
 
 using namespace db;
 
@@ -12,11 +12,12 @@ template class WriteSetComparator<EdgeID>;
 }
 
 template <TypedInternalID IDT>
-bool WriteSetComparator<IDT>::same(const WriteSet<IDT> setA , const WriteSet<IDT> setB) {
+bool WriteSetComparator<IDT>::same(const WriteSet<IDT>& setA , const WriteSet<IDT>& setB) {
+    constexpr std::string_view type = std::is_same_v<IDT, NodeID> ? "Node" : "Edge";
+
     if (setA.size() != setB.size()) {
-        spdlog::error(
-            "Node WriteSets in CommitJournal have sizes {} and {}, respectively.",
-            setA.size(), setB.size());
+        spdlog::error("{} WriteSets in CommitJournal have sizes {} and {}, respectively.",
+                      type, setA.size(), setB.size());
         return false;
     }
 
@@ -25,9 +26,8 @@ bool WriteSetComparator<IDT>::same(const WriteSet<IDT> setA , const WriteSet<IDT
     size_t index = 0;
     while (itA != setA.end() && itB != setB.end()) {
         if (*itA != *itB) {
-            spdlog::error(
-                "Node WriteSets have values {} and {}, respectively, at index {}", *itA,
-                *itB, index);
+            spdlog::error("{} WriteSets have values {} and {}, respectively, at index {}",
+                          *itA, type, *itB, index);
             return false;
         }
         itA++;
