@@ -33,7 +33,7 @@ public:
 
     /**
      * @brief Sets @ref _partIt to point to the first valid datapart in the range
-     * [partIdx, end]. Always leaves @ref _partIt pointint to a valid datapart, or
+     * [partIdx, end]. Always leaves @ref _partIt pointing to a valid datapart, or
      * pointing to the end iterator.
      */
     void goToPart(size_t partIdx);
