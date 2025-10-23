@@ -59,21 +59,6 @@ void ScanNodesIterator::next() {
     nextValid();
 }
 
-void ScanNodesIterator::advancePartIterator(size_t by) {
-    // Advance n dataparts forward
-    for (; by > 0 && _partIt.isNotEnd(); by--) {
-        _partIt.next();
-    }
-    // If we have not reached the end, update the _node members
-    if (_partIt.isNotEnd()) {
-        const DataPart* part = _partIt.get();
-        _currentNodeID = part->getFirstNodeID();
-        _partEnd = _currentNodeID + part->getNodeCount();
-        // This datapart might have no nodes. Advance again until we are at a valid part
-        nextValid();
-    }
-}
-
 void ScanNodesIterator::nextValid() {
     while (_currentNodeID >= _partEnd) {
         ++_partIt;

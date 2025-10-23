@@ -54,11 +54,9 @@ void GetOutEdgesIterator::goToPart(size_t partIdx) {
     advancePartIterator(partIdx);
 }
 
-void GetOutEdgesIterator::advancePartIterator(size_t by) {
-    _partIt.getIterator();
+void GetOutEdgesIterator::advancePartIterator(size_t n) {
     // Advance n dataparts forward
-    for (; by > 0 && _partIt.isNotEnd(); by--) {
-        spdlog::info("V this advance is in the loop");
+    for (; n > 0 && _partIt.isNotEnd(); n--) {
         _partIt.next();
     }
     // If we have not reached the end, update the _node members
