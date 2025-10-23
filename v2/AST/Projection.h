@@ -29,6 +29,10 @@ public:
 
     bool hasSkip() const { return _skip; }
 
+    bool isAggregate() const { return _aggregate; }
+
+    bool hasGroupingKeys() const { return _hasGroupingKeys; }
+
     void setDistinct(bool distinct) { _distinct = distinct; }
 
     void setLimit(Limit* limit) { _limit = limit; }
@@ -36,6 +40,10 @@ public:
     void setSkip(Skip* skip) { _skip = skip; }
 
     void setOrderBy(OrderBy* orderBy) { _orderBy = orderBy; }
+
+    void setAggregate(bool aggregate = true) { _aggregate = aggregate; }
+
+    void setHasGroupingKeys(bool hasGroupingKeys = true) { _hasGroupingKeys = hasGroupingKeys; }
 
     bool isAll() const {
         return std::holds_alternative<All>(_items);
@@ -65,6 +73,8 @@ private:
     Skip* _skip {nullptr};
     OrderBy* _orderBy {nullptr};
     bool _distinct {false};
+    bool _aggregate {false};
+    bool _hasGroupingKeys {false};
 
     std::variant<Items, All> _items;
 

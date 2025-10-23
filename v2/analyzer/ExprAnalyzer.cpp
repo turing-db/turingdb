@@ -452,7 +452,7 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
 
     // For each overload, check if the argument types match
     for (auto it = signatures.first; it != signatures.second; it++) {
-        const FunctionDecls::FunctionSignature& signature = it->second;
+        FunctionSignature& signature = *it->second;
 
         const auto& expectedArgs = signature._argumentTypes;
 
@@ -478,6 +478,8 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
         if (signature._isAggregate) {
             expr->setAggregate();
         }
+
+        expr->setSignature(&signature);
 
         return;
     }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string_view>
+#include "FunctionSignature.h"
 
 namespace db::v2 {
 
@@ -19,9 +19,13 @@ public:
     QualifiedName* getName() const { return _name; }
     ExprChain* getArguments() const { return _arguments; }
 
+    void setSignature(FunctionSignature* signature) { _signature = signature; }
+    FunctionSignature* getSignature() const { return _signature; }
+
 private:
     QualifiedName* _name {nullptr};
     ExprChain* _arguments {nullptr};
+    FunctionSignature* _signature {nullptr};
 
     FunctionInvocation(QualifiedName* name)
         : _name(name)

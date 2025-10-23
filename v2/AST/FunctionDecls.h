@@ -1,21 +1,15 @@
 #pragma once
 
 #include <string_view>
+#include <memory>
 #include <map>
 
-#include "decl/EvaluatedType.h"
+#include "FunctionSignature.h"
 
 namespace db::v2 {
 
 class FunctionDecls {
 public:
-    struct FunctionSignature {
-        std::string_view _fullName;
-        std::vector<EvaluatedType> _argumentTypes;
-        EvaluatedType _returnType {};
-        bool _isAggregate {false};
-    };
-
     FunctionDecls();
     ~FunctionDecls();
 
@@ -31,7 +25,7 @@ public:
     }
 
 private:
-    std::multimap<std::string_view, FunctionSignature> _decls;
+    std::multimap<std::string_view, std::unique_ptr<FunctionSignature>> _decls;
 };
 
 }

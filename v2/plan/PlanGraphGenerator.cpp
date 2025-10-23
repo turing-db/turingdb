@@ -1,6 +1,10 @@
 #include "PlanGraphGenerator.h"
 
+#include "FunctionInvocation.h"
 #include "Projection.h"
+#include "expr/Expr.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "nodes/GroupByNode.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -106,6 +110,31 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
 
     if (proj->isDistinct()) {
         throwError("DISTINCT not supported", stmt);
+    }
+
+    if (proj->isAggregate()) {
+        if (proj->hasGroupingKeys()) {
+            GroupByNode* groupBy = _tree.newOut<GroupByNode>(prevNode);
+            prevNode = groupBy;
+
+            // Loop over expressions, to gather the grouping keys
+            for (Expr* item : proj->items()) {
+                Expr::Kind kind = item->getKind();
+
+                if (!item->isAggregate()) {
+                    if (kind != Expr::Kind::SYMBOL
+                        && kind != Expr::Kind::PROPERTY) {
+                        throwError("Complex grouping keys are not supported yet. Only variables (e.g. n), "
+                                   "or property expression (e.g. n.name) are allowed",
+                                   proj);
+                    }
+
+                    groupBy->addGroupByKey(item);
+                }
+            }
+        }
+
+        // TODO: Gather the aggregate functions here
     }
 
     if (proj->hasOrderBy()) {

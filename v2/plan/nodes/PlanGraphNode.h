@@ -27,6 +27,12 @@ enum class PlanGraphOpcode {
     ORDER_BY,
     SKIP,
     LIMIT,
+    GROUP_BY,
+    COUNT,
+    AVG,
+    MIN,
+    MAX,
+    SUM,
     PRODUCE_RESULTS,
     _SIZE
 };
@@ -52,6 +58,12 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::ORDER_BY, "ORDER_BY">,
     EnumStringPair<PlanGraphOpcode::SKIP, "SKIP">,
     EnumStringPair<PlanGraphOpcode::LIMIT, "LIMIT">,
+    EnumStringPair<PlanGraphOpcode::GROUP_BY, "GROUP_BY">,
+    EnumStringPair<PlanGraphOpcode::COUNT, "COUNT">,
+    EnumStringPair<PlanGraphOpcode::AVG, "AVG">,
+    EnumStringPair<PlanGraphOpcode::MIN, "MIN">,
+    EnumStringPair<PlanGraphOpcode::MAX, "MAX">,
+    EnumStringPair<PlanGraphOpcode::SUM, "SUM">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">>;
 
 

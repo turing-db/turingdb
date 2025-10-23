@@ -37,12 +37,11 @@ using namespace db::v2;
 
 CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(graphView.metadata()),
-    _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
-    _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
-    _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
-{
+      _graphView(graphView),
+      _graphMetadata(graphView.metadata()),
+      _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
+      _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
+      _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView)) {
     _readAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
     _writeAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
 }
@@ -97,7 +96,7 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 }
 
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
-    const Projection* projection = returnSt->getProjection();
+    Projection* projection = returnSt->getProjection();
 
     if (projection->isDistinct()) {
         throwError("DISTINCT not supported", returnSt);
@@ -115,25 +114,19 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         analyze(projection->getLimit());
     }
 
-    if (projection->isAll()) {
-        return;
-    }
-
-    // Check if the projection contains aggregate expressions
+    // Check if the projection contains aggregate expressions and grouping keys
     bool isAggregate = false;
+    bool hasGroupingKeys = false;
 
     for (Expr* item : projection->items()) {
         _exprAnalyzer->analyzeRootExpr(item);
-
-        if (item->isAggregate() && !isAggregate) {
-            throwError("Grouping keys are not supported yet", projection);
-        }
-
         isAggregate |= item->isAggregate();
+        hasGroupingKeys |= !item->isAggregate();
     }
 
     if (isAggregate) {
-        throwError("Aggregate expressions in RETURN statement are not supported yet", projection);
+        projection->setAggregate();
+        projection->setHasGroupingKeys(hasGroupingKeys);
     }
 }
 

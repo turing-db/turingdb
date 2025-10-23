@@ -10,5 +10,6 @@ FunctionDecls::~FunctionDecls() {
 }
 
 void FunctionDecls::add(const FunctionSignature& signature) {
-    _decls.emplace(signature._fullName, signature);
+    // TODO: Find a better way than to make a copy. Overal, the API is bad
+    _decls.emplace(signature._fullName, std::make_unique<FunctionSignature>(signature));
 }
