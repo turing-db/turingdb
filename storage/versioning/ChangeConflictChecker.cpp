@@ -1,13 +1,19 @@
 #include "ChangeConflictChecker.h"
 
+#include <memory>
+#include <numeric>
+
 #include "Change.h"
 #include "CommitBuilder.h"
 #include "EntityIDRebaser.h"
+#include "iterators/GetInEdgesIterator.h"
+#include "iterators/GetOutEdgesIterator.h"
 #include "columns/ColumnVector.h"
 
 #include "BioAssert.h"
 #include "Panic.h"
-#include "iterators/GetOutEdgesIterator.h"
+
+
 
 using namespace db;
 
@@ -16,11 +22,11 @@ ChangeConflictChecker::ChangeConflictChecker(const Change& change,
                                              const Commit::CommitSpan commits)
     : _change(change),
     _entityIDRebaser(entityRebaser),
-    _commits(commits) {
+    _commitsSinceBranch(commits) {
 }
 
 void ChangeConflictChecker::getWritesSinceCommit(ConflictCheckSets& writes) {
-    for (const auto& commit : _commits) {
+    for (const auto& commit : _commitsSinceBranch) {
         const CommitHistory& history = commit->history();
         const CommitJournal& journal = history.journal();
         bioassert(&journal);
@@ -40,24 +46,56 @@ void ChangeConflictChecker::checkConflicts() {
         checkDeletedEdgeConflicts(writes, writeBuffer);
     }
 
-    const auto& latestCommit = _commits.back();
+    const auto& latestCommit = _commitsSinceBranch.back();
     const CommitData& latestCommitData = latestCommit->data();
     checkNewEdgesIncidentToDeleted(latestCommitData);
 }
 
 void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& latestCommitData) {
+    if (_deletedExistingNodes.empty()) {
+        return;
+    }
+
     const GraphView mostRecentView(latestCommitData);
-    GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
-    // TODO: Only check from dataparts that were created in the commit span
-    for (const EdgeRecord& edge : outEdges) {
-        for (const auto& commitBuilder : _change._commits) {
-            const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
-            if (!writeBuffer.deletedEdges().contains(edge._edgeID)) {
-                panic("An edge (with source Node {} and target Node {}) has been created "
-                      "on main. This change attempts to delete either its source or "
-                      "target, which causes a write conflict on this edge (EdgeID {}).",
-                      edge._nodeID, edge._otherID, edge._edgeID);
-            }
+    // We only care about dataparts that have been created since we branched
+    // Work out how many dataparts are on the tip of main
+    const size_t totalDPsOnMain = latestCommitData.allDataparts().size();
+
+    // Helper to accumulate datapart counts from each commit
+    const auto sumDPCountFromCommit = [&](size_t acc, const std::unique_ptr<Commit>& commit){
+        const CommitData& data = commit->data();
+        const size_t dataPartsFromThisCommit = data.commitDataparts().size();
+        return acc + dataPartsFromThisCommit;
+    };
+
+    // Calculate the total number of DPs created by each commit on main since we branched
+    const size_t numDPsCreatedSinceBranch = std::accumulate(
+        _commitsSinceBranch.begin(), _commitsSinceBranch.end(), 0, sumDPCountFromCommit);
+
+    bioassert(totalDPsOnMain >= numDPsCreatedSinceBranch);
+
+    const size_t numDataPartsToCheck = totalDPsOnMain - numDPsCreatedSinceBranch;
+    const size_t startingIndex = totalDPsOnMain - numDataPartsToCheck;
+
+    // 1. Check out edges
+    {
+        GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
+        GetOutEdgesIterator outEdgesIt = outEdges.begin();
+        outEdgesIt.goToPart(startingIndex);
+        if (outEdgesIt.isValid()) {
+            panic("Submit rejected: Commits on main have created an edge incident to a "
+                  "node this Change attempts to delete.");
+        }
+    }
+
+    // 2. Check in edges
+    {
+        GetInEdgesRange inEdges {mostRecentView, &_deletedExistingNodes};
+        GetInEdgesIterator inEdgesIt = inEdges.begin();
+        inEdgesIt.goToPart(startingIndex);
+        if (inEdgesIt.isValid()) {
+            panic("Submit rejected: Commits on main have created an edge incident to a "
+                  "node this Change attempts to delete.");
         }
     }
 }

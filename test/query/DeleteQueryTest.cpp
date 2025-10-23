@@ -167,9 +167,8 @@ TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
         .execute();
 
     const std::string expectedError =
-        "Unexpected exception: An edge (with source Node 12 and target Node 13) has been "
-        "created on main. This change attempts to delete either its source or "
-        "target, which causes a write conflict on this edge (EdgeID 13).";
+        "Unexpected exception: Submit rejected: Commits on main have created an edge incident to a "
+        "node this Change attempts to delete.";
 
     tester.query("change submit")
         .expectError()
