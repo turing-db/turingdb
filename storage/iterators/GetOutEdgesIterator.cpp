@@ -69,7 +69,8 @@ void GetOutEdgesIterator::advancePartIterator(size_t n) {
         _edges = indexer.getNodeOutEdges(nodeID);
         _edgeIt = _edges.begin();
 
-        // This datapart might have no nodes. Advance again until we are at a valid part
+        // This datapart might have no out edges for this NodeID. Advance again until we
+        // are at a valid part
         nextValid();
     }
 }
