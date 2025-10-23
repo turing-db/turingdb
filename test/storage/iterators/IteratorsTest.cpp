@@ -4,8 +4,6 @@
 #include "TuringTest.h"
 
 #include "Graph.h"
-#include "columns/ColumnVector.h"
-#include "iterators/GetOutEdgesIterator.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
