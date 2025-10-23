@@ -20,7 +20,7 @@ public:
 private:
     const Change& _change;
     const EntityIDRebaser& _entityIDRebaser;
-    const Commit::CommitSpan _commits;
+    const Commit::CommitSpan _commitsSinceBranch;
 
     ColumnVector<NodeID> _deletedExistingNodes;
 
