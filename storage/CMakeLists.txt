@@ -81,6 +81,7 @@ set(storage_sources
         comparators/StringIndexerComparator.cpp
         comparators/CommitViewComparator.cpp
         comparators/WriteSetComparator.cpp
+        comparators/TombstoneSetComparator.cpp
         comparators/GraphComparator.cpp
 
         dump/GraphLoader.cpp
