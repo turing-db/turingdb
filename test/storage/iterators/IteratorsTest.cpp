@@ -376,7 +376,6 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
         ASSERT_TRUE(VERIFY(compareSet, it));
     }
 
-    spdlog::info("Test of interest");
     { // Skip the first two dataparts - ends up pointing at empty DP : check that we
       // advance again to a valid part. Check out edges of Node 2
         std::vector<TestEdgeRecord> compareSet {
@@ -399,10 +398,9 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
 
         ASSERT_TRUE(VERIFY(compareSet, it));
     }
-    spdlog::info("Done test of interest");
 
     { // Skip all four dataparts, check all nodes
-        std::vector<TestEdgeRecord> compareSet {};    
+        std::vector<TestEdgeRecord> compareSet {};
         nodes.clear();
         nodes.push_back(0);
         nodes.push_back(1);
@@ -418,6 +416,26 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
         it.goToPart(4);
 
         ASSERT_TRUE(VERIFY(compareSet, it));
+    }
+
+    { // Attempt to GOTO a part index which is greater than the number of parts that exist
+        std::vector<TestEdgeRecord> compareSet {};
+        nodes.clear();
+        nodes.push_back(0);
+        nodes.push_back(1);
+        nodes.push_back(2);
+        nodes.push_back(3);
+        nodes.push_back(4);
+        nodes.push_back(5);
+        nodes.push_back(6);
+        nodes.push_back(7);
+
+        GetOutEdgesRange rg = reader.getOutEdges(&nodes);
+        GetOutEdgesIterator it = rg.begin();
+        it.goToPart(10);
+
+        ASSERT_TRUE(VERIFY(compareSet, it));
+        ASSERT_FALSE(it.isValid());
     }
 }
 
