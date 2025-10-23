@@ -1,24 +1,26 @@
-#include "mergers/DataPartMerger.h"
 #include "gtest/gtest.h"
 
-#include "EdgeContainer.h"
-#include "JobSystem.h"
-#include "NodeContainer.h"
 #include "TuringTest.h"
-#include "Graph.h"
-#include "metadata/GraphMetadata.h"
-#include "reader/GraphReader.h"
+
+#include "mergers/DataPartMerger.h"
 #include "writers/DataPartBuilder.h"
-#include "versioning/CommitWriteBuffer.h"
+#include "metadata/GraphMetadata.h"
+#include "EdgeContainer.h"
+#include "NodeContainer.h"
 #include "versioning/CommitBuilder.h"
-#include "versioning/Transaction.h"
-#include "writers/GraphWriter.h"
 #include "writers/MetadataBuilder.h"
+#include "Graph.h"
+#include "writers/GraphWriter.h"
+#include "reader/GraphReader.h"
+#include "versioning/Transaction.h"
+
+#include "JobSystem.h"
 
 using namespace turing::test;
 using namespace ::testing;
 using namespace db;
 
+// Helper Class To Map Old EntityIDs to New EntityIDs
 template <typename EntityType>
 class EntityMap {
 public:
@@ -28,11 +30,13 @@ public:
         EntityType _newID;
 
         EntityMapping() = delete;
+
         explicit EntityMapping(int64_t propertyID)
         :_propertyID(propertyID)
         {
         }
     };
+
     using EntityMappingContainer = std::vector<EntityMapping>;
     using propertyIDMap = std::unordered_map<int64_t, size_t>;
     using oldEntityMap = std::unordered_map<EntityType, size_t>;
@@ -100,7 +104,6 @@ using PropertyMap = std::variant<
     std::unordered_map<int64_t, types::String::Primitive>,
     std::unordered_map<int64_t, types::Bool::Primitive>>;
 
-
 class DataPartMergerTest : public TuringTest {
 protected:
     void initialize() override {
@@ -118,20 +121,22 @@ protected:
                                typename T::Primitive&& value,
                                int64_t id) {
         typename T::Primitive valueCopy = value;
+
         writer.addNodeProperty<T>(nodeID, propName, std::move(value));
+
         const auto propID = *writer.openWriteTransaction().readGraph().getMetadata().propTypes().get(propName);
-        const auto& it = _nodeIdToPropertyMap.find(propID._id.getValue());
-        if (it == _nodeIdToPropertyMap.end()) {
+        const auto& it = _nodePropertyMap.find(propID._id.getValue());
+        if (it == _nodePropertyMap.end()) {
             if constexpr (std::is_same_v<T, types::Int64>) {
-                _nodeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Int64::Primitive> {});
+                _nodePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Int64::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::String>) {
-                _nodeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::String::Primitive> {});
+                _nodePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::String::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::Bool>) {
-                _nodeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Bool::Primitive> {});
+                _nodePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Bool::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::UInt64>) {
-                _nodeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::UInt64::Primitive> {});
+                _nodePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::UInt64::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::Double>) {
-                _nodeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Double::Primitive> {});
+                _nodePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Double::Primitive> {});
             }
         }
 
@@ -140,7 +145,7 @@ protected:
             if constexpr (std::is_same_v<MapValueType, typename T::Primitive>) {
                 map[id] = valueCopy;
             }
-        }, _nodeIdToPropertyMap.at(propID._id.getValue()));
+        }, _nodePropertyMap.at(propID._id.getValue()));
     }
 
     template <SupportedType T>
@@ -150,20 +155,22 @@ protected:
                                typename T::Primitive&& value,
                                int64_t id) {
         typename T::Primitive valueCopy = value;
+
         writer.addEdgeProperty<T>(edge, propName, std::move(value));
+
         const auto propID = *writer.openWriteTransaction().readGraph().getMetadata().propTypes().get(propName);
-        const auto& it = _edgeIdToPropertyMap.find(propID._id.getValue());
-        if (it == _edgeIdToPropertyMap.end()) {
+        const auto& it = _edgePropertyMap.find(propID._id.getValue());
+        if (it == _edgePropertyMap.end()) {
             if constexpr (std::is_same_v<T, types::Int64>) {
-                _edgeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Int64::Primitive> {});
+                _edgePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Int64::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::String>) {
-                _edgeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::String::Primitive> {});
+                _edgePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::String::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::Bool>) {
-                _edgeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Bool::Primitive> {});
+                _edgePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Bool::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::UInt64>) {
-                _edgeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::UInt64::Primitive> {});
+                _edgePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::UInt64::Primitive> {});
             } else if constexpr (std::is_same_v<T, types::Double>) {
-                _edgeIdToPropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Double::Primitive> {});
+                _edgePropertyMap.emplace(propID._id.getValue(), std::unordered_map<int64_t, types::Double::Primitive> {});
             }
         }
 
@@ -172,15 +179,15 @@ protected:
             if constexpr (std::is_same_v<MapValueType, typename T::Primitive>) {
                 map[id] = valueCopy;
             }
-        }, _edgeIdToPropertyMap.at(propID._id.getValue()));
+        }, _edgePropertyMap.at(propID._id.getValue()));
     }
 
     std::unique_ptr<db::JobSystem> _jobSystem;
     GraphMetadata _emptyData;
     EntityMap<EdgeID> _edgeMap;
     EntityMap<NodeID> _nodeMap;
-    std::unordered_map<uint16_t, PropertyMap> _nodeIdToPropertyMap;
-    std::unordered_map<uint16_t, PropertyMap> _edgeIdToPropertyMap;
+    std::unordered_map<uint16_t, PropertyMap> _nodePropertyMap;
+    std::unordered_map<uint16_t, PropertyMap> _edgePropertyMap;
 };
 
 TEST_F(DataPartMergerTest, labels) {
@@ -227,7 +234,6 @@ TEST_F(DataPartMergerTest, labels) {
         addNodePropertyHelper<types::String>(writer, eighties, "name", "Eighties", 4);
         addNodePropertyHelper<types::Bool>(writer, eighties, "isReal", false, 4);
         writer.addNodeProperty<types::Int64>(eighties, "id", 4);
-
 
         const auto bio = writer.addNode({"Interest"});
         addNodePropertyHelper<types::String>(writer, bio, "name", "Bio", 5);
@@ -291,7 +297,6 @@ TEST_F(DataPartMergerTest, labels) {
         addNodePropertyHelper<types::Bool>(writer, maxime, "isFrench", true, 8);
         addNodePropertyHelper<types::Bool>(writer, maxime, "hasPhD", false, 8);
         writer.addNodeProperty<types::Int64>(maxime, "id", 8);
-
 
         const auto paddle = writer.addNode({"Interest"});
         addNodePropertyHelper<types::String>(writer, paddle, "name", "Paddle", 9);
@@ -414,34 +419,31 @@ TEST_F(DataPartMergerTest, labels) {
         switch (it.second->getValueType()) {
             case db::ValueType::Bool:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Bool>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_nodeIdToPropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                // code
                 break;
             case db::ValueType::Int64:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Int64>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_nodeIdToPropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                // code
                 break;
             case db::ValueType::String:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::String>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_nodeIdToPropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                // code
                 break;
             case db::ValueType::UInt64:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::UInt64>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_nodeIdToPropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
                 break;
             case db::ValueType::Double:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Double>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_nodeIdToPropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
                 break;
@@ -460,34 +462,31 @@ TEST_F(DataPartMergerTest, labels) {
         switch (it.second->getValueType()) {
             case db::ValueType::Bool:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Bool>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_edgeIdToPropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                // code
                 break;
             case db::ValueType::Int64:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Int64>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_edgeIdToPropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                // code
                 break;
             case db::ValueType::String:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::String>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_edgeIdToPropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                // code
                 break;
             case db::ValueType::UInt64:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::UInt64>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_edgeIdToPropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
                 break;
             case db::ValueType::Double:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Double>(it.first).zipped()) {
-                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_edgeIdToPropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
+                    const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
                 break;

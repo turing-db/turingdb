@@ -1,14 +1,13 @@
 #pragma once
 
-#include "DataPartSpan.h"
 #include <memory>
+
+#include "DataPartSpan.h"
 
 namespace db {
 class CommitBuilder;
-class VersionController;
 class DataPartBuilder;
 class JobSystem;
-class GraphMetadata;
 
 class DataPartMerger {
 public:
