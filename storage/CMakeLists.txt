@@ -95,6 +95,7 @@ set(storage_sources
         dump/StringIndexerLoader.cpp
         dump/CommitJournalDumper.cpp
         dump/CommitJournalLoader.cpp
+        dump/TombstonesDumper.cpp
       )
 
 add_library(turing_db_storage_s STATIC ${storage_sources})
