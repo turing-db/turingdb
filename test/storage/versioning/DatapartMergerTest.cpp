@@ -403,7 +403,12 @@ TEST_F(DataPartMergerTest, labels) {
     }
 
     ASSERT_EQ(mergedDataPart.nodes().size(), reader.getNodeCount());
+    ASSERT_EQ(mergedDataPart.edgeIndexer().getCoreNodeCount(), mergedDataPart.nodes().size());
+
     ASSERT_EQ(mergedDataPart.edges().size(), reader.getEdgeCount());
+
+    ASSERT_EQ(mergedDataPart.edgeIndexer().getPatchNodeCount(), 0);
+
     for (const auto& it : mergedDataPart.edges().getOuts()) {
         const auto& oldEdge = reader.getEdge(_edgeMap.getOld(it._edgeID));
         ASSERT_EQ(_nodeMap.getNew(oldEdge->_nodeID), it._nodeID);
