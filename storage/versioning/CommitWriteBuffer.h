@@ -115,7 +115,7 @@ public:
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
-    void addHangingEdges(DataPartSpan dataparts);
+    void addHangingEdges(const GraphView& view);
 
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
