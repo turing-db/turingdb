@@ -3,7 +3,6 @@
 #include "AnalyzeException.h"
 #include "ExprAnalyzer.h"
 #include "SymbolChain.h"
-#include "expr/ExprTree.h"
 #include "metadata/GraphMetadata.h"
 
 #include "DiagnosticsManager.h"
@@ -84,15 +83,26 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 
 void ReadStmtAnalyzer::analyze(OrderBy* orderBySt) {
     for (OrderByItem* item : orderBySt->getItems()) {
-        ExprTree* exprTree = ExprTree::create(_ast, item->getExpr());
-        _exprAnalyzer->analyzeRootExpr(exprTree, item->getExpr());
+        Expr* expr = item->getExpr();
+        _exprAnalyzer->analyzeRootExpr(expr);
+
+        if (expr->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", orderBySt);
+        }
     }
 }
 
 void ReadStmtAnalyzer::analyze(Skip* skip) {
     Expr* expr = skip->getExpr();
-    ExprTree* exprTree = ExprTree::create(_ast, expr);
-    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
+    _exprAnalyzer->analyzeRootExpr(expr);
+
+    if (expr->isDynamic()) {
+        throwError("SKIP expression must be a value that can be evaluated at compile time", skip);
+    }
+
+    if (expr->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", skip);
+    }
 
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("SKIP expression must be an integer", skip);
@@ -101,8 +111,15 @@ void ReadStmtAnalyzer::analyze(Skip* skip) {
 
 void ReadStmtAnalyzer::analyze(Limit* limit) {
     Expr* expr = limit->getExpr();
-    ExprTree* exprTree = ExprTree::create(_ast, expr);
-    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
+    _exprAnalyzer->analyzeRootExpr(expr);
+
+    if (expr->isDynamic()) {
+        throwError("LIMIT expression must be a value that can be evaluated at compile time", limit);
+    }
+
+    if (expr->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", limit);
+    }
 
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("LIMIT expression must be an integer", limit);
@@ -116,8 +133,11 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
 
     if (const WhereClause* where = pattern->getWhere()) {
         Expr* whereExpr = where->getExpr();
-        ExprTree* exprTree = ExprTree::create(_ast, whereExpr);
-        _exprAnalyzer->analyzeRootExpr(exprTree, whereExpr);
+        _exprAnalyzer->analyzeRootExpr(whereExpr);
+
+        if (whereExpr->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", pattern);
+        }
 
         if (whereExpr->getType() != EvaluatedType::Bool) {
             throwError("WHERE expression must be a boolean", pattern);
@@ -170,8 +190,11 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : *properties) {
-            ExprTree* exprTree = ExprTree::create(_ast, expr);
-            _exprAnalyzer->analyzeRootExpr(exprTree, expr);
+            _exprAnalyzer->analyzeRootExpr(expr);
+
+            if (expr->isAggregate()) {
+                throwError("Invalid use of aggregate expression in this context", nodePattern);
+            }
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (!propType) {
@@ -221,8 +244,11 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
         for (const auto& [propName, expr] : *properties) {
-            ExprTree* exprTree = ExprTree::create(_ast, expr);
-            _exprAnalyzer->analyzeRootExpr(exprTree, expr);
+            _exprAnalyzer->analyzeRootExpr(expr);
+
+            if (expr->isAggregate()) {
+                throwError("Invalid use of aggregate expression in this context", edgePattern);
+            }
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (!propType) {

@@ -23,7 +23,6 @@ class CharLiteral;
 class MapLiteral;
 class Expr;
 class ExprChain;
-class ExprTree;
 class BinaryExpr;
 class LiteralExpr;
 class EntityTypeExpr;
@@ -77,7 +76,6 @@ public:
     friend CharLiteral;
     friend MapLiteral;
     friend ExprChain;
-    friend ExprTree;
     friend BinaryExpr;
     friend LiteralExpr;
     friend EntityTypeExpr;
@@ -147,7 +145,6 @@ private:
     std::vector<Literal*> _literals;
     std::vector<Expr*> _expressions;
     std::vector<ExprChain*> _exprChains;
-    std::vector<ExprTree*> _exprTrees;
     std::vector<Pattern*> _patterns;
     std::vector<PatternElement*> _patternElems;
     std::vector<EntityPattern*> _entityPatterns;
@@ -173,7 +170,6 @@ private:
     void addLiteral(Literal* literal);
     void addExprChain(ExprChain* exprChain);
     void addExpr(Expr* expr);
-    void addExprTree(ExprTree* tree);
     void addPattern(Pattern* pattern);
     void addPatternElement(PatternElement* element);
     void addEntityPattern(EntityPattern* pattern);

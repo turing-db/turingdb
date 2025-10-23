@@ -10,7 +10,6 @@ set(ast_sources
     decl/PatternData.cpp
     decl/VarDecl.cpp
 
-    expr/ExprTree.cpp
     expr/ExprChain.cpp
     expr/BinaryExpr.cpp
     expr/LiteralExpr.cpp

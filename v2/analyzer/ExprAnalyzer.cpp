@@ -8,7 +8,6 @@
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
-#include "expr/ExprTree.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 
@@ -26,10 +25,8 @@ ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
 ExprAnalyzer::~ExprAnalyzer() {
 }
 
-void ExprAnalyzer::analyzeRootExpr(ExprTree* tree, Expr* expr) {
-    _currentTree = tree;
+void ExprAnalyzer::analyzeRootExpr(Expr* expr) {
     analyze(expr);
-    _currentTree = nullptr;
 }
 
 void ExprAnalyzer::analyze(Expr* expr) {
@@ -178,8 +175,16 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
         } break;
     }
 
-    _currentTree->addExpr(expr);
     expr->setType(type);
+
+    // Dynamic/Aggregate contamination
+    if (lhs->isDynamic() || rhs->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (lhs->isAggregate() || rhs->isAggregate()) {
+        expr->setAggregate();
+    }
 }
 
 void ExprAnalyzer::analyze(UnaryExpr* expr) {
@@ -216,6 +221,14 @@ void ExprAnalyzer::analyze(UnaryExpr* expr) {
     }
 
     expr->setType(type);
+    
+    if (operand->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (operand->isAggregate()) {
+        expr->setAggregate();
+    }
 }
 
 void ExprAnalyzer::analyze(SymbolExpr* expr) {
@@ -227,9 +240,9 @@ void ExprAnalyzer::analyze(SymbolExpr* expr) {
     expr->setDecl(varDecl);
     expr->setType(varDecl->getType());
 
-    // By default, variable expressions cannot be evaluated at compile time
+    // For now, variable expressions cannot be evaluated at compile time
     // TODO: We could check if the variable is actually a constexpr
-    _currentTree->setDynamic();
+    expr->setDynamic();
 }
 
 void ExprAnalyzer::analyze(LiteralExpr* expr) {
@@ -335,8 +348,7 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
 
     expr->setDecl(varDecl);
     expr->setType(type);
-
-    _currentTree->setDynamic();
+    expr->setDynamic();
 }
 
 void ExprAnalyzer::analyze(StringExpr* expr) {
@@ -356,6 +368,14 @@ void ExprAnalyzer::analyze(StringExpr* expr) {
     }
 
     expr->setType(EvaluatedType::Bool);
+
+    if (lhs->isDynamic() || rhs->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (lhs->isAggregate() || rhs->isAggregate()) {
+        expr->setAggregate();
+    }
 }
 
 void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
@@ -367,8 +387,8 @@ void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
 
-    _currentTree->setDynamic();
     expr->setDecl(decl);
+    expr->setDynamic();
 
     if (decl->getType() == EvaluatedType::NodePattern
         || decl->getType() == EvaluatedType::EdgePattern) {
@@ -410,8 +430,23 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
 
     const auto& requestedArgs = invoc->getArguments()->getExprs();
 
+    bool isDynamic = false;
+    bool isAggregate = false;
     for (Expr* arg : requestedArgs) {
         analyze(arg);
+
+        isDynamic |= arg->isDynamic();
+        isAggregate |= arg->isAggregate();
+    }
+
+    // If at least one argument is dynamic, the function invocation is dynamic
+    if (isDynamic) {
+        expr->setDynamic();
+    }
+
+    // If at least one argument is aggregate, the function invocation is aggregate
+    if (isAggregate) {
+        expr->setAggregate();
     }
 
     // For each overload, check if the argument types match
@@ -440,11 +475,8 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
         expr->setType(signature._returnType);
 
         if (signature._isAggregate) {
-            _currentTree->setAggregate();
+            expr->setAggregate();
         }
-
-        // By default, function evaluations cannot be evaluated at compile time
-        _currentTree->setDynamic();
 
         return;
     }

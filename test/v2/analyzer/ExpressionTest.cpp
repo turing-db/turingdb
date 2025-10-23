@@ -7,7 +7,6 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "expr/All.h"
-#include "expr/ExprTree.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -45,11 +44,11 @@ TEST_F(ExpressionTest, LiteralExpressionTest) {
     ASSERT_TRUE(stringLiteral->getLiteral()->getKind() == Literal::Kind::STRING);
     ASSERT_TRUE(charLiteral->getLiteral()->getKind() == Literal::Kind::CHAR);
 
-    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, boolLiteral), boolLiteral);
-    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, intLiteral), intLiteral);
-    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, doubleLiteral), doubleLiteral);
-    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, stringLiteral), stringLiteral);
-    _analyzer->analyzeRootExpr(ExprTree::create(&_ast, charLiteral), charLiteral);
+    _analyzer->analyzeRootExpr(boolLiteral);
+    _analyzer->analyzeRootExpr(intLiteral);
+    _analyzer->analyzeRootExpr(doubleLiteral);
+    _analyzer->analyzeRootExpr(stringLiteral);
+    _analyzer->analyzeRootExpr(charLiteral);
 
     EXPECT_EQ(boolLiteral->getType(), EvaluatedType::Bool);
     EXPECT_EQ(intLiteral->getType(), EvaluatedType::Integer);
@@ -58,21 +57,21 @@ TEST_F(ExpressionTest, LiteralExpressionTest) {
     EXPECT_EQ(charLiteral->getType(), EvaluatedType::Char);
 }
 
-#define EXPECT_BINARY_ISVALID(a, op, b, eval)                                             \
-    {                                                                                     \
-        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                                 \
-        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                                 \
-        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs);                       \
-        EXPECT_NO_THROW(_analyzer->analyzeRootExpr(ExprTree::create(&_ast, expr), expr)); \
-        EXPECT_EQ(expr->getType(), eval);                                                 \
+#define EXPECT_BINARY_ISVALID(a, op, b, eval)                       \
+    {                                                               \
+        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);           \
+        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);           \
+        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs); \
+        EXPECT_NO_THROW(_analyzer->analyzeRootExpr(expr));          \
+        EXPECT_EQ(expr->getType(), eval);                           \
     }
 
-#define EXPECT_BINARY_INVALID(a, op, b)                                                                  \
-    {                                                                                                    \
-        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                                                \
-        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                                                \
-        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs);                                      \
-        EXPECT_THROW(_analyzer->analyzeRootExpr(ExprTree::create(&_ast, expr), expr), AnalyzeException); \
+#define EXPECT_BINARY_INVALID(a, op, b)                                   \
+    {                                                                     \
+        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                 \
+        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                 \
+        BinaryExpr* expr = BinaryExpr::create(&_ast, op, lhs, rhs);       \
+        EXPECT_THROW(_analyzer->analyzeRootExpr(expr), AnalyzeException); \
     }
 
 TEST_F(ExpressionTest, BinaryExpressionTest) {
@@ -80,8 +79,8 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     {
         LiteralExpr* lhs = LiteralExpr::create(&_ast, db::v2::StringLiteral::create(&_ast, "test"));
         LiteralExpr* rhs = LiteralExpr::create(&_ast, BoolLiteral::create(&_ast, true));
-        _analyzer->analyzeRootExpr(ExprTree::create(&_ast, lhs), lhs);
-        _analyzer->analyzeRootExpr(ExprTree::create(&_ast, rhs), rhs);
+        _analyzer->analyzeRootExpr(lhs);
+        _analyzer->analyzeRootExpr(rhs);
         TypePairBitset pair {lhs->getType(), rhs->getType()};
         ASSERT_EQ(pair, TypePairBitset(EvaluatedType::String, EvaluatedType::Bool));
         ASSERT_EQ(pair, TypePairBitset(EvaluatedType::Bool, EvaluatedType::String));

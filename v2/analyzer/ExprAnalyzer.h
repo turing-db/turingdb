@@ -16,7 +16,6 @@ namespace db::v2 {
 class CypherAST;
 class DeclContext;
 class Expr;
-class ExprTree;
 class BinaryExpr;
 class UnaryExpr;
 class SymbolExpr;
@@ -39,7 +38,7 @@ public:
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
 
-    void analyzeRootExpr(ExprTree* tree, Expr* expr);
+    void analyzeRootExpr(Expr* expr);
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 

@@ -12,7 +12,6 @@
 #include "WriteStmtAnalyzer.h"
 #include "SinglePartQuery.h"
 #include "expr/Expr.h"
-#include "expr/ExprTree.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CreateStmt.h"
@@ -99,6 +98,7 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     const Projection* projection = returnSt->getProjection();
+
     if (projection->isDistinct()) {
         throwError("DISTINCT not supported", returnSt);
     }
@@ -119,36 +119,58 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         return;
     }
 
+    // Check if the projection contains aggregate expressions
+    bool isAggregate = false;
+
     for (Expr* item : projection->items()) {
-        ExprTree* exprTree = ExprTree::create(_ast, item);
-        _exprAnalyzer->analyzeRootExpr(exprTree, item);
+        _exprAnalyzer->analyzeRootExpr(item);
+
+        if (item->isAggregate() && !isAggregate) {
+            throwError("Grouping keys are not supported yet", projection);
+        }
+
+        isAggregate |= item->isAggregate();
+    }
+
+    if (isAggregate) {
+        throwError("Aggregate expressions in RETURN statement are not supported yet", projection);
     }
 }
 
 void CypherAnalyzer::analyze(OrderBy* orderBySt) {
     for (OrderByItem* item : orderBySt->getItems()) {
-        ExprTree* exprTree = ExprTree::create(_ast, item->getExpr());
-        _exprAnalyzer->analyzeRootExpr(exprTree, item->getExpr());
+        Expr* expr = item->getExpr();
+        _exprAnalyzer->analyzeRootExpr(expr);
+
+        if (expr->isAggregate()) {
+            throwError("Aggregate expressions in ORDER BY are not supported yet", orderBySt);
+        }
     }
 }
 
 void CypherAnalyzer::analyze(Skip* skipSt) {
     Expr* expr = skipSt->getExpr();
-    ExprTree* exprTree = ExprTree::create(_ast, expr);
-    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
-    
+    _exprAnalyzer->analyzeRootExpr(expr);
+
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("SKIP expression must be an integer", skipSt);
+    }
+
+    if (expr->isDynamic() || expr->isAggregate()) {
+        throwError("SKIP expression must be a value that can be evaluated at compile time", skipSt);
     }
 }
 
 void CypherAnalyzer::analyze(Limit* limitSt) {
     Expr* expr = limitSt->getExpr();
-    ExprTree* exprTree = ExprTree::create(_ast, expr);
-    _exprAnalyzer->analyzeRootExpr(exprTree, expr);
+    _exprAnalyzer->analyzeRootExpr(expr);
 
     if (expr->getType() != EvaluatedType::Integer) {
         throwError("LIMIT expression must be an integer", limitSt);
+    }
+
+    if (expr->isDynamic() || expr->isAggregate()) {
+        throwError("LIMIT expression must be a value that can be evaluated at compile time", limitSt);
     }
 }
 
