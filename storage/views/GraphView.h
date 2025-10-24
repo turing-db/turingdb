@@ -23,6 +23,7 @@ public:
     [[nodiscard]] std::span<const CommitView> commits() const { return _data->commits(); }
     [[nodiscard]] DataPartSpan dataparts() const { return _data->allDataparts(); }
     [[nodiscard]] DataPartSpan commitDataparts() const { return _data->commitDataparts(); }
+    [[nodiscard]] const Tombstones& tombstones() const { return _data->tombstones(); }
     [[nodiscard]] const GraphMetadata& metadata() const { return _data->metadata(); }
 
 private:

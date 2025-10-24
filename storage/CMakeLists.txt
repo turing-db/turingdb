@@ -32,6 +32,8 @@ set(storage_sources
         iterators/ScanOutEdgesByLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp
 
+        iterators/TombstoneFilter.cpp
+
         columns/Block.cpp
         columns/Column.cpp
 

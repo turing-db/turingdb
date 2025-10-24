@@ -220,8 +220,6 @@ Testing the following flow:
 6. Change 3 deletes the target node
 7. Change 2 submits -> accepted
 8 Change 3 submits -> rejected (write conflict on the edge)
-
-This should be accepted
 */
 TEST_F(DeleteQueryTest, conflictOnDeletedEdge) {
     QueryTester tester {_env->getMem(), *_interp, "default"};

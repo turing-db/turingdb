@@ -5,6 +5,7 @@
 #include "indexers/EdgeIndexer.h"
 #include "DataPart.h"
 #include "IteratorUtils.h"
+#include "iterators/TombstoneFilter.h"
 
 namespace db {
 
@@ -185,6 +186,38 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         CASE(5);
         CASE(6);
         CASE(7);
+    }
+
+    {
+        TombstoneFilter filter(_view.tombstones());
+        // Get indices to deleted based on deleted nodes/edges
+        if (_edgeIDs && _view.tombstones().hasEdges()) {
+            filter.populateDeletedIndices(*_edgeIDs);
+        }
+        if (_tgts && _view.tombstones().hasNodes()) {
+            filter.populateDeletedIndices(*_tgts);
+        }
+
+        if (filter.empty()) {
+            return;
+        }
+
+        // Apply the filter to indices
+        filter.applyFilter(*_indices);
+        size_t newSize = _indices->size();
+
+        if (_edgeIDs) {
+            filter.applyFilter(*_edgeIDs);
+            bioassert(_edgeIDs->size() == newSize);
+        }
+        if (_tgts) {
+            filter.applyFilter(*_tgts);
+            bioassert(_tgts->size() == newSize);
+        }
+        if (_types) {
+            filter.applyFilter(*_types);
+            bioassert(_types->size() == newSize);
+        }
     }
 }
 
