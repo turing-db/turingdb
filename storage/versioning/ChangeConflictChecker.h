@@ -56,5 +56,5 @@ private:
      */
     void checkDeletedEdgeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
 };
-    
+
 }
