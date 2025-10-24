@@ -42,7 +42,7 @@ DataPartMerger::DataPartMerger(CommitData* commitData,
 {
 }
 
-std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) const {
+std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) const {
     const auto& graphReader = _graphView.read();
     const size_t nodeCount = graphReader.getNodeCount();
     const size_t edgeCount = graphReader.getEdgeCount();

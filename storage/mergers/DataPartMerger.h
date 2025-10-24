@@ -9,15 +9,13 @@ namespace db {
 class MetadataBuilder;
 class GraphView;
 class DataPartBuilder;
-class JobSystem;
 
 class DataPartMerger {
 public:
     DataPartMerger(CommitData* commitData,
                             MetadataBuilder& metadataBuilder);
 
-    std::unique_ptr<DataPartBuilder> merge(DataPartSpan dataParts,
-                                           JobSystem& jobsystem) const;
+    std::unique_ptr<DataPartBuilder> merge(DataPartSpan dataParts) const;
 
 private:
     GraphView _graphView;
