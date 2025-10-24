@@ -1,10 +1,11 @@
 #include "ScanEdgesIterator.h"
 
-#include "BioAssert.h"
-#include "Bitmask.h"
-#include "DataPart.h"
+#include "TombstoneFilter.h"
 #include "EdgeContainer.h"
 #include "IteratorUtils.h"
+#include "Bitmask.h"
+#include "BioAssert.h"
+#include "DataPart.h"
 #include "Panic.h"
 
 namespace db {
@@ -60,6 +61,37 @@ ScanEdgesChunkWriter::ScanEdgesChunkWriter() = default;
 ScanEdgesChunkWriter::ScanEdgesChunkWriter(const GraphView& view)
     : ScanEdgesIterator(view)
 {
+}
+
+void ScanEdgesChunkWriter::filterTombstones() {
+    TombstoneFilter filter(_view.tombstones());
+
+    if (_srcs && _view.tombstones().hasNodes()) {
+        filter.populateDeletedIndices(*_srcs);
+    }
+    if (_tgts && _view.tombstones().hasNodes()) {
+        filter.populateDeletedIndices(*_tgts);
+    }
+    if (_edgeIDs && _view.tombstones().hasEdges()) {
+        filter.populateDeletedIndices(*_edgeIDs);
+    }
+
+    if (filter.empty()) {
+        return;
+    }
+
+    if (_srcs) {
+        filter.applyDeletedIndices(*_srcs);
+    }
+    if (_tgts) {
+        filter.applyDeletedIndices(*_tgts);
+    }
+    if (_edgeIDs) {
+        filter.applyDeletedIndices(*_edgeIDs);
+    }
+    if (_types) {
+        filter.applyDeletedIndices(*_types);
+    }
 }
 
 static constexpr size_t NColumns = 4;
@@ -159,6 +191,10 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
         CASE(13);
         CASE(14);
         CASE(15);
+    }
+
+    if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
+        filterTombstones();
     }
 }
 

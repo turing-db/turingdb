@@ -66,6 +66,8 @@ private:
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
+
+    void filterTombstones();
 };
 
 struct ScanEdgesRange {

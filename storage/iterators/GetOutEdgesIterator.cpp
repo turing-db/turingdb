@@ -220,7 +220,7 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         CASE(7);
     }
 
-    if (_view.tombstones().hasNodes() || _view.tombstones().hasEdges()) {
+    if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
         filterTombstones();
     }
 }
