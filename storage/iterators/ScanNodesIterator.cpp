@@ -6,6 +6,7 @@
 #include "BioAssert.h"
 #include "DataPart.h"
 #include "Iterator.h"
+#include "iterators/TombstoneFilter.h"
 
 using namespace db;
 
@@ -80,6 +81,11 @@ ScanNodesChunkWriter::ScanNodesChunkWriter(const GraphView& view)
 {
 }
 
+void ScanNodesChunkWriter::filterTombstones() {
+    TombstoneFilter filter(_view.tombstones());
+    filter.onePassApplyFilter(*_nodeIDs);
+}
+
 void ScanNodesChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     msgbioassert(_nodeIDs, "ScanNodesChunkWriter must be initialized with a valid column");
@@ -98,6 +104,10 @@ void ScanNodesChunkWriter::fill(size_t maxCount) {
         _currentNodeID += rangeSize;
         remainingToMax -= rangeSize;
         nextValid();
+    }
+
+    if (_view.tombstones().hasNodes()) {
+        filterTombstones();
     }
 }
 

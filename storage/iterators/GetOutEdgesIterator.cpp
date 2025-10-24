@@ -122,19 +122,19 @@ void GetOutEdgesChunkWriter::filterTombstones() {
     }
 
     // Apply the filter to indices
-    filter.applyFilter(*_indices);
+    filter.applyDeletedIndices(*_indices);
     size_t newSize = _indices->size();
 
     if (_edgeIDs) {
-        filter.applyFilter(*_edgeIDs);
+        filter.applyDeletedIndices(*_edgeIDs);
         bioassert(_edgeIDs->size() == newSize);
     }
     if (_tgts) {
-        filter.applyFilter(*_tgts);
+        filter.applyDeletedIndices(*_tgts);
         bioassert(_tgts->size() == newSize);
     }
     if (_types) {
-        filter.applyFilter(*_types);
+        filter.applyDeletedIndices(*_types);
         bioassert(_types->size() == newSize);
     }
 }
