@@ -4,7 +4,6 @@
 
 #include "columns/ColumnVector.h"
 #include "ID.h"
-#include "spdlog/spdlog.h"
 
 namespace db {
 
@@ -40,7 +39,7 @@ private:
 template <typename T>
 void TombstoneFilter::applyFilter(ColumnVector<T>& column) {
     size_t initialSize = column.size();
-    std::vector<T> raw = column.getRaw();
+    std::vector<T>& raw = column.getRaw();
 
     // 2 pointer approach: traverse the vector with @ref readPointer and
     // @ref writePointer. Overwrite values at @ref writePointer with the value at
@@ -48,14 +47,11 @@ void TombstoneFilter::applyFilter(ColumnVector<T>& column) {
     // Always increment read, only increment write if the value isn't deleted
     size_t writePointer = 0;
     for (size_t readPointer = 0; readPointer < initialSize; readPointer++) {
-        spdlog::info("Index {}", readPointer);
         if (!_deletedIndices.contains(readPointer)) {
-            spdlog::info("\t DELETED");
             raw[writePointer] = raw[readPointer];
             writePointer++;
             continue;
         }
-        spdlog::info("\t NOT DELETED");
     }
     raw.resize(writePointer);
 }

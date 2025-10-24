@@ -6,7 +6,6 @@
 #include "DataPart.h"
 #include "IteratorUtils.h"
 #include "iterators/TombstoneFilter.h"
-#include "spdlog/spdlog.h"
 
 namespace db {
 
@@ -193,11 +192,9 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         TombstoneFilter filter(_view.tombstones());
         // Get indices to deleted based on deleted nodes/edges
         if (_edgeIDs && _view.tombstones().hasEdges()) {
-            spdlog::info("Populating based on edges");
             filter.populateDeletedIndices(*_edgeIDs);
         }
         if (_tgts && _view.tombstones().hasNodes()) {
-            spdlog::info("Populating based on targets");
             filter.populateDeletedIndices(*_tgts);
         }
 
@@ -211,17 +208,14 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
 
         if (_edgeIDs) {
             filter.applyFilter(*_edgeIDs);
-            spdlog::info("applying filter to edges");
             bioassert(_edgeIDs->size() == newSize);
         }
         if (_tgts) {
             filter.applyFilter(*_tgts);
-            spdlog::info("applying filter to tgts");
             bioassert(_tgts->size() == newSize);
         }
         if (_types) {
             filter.applyFilter(*_types);
-            spdlog::info("applying filter to types");
             bioassert(_types->size() == newSize);
         }
     }
