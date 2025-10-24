@@ -10,7 +10,7 @@ class VarNode;
 class NodeFilterNode;
 class EdgeFilterNode;
 class PropertyConstraint;
-class WherePredicate;
+class Predicate;
 
 class FilterNode : public PlanGraphNode {
 public:
@@ -27,24 +27,12 @@ public:
         return _varNode;
     }
 
-    void addPropertyConstraint(PropertyConstraint* constraint) {
-        _propConstraints.push_back(constraint);
+    void addPredicate(Predicate* pred) {
+        _predicates.push_back(pred);
     }
 
-    void addWherePredicate(WherePredicate* pred) {
-        _wherePredicates.push_back(pred);
-    }
-
-    std::span<const PropertyConstraint* const> getPropertyConstraints() const {
-        return _propConstraints;
-    }
-
-    std::span<PropertyConstraint*> getPropertyConstraints() {
-        return _propConstraints;
-    }
-
-    const std::vector<WherePredicate*>& getWherePredicates() const {
-        return _wherePredicates;
+    const std::vector<Predicate*>& getPredicates() const {
+        return _predicates;
     }
 
     NodeFilterNode* asNodeFilter();
@@ -54,14 +42,12 @@ public:
     const EdgeFilterNode* asEdgeFilter() const;
 
     virtual bool isEmpty() const {
-        return _propConstraints.empty()
-            && _wherePredicates.empty();
+        return _predicates.empty();
     }
 
 private:
     VarNode* _varNode {nullptr};
-    std::vector<PropertyConstraint*> _propConstraints;
-    std::vector<WherePredicate*> _wherePredicates;
+    std::vector<Predicate*> _predicates;
 };
 
 class NodeFilterNode : public FilterNode {

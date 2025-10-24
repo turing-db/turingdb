@@ -7,14 +7,13 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "PlanGraph.h"
-#include "PropertyConstraint.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
 #include "PlanGraphTopology.h"
 
-#include "WherePredicate.h"
+#include "Predicate.h"
 #include "decl/VarDecl.h"
 #include "nodes/CartesianProductNode.h"
 #include "nodes/FilterNode.h"
@@ -172,11 +171,8 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
         }
 
-        PropertyConstraint* c = _tree->createPropertyConstraint();
-        c->var = var;
-        c->type = propType->_id;
-        c->expr = constraint._expr;
-        c->dependencies.genExprDependencies(*_variables, constraint._expr);
+        Predicate* predicate = _tree->createPredicate(constraint._expr);
+        predicate->generate(*_variables);
     }
 
     return var;
@@ -238,11 +234,8 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
         }
 
-        PropertyConstraint* c = _tree->createPropertyConstraint();
-        c->var = var;
-        c->type = propType->_id;
-        c->expr = constraint._expr;
-        c->dependencies.genExprDependencies(*_variables, constraint._expr);
+        Predicate* predicate = _tree->createPredicate(constraint._expr);
+        predicate->generate(*_variables);
     }
 
     return var;
@@ -295,11 +288,8 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
             throwError(fmt::format("Unknown property type: {}", constraint._propTypeName), constraint._expr);
         }
 
-        PropertyConstraint* c = _tree->createPropertyConstraint();
-        c->var = var;
-        c->type = propType->_id;
-        c->expr = constraint._expr;
-        c->dependencies.genExprDependencies(*_variables, constraint._expr);
+        Predicate* predicate = _tree->createPredicate(constraint._expr);
+        predicate->generate(*_variables);
     }
 
     return var;
@@ -380,7 +370,7 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
 
     // Unwraped the first list of AND expressions,
     // Treating other cases as a whole Where predicate
-    WherePredicate* predicate = _tree->createWherePredicate(expr);
+    Predicate* predicate = _tree->createPredicate(expr);
     predicate->generate(*_variables);
 }
 
@@ -403,7 +393,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
             }
         }
 
-        throwError("Unknown error");
+        throwError("Unexpected erorr. Cannot place join on variables");
     };
 
     for (VarNode* var : _variables->getVarNodes()) {
@@ -433,44 +423,19 @@ void ReadStmtGenerator::placeJoinsOnVars() {
     }
 }
 
-void ReadStmtGenerator::placePropertyExprJoins() {
-    for (const auto& prop : _tree->propConstraints()) {
-        VarNode* var = prop->var;
-
-        // Step 1: find the earliest point on the graph where to place the join
-        const ExprDependencies& dependencies = prop->dependencies;
-        var = dependencies.findCommonSuccessor(_topology.get(), var);
-
-        if (!var) [[unlikely]] {
-            throwError("Unknown error");
-        }
-
-        // Step 2: place joins
-        insertDataFlowNode(var, prop->var);
-
-        for (const ExprDependencies::ExprDependency& dep : dependencies.getDependencies()) {
-            insertDataFlowNode(var, dep._var);
-        }
-
-        // Step 3: Place the constraint
-        FilterNode* filter = _variables->getNodeFilter(var);
-        filter->addPropertyConstraint(prop.get());
-    }
-}
-
 void ReadStmtGenerator::placePredicateJoins() {
-    for (const auto& pred : _tree->wherePredicates()) {
+    for (const auto& pred : _tree->getPredicates()) {
         const ExprDependencies& deps = pred->getDependencies();
 
         if (deps.empty()) {
-            throwError("Where clauses without dependencies are not supported yet", pred->getExpr());
+            throwError("Predicates without dependencies are not supported yet", pred->getExpr());
         }
 
         // Step 1: find the earliest point on the graph where to place the join
         VarNode* var = deps.findCommonSuccessor(_topology.get(), nullptr);
 
         if (!var) {
-            throwError("Unknown error");
+            throwError("Unknown error. Could not place predicate");
         }
 
         // Step 2: Place joins
@@ -480,7 +445,7 @@ void ReadStmtGenerator::placePredicateJoins() {
 
         // Step 3: Place the constraint
         FilterNode* filterNode = _variables->getNodeFilter(var);
-        filterNode->addWherePredicate(pred.get());
+        filterNode->addPredicate(pred.get());
         pred->setFilterNode(filterNode);
     }
 }

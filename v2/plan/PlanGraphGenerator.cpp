@@ -76,10 +76,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         // Place joins on vars that have more than one input
         readGenerator.placeJoinsOnVars();
 
-        // Place joins based on property expressions
-        readGenerator.placePropertyExprJoins();
-
-        // Place joins based on where predicates
+        // Place joins based on predicates
         readGenerator.placePredicateJoins();
 
         // Place joins that generate the endpoint, and retrieve it

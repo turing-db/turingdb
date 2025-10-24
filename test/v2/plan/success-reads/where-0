@@ -15,7 +15,8 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ _a_._name_
+        __has predicate__
+        __dep__ _a_._name_
     `"]
     3["`
         __GET_EDGES__
@@ -40,7 +41,8 @@ flowchart TD
     8["`
         __FILTER_NODE__
         __label__: Person
-        __prop__ _m_._name_
+        __has predicate__
+        __dep__ _m_._name_
     `"]
     9["`
         __PRODUCE_RESULTS__

@@ -32,7 +32,8 @@ flowchart TD
     `"]
     8["`
         __FILTER_NODE__
-        __prop__ _b_._name_
+        __has predicate__
+        __dep__ _b_._name_
         __dep__ _a_._name_
     `"]
     9["`

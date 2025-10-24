@@ -1,7 +1,6 @@
 #include "PlanGraph.h"
 
-#include "PropertyConstraint.h"
-#include "WherePredicate.h"
+#include "Predicate.h"
 
 using namespace db::v2;
 
@@ -20,20 +19,11 @@ void PlanGraph::getRoots(std::vector<PlanGraphNode*>& roots) const {
     }
 }
 
-WherePredicate* PlanGraph::createWherePredicate(const Expr* expr) {
-    auto pred = std::make_unique<WherePredicate>(expr);
+Predicate* PlanGraph::createPredicate(const Expr* expr) {
+    auto pred = std::make_unique<Predicate>(expr);
     auto* predPtr = pred.get();
 
-    _wherePredicates.emplace_back(std::move(pred));
+    _predicates.emplace_back(std::move(pred));
 
     return predPtr;
-}
-
-PropertyConstraint* PlanGraph::createPropertyConstraint() {
-    auto prop = std::make_unique<PropertyConstraint>();
-    auto* propPtr = prop.get();
-
-    _propConstraints.emplace_back(std::move(prop));
-
-    return propPtr;
 }

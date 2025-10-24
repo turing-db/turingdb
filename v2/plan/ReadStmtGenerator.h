@@ -23,7 +23,6 @@ class Expr;
 class VarNode;
 class NodePattern;
 class EdgePattern;
-struct PropertyConstraint;
 
 class ReadStmtGenerator {
 public:
@@ -51,7 +50,6 @@ public:
     void unwrapWhereExpr(const Expr*);
 
     void placeJoinsOnVars();
-    void placePropertyExprJoins();
     void placePredicateJoins();
     PlanGraphNode* generateEndpoint();
     void insertDataFlowNode(VarNode* node, VarNode* dependency);

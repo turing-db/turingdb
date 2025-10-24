@@ -6,42 +6,30 @@
 
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
-#include "QueryCommand.h"
 #include "ReadStmtAnalyzer.h"
-#include "ExprAnalyzer.h"
 #include "WriteStmtAnalyzer.h"
+#include "ExprAnalyzer.h"
+#include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "Projection.h"
 #include "expr/Expr.h"
-#include "stmt/Limit.h"
-#include "stmt/MatchStmt.h"
-#include "stmt/CreateStmt.h"
-#include "stmt/OrderByItem.h"
+#include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
+#include "stmt/OrderByItem.h"
 #include "stmt/Skip.h"
-#include "stmt/StmtContainer.h"
-#include "Projection.h"
-#include "WhereClause.h"
-#include "Pattern.h"
-#include "PatternElement.h"
-#include "Symbol.h"
-#include "Literal.h"
-#include "NodePattern.h"
-#include "EdgePattern.h"
-#include "decl/PatternData.h"
-#include "decl/VarDecl.h"
-#include "decl/DeclContext.h"
-#include "QualifiedName.h"
+#include "stmt/Limit.h"
 
 using namespace db::v2;
 
 CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(graphView.metadata()),
-      _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
-      _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
-      _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView)) {
+    _graphView(graphView),
+    _graphMetadata(graphView.metadata()),
+    _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
+    _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
+    _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
+{
     _readAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
     _writeAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
 }

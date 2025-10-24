@@ -160,11 +160,13 @@ void ReadStmtAnalyzer::analyze(const PatternElement* element) {
 }
 
 void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
+    VarDecl* decl = nullptr;
+
     if (Symbol* symbol = nodePattern->getSymbol()) {
-        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, symbol->getName());
+        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, symbol->getName());
         nodePattern->setDecl(decl);
     } else {
-        VarDecl* decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
+        decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
         nodePattern->setDecl(decl);
     }
 
@@ -208,17 +210,33 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
                            nodePattern);
             }
 
-            data->addExprConstraint(propName->getName(), propType->_valueType, expr);
+            // Create a dummy Expr that represents the predicate evaluation
+            Symbol* varSymbol = Symbol::create(_ast, decl->getName());
+            QualifiedName* fullName = QualifiedName::create(_ast);
+
+            fullName->addName(varSymbol);
+            fullName->addName(propName);
+            fmt::println("Created predicate with symbols {}.{}", varSymbol->getName(), propName->getName());
+
+            PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
+            propExpr->setDecl(decl);
+            propExpr->setPropertyName(propName->getName());
+
+            BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
+
+            data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
         }
     }
 }
 
 void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
+    VarDecl* decl = nullptr;
+
     if (Symbol* symbol = edgePattern->getSymbol()) {
-        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
+        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
         edgePattern->setDecl(decl);
     } else {
-        VarDecl* decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
+        decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
         edgePattern->setDecl(decl);
     }
 
@@ -262,7 +280,21 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                            edgePattern);
             }
 
-            data->addExprConstraint(propName->getName(), propType->_valueType, expr);
+            // Create a dummy Expr that represents the predicate evaluation
+            Symbol* varSymbol = Symbol::create(_ast, decl->getName());
+            QualifiedName* fullName = QualifiedName::create(_ast);
+
+            fullName->addName(varSymbol);
+            fullName->addName(propName);
+            fmt::println("Created predicate with symbols {}.{}", varSymbol->getName(), propName->getName());
+
+            PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
+            propExpr->setDecl(decl);
+            propExpr->setPropertyName(propName->getName());
+
+            BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
+
+            data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
         }
     }
 }
