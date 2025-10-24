@@ -35,17 +35,19 @@ struct PropertyTypeDispatcher {
     }
 };
 
-DataPartMerger::DataPartMerger(CommitBuilder* commitBuilder)
-    :_commitBuilder(commitBuilder)
+DataPartMerger::DataPartMerger(CommitData* commitData,
+                               MetadataBuilder& metadataBuilder)
+    : _graphView(*commitData),
+    _metadataBuilder(metadataBuilder)
 {
 }
 
 std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts, JobSystem& jobSystem) const {
-    const auto& graphReader = _commitBuilder->viewGraph().read();
+    const auto& graphReader = _graphView.read();
     const size_t nodeCount = graphReader.getNodeCount();
     const size_t edgeCount = graphReader.getEdgeCount();
 
-    std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepare(_commitBuilder->metadata(), 0, 0, 0);
+    std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepare(_metadataBuilder, 0, 0, 0);
 
     std::vector<LabelSetHandle>& labelSets = datapartBuilder->coreNodeLabelSets();
     labelSets.reserve(nodeCount);
@@ -57,7 +59,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts, J
     PropertyManager& nodePropertyManager = *datapartBuilder->nodeProperties();
     PropertyManager& edgePropertyManager = *datapartBuilder->edgeProperties();
 
-    const auto& graphMetadata = _commitBuilder->commitData().metadata();
+    const auto& graphMetadata = _graphView.metadata();
 
     //Count The Number Of Entries For Each Property
     std::unordered_map<PropertyTypeID, size_t> _nodePropertiesCount;
