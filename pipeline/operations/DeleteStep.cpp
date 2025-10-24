@@ -61,7 +61,7 @@ void DeleteStep<IDT>::execute() {
         _writeBuffer->addDeletedEdges(_deletions);
     }
 
-    if constexpr(std::is_same_v<IDT, NodeID>) {
+    if constexpr(std::is_same_v<IDT, NodeID> && DETACH) {
         _writeBuffer->addHangingEdges(reader.getView());
     }
 }
