@@ -7,4 +7,3 @@ ANALYZE ERROR
      1 | MATCH (n) CREATE (m:Person { c: count(n) }) RETURN n
        |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
 -------* Invalid use of aggregate expression in this context
-

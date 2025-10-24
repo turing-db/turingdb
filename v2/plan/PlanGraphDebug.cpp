@@ -10,10 +10,9 @@
 #include "views/GraphView.h"
 
 #include "PlanGraph.h"
-#include "WherePredicate.h"
+#include "Predicate.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
-#include "PropertyConstraint.h"
 
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
@@ -41,30 +40,11 @@ void outputDependency(std::ostream& output, const ExprDependencies::ExprDependen
     }
 }
 
-void outputPredicate(std::ostream& output, const WherePredicate* pred) {
+void outputPredicate(std::ostream& output, const Predicate* pred) {
     output << "        __has predicate__" << "\n";
 
     for (const auto& dep : pred->getDependencies().getDependencies()) {
         outputDependency(output, dep);
-    }
-}
-
-void outputPropertyConstraints(std::ostream& output,
-                               const PropertyTypeMap& propTypeMap,
-                               std::span<const PropertyConstraint* const> constraints) {
-    for (const auto& constraint : constraints) {
-        const auto& [var, propType, expr, deps] = *constraint;
-
-        std::optional name = propTypeMap.getName(propType);
-        if (!name) {
-            name = std::to_string(propType);
-        }
-
-        output << fmt::format("        __prop__ _{}_._{}_\n", var->getVarDecl()->getName(), name.value());
-
-        for (const auto& dep : deps.getDependencies()) {
-            outputDependency(output, dep);
-        }
     }
 }
 
@@ -86,7 +66,6 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
     const auto& metadata = view.metadata();
     const auto& edgeTypeMap = metadata.edgeTypes();
     const auto& labelMap = metadata.labels();
-    const auto& propTypeMap = metadata.propTypes();
 
     std::unordered_map<const PlanGraphNode*, size_t> nodeOrder;
 
@@ -133,9 +112,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << "        __label__: " << labelMap.getName(label).value() << "\n";
                 }
 
-                outputPropertyConstraints(output, propTypeMap, n->getPropertyConstraints());
-
-                for (const auto& pred : n->getWherePredicates()) {
+                for (const auto& pred : n->getPredicates()) {
                     outputPredicate(output, pred);
                 }
             } break;
@@ -146,9 +123,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << "        __edge_type__: " << edgeTypeMap.getName(edgeType).value() << "\n";
                 }
 
-                outputPropertyConstraints(output, propTypeMap, e->getPropertyConstraints());
-
-                for (const auto& pred : e->getWherePredicates()) {
+                for (const auto& pred : e->getPredicates()) {
                     outputPredicate(output, pred);
                 }
             } break;

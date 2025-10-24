@@ -10,19 +10,19 @@ class FilterNode;
 class PlanGraphVariables;
 class PlanGraphNode;
 
-class WherePredicate {
+class Predicate {
 public:
-    explicit WherePredicate(const Expr* expr)
+    explicit Predicate(const Expr* expr)
         : _expr(expr)
     {
     }
 
-    ~WherePredicate() = default;
+    ~Predicate() = default;
 
-    WherePredicate(const WherePredicate&) = delete;
-    WherePredicate(WherePredicate&&) noexcept = default;
-    WherePredicate& operator=(const WherePredicate&) = delete;
-    WherePredicate& operator=(WherePredicate&&) noexcept = default;
+    Predicate(const Predicate&) = delete;
+    Predicate(Predicate&&) noexcept = default;
+    Predicate& operator=(const Predicate&) = delete;
+    Predicate& operator=(Predicate&&) noexcept = default;
 
     const ExprDependencies& getDependencies() const {
         return _dependencies;

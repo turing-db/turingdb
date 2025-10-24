@@ -2,9 +2,24 @@
 MATCH (n) RETURN n, count(n)
 
 /// RESULT
-ANALYZE ERROR
--------* Query error
-     1 | MATCH (n) RETURN n, count(n)
-       |                  ^
--------* Grouping keys are not supported yet
-
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __GROUP_BY__
+    `"]
+    4["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->3
+    2-->1
+    3-->4

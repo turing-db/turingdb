@@ -7,4 +7,3 @@ ANALYZE ERROR
      1 | MATCH (n { name: count(n.duration)}) RETURN n
        |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 -------* Invalid use of aggregate expression in this context
-

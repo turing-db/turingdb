@@ -10,8 +10,7 @@ namespace db::v2 {
 class VarDecl;
 class Expr;
 class ExprConstraint;
-class WherePredicate;
-class PropertyConstraint;
+class Predicate;
 
 class PlanGraph {
 public:
@@ -54,23 +53,17 @@ public:
         return _nodes;
     }
 
-    WherePredicate* createWherePredicate(const Expr* expr);
-    PropertyConstraint* createPropertyConstraint();
+    Predicate* createPredicate(const Expr* expr);
 
-    std::span<const std::unique_ptr<WherePredicate>> wherePredicates() const {
-        return _wherePredicates;
-    }
-
-    std::span<const std::unique_ptr<PropertyConstraint>> propConstraints() const {
-        return _propConstraints;
+    std::span<const std::unique_ptr<Predicate>> getPredicates() const {
+        return _predicates;
     }
 
 private:
     friend class PlanGraphDebug;
 
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
-    std::vector<std::unique_ptr<WherePredicate>> _wherePredicates;
-    std::vector<std::unique_ptr<PropertyConstraint>> _propConstraints;
+    std::vector<std::unique_ptr<Predicate>> _predicates;
 };
 
 }

@@ -13,7 +13,6 @@ namespace db::v2 {
 class CypherAST;
 class PlanGraph;
 class PlanGraphVariables;
-class PropertyConstraint;
 class SinglePartQuery;
 class ReturnStmt;
 class QueryCommand;
