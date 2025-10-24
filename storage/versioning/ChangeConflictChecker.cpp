@@ -13,6 +13,7 @@
 
 #include "BioAssert.h"
 #include "Panic.h"
+#include "versioning/CommitWriteBuffer.h"
 
 using namespace db;
 
@@ -25,7 +26,7 @@ ChangeConflictChecker::ChangeConflictChecker(const Change& change,
 }
 
 void ChangeConflictChecker::getWritesSinceCommit(ConflictCheckSets& writes) {
-    for (const auto& commit : _commitsSinceBranch) {
+    for (const std::unique_ptr<Commit>& commit : _commitsSinceBranch) {
         const CommitHistory& history = commit->history();
         const CommitJournal& journal = history.journal();
         bioassert(&journal);
@@ -38,7 +39,7 @@ void ChangeConflictChecker::checkConflicts() {
     ConflictCheckSets writes;
     getWritesSinceCommit(writes);
 
-    for (const auto& commitBuilder : _change._commits) {
+    for (const std::unique_ptr<CommitBuilder>& commitBuilder : _change._commits) {
         const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
         checkPendingEdgeConflicts(writes, writeBuffer);
         checkDeletedNodeConflicts(writes, writeBuffer);
@@ -47,7 +48,7 @@ void ChangeConflictChecker::checkConflicts() {
 
     // Check the latest commit for newly created edges that are incident to nodes this
     // change attempts to delete
-    const auto& latestCommit = _commitsSinceBranch.back();
+    const std::unique_ptr<Commit>& latestCommit = _commitsSinceBranch.back();
     const CommitData& latestCommitData = latestCommit->data();
     checkNewEdgesIncidentToDeleted(latestCommitData);
 }
@@ -64,16 +65,11 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
     // Work out how many dataparts are on the tip of main.
     const size_t totalDPsOnMain = latestCommitData.allDataparts().size();
 
-    // Helper to accumulate datapart counts from each commit
-    const auto sumDPCountFromCommit = [&](size_t acc, const std::unique_ptr<Commit>& commit){
-        const CommitData& data = commit->data();
-        const size_t dataPartsFromThisCommit = data.commitDataparts().size();
-        return acc + dataPartsFromThisCommit;
-    };
-
     // Calculate the total number of DPs created by each commit on main since we branched
-    const size_t numDPsCreatedSinceBranch = std::accumulate(
-        _commitsSinceBranch.begin(), _commitsSinceBranch.end(), 0, sumDPCountFromCommit);
+    size_t numDPsCreatedSinceBranch = 0;
+    for (const auto& commit : _commitsSinceBranch) {
+        numDPsCreatedSinceBranch += commit->data().commitDataparts().size();
+    }
 
     bioassert(totalDPsOnMain >= numDPsCreatedSinceBranch);
 
@@ -84,20 +80,21 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
         return;
     }
 
-    const size_t numDataPartsToCheck = totalDPsOnMain - numDPsCreatedSinceBranch;
-    const size_t startingIndex = totalDPsOnMain - numDataPartsToCheck;
+    const size_t startingIndex = totalDPsOnMain - numDPsCreatedSinceBranch;
 
+    // Check dataparts that have been created on main since we branched, skipping all
+    // dataparts we have already seen: there cannot be conflicts there. Try and
+    // advance to the first datapart that has been added since we branched. If any
+    // dataparts in the range [startingIndex, end] contain edges from a deleted node,
+    // @ref outEdgesIt will be valid. If there are such edges, then a commit on main has
+    // created an edge from a node this change is trying to delete: write conflict.
+    // Otherwise, @ref goToPart will advance to the `end` part iterator, and @ref
+    // outEdgesIt.isValid() will return false.
     // 1. Check out edges
     {
         GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
         GetOutEdgesIterator outEdgesIt = outEdges.begin();
-        // Skip all dataparts we have already seen, there cannot be conflicts here
-        // Try and advance to the first datapart that has been added since we branched
-        // If any dataparts in the range [startingIndex, end] contain out edges from a
-        // deleted node, @ref outEdgesIt will be valid. If there are such edges, then a
-        // commit on main has created an edge from a node this change is trying to delete:
-        // write conflict. Otherwise, @ref goToPart will advance to the `end` part
-        // iterator, and @ref outEdgesIt.isValid() will return false.
+        
         outEdgesIt.goToPart(startingIndex);
         if (outEdgesIt.isValid()) {
             panic("Submit rejected: Commits on main have created an edge incident to a "
@@ -109,13 +106,6 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
     {
         GetInEdgesRange inEdges {mostRecentView, &_deletedExistingNodes};
         GetInEdgesIterator inEdgesIt = inEdges.begin();
-        // Skip all dataparts we have already seen, there cannot be conflicts here
-        // Try and advance to the first datapart that has been added since we branched
-        // If any dataparts in the range [startingIndex, end] contain in edges from a
-        // deleted node, @ref inEdgesIt will be valid. If there are such edges, then a
-        // commit on main has created an edge from a node this change is trying to delete:
-        // write conflict. Otherwise, @ref goToPart will advance to the `end` part
-        // iterator, and @ref inEdgesIt.isValid() will return false.
         inEdgesIt.goToPart(startingIndex);
         if (inEdgesIt.isValid()) {
             panic("Submit rejected: Commits on main have created an edge incident to a "
@@ -127,8 +117,8 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& writes,
                                                       const CommitWriteBuffer& writeBuffer) {
     // Check for pending edges to see if their source or target has write conflict
-    const auto& pendingEdges = writeBuffer.pendingEdges();
-    for (const auto& edge : pendingEdges) {
+    const CommitWriteBuffer::PendingEdges& pendingEdges = writeBuffer.pendingEdges();
+    for (const CommitWriteBuffer::PendingEdge& edge : pendingEdges) {
         // Check if source node was modified
         if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
             NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};
@@ -152,7 +142,7 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
 
 void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& writes,
                                               const CommitWriteBuffer& writeBuffer) {
-    const auto& deletedNodes = writeBuffer.deletedNodes();
+    const CommitWriteBuffer::DeletedNodes& deletedNodes = writeBuffer.deletedNodes();
     for (const NodeID deletedNode : deletedNodes) {
         NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
         // If this is a node which existed before branching, we need to note it and do a
@@ -170,7 +160,7 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
 
 void ChangeConflictChecker::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
                                               const CommitWriteBuffer& writeBuffer) {
-    const auto& deletedEdges = writeBuffer.deletedEdges();
+    const CommitWriteBuffer::DeletedEdges& deletedEdges = writeBuffer.deletedEdges();
     for (const EdgeID deletedEdge : deletedEdges) {
         EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
         if (writes.writtenEdges.contains(newID)) {
