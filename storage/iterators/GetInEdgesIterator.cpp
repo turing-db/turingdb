@@ -56,7 +56,7 @@ void GetInEdgesIterator::goToPart(size_t partIdx) {
 
 void GetInEdgesIterator::advancePartIterator(size_t n) {
     // Advance n dataparts forward
-    for (; n > 0 && _partIt.isNotEnd(); n--) {
+    for (size_t i = 0; i < n && _partIt.isNotEnd(); i++) {
         _partIt.next();
     }
     // If we have not reached the end, update the _node members
