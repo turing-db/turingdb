@@ -73,29 +73,29 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts, J
     }
 
     for (const auto& dataPart : dataParts) {
-        for (const auto& record : dataPart->nodes().records()) {
-            labelSets.emplace_back(*graphMetadata.labelsets().getValue(record._labelset.getID()));
+        for (const auto& nodeRecord : dataPart->nodes().records()) {
+            labelSets.emplace_back(*graphMetadata.labelsets().getValue(nodeRecord._labelset.getID()));
         }
 
         std::memcpy(edges.data() + edgeOffset, dataPart->edges()._outEdges.data(), (dataPart->edges().size() * sizeof(EdgeRecord)));
         edgeOffset += dataPart->edges().size();
 
-        for (const auto& it : dataPart->nodeProperties()) {
+        for (const auto& propIt : dataPart->nodeProperties()) {
             const auto process = [&]<SupportedType Type> {
                 if constexpr (std::is_same_v<Type, types::String>) {
-                    if (!nodePropertyManager.hasPropertyType(it.first)) {
-                        nodePropertyManager.registerPropertyType<types::String>(it.first);
+                    if (!nodePropertyManager.hasPropertyType(propIt.first)) {
+                        nodePropertyManager.registerPropertyType<types::String>(propIt.first);
 
-                        auto& propertyContainer = nodePropertyManager.getMutableContainer<types::String>(it.first);
-                        propertyContainer._values._views.resize(_nodePropertiesCount[it.first]);
-                        propertyContainer.ids().resize(_nodePropertiesCount[it.first]);
+                        auto& propertyContainer = nodePropertyManager.getMutableContainer<types::String>(propIt.first);
+                        propertyContainer._values._views.resize(_nodePropertiesCount[propIt.first]);
+                        propertyContainer.ids().resize(_nodePropertiesCount[propIt.first]);
 
                         // Re-use for offsets;
-                        _nodePropertiesCount[it.first] = 0;
+                        _nodePropertiesCount[propIt.first] = 0;
                     }
 
-                    auto& oldContainer = it.second->cast<types::String>();
-                    auto& newContainer = nodePropertyManager.getMutableContainer<types::String>(it.first);
+                    auto& oldContainer = propIt.second->cast<types::String>();
+                    auto& newContainer = nodePropertyManager.getMutableContainer<types::String>(propIt.first);
 
                     // since the string_view values are just copied into another string_view on the sort
                     // we can just copy the id's and the corresponding string_view that still point to
@@ -103,96 +103,96 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts, J
                     // exist until our merged datapart is fully created. This allows us to avoid unecessary
                     // copies of all the strings, and avoid having to do some not-so-nice pointer transalations
 
-                    std::memcpy(newContainer._values._views.data() + _nodePropertiesCount[it.first],
+                    std::memcpy(newContainer._values._views.data() + _nodePropertiesCount[propIt.first],
                                 oldContainer._values._views.data(),
                                 (oldContainer._values._views.size() * sizeof(std::string_view)));
 
-                    std::memcpy(newContainer.ids().data() + _nodePropertiesCount[it.first],
+                    std::memcpy(newContainer.ids().data() + _nodePropertiesCount[propIt.first],
                                 oldContainer.ids().data(),
                                 (oldContainer.ids().size() * sizeof(EntityID)));
 
-                    _nodePropertiesCount[it.first] += oldContainer.ids().size();
+                    _nodePropertiesCount[propIt.first] += oldContainer.ids().size();
                 } else {
-                    if (!nodePropertyManager.hasPropertyType(it.first)) {
-                        nodePropertyManager.registerPropertyType<Type>(it.first);
+                    if (!nodePropertyManager.hasPropertyType(propIt.first)) {
+                        nodePropertyManager.registerPropertyType<Type>(propIt.first);
 
-                        auto& propertyContainer = nodePropertyManager.getMutableContainer<Type>(it.first);
-                        propertyContainer.values().resize(_nodePropertiesCount[it.first]);
-                        propertyContainer.ids().resize(_nodePropertiesCount[it.first]);
+                        auto& propertyContainer = nodePropertyManager.getMutableContainer<Type>(propIt.first);
+                        propertyContainer.values().resize(_nodePropertiesCount[propIt.first]);
+                        propertyContainer.ids().resize(_nodePropertiesCount[propIt.first]);
 
                         // Re-use for offsets;
-                        _nodePropertiesCount[it.first] = 0;
+                        _nodePropertiesCount[propIt.first] = 0;
                     }
 
-                    auto& oldContainer = it.second->cast<Type>();
-                    auto& newContainer = nodePropertyManager.getMutableContainer<Type>(it.first);
+                    auto& oldContainer = propIt.second->cast<Type>();
+                    auto& newContainer = nodePropertyManager.getMutableContainer<Type>(propIt.first);
 
-                    std::memcpy(newContainer.values().data() + _nodePropertiesCount[it.first],
+                    std::memcpy(newContainer.values().data() + _nodePropertiesCount[propIt.first],
                                 oldContainer.values().data(),
                                 (oldContainer.values().size() * sizeof(typename Type::Primitive)));
 
-                    std::memcpy(newContainer.ids().data() + _nodePropertiesCount[it.first],
+                    std::memcpy(newContainer.ids().data() + _nodePropertiesCount[propIt.first],
                                 oldContainer.ids().data(),
                                 (oldContainer.ids().size() * sizeof(EntityID)));
 
-                    _nodePropertiesCount[it.first] += oldContainer.ids().size();
+                    _nodePropertiesCount[propIt.first] += oldContainer.ids().size();
                 }
             };
-            PropertyTypeDispatcher {it.second->getValueType()}.execute(process);
+            PropertyTypeDispatcher {propIt.second->getValueType()}.execute(process);
         }
 
-        for (const auto& it : dataPart->edgeProperties()) {
+        for (const auto& propIt : dataPart->edgeProperties()) {
             const auto process = [&]<SupportedType Type> {
                 if constexpr (std::is_same_v<Type, types::String>) {
-                    if (!edgePropertyManager.hasPropertyType(it.first)) {
-                        edgePropertyManager.registerPropertyType<types::String>(it.first);
+                    if (!edgePropertyManager.hasPropertyType(propIt.first)) {
+                        edgePropertyManager.registerPropertyType<types::String>(propIt.first);
 
-                        auto& propertyContainer = edgePropertyManager.getMutableContainer<types::String>(it.first);
-                        propertyContainer._values._views.resize(_edgePropertiesCount[it.first]);
-                        propertyContainer.ids().resize(_edgePropertiesCount[it.first]);
+                        auto& propertyContainer = edgePropertyManager.getMutableContainer<types::String>(propIt.first);
+                        propertyContainer._values._views.resize(_edgePropertiesCount[propIt.first]);
+                        propertyContainer.ids().resize(_edgePropertiesCount[propIt.first]);
 
                         // Re-use for offsets;
-                        _edgePropertiesCount[it.first] = 0;
+                        _edgePropertiesCount[propIt.first] = 0;
                     }
 
-                    auto& oldContainer = it.second->cast<types::String>();
-                    auto& newContainer = edgePropertyManager.getMutableContainer<types::String>(it.first);
+                    auto& oldContainer = propIt.second->cast<types::String>();
+                    auto& newContainer = edgePropertyManager.getMutableContainer<types::String>(propIt.first);
 
-                    std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[it.first],
+                    std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propIt.first],
                                 oldContainer._values._views.data(),
                                 (oldContainer._values._views.size() * sizeof(std::string_view)));
 
-                    std::memcpy(newContainer.ids().data() + _edgePropertiesCount[it.first],
+                    std::memcpy(newContainer.ids().data() + _edgePropertiesCount[propIt.first],
                                 oldContainer.ids().data(),
                                 (oldContainer.ids().size() * sizeof(EntityID)));
 
-                    _edgePropertiesCount[it.first] += oldContainer.ids().size();
+                    _edgePropertiesCount[propIt.first] += oldContainer.ids().size();
                 } else {
-                    if (!edgePropertyManager.hasPropertyType(it.first)) {
-                        edgePropertyManager.registerPropertyType<Type>(it.first);
+                    if (!edgePropertyManager.hasPropertyType(propIt.first)) {
+                        edgePropertyManager.registerPropertyType<Type>(propIt.first);
 
-                        auto& propertyContainer = edgePropertyManager.getMutableContainer<Type>(it.first);
-                        propertyContainer.values().resize(_edgePropertiesCount[it.first]);
-                        propertyContainer.ids().resize(_edgePropertiesCount[it.first]);
+                        auto& propertyContainer = edgePropertyManager.getMutableContainer<Type>(propIt.first);
+                        propertyContainer.values().resize(_edgePropertiesCount[propIt.first]);
+                        propertyContainer.ids().resize(_edgePropertiesCount[propIt.first]);
 
                         // Re-use for offsets;
-                        _edgePropertiesCount[it.first] = 0;
+                        _edgePropertiesCount[propIt.first] = 0;
                     }
-                    auto& oldContainer = it.second->cast<Type>();
-                    auto& newContainer = edgePropertyManager.getMutableContainer<Type>(it.first);
+                    auto& oldContainer = propIt.second->cast<Type>();
+                    auto& newContainer = edgePropertyManager.getMutableContainer<Type>(propIt.first);
 
-                    std::memcpy(newContainer.values().data() + _edgePropertiesCount[it.first],
+                    std::memcpy(newContainer.values().data() + _edgePropertiesCount[propIt.first],
                                 oldContainer.values().data(),
                                 (oldContainer.values().size() * sizeof(typename Type::Primitive)));
 
-                    std::memcpy(newContainer.ids().data() + _edgePropertiesCount[it.first],
+                    std::memcpy(newContainer.ids().data() + _edgePropertiesCount[propIt.first],
                                 oldContainer.ids().data(),
                                 (oldContainer.ids().size() * sizeof(EntityID)));
 
-                    _edgePropertiesCount[it.first] += oldContainer.ids().size();
+                    _edgePropertiesCount[propIt.first] += oldContainer.ids().size();
                 }
             };
-            PropertyTypeDispatcher {it.second->getValueType()}.execute(process);
+            PropertyTypeDispatcher {propIt.second->getValueType()}.execute(process);
         }
     }
 
