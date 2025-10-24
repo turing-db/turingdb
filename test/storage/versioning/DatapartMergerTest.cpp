@@ -32,7 +32,7 @@ public:
         EntityMapping() = delete;
 
         explicit EntityMapping(int64_t propertyID)
-        :_propertyID(propertyID)
+            : _propertyID(propertyID)
         {
         }
     };
@@ -369,7 +369,7 @@ TEST_F(DataPartMergerTest, labels) {
 
     auto* commitBuilder = writer.openWriteTransaction().commitBuilder();
 
-    DataPartMerger merger(commitBuilder);
+    DataPartMerger merger(&commitBuilder->commitData(),commitBuilder->metadata());
     std::unique_ptr<DataPartBuilder> dataPartBuilder = merger.merge(commitBuilder->commitData().allDataparts(), *_jobSystem);
 
     DataPart mergedDataPart = DataPart(0, 0);

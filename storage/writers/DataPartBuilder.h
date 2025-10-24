@@ -71,7 +71,6 @@ private:
     EdgeID _firstEdgeID {0};
     NodeID _nextNodeID {0};
     EdgeID _nextEdgeID {0};
-    GraphView _view;
     MetadataBuilder* _metadata {nullptr};
     size_t _outPatchEdgeCount {0};
     size_t _inPatchEdgeCount {0};

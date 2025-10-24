@@ -3,20 +3,25 @@
 #include <memory>
 
 #include "DataPartSpan.h"
+#include "views/GraphView.h"
 
 namespace db {
-class CommitBuilder;
+class MetadataBuilder;
+class GraphView;
 class DataPartBuilder;
 class JobSystem;
 
 class DataPartMerger {
 public:
-    explicit DataPartMerger(CommitBuilder* commitBuilder);
+    DataPartMerger(CommitData* commitData,
+                            MetadataBuilder& metadataBuilder);
 
-    std::unique_ptr<DataPartBuilder> merge(DataPartSpan dataParts, JobSystem& jobsystem) const;
+    std::unique_ptr<DataPartBuilder> merge(DataPartSpan dataParts,
+                                           JobSystem& jobsystem) const;
 
 private:
-    CommitBuilder* _commitBuilder;
+    GraphView _graphView;
+    MetadataBuilder& _metadataBuilder;
 };
 
 }
