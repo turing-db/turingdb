@@ -19,6 +19,7 @@ class ColumnVector;
 class TombstoneFilter {
 public:
     TombstoneFilter(const Tombstones& tombstones);
+    ~TombstoneFilter() = default;
 
     TombstoneFilter(const TombstoneFilter&) = delete;
     TombstoneFilter(TombstoneFilter&&) = delete;
