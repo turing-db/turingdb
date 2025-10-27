@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "decl/EvaluatedType.h"
 
 namespace db::v2 {
