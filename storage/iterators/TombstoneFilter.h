@@ -35,18 +35,18 @@ public:
 
     /**
      * @brief Step 1 of a 2 step filtering process for chunk writers who produced multiple
-     * columns which need to be filtered, for example @ref GetOutEdgesChunkWriter produces
-     * both EdgeID and NodeID columns, which both need to be filtered, and only rows which
-     * pass the filter of both columns remain
+     * columns which need to be filtered.
+     * @detail Adds indexes which contain a Node or Edge ID which has a tombstone in @ref
+     * _tombstones to @ref _deletedIndices.
      */
     template <TypedInternalID IDT>
     void populateDeletedIndices(const ColumnVector<IDT>& column);
 
     /**
      * @brief Step 2 of a 2 step filtering process for chunk writers who produced multiple
-     * columns which need to be filtered, for example @ref GetOutEdgesChunkWriter produces
-     * both EdgeID and NodeID columns, which both need to be filtered, and only rows which
-     * pass the filter of both columns remain
+     * columns which need to be filtered.
+     * @detail Stably moves all elements at indices which are not in @ref _deletedIndices
+     * to the front of the column, and resizes to only include those values.
      */
     template <typename T>
     void applyDeletedIndices(ColumnVector<T>& column);

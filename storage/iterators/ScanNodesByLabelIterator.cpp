@@ -3,6 +3,7 @@
 #include <numeric>
 
 #include "DataPart.h"
+#include "TombstoneFilter.h"
 #include "NodeContainer.h"
 
 namespace db {
@@ -76,6 +77,11 @@ ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter(const GraphView& view, 
 {
 }
 
+void ScanNodesByLabelChunkWriter::filterTombstones() {
+    TombstoneFilter filter(_view.tombstones());
+    filter.onePassApplyFilter(*_nodeIDs);
+}
+
 void ScanNodesByLabelChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     msgbioassert(_nodeIDs, "ScanNodesByLabelChunkWriter must be initialized with a valid column");
@@ -93,6 +99,10 @@ void ScanNodesByLabelChunkWriter::fill(size_t maxCount) {
         std::iota(_nodeIDs->begin() + prevSize, _nodeIDs->end(), *_rangeIt);
         _rangeIt += rangeSize;
         nextValid();
+    }
+
+    if (_view.tombstones().hasNodes()) {
+        filterTombstones();
     }
 }
 

@@ -58,6 +58,8 @@ public:
 
 private:
     ColumnNodeIDs* _nodeIDs {nullptr};
+
+    void filterTombstones();
 };
 
 struct ScanNodesByLabelRange {
