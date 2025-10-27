@@ -7,6 +7,7 @@
 #include "Path.h"
 #include "versioning/CommitHash.h"
 #include "versioning/GraphID.h"
+#include "mergers/DataPartMergeResult.h"
 
 namespace db {
 
@@ -41,6 +42,7 @@ public:
 
     [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
+    [[nodiscard]] DataPartMergeResult<void> mergeDataParts(JobSystem& jobSystem);
 
     [[nodiscard]] GraphID getID() const { return _graphID; }
     [[nodiscard]] CommitHash getHeadHash() const;

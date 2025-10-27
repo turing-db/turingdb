@@ -30,6 +30,7 @@ public:
         DELETE_NODES_COMMAND,
         DELETE_EDGES_COMMAND,
         COMMIT_COMMAND,
+        DATAPARTMERGE_COMMAND,
         CREATE_GRAPH_COMMAND,
         LIST_GRAPH_COMMAND,
         LOAD_GRAPH_COMMAND,
@@ -119,9 +120,19 @@ private:
     ~CommitCommand() override;
 };
 
+class DataPartMergeCommand : public QueryCommand {
+public:
+    static DataPartMergeCommand* create(ASTContext* ctxt);
+
+    Kind getKind() const override { return Kind::DATAPARTMERGE_COMMAND; }
+
+private:
+    DataPartMergeCommand();
+    ~DataPartMergeCommand() override;
+};
+
 class CreateGraphCommand : public QueryCommand {
 public:
-
     static CreateGraphCommand* create(ASTContext* ctxt, const std::string& name);
 
     Kind getKind() const override { return Kind::CREATE_GRAPH_COMMAND; }

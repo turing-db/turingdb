@@ -412,9 +412,11 @@ ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, Com
     }
 
     Graph* graph = it->second.get();
-    auto change = graph->newChange(baseHash);
+    return _changes->createChange(graph, baseHash);
+}
 
-    return _changes->storeChange(graph, std::move(change));
+DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
+    return _changes->mergeDataParts(graph, jobSystem);
 }
 
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,

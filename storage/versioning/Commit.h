@@ -20,7 +20,7 @@ public:
     using CommitSpan = std::span<const std::unique_ptr<Commit>>;
 
     Commit();
-    Commit(VersionController* controller, const WeakArc<CommitData>& data);
+    Commit(VersionController* controller, const WeakArc<CommitData>& data, bool isMergeCommit = false);
     ~Commit();
 
     Commit(const Commit&) = delete;
@@ -38,11 +38,16 @@ public:
     [[nodiscard]] const CommitHistory& history() const { return _data->history(); }
     [[nodiscard]] CommitHistory& history() { return _data->history(); }
     [[nodiscard]] bool isHead() const;
+    [[nodiscard]] bool isMergeCommit() const { return _mergeCommit; };
     [[nodiscard]] CommitView view() const;
 
     [[nodiscard]] static std::unique_ptr<Commit> createNextCommit(VersionController* controller,
                                                                   const WeakArc<CommitData>& data,
                                                                   const CommitView& prevCommit);
+
+    [[nodiscard]] static std::unique_ptr<Commit> createMergeCommit(VersionController* controller,
+                                                                   const WeakArc<CommitData>& data,
+                                                                   const CommitView& prevCommit);
 
 private:
     friend CommitLoader;
@@ -51,6 +56,7 @@ private:
     VersionController* _controller {nullptr};
     CommitHash _hash = CommitHash::create();
     WeakArc<CommitData> _data;
+    bool _mergeCommit {false};
 };
 
 }

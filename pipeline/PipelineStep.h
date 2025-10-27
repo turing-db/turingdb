@@ -37,6 +37,7 @@
 #include "operations/HistoryStep.h"
 #include "operations/ChangeStep.h"
 #include "operations/CommitStep.h"
+#include "operations/DataPartMergeStep.h"
 #include "operations/CallPropertyStep.h"
 #include "operations/S3ConnectStep.h"
 #include "operations/S3PushStep.h"
@@ -144,6 +145,7 @@ public:
     PipelineStep(DeleteStep<EdgeID>::Tag);
 
     PipelineStep(CommitStep::Tag);
+    PipelineStep(DataPartMergeStep::Tag);
     PipelineStep(CallPropertyStep::Tag,
                  ColumnVector<PropertyTypeID>* id,
                  ColumnVector<std::string_view>* name,
@@ -252,6 +254,7 @@ private:
                  DeleteStep<NodeID>,
                  DeleteStep<EdgeID>,
                  CommitStep,
+                 DataPartMergeStep,
                  CallPropertyStep,
                  CallLabelStep,
                  CallLabelSetStep,

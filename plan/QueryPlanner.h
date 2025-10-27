@@ -139,6 +139,7 @@ private:
     bool planHistory(const HistoryCommand* history);
     bool planChange(const ChangeCommand* cmd);
     bool planCommit(const CommitCommand* commit);
+    bool planDataPartMerge(const DataPartMergeCommand* commit);
     bool planCall(const CallCommand* call);
     bool planS3Connect(const S3ConnectCommand* s3Connect);
     bool planS3Transfer(const S3TransferCommand* s3Transfer);

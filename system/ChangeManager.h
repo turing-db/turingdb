@@ -3,6 +3,7 @@
 #include <unordered_map>
 
 #include "RWSpinLock.h"
+#include "mergers/DataPartMergeResult.h"
 #include "versioning/ChangeResult.h"
 #include "versioning/ChangeID.h"
 #include "versioning/Change.h"
@@ -41,12 +42,16 @@ public:
     ChangeManager& operator=(const ChangeManager&) = delete;
     ChangeManager& operator=(ChangeManager&&) = delete;
 
-    Change* storeChange(const Graph* graph, std::unique_ptr<Change> change);
+    Change* createChange(Graph* graph, CommitHash baseHash);
     ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
     ChangeResult<void> submitChange(ChangeAccessor& access, JobSystem&);
     ChangeResult<void> deleteChange(ChangeAccessor& access, ChangeID changeID);
 
+    DataPartMergeResult<void> mergeDataParts(Graph* grapph, JobSystem& jobSystem);
+
     void listChanges(std::vector<const Change*>& list, const Graph* graph) const;
+
+    bool isEmpty() { return _changes.empty(); };
 
 private:
     mutable RWSpinLock _changesLock;
