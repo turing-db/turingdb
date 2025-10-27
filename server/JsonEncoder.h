@@ -137,6 +137,7 @@ public:
             case QueryCommand::Kind::DELETE_NODES_COMMAND:
             case QueryCommand::Kind::DELETE_EDGES_COMMAND:
             case QueryCommand::Kind::COMMIT_COMMAND:
+            case QueryCommand::Kind::DATAPARTMERGE_COMMAND:
             case QueryCommand::Kind::CREATE_GRAPH_COMMAND:
             case QueryCommand::Kind::S3CONNECT_COMMAND:
             case QueryCommand::Kind::S3TRANSFER_COMMAND:

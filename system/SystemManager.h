@@ -12,6 +12,7 @@
 #include "GraphFileType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
+#include "mergers/DataPartMergeResult.h"
 #include "dump/DumpResult.h"
 
 namespace db {
@@ -68,6 +69,8 @@ public:
     const ChangeManager& getChangeManager() const { return *_changes; }
 
     ChangeResult<Change*> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
+
+    DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
 
     ChangeResult<Transaction> openTransaction(std::string_view graphName,
                                               CommitHash commitHash,

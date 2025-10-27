@@ -60,6 +60,7 @@ enum class PipelineOpcode : uint64_t {
     DELETE_NODES,
     DELETE_EDGES,
     COMMIT,
+    DATAPART_MERGE,
     END,
     CALL_PROPERTIES,
     CALL_LABELS,

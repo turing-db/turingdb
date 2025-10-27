@@ -309,6 +309,12 @@ PipelineStep::PipelineStep(CommitStep::Tag)
 {
 }
 
+PipelineStep::PipelineStep(DataPartMergeStep::Tag)
+    : _opcode(PipelineOpcode::DATAPART_MERGE),
+    _impl(std::in_place_type<DataPartMergeStep>)
+{
+}
+
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_INT64, Int64)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_UINT64, UInt64)
 SCAN_NODE_PROPERTIES_IMPL(SCAN_NODE_PROPERTY_DOUBLE, Double)
