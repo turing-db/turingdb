@@ -687,7 +687,7 @@ TEST_F(DeleteQueryTest, delNodesStringApprox) {
 
     { // Delete unrelated node
         auto VERIFY = [&]() {
-            tester.query("match (n{name~=\"Ma\") return n")
+            tester.query("match (n{name~=\"Ma\"}) return n")
                 .expectVector<NodeID>({8, 11})
                 .execute();
         };
@@ -704,7 +704,7 @@ TEST_F(DeleteQueryTest, delNodesStringApprox) {
 
     { // Delete Martina
         auto VERIFY = [&]() {
-            tester.query("match (n{name~=\"Ma\") return n")
+            tester.query("match (n{name~=\"Ma\"}) return n")
                 .expectVector<NodeID>({8})
                 .execute();
         };
@@ -721,7 +721,7 @@ TEST_F(DeleteQueryTest, delNodesStringApprox) {
 
     { // Delete Maxime
         auto VERIFY = [&]() {
-            tester.query("match (n{name~=\"Ma\") return n")
+            tester.query("match (n{name~=\"Ma\"}) return n")
                 .expectVector<NodeID>({})
                 .execute();
         };
