@@ -2,6 +2,8 @@
 
 #include "DataPart.h"
 #include "IteratorUtils.h"
+#include "iterators/TombstoneFilter.h"
+#include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"
 #include "Panic.h"
 
@@ -78,6 +80,27 @@ ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView&
     : ScanEdgePropertiesIterator<T>(view, propTypeID) {
 }
 
+template <SupportedType T>
+void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
+     // XXX: This should probably be an exception, as it will cause segfault if the
+    // planner does not materialise the edge column
+    msgbioassert(_edgeIDs,
+                 "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
+                 "whilst not materialising the NodeID column.");
+
+    TombstoneFilter filter(this->_view.tombstones());
+
+    filter.populateDeletedIndices(*_edgeIDs);
+    if (filter.empty()) {
+        return;
+    }
+
+    filter.applyDeletedIndices(*_edgeIDs);
+    if (_properties) {
+        filter.applyDeletedIndices(*_properties);
+    }
+}
+
 static constexpr size_t NColumns = 2;
 static constexpr size_t NCombinations = 1 << NColumns;
 
@@ -141,6 +164,10 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
         CASE(1);
         CASE(2);
         CASE(3);
+    }
+
+    if (this->_view.tombstones().hasEdges()) {
+        filterTombstones();
     }
 }
 

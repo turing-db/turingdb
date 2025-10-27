@@ -123,7 +123,6 @@ public:
 
 private:
     ColumnVector<size_t>* _indices {nullptr};
-    ColumnIDs* _entityIDs {nullptr};
     ColumnValues* _output {nullptr};
 };
 

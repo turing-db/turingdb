@@ -2,6 +2,7 @@
 
 #include "DataPart.h"
 #include "EdgeContainer.h"
+#include "iterators/TombstoneFilter.h"
 #include "indexers/EdgeIndexer.h"
 #include "IteratorUtils.h"
 #include "Panic.h"
@@ -76,6 +77,36 @@ ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter() = default;
 ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
     : ScanInEdgesByLabelIterator(view, labelset)
 {
+}
+
+void ScanInEdgesByLabelChunkWriter::filterTombstones() {
+    TombstoneFilter filter(_view.tombstones());
+
+    if (_srcs) {
+        filter.populateDeletedIndices(*_srcs);
+    }
+    if (_edgeIDs) {
+        filter.populateDeletedIndices(*_edgeIDs);
+    }
+    if (_tgts) {
+        filter.populateDeletedIndices(*_srcs);
+    }
+    if (_types) {
+        filter.populateDeletedIndices(*_srcs);
+    }
+
+    if (_srcs) {
+        filter.applyDeletedIndices(*_srcs);
+    }
+    if (_edgeIDs) {
+        filter.applyDeletedIndices(*_edgeIDs);
+    }
+    if (_tgts) {
+        filter.applyDeletedIndices(*_srcs);
+    }
+    if (_types) {
+        filter.applyDeletedIndices(*_srcs);
+    }
 }
 
 static constexpr size_t NColumns = 4;
@@ -188,6 +219,10 @@ void ScanInEdgesByLabelChunkWriter::fill(size_t maxCount) {
         CASE(13);
         CASE(14);
         CASE(15);
+    }
+
+    if (_view.tombstones().hasNodes() || _view.tombstones().hasEdges()) {
+        filterTombstones();
     }
 }
 

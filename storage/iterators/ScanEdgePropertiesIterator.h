@@ -75,6 +75,8 @@ public:
 private:
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnVector<Primitive>* _properties {nullptr};
+
+    void filterTombstones();
 };
 
 template <SupportedType T>
