@@ -450,6 +450,140 @@ TEST_F(DeleteQueryTest, deleteEdgesScanEdges) {
     }
 }
 
+TEST_F(DeleteQueryTest, deleteNodesScanEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete Remy, ensure his edges are also deleted
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return e")
+                .expectVector<EdgeID>({5, 6, 8, 9, 10, 11, 12})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete Maxime, ensure his edges are also deleted
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return e")
+                .expectVector<EdgeID>({5, 6, 10, 11, 12})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete nodes 8")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete Cooking, ensure Martina -> Cooking and Adam -> Cooking are deleted
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return e")
+                .expectVector<EdgeID>({5, 10, 11})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete nodes 5")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
+// Same as @ref deleteNodesScanEdges, but does not materialise edgeID column
+TEST_F(DeleteQueryTest, delNodesScanEdgesNoEdgeIDs) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete Remy, ensure his edges are also deleted
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return n,m")/*,e")*/
+                .expectVector<NodeID>({1, 1, 8, 8, 9, 9, 11})
+                .expectVector<NodeID>({4, 5, 4, 7, 10, 2, 5})
+                // .expectVector<EdgeID>({5, 6, 8, 9, 10, 11, 12})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete Maxime, ensure his edges are also deleted
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return n,m")/*,e")*/
+                .expectVector<NodeID>({1, 1, 9, 9, 11})
+                .expectVector<NodeID>({4, 5, 10, 2, 5})
+                // .expectVector<EdgeID>({5, 6, 10, 11, 12})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete nodes 8")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete Cooking, ensure Martina -> Cooking and Adam -> Cooking are deleted
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return n,m")/*,e")*/
+                .expectVector<NodeID>({1, 9, 9})
+                .expectVector<NodeID>({4, 10, 2})
+                // .expectVector<EdgeID>({5, 10, 11})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete nodes 5")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
+TEST_F(DeleteQueryTest, delEdgesScanEdgesNoEdgeIDs) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Below passes with the comments uncommented, fails with as edge column is not
+      // materialised to filter
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return n,m"/*, e*/)
+                .expectVector<NodeID>({0, 0, 0, 0, 1, 1, 1, 6, 8, 8, 11})
+                .expectVector<NodeID>({1, 6, 2, 3, 0, 4, 5, 0, 4, 7, 5})
+                // .expectVector<EdgeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12})
+                .execute();
+        };
+        newChange(tester);
+        tester.query("delete edges 10, 11") // Delete Luc's edges
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
