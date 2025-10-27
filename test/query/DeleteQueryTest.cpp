@@ -793,6 +793,98 @@ TEST_F(DeleteQueryTest, delEdgesStringApprox) {
     }
 }
 
+TEST_F(DeleteQueryTest, deleteNodesScanStringProperties) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete unrelated node
+        auto VERIFY = [&](){
+            tester.query("match (n{name=\"Remy\"}) return n")
+                .expectVector<NodeID>({0})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 1")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete only node which matches
+        auto VERIFY = [&](){
+            tester.query("match (n{name=\"Remy\"}) return n")
+                .expectVector<NodeID>({})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
+TEST_F(DeleteQueryTest, deleteNodesScanBoolProperties) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    {
+        auto VERIFY = [&]() {
+            tester.query("match (n{hasPhD=true}) return n, n.hasPhD")
+                .expectVector<NodeID>({0, 11})
+                .expectOptVector<types::Bool::Primitive>({true, true})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 1, 9")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    {
+        auto VERIFY = [&]() {
+                tester.query("match (n{hasPhD=true}) return n, n.hasPhD")
+                    .expectVector<NodeID>({0})
+                    .expectOptVector<types::Bool::Primitive>({true})
+                    .execute();
+            };
+
+        newChange(tester);
+        tester.query("delete nodes 11").execute();
+        tester.query("commit").execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    {
+        auto VERIFY = [&]() {
+            tester.query("match (n{hasPhD=true}) return n, n.hasPhD")
+                .expectVector<NodeID>({})
+                .expectOptVector<types::Bool::Primitive>({})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 0").execute();
+        tester.query("commit").execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
