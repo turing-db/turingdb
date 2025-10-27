@@ -427,7 +427,7 @@ void ReadStmtGenerator::placePredicateJoins() {
     for (const auto& pred : _tree->getPredicates()) {
         const ExprDependencies& deps = pred->getDependencies();
 
-        if (deps.empty()) {
+        if (deps.getVarDeps().empty()) {
             throwError("Predicates without dependencies are not supported yet", pred->getExpr());
         }
 
@@ -439,7 +439,7 @@ void ReadStmtGenerator::placePredicateJoins() {
         }
 
         // Step 2: Place joins
-        for (const ExprDependencies::ExprDependency& dep : deps.getDependencies()) {
+        for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             insertDataFlowNode(var, dep._var);
         }
 

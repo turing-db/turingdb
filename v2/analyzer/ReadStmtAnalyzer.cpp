@@ -216,7 +216,6 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             fullName->addName(varSymbol);
             fullName->addName(propName);
-            fmt::println("Created predicate with symbols {}.{}", varSymbol->getName(), propName->getName());
 
             PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
             propExpr->setDecl(decl);
@@ -286,7 +285,6 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
             fullName->addName(varSymbol);
             fullName->addName(propName);
-            fmt::println("Created predicate with symbols {}.{}", varSymbol->getName(), propName->getName());
 
             PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
             propExpr->setDecl(decl);

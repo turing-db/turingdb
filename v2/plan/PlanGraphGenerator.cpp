@@ -2,9 +2,11 @@
 
 #include "FunctionInvocation.h"
 #include "Projection.h"
+#include "QualifiedName.h"
+#include "Symbol.h"
 #include "expr/Expr.h"
 #include "expr/FunctionInvocationExpr.h"
-#include "nodes/GroupByNode.h"
+#include "ExprDependencies.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -21,6 +23,8 @@
 #include "nodes/LimitNode.h"
 #include "nodes/SkipNode.h"
 #include "nodes/WriteNode.h"
+#include "nodes/AggregateEvalNode.h"
+#include "nodes/FuncEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
 
 #include "QueryCommand.h"
@@ -56,6 +60,8 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             throwError(fmt::format("Unsupported query command of type {}", (uint64_t)query->getKind()), query);
             break;
     }
+
+    _tree.removeIsolatedNodes();
 }
 
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
@@ -109,29 +115,47 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
         throwError("DISTINCT not supported", stmt);
     }
 
-    if (proj->isAggregate()) {
-        if (proj->hasGroupingKeys()) {
-            GroupByNode* groupBy = _tree.newOut<GroupByNode>(prevNode);
-            prevNode = groupBy;
+    // GetPropertyNode* getProperty = _tree.create<GetPropertyNode>(prevNode);
+    FuncEvalNode* funcEval = _tree.create<FuncEvalNode>();
+    AggregateEvalNode* aggregateEval = _tree.create<AggregateEvalNode>();
 
-            // Loop over expressions, to gather the grouping keys
-            for (Expr* item : proj->items()) {
-                Expr::Kind kind = item->getKind();
+    for (Expr* item : proj->items()) {
+        ExprDependencies deps;
+        deps.genExprDependencies(*_variables, item);
 
-                if (!item->isAggregate()) {
-                    if (kind != Expr::Kind::SYMBOL
-                        && kind != Expr::Kind::PROPERTY) {
-                        throwError("Complex grouping keys are not supported yet. Only variables (e.g. n), "
-                                   "or property expression (e.g. n.name) are allowed",
-                                   proj);
-                    }
+        for (const ExprDependencies::FuncDependency& dep : deps.getFuncDeps()) {
+            const FunctionInvocation* func = dep._expr->getFunctionInvocation();
+            const FunctionSignature* signature = func->getSignature();
 
-                    groupBy->addGroupByKey(item);
-                }
+            if (signature->_isAggregate) {
+                aggregateEval->addFunc(signature);
+            } else {
+                funcEval->addFunc(signature);
             }
         }
 
-        // TODO: Gather the aggregate functions here
+        if (proj->isAggregate() && !item->isAggregate()) {
+            const Expr::Kind kind = item->getKind();
+
+            if (kind != Expr::Kind::SYMBOL
+                && kind != Expr::Kind::PROPERTY) {
+                throwError("Complex grouping keys are not supported yet. Only variables (e.g. n), "
+                           "or property expression (e.g. n.name) are allowed",
+                           proj);
+            }
+
+            aggregateEval->addGroupByKey(item);
+        }
+    }
+
+    if (!funcEval->getFuncs().empty()) {
+        prevNode->connectOut(funcEval);
+        prevNode = funcEval;
+    }
+
+    if (!aggregateEval->getFuncs().empty()) {
+        prevNode->connectOut(aggregateEval);
+        prevNode = aggregateEval;
     }
 
     if (proj->hasOrderBy()) {

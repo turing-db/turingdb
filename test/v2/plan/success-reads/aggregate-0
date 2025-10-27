@@ -1,5 +1,5 @@
 /// QUERY
-MATCH (n) RETURN n, count(n)
+MATCH (n:Person) RETURN n, count(n)
 
 /// RESULT
 flowchart TD
@@ -12,6 +12,7 @@ flowchart TD
     `"]
     2["`
         __FILTER_NODE__
+        __label__: Person
     `"]
     3["`
         __AGGREGATE_EVAL__
