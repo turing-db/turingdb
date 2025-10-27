@@ -584,6 +584,49 @@ TEST_F(DeleteQueryTest, delEdgesScanEdgesNoEdgeIDs) {
     }
 }
 
+TEST_F(DeleteQueryTest, delNodeGetOutEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Remy, then use NodeID injection to force GetOutEdges
+        auto VERIFY = [&]() {
+            tester.query("match (n @ 0)-[e]-(m) return e")
+                .expectVector<EdgeID>({})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
+TEST_F(DeleteQueryTest, delEdgesGetOutEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete some of Adam's edges, then use NodeID injection to force GetOutEdges
+        auto VERIFY = [&]() {
+            tester.query("match (n @ 1)-[e]-(m) return e,m")
+                .expectVector<EdgeID>({5})
+                .expectVector<NodeID>({4})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 4,6")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
