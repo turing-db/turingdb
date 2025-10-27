@@ -1,7 +1,6 @@
 #include "ChangeConflictChecker.h"
 
 #include <memory>
-#include <numeric>
 
 #include "Change.h"
 #include "CommitBuilder.h"
@@ -121,7 +120,7 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
     for (const CommitWriteBuffer::PendingEdge& edge : pendingEdges) {
         // Check if source node was modified
         if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
-            NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};
+            const NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};
             if (writes.writtenNodes.contains(newSrc)) {
                 panic("This change attempted to create an edge with source Node {} "
                       "(which is now Node {} on main) which has been modified on main.",
@@ -130,7 +129,7 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
         }
         // Check if target node was modified
         if (const NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
-            NodeID newTgt = {_entityIDRebaser.rebaseNodeID(*oldTgtID)};
+            const NodeID newTgt = {_entityIDRebaser.rebaseNodeID(*oldTgtID)};
             if (writes.writtenNodes.contains(newTgt)) {
                 panic("This change attempted to create an edge with target Node {} "
                       "(which is now Node {} on main) which has been modified on main.",
@@ -144,7 +143,7 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
                                               const CommitWriteBuffer& writeBuffer) {
     const CommitWriteBuffer::DeletedNodes& deletedNodes = writeBuffer.deletedNodes();
     for (const NodeID deletedNode : deletedNodes) {
-        NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
+        const NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
         // If this is a node which existed before branching, we need to note it and do a
         // GetOut/InEdges to check for conflicts
         if (deletedNode == newID) {
@@ -162,7 +161,7 @@ void ChangeConflictChecker::checkDeletedEdgeConflicts(const ConflictCheckSets& w
                                               const CommitWriteBuffer& writeBuffer) {
     const CommitWriteBuffer::DeletedEdges& deletedEdges = writeBuffer.deletedEdges();
     for (const EdgeID deletedEdge : deletedEdges) {
-        EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
+        const EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
         if (writes.writtenEdges.contains(newID)) {
             panic("This change attempted to delete Edge {} "
                   "(which is now Edge {} on main) which has been modified on main.",
