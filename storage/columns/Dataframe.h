@@ -23,6 +23,7 @@ public:
     }
 
     Dataframe& operator=(Dataframe&& other) {
+        _headerMap = std::move(other._headerMap);
         _cols = std::move(other._cols);
         return *this;
     }
