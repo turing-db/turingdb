@@ -2,6 +2,7 @@
 
 #include "DataPart.h"
 #include "IteratorUtils.h"
+#include "iterators/TombstoneFilter.h"
 #include "properties/PropertyManager.h"
 #include "Panic.h"
 
@@ -114,6 +115,27 @@ ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(
 {
 }
 
+template <SupportedType T>
+void ScanNodePropertiesByLabelChunkWriter<T>::filterTombstones() {
+    // XXX: This should probably be an exception, as it will cause segfault if the
+    // planner does not materialise the edge column
+    msgbioassert(_nodeIDs,
+                 "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
+                 "whilst not materialising the NodeID column.");
+
+    TombstoneFilter filter(this->_view.tombstones());
+
+    filter.populateDeletedIndices(*_nodeIDs);
+    if (filter.empty()) {
+        return;
+    }
+
+    filter.applyDeletedIndices(*_nodeIDs);
+    if (_properties) {
+        filter.applyDeletedIndices(*_properties);
+    }
+}
+
 static constexpr size_t NColumns = 2;
 static constexpr size_t NCombinations = 1 << NColumns;
 
@@ -176,6 +198,10 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
         CASE(1);
         CASE(2);
         CASE(3);
+    }
+
+    if (this->_view.tombstones().hasNodes()) {
+        filterTombstones();
     }
 }
 

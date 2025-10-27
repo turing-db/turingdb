@@ -84,6 +84,8 @@ public:
 private:
     ColumnVector<Primitive>* _properties {nullptr};
     ColumnNodeIDs* _nodeIDs {nullptr};
+
+    void filterTombstones();
 };
 
 template <SupportedType T>
