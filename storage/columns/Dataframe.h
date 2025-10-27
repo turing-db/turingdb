@@ -17,7 +17,8 @@ public:
     Dataframe();
 
     Dataframe(Dataframe&& other)
-        : _cols(std::move(other._cols))
+        : _headerMap(std::move(other._headerMap)),
+        _cols(std::move(other._cols))
     {
     }
 
@@ -36,6 +37,9 @@ public:
     NamedColumn* getColumn(ColumnName name) const {
         return _headerMap.getColumn(name);
     }
+
+    void setColumnPrimaryName(NamedColumn* col, ColumnName name);
+    void addNameToColumn(NamedColumn* col, ColumnName name);
 
 private:
     DataframeHeaderMap _headerMap;

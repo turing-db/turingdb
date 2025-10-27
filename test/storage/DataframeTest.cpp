@@ -119,3 +119,49 @@ TEST_F(DataframeTest, anonymous) {
     std::vector<NamedColumn*> goldVec = {col0, col1};
     ASSERT_EQ(df.cols(), goldVec);
 }
+
+TEST_F(DataframeTest, testColNames) {
+    ColumnNameManager nameMan;
+    Dataframe df;
+
+    ColumnNodeIDs col0;
+    ColumnNodeIDs col1;
+    ColumnNodeIDs col2;
+
+    auto colA = NamedColumn::create(&df, &col0, nameMan.getName("a"));
+    auto colB = NamedColumn::create(&df, &col1, nameMan.getName("b"));
+    auto colC = NamedColumn::create(&df, &col2, nameMan.getName("c"));
+    ASSERT_TRUE(colA != nullptr);
+    ASSERT_TRUE(colB != nullptr);
+    ASSERT_TRUE(colC != nullptr);
+
+    // Change name of middle column
+    colB->setPrimaryName(nameMan.getName("middle1"));
+    ASSERT_EQ(colB->getPrimaryName(), nameMan.getName("middle1"));
+
+    // Check that the dataframe still has 3 columns
+    ASSERT_EQ(df.cols().size(), 3);
+
+    // Check that we retrieve colB using the new name
+    ASSERT_EQ(df.getColumn(nameMan.getName("middle1")), colB);
+
+    // Check that we can't retrieve colB using the old name
+    ASSERT_TRUE(df.getColumn(nameMan.getName("b")) == nullptr);
+
+    // Check the new names in-order of the columns
+    std::vector<ColumnName> colNames;
+    const std::vector<ColumnName> goldNames = {
+        nameMan.getName("a"),
+        nameMan.getName("middle1"),
+        nameMan.getName("c")
+    };
+
+    std::for_each(df.cols().begin(), df.cols().end(),
+            [&colNames](NamedColumn* col){ colNames.push_back(col->getPrimaryName()); });
+    ASSERT_EQ(colNames, goldNames);
+
+    // Change colC name
+    colC->setPrimaryName(nameMan.getName("p"));
+    ASSERT_EQ(colC->getPrimaryName(), nameMan.getName("p"));
+    ASSERT_EQ(df.getColumn(nameMan.getName("p")), colC);
+}
