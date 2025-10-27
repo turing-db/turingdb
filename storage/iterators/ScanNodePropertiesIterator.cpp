@@ -180,7 +180,6 @@ void ScanNodePropertiesChunkWriter<T>::fill(size_t maxCount) {
     }
 }
 
-
 template class ScanNodePropertiesIterator<types::Int64>;
 template class ScanNodePropertiesIterator<types::UInt64>;
 template class ScanNodePropertiesIterator<types::Double>;

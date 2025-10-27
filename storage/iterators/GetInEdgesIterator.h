@@ -87,7 +87,6 @@ private:
     void filterTombstones();
 };
 
-
 struct GetInEdgesRange {
     GraphView _view;
     const ColumnNodeIDs* _inputNodeIDs {nullptr};

@@ -171,7 +171,6 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
     }
 }
 
-
 template class ScanEdgePropertiesIterator<types::Int64>;
 template class ScanEdgePropertiesIterator<types::UInt64>;
 template class ScanEdgePropertiesIterator<types::Double>;

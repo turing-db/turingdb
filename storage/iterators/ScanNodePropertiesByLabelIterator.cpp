@@ -205,7 +205,6 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
     }
 }
 
-
 template class ScanNodePropertiesByLabelIterator<types::Int64>;
 template class ScanNodePropertiesByLabelIterator<types::UInt64>;
 template class ScanNodePropertiesByLabelIterator<types::Double>;

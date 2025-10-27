@@ -99,7 +99,6 @@ struct ScanNodePropertiesByLabelRange {
     ScanNodePropertiesByLabelChunkWriter<T> chunkWriter() const { return {_view, _propTypeID, _labelset}; }
 };
 
-
 static_assert(PropertiesChunkWriter<ScanNodePropertiesByLabelChunkWriter<types::UInt64>>);
 static_assert(PropertiesChunkWriter<ScanNodePropertiesByLabelChunkWriter<types::Int64>>);
 static_assert(PropertiesChunkWriter<ScanNodePropertiesByLabelChunkWriter<types::Double>>);
