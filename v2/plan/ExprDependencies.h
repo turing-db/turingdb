@@ -108,32 +108,6 @@ public:
 private:
     VarDepVector _varDeps;
     FuncDepVector _funcDeps;
-
-    void genExprDependencies(const PlanGraphVariables& variables, const BinaryExpr* expr) {
-        genExprDependencies(variables, expr->getLHS());
-        genExprDependencies(variables, expr->getRHS());
-    }
-
-    void genExprDependencies(const PlanGraphVariables& variables, const UnaryExpr* expr) {
-        genExprDependencies(variables, expr->getSubExpr());
-    }
-
-    void genExprDependencies(const PlanGraphVariables& variables, const StringExpr* expr) {
-        genExprDependencies(variables, expr->getLHS());
-        genExprDependencies(variables, expr->getRHS());
-    }
-
-    void genExprDependencies(const PlanGraphVariables& variables, const EntityTypeExpr* expr) {
-        _varDeps.emplace_back(variables.getVarNode(expr->getDecl()), expr);
-    }
-
-    void genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr* expr) {
-        _varDeps.emplace_back(variables.getVarNode(expr->getDecl()), expr);
-    }
-
-    void genExprDependencies(const PlanGraphVariables& variables, const FunctionInvocationExpr* expr) {
-        _funcDeps.emplace_back(expr);
-    }
 };
 
 }
