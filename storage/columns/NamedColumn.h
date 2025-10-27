@@ -13,6 +13,8 @@ public:
 
     ColumnName getPrimaryName() const { return _primaryName; }
 
+    void setPrimaryName(ColumnName name);
+
     Column* getColumn() const { return _column; }
 
     static NamedColumn* create(Dataframe* df,

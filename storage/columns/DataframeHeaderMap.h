@@ -7,9 +7,12 @@
 namespace db {
 
 class NamedColumn;
+class Dataframe;
 
 class DataframeHeaderMap {
 public:
+    friend Dataframe;
+
     DataframeHeaderMap();
     ~DataframeHeaderMap();
 
@@ -22,12 +25,16 @@ public:
         return colIt->second;
     }
 
+private:
+    std::unordered_map<ColumnName, NamedColumn*, ColumnNameHash> _nameMap;
+
     void addNameForColumn(NamedColumn* col, ColumnName name) {
         _nameMap[name] = col;
     }
 
-private:
-    std::unordered_map<ColumnName, NamedColumn*, ColumnNameHash> _nameMap;
+    void removeColumnName(ColumnName name) {
+        _nameMap.erase(name);
+    }
 };
 
 }

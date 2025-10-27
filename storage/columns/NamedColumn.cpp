@@ -19,3 +19,7 @@ NamedColumn* NamedColumn::create(Dataframe* parent,
     parent->addColumn(namedCol);
     return namedCol;
 }
+
+void NamedColumn::setPrimaryName(ColumnName name) {
+    _parent->setColumnPrimaryName(this, name);
+}
