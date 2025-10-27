@@ -3,9 +3,9 @@
 #include <limits>
 
 #include "Commit.h"
-#include "versioning/DataPartRebaser.h"
-#include "versioning/EntityIDRebaser.h"
-#include "versioning/MetadataRebaser.h"
+#include "DataPartRebaser.h"
+#include "EntityIDRebaser.h"
+#include "MetadataRebaser.h"
 #include "ID.h"
 
 namespace db {

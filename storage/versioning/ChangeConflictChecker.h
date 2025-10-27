@@ -22,7 +22,7 @@ private:
     const EntityIDRebaser& _entityIDRebaser;
     const Commit::CommitSpan _commitsSinceBranch;
 
-    ColumnVector<NodeID> _deletedExistingNodes;
+    ColumnVector<NodeID> _deletedExistingNodes; // Filled to pass to GetOut/InEdges
 
     /**
      * @brief Folds over @ref _commitsSinceBranch, performing set theoretic union over the
