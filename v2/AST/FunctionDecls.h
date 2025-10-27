@@ -10,6 +10,32 @@ namespace db::v2 {
 
 class FunctionDecls {
 public:
+    class FunctionSignatureBuilder {
+    public:
+        explicit FunctionSignatureBuilder(FunctionSignature* signature)
+            : _signature(signature)
+        {
+        }
+
+        FunctionSignatureBuilder& setIsAggregate(bool isAggregate) {
+            _signature->_isAggregate = isAggregate;
+            return *this;
+        }
+
+        FunctionSignatureBuilder& setArguments(std::initializer_list<EvaluatedType> types) {
+            _signature->_argumentTypes = types;
+            return *this;
+        }
+
+        FunctionSignatureBuilder& setReturnType(EvaluatedType type) {
+            _signature->_returnType = type;
+            return *this;
+        }
+
+    private:
+        FunctionSignature* _signature {nullptr};
+    };
+
     FunctionDecls();
     ~FunctionDecls();
 
@@ -18,7 +44,9 @@ public:
     FunctionDecls& operator=(const FunctionDecls&) = delete;
     FunctionDecls& operator=(FunctionDecls&&) = delete;
 
-    void add(const FunctionSignature& signature);
+    static std::unique_ptr<FunctionDecls> createDefault();
+
+    FunctionSignatureBuilder create(std::string_view fullName);
 
     auto get(std::string_view fullName) const {
         return _decls.equal_range(fullName);
