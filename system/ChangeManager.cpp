@@ -12,13 +12,25 @@ ChangeManager::ChangeManager() = default;
 
 ChangeManager::~ChangeManager() = default;
 
-Change* ChangeManager::storeChange(const Graph* graph, std::unique_ptr<Change> change) {
+Change* ChangeManager::createChange(Graph* graph, CommitHash baseHash) {
     std::unique_lock guard(_changesLock);
+
+    auto change = graph->newChange(baseHash);
     const auto id = change->id();
     auto* ptr = change.get();
     _changes.emplace(GraphChangePair {graph, id}, std::move(change));
 
     return ptr;
+}
+
+DataPartMergeResult<void> ChangeManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
+    std::unique_lock guard(_changesLock);
+
+    if (!isEmpty()) {
+        return DataPartMergeError::result(DataPartMergeErrorType::CHANGES_ON_MAIN);
+    }
+
+    return graph->mergeDataParts(jobSystem);
 }
 
 ChangeResult<Change*> ChangeManager::getChange(const Graph* graph, ChangeID changeID) {

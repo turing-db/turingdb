@@ -38,6 +38,7 @@ public:
     }
 
     void newCommitHistoryFromPrevious(const CommitHistory& previous);
+    void newMergeCommitHistory(const CommitHistory& previous);
 
     const CommitJournal& journal() const { return *_journal; }
 

@@ -34,6 +34,10 @@ public:
                                                                 Change* change,
                                                                 const GraphView& view);
 
+    [[nodiscard]] static std::unique_ptr<CommitBuilder> prepareMerge(VersionController& controller,
+                                                                     Change* change,
+                                                                     const GraphView& view);
+
     [[nodiscard]] CommitHash hash() const;
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
@@ -49,6 +53,8 @@ public:
     }
 
     DataPartBuilder& newBuilder();
+
+    void appendBuilder(std::unique_ptr<DataPartBuilder> builder);
 
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);
 
@@ -94,6 +100,6 @@ private:
     explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
 
     void initialize();
-    };
+    void initializeMerge();
+};
 }
-

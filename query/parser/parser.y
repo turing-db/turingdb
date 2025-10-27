@@ -127,6 +127,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %token S3_PUSH "'S3_PUSH'"
 %token S3_PULL "'S3_PULL'"
 
+%token DATA_PART_MERGE "'DATA_PART_MERGE'"
+
 // Operators
 %token PLUS         "'+'"
 %token MINUS        "'-'"
@@ -206,6 +208,8 @@ static db::YParser::symbol_type yylex(db::YScanner& scanner) {
 %type<db::QueryCommand*> s3connect_cmd
 %type<db::QueryCommand*> s3transfer_cmd
 
+%type<db::QueryCommand*> data_part_merge_cmd 
+
 %start query_unit
 
 %%
@@ -225,6 +229,7 @@ cmd: match_cmd { ctxt->setRoot($1); }
    | history_cmd { ctxt->setRoot($1); }
    | change_cmd { ctxt->setRoot($1); }
    | commit_cmd { ctxt->setRoot($1); }
+   | data_part_merge_cmd { ctxt->setRoot($1); }
    | call_cmd { ctxt->setRoot($1); }
    | s3connect_cmd { ctxt->setRoot($1); }
    | s3transfer_cmd { ctxt->setRoot($1); }
@@ -633,6 +638,9 @@ change_cmd: CHANGE change_subcmd {
 
 // COMMIT
 commit_cmd: COMMIT { $$ = CommitCommand::create(ctxt); }
+          ;
+
+data_part_merge_cmd: DATA_PART_MERGE { $$ = DataPartMergeCommand::create(ctxt); }
           ;
 
 s3connect_cmd : S3_CONNECT STRING_CONSTANT STRING_CONSTANT STRING_CONSTANT{ $$ = S3ConnectCommand::create(ctxt,$2,$3,$4); }

@@ -40,7 +40,6 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& pr
 
     auto* ptr = new MetadataBuilder;
     ptr->_metadata = metadata;
-    *ptr->_metadata = prevMetadata;
 
     return std::unique_ptr<MetadataBuilder>(ptr);
 }

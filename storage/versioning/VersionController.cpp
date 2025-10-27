@@ -8,6 +8,8 @@
 #include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
+#include "mergers/DataPartMerger.h"
+#include "writers/DataPartBuilder.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitHash.h"
@@ -38,6 +40,28 @@ void VersionController::createFirstCommit() {
     commit->history().pushCommit(CommitView {commit.get()});
 
     this->addCommit(std::move(commit));
+}
+
+DataPartMergeResult<void> VersionController::mergeDataParts(JobSystem& jobSystem) {
+    Profile profile {"VersionController::mergeDataParts"};
+    Commit* mainState = _head.load();
+
+    auto newTip = CommitBuilder::prepareMerge(*this,
+                                              nullptr,
+                                              GraphView {mainState->data()});
+
+    const auto merger = DataPartMerger(&mainState->data(), newTip->metadata());
+
+    newTip->appendBuilder(merger.merge(mainState->data().allDataparts()));
+
+    auto buildRes = newTip->build(jobSystem);
+    if (!buildRes) {
+        return DataPartMergeError::result(DataPartMergeErrorType::MERGE_GRAPH_FAILED);
+    }
+
+    addCommit(std::move(buildRes.value()));
+
+    return {};
 }
 
 FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {

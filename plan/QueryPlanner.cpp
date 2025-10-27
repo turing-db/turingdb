@@ -123,6 +123,9 @@ bool QueryPlanner::plan(const QueryCommand* query) {
         case QueryCommand::Kind::COMMIT_COMMAND:
             return planCommit(static_cast<const CommitCommand*>(query));
 
+        case QueryCommand::Kind::DATAPARTMERGE_COMMAND:
+            return planDataPartMerge(static_cast<const DataPartMergeCommand*>(query));
+
         case QueryCommand::Kind::CALL_COMMAND:
             return planCall(static_cast<const CallCommand*>(query));
 
@@ -1764,6 +1767,14 @@ bool QueryPlanner::planChange(const ChangeCommand* cmd) {
 bool QueryPlanner::planCommit(const CommitCommand* commit) {
     _pipeline->add<StopStep>();
     _pipeline->add<CommitStep>();
+    _pipeline->add<EndStep>();
+
+    return true;
+}
+
+bool QueryPlanner::planDataPartMerge(const DataPartMergeCommand* commit) {
+    _pipeline->add<StopStep>();
+    _pipeline->add<DataPartMergeStep>();
     _pipeline->add<EndStep>();
 
     return true;

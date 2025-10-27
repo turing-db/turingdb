@@ -101,6 +101,21 @@ CommitCommand* CommitCommand::create(ASTContext* ctxt) {
     return cmd;
 }
 
+// DataPartMergeCommand
+
+DataPartMergeCommand::DataPartMergeCommand()
+{
+}
+
+DataPartMergeCommand::~DataPartMergeCommand() {
+}
+
+DataPartMergeCommand* DataPartMergeCommand::create(ASTContext* ctxt) {
+    DataPartMergeCommand* cmd = new DataPartMergeCommand();
+    cmd->registerCmd(ctxt);
+    return cmd;
+}
+
 // CreateGraphCommand
 
 CreateGraphCommand::CreateGraphCommand(const std::string& name)

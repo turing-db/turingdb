@@ -50,6 +50,16 @@ public:
         if (prevHistory) {
             commit->_data->_history.newCommitHistoryFromPrevious(*prevHistory);
         }
+
+        const auto it = std::ranges::find_if(files.value(),
+                                             [&](const fs::Path& path) {
+                                                 return path.filename() == "merge";
+                                             });
+
+        if (it != files->end()) {
+            commit->_data->_history._allDataparts = {};
+        }
+
         commit->_data->_history.pushCommit(commit->view());
 
         CommitHistoryBuilder historyBuilder {commit->_data->_history};
