@@ -83,7 +83,7 @@ ScanNodesChunkWriter::ScanNodesChunkWriter(const GraphView& view)
 
 void ScanNodesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
-    filter.onePassApplyFilter(*_nodeIDs);
+    filter.filter(_nodeIDs);
 }
 
 void ScanNodesChunkWriter::fill(size_t maxCount) {

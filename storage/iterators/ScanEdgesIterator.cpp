@@ -65,33 +65,7 @@ ScanEdgesChunkWriter::ScanEdgesChunkWriter(const GraphView& view)
 
 void ScanEdgesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
-
-    if (_srcs && _view.tombstones().hasNodes()) {
-        filter.populateDeletedIndices(*_srcs);
-    }
-    if (_tgts && _view.tombstones().hasNodes()) {
-        filter.populateDeletedIndices(*_tgts);
-    }
-    if (_edgeIDs && _view.tombstones().hasEdges()) {
-        filter.populateDeletedIndices(*_edgeIDs);
-    }
-
-    if (filter.empty()) {
-        return;
-    }
-
-    if (_srcs) {
-        filter.applyDeletedIndices(*_srcs);
-    }
-    if (_tgts) {
-        filter.applyDeletedIndices(*_tgts);
-    }
-    if (_edgeIDs) {
-        filter.applyDeletedIndices(*_edgeIDs);
-    }
-    if (_types) {
-        filter.applyDeletedIndices(*_types);
-    }
+    filter.filter(_srcs, _tgts, _edgeIDs, _types);
 }
 
 static constexpr size_t NColumns = 4;

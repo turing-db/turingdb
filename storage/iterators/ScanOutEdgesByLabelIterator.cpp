@@ -81,31 +81,7 @@ ScanOutEdgesByLabelChunkWriter::ScanOutEdgesByLabelChunkWriter(const GraphView& 
 
 void ScanOutEdgesByLabelChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
-
-    // Generate entries to filter
-    if (_srcs) {
-        filter.populateDeletedIndices(*_srcs);
-    }
-    if (_edgeIDs) {
-        filter.populateDeletedIndices(*_edgeIDs);
-    }
-    if (_tgts) {
-        filter.populateDeletedIndices(*_tgts);
-    }
-
-    // Apply to all columns
-    if (_srcs) {
-        filter.applyDeletedIndices(*_srcs);
-    }
-    if (_edgeIDs) {
-        filter.applyDeletedIndices(*_edgeIDs);
-    }
-    if (_tgts) {
-        filter.applyDeletedIndices(*_tgts);
-    }
-    if (_types) {
-        filter.applyDeletedIndices(*_types);
-    }
+    filter.filter(_srcs, _tgts, _edgeIDs, _types);
 }
 
 static constexpr size_t NColumns = 4;

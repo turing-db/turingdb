@@ -81,32 +81,7 @@ ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& vi
 
 void ScanInEdgesByLabelChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
-
-    if (_srcs) {
-        filter.populateDeletedIndices(*_srcs);
-    }
-    if (_edgeIDs) {
-        filter.populateDeletedIndices(*_edgeIDs);
-    }
-    if (_tgts) {
-        filter.populateDeletedIndices(*_srcs);
-    }
-    if (_types) {
-        filter.populateDeletedIndices(*_srcs);
-    }
-
-    if (_srcs) {
-        filter.applyDeletedIndices(*_srcs);
-    }
-    if (_edgeIDs) {
-        filter.applyDeletedIndices(*_edgeIDs);
-    }
-    if (_tgts) {
-        filter.applyDeletedIndices(*_srcs);
-    }
-    if (_types) {
-        filter.applyDeletedIndices(*_srcs);
-    }
+    filter.filter(_srcs, _tgts, _edgeIDs, _types);
 }
 
 static constexpr size_t NColumns = 4;

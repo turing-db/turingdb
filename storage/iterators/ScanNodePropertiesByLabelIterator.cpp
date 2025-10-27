@@ -117,22 +117,17 @@ ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(
 
 template <SupportedType T>
 void ScanNodePropertiesByLabelChunkWriter<T>::filterTombstones() {
-    // XXX: This should probably be an exception, as it will cause segfault if the
-    // planner does not materialise the edge column
+    // XXX: This should probably be an exception, as it will result in incorrect results
+    // due to not filtering on NodeIDs if @ref _nodeIDs is not materialised
     msgbioassert(_nodeIDs,
                  "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
                  "whilst not materialising the NodeID column.");
 
     TombstoneFilter filter(this->_view.tombstones());
+    filter.filter(_nodeIDs, _properties);
 
-    filter.populateDeletedIndices(*_nodeIDs);
-    if (filter.empty()) {
-        return;
-    }
-
-    filter.applyDeletedIndices(*_nodeIDs);
     if (_properties) {
-        filter.applyDeletedIndices(*_properties);
+        bioassert(_properties->size() == _nodeIDs->size());
     }
 }
 

@@ -50,8 +50,10 @@ void Step::execute() {
     // Fill _nodes with the matches of all datapart's indexes
     try {
         StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
-        TombstoneFilter filter(_view.tombstones());
-        filter.onePassApplyFilter(*_nodes);
+        if (_view.tombstones().hasNodes()) {
+            TombstoneFilter filter(_view.tombstones());
+            filter.filter(_nodes);
+        }
     } catch (TuringException& e) {
         throw PipelineException(e.what());
     }

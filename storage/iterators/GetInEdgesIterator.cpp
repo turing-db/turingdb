@@ -109,32 +109,17 @@ GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
 
 void GetInEdgesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
-    // Get indices to deleted based on deleted nodes/edges
-    if (_edgeIDs && _view.tombstones().hasEdges()) {
-        filter.populateDeletedIndices(*_edgeIDs);
-    }
-    if (_tgts && _view.tombstones().hasNodes()) {
-        filter.populateDeletedIndices(*_tgts);
-    }
+    filter.filter(_edgeIDs, _tgts, _types, _indices);
 
-    if (filter.empty()) {
-        return;
-    }
-
-    // Apply the filter to indices
-    filter.applyDeletedIndices(*_indices);
     size_t newSize = _indices->size();
 
     if (_edgeIDs) {
-        filter.applyDeletedIndices(*_edgeIDs);
         bioassert(_edgeIDs->size() == newSize);
     }
     if (_tgts) {
-        filter.applyDeletedIndices(*_tgts);
         bioassert(_tgts->size() == newSize);
     }
     if (_types) {
-        filter.applyDeletedIndices(*_types);
         bioassert(_types->size() == newSize);
     }
 }
@@ -146,9 +131,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
-
-    _indices->clear();
-
+ _indices->clear();
     if (_edgeIDs) {
         _edgeIDs->clear();
     }
@@ -221,7 +204,8 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     }
 
     if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
-        filterTombstones();
+        TombstoneFilter filter(_view.tombstones());
+        filter.filter(_edgeIDs, _types, _tgts, _indices);
     }
 }
 

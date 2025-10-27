@@ -109,32 +109,16 @@ GetOutEdgesChunkWriter::GetOutEdgesChunkWriter(const GraphView& view,
 
 void GetOutEdgesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
-    // Get indices to deleted based on deleted nodes/edges
-    if (_edgeIDs && _view.tombstones().hasEdges()) {
-        filter.populateDeletedIndices(*_edgeIDs);
-    }
-    if (_tgts && _view.tombstones().hasNodes()) {
-        filter.populateDeletedIndices(*_tgts);
-    }
+    filter.filter(_edgeIDs, _tgts, _types, _indices);
 
-    if (filter.empty()) {
-        return;
-    }
-
-    // Apply the filter to indices
-    filter.applyDeletedIndices(*_indices);
     size_t newSize = _indices->size();
-
     if (_edgeIDs) {
-        filter.applyDeletedIndices(*_edgeIDs);
         bioassert(_edgeIDs->size() == newSize);
     }
     if (_tgts) {
-        filter.applyDeletedIndices(*_tgts);
         bioassert(_tgts->size() == newSize);
     }
     if (_types) {
-        filter.applyDeletedIndices(*_types);
         bioassert(_types->size() == newSize);
     }
 }

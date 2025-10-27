@@ -82,22 +82,17 @@ ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView&
 
 template <SupportedType T>
 void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
-     // XXX: This should probably be an exception, as it will cause segfault if the
-    // planner does not materialise the edge column
+    // XXX: This should probably be an exception, as it will result in incorrect results
+    // due to not filtering on EdgeIDs if @ref _edgeIDs is not materialised
     msgbioassert(_edgeIDs,
                  "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
                  "whilst not materialising the NodeID column.");
 
     TombstoneFilter filter(this->_view.tombstones());
+    filter.filter(_edgeIDs, _properties);
 
-    filter.populateDeletedIndices(*_edgeIDs);
-    if (filter.empty()) {
-        return;
-    }
-
-    filter.applyDeletedIndices(*_edgeIDs);
     if (_properties) {
-        filter.applyDeletedIndices(*_properties);
+        bioassert(_edgeIDs->size() == _properties->size());
     }
 }
 
