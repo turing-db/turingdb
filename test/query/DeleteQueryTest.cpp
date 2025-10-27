@@ -395,6 +395,61 @@ TEST_F(DeleteQueryTest, deleteNodesScanNodes) {
     }
 }
 
+TEST_F(DeleteQueryTest, deleteEdgesScanEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete the first edge
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return e")
+                .expectVector<EdgeID>({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete some edges from the middle of the graph
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return e")
+                .expectVector<EdgeID>({1, 2, 4, 5, 6, 7, 8, 9, 10, 12})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 3, 11")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete the last edge
+        auto VERIFY = [&]() {
+            tester.query("match (n)-[e]-(m) return e")
+                .expectVector<EdgeID>({1, 2, 4, 5, 6, 7, 8, 9, 10})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 12")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
