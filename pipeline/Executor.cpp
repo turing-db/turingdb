@@ -91,6 +91,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _activateTbl[(uint64_t)PipelineOpcode::DELETE_NODES] = ACTIVATE_PTR(DeleteNodesStep);
         _activateTbl[(uint64_t)PipelineOpcode::DELETE_EDGES] = ACTIVATE_PTR(DeleteEdgesStep);
         _activateTbl[(uint64_t)PipelineOpcode::COMMIT] = ACTIVATE_PTR(CommitStep);
+        _activateTbl[(uint64_t)PipelineOpcode::DATAPART_MERGE] = ACTIVATE_PTR(DataPartMergeStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = ACTIVATE_PTR(CallPropertyStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_LABELS] = ACTIVATE_PTR(CallLabelStep);
         _activateTbl[(uint64_t)PipelineOpcode::CALL_EDGETYPES] = ACTIVATE_PTR(CallEdgeTypeStep);
@@ -156,6 +157,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
         _returnTbl[(uint64_t)PipelineOpcode::DELETE_NODES] = RETURN_PTR(DeleteNodesStep);
         _returnTbl[(uint64_t)PipelineOpcode::DELETE_EDGES] = RETURN_PTR(DeleteEdgesStep);
         _returnTbl[(uint64_t)PipelineOpcode::COMMIT] = RETURN_PTR(CommitStep);
+        _returnTbl[(uint64_t)PipelineOpcode::DATAPART_MERGE] = RETURN_PTR(DataPartMergeStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_PROPERTIES] = RETURN_PTR(CallPropertyStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_LABELS] = RETURN_PTR(CallLabelStep);
         _returnTbl[(uint64_t)PipelineOpcode::CALL_EDGETYPES] = RETURN_PTR(CallEdgeTypeStep);
@@ -261,6 +263,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     ACTIVATE_STEP(DeleteNodesStep)
     ACTIVATE_STEP(DeleteEdgesStep)
     ACTIVATE_STEP(CommitStep)
+    ACTIVATE_STEP(DataPartMergeStep)
     ACTIVATE_STEP(CallPropertyStep)
     ACTIVATE_STEP(CallLabelStep)
     ACTIVATE_STEP(CallEdgeTypeStep)
@@ -325,6 +328,7 @@ void Executor::runImpl(ExecutionContext* ctxt, Pipeline* pipeline, bool init) {
     RETURN_STEP(DeleteNodesStep)
     RETURN_STEP(DeleteEdgesStep)
     RETURN_STEP(CommitStep)
+    RETURN_STEP(DataPartMergeStep)
     RETURN_STEP(CallPropertyStep)
     RETURN_STEP(CallLabelStep)
     RETURN_STEP(CallEdgeTypeStep)

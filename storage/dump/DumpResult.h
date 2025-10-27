@@ -38,6 +38,7 @@ enum class DumpErrorType : uint8_t {
     CANNOT_OPEN_PROPERTY_TYPES,
     CANNOT_OPEN_JOURNAL,
     CANNOT_OPEN_TOMBSTONES,
+    CANNOT_OPEN_MERGE,
 
     CANNOT_LIST_COMMITS,
     CANNOT_LIST_COMMIT_FILES,
@@ -114,6 +115,7 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, "Cannot open graph property types">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_JOURNAL, "Cannot open commit journal">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_TOMBSTONES, "Cannot open commit tombstones">,
+    EnumStringPair<DumpErrorType::CANNOT_OPEN_MERGE, "Cannot open merge file">,
     EnumStringPair<DumpErrorType::CANNOT_LIST_COMMITS, "Cannot list commits">,
     EnumStringPair<DumpErrorType::CANNOT_LIST_COMMIT_FILES, "Cannot list commit files">,
     EnumStringPair<DumpErrorType::CANNOT_LIST_DATAPARTS, "Cannot list dataparts">,

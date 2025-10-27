@@ -54,6 +54,7 @@ set(storage_sources
         writers/MetadataBuilder.cpp
 
         mergers/DataPartMerger.cpp
+        mergers/DataPartMergeResult.cpp
 
         versioning/CommitResult.cpp
         versioning/ChangeResult.cpp

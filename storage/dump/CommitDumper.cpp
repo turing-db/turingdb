@@ -137,7 +137,19 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
         if (auto res = dumper.dump(tombstones); !res) {
             return res;
         }
-        
+    }
+
+    // Dumping Merge File
+    // Existence Of File Confirms If We Have A Merge Commit
+    {
+        Profile profile {"CommitDumper::dump <merge>"};
+        if (commit.isMergeCommit()) {
+            const fs::Path mergePath = path / "merge";
+            auto writerRes = fs::FilePageWriter::open(mergePath, DumpConfig::PAGE_SIZE);
+            if (!writerRes) {
+                return DumpError::result(DumpErrorType::CANNOT_OPEN_MERGE, writerRes.error());
+            }
+        }
     }
 
     for (const auto& [i, part] : commit.data().commitDataparts() | rv::enumerate) {

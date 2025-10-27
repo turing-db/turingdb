@@ -29,6 +29,14 @@ std::unique_ptr<CommitBuilder> CommitBuilder::prepare(VersionController& control
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
+std::unique_ptr<CommitBuilder> CommitBuilder::prepareMerge(VersionController& controller,
+                                                           Change* change,
+                                                           const GraphView& view) {
+    auto* ptr = new CommitBuilder {controller, change, view};
+    ptr->initializeMerge();
+    return std::unique_ptr<CommitBuilder> {ptr};
+}
+
 CommitHash CommitBuilder::hash() const {
     return _commitData->hash();
 }
@@ -41,8 +49,13 @@ GraphReader CommitBuilder::readGraph() const {
     return viewGraph().read();
 }
 
+void CommitBuilder::appendBuilder(std::unique_ptr<DataPartBuilder> builder) {
+    std::unique_lock<std::mutex> lock {_mutex};
+    _builders.emplace_back(std::move(builder));
+}
+
 DataPartBuilder& CommitBuilder::newBuilder() {
-    std::scoped_lock lock {_mutex};
+    std::unique_lock<std::mutex> lock {_mutex};
     GraphView view {*_commitData};
     const size_t partIndex = view.dataparts().size() + _builders.size();
     auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder,
@@ -56,7 +69,7 @@ DataPartBuilder& CommitBuilder::newBuilder() {
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile {"CommitBuilder::buildAllPending"};
 
-    std::scoped_lock lock {_mutex};
+    std::unique_lock<std::mutex> lock {_mutex};
 
     GraphView view {*_commitData};
 
@@ -158,4 +171,30 @@ void CommitBuilder::initialize() {
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
     // Copy tombstones from previous commit
     _commitData->_tombstones = prevCommit.tombstones();
+}
+
+void CommitBuilder::initializeMerge() {
+    Profile profile {"CommitBuilder::initialize"};
+
+    auto reader = _view.read();
+
+    _firstNodeID = 0;
+    _firstEdgeID = 0;
+
+    _nextNodeID = 0;
+    _nextEdgeID = 0;
+
+    const CommitView prevCommit = reader.commits().back();
+
+    // Create new commit data
+    _commitData = _controller->createCommitData(CommitHash::create());
+    _commit = Commit::createMergeCommit(_controller, _commitData, prevCommit);
+
+    // Create metadata builder
+    _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
+
+    _commitData->_history._journal = CommitJournal::emptyJournal();
+
+    // Create the write buffer for this commit
+    _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
 }

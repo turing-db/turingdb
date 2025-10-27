@@ -10,6 +10,7 @@
 #include "Profiler.h"
 #include "versioning/Change.h"
 #include "versioning/CommitResult.h"
+#include "mergers/DataPartMergeResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
@@ -41,6 +42,7 @@ public:
     VersionController& operator=(VersionController&&) = delete;
 
     void createFirstCommit();
+    [[nodiscard]] DataPartMergeResult<void> mergeDataParts(JobSystem& jobSystem);
     [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
 
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
@@ -63,6 +65,7 @@ private:
     friend GraphLoader;
     friend GraphDumper;
     friend Change;
+    friend Graph;
 
     Graph* _graph {nullptr};
 

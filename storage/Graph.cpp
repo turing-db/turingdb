@@ -21,6 +21,10 @@ FrozenCommitTx Graph::openTransaction(CommitHash hash) const {
     return _versionController->openTransaction(hash);
 }
 
+DataPartMergeResult<void> Graph::mergeDataParts(JobSystem& jobSystem) {
+    return _versionController->mergeDataParts(jobSystem);
+}
+
 CommitHash Graph::getHeadHash() const {
     return _versionController->getHeadHash();
 }

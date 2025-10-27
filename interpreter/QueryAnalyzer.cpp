@@ -96,6 +96,7 @@ void QueryAnalyzer::analyze(QueryCommand* cmd) {
         case QueryCommand::Kind::HISTORY_COMMAND:
         case QueryCommand::Kind::CHANGE_COMMAND:
         case QueryCommand::Kind::COMMIT_COMMAND:
+        case QueryCommand::Kind::DATAPARTMERGE_COMMAND:
         case QueryCommand::Kind::CALL_COMMAND:
         case QueryCommand::Kind::S3CONNECT_COMMAND:
             return;

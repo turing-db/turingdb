@@ -55,6 +55,8 @@ using namespace db;
 "edgetypes"|"EDGETYPES" { return YParser::make_EDGETYPES(getLocation()); }
 "labelsets"|"LABELSETS" { return YParser::make_LABELSETS(getLocation()); }
 
+"data_part_merge"|"DATA_PART_MERGE" { return YParser::make_DATA_PART_MERGE(getLocation()); }
+
 "." { return YParser::make_POINT(getLocation()); }
 "," { return YParser::make_COMMA(getLocation()); }
 ":" { return YParser::make_COLON(getLocation()); }
