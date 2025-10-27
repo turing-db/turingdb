@@ -59,6 +59,8 @@ public:
         return _predicates;
     }
 
+    void removeIsolatedNodes();
+
 private:
     friend class PlanGraphDebug;
 

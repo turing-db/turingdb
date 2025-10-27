@@ -1,12 +1,9 @@
 #pragma once
 
-#include <variant>
-
-#include "metadata/LabelSet.h"
-
 #include "PlanGraphVariables.h"
 #include "PlannerException.h"
 #include "PlanGraphTopology.h"
+#include "expr/SymbolExpr.h"
 #include "nodes/VarNode.h"
 
 #include "expr/BinaryExpr.h"
@@ -15,57 +12,70 @@
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/UnaryExpr.h"
+#include "expr/FunctionInvocationExpr.h"
 
 namespace db::v2 {
 
 class ExprDependencies {
 public:
-    struct LabelDependency {
-        const LabelSet* _labelSet {nullptr};
-    };
-
-    struct PropertyDependency {
-        std::string_view _propertyType;
-    };
-
-    using Dependency = std::variant<const EntityTypeExpr*, const PropertyExpr*>;
-
-    struct ExprDependency {
+    struct VarDependency {
         VarNode* _var {nullptr};
-        Dependency _dep;
+        const Expr* _expr {nullptr};
     };
 
-    using Container = std::vector<ExprDependency>;
+    struct FuncDependency {
+        const FunctionInvocationExpr* _expr {nullptr};
+    };
 
-    const Container& getDependencies() const {
-        return _dependencies;
+    using VarDepVector = std::vector<VarDependency>;
+    using FuncDepVector = std::vector<FuncDependency>;
+
+    const VarDepVector& getVarDeps() const {
+        return _varDeps;
     }
 
-    bool empty() const {
-        return _dependencies.empty();
+    const FuncDepVector& getFuncDeps() const {
+        return _funcDeps;
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const Expr* expr) {
         switch (expr->getKind()) {
-            case Expr::Kind::BINARY:
-                genExprDependencies(variables, static_cast<const BinaryExpr*>(expr));
-                break;
+            case Expr::Kind::BINARY: {
+                const BinaryExpr* binary = static_cast<const BinaryExpr*>(expr);
+                genExprDependencies(variables, binary->getLHS());
+                genExprDependencies(variables, binary->getRHS());
+            } break;
 
-            case Expr::Kind::UNARY:
-                genExprDependencies(variables, static_cast<const UnaryExpr*>(expr));
-                break;
+            case Expr::Kind::UNARY: {
+                const UnaryExpr* unary = static_cast<const UnaryExpr*>(expr);
+                genExprDependencies(variables, unary->getSubExpr());
+            } break;
 
-            case Expr::Kind::STRING:
-                genExprDependencies(variables, static_cast<const StringExpr*>(expr));
-                break;
+            case Expr::Kind::STRING: {
+                const StringExpr* string = static_cast<const StringExpr*>(expr);
+                genExprDependencies(variables, string->getLHS());
+                genExprDependencies(variables, string->getRHS());
+            } break;
 
-            case Expr::Kind::ENTITY_TYPES:
-                genExprDependencies(variables, static_cast<const EntityTypeExpr*>(expr));
-                break;
+            case Expr::Kind::ENTITY_TYPES: {
+                const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+                _varDeps.emplace_back(variables.getVarNode(entityType->getDecl()), expr);
+            } break;
 
-            case Expr::Kind::PROPERTY:
-                genExprDependencies(variables, static_cast<const PropertyExpr*>(expr));
-                break;
+            case Expr::Kind::PROPERTY: {
+                const PropertyExpr* prop = static_cast<const PropertyExpr*>(expr);
+                _varDeps.emplace_back(variables.getVarNode(prop->getDecl()), expr);
+            } break;
+
+            case Expr::Kind::FUNCTION_INVOCATION: {
+                const FunctionInvocationExpr* func = static_cast<const FunctionInvocationExpr*>(expr);
+                _funcDeps.emplace_back(func);
+            } break;
+
+            case Expr::Kind::SYMBOL: {
+                const SymbolExpr* symbol = static_cast<const SymbolExpr*>(expr);
+                _varDeps.emplace_back(variables.getVarNode(symbol->getDecl()), expr);
+            } break;
 
             case Expr::Kind::PATH:
                 // throwError("Path expression not supported yet", expr);
@@ -73,26 +83,14 @@ public:
                 throw PlannerException("Path expression not supported yet");
                 break;
 
-            case Expr::Kind::SYMBOL:
-                // throwError("Symbol expression not supported yet", expr);
-                // TODO Find a way to get access to throwError
-                throw PlannerException("Symbol expression not supported yet");
-                break;
-
             case Expr::Kind::LITERAL:
                 // Reached end
-                break;
-
-            case Expr::Kind::FUNCTION_INVOCATION:
-                // throwError("Function invocation expression not supported yet", expr);
-                // TODO Find a way to get access to throwError
-                throw PlannerException("Function invocation expression not supported yet");
                 break;
         }
     }
 
     VarNode* findCommonSuccessor(PlanGraphTopology* topology, VarNode* var) const {
-        for (const ExprDependency& dep : _dependencies) {
+        for (const VarDependency& dep : _varDeps) {
             PlanGraphNode* successor = topology->findCommonSuccessor(var, dep._var);
 
             if (successor) {
@@ -108,7 +106,8 @@ public:
     }
 
 private:
-    Container _dependencies;
+    VarDepVector _varDeps;
+    FuncDepVector _funcDeps;
 
     void genExprDependencies(const PlanGraphVariables& variables, const BinaryExpr* expr) {
         genExprDependencies(variables, expr->getLHS());
@@ -125,11 +124,15 @@ private:
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const EntityTypeExpr* expr) {
-        _dependencies.emplace_back(variables.getVarNode(expr->getDecl()), expr);
+        _varDeps.emplace_back(variables.getVarNode(expr->getDecl()), expr);
     }
 
     void genExprDependencies(const PlanGraphVariables& variables, const PropertyExpr* expr) {
-        _dependencies.emplace_back(variables.getVarNode(expr->getDecl()), expr);
+        _varDeps.emplace_back(variables.getVarNode(expr->getDecl()), expr);
+    }
+
+    void genExprDependencies(const PlanGraphVariables& variables, const FunctionInvocationExpr* expr) {
+        _funcDeps.emplace_back(expr);
     }
 };
 

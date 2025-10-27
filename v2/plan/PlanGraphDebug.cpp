@@ -1,6 +1,9 @@
 #include "PlanGraphDebug.h"
 
+#include "FunctionSignature.h"
+#include "nodes/AggregateEvalNode.h"
 #include "nodes/FilterNode.h"
+#include "nodes/FuncEvalNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
@@ -26,24 +29,24 @@ using namespace db::v2;
 
 namespace {
 
-void outputDependency(std::ostream& output, const ExprDependencies::ExprDependency& dep) {
+void outputDependency(std::ostream& output, const ExprDependencies::VarDependency& dep) {
     output << "        __dep__ _" << dep._var->getVarDecl()->getName() << "_";
-    if (const auto* expr = std::get_if<const EntityTypeExpr*>(&dep._dep)) {
-        const auto* types = (*expr)->getTypes();
+    if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
+        const auto* types = expr->getTypes();
         bioassert(types);
 
         for (const auto& type : *types) {
             output << ":_" << type->getName() << "_\n";
         }
-    } else if (const auto* expr = std::get_if<const PropertyExpr*>(&dep._dep)) {
-        output << "._" << (*expr)->getPropName() << "_\n";
+    } else if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+        output << "._" << expr->getPropName() << "_\n";
     }
 }
 
 void outputPredicate(std::ostream& output, const Predicate* pred) {
     output << "        __has predicate__" << "\n";
 
-    for (const auto& dep : pred->getDependencies().getDependencies()) {
+    for (const auto& dep : pred->getDependencies().getVarDeps()) {
         outputDependency(output, dep);
     }
 }
@@ -125,6 +128,23 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
                 for (const auto& pred : e->getPredicates()) {
                     outputPredicate(output, pred);
+                }
+            } break;
+
+            case PlanGraphOpcode::AGGREGATE_EVAL: {
+                const auto* n = dynamic_cast<AggregateEvalNode*>(node.get());
+                for (const auto& func : n->getFuncs()) {
+                    output << "        __aggregate_func__: " << func->_fullName << "\n";
+                }
+                if (!n->getGroupByKeys().empty()) {
+                    output << "        __has grouping keys__: " << n->getGroupByKeys().size() << "\n";
+                }
+            } break;
+
+            case PlanGraphOpcode::FUNC_EVAL: {
+                const auto* n = dynamic_cast<FuncEvalNode*>(node.get());
+                for (const auto& func : n->getFuncs()) {
+                    output << "        __func__: " << func->_fullName << "\n";
                 }
             } break;
 

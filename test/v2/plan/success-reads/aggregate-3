@@ -1,5 +1,5 @@
 /// QUERY
-MATCH (n) RETURN n, count(n)
+MATCH (n) RETURN count(n) * avg(n.duration)
 
 /// RESULT
 flowchart TD
@@ -16,7 +16,7 @@ flowchart TD
     3["`
         __AGGREGATE_EVAL__
         __aggregate_func__: count
-        __has grouping keys__: 1
+        __aggregate_func__: avg
     `"]
     4["`
         __PRODUCE_RESULTS__
