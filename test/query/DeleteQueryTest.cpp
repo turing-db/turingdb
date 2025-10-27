@@ -737,6 +737,62 @@ TEST_F(DeleteQueryTest, delNodesStringApprox) {
     }
 }
 
+// Test LookupStringIndexStep
+TEST_F(DeleteQueryTest, delEdgesStringApprox) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    {
+        auto VERIFY = [&](){
+            tester.query("match (n)-[e{name~=\"Ma\"}]-(m) return e")
+                .expectVector<EdgeID>({8,12})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 9")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    {
+        auto VERIFY = [&](){
+            tester.query("match (n)-[e{name~=\"Ma\"}]-(m) return e")
+                .expectVector<EdgeID>({8})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 12")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    {
+        auto VERIFY = [&](){
+            tester.query("match (n)-[e{name~=\"Ma\"}]-(m) return e")
+                .expectVector<EdgeID>({})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 8")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 

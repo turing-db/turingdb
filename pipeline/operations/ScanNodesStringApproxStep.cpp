@@ -10,6 +10,7 @@
 #include "TuringException.h"
 #include "columns/ColumnVector.h"
 #include "indexes/StringIndexUtils.h"
+#include "iterators/TombstoneFilter.h"
 #include "views/GraphView.h"
 
 using namespace db;
@@ -49,6 +50,8 @@ void Step::execute() {
     // Fill _nodes with the matches of all datapart's indexes
     try {
         StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
+        TombstoneFilter filter(_view.tombstones());
+        filter.onePassApplyFilter(*_nodes);
     } catch (TuringException& e) {
         throw PipelineException(e.what());
     }
