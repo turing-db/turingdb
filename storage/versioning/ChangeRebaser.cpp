@@ -90,6 +90,3 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     _currentHeadCommitData = &commitBuilder.commitData();
     _currentHeadHistory = &_currentHeadCommitData->history();
 }
-
-
-

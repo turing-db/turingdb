@@ -49,7 +49,6 @@ public:
          UntypedProperties properties;
     };
 
-
      // A node: either exists in previous commit (materialised as NodeID),
      // or to be created in this commit (materialised as PendingNodeOffset)
      using PendingNodes = std::vector<PendingNode>;

@@ -60,7 +60,6 @@ public:
     [[nodiscard]] bool nodeIsDeleted(NodeID nodeID) const;
     [[nodiscard]] bool edgeIsDeleted(EdgeID edgeID) const;
 
-
     template <SupportedType T> [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID,
                                                                                     NodeID nodeID) const;
 

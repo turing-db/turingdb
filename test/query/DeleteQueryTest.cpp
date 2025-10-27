@@ -179,7 +179,6 @@ TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
 /*
 Testing the following flow:
 
-
 1. Change1 is created and creates two nodes, and an edge between them
 2. Submits
 3. Change2 is created deletes the source node
@@ -212,7 +211,6 @@ TEST_F(DeleteQueryTest, noConflictOnDeletedEdge) {
 
 /*
 Testing the following flow:
-
 
 1. Change1 is created and creates two nodes, and an edge between them
 2. Submits
