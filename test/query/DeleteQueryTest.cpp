@@ -627,6 +627,116 @@ TEST_F(DeleteQueryTest, delEdgesGetOutEdges) {
     }
 }
 
+TEST_F(DeleteQueryTest, delNodesScanLabels) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete the first node
+        auto VERIFY = [&]() {
+            tester.query("match (n:Person) return n")
+                .expectVector<NodeID>({1, 8, 9, 11, 12})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete some nodes from the middle of the graph
+        auto VERIFY = [&]() {
+            tester.query("match (n:Person) return n")
+                .expectVector<NodeID>({1, 8, 12})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 9, 11")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete the last node
+        auto VERIFY = [&]() {
+            tester.query("match (n:Person) return n")
+                .expectVector<NodeID>({1, 8})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 12")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
+TEST_F(DeleteQueryTest, delNodesStringApprox) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Delete unrelated node
+        auto VERIFY = [&]() {
+            tester.query("match (n{name~=\"Ma\") return n")
+                .expectVector<NodeID>({8, 11})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete Martina
+        auto VERIFY = [&]() {
+            tester.query("match (n{name~=\"Ma\") return n")
+                .expectVector<NodeID>({8})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 11")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+
+    { // Delete Maxime
+        auto VERIFY = [&]() {
+            tester.query("match (n{name~=\"Ma\") return n")
+                .expectVector<NodeID>({})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 8")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
