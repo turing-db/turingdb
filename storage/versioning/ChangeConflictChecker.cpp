@@ -141,7 +141,7 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
 }
 
 void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& writes,
-                                              const CommitWriteBuffer& writeBuffer) {
+                                                      const CommitWriteBuffer& writeBuffer) {
     const CommitWriteBuffer::DeletedNodes& deletedNodes = writeBuffer.deletedNodes();
     for (const NodeID deletedNode : deletedNodes) {
         const NodeID newID = _entityIDRebaser.rebaseNodeID(deletedNode);
