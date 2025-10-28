@@ -17,8 +17,9 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
@@ -505,7 +506,11 @@ void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, con
             return;
         }
 
-        throwError(fmt::format("Property type '{}' already exists", name), obj);
+        throwError(fmt::format("Property type '{}' already exists with a different type '{}' vs. '{}'",
+                               name,
+                               ValueTypeName::value(it->second),
+                               ValueTypeName::value(type)),
+                   obj);
     }
 
     // Register the new type

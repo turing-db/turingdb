@@ -6,4 +6,4 @@ ANALYZE ERROR
 -------* Query error
      1 | CREATE (n:Person { newProp: 5 }), (m:Person { newProp: "This is now a string" })
        |                                                        ^^^^^^^^^^^^^^^^^^^^^^
--------* Property type 'newProp' already exists
+-------* Property type 'newProp' already exists with a different type 'Int64' vs. 'String'
