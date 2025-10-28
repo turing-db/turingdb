@@ -114,7 +114,7 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // If the above call to @ref ChangeRebaser::checkConflicts does not throw, then there
     // are no write conflicts, and we may safely proceed with rebasing - involving
     // modifying the CommitBuilders, CommitWriteBuffers, etc. - as there is no chance that
-    // we need to rollback our pre-submit state.
+    // we need to rollback to our pre-submit state.
     for (auto& commitBuilder : _commits) {
         rebaser.rebaseCommitBuilder(*commitBuilder);
     }

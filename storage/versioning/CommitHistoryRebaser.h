@@ -19,7 +19,7 @@ public:
                 DataPartRebaser& dataPartRebaser,
                 const CommitHistory& prevHistory);
 
-    void undoLocalCommits();
+    void removeCreatedDataParts();
 
 private:
     CommitHistory& _history;

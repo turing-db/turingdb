@@ -52,18 +52,20 @@ void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
 }
 
 void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
+    bioassert(!_newMainReader->commits().empty());
+
     Tombstones::NodeTombstones& nodeTombstones = tombstones._nodeTombstones;
     Tombstones::EdgeTombstones& edgeTombstones = tombstones._edgeTombstones;
 
     // Reassign the IDs to be in sync with main
-    {
+    if (!nodeTombstones.empty()) {
         Tombstones::NodeTombstones temp;
         for (const NodeID node : nodeTombstones) {
             temp.insert(_entityIDRebaser.rebaseNodeID(node));
         }
         nodeTombstones.swap(temp);
     }
-    {
+    if (!edgeTombstones.empty()) {
         Tombstones::EdgeTombstones temp;
         for (const EdgeID edge : edgeTombstones) {
             temp.insert(_entityIDRebaser.rebaseEdgeID(edge));
@@ -88,17 +90,16 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     CommitData& data = commitBuilder.commitData();
     CommitHistory& history = data.history();
 
+    // Even if this commit hasn't created tombstones, we need to union them with the
+    // tombstones on main, so always rebase
     Tombstones& commitTombstones = commitBuilder._commitData->_tombstones;
     rebaseTombstones(commitTombstones);
 
     CommitHistoryRebaser historyRebaser {history};
 
-    // Undo any commits that were made locally
-    // Only check those with an non-empty writebuffer, as other sources e.g.
-    // GraphWriter will create multiple dataparts from builders at commit-time but not
-    // at submit time, and so should not be erased
+    // If we made a local commit (signified by the write buffer being flushed), undo it
     if (!commitBuilder.writeBuffer().isFlushed()) {
-        historyRebaser.undoLocalCommits();
+        historyRebaser.removeCreatedDataParts();
         // We have deleted all created DPs: reset this number
         commitBuilder._datapartCount = 0;
         commitBuilder.writeBuffer().setUnflushed();

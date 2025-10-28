@@ -43,7 +43,7 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
     }
 }
 
-void CommitHistoryRebaser::undoLocalCommits() {
+void CommitHistoryRebaser::removeCreatedDataParts() {
     // Total number of dataparts in the view of this commit
     const size_t totalDPs = _history._allDataparts.size();
     // Total number of datapart which were created as part of this commit, as a result
