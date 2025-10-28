@@ -1,0 +1,9 @@
+/// QUERY
+MATCH (n:Person) SET n.name = 5
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n:Person) SET n.name = 5
+       |                      ^^^^^^^^^^
+-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible

@@ -1,0 +1,23 @@
+/// QUERY
+MATCH (n) SET n.integer = 5 SET n.integer = 6
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+    `"]
+    3["`
+        __WRITE__
+        __node_update__ integer
+        __node_update__ integer
+    `"]
+    0-->2
+    1-->3
+    2-->1

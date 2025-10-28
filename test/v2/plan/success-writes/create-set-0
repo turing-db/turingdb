@@ -1,0 +1,10 @@
+/// QUERY
+CREATE (n:Person) SET n.name = "Node"
+
+/// RESULT
+flowchart TD
+    0["`
+        __WRITE__
+        __node__ (0:Person)
+        __node_update__ name
+    `"]

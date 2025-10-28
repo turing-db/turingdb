@@ -17,9 +17,8 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
@@ -273,7 +272,7 @@ void ExprAnalyzer::analyze(LiteralExpr* expr) {
     }
 }
 
-db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr) {
+db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
     if (qualifiedName->size() != 2) {
@@ -310,9 +309,15 @@ db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr) {
         auto it = _toBeCreatedTypes.find(name);
 
         if (it == _toBeCreatedTypes.end()) {
-            // Property does not exist and is not meant to be created in this query
-            const std::string error = fmt::format("Property type '{}' not found", propName->getName());
-            throwError(error, expr);
+            if (!allowCreate) {
+                // Property does not exist and is not meant to be created in this query
+                const std::string error = fmt::format("Property type '{}' not found", propName->getName());
+                throwError(error, expr);
+            } else {
+                // Property does not exist but is created
+                addToBeCreatedType(propName->getName(), defaultType, expr);
+                it = _toBeCreatedTypes.find(name);
+            }
         }
 
         // Property is meant to be created in this query

@@ -252,11 +252,16 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
         case SetItem::PropertyExprAssign::index: {
             auto& v = std::get<SetItem::PropertyExprAssign>(item->item());
 
-            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyze(v.propTypeExpr);
-            _exprAnalyzer->analyze(v.propValueExpr);
-
+            // Analyzing rhs
             const EvaluatedType rhsType = v.propValueExpr->getType();
 
+            // Analyzing lhs
+            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyze(v.propTypeExpr,
+                                                                    true,
+                                                                    evaluatedToValueType(rhsType));
+            _exprAnalyzer->analyze(v.propValueExpr);
+
+            // Checking property compatibility
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
                 throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(lhsEvaluatedVt),
