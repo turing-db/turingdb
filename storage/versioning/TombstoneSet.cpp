@@ -15,8 +15,8 @@ bool TombstoneSet<IDT>::contains(IDT id) const {
 }
 
 template <TypedInternalID IDT>
-auto TombstoneSet<IDT>::insert(IDT id) {
-    return _set.insert(id);
+void TombstoneSet<IDT>::insert(IDT id) {
+    _set.insert(id);
 }
 
 template <TypedInternalID IDT>
@@ -24,3 +24,12 @@ size_t TombstoneSet<IDT>::size() const {
     return _set.size();
 }
 
+template <TypedInternalID IDT>
+void TombstoneSet<IDT>::swap(TombstoneSet<IDT>& other) noexcept {
+    _set.swap(other._set);
+};
+
+template <TypedInternalID IDT>
+void TombstoneSet<IDT>::setUnion(TombstoneSet<IDT>& set1, const TombstoneSet<IDT>& set2) {
+    set1.insert(set2);
+}

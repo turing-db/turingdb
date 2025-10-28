@@ -82,6 +82,7 @@ private:
     NodeID _nextNodeID;
     EdgeID _nextEdgeID;
 
+    // Points to the same CommitData as @ref _commit::_data
     WeakArc<CommitData> _commitData;
     std::unique_ptr<MetadataBuilder> _metadataBuilder;
     std::unique_ptr<Commit> _commit;

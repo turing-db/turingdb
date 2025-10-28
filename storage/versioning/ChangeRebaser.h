@@ -41,6 +41,13 @@ private:
 
     NodeID _newNextNodeID {std::numeric_limits<NodeID>::max()};
     EdgeID _newNextEdgeID {std::numeric_limits<EdgeID>::max()};
+
+    /**
+     * @brief Rebases the IDs of Nodes and Edges in @param
+     * tombstones::_nodeTombstones/_edgeTombstones according to main. Performs set union
+     * on the tombstones in main and @param tombstones.
+     */
+    void rebaseTombstones(Tombstones& tombstones);
 };
     
 }

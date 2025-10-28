@@ -36,6 +36,7 @@ public:
 
 private:
     friend class CommitWriteBuffer;
+    friend class ChangeRebaser;
 
     /**
      * @brief Given a range over NodeIDs, calls @ref TombstoneSet::insert over that range

@@ -13,6 +13,7 @@ class CommitLoader;
 class GraphLoader;
 class VersionController;
 class Change;
+class ChangeRebaser;
 
 class CommitData {
 public:
@@ -44,6 +45,7 @@ private:
     friend VersionController;
     friend Change;
     friend Commit;
+    friend ChangeRebaser;
 
     CommitHash _hash;
     CommitHistory _history;

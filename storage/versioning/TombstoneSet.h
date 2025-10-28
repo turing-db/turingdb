@@ -11,7 +11,7 @@ template <TypedInternalID IDT>
 class TombstoneSet {
 public:
     bool contains(IDT id) const;
-    auto insert(IDT id);
+    void insert(IDT id);
     size_t size() const;
 
     auto begin() { return _set.begin(); }
@@ -21,9 +21,17 @@ public:
 
     bool empty() const { return _set.empty(); }
 
+    void swap(TombstoneSet<IDT>& other) noexcept;
+
     template <std::ranges::input_range Range>
         requires std::same_as<std::ranges::range_value_t<Range>, IDT>
     void insert(Range& range);
+
+    /**
+     * @brief Performs set-theoretic union of @param set1 and @param set2, storing the
+     * result in @param set1
+     */
+    static void setUnion(TombstoneSet<IDT>& set1, const TombstoneSet<IDT>& set2);
 
 private:
     std::unordered_set<IDT> _set;

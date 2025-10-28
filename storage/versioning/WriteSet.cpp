@@ -22,7 +22,7 @@ void WriteSet<IDT>::insert(IDT id) {
 }
 
 template <TypedInternalID IDT>
-void WriteSet<IDT>::swap(WriteSet<IDT>& other) {
+void WriteSet<IDT>::swap(WriteSet<IDT>& other) noexcept {
     this->_set.swap(other._set);
 }
 

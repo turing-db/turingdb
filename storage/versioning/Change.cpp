@@ -71,6 +71,18 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
     return {};
 }
 
+/*
+ * The rebase follows a two stage approach:
+ * Stage 1: Make a call to @ref ChangeRebaser::checkConflicts to check if there have been
+ * write conflicts that we need reject under snapshot isolation. This stage does not
+ * modify any member belonging to @ref this Change, meaning in the case of a reject, the
+ * state is left precisely as it was prior to the call of @ref Change::rebase.
+ *
+ * Stage 2: If the call to @ref ChangeRebaser::checkConflicts completes without throwing
+ * an exception, then we proceed by calling @ref ChangeRebaser::rebaseCommitBuilder on
+ * each pending @ref CommitBuilder in @ref _commits. This modifies the builders in-place
+ * in order to be in sync with main.
+ */
 CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     Profile profile {"Change::rebase"};
 
@@ -99,6 +111,10 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // Check the write buffer for each commit to be made for write conflicts
     rebaser.checkConflicts(commitsSinceBranch);
 
+    // If the above call to @ref ChangeRebaser::checkConflicts does not throw, then there
+    // are no write conflicts, and we may safely proceed with rebasing - involving
+    // modifying the CommitBuilders, CommitWriteBuffers, etc. - as there is no chance that
+    // we need to rollback our pre-submit state.
     for (auto& commitBuilder : _commits) {
         rebaser.rebaseCommitBuilder(*commitBuilder);
     }

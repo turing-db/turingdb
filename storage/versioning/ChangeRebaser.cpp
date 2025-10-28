@@ -10,12 +10,8 @@
 #include "DataPartRebaser.h"
 #include "reader/GraphReader.h"
 #include "BioAssert.h"
-#include "versioning/ChangeConflictChecker.h"
-#include "versioning/CommitBuilder.h"
-#include "versioning/CommitHistory.h"
-#include "versioning/CommitHistoryRebaser.h"
-#include "versioning/CommitWriteBuffer.h"
-#include "versioning/DataPartRebaser.h"
+#include "ChangeConflictChecker.h"
+#include "Tombstones.h"
 
 using namespace db;
 
@@ -55,9 +51,45 @@ void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
     conflictChecker.checkConflicts();
 }
 
+void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
+    Tombstones::NodeTombstones& nodeTombstones = tombstones._nodeTombstones;
+    Tombstones::EdgeTombstones& edgeTombstones = tombstones._edgeTombstones;
+
+    // Reassign the IDs to be in sync with main
+    {
+        Tombstones::NodeTombstones temp;
+        for (const NodeID node : nodeTombstones) {
+            temp.insert(_entityIDRebaser.rebaseNodeID(node));
+        }
+        nodeTombstones.swap(temp);
+    }
+    {
+        Tombstones::EdgeTombstones temp;
+        for (const EdgeID edge : edgeTombstones) {
+            temp.insert(_entityIDRebaser.rebaseEdgeID(edge));
+        }
+        edgeTombstones.swap(temp);
+    }
+
+    // We want all the tombstones on main unioned with the rebased tombstones we created
+    const Tombstones& mainTombstones = _newMainReader->commits().back().tombstones();
+
+    const Tombstones::NodeTombstones& mainNodeTombstones =
+        mainTombstones.nodeTombstones();
+    const Tombstones::EdgeTombstones& mainEdgeTombstones =
+        mainTombstones.edgeTombstones();
+
+    // Perform set union on main and rebased tombstones
+    Tombstones::NodeTombstones::setUnion(nodeTombstones, mainNodeTombstones);
+    Tombstones::EdgeTombstones::setUnion(edgeTombstones, mainEdgeTombstones);
+}
+
 void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     CommitData& data = commitBuilder.commitData();
     CommitHistory& history = data.history();
+
+    Tombstones& commitTombstones = commitBuilder._commitData->_tombstones;
+    rebaseTombstones(commitTombstones);
 
     CommitHistoryRebaser historyRebaser {history};
 
