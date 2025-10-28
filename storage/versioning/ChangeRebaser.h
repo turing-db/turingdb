@@ -23,10 +23,21 @@ public:
                   const CommitData* currentHeadCommitData,
                   const CommitHistory* currentHeadHistory);
 
+    /**
+     * @brief Performs the required setup tasks, ready to call @ref checkConflicts,
+     * abstracting much logic out of the constructor.
+     */
     void init(const GraphReader& mainReader, const GraphReader& branchTimeReader);
 
+    /**
+    * @brief Constructs a ChangeConflictChecker to compare against @param commits
+    */
     void checkConflicts(const Commit::CommitSpan commits);
 
+    /**
+     * @brief Rebases the provided @param commitBuilder according to the views of @ref
+     * _branchTimeReader and @ref _newMainReader
+     */
     void rebaseCommitBuilder(CommitBuilder& commitBuilder);
 
 private:
