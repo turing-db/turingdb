@@ -11,7 +11,7 @@ namespace db {
 class ExecutionContext;
 class CommitBuilder;
 
-template <TypedInternalID IDT>
+template <TypedInternalID IDType>
 class DeleteStep {
 public:
     struct Tag {};
@@ -23,7 +23,7 @@ public:
     using DeleteNodesStep = DeleteStep<NodeID>;
     using DeleteEdgesStep = DeleteStep<EdgeID>;
 
-    void addDeletions(std::vector<IDT>&& deletedIDs);
+    void addDeletions(std::vector<IDType>&& deletedIDs);
 
     void prepare(ExecutionContext* ctxt);
 
@@ -36,7 +36,7 @@ public:
     void describe(std::string& descr) const;
 
 private:
-    std::vector<IDT> _deletions;
+    std::vector<IDType> _deletions;
     CommitBuilder* _commitBuilder {nullptr};
     CommitWriteBuffer* _writeBuffer {nullptr};
 };
