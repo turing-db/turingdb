@@ -7,6 +7,10 @@ namespace db {
 /**
  * @brief Wrapper class for a "set" which need support fast lookups, union, and
  * intersection as a member of @ref CommitJournal for conflict checking
+ * @detail Primary usage is during conflict checking. This operation involves set union
+ * and determining if the intersection is empty. Sorted vector is therefore chosen as it
+ * is faster than a hashtable-based datastructure. Source:
+ * https://lemire.me/blog/2017/01/27/how-expensive-are-the-union-and-intersection-of-two-unordered_set-in-c/
  */
 template <TypedInternalID IDT>
 class WriteSet {
@@ -33,10 +37,21 @@ public:
 
     void swap(WriteSet<IDT>& other) noexcept;
 
+    /**
+    * @brief Finalises the journal for use in a frozen commit.
+    * @detail Sorts and ensures uniqueness of elements.
+    */
     void finalise();
 
+    /**
+    * @brief Determines if the intersection between @param set1 and @param set2 is empty
+    */
     static bool emptyIntersection(const WriteSet<IDT>& set1, const WriteSet<IDT>& set2);
 
+    /**
+     * @brief Performs set-theoretic union of @param set1 and @param set2, storing the
+     * result in @param set1
+     */
     static void setUnion(WriteSet<IDT>& set1, const WriteSet<IDT>& set2);
 
     static void setIntersection(WriteSet<IDT>& set1, WriteSet<IDT>& set2) = delete;

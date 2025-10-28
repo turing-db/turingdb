@@ -73,7 +73,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     Commit* mainState = _head.load();
 
     // rebase if main has changed under us
-    // TODO: Get union of WriteSets since branch time
     if (mainState->hash() != change->baseHash()) {
         if (auto res = change->rebase(jobSystem); !res) {
             return res;
@@ -81,8 +80,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commitBuilder : change->_commits) {
-        // TODO: Compare WriteSet of current builder with union created at rebase
-
         // Creates a new builder to execute CREATE/DELETE commands.
         // If locally `Change::commit` all changes, and no rebase, then no need to flush
         // again. Otherwise flush again.
