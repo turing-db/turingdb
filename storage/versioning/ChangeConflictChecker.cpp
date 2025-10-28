@@ -21,7 +21,8 @@ ChangeConflictChecker::ChangeConflictChecker(const Change& change,
                                              const Commit::CommitSpan commits)
     : _change(change),
     _entityIDRebaser(entityRebaser),
-    _commitsSinceBranch(commits) {
+    _commitsSinceBranch(commits)
+{
 }
 
 void ChangeConflictChecker::getWritesSinceCommit(ConflictCheckSets& writes) {
