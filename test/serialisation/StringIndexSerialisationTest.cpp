@@ -1,21 +1,21 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "DataPart.h"
 #include "dump/GraphDumper.h"
 #include "Path.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 
-#include "TuringDB.h"
-#include "Graph.h"
 #include "SystemManager.h"
-#include "indexers/StringPropertyIndexer.h"
-#include "reader/GraphReader.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
 #include "dump/GraphLoader.h"
 #include "TuringConfig.h"
+#include "TuringTestEnv.h"
 #include "SimpleGraph.h"
+#include "indexers/StringPropertyIndexer.h"
+#include "reader/GraphReader.h"
+#include "versioning/ChangeID.h"
+#include "versioning/Transaction.h"
 
 using namespace db;
 using namespace turing::test;
@@ -23,37 +23,35 @@ using namespace turing::test;
 class StringIndexSerialisationTest : public TuringTest {
 public:
     void initialize()  override {
-        _config.setSyncedOnDisk(false);
+        _env.getConfig().setSyncedOnDisk(false);
         _workingPath = fs::Path {_outDir + "/testfile"};
         _config.setTuringDirectory(_workingPath);
-        _db = std::make_unique<TuringDB>(&_config);
-        _db->run();
 
-        SystemManager& sysMan = _db->getSystemManager();
-        _builtGraph = sysMan.createGraph("simple");
-        SimpleGraph::createSimpleGraph(_builtGraph);
+        SystemManager& sysMan = _env.getSystemManager();
+        Graph* builtGraph = sysMan.createGraph(_builtGraphName);
+        SimpleGraph::createSimpleGraph(builtGraph);
 
         loadDumpLoadSimpleDb();
     }
 
 protected:
     TuringConfig _config;
-    std::unique_ptr<TuringDB> _db;
-    Graph* _builtGraph {nullptr};
-    std::unique_ptr<Graph> _loadedGraph;
+    TuringTestEnv _env;
+    std::string _builtGraphName {"simple"};
+    std::string _loadedGraphName {"newsimple"};
     fs::Path _workingPath;
 
 private:
     void loadDumpLoadSimpleDb() {
-        GraphDumper dumper;
+        SystemManager& sysMan = _env.getSystemManager();
 
-        auto res = dumper.dump(*_builtGraph, _workingPath);
+        auto res = GraphDumper::dump(*sysMan.getGraph(_builtGraphName), _workingPath);
         if (!res) {
             throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
         }
 
-        _loadedGraph = Graph::create();
-        const auto loadRes = GraphLoader::load(_loadedGraph.get(), _workingPath);
+        Graph* loadedGraph = sysMan.createGraph(_loadedGraphName);
+        const auto loadRes = GraphLoader::load(loadedGraph, _workingPath);
         if (!loadRes) {
             throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
         }
@@ -61,7 +59,10 @@ private:
 };
 
 TEST_F(StringIndexSerialisationTest, indexInitialisation) {
-    auto tx = _builtGraph->openTransaction();
+    SystemManager& sysMan = _env.getSystemManager();
+    auto txRes = sysMan.openTransaction(_builtGraphName, CommitHash::head(), ChangeID::head());
+    ASSERT_TRUE(txRes);
+    auto& tx = txRes.value();
     auto reader = tx.readGraph();
     auto builtDps = reader.dataparts();
 
@@ -70,9 +71,12 @@ TEST_F(StringIndexSerialisationTest, indexInitialisation) {
         EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
     }
 
-    auto txl = _loadedGraph->openTransaction();
-    auto readerl = txl.readGraph();
-    auto loadedDps = readerl.dataparts();
+    auto txLRes = sysMan.openTransaction(_loadedGraphName, CommitHash::head(), ChangeID::head());
+    ASSERT_TRUE(txLRes);
+    auto& txLoad = txLRes.value();
+
+    auto readerLoad = txLoad.readGraph();
+    auto loadedDps = readerLoad.dataparts();
 
     for (const auto& dp : loadedDps) {
         EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
