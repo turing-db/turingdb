@@ -1,0 +1,10 @@
+/// QUERY
+CREATE (n:Person { newProp: 5 }), (m:Person { newProp: 6 })
+
+/// RESULT
+flowchart TD
+    0["`
+        __WRITE__
+        __node__ (0:Person {newProp (Int64): *expr* })
+        __node__ (1:Person {newProp (Int64): *expr* })
+    `"]
