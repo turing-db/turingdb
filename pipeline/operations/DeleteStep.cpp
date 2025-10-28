@@ -39,14 +39,14 @@ void DeleteStep<IDT>::execute() {
     GraphReader reader = _commitBuilder->readGraph();
 
     for (IDT id : _deletions) {
-        bool has {false};
+        bool existsAndNotDeleted {false};
         if constexpr (std::is_same_v<IDT, NodeID>) {
-            has = reader.graphHasNode(id) && !reader.nodeIsDeleted(id);
+            existsAndNotDeleted = reader.graphHasNode(id) && !reader.nodeIsDeleted(id);
         } else if constexpr (std::is_same_v<IDT, EdgeID>) {
-            has = reader.graphHasEdge(id) && !reader.edgeIsDeleted(id);
+            existsAndNotDeleted = reader.graphHasEdge(id) && !reader.edgeIsDeleted(id);
         }
 
-        if (!has) [[unlikely]] {
+        if (!existsAndNotDeleted) [[unlikely]] {
             std::string err =
                 fmt::format("Graph does not contain {} with ID: {}.",
                             std::is_same_v<IDT, NodeID> ? "node" : "edge",

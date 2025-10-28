@@ -94,9 +94,10 @@ private:
 template <TypedInternalID IDT>
 class DeleteCommand : public QueryCommand {
 public:
+    using Deletions = std::vector<IDT>;
     static DeleteCommand<IDT>* create(ASTContext* ctxt, DeletedIDs<IDT>* deletedIDs);
 
-    std::vector<IDT>& deletions() const;
+    Deletions& deletions() const;
 
     Kind getKind() const override;
 

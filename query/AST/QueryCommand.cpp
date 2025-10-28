@@ -65,7 +65,7 @@ DeleteCommand<IDT>* DeleteCommand<IDT>::create(ASTContext* ctxt,
 }
 
 template <TypedInternalID IDT>
-std::vector<IDT>& DeleteCommand<IDT>::deletions() const {
+DeleteCommand<IDT>::Deletions& DeleteCommand<IDT>::deletions() const {
     return _deletedIDs->getIDs();
 }
 
