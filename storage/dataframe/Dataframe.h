@@ -9,6 +9,11 @@ namespace db {
 
 class NamedColumn;
 
+// A basic Dataframe class where columns are indexed by numerical ColumnTag.
+// Columns can have optional names as string_views, but only tags can be used
+// to uniquely retrieve a column.
+// A Dataframe can possibly have several columns with the same name strings.
+// Uniqueness is only enforced on ColumnTags.
 class Dataframe {
 public:
     using NamedColumns = std::vector<NamedColumn*>;
