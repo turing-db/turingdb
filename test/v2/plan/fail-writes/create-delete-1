@@ -1,0 +1,9 @@
+/// QUERY
+CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e
+
+/// RESULT
+PLAN ERROR
+-------* Query error
+     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e
+       |                                                  ^
+-------* Cannot delete pending edge
