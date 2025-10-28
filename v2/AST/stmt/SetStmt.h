@@ -1,27 +1,29 @@
 #pragma once
 
+#include <vector>
+
 #include "Stmt.h"
 
 namespace db::v2 {
 
 class Pattern;
 class CypherAST;
+class SetItem;
 
 class SetStmt : public Stmt {
 public:
-    static SetStmt* create(CypherAST* ast, Pattern* pattern);
+    using SetItems = std::vector<SetItem*>;
 
-    Kind getKind() const override { return Kind::CREATE; }
+    static SetStmt* create(CypherAST* ast);
 
-    const Pattern* getPattern() const { return _pattern; }
+    Kind getKind() const override { return Kind::SET; }
+
+    void addItem(SetItem* item) { _items.push_back(item); }
+
+    const SetItems& getItems() const { return _items; }
 
 private:
-    Pattern* _pattern {nullptr};
-
-    SetStmt(Pattern* pattern)
-        : _pattern(pattern)
-    {
-    }
+    SetItems _items;
 
     ~SetStmt() override;
 };

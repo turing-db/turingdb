@@ -24,6 +24,8 @@ set(ast_sources
     stmt/Stmt.cpp
     stmt/StmtContainer.cpp
     stmt/MatchStmt.cpp
+    stmt/SetStmt.cpp
+    stmt/SetItem.cpp
     stmt/CreateStmt.cpp
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp

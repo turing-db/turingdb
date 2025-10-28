@@ -41,6 +41,7 @@ class EdgePattern;
 class Projection;
 class Stmt;
 class SubStmt;
+class SetItem;
 class Limit;
 class Skip;
 class OrderBy;
@@ -92,6 +93,7 @@ public:
     friend NodePattern;
     friend EdgePattern;
     friend Projection;
+    friend SetItem;
     friend Limit;
     friend Skip;
     friend OrderBy;
@@ -154,6 +156,7 @@ private:
     std::vector<WhereClause*> _whereClauses;
     std::vector<Stmt*> _stmts;
     std::vector<SubStmt*> _subStmts;
+    std::vector<SetItem*> _setItems;
     std::vector<OrderBy*> _orderBys;
     std::vector<OrderByItem*> _orderByItems;
     std::vector<StmtContainer*> _stmtContainers;
@@ -179,6 +182,7 @@ private:
     void addWhereClause(WhereClause* clause);
     void addStmt(Stmt* stmt);
     void addSubStmt(SubStmt* subStmt);
+    void addSetItem(SetItem* item);
     void addOrderByItem(OrderByItem* item);
     void addStmtContainer(StmtContainer* container);
     void addQuery(QueryCommand* query);
