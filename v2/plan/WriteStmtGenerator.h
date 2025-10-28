@@ -50,6 +50,8 @@ private:
     PlanGraphVariables* _variables {nullptr};
     WriteNode* _currentNode {nullptr};
 
+    void prepareWriteNode(PlanGraphNode* prevNode);
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 

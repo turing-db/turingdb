@@ -65,16 +65,7 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
 }
 
 void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode) {
-    if (!prevNode) {
-        // First node in the plan graph
-        _currentNode = _tree->create<WriteNode>();
-    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
-        // Previous node is a write node, reuse it
-        _currentNode = static_cast<WriteNode*>(prevNode);
-    } else {
-        // Previous node is not a write node, create a new one
-        _currentNode = _tree->newOut<WriteNode>(prevNode);
-    }
+    prepareWriteNode(prevNode);
 
     const Pattern* pattern = stmt->getPattern();
 
@@ -84,16 +75,7 @@ void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNod
 }
 
 void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* prevNode) {
-    if (!prevNode) {
-        // First node in the plan graph
-        _currentNode = _tree->create<WriteNode>();
-    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
-        // Previous node is a write node, reuse it
-        _currentNode = static_cast<WriteNode*>(prevNode);
-    } else {
-        // Previous node is not a write node, create a new one
-        _currentNode = _tree->newOut<WriteNode>(prevNode);
-    }
+    prepareWriteNode(prevNode);
 
     for (const SetItem* item : stmt->getItems()) {
         switch (item->item().index()) {
@@ -120,16 +102,7 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
 }
 
 void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode) {
-    if (!prevNode) {
-        // First node in the plan graph
-        _currentNode = _tree->create<WriteNode>();
-    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
-        // Previous node is a write node, reuse it
-        _currentNode = static_cast<WriteNode*>(prevNode);
-    } else {
-        // Previous node is not a write node, create a new one
-        _currentNode = _tree->newOut<WriteNode>(prevNode);
-    }
+    prepareWriteNode(prevNode);
 
     const ExprChain* exprs = stmt->getExpressions();
 
@@ -231,6 +204,19 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
         }
 
         lhs = rhs;
+    }
+}
+
+void WriteStmtGenerator::prepareWriteNode(PlanGraphNode* prevNode) {
+    if (!prevNode) {
+        // First node in the plan graph
+        _currentNode = _tree->create<WriteNode>();
+    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
+        // Previous node is a write node, reuse it
+        _currentNode = static_cast<WriteNode*>(prevNode);
+    } else {
+        // Previous node is not a write node, create a new one
+        _currentNode = _tree->newOut<WriteNode>(prevNode);
     }
 }
 
