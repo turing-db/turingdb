@@ -1,9 +1,9 @@
 #pragma once
 
 #include <vector>
+#include <unordered_map>
 
-#include "DataframeHeaderMap.h"
-#include "ColumnName.h"
+#include "ColumnTag.h"
 
 namespace db {
 
@@ -35,15 +35,17 @@ public:
 
     const NamedColumns& cols() const { return _cols; }
 
-    NamedColumn* getColumn(ColumnName name) const {
-        return _headerMap.getColumn(name);
+    NamedColumn* getColumn(ColumnTag tag) const {
+        const auto it = _headerMap.find(tag);
+        if (it == _headerMap.end()) {
+            return nullptr;
+        }
+
+        return it->second;
     }
 
-    void setColumnPrimaryName(NamedColumn* col, ColumnName name);
-    void addNameToColumn(NamedColumn* col, ColumnName name);
-
 private:
-    DataframeHeaderMap _headerMap;
+    std::unordered_map<ColumnTag, NamedColumn*> _headerMap;
     NamedColumns _cols;
 
     void addColumn(NamedColumn* column);

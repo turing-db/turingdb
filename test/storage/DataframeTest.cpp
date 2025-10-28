@@ -1,9 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "columns/Dataframe.h"
 #include "columns/ColumnIDs.h"
-#include "columns/NamedColumn.h"
-#include "columns/ColumnNameManager.h"
+#include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
 
 #include "TuringException.h"
 
@@ -25,79 +24,50 @@ TEST_F(DataframeTest, testEmpty) {
 
 TEST_F(DataframeTest, testOneCol) {
     Dataframe df;
-    ColumnNameManager nameMan;
 
     ColumnNodeIDs colNodes1;
 
-    const ColumnName aName = nameMan.getName("a");
-    NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aName);
+    const ColumnHeader aHeader(0);
+    NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aHeader);
     ASSERT_TRUE(col1 != nullptr);
 
     ASSERT_EQ(df.cols().size(), 1);
 
     for (const NamedColumn* namedCol : df.cols()) {
-        ASSERT_EQ(namedCol->getPrimaryName(), aName);
-
-        // Retrieve name by doing another lookup into name manager
-        ASSERT_EQ(namedCol->getPrimaryName(), nameMan.getName("a"));
+        ASSERT_EQ(namedCol->getHeader().getTag(), aHeader.getTag());
     }
 }
 
-TEST_F(DataframeTest, testSameName) {
+TEST_F(DataframeTest, testSameTag) {
     Dataframe df;
-    ColumnNameManager nameMan;
 
     ColumnNodeIDs colNodes1;
     ColumnNodeIDs colNodes2;
     ColumnEdgeIDs colEdges1;
 
-    NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, nameMan.getName("a"));
+    const ColumnHeader aHeader(0);
+    NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aHeader);
     ASSERT_TRUE(col1 != nullptr);
 
-    NamedColumn* col2 = NamedColumn::create(&df, &colNodes2, nameMan.getName("b"));
+    const ColumnHeader bHeader(1);
+    NamedColumn* col2 = NamedColumn::create(&df, &colNodes2, bHeader);
     ASSERT_TRUE(col2 != nullptr);
 
-    EXPECT_THROW(NamedColumn::create(&df, &colEdges1, nameMan.getName("a")), TuringException);
+    EXPECT_THROW(NamedColumn::create(&df, &colEdges1, aHeader), TuringException);
 
     ASSERT_EQ(df.cols().size(), 2);
 }
 
-TEST_F(DataframeTest, nameManagerNotAnonymous) {
-    ColumnNameManager nameMan;
-
-    // Check the string stored for non-anonymous case
-    const auto nameToto = nameMan.getName("toto");
-    const auto nameTiti = nameMan.getName("titi");
-    const auto nameTata = nameMan.getName("tata");
-    ASSERT_EQ(nameToto.toStdString(), "toto");
-    ASSERT_EQ(nameTiti.toStdString(), "titi");
-    ASSERT_EQ(nameTata.toStdString(), "tata");
-
-    // Compare with retrieved name
-    ASSERT_EQ(nameToto, nameMan.getName("toto"));
-    ASSERT_EQ(nameTiti, nameMan.getName("titi"));
-    ASSERT_EQ(nameTata, nameMan.getName("tata"));
-    ASSERT_NE(nameToto, nameTiti);
-    ASSERT_NE(nameToto, nameTata);
-    ASSERT_NE(nameTiti, nameTata);
-}
-
 TEST_F(DataframeTest, anonymous) {
-    const auto v0Name = ColumnName((size_t)0);
-    const auto v1Name = ColumnName(1);
-    const auto v2Name = ColumnName(2);
-    const auto v3Name = ColumnName(3);
+    const auto v0Header = ColumnHeader((size_t)0);
+    const auto v1Header = ColumnHeader(1);
+    const auto v2Header = ColumnHeader(2);
+    const auto v3Header = ColumnHeader(3);
 
-    // Check the string encoding
-    ASSERT_EQ(v0Name.toStdString(), "$0");
-    ASSERT_EQ(v1Name.toStdString(), "$1");
-    ASSERT_EQ(v2Name.toStdString(), "$2");
-    ASSERT_EQ(v3Name.toStdString(), "$3");
-
-    // Check with retrieve
-    ASSERT_EQ(v0Name, ColumnName((size_t)0));
-
-    ASSERT_TRUE(v0Name.getString() == nullptr);
+    ASSERT_EQ(v0Header.getTag(), 0);
+    ASSERT_EQ(v1Header.getTag(), 1);
+    ASSERT_EQ(v2Header.getTag(), 2);
+    ASSERT_EQ(v3Header.getTag(), 3);
 
     Dataframe df;
 
@@ -105,14 +75,18 @@ TEST_F(DataframeTest, anonymous) {
     ColumnNodeIDs nodes1;
     ColumnNodeIDs nodes2;
 
-    NamedColumn* col0 = NamedColumn::create(&df, &nodes0, v0Name);
+    NamedColumn* col0 = NamedColumn::create(&df, &nodes0, v0Header);
     ASSERT_TRUE(col0 != nullptr);
+    ASSERT_EQ(col0->getColumn(), &nodes0);
 
-    NamedColumn* col1 = NamedColumn::create(&df, &nodes0, v1Name);
+    NamedColumn* col1 = NamedColumn::create(&df, &nodes1, v1Header);
     ASSERT_TRUE(col1 != nullptr);
+    ASSERT_EQ(col1->getColumn(), &nodes1);
+
+    ASSERT_EQ(df.getColumn(v0Header.getTag()), col0);
 
     // Try to add a column with same anonymous tag
-    EXPECT_THROW(NamedColumn::create(&df, &nodes2, ColumnName((size_t)0)), TuringException);
+    EXPECT_THROW(NamedColumn::create(&df, &nodes2, v0Header), TuringException);
 
     // Compare columns of dataframe
     ASSERT_EQ(df.cols().size(), 2);
@@ -121,47 +95,26 @@ TEST_F(DataframeTest, anonymous) {
 }
 
 TEST_F(DataframeTest, testColNames) {
-    ColumnNameManager nameMan;
     Dataframe df;
 
     ColumnNodeIDs col0;
     ColumnNodeIDs col1;
     ColumnNodeIDs col2;
 
-    auto colA = NamedColumn::create(&df, &col0, nameMan.getName("a"));
-    auto colB = NamedColumn::create(&df, &col1, nameMan.getName("b"));
-    auto colC = NamedColumn::create(&df, &col2, nameMan.getName("c"));
+    auto colA = NamedColumn::create(&df, &col0, ColumnHeader(0));
+    auto colB = NamedColumn::create(&df, &col1, ColumnHeader(1));
+    auto colC = NamedColumn::create(&df, &col2, ColumnHeader(2));
     ASSERT_TRUE(colA != nullptr);
     ASSERT_TRUE(colB != nullptr);
     ASSERT_TRUE(colC != nullptr);
 
     // Change name of middle column
-    colB->setPrimaryName(nameMan.getName("middle1"));
-    ASSERT_EQ(colB->getPrimaryName(), nameMan.getName("middle1"));
+    colB->getHeader().setName("middle1");
+    ASSERT_EQ(colB->getHeader().getName(), "middle1");
 
     // Check that the dataframe still has 3 columns
     ASSERT_EQ(df.cols().size(), 3);
 
-    // Check that we retrieve colB using the new name
-    ASSERT_EQ(df.getColumn(nameMan.getName("middle1")), colB);
-
-    // Check that we can't retrieve colB using the old name
-    ASSERT_TRUE(df.getColumn(nameMan.getName("b")) == nullptr);
-
-    // Check the new names in-order of the columns
-    std::vector<ColumnName> colNames;
-    const std::vector<ColumnName> goldNames = {
-        nameMan.getName("a"),
-        nameMan.getName("middle1"),
-        nameMan.getName("c")
-    };
-
-    std::for_each(df.cols().begin(), df.cols().end(),
-            [&colNames](NamedColumn* col){ colNames.push_back(col->getPrimaryName()); });
-    ASSERT_EQ(colNames, goldNames);
-
-    // Change colC name
-    colC->setPrimaryName(nameMan.getName("p"));
-    ASSERT_EQ(colC->getPrimaryName(), nameMan.getName("p"));
-    ASSERT_EQ(df.getColumn(nameMan.getName("p")), colC);
+    // Check that we retrieve colB using the tag
+    ASSERT_EQ(df.getColumn(ColumnTag(1)), colB);
 }
