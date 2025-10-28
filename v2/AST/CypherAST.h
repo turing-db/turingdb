@@ -48,6 +48,7 @@ class OrderByItem;
 class StmtContainer;
 class MatchStmt;
 class CreateStmt;
+class SetStmt;
 class DeleteStmt;
 class QueryCommand;
 class SinglePartQuery;
@@ -98,6 +99,7 @@ public:
     friend StmtContainer;
     friend MatchStmt;
     friend CreateStmt;
+    friend SetStmt;
     friend DeleteStmt;
     friend ReturnStmt;
     friend WhereClause;
