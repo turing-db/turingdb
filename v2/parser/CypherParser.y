@@ -29,6 +29,7 @@
     #include "stmt/ReturnStmt.h"
     #include "stmt/MatchStmt.h"
     #include "stmt/CreateStmt.h"
+    #include "stmt/SetStmt.h"
     #include "stmt/DeleteStmt.h"
     #include "expr/All.h"
     #include "Literal.h"
@@ -247,6 +248,7 @@
 %type<db::v2::StmtContainer*> updatingStatements
 %type<db::v2::MatchStmt*> matchSt
 %type<db::v2::CreateStmt*> createSt
+%type<db::v2::SetStmt*> setSt
 %type<db::v2::DeleteStmt*> deleteSt
 %type<db::v2::ReturnStmt*> returnSt
 %type<db::v2::Skip*> skipSSt
@@ -425,7 +427,7 @@ updatingStatement
     : createSt { $$ = $1; }
     | mergeSt { scanner.notImplemented(@$, "MERGE"); }
     | deleteSt { $$ = $1; }
-    | setSt { scanner.notImplemented(@$, "SET"); }
+    | setSt { $$ = $1; }
     | removeSt { scanner.notImplemented(@$, "REMOVE"); }
     ;
  
