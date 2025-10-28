@@ -91,7 +91,7 @@ void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
     TombstoneFilter filter(this->_view.tombstones());
     filter.filter(_edgeIDs, _properties);
 
-    if (_properties) {
+    if (_properties && _edgeIDs) {
         bioassert(_edgeIDs->size() == _properties->size());
     }
 }
