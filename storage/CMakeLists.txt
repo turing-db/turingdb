@@ -34,10 +34,9 @@ set(storage_sources
 
         columns/Block.cpp
         columns/Column.cpp
-        columns/ColumnNameManager.cpp
-        columns/Dataframe.cpp
-        columns/DataframeHeaderMap.cpp
-        columns/NamedColumn.cpp
+
+        dataframe/Dataframe.cpp
+        dataframe/NamedColumn.cpp
 
         indexers/EdgeIndexer.cpp
 

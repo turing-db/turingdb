@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ColumnName.h"
+#include "ColumnHeader.h"
 
 namespace db {
 
@@ -11,26 +11,25 @@ class NamedColumn {
 public:
     friend Dataframe;
 
-    ColumnName getPrimaryName() const { return _primaryName; }
-
-    void setPrimaryName(ColumnName name);
+    const ColumnHeader& getHeader() const { return _header; }
+    ColumnHeader& getHeader() { return _header; }
 
     Column* getColumn() const { return _column; }
 
     static NamedColumn* create(Dataframe* df,
                                Column* column,
-                               ColumnName name);
+                               const ColumnHeader& header);
 
 private:
     Dataframe* _parent {nullptr};
-    ColumnName _primaryName;
+    ColumnHeader _header;
     Column* _column {nullptr};
 
     NamedColumn(Dataframe* parent,
-                ColumnName name,
+                const ColumnHeader& header,
                 Column* column)
         : _parent(parent),
-        _primaryName(name),
+        _header(header),
         _column(column)
     {
     }
