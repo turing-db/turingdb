@@ -47,6 +47,7 @@
     #include "stmt/Limit.h"
     #include "stmt/OrderBy.h"
     #include "stmt/OrderByItem.h"
+    #include "stmt/SetItem.h"
 
     namespace db::v2 {
         class YCypherScanner;
@@ -214,6 +215,7 @@
 %type<db::v2::Expr*> atomicExpr
 %type<db::v2::Expr*> listExpr
 %type<db::v2::Expr*> stringExpr
+%type<db::v2::Expr*> entityTypeExpr
 %type<db::v2::Expr*> propertyOrLabelExpr
 %type<db::v2::Expr*> propertyExpr
 %type<db::v2::Expr*> atomExpr
@@ -249,6 +251,7 @@
 %type<db::v2::MatchStmt*> matchSt
 %type<db::v2::CreateStmt*> createSt
 %type<db::v2::SetStmt*> setSt
+%type<db::v2::SetItem*> setItem
 %type<db::v2::DeleteStmt*> deleteSt
 %type<db::v2::ReturnStmt*> returnSt
 %type<db::v2::Skip*> skipSSt
@@ -446,7 +449,7 @@ removeItemChain
     ;
 
 removeItem
-    : symbol nodeLabels { scanner.notImplemented(@$, "REMOVE"); }
+    : entityTypeExpr { scanner.notImplemented(@$, "REMOVE"); }
     | propertyExpr { scanner.notImplemented(@$, "REMOVE"); }
     ;
 
@@ -513,14 +516,14 @@ mergeAction
     ;
 
 setSt
-    : SET setItem { scanner.notImplemented(@$, "SET"); }
-    | setSt COMMA setItem
+    : SET setItem { $$ = SetStmt::create(ast); $$->addItem($2); LOC($$, @$); }
+    | setSt COMMA setItem { $$ = $1; $$->addItem($3); }
     ;
 
 setItem
-    : propertyExpr ASSIGN expr
-    | symbol ADD_ASSIGN expr
-    | symbol nodeLabels
+    : propertyExpr ASSIGN expr { $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), $3); LOC($$, @$); }
+    | symbol ADD_ASSIGN expr { $$ = SetItem::create(ast, $1, $3); LOC($$, @$); }
+    | entityTypeExpr { $$ = SetItem::create(ast, static_cast<EntityTypeExpr*>($1)); LOC($$, @$); }
     ;
 
 nodeLabels
@@ -641,7 +644,11 @@ propertyOrLabelExpr
     // This seems too permissive, it allows 'n.name:Person' which is weird
 
     // Replaced by this more specific rule
-    | symbol nodeLabels { $$ = EntityTypeExpr::create(ast, $1, $2); LOC($$, @$); }
+    | entityTypeExpr { $$ = $1; }
+    ;
+
+entityTypeExpr
+    : symbol nodeLabels { $$ = EntityTypeExpr::create(ast, $1, $2); LOC($$, @$); }
     ;
 
 propertyExpr
@@ -1032,7 +1039,7 @@ forConstraint
     ;
 
 nodeConstraintPattern
-    : OPAREN symbol nodeLabels CPAREN
+    : OPAREN entityTypeExpr CPAREN
     ;
 
 edgeConstraintPattern

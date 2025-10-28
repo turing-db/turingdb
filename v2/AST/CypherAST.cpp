@@ -19,6 +19,7 @@
 #include "stmt/SubStmt.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/OrderByItem.h"
+#include "stmt/SetItem.h"
 #include "QueryCommand.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
@@ -86,6 +87,10 @@ CypherAST::~CypherAST() {
     }
 
     for (OrderByItem* item : _orderByItems) {
+        delete item;
+    }
+
+    for (SetItem* item : _setItems) {
         delete item;
     }
 
@@ -187,6 +192,10 @@ void CypherAST::addSubStmt(SubStmt* subStmt) {
 
 void CypherAST::addOrderByItem(OrderByItem* item) {
     _orderByItems.push_back(item);
+}
+
+void CypherAST::addSetItem(SetItem* item) {
+    _setItems.push_back(item);
 }
 
 void CypherAST::addStmtContainer(StmtContainer* container) {
