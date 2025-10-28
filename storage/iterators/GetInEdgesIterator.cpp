@@ -131,7 +131,9 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
- _indices->clear();
+
+     _indices->clear();
+
     if (_edgeIDs) {
         _edgeIDs->clear();
     }
