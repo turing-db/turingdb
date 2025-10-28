@@ -275,7 +275,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             throwError("SET cannot dynamically mutate properties yet", item);
         } break;
         case SetItem::SymbolEntityTypes::index: {
-            throwError("SET cannot assign entity types yet", item);
+            throwError("SET cannot update entity types yet", item);
         } break;
         default: {
             throwError(fmt::format("Unsupported SET expression"), item);

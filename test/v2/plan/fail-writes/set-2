@@ -1,0 +1,9 @@
+/// QUERY
+MATCH (n) SET n += {name: "Node"}
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) SET n += {name: "Node"}
+       |               ^^^^^^^^^^^^^^^^^^^
+-------* SET cannot dynamically mutate properties yet

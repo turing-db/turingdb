@@ -1,0 +1,9 @@
+/// QUERY
+MATCH (n) SET n:Node
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | MATCH (n) SET n:Node
+       |               ^^^^^^
+-------* SET cannot update entity types yet
