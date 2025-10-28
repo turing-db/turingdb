@@ -39,6 +39,7 @@ WriteStmtGenerator::~WriteStmtGenerator() {
 }
 
 WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* prevNode) {
+    fmt::println("Generating write stmt");
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);
@@ -57,9 +58,19 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
 }
 
 void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode) {
-    _currentNode = prevNode
-                     ? _tree->newOut<WriteNode>(prevNode)
-                     : _tree->create<WriteNode>();
+    if (!prevNode) {
+        fmt::println("CREATE Creating new ROOT write node");
+        // First node in the plan graph
+        _currentNode = _tree->create<WriteNode>();
+    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
+        fmt::println("CREATE Reusing write node");
+        // Previous node is a write node, reuse it
+        _currentNode = static_cast<WriteNode*>(prevNode);
+    } else {
+        fmt::println("CREATE Creating new write node");
+        // Previous node is not a write node, create a new one
+        _currentNode = _tree->newOut<WriteNode>(prevNode);
+    }
 
     const Pattern* pattern = stmt->getPattern();
 
@@ -68,10 +79,36 @@ void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNod
     }
 }
 
+void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* prevNode) {
+    if (!prevNode) {
+        fmt::println("SET Creating new ROOT write node");
+        // First node in the plan graph
+        _currentNode = _tree->create<WriteNode>();
+    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
+        fmt::println("SET Reusing write node");
+        // Previous node is a write node, reuse it
+        _currentNode = static_cast<WriteNode*>(prevNode);
+    } else {
+        fmt::println("SET Creating new write node");
+        // Previous node is not a write node, create a new one
+        _currentNode = _tree->newOut<WriteNode>(prevNode);
+    }
+}
+
 void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode) {
-    _currentNode = prevNode
-                     ? _tree->newOut<WriteNode>(prevNode)
-                     : _tree->create<WriteNode>();
+    if (!prevNode) {
+        fmt::println("DELETE Creating new ROOT write node");
+        // First node in the plan graph
+        _currentNode = _tree->create<WriteNode>();
+    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
+        fmt::println("DELETE Reusing write node");
+        // Previous node is a write node, reuse it
+        _currentNode = static_cast<WriteNode*>(prevNode);
+    } else {
+        fmt::println("DELETE Creating new write node");
+        // Previous node is not a write node, create a new one
+        _currentNode = _tree->newOut<WriteNode>(prevNode);
+    }
 
     const ExprChain* exprs = stmt->getExpressions();
 
@@ -116,11 +153,18 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
     WriteNode::EdgeNeighbour lhs;
     WriteNode::EdgeNeighbour rhs;
 
-    if (_variables->getVarNode(originDecl) != nullptr) {
+    // A node may:
+    //   - Have to be created
+    //   - Be an input to the write query: MATCH (n) CREATE (n)-[e:E]->(m)
+    //   - Already created in the query: CREATE (n:Person), (n)-[e:E]->(m)
+    const VarNode* varNode = _variables->getVarNode(originDecl);
+
+    if (varNode != nullptr || _currentNode->hasPendingNode(originDecl)) {
+        // Already defined (input or pending)
         lhs = WriteNode::EdgeNeighbour {originDecl};
     } else {
         // Create a new node
-        const size_t offset = _currentNode->addNode(data);
+        const size_t offset = _currentNode->addNode(originDecl, data);
         lhs = WriteNode::EdgeNeighbour {offset};
     }
 
@@ -130,11 +174,14 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
         // - Get/Create the rhs node
         const VarDecl* rhsDecl = rhsNode->getDecl();
         const NodePatternData* rhsData = rhsNode->getData();
+        const VarNode* rhsVarNode = _variables->getVarNode(rhsDecl);
 
-        if (_variables->getVarNode(rhsDecl) != nullptr) {
+        if (rhsVarNode != nullptr || _currentNode->hasPendingNode(rhsDecl)) {
+            // Already defined (input or pending)
             rhs = WriteNode::EdgeNeighbour {rhsDecl};
         } else {
-            const size_t rhsOffset = _currentNode->addNode(rhsData);
+            // Create a new node
+            const size_t rhsOffset = _currentNode->addNode(rhsDecl, rhsData);
             rhs = WriteNode::EdgeNeighbour {rhsOffset};
         }
 
