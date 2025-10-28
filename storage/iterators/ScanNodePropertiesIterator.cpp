@@ -99,7 +99,7 @@ void ScanNodePropertiesChunkWriter<T>::filterTombstones() {
     TombstoneFilter filter(this->_view.tombstones());
     filter.filter(_nodeIDs, _properties);
 
-    if (_properties) {
+    if (_properties && _nodeIDs) {
         bioassert(_nodeIDs->size() == _properties->size());
     }
 }
