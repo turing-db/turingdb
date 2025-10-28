@@ -273,7 +273,7 @@ void ExprAnalyzer::analyze(LiteralExpr* expr) {
     }
 }
 
-void ExprAnalyzer::analyze(PropertyExpr* expr) {
+db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
     if (qualifiedName->size() != 2) {
@@ -307,9 +307,9 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
         // Property does not exist yet
 
         std::string_view name = propName->getName();
-        auto it = _typeMap.find(name);
+        auto it = _toBeCreatedTypes.find(name);
 
-        if (it == _typeMap.end()) {
+        if (it == _toBeCreatedTypes.end()) {
             // Property does not exist and is not meant to be created in this query
             const std::string error = fmt::format("Property type '{}' not found", propName->getName());
             throwError(error, expr);
@@ -349,6 +349,8 @@ void ExprAnalyzer::analyze(PropertyExpr* expr) {
     expr->setDecl(varDecl);
     expr->setType(type);
     expr->setDynamic();
+
+    return vt;
 }
 
 void ExprAnalyzer::analyze(StringExpr* expr) {
@@ -485,6 +487,24 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
     }
 
     throwError(fmt::format("Invalid arguments for function '{}'", name), expr);
+}
+
+void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, const void* obj) {
+    auto it = _toBeCreatedTypes.find(name);
+
+    if (it != _toBeCreatedTypes.end()) {
+        // Type was already registered
+
+        if (it->second == type) {
+            // Same types -> this is ok
+            return;
+        }
+
+        throwError(fmt::format("Property type '{}' already exists", name), obj);
+    }
+
+    // Register the new type
+    _toBeCreatedTypes[name] = type;
 }
 
 bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {

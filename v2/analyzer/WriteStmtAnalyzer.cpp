@@ -20,17 +20,19 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
+#include "expr/PropertyExpr.h"
 #include "stmt/DeleteStmt.h"
+#include "stmt/SetItem.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/SetStmt.h"
 
 using namespace db::v2;
 
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 WriteStmtAnalyzer::~WriteStmtAnalyzer() {
@@ -40,6 +42,10 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             analyze(static_cast<const CreateStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::SET:
+            analyze(static_cast<const SetStmt*>(stmt));
             break;
 
         case Stmt::Kind::DELETE:
@@ -57,6 +63,12 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     if (createStmt->getPattern()) {
         analyze(createStmt->getPattern());
+    }
+}
+
+void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
+    for (SetItem* item : setStmt->getItems()) {
+        analyze(item);
     }
 }
 
@@ -168,6 +180,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
                                expr);
                 }
                 data->addExprConstraint(propName->getName(), valueType, expr);
+                _exprAnalyzer->addToBeCreatedType(propName->getName(), valueType, expr);
             }
         }
     }
@@ -234,6 +247,36 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                 }
                 data->addExprConstraint(propName->getName(), valueType, expr);
             }
+        }
+    }
+}
+
+void WriteStmtAnalyzer::analyze(SetItem* item) {
+    switch (item->item().index()) {
+        case SetItem::PropertyExprAssign::index: {
+            auto& v = std::get<SetItem::PropertyExprAssign>(item->item());
+
+            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyze(v.propTypeExpr);
+            _exprAnalyzer->analyze(v.propValueExpr);
+
+            const EvaluatedType rhsType = v.propValueExpr->getType();
+
+            if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
+                throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
+                                       ValueTypeName::value(lhsEvaluatedVt),
+                                       EvaluatedTypeName::value(rhsType)),
+                           item);
+            }
+
+        } break;
+        case SetItem::SymbolAddAssign::index: {
+            throwError("SET cannot dynamically mutate properties yet", item);
+        } break;
+        case SetItem::SymbolEntityTypes::index: {
+            throwError("SET cannot assign entity types yet", item);
+        } break;
+        default: {
+            throwError(fmt::format("Unsupported SET expression"), item);
         }
     }
 }

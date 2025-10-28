@@ -168,10 +168,9 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                                 output << ", ";
                             }
 
-                            output << fmt::format("{} ({}): {}",
+                            output << fmt::format("{} ({}): *expr*",
                                                   propName,
-                                                  ValueTypeName::value(vt),
-                                                  fmt::ptr(expr));
+                                                  ValueTypeName::value(vt));
                         }
                         output << " }";
                     }

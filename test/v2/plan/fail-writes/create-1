@@ -1,0 +1,9 @@
+/// QUERY
+CREATE (n:Person { newProp: 5 }), (m:Person { newProp: "This is now a string" })
+
+/// RESULT
+ANALYZE ERROR
+-------* Query error
+     1 | CREATE (n:Person { newProp: 5 }), (m:Person { newProp: "This is now a string" })
+       |                                                        ^^^^^^^^^^^^^^^^^^^^^^
+-------* Property type 'newProp' already exists

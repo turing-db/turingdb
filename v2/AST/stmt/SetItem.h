@@ -13,16 +13,24 @@ class EntityTypeExpr;
 class SetItem {
 public:
     struct PropertyExprAssign {
-        PropertyExpr* expr;
-        Expr* value;
+        static constexpr std::size_t index = 0;
+
+        PropertyExpr* propTypeExpr;
+        Expr* propValueExpr;
     };
 
     struct SymbolAddAssign {
+        static constexpr std::size_t index = 1;
+
         Symbol* symbol {nullptr};
         Expr* value {nullptr};
     };
 
-    using SymbolEntityTypes = EntityTypeExpr*;
+    struct SymbolEntityTypes {
+        static constexpr std::size_t index = 2;
+
+        EntityTypeExpr* value {nullptr};
+    };
 
     using Variant = std::variant<PropertyExprAssign,
                                  SymbolAddAssign,

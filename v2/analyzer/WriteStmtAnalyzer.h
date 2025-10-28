@@ -14,6 +14,8 @@ class DeclContext;
 class ExprAnalyzer;
 class Stmt;
 class CreateStmt;
+class SetStmt;
+class SetItem;
 class DeleteStmt;
 class Pattern;
 class PatternElement;
@@ -40,12 +42,6 @@ public:
 
     // Statements
     void analyze(const Stmt* stmt);
-    void analyze(const CreateStmt* createStmt);
-    void analyze(const DeleteStmt* deleteStmt);
-    void analyze(const Pattern* pattern);
-    void analyze(const PatternElement* element);
-    void analyze(NodePattern* node);
-    void analyze(EdgePattern* edge);
 
 private:
     CypherAST* _ast {nullptr};
@@ -54,6 +50,15 @@ private:
     ExprAnalyzer* _exprAnalyzer {nullptr};
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
+
+    void analyze(const CreateStmt* createStmt);
+    void analyze(const SetStmt* setStmt);
+    void analyze(const DeleteStmt* deleteStmt);
+    void analyze(const Pattern* pattern);
+    void analyze(const PatternElement* element);
+    void analyze(NodePattern* node);
+    void analyze(EdgePattern* edge);
+    void analyze(SetItem* item);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 

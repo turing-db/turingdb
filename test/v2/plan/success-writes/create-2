@@ -1,0 +1,9 @@
+/// QUERY
+CREATE (n:Person { newProp: "This is a new string prop" })
+
+/// RESULT
+flowchart TD
+    0["`
+        __WRITE__
+        __node__ (0:Person {newProp (String): *expr* })
+    `"]

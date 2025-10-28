@@ -39,6 +39,9 @@ public:
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
 
     void analyzeRootExpr(Expr* expr);
+    ValueType analyze(PropertyExpr* expr);
+
+    void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
@@ -56,11 +59,11 @@ private:
     void analyze(UnaryExpr* expr);
     void analyze(SymbolExpr* expr);
     void analyze(LiteralExpr* expr);
-    void analyze(PropertyExpr* expr);
     void analyze(StringExpr* expr);
     void analyze(EntityTypeExpr* expr);
     void analyze(PathExpr* expr);
     void analyze(FunctionInvocationExpr* expr);
+    std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
