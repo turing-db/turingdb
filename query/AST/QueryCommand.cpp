@@ -48,7 +48,8 @@ CreateCommand* CreateCommand::create(ASTContext* ctxt, CreateTargets* targets) {
 // DeleteCommand
 template <TypedInternalID IDT>
 DeleteCommand<IDT>::DeleteCommand(DeletedIDs<IDT>* deletions)
-    : _deletedIDs(deletions) {
+    : _deletedIDs(deletions)
+{
 }
 
 template <TypedInternalID IDT>
@@ -79,10 +80,10 @@ QueryCommand::Kind DeleteCommand<IDT>::getKind() const {
 }
 
 namespace db {
-    template class DeleteCommand<NodeID>;
-    template class DeleteCommand<EdgeID>;
-    template class DeletedIDs<NodeID>;
-    template class DeletedIDs<EdgeID>;
+template class DeleteCommand<NodeID>;
+template class DeleteCommand<EdgeID>;
+template class DeletedIDs<NodeID>;
+template class DeletedIDs<EdgeID>;
 }
 
 // CommitCommand 
