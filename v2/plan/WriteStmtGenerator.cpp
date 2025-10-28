@@ -15,11 +15,14 @@
 #include "decl/PatternData.h"
 
 #include "expr/ExprChain.h"
+#include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 
 #include "nodes/WriteNode.h"
 #include "nodes/VarNode.h"
 
+#include "stmt/SetItem.h"
+#include "stmt/SetStmt.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
 #include "stmt/DeleteStmt.h"
@@ -45,6 +48,10 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
             generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);
             break;
 
+        case Stmt::Kind::SET:
+            generateSetStmt(static_cast<const SetStmt*>(stmt), prevNode);
+            break;
+
         case Stmt::Kind::DELETE:
             generateDeleteStmt(static_cast<const DeleteStmt*>(stmt), prevNode);
             break;
@@ -59,15 +66,12 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
 
 void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode) {
     if (!prevNode) {
-        fmt::println("CREATE Creating new ROOT write node");
         // First node in the plan graph
         _currentNode = _tree->create<WriteNode>();
     } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
-        fmt::println("CREATE Reusing write node");
         // Previous node is a write node, reuse it
         _currentNode = static_cast<WriteNode*>(prevNode);
     } else {
-        fmt::println("CREATE Creating new write node");
         // Previous node is not a write node, create a new one
         _currentNode = _tree->newOut<WriteNode>(prevNode);
     }
@@ -75,37 +79,54 @@ void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNod
     const Pattern* pattern = stmt->getPattern();
 
     for (const PatternElement* element : pattern->elements()) {
-        generatePatternElement(element);
+        generateCreatePatternElement(element);
     }
 }
 
 void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* prevNode) {
     if (!prevNode) {
-        fmt::println("SET Creating new ROOT write node");
         // First node in the plan graph
         _currentNode = _tree->create<WriteNode>();
     } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
-        fmt::println("SET Reusing write node");
         // Previous node is a write node, reuse it
         _currentNode = static_cast<WriteNode*>(prevNode);
     } else {
-        fmt::println("SET Creating new write node");
         // Previous node is not a write node, create a new one
         _currentNode = _tree->newOut<WriteNode>(prevNode);
+    }
+
+    for (const SetItem* item : stmt->getItems()) {
+        switch (item->item().index()) {
+            case SetItem::PropertyExprAssign::index: {
+                const auto& v = std::get<SetItem::PropertyExprAssign>(item->item());
+                const VarDecl* decl = v.propTypeExpr->getDecl();
+                if (decl->getType() == EvaluatedType::NodePattern) {
+                    _currentNode->addNodeUpdate(v.propTypeExpr->getPropName(), v.propValueExpr);
+                } else if (decl->getType() == EvaluatedType::EdgePattern) {
+                    _currentNode->addEdgeUpdate(v.propTypeExpr->getPropName(), v.propValueExpr);
+                }
+            } break;
+            case SetItem::SymbolAddAssign::index: {
+                throwError("SET cannot dynamically mutate properties yet", item);
+            } break;
+            case SetItem::SymbolEntityTypes::index: {
+                throwError("SET cannot assign entity types yet", item);
+            } break;
+            default: {
+                throwError(fmt::format("Unsupported SET expression"), item);
+            }
+        }
     }
 }
 
 void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode) {
     if (!prevNode) {
-        fmt::println("DELETE Creating new ROOT write node");
         // First node in the plan graph
         _currentNode = _tree->create<WriteNode>();
     } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
-        fmt::println("DELETE Reusing write node");
         // Previous node is a write node, reuse it
         _currentNode = static_cast<WriteNode*>(prevNode);
     } else {
-        fmt::println("DELETE Creating new write node");
         // Previous node is not a write node, create a new one
         _currentNode = _tree->newOut<WriteNode>(prevNode);
     }
@@ -127,8 +148,18 @@ void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNod
         const EvaluatedType type = symbol->getType();
 
         if (type == EvaluatedType::NodePattern) {
+            if (_currentNode->hasPendingNode(decl)) {
+                // TODO: Check if we should support this, Neo4j does
+                throwError("Cannot delete pending node", symbol);
+            }
+
             _currentNode->deleteNode(decl);
         } else if (type == EvaluatedType::EdgePattern) {
+            if (_currentNode->hasPendingEdge(decl)) {
+                // TODO: Check if we should support this, Neo4j does
+                throwError("Cannot delete pending edge", symbol);
+            }
+
             _currentNode->deleteEdge(decl);
         } else {
             throwError(fmt::format("Can only delete nodes or edges, not '{}'",
@@ -138,7 +169,7 @@ void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNod
     }
 }
 
-void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
+void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* element) {
     NodePattern* origin = dynamic_cast<NodePattern*>(element->getRootEntity());
 
     // Step 1. Handle the origin
@@ -186,14 +217,16 @@ void WriteStmtGenerator::generatePatternElement(const PatternElement* element) {
         }
 
         // - Create the new edge
+        const VarDecl* edgeDecl = edge->getDecl();
+
         switch (edge->getDirection()) {
             case EdgePattern::Direction::Undirected:
                 throwError("Cannot use undirected edges in write statements", edge);
             case EdgePattern::Direction::Backward:
-                _currentNode->addEdge(rhs, edge->getData(), lhs);
+                _currentNode->addEdge(edgeDecl, rhs, edge->getData(), lhs);
                 break;
             case EdgePattern::Direction::Forward:
-                _currentNode->addEdge(lhs, edge->getData(), rhs);
+                _currentNode->addEdge(edgeDecl, lhs, edge->getData(), rhs);
                 break;
         }
 

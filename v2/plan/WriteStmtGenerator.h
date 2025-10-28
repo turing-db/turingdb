@@ -37,12 +37,12 @@ public:
     void generateSetStmt(const SetStmt* stmt, PlanGraphNode* prevNode);
     void generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode);
     void generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode);
-    void generatePatternElement(const PatternElement* element);
+    void generateCreatePatternElement(const PatternElement* element);
 
-    void generatePatternElementNode(NodePattern* origin);
-    void generatePatternElementEdge(const NodePattern* src,
-                                    EdgePattern* edge,
-                                    const NodePattern* dst);
+    void generateCreatePatternElementNode(NodePattern* origin);
+    void generateCreatePatternElementEdge(const NodePattern* src,
+                                          EdgePattern* edge,
+                                          const NodePattern* dst);
 
 private:
     const CypherAST* _ast {nullptr};
