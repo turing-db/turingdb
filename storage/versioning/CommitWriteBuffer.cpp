@@ -104,21 +104,15 @@ void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
 
 void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                          const PendingEdge& edge) {
-    // Sorted and unique
-    // bioassert(std::ranges::is_sorted(deletedNodes()));
-    // bioassert(std::ranges::is_sorted(deletedEdges()));
-    // bioassert(std::ranges::adjacent_find(deletedNodes()) == deletedNodes().end());
-    // bioassert(std::ranges::adjacent_find(deletedEdges()) == deletedEdges().end());
-
     // If this edge has source or target which is a node in a previous datapart, check
-    // if it has been deleted. NOTE: Deletes currently not implemented
+    // if it has been deleted.
     if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
-        if (std::ranges::binary_search(deletedNodes(), *srcID)) {
+        if (deletedNodes().contains(*srcID)) {
             return;
         }
     }
     if (const NodeID* tgtID = std::get_if<NodeID>(&edge.tgt)) {
-        if (std::ranges::binary_search(deletedNodes(), *tgtID)) {
+        if (deletedNodes().contains(*tgtID)) {
             return;
         }
     }
@@ -212,16 +206,16 @@ void CommitWriteBufferRebaser::rebase() {
     // over unordered_set, so instead construct the rebased sets as temporaries, and then
     // assign back to the write buffer
     {
-        auto& deletedEdges = _buffer->deletedEdges();
-        std::remove_reference_t<decltype(deletedEdges)> temp(deletedEdges.size());
+        CommitWriteBuffer::DeletedEdges& deletedEdges = _buffer->_deletedEdges;
+        CommitWriteBuffer::DeletedEdges temp(deletedEdges.size());
         for (const EdgeID edge : deletedEdges) {
             temp.insert(_idRebaser->rebaseEdgeID(edge));
         }
         deletedEdges.swap(temp);
     }
     {
-        auto& deletedNodes = _buffer->deletedNodes();
-        std::remove_reference_t<decltype(deletedNodes)> temp(deletedNodes.size());
+        CommitWriteBuffer::DeletedNodes& deletedNodes = _buffer->_deletedNodes;
+        CommitWriteBuffer::DeletedNodes temp(deletedNodes.size());
         for (const NodeID node : deletedNodes) {
             temp.insert(_idRebaser->rebaseNodeID(node));
         }

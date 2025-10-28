@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "DataPart.h"
-#include "DataPartSpan.h"
 #include "ID.h"
 
 namespace db {
@@ -78,16 +77,17 @@ public:
      size_t numPendingNodes() const { return _pendingNodes.size(); }
      size_t numPendingEdges() const { return _pendingEdges.size(); }
 
+     /**
+      * @brief Populates the provided @param tombstones and @ref _journal with the deleted
+      * node and edge IDs contained in @ref _deletedNodes and @ref _deletedEdges.
+      */
      void applyDeletions(Tombstones& tombstones);
 
      const PendingNodes& pendingNodes() const { return _pendingNodes; }
      const PendingEdges& pendingEdges() const { return _pendingEdges; }
 
-     DeletedNodes& deletedNodes() { return _deletedNodes; }
-     DeletedEdges& deletedEdges() { return _deletedEdges; }
-
-     const auto& deletedNodes() const { return _deletedNodes; }
-     const auto& deletedEdges() const { return _deletedEdges; }
+     const DeletedNodes& deletedNodes() const { return _deletedNodes; }
+     const DeletedEdges& deletedEdges() const { return _deletedEdges; }
 
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
