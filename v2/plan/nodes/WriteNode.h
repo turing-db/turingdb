@@ -64,9 +64,10 @@ public:
     {
     }
 
-    size_t addNode(const NodePatternData* data) {
+    size_t addNode(const VarDecl* decl, const NodePatternData* data) {
         const size_t offset = _newNodes.size();
         _newNodes.emplace_back(data, offset);
+        _nodeDeclMapping[decl] = offset;
 
         return offset;
     }
@@ -92,6 +93,14 @@ public:
         return _newNodes.at(offset);
     }
 
+    const PendingNode& getPendingNode(const VarDecl* decl) const {
+        return _newNodes.at(_nodeDeclMapping.at(decl));
+    }
+
+    bool hasPendingNode(const VarDecl* decl) const {
+        return _nodeDeclMapping.contains(decl);
+    }
+
     using PendingNodeSpan = std::span<const PendingNode>;
     using PendingEdgeSpan = std::span<const PendingEdge>;
     using ToDeleteNodeSpan = std::span<const VarDecl* const>;
@@ -103,6 +112,7 @@ public:
     ToDeleteEdgeSpan toDeleteEdges() const { return _toDeleteEdges; }
 
 private:
+    std::unordered_map<const VarDecl*, size_t> _nodeDeclMapping;
     std::vector<PendingNode> _newNodes;
     std::vector<PendingEdge> _newEdges;
     std::vector<const VarDecl*> _toDeleteNodes;

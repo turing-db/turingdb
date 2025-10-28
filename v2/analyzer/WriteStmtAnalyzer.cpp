@@ -109,12 +109,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     if (Symbol* symbol = nodePattern->getSymbol()) {
         decl = _ctxt->getDecl(symbol->getName());
         if (decl) {
-            if (_toBeCreated.contains(decl)) {
-                // Already defined in the write statement
-                throwError("Variable already defined", nodePattern);
-            }
-
-            // Node is an input to the write query
+            // Node already defined. It is either created in the query, or an input to the write query
             if (decl->getType() != EvaluatedType::NodePattern) {
                 throwError(fmt::format("Type mismatch. Expected NodePattern but is {} instead ",
                                        EvaluatedTypeName::value(decl->getType())),
@@ -123,8 +118,9 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             const auto& labels = nodePattern->labels();
 
+            // Already existing vars cannot have constraints
             if (nodePattern->getData() != nullptr || labels != nullptr) {
-                throwError("Input nodes to write statements cannot have constraints", nodePattern);
+                throwError("Variable already defined", nodePattern);
             }
 
             nodePattern->setDecl(decl);
