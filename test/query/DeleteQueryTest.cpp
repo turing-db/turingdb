@@ -930,3 +930,57 @@ TEST_F(DeleteQueryTest, deleteCommitThenRebase) {
         .expectVector<EdgeID>({0,1, /*2*/})
         .execute();
 }
+
+TEST_F(DeleteQueryTest, multipleCommitsThenRebase) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    newChange(tester);
+    tester.query("create (n:NODE)-[e:EDGE]-(m:NODE)")
+        .execute();
+    submitChange(tester);
+
+    ChangeID ch1 = newChange(tester);
+    ChangeID ch2 = newChange(tester);
+
+    tester.setChangeID(ch1);
+
+    tester.query("create (n:NODE)-[e:EDGE]-(m:NODE)") // IDs 2, 1, 3 locally
+        .execute();
+    tester.query("commit")
+        .execute();
+    tester.query("delete nodes 2") // Delete a node we just created
+        .execute();
+    tester.query("commit")
+        .execute();
+
+    tester.query("create (n:NEWNODE)") // Node 4 localy
+        .execute();
+    tester.query("commit")
+        .execute();
+    tester.query("delete nodes 1")
+        .execute();
+
+    tester.setChangeID(ch2);
+
+    tester.query("create (n:NODE)-[e:EDGE]-(m:NODE)") // IDs 2, 1, 3 locally
+        .execute();
+    submitChange(tester); // IDs are now 2, 1, 3 on main
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0, 1, 2, 3})
+        .execute();
+    tester.query("match (n)-[e]-(m) return e")
+        .expectVector<EdgeID>({0, 1})
+        .execute();
+
+    tester.setChangeID(ch1); // This change created 2 nodes and one edge, and deleted the node
+    submitChange(tester); // Now rebase will +2 to nodeIDs and +1 to EdgeIDs
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>(
+            {0, 2, 3, /*4,*/ 5, 6})
+        .execute();
+    tester.query("match (n)-[e]-(m) return e") // Change1 created 2 (locally as 1) but deleted it
+        .expectVector<EdgeID>({1, /*2*/})
+        .execute();
+}
