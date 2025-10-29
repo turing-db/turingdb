@@ -97,7 +97,7 @@ public:
     using Deletions = std::vector<IDT>;
     static DeleteCommand<IDT>* create(ASTContext* ctxt, DeletedIDs<IDT>* deletedIDs);
 
-    Deletions& deletions() const;
+    const Deletions& deletions() const;
 
     Kind getKind() const override;
 
