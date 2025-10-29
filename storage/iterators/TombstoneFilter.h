@@ -3,6 +3,8 @@
 #include <type_traits>
 #include <unordered_set>
 
+#include "columns/ColumnEdgeTypes.h"
+#include "columns/ColumnIDs.h"
 #include "versioning/Tombstones.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
@@ -39,6 +41,10 @@ public:
     TombstoneFilter& operator=(const TombstoneFilter&) = delete;
     TombstoneFilter& operator=(TombstoneFilter&&) = delete;
 
+    using ColumnIndices = ColumnVector<size_t>;
+
+    void filterGetOutEdges(ColumnEdgeIDs* edgeIDs, ColumnNodeIDs* tgtIDs,
+                           ColumnEdgeTypes* edgeTypes, ColumnIndices* indices);
     /**
      * @brief Generalised filter operation for multiple columns that need be filtered
      * consistently.

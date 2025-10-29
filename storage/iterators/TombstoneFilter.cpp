@@ -62,3 +62,42 @@ void TombstoneFilter::onePassApplyFilter(ColumnVector<IDT>& column) {
     }
     raw.resize(writePointer);
 }
+
+void TombstoneFilter::filterGetOutEdges(ColumnEdgeIDs* edgeIDs, ColumnNodeIDs* tgtIDs,
+                                        ColumnEdgeTypes* edgeTypes, ColumnIndices* indices) {
+    // Filter based on deleted edges: if a target has been deleted, any edges incident to
+    // it would also be marked deleted
+    ColumnEdgeIDs* const baseColumn = edgeIDs;
+    bioassert(baseColumn); // XXX Should be exception?
+
+    size_t initialSize = baseColumn->size();
+
+    size_t writePtr = 0;
+    for (size_t readPtr = 0; readPtr < initialSize; readPtr++) {
+        EdgeID edge = (*baseColumn)[readPtr];
+        if (_tombstones.containsEdge(edge)) {
+            continue;
+        }
+        (*baseColumn)[writePtr] = (*baseColumn)[readPtr];
+        if (tgtIDs) {
+            (*tgtIDs)[writePtr] = (*tgtIDs)[readPtr];
+        }
+        if (edgeTypes) {
+            (*edgeTypes)[writePtr] = (*edgeTypes)[readPtr];
+        }
+        if (indices) {
+            (*indices)[writePtr] = (*indices)[readPtr];
+        }
+        writePtr++;
+    }
+    baseColumn->resize(writePtr);
+    if (tgtIDs) {
+        tgtIDs->resize(writePtr);
+    }
+    if (edgeTypes) {
+        edgeTypes->resize(writePtr);
+    }
+    if (indices) {
+        indices->resize(writePtr);
+    }
+}
