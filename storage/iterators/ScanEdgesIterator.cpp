@@ -65,6 +65,8 @@ ScanEdgesChunkWriter::ScanEdgesChunkWriter(const GraphView& view)
 
 void ScanEdgesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
+    bioassert(_edgeIDs);
+    filter.setBaseColumn(_edgeIDs);
     filter.filter(_srcs, _tgts, _edgeIDs, _types);
 }
 

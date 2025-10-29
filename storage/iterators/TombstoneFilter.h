@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <type_traits>
 #include <unordered_set>
+#include <variant>
 
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
@@ -46,6 +47,17 @@ public:
 
     void filterGetOutEdges(ColumnEdgeIDs* edgeIDs, ColumnNodeIDs* tgtIDs,
                            ColumnEdgeTypes* edgeTypes, ColumnIndices* indices);
+
+    void setBaseColumn(ColumnVector<NodeID>* nodeColumn) {
+        bioassert(nodeColumn);
+        _baseCol = nodeColumn;
+    }
+
+    void setBaseColumn(ColumnVector<EdgeID>* edgeColumn) {
+        bioassert(edgeColumn);
+        _baseCol = edgeColumn;
+    }
+
     /**
      * @brief Generalised filter operation for multiple columns that need be filtered
      * consistently.
@@ -67,10 +79,12 @@ public:
 private:
     using DeletedIndices = std::unordered_set<size_t>;
     using DeletedVec = std::vector<size_t>;
+    using BaseColumn = std::variant<ColumnVector<NodeID>*, ColumnVector<EdgeID>*>;
 
     const Tombstones& _tombstones;
     DeletedIndices _deletedIndices;
     DeletedVec _delVec;
+    BaseColumn _baseCol;
 
     /**
      * @brief Specialised filtering method, used when only a single column of the output
@@ -118,7 +132,7 @@ void TombstoneFilter::filter(Cols... columns) {
     bool hasEdges = _tombstones.hasEdges();
 
     // Helper to add indexes to be deleted if the column is an ID column
-    const auto populateIfID = [this, hasNodes, hasEdges]<typename T>(ColumnVector<T>* col) {
+    [[maybe_unused]] const auto populateIfID = [this, hasNodes, hasEdges]<typename T>(ColumnVector<T>* col) {
         if (!col) {
             return;
         }
@@ -139,10 +153,12 @@ void TombstoneFilter::filter(Cols... columns) {
         if (!col) {
             return;
         }
+        // this->applyDeletedIndices(*col);
         this->applyDeletedVec(*col);
     };
 
-    (populateIfID(columns), ...); // Populate @ref _deletedIndices for ID columns
+    // (populateIfID(columns), ...); // Populate @ref _deletedIndices for ID columns
+    std::visit([this](auto& base) { populateDeletedIndices(*base); }, _baseCol);
     if (_deletedIndices.empty()) { // Nothing to filter -> exit early
         return;
     }
@@ -218,7 +234,7 @@ void TombstoneFilter::applyDeletedVec(ColumnVector<T>& column) {
 
         // Do not read the deleted block that we just skipped
         readPtr = deletedRangeEnd + 1;
-        i++;
+        i++; // Look at the next index to be deleted
     }
 
     // There may be an interval [_delVec.back(), column.size()]. Move that down

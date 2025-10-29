@@ -52,6 +52,7 @@ void Step::execute() {
         StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
         if (_view.tombstones().hasNodes()) {
             TombstoneFilter filter(_view.tombstones());
+            filter.setBaseColumn(_nodes);
             filter.filter(_nodes);
         }
     } catch (TuringException& e) {

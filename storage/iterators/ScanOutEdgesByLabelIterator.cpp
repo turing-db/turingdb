@@ -81,6 +81,7 @@ ScanOutEdgesByLabelChunkWriter::ScanOutEdgesByLabelChunkWriter(const GraphView& 
 
 void ScanOutEdgesByLabelChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
+    filter.setBaseColumn(_edgeIDs);
     filter.filter(_srcs, _tgts, _edgeIDs, _types);
 }
 

@@ -124,6 +124,8 @@ void ScanNodePropertiesByLabelChunkWriter<T>::filterTombstones() {
                  "whilst not materialising the NodeID column.");
 
     TombstoneFilter filter(this->_view.tombstones());
+    bioassert(_nodeIDs);
+    filter.setBaseColumn(_nodeIDs);
     filter.filter(_nodeIDs, _properties);
 
     if (_properties && _nodeIDs) {

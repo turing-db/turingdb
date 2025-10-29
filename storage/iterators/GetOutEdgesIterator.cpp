@@ -109,6 +109,8 @@ GetOutEdgesChunkWriter::GetOutEdgesChunkWriter(const GraphView& view,
 
 void GetOutEdgesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
+    bioassert(_edgeIDs);
+    filter.setBaseColumn(_edgeIDs);
     filter.filterGetOutEdges(_edgeIDs, _tgts, _types, _indices);
 
     size_t newSize = _indices->size();

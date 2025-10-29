@@ -109,6 +109,8 @@ GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
 
 void GetInEdgesChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
+    bioassert(_edgeIDs);
+    filter.setBaseColumn(_edgeIDs);
     filter.filter(_edgeIDs, _tgts, _types, _indices);
 
     size_t newSize = _indices->size();
@@ -206,8 +208,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     }
 
     if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
-        TombstoneFilter filter(_view.tombstones());
-        filter.filter(_edgeIDs, _types, _tgts, _indices);
+        filterTombstones();
     }
 }
 

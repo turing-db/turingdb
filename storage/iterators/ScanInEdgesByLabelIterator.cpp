@@ -1,5 +1,6 @@
 #include "ScanInEdgesByLabelIterator.h"
 
+#include "BioAssert.h"
 #include "DataPart.h"
 #include "EdgeContainer.h"
 #include "iterators/TombstoneFilter.h"
@@ -81,6 +82,8 @@ ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& vi
 
 void ScanInEdgesByLabelChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
+    bioassert(_edgeIDs);
+    filter.setBaseColumn(_edgeIDs);
     filter.filter(_srcs, _tgts, _edgeIDs, _types);
 }
 

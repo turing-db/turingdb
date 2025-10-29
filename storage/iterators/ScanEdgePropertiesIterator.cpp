@@ -89,6 +89,7 @@ void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
                  "whilst not materialising the NodeID column.");
 
     TombstoneFilter filter(this->_view.tombstones());
+    filter.setBaseColumn(_edgeIDs);
     filter.filter(_edgeIDs, _properties);
 
     if (_properties && _edgeIDs) {
