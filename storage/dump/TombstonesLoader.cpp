@@ -34,7 +34,7 @@ DumpResult<void> TombstonesLoader::load(Tombstones& tombstones) {
         }
 
         // Insert all elements of vector into the tombstones set in one go
-        tombstones.edgeTombstones().reserve(nodeCount);
+        tombstones.nodeTombstones().reserve(nodeCount);
         tombstones.nodeTombstones().insert(tempNodeVec);
     }
     
