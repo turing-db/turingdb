@@ -14,9 +14,9 @@ namespace db {
 }
 
 template <TypedInternalID IDT>
-void DeleteStep<IDT>::addDeletions(std::vector<IDT>&& deletedIDs) {
+void DeleteStep<IDT>::addDeletions(const std::vector<IDT>& deletedIDs) {
     bioassert(_deletions.empty());
-    _deletions = std::move(deletedIDs);
+    _deletions = deletedIDs;
 }
 
 template <TypedInternalID IDT>

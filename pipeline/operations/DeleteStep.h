@@ -23,7 +23,7 @@ public:
     using DeleteNodesStep = DeleteStep<NodeID>;
     using DeleteEdgesStep = DeleteStep<EdgeID>;
 
-    void addDeletions(std::vector<IDType>&& deletedIDs);
+    void addDeletions(const std::vector<IDType>& deletedIDs);
 
     void prepare(ExecutionContext* ctxt);
 

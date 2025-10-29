@@ -205,14 +205,14 @@ bool QueryPlanner::planCreate(const CreateCommand* createCmd) {
 }
 
 bool QueryPlanner::planDeleteNodes(const DeleteCommand<NodeID>* delCmd) {
-    std::vector<NodeID>& deletions = delCmd->deletions();
+    const DeleteCommand<NodeID>::Deletions& deletions = delCmd->deletions();
 
     _pipeline->add<StopStep>();
 
     DeleteStep<NodeID>& step =
         _pipeline->add<DeleteStep<NodeID>>().get<DeleteStep<NodeID>>();
 
-    step.addDeletions(std::move(deletions));
+    step.addDeletions(deletions);
 
     _pipeline->add<EndStep>();
 
@@ -220,14 +220,14 @@ bool QueryPlanner::planDeleteNodes(const DeleteCommand<NodeID>* delCmd) {
 }
 
 bool QueryPlanner::planDeleteEdges(const DeleteCommand<EdgeID>* delCmd) {
-    std::vector<EdgeID>& deletions = delCmd->deletions();
+    const DeleteCommand<EdgeID>::Deletions& deletions = delCmd->deletions();
 
     _pipeline->add<StopStep>();
 
     DeleteStep<EdgeID>& step =
         _pipeline->add<DeleteStep<EdgeID>>().get<DeleteStep<EdgeID>>();
 
-    step.addDeletions(std::move(deletions));
+    step.addDeletions(deletions);
 
     _pipeline->add<EndStep>();
 

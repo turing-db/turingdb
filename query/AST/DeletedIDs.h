@@ -19,7 +19,7 @@ public:
 
     void addID(IDT id);
 
-    std::vector<IDT>& getIDs() { return _deletedIDs; }
+    const std::vector<IDT>& getIDs() { return _deletedIDs; }
 
 private:
     friend ASTContext;
