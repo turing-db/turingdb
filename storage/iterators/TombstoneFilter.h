@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <type_traits>
 #include <unordered_set>
 
@@ -65,9 +66,11 @@ public:
 
 private:
     using DeletedIndices = std::unordered_set<size_t>;
+    using DeletedVec = std::vector<size_t>;
 
     const Tombstones& _tombstones;
     DeletedIndices _deletedIndices;
+    DeletedVec _delVec;
 
     /**
      * @brief Specialised filtering method, used when only a single column of the output
@@ -95,6 +98,9 @@ private:
      */
     template <typename T>
     void applyDeletedIndices(ColumnVector<T>& column);
+
+    template <typename T>
+    void applyDeletedVec(ColumnVector<T>& column);
 };
 
 template <ColumnVectorPtr Col>
@@ -133,7 +139,7 @@ void TombstoneFilter::filter(Cols... columns) {
         if (!col) {
             return;
         }
-        this->applyDeletedIndices(*col);
+        this->applyDeletedVec(*col);
     };
 
     (populateIfID(columns), ...); // Populate @ref _deletedIndices for ID columns
@@ -163,4 +169,70 @@ void TombstoneFilter::applyDeletedIndices(ColumnVector<T>& column) {
     }
     raw.resize(writePointer);
 }
+
+template <typename T>
+void TombstoneFilter::applyDeletedVec(ColumnVector<T>& column) {
+    bioassert(!_delVec.empty());
+
+    if (column.empty()) {
+        return;
+    }
+
+    // We should be able to omit these if we only generated filtered indices on a "base
+    // column" (e.g. the edge column in GetOutEdges)
+    std::ranges::sort(_delVec);
+    auto [newEnd, oldEnd] = std::ranges::unique(_delVec);
+    _delVec.erase(newEnd, oldEnd);
+
+    // Unique and sorted
+    bioassert(std::ranges::adjacent_find(_delVec) == _delVec.end());
+    bioassert(std::ranges::is_sorted(_delVec));
+
+    std::vector<T>& raw = column.getRaw();
+    size_t initialSize = raw.size();
+
+    // Track the index in the column we are reading from and writing to
+    size_t readPtr {0};
+    size_t writePtr {0};
+    for (size_t i = 0; i < _delVec.size();) {
+        // Compute the range [start, end] that is to be deleted
+        size_t deletedRangeStart = _delVec[i];
+        size_t deletedRangeEnd = deletedRangeStart;
+
+        // Find a contiguous block of deleted indices
+        while (i + 1 < _delVec.size() && _delVec[i + 1] == _delVec[i] + 1) {
+            i++;
+            deletedRangeEnd++;
+        }
+
+        // Calculate the size of the block to be deleted based on the indexes of the
+        // column
+        size_t deletedBlockSize = deletedRangeStart - readPtr;
+
+        std::memmove(raw.data() + writePtr, // Write to the current point in the column
+                     raw.data() + readPtr,  // From where we are reading the in the col
+                     deletedBlockSize * sizeof(T));
+
+        // Increment so the next place we write is after the block we just moved
+        writePtr += deletedBlockSize;
+
+        // Do not read the deleted block that we just skipped
+        readPtr = deletedRangeEnd + 1;
+        i++;
+    }
+
+    // There may be an interval [_delVec.back(), column.size()]. Move that down
+    if (readPtr < initialSize) {
+        size_t remainingSize = initialSize - readPtr;
+        std::memmove(raw.data() + writePtr,
+                     raw.data() + readPtr,
+                     remainingSize * sizeof(T));
+        writePtr += remainingSize;
+    }
+
+    // We potentially shifted elements down, so the end of the vector needs to be
+    // truncated
+    raw.resize(writePtr);
+}
+
 }

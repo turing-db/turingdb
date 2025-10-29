@@ -33,6 +33,7 @@ void TombstoneFilter::populateDeletedIndices(const ColumnVector<IDT>& column) {
 
         if (deleted) {
             _deletedIndices.insert(i);
+            _delVec.push_back(i);
         }
     }
 }
