@@ -1,6 +1,6 @@
 #pragma once
 
-#include "columns/Block.h"
+#include "dataframe/Dataframe.h"
 
 namespace db::v2 {
 
@@ -16,8 +16,8 @@ public:
 
     bool hasData() const { return _hasData; }
 
-    Block& getBlock() { return _block; }
-    const Block& getBlock() const { return _block; }
+    Dataframe& getDataframe() { return _dataframe; }
+    const Dataframe& getDataframe() const { return _dataframe; }
 
     void setSource(PipelinePort* source) { _source = source; }
     void setConsumer(PipelinePort* consumer) { _consumer = consumer; }
@@ -30,7 +30,7 @@ public:
 private:
     PipelinePort* _source {nullptr};
     PipelinePort* _consumer {nullptr};
-    Block _block;
+    Dataframe _dataframe;
     bool _hasData {false};
 
     PipelineBuffer() = default;
