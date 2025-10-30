@@ -969,15 +969,21 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
         }
     }
 
-    // Generate edgeIDs only if the edge is returned by projection
+    // Generate edgeIDs only if the edge is returned by projection...
     const VarExpr* edgeVar = edge->getVar();
+    ColumnEdgeIDs* edges {nullptr};
     if (edgeVar) {
         VarDecl* edgeDecl = edgeVar->getDecl();
         if (edgeDecl->isUsed()) {
-            auto* edges = _mem->alloc<ColumnEdgeIDs>();
+            edges = _mem->alloc<ColumnEdgeIDs>();
             edgeWriteInfo._edges = edges;
             _transformData->addColumn(edges, edgeDecl);
         }
+    }
+    // ... or if we have tombstones and need to filter chunk writer outputs
+    if (!edges && (_view.tombstones().hasEdges() || _view.tombstones().hasNodes())) {
+        edges = _mem->alloc<ColumnEdgeIDs>();
+        edgeWriteInfo._edges = edges;
     }
 
     if (!sourceTypeConstr && !targetTypeConstr) {
