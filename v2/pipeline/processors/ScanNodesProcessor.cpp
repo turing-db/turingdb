@@ -20,7 +20,7 @@ ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
     ScanNodesProcessor* scanNodes = new ScanNodesProcessor();
 
     PipelineOutputPort* outNodeIDs = PipelineOutputPort::create(pipeline, scanNodes);
-    scanNodes->_outNodeIDs = outNodeIDs;
+    scanNodes->_outNodeIDs.setPort(outNodeIDs);
     scanNodes->addOutput(outNodeIDs);
 
     scanNodes->postCreate(pipeline);
@@ -28,7 +28,7 @@ ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
 }
 
 void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs->getBuffer()->getBlock()[0]);
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs.getRawColumn());
 
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
@@ -47,5 +47,5 @@ void ScanNodesProcessor::execute() {
         finish();
     }
 
-    _outNodeIDs->writeData();
+    _outNodeIDs.getPort()->writeData();
 }
