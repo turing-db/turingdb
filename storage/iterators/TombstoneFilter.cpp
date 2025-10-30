@@ -16,7 +16,7 @@ template void TombstoneFilter::populateRanges<EdgeID>(const ColumnVector<EdgeID>
 }
 
 TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
-        : _tombstones(tombstones)
+    : _tombstones(tombstones)
 {
 }
 
