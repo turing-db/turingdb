@@ -11,4 +11,5 @@ target_link_libraries(${SAMPLE_NAME}
            turing_db_examples_s
            turing_db_v2_parser_s
            turing_db_v2_analyzer_s
-           turing_db_v2_plan_s)
+           turing_db_v2_plan_s
+           turing_db_v2_pipeline_s)

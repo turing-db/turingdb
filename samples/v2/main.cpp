@@ -15,6 +15,9 @@
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
+#include "PipelineV2.h"
+#include "LocalMemory.h"
+#include "PipelineGenerator.h"
 
 using namespace db;
 using namespace db::v2;
@@ -79,13 +82,33 @@ int main(int argc, char** argv) {
         dumper.dump(std::cout);
     }
 
+    PlanGraphGenerator planGen(ast, view);
+    const PlanGraph& planGraph = planGen.getPlanGraph();
     {
-        PlanGraphGenerator planGen(ast, view);
         try {
             auto t0 = Clock::now();
             planGen.generate(ast.queries().front());
             auto t1 = Clock::now();
             fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, t1));
+        } catch (const CompilerException& e) {
+            fmt::print("{}\n", e.what());
+            return EXIT_FAILURE;
+        }
+
+        PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
+    }
+
+    LocalMemory mem;
+    PipelineV2 pipeline;
+    {
+        auto callback = [](const Block& block) {};
+
+        PipelineGenerator pipelineGen(&planGraph, &pipeline, &mem, callback);
+        try {
+            auto t0 = Clock::now();
+            pipelineGen.generate();
+            auto t1 = Clock::now();
+            fmt::print("Query pipeline generated in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
             return EXIT_FAILURE;
