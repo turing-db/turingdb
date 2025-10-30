@@ -1087,7 +1087,9 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
+
+    const bool needFilter = _view.tombstones().hasEdges() || _view.tombstones().hasNodes();
+    const bool mustWriteEdges =(edgeDecl && edgeDecl->isUsed()) || needFilter;
 
     EdgeWriteInfo edgeWriteInfo;
     edgeWriteInfo._indices = indices;
@@ -1450,7 +1452,9 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
+
+    const bool needFilter = _view.tombstones().hasEdges() || _view.tombstones().hasNodes();
+    const bool mustWriteEdges = (edgeDecl && edgeDecl->isUsed()) || needFilter;
 
     if (mustWriteEdges || edgeExprConstr) {
         auto* edges = _mem->alloc<ColumnEdgeIDs>();

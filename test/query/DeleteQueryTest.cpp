@@ -627,6 +627,48 @@ TEST_F(DeleteQueryTest, delEdgesGetOutEdges) {
     }
 }
 
+TEST_F(DeleteQueryTest, delNodeGetOutEdgesNoEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Remy, then use NodeID injection to force GetOutEdges
+        auto VERIFY = [&]() { // Only return n so e is not allocced
+            tester.query("match (n @ 0)-[e]-(m) return n")
+                .expectVector<NodeID>({})
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete nodes 0")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
+TEST_F(DeleteQueryTest, delEdgeGetOutEdgesNoEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    { // Remy, use NodeID injection to force GetOutEdges
+        auto VERIFY = [&]() { // Only return n so e is not allocced
+            tester.query("match (n @ 0)-[e]-(m) return n")
+                .expectVector<NodeID>({0}) // There is still 1 Remy edge left
+                .execute();
+        };
+
+        newChange(tester);
+        tester.query("delete edges 0,1,2")
+            .execute();
+        tester.query("commit")
+            .execute();
+        VERIFY();
+        submitChange(tester);
+        VERIFY();
+    }
+}
+
 TEST_F(DeleteQueryTest, delNodesScanLabels) {
     QueryTester tester {_env->getMem(), *_interp};
 
