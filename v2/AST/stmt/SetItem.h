@@ -13,22 +13,16 @@ class EntityTypeExpr;
 class SetItem {
 public:
     struct PropertyExprAssign {
-        static constexpr std::size_t index = 0;
-
         PropertyExpr* propTypeExpr;
         Expr* propValueExpr;
     };
 
     struct SymbolAddAssign {
-        static constexpr std::size_t index = 1;
-
         Symbol* symbol {nullptr};
         Expr* value {nullptr};
     };
 
     struct SymbolEntityTypes {
-        static constexpr std::size_t index = 2;
-
         EntityTypeExpr* value {nullptr};
     };
 
@@ -42,6 +36,10 @@ public:
 
     Variant& item() { return _item; }
     const Variant& item() const { return _item; }
+
+
+    template<class... Ts>
+    struct Overloaded : Ts... { using Ts::operator()...; };
 
 private:
     friend CypherAST;

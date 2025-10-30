@@ -31,9 +31,8 @@ using namespace db::v2;
 
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 WriteStmtAnalyzer::~WriteStmtAnalyzer() {
@@ -249,10 +248,9 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 }
 
 void WriteStmtAnalyzer::analyze(SetItem* item) {
-    switch (item->item().index()) {
-        case SetItem::PropertyExprAssign::index: {
-            auto& v = std::get<SetItem::PropertyExprAssign>(item->item());
-
+    const auto visitor = SetItem::Overloaded {
+        // PropertyExprAssign case
+        [this, item](const SetItem::PropertyExprAssign& v) {
             // Analyzing rhs
             const EvaluatedType rhsType = v.propValueExpr->getType();
 
@@ -269,18 +267,19 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
                                        EvaluatedTypeName::value(rhsType)),
                            item);
             }
+        },
 
-        } break;
-        case SetItem::SymbolAddAssign::index: {
+        // SymbolAddAssign case
+        [this, item](const SetItem::SymbolAddAssign& v) {
             throwError("SET cannot dynamically mutate properties yet", item);
-        } break;
-        case SetItem::SymbolEntityTypes::index: {
+        },
+
+        // SymbolEntityTypes case
+        [this, item](const SetItem::SymbolEntityTypes& v) {
             throwError("SET cannot update entity types yet", item);
-        } break;
-        default: {
-            throwError(fmt::format("Unsupported SET expression"), item);
-        }
-    }
+        }};
+
+    std::visit(visitor, item->item());
 }
 
 void WriteStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

@@ -33,9 +33,8 @@ WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
                                        PlanGraph* tree,
                                        PlanGraphVariables* variables)
     : _ast(ast),
-    _tree(tree),
-    _variables(variables)
-{
+      _tree(tree),
+      _variables(variables) {
 }
 
 WriteStmtGenerator::~WriteStmtGenerator() {
@@ -78,9 +77,9 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
     prepareWriteNode(prevNode);
 
     for (const SetItem* item : stmt->getItems()) {
-        switch (item->item().index()) {
-            case SetItem::PropertyExprAssign::index: {
-                const auto& v = std::get<SetItem::PropertyExprAssign>(item->item());
+        const auto visitor = SetItem::Overloaded {
+            // PropertyExprAssign case
+            [this](const SetItem::PropertyExprAssign& v) {
                 const VarDecl* decl = v.propTypeExpr->getDecl();
 
                 if (decl->getType() == EvaluatedType::NodePattern) {
@@ -93,18 +92,20 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
                                                 v.propTypeExpr->getPropName(),
                                                 v.propValueExpr);
                 }
-            } break;
-            case SetItem::SymbolAddAssign::index: {
+            },
+
+            // SymbolAddAssign case
+            [this, item](const SetItem::SymbolAddAssign& v) {
                 throwError("SET cannot dynamically mutate properties yet", item);
-            } break;
-            case SetItem::SymbolEntityTypes::index: {
+            },
+
+            // SymbolEntityTypes case
+            [this, item](const SetItem::SymbolEntityTypes& v) {
                 throwError("SET cannot update entity types yet", item);
-            } break;
-            default: {
-                throwError(fmt::format("Unsupported SET expression"), item);
-            }
-        }
-    }
+            }};
+
+        std::visit(visitor, item->item());
+    };
 }
 
 void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode) {
