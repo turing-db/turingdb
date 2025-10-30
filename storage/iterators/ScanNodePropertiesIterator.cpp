@@ -90,18 +90,18 @@ ScanNodePropertiesChunkWriter<T>::ScanNodePropertiesChunkWriter(const GraphView&
 
 template <SupportedType T>
 void ScanNodePropertiesChunkWriter<T>::filterTombstones() {
-    // XXX: This should probably be an exception, as it will result in incorrect results
-    // due to not filtering on NodeIDs if @ref _nodeIDs is not materialised
-    msgbioassert(_nodeIDs,
-                 "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
-                 "whilst not materialising the NodeID column.");
+    // Base column of this ChunkWriter is _nodeIDs
+    bioassert(_nodeIDs);
 
     TombstoneFilter filter(this->_view.tombstones());
-    filter.setBaseColumn(_nodeIDs);
-    filter.filter(_nodeIDs, _properties);
+    filter.populateRanges(_nodeIDs);
 
-    if (_properties && _nodeIDs) {
-        bioassert(_nodeIDs->size() == _properties->size());
+    filter.filter(_nodeIDs);
+
+    if (_properties) {
+        filter.filter(_properties);
+        size_t newSize = _nodeIDs->size();
+        bioassert(_properties->size() == newSize);
     }
 }
 

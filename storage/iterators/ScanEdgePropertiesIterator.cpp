@@ -82,17 +82,16 @@ ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView&
 
 template <SupportedType T>
 void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
-    // XXX: This should probably be an exception, as it will result in incorrect results
-    // due to not filtering on EdgeIDs if @ref _edgeIDs is not materialised
-    msgbioassert(_edgeIDs,
-                 "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
-                 "whilst not materialising the NodeID column.");
+    // Base column of this ChunkWriter is _edgeIDs
+    bioassert(_edgeIDs);
 
     TombstoneFilter filter(this->_view.tombstones());
-    filter.setBaseColumn(_edgeIDs);
-    filter.filter(_edgeIDs, _properties);
 
-    if (_properties && _edgeIDs) {
+    filter.populateRanges(_edgeIDs);
+    filter.filter(_edgeIDs);
+
+    if (_properties ) {
+        filter.filter(_properties);
         bioassert(_edgeIDs->size() == _properties->size());
     }
 }
