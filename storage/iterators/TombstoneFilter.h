@@ -13,7 +13,13 @@ class ColumnVector;
 
 /**
  * @brief Provides generic methods for applying filtering based on tombstones to the
- * ColumnVector outputs of a ChunkWriter
+ * ColumnVector outputs of a ChunkWriter.
+ * @detail Uses a two-stage, multipass filtering approach based on a "base column" which
+ * is determined by the ChunkWriter whose output is being filtered.
+ * Stage 1: Call @ref populateRanges to find the intervals in the base column which are
+ * not deleted
+ * Stage 2: Calls to @ref filter for each column to be filtered, which moves all
+ * non-deleted ranges to the front of the column - removing deleted rows
  */
 class TombstoneFilter {
 public:
@@ -34,6 +40,12 @@ public:
     template <TypedInternalID IDT>
     void populateRanges(const ColumnVector<IDT>* baseCol);
 
+    /**
+     * @brief Moves ranges in @ref _nonDeletedRanges to the front of the column, and
+     * truncates any hanging entries
+     * @warn Requires @ref populateRanges to be called prior to populate
+     * @ref _nonDeletedRanges
+     */
     template <typename T>
     void filter(ColumnVector<T>* col);
 
