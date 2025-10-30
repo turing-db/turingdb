@@ -42,7 +42,7 @@ public:
 
     /**
      * @brief Moves ranges in @ref _nonDeletedRanges to the front of the column, and
-     * truncates any hanging entries
+     * truncates any remaining rows
      * @warn Requires @ref populateRanges to be called prior to populate
      * @ref _nonDeletedRanges
      */
@@ -60,13 +60,14 @@ private:
 
     const Tombstones& _tombstones;
     NonDeletedRanges _nonDeletedRanges;
-    bool _initialised {false};
+    bool _initialised {false}; // Tracks whether @ref populateRanges was called
 };
 
 template <typename T>
 void TombstoneFilter::filter(ColumnVector<T>* col) {
     bioassert(col);
     bioassert(_initialised);
+
     // No non-deleted entries => all deleted => clear
     if (_nonDeletedRanges.empty()) {
         col->clear();
