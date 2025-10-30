@@ -81,10 +81,26 @@ ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& vi
 }
 
 void ScanInEdgesByLabelChunkWriter::filterTombstones() {
-    TombstoneFilter filter(_view.tombstones());
+    // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
-    filter.setBaseColumn(_edgeIDs);
-    filter.filter(_srcs, _tgts, _edgeIDs, _types);
+
+    TombstoneFilter filter(_view.tombstones());
+    filter.populateRanges(_edgeIDs);
+
+    size_t newSize = _edgeIDs->size();
+
+    if (_srcs) {
+        filter.filter(_srcs);
+        bioassert(_srcs->size() == newSize);
+    }
+    if (_tgts) {
+        filter.filter(_tgts);
+        bioassert(_tgts->size() == newSize);
+    }
+    if (_types) {
+        filter.filter(_types);
+        bioassert(_types->size() == newSize);
+    }
 }
 
 static constexpr size_t NColumns = 4;
@@ -199,7 +215,8 @@ void ScanInEdgesByLabelChunkWriter::fill(size_t maxCount) {
         CASE(15);
     }
 
-    if (_view.tombstones().hasNodes() || _view.tombstones().hasEdges()) {
+    // Base column is _edgeIDs, so only need to check if there are edge tombstones
+    if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
 }

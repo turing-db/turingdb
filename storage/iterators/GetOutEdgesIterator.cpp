@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "columns/ColumnIDs.h"
 #include "indexers/EdgeIndexer.h"
 #include "DataPart.h"
 #include "IteratorUtils.h"
@@ -108,19 +109,24 @@ GetOutEdgesChunkWriter::GetOutEdgesChunkWriter(const GraphView& view,
 }
 
 void GetOutEdgesChunkWriter::filterTombstones() {
-    TombstoneFilter filter(_view.tombstones());
+    // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
-    filter.setBaseColumn(_edgeIDs);
-    filter.filterGetOutEdges(_edgeIDs, _tgts, _types, _indices);
 
-    size_t newSize = _indices->size();
-    if (_edgeIDs) {
-        bioassert(_edgeIDs->size() == newSize);
-    }
+    TombstoneFilter filter(_view.tombstones());
+    filter.populateRanges(_edgeIDs);
+
+    filter.filter(_edgeIDs);
+    size_t newSize = _edgeIDs->size();
+
+    filter.filter(_indices);
+    bioassert(_indices->size() == newSize);
+
     if (_tgts) {
+        filter.filter(_tgts);
         bioassert(_tgts->size() == newSize);
     }
     if (_types) {
+        filter.filter(_types);
         bioassert(_types->size() == newSize);
     }
 }
@@ -206,7 +212,8 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         CASE(7);
     }
 
-    if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
+    // Base column is _edgeIDs: only need to check if there are edge tombstones
+    if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
 }

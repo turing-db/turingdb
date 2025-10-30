@@ -2,6 +2,7 @@
 
 #include <ranges>
 
+#include "ID.h"
 #include "versioning/TombstoneSet.h"
 
 namespace db {
@@ -24,6 +25,9 @@ public:
 
     bool containsNode(NodeID nodeID) const { return _nodeTombstones.contains(nodeID); }
     bool containsEdge(EdgeID edgeID) const { return _edgeTombstones.contains(edgeID); }
+
+    template <TypedInternalID IDT>
+    bool contains(IDT id) const;
 
     size_t numNodes() const { return _nodeTombstones.size(); }
     size_t numEdges() const { return _edgeTombstones.size(); }

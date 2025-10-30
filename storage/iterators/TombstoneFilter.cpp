@@ -1,17 +1,18 @@
 #include "TombstoneFilter.h"
 
+#include "BioAssert.h"
 #include "versioning/Tombstones.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
+#include <cstring>
 
 using namespace db;
 
 namespace db {
-template void TombstoneFilter::populateDeletedIndices<NodeID>(const ColumnVector<NodeID>& column);
-template void TombstoneFilter::populateDeletedIndices<EdgeID>(const ColumnVector<EdgeID>& column);
 
-template void TombstoneFilter::onePassApplyFilter<NodeID>(ColumnVector<NodeID>& column);
-template void TombstoneFilter::onePassApplyFilter<EdgeID>(ColumnVector<EdgeID>& column);
+template void TombstoneFilter::populateRanges<NodeID>(const ColumnVector<NodeID>* baseCol);
+template void TombstoneFilter::populateRanges<EdgeID>(const ColumnVector<EdgeID>* baseCol);
+
 }
 
 TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
@@ -20,85 +21,34 @@ TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
 }
 
 template <TypedInternalID IDT>
-void TombstoneFilter::populateDeletedIndices(const ColumnVector<IDT>& column) {
-    for (size_t i = 0; i < column.size(); i++) {
-        const IDT id = column.getRaw()[i];
+void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
+    bioassert(baseCol);
+    bioassert(_nonDeletedRanges.empty());
 
-        bool deleted {false};
-        if constexpr (std::is_same_v<IDT, NodeID>) {
-            deleted = _tombstones.containsNode(id);
-        } else {
-            deleted = _tombstones.containsEdge(id);
-        }
+    _nonDeletedRanges.clear();
+    const ColumnVector<IDT>& col = *baseCol;
 
+    size_t i = 0;
+    while (i < col.size()) { // Scan each element in the base column
+        // Skip until we find a non-deleted entry
+        bool deleted =  _tombstones.contains(col[i]);
         if (deleted) {
-            _deletedIndices.insert(i);
-            _delVec.push_back(i);
-        }
-    }
-}
-
-template <TypedInternalID IDT>
-void TombstoneFilter::onePassApplyFilter(ColumnVector<IDT>& column) {
-    size_t initialSize = column.size();
-    std::vector<IDT>& raw = column.getRaw();
-
-    // 2 pointer approach: traverse the vector with @ref readPointer and
-    // @ref writePointer. Overwrite values at @ref writePointer with the value at
-    // @ref readPointer if the index of @ref readPointer is not to be deleted.
-    // Always increment read, only increment write if the value isn't deleted
-    size_t writePointer = 0;
-    for (size_t readPointer = 0; readPointer < initialSize; readPointer++) {
-        bool deleted {false};
-        if constexpr (std::is_same_v<IDT, NodeID>) {
-            deleted = _tombstones.containsNode(raw[readPointer]);
-        } else {
-            deleted = _tombstones.containsEdge(raw[readPointer]);
-        }
-        if (!deleted) {
-            raw[writePointer] = raw[readPointer];
-            writePointer++;
+            i++;
             continue;
         }
+
+        // We have found a non-deleted entry, scan forward to see how many non-deleted
+        // entries we have in a row, and form a range from it
+        size_t start = i;
+        size_t size = 1;
+        i++; // Pre-increment i: we scan the next entry after the non-deleted just found
+        while (i < col.size() && !_tombstones.contains(col[i])) {
+            i++;
+            size++;
+        }
+
+        _nonDeletedRanges.emplace_back(start, size);
     }
-    raw.resize(writePointer);
+    _initialised = true;
 }
 
-void TombstoneFilter::filterGetOutEdges(ColumnEdgeIDs* edgeIDs, ColumnNodeIDs* tgtIDs,
-                                        ColumnEdgeTypes* edgeTypes, ColumnIndices* indices) {
-    // Filter based on deleted edges: if a target has been deleted, any edges incident to
-    // it would also be marked deleted
-    ColumnEdgeIDs* const baseColumn = edgeIDs;
-    bioassert(baseColumn); // XXX Should be exception?
-
-    size_t initialSize = baseColumn->size();
-
-    size_t writePtr = 0;
-    for (size_t readPtr = 0; readPtr < initialSize; readPtr++) {
-        EdgeID edge = (*baseColumn)[readPtr];
-        if (_tombstones.containsEdge(edge)) {
-            continue;
-        }
-        (*baseColumn)[writePtr] = (*baseColumn)[readPtr];
-        if (tgtIDs) {
-            (*tgtIDs)[writePtr] = (*tgtIDs)[readPtr];
-        }
-        if (edgeTypes) {
-            (*edgeTypes)[writePtr] = (*edgeTypes)[readPtr];
-        }
-        if (indices) {
-            (*indices)[writePtr] = (*indices)[readPtr];
-        }
-        writePtr++;
-    }
-    baseColumn->resize(writePtr);
-    if (tgtIDs) {
-        tgtIDs->resize(writePtr);
-    }
-    if (edgeTypes) {
-        edgeTypes->resize(writePtr);
-    }
-    if (indices) {
-        indices->resize(writePtr);
-    }
-}

@@ -117,18 +117,16 @@ ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(
 
 template <SupportedType T>
 void ScanNodePropertiesByLabelChunkWriter<T>::filterTombstones() {
-    // XXX: This should probably be an exception, as it will result in incorrect results
-    // due to not filtering on NodeIDs if @ref _nodeIDs is not materialised
-    msgbioassert(_nodeIDs,
-                 "Attempted to filter the output of a ScanNodePropertiesChunkWriter "
-                 "whilst not materialising the NodeID column.");
+    // Base column of this ChunkWriter is _nodeIDs
+    bioassert(_nodeIDs);
 
     TombstoneFilter filter(this->_view.tombstones());
-    bioassert(_nodeIDs);
-    filter.setBaseColumn(_nodeIDs);
-    filter.filter(_nodeIDs, _properties);
+    filter.populateRanges(_nodeIDs);
 
-    if (_properties && _nodeIDs) {
+    filter.filter(_nodeIDs);
+
+    if (_properties) {
+        filter.filter(_properties);
         bioassert(_properties->size() == _nodeIDs->size());
     }
 }

@@ -108,20 +108,24 @@ GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
 }
 
 void GetInEdgesChunkWriter::filterTombstones() {
-    TombstoneFilter filter(_view.tombstones());
+    // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
-    filter.setBaseColumn(_edgeIDs);
-    filter.filter(_edgeIDs, _tgts, _types, _indices);
 
-    size_t newSize = _indices->size();
+    TombstoneFilter filter(_view.tombstones());
+    filter.populateRanges(_edgeIDs);
 
-    if (_edgeIDs) {
-        bioassert(_edgeIDs->size() == newSize);
-    }
+    filter.filter(_indices);
+    filter.filter(_edgeIDs);
+
+    size_t newSize = _edgeIDs->size();
+    bioassert(_indices->size() == newSize);
+
     if (_tgts) {
+        filter.filter(_tgts);
         bioassert(_tgts->size() == newSize);
     }
     if (_types) {
+        filter.filter(_types);
         bioassert(_types->size() == newSize);
     }
 }

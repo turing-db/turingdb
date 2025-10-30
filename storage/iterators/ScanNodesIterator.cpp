@@ -82,7 +82,11 @@ ScanNodesChunkWriter::ScanNodesChunkWriter(const GraphView& view)
 }
 
 void ScanNodesChunkWriter::filterTombstones() {
+    // Base column of this ChunkWriter is _nodeIDs
+    bioassert(_nodeIDs);
+
     TombstoneFilter filter(_view.tombstones());
+    filter.populateRanges(_nodeIDs);
     filter.filter(_nodeIDs);
 }
 
