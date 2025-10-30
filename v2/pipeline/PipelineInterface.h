@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PipelinePort.h"
+
 #include "dataframe/NamedColumn.h"
 
 namespace db::v2 {
@@ -36,6 +38,10 @@ public:
     PipelineOutputPort* getPort() const { return _port; }
 
     void setPort(PipelineOutputPort* port) { _port = port; }
+
+    void connectTo(PipelineInputInterface& input) {
+        _port->connectTo(input.getPort());
+    }
 
 private:
     PipelineOutputPort* _port {nullptr};
