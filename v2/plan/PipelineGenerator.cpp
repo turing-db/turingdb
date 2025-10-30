@@ -10,10 +10,12 @@
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
+#include "nodes/GetEdgesNode.h"
 #include "nodes/GetEdgeTargetNode.h"
 #include "nodes/MaterializeNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/ProduceResultsNode.h"
+#include "nodes/JoinNode.h"
 
 #include "PlannerException.h"
 
@@ -68,6 +70,10 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node), stream);
         break;
 
+        case PlanGraphOpcode::GET_EDGES:
+            translateGetEdgesNode(static_cast<GetEdgesNode*>(node), stream);
+        break;
+
         case PlanGraphOpcode::GET_EDGE_TARGET:
             translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node), stream);
         break;
@@ -88,14 +94,16 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateProduceResultsNode(static_cast<ProduceResultsNode*>(node), stream);
         break;
 
+        case PlanGraphOpcode::JOIN:
+            translateJoinNode(static_cast<JoinNode*>(node), stream);
+        break;
+
         case PlanGraphOpcode::GET_IN_EDGES:
-        case PlanGraphOpcode::GET_EDGES: 
         case PlanGraphOpcode::CREATE_NODE:
         case PlanGraphOpcode::CREATE_EDGE:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
-        case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::WRITE:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::AGGREGATE_EVAL:
@@ -103,7 +111,7 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         case PlanGraphOpcode::SKIP:
         case PlanGraphOpcode::LIMIT:
         default:
-            throw PlannerException(fmt::format("Plan graph node opcode not supported: {}",
+            throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
                 PlanGraphOpcodeDescription::value(node->getOpcode())));
     }
 }
@@ -115,6 +123,9 @@ void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStr
 }
 
 void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
+}
+
+void PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node, PlanGraphStream& stream) {
 }
 
 void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
@@ -130,4 +141,7 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
+}
+
+void PipelineGenerator::translateJoinNode(JoinNode* node, PlanGraphStream& stream) {
 }
