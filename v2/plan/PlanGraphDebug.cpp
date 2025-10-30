@@ -184,10 +184,10 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
                     output << "        __edge__ ";
 
-                    if (edge._src.isInput()) {
-                        output << "(" << edge._src.asInput()->getName() << ")";
+                    if (!n->hasPendingNode(edge._src)) {
+                        output << "(" << edge._src->getName() << ")";
                     } else {
-                        output << "(" << edge._src.asPendingNodeOffset() << ")";
+                        output << "(" << n->getPendingNodeOffset(edge._src) << ")";
                     }
 
                     output << "-[" << j;                                  // Edge ID
@@ -210,10 +210,10 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     }
 
                     output << "]->";
-                    if (edge._tgt.isInput()) {
-                        output << "(" << edge._tgt.asInput()->getName() << ")\n";
+                    if (!n->hasPendingNode(edge._tgt)) {
+                        output << "(" << edge._tgt->getName() << ")\n";
                     } else {
-                        output << "(" << edge._tgt.asPendingNodeOffset() << ")\n";
+                        output << "(" << n->getPendingNodeOffset(edge._tgt) << ")\n";
                     }
                     j++;
                 }

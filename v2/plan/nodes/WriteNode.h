@@ -1,7 +1,6 @@
 #pragma once
 
 #include <span>
-#include <variant>
 
 #include "PlanGraphNode.h"
 
@@ -14,56 +13,32 @@ class EdgePatternData;
 
 class WriteNode : public PlanGraphNode {
 public:
+    /// @brief Describes a node property update to be applied.
     struct NodeUpdate {
+        const VarDecl* _decl {nullptr};
         std::string_view _propTypeName;
         const Expr* _propValueExpr {nullptr};
     };
 
+    /// @brief Describes an edge property update to be applied.
     struct EdgeUpdate {
+        const VarDecl* _decl {nullptr};
         std::string_view _propTypeName;
         const Expr* _propValueExpr {nullptr};
     };
 
+    /// @brief Describes a pending node.
     struct PendingNode {
+        /// @brief The node data, contains the label and property constraints
         const NodePatternData* _data {nullptr};
-        size_t _offset {0};
     };
 
-    class EdgeNeighbour {
-    public:
-        EdgeNeighbour() = default;
-
-        explicit EdgeNeighbour(const VarDecl* var)
-            : _data(var) {
-        }
-
-        explicit EdgeNeighbour(size_t offset)
-            : _data(offset) {
-        }
-
-        bool isPendingNodeOffset() const {
-            return std::holds_alternative<size_t>(_data);
-        }
-
-        bool isInput() const {
-            return std::holds_alternative<const VarDecl*>(_data);
-        }
-
-        const VarDecl* asInput() const {
-            return std::get<const VarDecl*>(_data);
-        }
-
-        size_t asPendingNodeOffset() const {
-            return std::get<size_t>(_data);
-        }
-
-    private:
-        std::variant<const VarDecl*, size_t> _data;
-    };
-
+    /// @brief Describes a pending edge.
     struct PendingEdge {
-        EdgeNeighbour _src;
-        EdgeNeighbour _tgt;
+        const VarDecl* _src {nullptr};
+        const VarDecl* _tgt {nullptr};
+
+        /// @brief The edge data, contains the edge type and property constraints
         const EdgePatternData* _data {nullptr};
     };
 
@@ -74,16 +49,16 @@ public:
 
     size_t addNode(const VarDecl* decl, const NodePatternData* data) {
         const size_t offset = _newNodes.size();
-        _newNodes.emplace_back(data, offset);
+        _newNodes.emplace_back(data);
         _newNodeDeclMapping[decl] = offset;
 
         return offset;
     }
 
     size_t addEdge(const VarDecl* decl,
-                   const EdgeNeighbour& src,
                    const EdgePatternData* data,
-                   const EdgeNeighbour& tgt) {
+                   const VarDecl* src,
+                   const VarDecl* tgt) {
         const size_t offset = _newEdges.size();
         _newEdges.emplace_back(src, tgt, data);
         _newEdgeDeclMapping[decl] = offset;
@@ -99,12 +74,16 @@ public:
         _toDeleteEdges.push_back(decl);
     }
 
-    void addNodeUpdate(std::string_view propTypeExpr, const Expr* expr) {
-        _nodeUpdates.emplace_back(propTypeExpr, expr);
+    void addNodeUpdate(const VarDecl* decl,
+                       std::string_view propTypeExpr,
+                       const Expr* expr) {
+        _nodeUpdates.emplace_back(decl, propTypeExpr, expr);
     }
 
-    void addEdgeUpdate(std::string_view propTypeExpr, const Expr* expr) {
-        _edgeUpdates.emplace_back(propTypeExpr, expr);
+    void addEdgeUpdate(const VarDecl* decl,
+                       std::string_view propTypeExpr,
+                       const Expr* expr) {
+        _edgeUpdates.emplace_back(decl, propTypeExpr, expr);
     }
 
     const PendingNode& getPendingNode(size_t offset) const {
@@ -113,6 +92,14 @@ public:
 
     const PendingNode& getPendingNode(const VarDecl* decl) const {
         return _newNodes.at(_newNodeDeclMapping.at(decl));
+    }
+
+    size_t getPendingNodeOffset(const VarDecl* decl) const {
+        return _newNodeDeclMapping.at(decl);
+    }
+
+    size_t getPendingEdgeOffset(const VarDecl* decl) const {
+        return _newEdgeDeclMapping.at(decl);
     }
 
     bool hasPendingNode(const VarDecl* decl) const {
@@ -138,13 +125,28 @@ public:
     EdgeUpdateSpan edgeUpdates() const { return _edgeUpdates; }
 
 private:
+    /// @brief Maps the VarDecl of a new node to its offset in the _newNodes vector
     std::unordered_map<const VarDecl*, size_t> _newNodeDeclMapping;
+
+    /// @brief Maps the VarDecl of a new edge to its offset in the _newEdges vector
     std::unordered_map<const VarDecl*, size_t> _newEdgeDeclMapping;
+
+    /// @brief Contains the node data describing the new nodes
     std::vector<PendingNode> _newNodes;
+
+    /// @brief Contains the edge data + src/tgt info describing the new edges
     std::vector<PendingEdge> _newEdges;
+
+    /// @brief Contains the node property updates to be applied
     std::vector<NodeUpdate> _nodeUpdates;
+
+    /// @brief Contains the edge property updates to be applied
     std::vector<EdgeUpdate> _edgeUpdates;
+
+    /// @brief Contains the VarDecls of nodes to be deleted
     std::vector<const VarDecl*> _toDeleteNodes;
+
+    /// @brief Contains the VarDecls of edges to be deleted
     std::vector<const VarDecl*> _toDeleteEdges;
 };
 

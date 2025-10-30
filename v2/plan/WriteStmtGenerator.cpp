@@ -82,10 +82,16 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
             case SetItem::PropertyExprAssign::index: {
                 const auto& v = std::get<SetItem::PropertyExprAssign>(item->item());
                 const VarDecl* decl = v.propTypeExpr->getDecl();
+
                 if (decl->getType() == EvaluatedType::NodePattern) {
-                    _currentNode->addNodeUpdate(v.propTypeExpr->getPropName(), v.propValueExpr);
+                    _currentNode->addNodeUpdate(v.propTypeExpr->getDecl(),
+                                                v.propTypeExpr->getPropName(),
+                                                v.propValueExpr);
+
                 } else if (decl->getType() == EvaluatedType::EdgePattern) {
-                    _currentNode->addEdgeUpdate(v.propTypeExpr->getPropName(), v.propValueExpr);
+                    _currentNode->addEdgeUpdate(v.propTypeExpr->getDecl(),
+                                                v.propTypeExpr->getPropName(),
+                                                v.propValueExpr);
                 }
             } break;
             case SetItem::SymbolAddAssign::index: {
@@ -145,8 +151,6 @@ void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNod
 void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* element) {
     NodePattern* origin = dynamic_cast<NodePattern*>(element->getRootEntity());
 
-    // Step 1. Handle the origin
-
     if (!origin) [[unlikely]] {
         throwError("CREATE statement must have a node pattern as origin", element);
     }
@@ -154,39 +158,34 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
     const VarDecl* originDecl = origin->getDecl();
     const NodePatternData* data = origin->getData();
 
-    WriteNode::EdgeNeighbour lhs;
-    WriteNode::EdgeNeighbour rhs;
+    const VarDecl* lhs = nullptr;
+    const VarDecl* rhs = nullptr;
 
     // A node may:
     //   - Have to be created
     //   - Be an input to the write query: MATCH (n) CREATE (n)-[e:E]->(m)
     //   - Already created in the query: CREATE (n:Person), (n)-[e:E]->(m)
+
+    // Step 1. Handle the origin
     const VarNode* varNode = _variables->getVarNode(originDecl);
 
-    if (varNode != nullptr || _currentNode->hasPendingNode(originDecl)) {
-        // Already defined (input or pending)
-        lhs = WriteNode::EdgeNeighbour {originDecl};
-    } else {
-        // Create a new node
-        const size_t offset = _currentNode->addNode(originDecl, data);
-        lhs = WriteNode::EdgeNeighbour {offset};
+    if (!_currentNode->hasPendingNode(originDecl) && varNode == nullptr) {
+        // Node is not created yet and is not an input
+        _currentNode->addNode(originDecl, data);
     }
 
+    lhs = originDecl;
+
     // Step 2. Handle the [edge-rhs] chains
-
     for (auto [edge, rhsNode] : element->getElementChain()) {
-        // - Get/Create the rhs node
-        const VarDecl* rhsDecl = rhsNode->getDecl();
-        const NodePatternData* rhsData = rhsNode->getData();
-        const VarNode* rhsVarNode = _variables->getVarNode(rhsDecl);
+        rhs = rhsNode->getDecl();
 
-        if (rhsVarNode != nullptr || _currentNode->hasPendingNode(rhsDecl)) {
-            // Already defined (input or pending)
-            rhs = WriteNode::EdgeNeighbour {rhsDecl};
-        } else {
-            // Create a new node
-            const size_t rhsOffset = _currentNode->addNode(rhsDecl, rhsData);
-            rhs = WriteNode::EdgeNeighbour {rhsOffset};
+        const NodePatternData* rhsData = rhsNode->getData();
+        const VarNode* rhsVarNode = _variables->getVarNode(rhs);
+
+        if (!_currentNode->hasPendingNode(rhs) && rhsVarNode == nullptr) {
+            // Node is not created yet and is not an input
+            _currentNode->addNode(rhs, rhsData);
         }
 
         // - Create the new edge
@@ -196,10 +195,10 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
             case EdgePattern::Direction::Undirected:
                 throwError("Cannot use undirected edges in write statements", edge);
             case EdgePattern::Direction::Backward:
-                _currentNode->addEdge(edgeDecl, rhs, edge->getData(), lhs);
+                _currentNode->addEdge(edgeDecl, edge->getData(), rhs, lhs);
                 break;
             case EdgePattern::Direction::Forward:
-                _currentNode->addEdge(edgeDecl, lhs, edge->getData(), rhs);
+                _currentNode->addEdge(edgeDecl, edge->getData(), lhs, rhs);
                 break;
         }
 

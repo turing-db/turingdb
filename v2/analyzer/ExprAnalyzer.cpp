@@ -306,7 +306,7 @@ db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueT
     if (!propTypeFound) {
         // Property does not exist yet
 
-        std::string_view name = propName->getName();
+        const std::string_view name = propName->getName();
         auto it = _toBeCreatedTypes.find(name);
 
         if (it == _toBeCreatedTypes.end()) {
@@ -496,7 +496,7 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
 }
 
 void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, const void* obj) {
-    auto it = _toBeCreatedTypes.find(name);
+    const auto it = _toBeCreatedTypes.find(name);
 
     if (it != _toBeCreatedTypes.end()) {
         // Type was already registered

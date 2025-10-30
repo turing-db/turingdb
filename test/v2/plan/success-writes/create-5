@@ -7,5 +7,5 @@ flowchart TD
         __WRITE__
         __node__ (0:Person)
         __node__ (1:Person)
-        __edge__ (n)-[0:NewEdge]->(1)
+        __edge__ (0)-[0:NewEdge]->(1)
     `"]
