@@ -31,8 +31,9 @@ using namespace db::v2;
 
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 WriteStmtAnalyzer::~WriteStmtAnalyzer() {
@@ -258,7 +259,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             const ValueType lhsEvaluatedVt = _exprAnalyzer->analyze(v.propTypeExpr,
                                                                     true,
                                                                     evaluatedToValueType(rhsType));
-            _exprAnalyzer->analyze(v.propValueExpr);
+            _exprAnalyzer->analyzeRootExpr(v.propValueExpr);
 
             // Checking property compatibility
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {

@@ -32,9 +32,13 @@ void PlanGraph::removeIsolatedNodes() {
     std::vector<std::unique_ptr<PlanGraphNode>> newNodes;
 
     for (auto& node : _nodes) {
-        if (!node->inputs().empty() || !node->outputs().empty()) {
-            newNodes.emplace_back(std::move(node));
+        if (node->inputs().empty()
+            && node->outputs().empty()
+            && node->getOpcode() != PlanGraphOpcode::WRITE) {
+            continue;
         }
+
+        newNodes.emplace_back(std::move(node));
     }
 
     _nodes = std::move(newNodes);

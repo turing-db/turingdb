@@ -33,15 +33,15 @@ WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
                                        PlanGraph* tree,
                                        PlanGraphVariables* variables)
     : _ast(ast),
-      _tree(tree),
-      _variables(variables) {
+    _tree(tree),
+    _variables(variables)
+{
 }
 
 WriteStmtGenerator::~WriteStmtGenerator() {
 }
 
 WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* prevNode) {
-    fmt::println("Generating write stmt");
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);

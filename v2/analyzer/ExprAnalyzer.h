@@ -39,7 +39,10 @@ public:
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
 
     void analyzeRootExpr(Expr* expr);
-    ValueType analyze(PropertyExpr* expr);
+
+    ValueType analyze(PropertyExpr* expr,
+                      bool allowCreate = false,
+                      ValueType defaultType = ValueType::Invalid);
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
@@ -51,7 +54,7 @@ private:
     DeclContext* _ctxt {nullptr};
     const GraphMetadata& _graphMetadata;
 
-    std::unordered_map<std::string_view, ValueType> _typeMap;
+    std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 
     // Expressions
     void analyze(Expr* expr);
@@ -63,7 +66,6 @@ private:
     void analyze(EntityTypeExpr* expr);
     void analyze(PathExpr* expr);
     void analyze(FunctionInvocationExpr* expr);
-    std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

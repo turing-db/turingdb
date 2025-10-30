@@ -29,7 +29,8 @@ SetItem* SetItem::create(CypherAST* ast, Symbol* symbol, Expr* value) {
     return setItem;
 }
 
-SetItem::SetItem() {
+SetItem::SetItem()
+{
 }
 
 SetItem::~SetItem() {
