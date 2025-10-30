@@ -14,11 +14,11 @@ LimitProcessor* LimitProcessor::create(PipelineV2* pipeline, size_t limit) {
     LimitProcessor* processor = new LimitProcessor(limit);
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, processor);
-    processor->_input = input;
+    processor->_input.setPort(input);
     processor->addInput(input);
 
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, processor);
-    processor->_output = output;
+    processor->_output.setPort(output);
     processor->addOutput(output);
 
     processor->postCreate(pipeline);
@@ -37,15 +37,15 @@ void LimitProcessor::reset() {
 }
 
 void LimitProcessor::execute() {
-    _input->consume();
+    _input.getPort()->consume();
     finish();
 
     if (_reachedLimit) {
         // We have reached the limit, do nothing
         return;
     } else {
-        const Block& inputBlock = _input->getBuffer()->getBlock();
-        Block& outputBlock = _output->getBuffer()->getBlock();
+        const Block& inputBlock = _input.getPort()->getBuffer()->getBlock();
+        Block& outputBlock = _output.getPort()->getBuffer()->getBlock();
         const size_t blockRowCount = inputBlock.getBlockRowCount();
         const size_t remainingCapacity = _limit - _currentRowCount;
 
@@ -58,6 +58,6 @@ void LimitProcessor::execute() {
         }
 
         _currentRowCount += rowsToWrite;
-        _output->writeData();
+        _output.getPort()->writeData();
     }
 }

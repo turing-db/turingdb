@@ -30,11 +30,11 @@ GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
     PipelineOutputPort* outTargetNodes = PipelineOutputPort::create(pipeline, getOutEdges);
     PipelineOutputPort* outEdgeTypes = PipelineOutputPort::create(pipeline, getOutEdges);
 
-    getOutEdges->_inNodeIDs = inNodeIDs;
-    getOutEdges->_outIndices = outIndices;
-    getOutEdges->_outEdgeIDs = outEdgeIDs;
-    getOutEdges->_outTargetNodes = outTargetNodes;
-    getOutEdges->_outEdgeTypes = outEdgeTypes;
+    getOutEdges->_inNodeIDs.setPort(inNodeIDs);
+    getOutEdges->_outIndices.setPort(outIndices);
+    getOutEdges->_outEdgeIDs.setPort(outEdgeIDs);
+    getOutEdges->_outTargetNodes.setPort(outTargetNodes);
+    getOutEdges->_outEdgeTypes.setPort(outEdgeTypes);
 
     getOutEdges->addInput(inNodeIDs);
     getOutEdges->addOutput(outIndices);
@@ -47,32 +47,21 @@ GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
 }
 
 void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
-    PipelineBuffer* nodeIDsBuffer = _inNodeIDs->getBuffer();
-    if (!nodeIDsBuffer) {
-        throw PipelineException("GetOutEdgesProcessor: Node IDs port not connected");
-    }
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs.getRawColumn());
+    ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices.getRawColumn());
+    ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdgeIDs.getRawColumn());
+    ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outTargetNodes.getRawColumn());
+    ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdgeTypes.getRawColumn());
 
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(nodeIDsBuffer->getBlock()[0]);
+    if (!nodeIDs || !indices || !edgeIDs || !targetNodes || !edgeTypes) {
+        throw PipelineException("GetOutEdgesProcessor: Invalid columns");
+    }
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
-
-    ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices->getBuffer()->getBlock()[0]);
     _it->setIndices(indices);
-
-    if (_outEdgeIDs->isConnected()) {
-        ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdgeIDs->getBuffer()->getBlock()[0]);
-        _it->setEdgeIDs(edgeIDs);
-    }
-
-    if (_outTargetNodes->isConnected()) {
-        ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outTargetNodes->getBuffer()->getBlock()[0]);
-        _it->setTgtIDs(targetNodes);
-    }
-
-    if (_outEdgeTypes->isConnected()) {
-        ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdgeTypes->getBuffer()->getBlock()[0]);
-        _it->setEdgeTypes(edgeTypes);
-    }
+    _it->setEdgeIDs(edgeIDs);
+    _it->setTgtIDs(targetNodes);
+    _it->setEdgeTypes(edgeTypes);
 
     markAsPrepared();
 }
@@ -83,16 +72,16 @@ void GetOutEdgesProcessor::reset() {
 }
 
 void GetOutEdgesProcessor::execute() {
-    _inNodeIDs->consume();
+    _inNodeIDs.getPort()->consume();
     _it->fill(ChunkConfig::CHUNK_SIZE);
 
     if (!_it->isValid()) {
         finish();
     }
 
-    _outIndices->writeData();
-    _outEdgeIDs->writeData();
-    _outTargetNodes->writeData();
-    _outEdgeTypes->writeData();
-    _outIndices->writeData();
+    _outIndices.getPort()->writeData();
+    _outEdgeIDs.getPort()->writeData();
+    _outTargetNodes.getPort()->writeData();
+    _outEdgeTypes.getPort()->writeData();
+    _outIndices.getPort()->writeData();
 }

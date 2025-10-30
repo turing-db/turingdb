@@ -15,13 +15,13 @@ void LambdaProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void LambdaProcessor::reset() {
-    _callback(_input->getBuffer()->getBlock(), Operation::RESET);
+    _callback(_input.getPort()->getBuffer()->getBlock(), Operation::RESET);
     markAsReset();
 }
 
 void LambdaProcessor::execute() {
-    _input->consume();
-    _callback(_input->getBuffer()->getBlock(), Operation::EXECUTE);
+    _input.getPort()->consume();
+    _callback(_input.getPort()->getBuffer()->getBlock(), Operation::EXECUTE);
     finish();
 }
 
@@ -29,7 +29,7 @@ LambdaProcessor* LambdaProcessor::create(PipelineV2* pipeline, Callback callback
     LambdaProcessor* lambda = new LambdaProcessor(callback);
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, lambda);
-    lambda->_input = input;
+    lambda->_input.setPort(input);
     lambda->addInput(input);
 
     lambda->postCreate(pipeline);

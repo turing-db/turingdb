@@ -4,6 +4,8 @@
 
 #include "Processor.h"
 
+#include "PipelineInterface.h"
+
 namespace db {
 class Block;
 }
@@ -26,11 +28,11 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineOutputPort* output() const { return _output; }
+    PipelineOutputInterface& output() { return _output; }
 
 private:
     Callback _callback;
-    PipelineOutputPort* _output {nullptr};
+    PipelineOutputInterface _output;
 
     LambdaSourceProcessor(Callback callback);
     ~LambdaSourceProcessor();

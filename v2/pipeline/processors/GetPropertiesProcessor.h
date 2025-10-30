@@ -4,17 +4,15 @@
 
 #include "Processor.h"
 
-#include "PipelinePort.h"
+#include "PipelineInterface.h"
+
 #include "ExecutionContext.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "columns/ColumnIDs.h"
-#include "columns/Block.h"
 #include "iterators/ChunkConfig.h"
 #include "iterators/GetPropertiesIterator.h"
-
-#include "PipelineException.h"
 
 namespace db::v2 {
 
@@ -23,9 +21,9 @@ class PipelineV2;
 template <typename PropertyChunkWriter>
 class GetPropertiesProcessor : public Processor {
 public:
-    PipelineInputPort* inIDs() { return _inIDs; }
-    PipelineOutputPort* outIndices() { return _outIndices; }
-    PipelineOutputPort* outValues() { return _outValues; }
+    PipelineInputInterface& inIDs() { return _inIDs; }
+    PipelineOutputInterface& outIndices() { return _outIndices; }
+    PipelineOutputInterface& outValues() { return _outValues; }
 
     static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType) {
         auto* getProps = new GetPropertiesProcessor<PropertyChunkWriter>(propType);
@@ -34,9 +32,9 @@ public:
         PipelineOutputPort* outIndices = PipelineOutputPort::create(pipeline, getProps);
         PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
 
-        getProps->_inIDs = inIDs;
-        getProps->_outIndices = outIndices;
-        getProps->_outValues = outValues;
+        getProps->_inIDs.setPort(inIDs);
+        getProps->_outIndices.setPort(outIndices);
+        getProps->_outValues.setPort(outValues);
 
         getProps->addInput(inIDs);
         getProps->addOutput(outIndices);
@@ -47,16 +45,11 @@ public:
     }
 
     void prepare(ExecutionContext* ctxt) override {
-        PipelineBuffer* idsBuffer = _inIDs->getBuffer();
-        if (!idsBuffer) {
-            throw PipelineException("GetPropertiesProcessor: Input IDs port not connected");
-        }
-
-        ColumnNodeIDs* ids = dynamic_cast<ColumnNodeIDs*>(idsBuffer->getBlock()[0]);
+        ColumnNodeIDs* ids = dynamic_cast<ColumnNodeIDs*>(_inIDs.getRawColumn());
         _propWriter = std::make_unique<PropertyChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-        ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices->getBuffer()->getBlock()[0]);
-        auto* values = dynamic_cast<PropertyChunkWriter::ColumnValues*>(_outValues->getBuffer()->getBlock()[0]);
+        ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices.getRawColumn());
+        auto* values = dynamic_cast<PropertyChunkWriter::ColumnValues*>(_outValues.getRawColumn());
 
         _propWriter->setIndices(indices);
         _propWriter->setOutput(values);
@@ -69,10 +62,10 @@ public:
     }
 
     void execute() override {
-        _inIDs->consume();
+        _inIDs.getPort()->consume();
         _propWriter->fill(ChunkConfig::CHUNK_SIZE);
-        _outIndices->writeData();
-        _outValues->writeData();
+        _outIndices.getPort()->writeData();
+        _outValues.getPort()->writeData();
 
         if (!_propWriter->isValid()) {
             finish();
@@ -82,9 +75,9 @@ public:
 protected:
     PropertyType _propType;
     std::unique_ptr<PropertyChunkWriter> _propWriter;
-    PipelineInputPort* _inIDs {nullptr};
-    PipelineOutputPort* _outIndices {nullptr};
-    PipelineOutputPort* _outValues {nullptr};
+    PipelineInputInterface _inIDs;
+    PipelineOutputInterface _outIndices;
+    PipelineOutputInterface _outValues;
 
     GetPropertiesProcessor(PropertyType propType)
         : _propType(propType)

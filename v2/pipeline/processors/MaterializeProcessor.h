@@ -2,6 +2,8 @@
 
 #include "Processor.h"
 
+#include "PipelineInterface.h"
+
 #include "processors/MaterializeData.h"
 #include "columns/ColumnVector.h"
 
@@ -10,8 +12,6 @@ class LocalMemory;
 }
 
 namespace db::v2 {
-
-class PipelinePort;
 
 class MaterializeProcessor : public Processor {
 public:
@@ -23,12 +23,12 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineInputPort* input() const { return _input; }
-    PipelineOutputPort* output() const { return _output; }
+    PipelineInputInterface& input() { return _input; }
+    PipelineOutputInterface& output() { return _output; }
 
 private:
-    PipelineInputPort* _input {nullptr};
-    PipelineOutputPort* _output {nullptr};
+    PipelineInputInterface _input;
+    PipelineOutputInterface _output;
     MaterializeData _matData;
     ColumnVector<size_t> _transform;
 
