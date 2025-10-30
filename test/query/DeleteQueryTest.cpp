@@ -984,3 +984,39 @@ TEST_F(DeleteQueryTest, multipleCommitsThenRebase) {
         .expectVector<EdgeID>({1, /*2*/})
         .execute();
 }
+
+TEST_F(DeleteQueryTest, deleteAllNodes) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    newChange(tester);
+    tester.query("delete nodes 0,1,2,3,4,5,6,7,8,9,10,11,12")
+        .execute();
+    submitChange(tester);
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({})
+        .execute();
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({})
+        .expectVector<EdgeID>({})
+        .expectVector<NodeID>({})
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, deleteAllEdges) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    newChange(tester);
+    tester.query("delete edges 0,1,2,3,4,5,6,7,8,9,10,11,12")
+        .execute();
+    submitChange(tester);
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
+        .execute();
+    tester.query("match (n)-[e]-(m) return n,e,m")
+        .expectVector<NodeID>({})
+        .expectVector<EdgeID>({})
+        .expectVector<NodeID>({})
+        .execute();
+}
