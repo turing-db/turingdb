@@ -85,11 +85,11 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
     MaterializeProcessor* materialize = new MaterializeProcessor(mem);
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, materialize);
-    materialize->_input = input;
+    materialize->_input.setPort(input);
     materialize->addInput(input);
 
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, materialize);
-    materialize->_output = output;
+    materialize->_output.setPort(output);
     materialize->addOutput(output);
 
     materialize->_matData.setOutput(&output->getBuffer()->getBlock());
@@ -107,11 +107,11 @@ void MaterializeProcessor::reset() {
 }
 
 void MaterializeProcessor::execute() {
-    _input->consume();
-    _output->writeData();
+    _input.getPort()->consume();
+    _output.getPort()->writeData();
     finish();
 
-    Block& output = _output->getBuffer()->getBlock();
+    Block& output = _output.getPort()->getBuffer()->getBlock();
     const MaterializeData::Indices& indices = _matData.getIndices();
     const MaterializeData::ColumnsPerStep& columnsPerStep = _matData.getColumnsPerStep();
     const size_t colCount = _matData.getColumnCount();

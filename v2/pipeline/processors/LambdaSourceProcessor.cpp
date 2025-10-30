@@ -12,19 +12,19 @@ LambdaSourceProcessor::~LambdaSourceProcessor() {
 
 void LambdaSourceProcessor::prepare(ExecutionContext* ctxt) {
     bool isFinished = false;
-    _callback(_output->getBuffer()->getBlock(), isFinished, Operation::PREPARE);
+    _callback(_output.getPort()->getBuffer()->getBlock(), isFinished, Operation::PREPARE);
     markAsPrepared();
 }
 
 void LambdaSourceProcessor::reset() {
     bool isFinished = false;
-    _callback(_output->getBuffer()->getBlock(), isFinished, Operation::RESET);
+    _callback(_output.getPort()->getBuffer()->getBlock(), isFinished, Operation::RESET);
     markAsReset();
 }
 
 void LambdaSourceProcessor::execute() {
     bool isFinished = false;
-    _callback(_output->getBuffer()->getBlock(), isFinished, Operation::EXECUTE);
+    _callback(_output.getPort()->getBuffer()->getBlock(), isFinished, Operation::EXECUTE);
 
     if (isFinished) {
         finish();
@@ -35,7 +35,7 @@ LambdaSourceProcessor* LambdaSourceProcessor::create(PipelineV2* pipeline, Callb
     LambdaSourceProcessor* lambda = new LambdaSourceProcessor(callback);
 
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, lambda);
-    lambda->_output = output;
+    lambda->_output.setPort(output);
     lambda->addOutput(output);
 
     lambda->postCreate(pipeline);

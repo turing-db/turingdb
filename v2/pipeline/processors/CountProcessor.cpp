@@ -1,7 +1,5 @@
 #include "CountProcessor.h"
 
-#include "PipelinePort.h"
-
 #include "PipelineException.h"
 
 using namespace db::v2;
@@ -17,11 +15,11 @@ CountProcessor* CountProcessor::create(PipelineV2* pipeline) {
     CountProcessor* count = new CountProcessor();
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, count);
-    count->_input = input;
+    count->_input.setPort(input);
     count->addInput(input);
     
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, count);
-    count->_output = output;
+    count->_output.setPort(output);
     count->addOutput(output);
 
     count->postCreate(pipeline);
@@ -30,12 +28,13 @@ CountProcessor* CountProcessor::create(PipelineV2* pipeline) {
 }
 
 void CountProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnConst<size_t>* countColumn = dynamic_cast<ColumnConst<size_t>*>(_output->getBuffer()->getBlock().columns().front());
+    ColumnConst<size_t>* countColumn = dynamic_cast<ColumnConst<size_t>*>(_output.getRawColumn());
     if (!countColumn) {
        throw PipelineException("CountProcessor::prepare: count column is not a ColumnConst<size_t>");
     }
 
     _countColumn = countColumn;
+
     markAsPrepared();
 }
 
@@ -45,16 +44,17 @@ void CountProcessor::reset() {
 }
 
 void CountProcessor::execute() {
-    _input->consume();
+    PipelineInputPort* inputPort = _input.getPort();
+    inputPort->consume();
 
-    const Block& inputBlock = _input->getBuffer()->getBlock();
+    const Block& inputBlock = inputPort->getBuffer()->getBlock();
     const size_t blockRowCount = inputBlock.getBlockRowCount();
     _countRunning += blockRowCount;
 
     // Write the count value only if the input is finished
-    if (_input->isClosed()) {
+    if (inputPort->isClosed()) {
         _countColumn->set(_countRunning);
-        _output->writeData();
+        _output.getPort()->writeData();
         finish();
     }
 }

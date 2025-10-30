@@ -4,13 +4,13 @@
 
 #include "Processor.h"
 
+#include "PipelineInterface.h"
+
 namespace db {
 class GetOutEdgesChunkWriter;
 }
 
 namespace db::v2 {
-
-class PipelinePort;
 
 class GetOutEdgesProcessor : public Processor {
 public:
@@ -20,18 +20,18 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineInputPort* inNodeIDs() const { return _inNodeIDs; }
-    PipelineOutputPort* outIndices() const { return _outIndices; }
-    PipelineOutputPort* outEdgeIDs() const { return _outEdgeIDs; }
-    PipelineOutputPort* outTargetNodes() const { return _outTargetNodes; }
-    PipelineOutputPort* outEdgeTypes() const { return _outEdgeTypes; }
+    PipelineInputInterface& inNodeIDs() { return _inNodeIDs; }
+    PipelineOutputInterface& outIndices() { return _outIndices; }
+    PipelineOutputInterface& outEdgeIDs() { return _outEdgeIDs; }
+    PipelineOutputInterface& outTargetNodes() { return _outTargetNodes; }
+    PipelineOutputInterface& outEdgeTypes() { return _outEdgeTypes; }
 
 private:
-    PipelineInputPort* _inNodeIDs {nullptr};
-    PipelineOutputPort* _outIndices {nullptr};
-    PipelineOutputPort* _outEdgeIDs {nullptr};
-    PipelineOutputPort* _outTargetNodes {nullptr};
-    PipelineOutputPort* _outEdgeTypes {nullptr};
+    PipelineInputInterface _inNodeIDs;
+    PipelineOutputInterface _outIndices;
+    PipelineOutputInterface _outEdgeIDs;
+    PipelineOutputInterface _outTargetNodes;
+    PipelineOutputInterface _outEdgeTypes;
     std::unique_ptr<GetOutEdgesChunkWriter> _it;
 
     GetOutEdgesProcessor();
