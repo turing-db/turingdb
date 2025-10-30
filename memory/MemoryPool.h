@@ -10,6 +10,8 @@ struct MemoryBlock;
 template <typename ObjectT>
 class MemoryPool {
 public:
+    using MemoryBlockT = MemoryBlock<ObjectT>;
+
     MemoryPool()
         : _first(new MemoryBlock<ObjectT>()),
         _last(_first),
@@ -23,9 +25,9 @@ public:
     MemoryPool& operator=(MemoryPool&&) = delete;
 
     ~MemoryPool() {
-        auto* block = _first;
+        MemoryBlockT* block = _first;
         while (block) {
-            auto* nextBlock = block->_next;
+            MemoryBlockT* nextBlock = block->_next;
             delete block;
             block = nextBlock;
         }
@@ -33,7 +35,7 @@ public:
 
     void clear() {
         // Invoke std::vector clear on each MemoryBlock one by one
-        auto* block = _first;
+        MemoryBlockT* block = _first;
         while (block) {
             block->_objects.clear();
             block = block->_next;
@@ -55,12 +57,12 @@ public:
     }
 
 private:
-    MemoryBlock<ObjectT>* _first {nullptr};
-    MemoryBlock<ObjectT>* _last {nullptr};
-    MemoryBlock<ObjectT>* _current {nullptr};
+    MemoryBlockT* _first {nullptr};
+    MemoryBlockT* _last {nullptr};
+    MemoryBlockT* _current {nullptr};
 
     void allocBlock() {
-        MemoryBlock<ObjectT>* newBlock = new MemoryBlock<ObjectT>();
+        MemoryBlockT* newBlock = new MemoryBlock<ObjectT>();
         _last->_next = newBlock;
         _last = newBlock;
     }
@@ -68,6 +70,7 @@ private:
 
 template <typename ObjectT>
 struct MemoryBlock {
+    // Each block is 8MB in capacity
     static constexpr size_t MEMORY_BLOCK_BYTE_CAPACITY = 8*1024*1024;
     static constexpr size_t MEMORY_BLOCK_CAPACITY = MEMORY_BLOCK_BYTE_CAPACITY/sizeof(ObjectT);
     static_assert(sizeof(ObjectT) <= MEMORY_BLOCK_BYTE_CAPACITY);

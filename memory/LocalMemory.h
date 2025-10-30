@@ -65,6 +65,13 @@ public:
         MakeMemoryPool<ColumnSet<EdgeID>>::type
         >;
 
+    template <typename KeyT, typename ValueT>
+    struct ClearTransform {
+        void operator()(ValueT& value) const {
+            value.clear();
+        }
+    };
+
     LocalMemory(const LocalMemory&) = delete;
     LocalMemory(LocalMemory&&) = delete;
     LocalMemory& operator=(const LocalMemory&) = delete;
@@ -79,17 +86,7 @@ public:
     }
 
     void clear() {
-        _pools.get<ColumnVector<EntityID>>().clear();
-        _pools.get<ColumnVector<NodeID>>().clear();
-        _pools.get<ColumnVector<EdgeID>>().clear();
-        _pools.get<ColumnVector<PropertyType>>().clear();
-        _pools.get<ColumnVector<size_t>>().clear();
-        _pools.get<ColumnConst<EdgeTypeID>>().clear();
-        _pools.get<ColumnConst<size_t>>().clear();
-        _pools.get<ColumnVector<std::string>>().clear();
-        _pools.get<ColumnVector<std::string_view>>().clear();
-        _pools.get<ColumnVector<const CommitBuilder*>>().clear();
-        _pools.get<ColumnVector<const Change*>>().clear();
+        _pools.transform<ClearTransform>();
     }
 
 private:

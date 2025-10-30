@@ -49,64 +49,84 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
 
     switch ((Endpoint)httpInfo._endpoint) {
         case Endpoint::QUERY: {
-            return query();
+             query();
         }
+        break;
         case Endpoint::LOAD_GRAPH: {
-            return load_graph();
+             load_graph();
         }
+        break;
         case Endpoint::GET_GRAPH_STATUS: {
-            return get_graph_status();
+             get_graph_status();
         }
+        break;
         case Endpoint::IS_GRAPH_LOADED: {
-            return is_graph_loaded();
+             is_graph_loaded();
         }
+        break;
         case Endpoint::IS_GRAPH_LOADING: {
-            return is_graph_loading();
+             is_graph_loading();
         }
+        break;
         case Endpoint::LIST_LOADED_GRAPHS: {
-            return list_loaded_graphs();
+             list_loaded_graphs();
         }
+        break;
         case Endpoint::LIST_AVAIL_GRAPHS: {
-            return list_avail_graphs();
+             list_avail_graphs();
         }
+        break;
         case Endpoint::LIST_LABELS: {
-            return list_labels();
+             list_labels();
         }
+        break;
         case Endpoint::LIST_PROPERTY_TYPES: {
-            return list_property_types();
+             list_property_types();
         }
+        break;
         case Endpoint::LIST_EDGE_TYPES: {
-            return list_edge_types();
+             list_edge_types();
         }
+        break;
         case Endpoint::LIST_NODES: {
-            return list_nodes();
+             list_nodes();
         }
+        break;
         case Endpoint::GET_NODE_PROPERTIES: {
-            return get_node_properties();
+             get_node_properties();
         }
+        break;
         case Endpoint::GET_NEIGHBORS: {
-            return get_neighbors();
+             get_neighbors();
         }
+        break;
         case Endpoint::GET_NODES: {
-            return get_nodes();
+             get_nodes();
         }
+        break;
         case Endpoint::GET_NODE_EDGES: {
-            return get_node_edges();
+             get_node_edges();
         }
+        break;
         case Endpoint::GET_EDGES: {
-            return get_edges();
+             get_edges();
         }
+        break;
         case Endpoint::EXPLORE_NODE_EDGES: {
-            return explore_node_edges();
+             explore_node_edges();
         }
+        break;
         case Endpoint::HISTORY: {
-            return history();
+             history();
         }
+        break;
         default: {
             _writer.writeHttpError(net::HTTP::Status::NOT_FOUND);
-            return;
         }
+        break;
     }
+
+    _threadContext->getLocalMemory().clear();
 }
 
 const Graph* DBServerProcessor::getRequestedGraph() const {
