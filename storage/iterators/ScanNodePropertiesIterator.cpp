@@ -2,7 +2,6 @@
 
 #include "DataPart.h"
 #include "IteratorUtils.h"
-#include "iterators/TombstoneFilter.h"
 #include "properties/PropertyManager.h"
 #include "BioAssert.h"
 
@@ -81,11 +80,10 @@ void ScanNodePropertiesIterator<T>::newPropertySpan() {
 }
 
 template <SupportedType T>
-ScanNodePropertiesChunkWriter<T>::ScanNodePropertiesChunkWriter() = default;
-
-template <SupportedType T>
 ScanNodePropertiesChunkWriter<T>::ScanNodePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID)
-    : ScanNodePropertiesIterator<T>(view, propTypeID) {
+    : ScanNodePropertiesIterator<T>(view, propTypeID),
+    _filter(view.tombstones())
+{
 }
 
 template <SupportedType T>
@@ -93,15 +91,16 @@ void ScanNodePropertiesChunkWriter<T>::filterTombstones() {
     // Base column of this ChunkWriter is _nodeIDs
     bioassert(_nodeIDs);
 
-    TombstoneFilter filter(this->_view.tombstones());
-    filter.populateRanges(_nodeIDs);
+    _filter.populateRanges(_nodeIDs);
 
-    filter.filter(_nodeIDs);
+    _filter.filter(_nodeIDs);
 
     if (_properties) {
-        filter.filter(_properties);
+        _filter.filter(_properties);
         bioassert(_properties->size() == _nodeIDs->size());
     }
+
+    _filter.reset();
 }
 
 static constexpr size_t NColumns = 2;
