@@ -1830,3 +1830,41 @@ TEST_F(QueryTest, historyCorrectParts) {
 
     validateHistory();
 }
+
+TEST_F(QueryTest, commitWriteBufferBadPendingNode) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    // Try to create a node, but fail, parser exception
+    tester.query("create (n)").expectError().execute();
+
+    // Try to create a node, and succeed
+    tester.query("create (n:Person)").expectError().execute();
+
+    tester.query("change submit")
+        .execute();
+    tester.setChangeID(ChangeID::head());
+
+    // Ensure we only created one node
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0})
+        .execute();
+}
+
+TEST_F(QueryTest, commitWriteBufferBadPendingEdge) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    // Try to create an edge, but fail, parser exception
+    tester.query("create (n)-[e]-(m)").expectError().execute();
+
+    // Try to create an edge, and succeed
+    tester.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)").expectError().execute();
+
+    tester.query("change submit")
+        .execute();
+    tester.setChangeID(ChangeID::head());
+
+    // Ensure we only created one node
+    tester.query("match (n)-[e]-(m) return m")
+        .expectVector<EdgeID>({0})
+        .execute();
+}
