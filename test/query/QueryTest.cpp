@@ -1834,11 +1834,26 @@ TEST_F(QueryTest, historyCorrectParts) {
 TEST_F(QueryTest, commitWriteBufferBadPendingNode) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
+    const auto newChange = [&]() {
+        auto res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    newChange();
+
     // Try to create a node, but fail, parser exception
-    tester.query("create (n)").expectError().execute();
+    tester.query("create (n)")
+        .expectError()
+        .execute();
 
     // Try to create a node, and succeed
-    tester.query("create (n:Person)").expectError().execute();
+    tester.query("create (n:Person)")
+        .execute();
 
     tester.query("change submit")
         .execute();
@@ -1853,18 +1868,33 @@ TEST_F(QueryTest, commitWriteBufferBadPendingNode) {
 TEST_F(QueryTest, commitWriteBufferBadPendingEdge) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
+    const auto newChange = [&]() {
+        auto res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+
+    newChange();
+
     // Try to create an edge, but fail, parser exception
-    tester.query("create (n)-[e]-(m)").expectError().execute();
+    tester.query("create (n)-[e]-(m)")
+        .expectError()
+        .execute();
 
     // Try to create an edge, and succeed
-    tester.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)").expectError().execute();
+    tester.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)")
+        .execute();
 
     tester.query("change submit")
         .execute();
     tester.setChangeID(ChangeID::head());
 
     // Ensure we only created one node
-    tester.query("match (n)-[e]-(m) return m")
+    tester.query("match (n)-[e]-(m) return e")
         .expectVector<EdgeID>({0})
         .execute();
 }
