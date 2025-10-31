@@ -61,5 +61,6 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
 
         _nonDeletedRanges->emplace_back(start, size);
     }
+    _initialised = true;
 }
 
