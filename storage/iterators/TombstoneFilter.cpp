@@ -7,6 +7,7 @@
 #include "columns/ColumnVector.h"
 #include "ID.h"
 
+#include "FatalException.h"
 #include "BioAssert.h"
 
 using namespace db;
@@ -26,7 +27,11 @@ TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
 template <TypedInternalID IDT>
 void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
     bioassert(baseCol);
-    // TODO: Throw FatalException if !baseCol
+
+    if (!baseCol) [[unlikely]] {
+        throw FatalException(
+            "Planner failed to provide necessary column to ChunkWriter for filtering.");
+    }
 
     // We use pointer indirection to avoid heap allocating a vector in each chunk writer
     // if the filter is never needed. On first invocation of this function, create the
