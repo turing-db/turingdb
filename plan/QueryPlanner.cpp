@@ -981,7 +981,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
         }
     }
     // ... or if we have tombstones and need to filter chunk writer outputs
-    if (!edges && (_view.tombstones().hasEdges() || _view.tombstones().hasNodes())) {
+    if (!edges && _view.tombstones().hasEdges()) {
         edges = _mem->alloc<ColumnEdgeIDs>();
         edgeWriteInfo._edges = edges;
     }

@@ -87,19 +87,17 @@ void ScanInEdgesByLabelChunkWriter::filterTombstones() {
     TombstoneFilter filter(_view.tombstones());
     filter.populateRanges(_edgeIDs);
 
-    size_t newSize = _edgeIDs->size();
-
     if (_srcs) {
         filter.filter(_srcs);
-        bioassert(_srcs->size() == newSize);
+        bioassert(_srcs->size() == _edgeIDs->size());
     }
     if (_tgts) {
         filter.filter(_tgts);
-        bioassert(_tgts->size() == newSize);
+        bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
         filter.filter(_types);
-        bioassert(_types->size() == newSize);
+        bioassert(_types->size() == _edgeIDs->size());
     }
 }
 
