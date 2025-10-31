@@ -374,12 +374,10 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
 
 void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
     bioassert(entity);
-
-    const std::string& varName = entity->getVar() ? entity->getVar()->getName() : "";
-
     if (!entity->getTypeConstraint()) [[unlikely]] {
         std::string error =
             "A label/type constraint is required for all entities in CREATE queries.";
+        const std::string& varName = entity->getVar() ? entity->getVar()->getName() : "";
         if (varName != "") {
             error += fmt::format(" Variable {} was not provided a label/type constraint.", varName);
         }
@@ -393,27 +391,31 @@ void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
         case DeclKind::NODE_DECL: {
             if (typeConstraints.empty()) [[unlikely]]{
                 std::string error = "Nodes require at least one label.";
+                const std::string& varName =
+                    entity->getVar() ? entity->getVar()->getName() : "";
                 if (varName != "") {
                     error += fmt::format(" Node {} was not provided any label constraints.", varName);
                 }
                 throw AnalyzeException(std::move(error));
             }
-        break;
         }
+        break;
         case DeclKind::EDGE_DECL: {
             if (typeConstraints.size() != 1) [[unlikely]] {
                 std::string error = "Edges require at exactly one type.";
+                const std::string& varName =
+                    entity->getVar() ? entity->getVar()->getName() : "";
                 if (varName != "") {
                     error += fmt::format(" Edge {} was not provided a single type.", varName);
                 }
                 throw AnalyzeException(std::move(error));
             }
-        break;
         }
+        break;
         default: {
             throw AnalyzeException("Unknown entity type with invalid type constraints.");
-        break;
         }
+        break;
     }
 }
 

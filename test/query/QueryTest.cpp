@@ -1917,7 +1917,6 @@ TEST_F(QueryTest, analyzerTypeConstraintCheck) {
         tester.setChangeID(ChangeID::head());
     };
 
-
     newChange();
 
     std::string expectedError =
