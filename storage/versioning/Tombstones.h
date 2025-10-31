@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ranges>
-#include <type_traits>
 
 #include "ID.h"
 #include "versioning/TombstoneSet.h"

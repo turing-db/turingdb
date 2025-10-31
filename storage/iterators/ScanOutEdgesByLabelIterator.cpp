@@ -214,7 +214,7 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
         CASE(15);
     }
 
-    if (_view.tombstones().hasNodes() || _view.tombstones().hasEdges()) {
+    if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
 }

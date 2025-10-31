@@ -184,7 +184,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
         CASE(15);
     }
 
-    if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
+    if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
 }

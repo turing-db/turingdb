@@ -51,8 +51,6 @@ void Step::execute() {
     try {
         StringIndexUtils::getMatches<NodeID>(_nodes->getRaw(), _view, _pId, _strQuery);
         if (_view.tombstones().hasNodes()) {
-            bioassert(_nodes);
-
             TombstoneFilter filter(_view.tombstones());
             filter.populateRanges(_nodes);
             filter.filter(_nodes);

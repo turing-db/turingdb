@@ -80,6 +80,10 @@ void TombstoneFilter::filter(ColumnVector<T>* col) {
     bioassert(_initialised);
     bioassert(_nonDeletedRanges);
 
+    if (!col) [[unlikely]] {
+        return;
+    }
+
     // No non-deleted entries => all deleted => clear
     if (_nonDeletedRanges->empty()) {
         col->clear();

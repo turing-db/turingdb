@@ -1478,7 +1478,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
 
-    const bool needFilter = _view.tombstones().hasEdges() || _view.tombstones().hasNodes();
+    const bool needFilter = _view.tombstones().hasEdges();
     const bool mustWriteEdges = (edgeDecl && edgeDecl->isUsed()) || needFilter;
 
     if (mustWriteEdges || edgeExprConstr) {
