@@ -103,7 +103,8 @@ void GetInEdgesIterator::nextValid() {
 
 GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
                                              const ColumnNodeIDs* inputNodeIDs)
-    : GetInEdgesIterator(view, inputNodeIDs)
+    : GetInEdgesIterator(view, inputNodeIDs),
+    _filter(view.tombstones())
 {
 }
 
@@ -111,22 +112,23 @@ void GetInEdgesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
 
-    TombstoneFilter filter(_view.tombstones());
-    filter.populateRanges(_edgeIDs);
+    _filter.populateRanges(_edgeIDs);
 
-    filter.filter(_indices);
-    filter.filter(_edgeIDs);
+    _filter.filter(_indices);
+    _filter.filter(_edgeIDs);
 
     bioassert(_indices->size() == _edgeIDs->size());
 
     if (_tgts) {
-        filter.filter(_tgts);
+        _filter.filter(_tgts);
         bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
-        filter.filter(_types);
+        _filter.filter(_types);
         bioassert(_types->size() == _edgeIDs->size());
     }
+
+    _filter.reset();
 }
 
 static constexpr size_t NColumns = 3;
