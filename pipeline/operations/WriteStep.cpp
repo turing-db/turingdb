@@ -169,7 +169,7 @@ void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
     // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
 
-    EdgeTypeID pendingEdgeType {std::numeric_limits<EdgeTypeID>::max()};
+    EdgeTypeID pendingEdgeType;
 
     if (patternType != nullptr) {
         pendingEdgeType = _metadataBuilder->getOrCreateEdgeType(
