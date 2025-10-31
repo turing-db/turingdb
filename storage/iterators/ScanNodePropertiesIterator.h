@@ -4,6 +4,7 @@
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "columns/ColumnIDs.h"
 #include "metadata/PropertyType.h"
 
@@ -68,7 +69,7 @@ public:
     using Type = T;
     using Primitive = T::Primitive;
 
-    ScanNodePropertiesChunkWriter();
+    ScanNodePropertiesChunkWriter() = delete;
     ScanNodePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID);
 
     void fill(size_t maxCount);
@@ -84,6 +85,8 @@ public:
 private:
     ColumnVector<Primitive>* _properties {nullptr};
     ColumnNodeIDs* _nodeIDs {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };
