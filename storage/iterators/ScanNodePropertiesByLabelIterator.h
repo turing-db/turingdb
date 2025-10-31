@@ -3,10 +3,11 @@
 #include "Iterator.h"
 
 #include "ChunkWriter.h"
-#include "columns/ColumnIDs.h"
-#include "iterators/PartIterator.h"
+#include "PartIterator.h"
+#include "TombstoneFilter.h"
 #include "properties/PropertyManager.h"
 #include "metadata/PropertyType.h"
+#include "columns/ColumnIDs.h"
 
 namespace db {
 
@@ -67,7 +68,7 @@ public:
     using Type = T;
     using Primitive = T::Primitive;
 
-    ScanNodePropertiesByLabelChunkWriter();
+    ScanNodePropertiesByLabelChunkWriter() = delete;
     ScanNodePropertiesByLabelChunkWriter(const GraphView& view,
                                          PropertyTypeID propTypeID,
                                          const LabelSetHandle& labelset);
@@ -84,6 +85,8 @@ public:
 private:
     ColumnVector<Primitive>* _properties {nullptr};
     ColumnNodeIDs* _nodeIDs {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };
