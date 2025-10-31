@@ -284,7 +284,7 @@ TEST_F(DeleteQueryTest, deleteTombstonedEdge) {
         .expectError() // already deleted: reject
         .execute();
     tester.query("delete edges 8")
-        .execute(); // 9 still exists :accept
+        .execute(); // 9 still exists: accept
     submitChange(tester);
 }
 
@@ -307,35 +307,45 @@ TEST_F(DeleteQueryTest, idempotentInCommit) {
 
     submitChange(tester);
 
-    tester.query("deleted edges 7")
+    newChange(tester);
+
+    tester.query("delete edges 7")
+        .expectError()
+        .expectErrorMessage("Graph does not contain edge with ID: 7.")
+        .execute();
+
+    tester.query("delete edges 7,7,7,7")
+        .expectError()
+        .expectErrorMessage("Graph does not contain edge with ID: 7.")
+        .execute();
+
+    tester.query("delete edges 5")
+        .expectError()
+        .expectErrorMessage("Graph does not contain edge with ID: 5.")
+        .execute();
+
+    tester.query("delete edges 5,5,5,5")
+        .expectErrorMessage("Graph does not contain edge with ID: 5.")
         .expectError()
         .execute();
 
-    tester.query("deleted edges 7,7,7,7")
+    tester.query("delete nodes 3")
         .expectError()
+        .expectErrorMessage("Graph does not contain node with ID: 3.")
         .execute();
 
-    tester.query("deleted edges 5")
+    tester.query("delete nodes 3,3,3,3")
         .expectError()
+        .expectErrorMessage("Graph does not contain node with ID: 3.")
         .execute();
 
-    tester.query("deleted edges 5,5,5,5")
+    tester.query("delete nodes 4")
         .expectError()
+        .expectErrorMessage("Graph does not contain node with ID: 4.")
         .execute();
 
-    tester.query("deleted nodes 3")
-        .expectError()
-        .execute();
-
-    tester.query("deleted nodes 3,3,3,3")
-        .expectError()
-        .execute();
-
-    tester.query("deleted nodes 4")
-        .expectError()
-        .execute();
-
-    tester.query("deleted nodes 4,4,4,4")
+    tester.query("delete nodes 4,4,4,4")
+        .expectErrorMessage("Graph does not contain node with ID: 4.")
         .expectError()
         .execute();
 }
