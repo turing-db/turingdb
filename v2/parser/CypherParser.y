@@ -28,6 +28,7 @@
     #include "stmt/StmtContainer.h"
     #include "stmt/ReturnStmt.h"
     #include "stmt/MatchStmt.h"
+    #include "stmt/CallStmt.h"
     #include "stmt/CreateStmt.h"
     #include "stmt/SetStmt.h"
     #include "stmt/DeleteStmt.h"
@@ -37,6 +38,8 @@
     #include "SymbolChain.h"
     #include "FunctionInvocation.h"
     #include "WhereClause.h"
+    #include "YieldClause.h"
+    #include "YieldItems.h"
     #include "Pattern.h"
     #include "NodePattern.h"
     #include "EdgePattern.h"
@@ -203,6 +206,7 @@
 %type<db::v2::SymbolChain*> opt_edgeTypes
 
 %type<db::v2::ExprChain*> exprChain
+%type<db::v2::ExprChain*> parenExprChain
 %type<db::v2::Expr*> expr
 %type<db::v2::Expr*> xorExpr
 %type<db::v2::Expr*> andExpr
@@ -239,7 +243,12 @@
 %type<db::v2::EdgePattern*> edgePattern
 %type<db::v2::EdgePattern*> edgeDetail
 %type<std::pair<db::v2::EdgePattern*, db::v2::NodePattern*>> patternElemChain
-%type<db::v2::WhereClause*> where
+%type<db::v2::WhereClause*> whereClause
+%type<db::v2::YieldClause*> yieldClause
+%type<db::v2::YieldItems*> yieldItemChain
+%type<db::v2::YieldItems*> yieldItems
+%type<db::v2::Symbol*> yieldItem
+
 
 %type<db::v2::SinglePartQuery*> singlePartQuery
 %type<db::v2::QueryCommand*> singleQuery
@@ -249,6 +258,7 @@
 %type<db::v2::StmtContainer*> readingStatements
 %type<db::v2::StmtContainer*> updatingStatements
 %type<db::v2::MatchStmt*> matchSt
+%type<db::v2::CallStmt*> callSt
 %type<db::v2::CreateStmt*> createSt
 %type<db::v2::SetStmt*> setSt
 %type<db::v2::SetItem*> setItem
@@ -301,7 +311,7 @@ returnSt
     ;
 
 withSt
-    : WITH projectionBody where { scanner.notImplemented(@$, "WITH ... WHERE"); }
+    : WITH projectionBody whereClause { scanner.notImplemented(@$, "WITH ... WHERE"); }
     | WITH projectionBody { scanner.notImplemented(@$, "WITH"); }
     ;
 
@@ -423,7 +433,7 @@ unwindSt
 readingStatement
     : matchSt { $$ = $1; }
     | unwindSt { scanner.notImplemented(@$, "UNWIND"); }
-    | queryCallSt { scanner.notImplemented(@$, "CALL"); }
+    | callSt { $$ = $1; }
     ;
 
 updatingStatement
@@ -453,11 +463,43 @@ removeItem
     | propertyExpr { scanner.notImplemented(@$, "REMOVE"); }
     ;
 
-queryCallSt
-    : CALL invocationName parenExprChain { scanner.notImplemented(@$, "CALL name(...)"); }
-    | CALL invocationName parenExprChain yieldClause { scanner.notImplemented(@$, "CALL name(...) YIELD ..."); }
-    | OPTIONAL CALL invocationName parenExprChain { scanner.notImplemented(@$, "OPTIONAL CALL name(...)"); }
-    | OPTIONAL CALL invocationName parenExprChain yieldClause { scanner.notImplemented(@$, "OPTIONAL CALL name(...) YIELD ..."); }
+callSt
+    : CALL invocationName parenExprChain {
+        $$ = CallStmt::create(ast);
+        auto* func = FunctionInvocation::create(ast, $2);
+        func->setArguments($3);
+        auto* expr = FunctionInvocationExpr::create(ast, func);
+        $$->setFunc(expr);
+        LOC($$, @$);
+    }
+    | CALL invocationName parenExprChain yieldClause {
+        $$ = CallStmt::create(ast);
+        auto* func = FunctionInvocation::create(ast, $2);
+        func->setArguments($3);
+        auto* expr = FunctionInvocationExpr::create(ast, func);
+        $$->setFunc(expr);
+        $$->setYield($4);
+        LOC($$, @$);
+    }
+    | OPTIONAL CALL invocationName parenExprChain {
+        $$ = CallStmt::create(ast);
+        auto* func = FunctionInvocation::create(ast, $3);
+        func->setArguments($4);
+        auto* expr = FunctionInvocationExpr::create(ast, func);
+        $$->setFunc(expr);
+        $$->setOptional(true);
+        LOC($$, @$);
+    }
+    | OPTIONAL CALL invocationName parenExprChain yieldClause {
+        $$ = CallStmt::create(ast);
+        auto* func = FunctionInvocation::create(ast, $3);
+        func->setArguments($4);
+        auto* expr = FunctionInvocationExpr::create(ast, func);
+        $$->setFunc(expr);
+        $$->setOptional(true);
+        $$->setYield($5);
+        LOC($$, @$);
+    }
     | CALL OBRACE query CBRACE { scanner.notImplemented(@$, "CALL { subquery }"); }
     | CALL OPAREN CPAREN OBRACE query CBRACE { scanner.notImplemented(@$, "CALL () { subquery }"); }
     | CALL OPAREN callCapture CPAREN OBRACE query CBRACE { scanner.notImplemented(@$, "CALL (..) { subquery }"); }
@@ -476,28 +518,28 @@ exprChain
     ;
 
 yieldClause
-    : YIELD yieldItems
-    | YIELD MULT
+    : YIELD yieldItems { $$ = YieldClause::create(ast); $$->setItems($2); }
+    | YIELD MULT { $$ = YieldClause::create(ast); }
     ;
 
 parenExprChain
-    : OPAREN exprChain CPAREN
-    | OPAREN CPAREN
+    : OPAREN exprChain CPAREN { $$ = $2; }
+    | OPAREN CPAREN { $$ = ExprChain::create(ast); }
     ;
 
 yieldItems
-    : yieldItemChain
-    | yieldItemChain where
+    : yieldItemChain { $$ = $1; }
+    | yieldItemChain whereClause { $$ = $1; $$->setWhere($2); }
     ;
 
 yieldItemChain
-    : yieldItem
-    | yieldItemChain COMMA yieldItem
+    : yieldItem { $$ = YieldItems::create(ast); $$->add($1); }
+    | yieldItemChain COMMA yieldItem { $$ = $1; $$->add($3); }
     ;
 
 yieldItem
-    : symbol
-    | symbol AS symbol
+    : symbol { $$ = $1; }
+    | symbol AS symbol { scanner.notImplemented(@$, "AS"); }
     ;
 
 mergeSt
@@ -539,10 +581,10 @@ createSt
 
 patternWhere
     : pattern { $$ = $1; LOC($$, @$); }
-    | pattern where { $1->setWhere($2); $$ = $1; LOC($$, @$); }
+    | pattern whereClause { $1->setWhere($2); $$ = $1; LOC($$, @$); }
     ;
 
-where
+whereClause
     : WHERE expr { $$ = WhereClause::create(ast, $2); LOC($$, @$); }
     ;
 
@@ -886,8 +928,8 @@ filterKeyword
 //patternComprehension
 //    : OBRACK edgesChainPattern PIPE expr CBRACK
 //    | OBRACK lhs edgesChainPattern PIPE expr CBRACK
-//    | OBRACK edgesChainPattern where PIPE expr CBRACK
-//    | OBRACK lhs edgesChainPattern where PIPE expr CBRACK
+//    | OBRACK edgesChainPattern whereClause PIPE expr CBRACK
+//    | OBRACK lhs edgesChainPattern whereClause PIPE expr CBRACK
 //    ;
 
 //edgesChainPattern
@@ -902,7 +944,7 @@ listComprehension
 
 filterExpr
     : symbol IN expr { scanner.notImplemented(@$, "IN"); }
-    | symbol IN expr where { scanner.notImplemented(@$, "IN"); }
+    | symbol IN expr whereClause { scanner.notImplemented(@$, "IN"); }
     ;
 
 countFunc

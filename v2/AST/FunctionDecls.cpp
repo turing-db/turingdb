@@ -14,10 +14,16 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
 
     // Metadata
     decls->create("db.labels")
+        .setIsDatabaseProcedure(true)
         .setReturnType(EvaluatedType::String);
     decls->create("db.propertyTypes")
+        .setIsDatabaseProcedure(true)
         .setReturnType(EvaluatedType::String);
     decls->create("db.edgeTypes")
+        .setIsDatabaseProcedure(true)
+        .setReturnType(EvaluatedType::String);
+    decls->create("db.history")
+        .setIsDatabaseProcedure(true)
         .setReturnType(EvaluatedType::String);
 
     // Entity patterns

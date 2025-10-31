@@ -14,6 +14,7 @@ class DeclContext;
 class VarDecl;
 class Stmt;
 class MatchStmt;
+class CallStmt;
 class OrderBy;
 class Skip;
 class Limit;
@@ -47,6 +48,7 @@ public:
     // Statements
     void analyze(const Stmt* stmt);
     void analyze(const MatchStmt* matchSt);
+    void analyze(const CallStmt* callSt);
     void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
