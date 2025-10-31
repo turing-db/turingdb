@@ -74,10 +74,9 @@ void ScanNodesIterator::nextValid() {
     }
 }
 
-ScanNodesChunkWriter::ScanNodesChunkWriter() = default;
-
 ScanNodesChunkWriter::ScanNodesChunkWriter(const GraphView& view)
-    : ScanNodesIterator(view)
+    : ScanNodesIterator(view),
+    _filter(view.tombstones())
 {
 }
 
@@ -85,9 +84,9 @@ void ScanNodesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _nodeIDs
     bioassert(_nodeIDs);
 
-    TombstoneFilter filter(_view.tombstones());
-    filter.populateRanges(_nodeIDs);
-    filter.filter(_nodeIDs);
+    _filter.populateRanges(_nodeIDs);
+    _filter.filter(_nodeIDs);
+    _filter.reset();
 }
 
 void ScanNodesChunkWriter::fill(size_t maxCount) {

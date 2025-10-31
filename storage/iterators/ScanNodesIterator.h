@@ -4,6 +4,7 @@
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "ID.h"
 #include "columns/ColumnIDs.h"
 
@@ -40,7 +41,7 @@ protected:
 
 class ScanNodesChunkWriter : public ScanNodesIterator {
 public:
-    ScanNodesChunkWriter();
+    ScanNodesChunkWriter() = delete;
     explicit ScanNodesChunkWriter(const GraphView& view);
 
     void setNodeIDs(ColumnNodeIDs* nodeIDs) { _nodeIDs = nodeIDs; }
@@ -49,6 +50,8 @@ public:
 
 private:
     ColumnNodeIDs* _nodeIDs {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };
