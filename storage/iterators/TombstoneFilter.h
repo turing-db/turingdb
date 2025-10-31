@@ -50,6 +50,7 @@ public:
     void filter(ColumnVector<T>* col);
 
     void reset() {
+        _initialised = false;
         if (_nonDeletedRanges) {
             _nonDeletedRanges->clear();
         }
@@ -68,12 +69,15 @@ private:
 
     // Pointer indirection to vector: only allocate vector if the owning ChunkWriter needs
     // to be filter
-    std::unique_ptr<NonDeletedRanges> _nonDeletedRanges;
+    std::unique_ptr<NonDeletedRanges> _nonDeletedRanges {nullptr};
+
+    bool _initialised {false}; // Tracks whether @ref populateRanges was called
 };
 
 template <typename T>
 void TombstoneFilter::filter(ColumnVector<T>* col) {
     bioassert(col);
+    bioassert(_initialised);
     bioassert(_nonDeletedRanges);
 
     // No non-deleted entries => all deleted => clear
