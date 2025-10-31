@@ -78,7 +78,7 @@ void TombstoneFilter::filter(ColumnVector<T>* col) {
 
     // Keep track of the index we are writing to
     size_t writePtr = 0;
-    for (NonDeletedRange rg : _nonDeletedRanges) {
+    for (const NonDeletedRange& rg : _nonDeletedRanges) {
         // Shift the non-deleted range left, to the current write position
         std::memmove(data + writePtr, data + rg.start, sizeof(T) * rg.size);
         writePtr += rg.size;
