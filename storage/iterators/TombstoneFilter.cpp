@@ -48,7 +48,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
     size_t i = 0;
     while (i < col.size()) { // Scan each element in the base column
         // Skip until we find a non-deleted entry
-        bool deleted =  _tombstones.contains(col[i]);
+        const bool deleted =  _tombstones.contains(col[i]);
         if (deleted) {
             i++;
             continue;
