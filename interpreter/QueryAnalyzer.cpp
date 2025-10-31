@@ -6,8 +6,6 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/algorithm/adjacent_find.hpp>
 
-#include "DeclKind.h"
-#include "TypeConstraint.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "AnalyzeException.h"
@@ -19,6 +17,8 @@
 #include "MatchTarget.h"
 #include "MatchTargets.h"
 #include "PathPattern.h"
+#include "DeclKind.h"
+#include "TypeConstraint.h"
 #include "QueryCommand.h"
 #include "ReturnField.h"
 #include "ASTContext.h"
