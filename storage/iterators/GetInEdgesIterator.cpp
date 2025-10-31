@@ -117,16 +117,15 @@ void GetInEdgesChunkWriter::filterTombstones() {
     filter.filter(_indices);
     filter.filter(_edgeIDs);
 
-    size_t newSize = _edgeIDs->size();
-    bioassert(_indices->size() == newSize);
+    bioassert(_indices->size() == _edgeIDs->size());
 
     if (_tgts) {
         filter.filter(_tgts);
-        bioassert(_tgts->size() == newSize);
+        bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
         filter.filter(_types);
-        bioassert(_types->size() == newSize);
+        bioassert(_types->size() == _edgeIDs->size());
     }
 }
 
@@ -138,7 +137,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
 
-     _indices->clear();
+    _indices->clear();
 
     if (_edgeIDs) {
         _edgeIDs->clear();
@@ -211,7 +210,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
         CASE(7);
     }
 
-    if (_view.tombstones().hasEdges() || _view.tombstones().hasNodes()) {
+    if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
 }

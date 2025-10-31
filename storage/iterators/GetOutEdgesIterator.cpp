@@ -116,18 +116,17 @@ void GetOutEdgesChunkWriter::filterTombstones() {
     filter.populateRanges(_edgeIDs);
 
     filter.filter(_edgeIDs);
-    size_t newSize = _edgeIDs->size();
 
     filter.filter(_indices);
-    bioassert(_indices->size() == newSize);
+    bioassert(_indices->size() == _edgeIDs->size());
 
     if (_tgts) {
         filter.filter(_tgts);
-        bioassert(_tgts->size() == newSize);
+        bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
         filter.filter(_types);
-        bioassert(_types->size() == newSize);
+        bioassert(_types->size() == _edgeIDs->size());
     }
 }
 

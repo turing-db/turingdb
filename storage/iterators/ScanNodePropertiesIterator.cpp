@@ -100,8 +100,7 @@ void ScanNodePropertiesChunkWriter<T>::filterTombstones() {
 
     if (_properties) {
         filter.filter(_properties);
-        size_t newSize = _nodeIDs->size();
-        bioassert(_properties->size() == newSize);
+        bioassert(_properties->size() == _nodeIDs->size());
     }
 }
 
