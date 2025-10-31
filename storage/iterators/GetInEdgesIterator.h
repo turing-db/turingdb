@@ -5,7 +5,7 @@
 #include "Iterator.h"
 #include "ChunkWriter.h"
 #include "PartIterator.h"
-#include "iterators/TombstoneFilter.h"
+#include "TombstoneFilter.h"
 #include "EdgeRecord.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"

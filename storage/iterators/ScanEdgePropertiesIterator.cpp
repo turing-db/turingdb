@@ -77,7 +77,9 @@ EdgeID ScanEdgePropertiesIterator<T>::getCurrentEdgeID() const {
 
 template <SupportedType T>
 ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID)
-    : ScanEdgePropertiesIterator<T>(view, propTypeID) {
+    : ScanEdgePropertiesIterator<T>(view, propTypeID),
+    _filter(view.tombstones())
+{
 }
 
 template <SupportedType T>
@@ -85,15 +87,15 @@ void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
 
-    TombstoneFilter filter(this->_view.tombstones());
-
-    filter.populateRanges(_edgeIDs);
-    filter.filter(_edgeIDs);
+    _filter.populateRanges(_edgeIDs);
+    _filter.filter(_edgeIDs);
 
     if (_properties ) {
-        filter.filter(_properties);
+        _filter.filter(_properties);
         bioassert(_edgeIDs->size() == _properties->size());
     }
+
+    _filter.reset();
 }
 
 static constexpr size_t NColumns = 2;

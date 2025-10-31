@@ -4,6 +4,7 @@
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
@@ -75,6 +76,8 @@ public:
 private:
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnVector<Primitive>* _properties {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };
