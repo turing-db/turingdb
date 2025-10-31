@@ -1,10 +1,13 @@
 #include "TombstoneFilter.h"
 
-#include "BioAssert.h"
+#include <memory>
+#include <cstring>
+
 #include "versioning/Tombstones.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
-#include <cstring>
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -23,9 +26,16 @@ TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
 template <TypedInternalID IDT>
 void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
     bioassert(baseCol);
-    bioassert(_nonDeletedRanges.empty());
 
-    _nonDeletedRanges.clear();
+    // We use pointer indirection to avoid heap allocating a vector in each chunk writer
+    // if the filter is never needed. On first invocation of this function, create the
+    // vector.
+    if (!_nonDeletedRanges) {
+        _nonDeletedRanges = std::make_unique<NonDeletedRanges>();
+    }
+
+    _nonDeletedRanges->clear();
+
     const ColumnVector<IDT>& col = *baseCol;
 
     size_t i = 0;
@@ -47,7 +57,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
             size++;
         }
 
-        _nonDeletedRanges.emplace_back(start, size);
+        _nonDeletedRanges->emplace_back(start, size);
     }
     _initialised = true;
 }

@@ -59,7 +59,11 @@ private:
     };
 
     const Tombstones& _tombstones;
-    NonDeletedRanges _nonDeletedRanges;
+
+    // Pointer indirection to vector: only allocate vector if the owning ChunkWriter needs
+    // to be filter
+    std::unique_ptr<NonDeletedRanges> _nonDeletedRanges {nullptr};
+
     bool _initialised {false}; // Tracks whether @ref populateRanges was called
 };
 
@@ -67,9 +71,10 @@ template <typename T>
 void TombstoneFilter::filter(ColumnVector<T>* col) {
     bioassert(col);
     bioassert(_initialised);
+    bioassert(_nonDeletedRanges);
 
     // No non-deleted entries => all deleted => clear
-    if (_nonDeletedRanges.empty()) {
+    if (_nonDeletedRanges->empty()) {
         col->clear();
         return;
     }
@@ -78,7 +83,7 @@ void TombstoneFilter::filter(ColumnVector<T>* col) {
 
     // Keep track of the index we are writing to
     size_t writePtr = 0;
-    for (const NonDeletedRange& rg : _nonDeletedRanges) {
+    for (const NonDeletedRange& rg : *_nonDeletedRanges) {
         // Shift the non-deleted range left, to the current write position
         std::memmove(data + writePtr, data + rg.start, sizeof(T) * rg.size);
         writePtr += rg.size;
