@@ -3,6 +3,7 @@
 #include "columns/ColumnIDs.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+#include "dataframe/ColumnTagManager.h"
 
 #include "TuringException.h"
 
@@ -24,10 +25,11 @@ TEST_F(DataframeTest, testEmpty) {
 
 TEST_F(DataframeTest, testOneCol) {
     Dataframe df;
+    ColumnTagManager tagManager;
 
     ColumnNodeIDs colNodes1;
 
-    const ColumnHeader aHeader(0);
+    const ColumnHeader aHeader(tagManager.allocTag());
     NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aHeader);
     ASSERT_TRUE(col1 != nullptr);
 
@@ -40,16 +42,17 @@ TEST_F(DataframeTest, testOneCol) {
 
 TEST_F(DataframeTest, testSameTag) {
     Dataframe df;
+    ColumnTagManager tagManager;
 
     ColumnNodeIDs colNodes1;
     ColumnNodeIDs colNodes2;
     ColumnEdgeIDs colEdges1;
 
-    const ColumnHeader aHeader(0);
+    const ColumnHeader aHeader(tagManager.allocTag());
     NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aHeader);
     ASSERT_TRUE(col1 != nullptr);
 
-    const ColumnHeader bHeader(1);
+    const ColumnHeader bHeader(tagManager.allocTag());
     NamedColumn* col2 = NamedColumn::create(&df, &colNodes2, bHeader);
     ASSERT_TRUE(col2 != nullptr);
 
@@ -59,15 +62,17 @@ TEST_F(DataframeTest, testSameTag) {
 }
 
 TEST_F(DataframeTest, anonymous) {
-    const auto v0Header = ColumnHeader((size_t)0);
-    const auto v1Header = ColumnHeader(1);
-    const auto v2Header = ColumnHeader(2);
-    const auto v3Header = ColumnHeader(3);
+    ColumnTagManager tagManager;
 
-    ASSERT_EQ(v0Header.getTag(), 0);
-    ASSERT_EQ(v1Header.getTag(), 1);
-    ASSERT_EQ(v2Header.getTag(), 2);
-    ASSERT_EQ(v3Header.getTag(), 3);
+    const auto v0Header = ColumnHeader(tagManager.allocTag());
+    const auto v1Header = ColumnHeader(tagManager.allocTag());
+    const auto v2Header = ColumnHeader(tagManager.allocTag());
+    const auto v3Header = ColumnHeader(tagManager.allocTag());
+
+    ASSERT_EQ(v0Header.getTag(), ColumnTag(0));
+    ASSERT_EQ(v1Header.getTag(), ColumnTag(1));
+    ASSERT_EQ(v2Header.getTag(), ColumnTag(2));
+    ASSERT_EQ(v3Header.getTag(), ColumnTag(3));
 
     Dataframe df;
 
@@ -96,14 +101,15 @@ TEST_F(DataframeTest, anonymous) {
 
 TEST_F(DataframeTest, testColNames) {
     Dataframe df;
+    ColumnTagManager tagManager;
 
     ColumnNodeIDs col0;
     ColumnNodeIDs col1;
     ColumnNodeIDs col2;
 
-    auto colA = NamedColumn::create(&df, &col0, ColumnHeader(0));
-    auto colB = NamedColumn::create(&df, &col1, ColumnHeader(1));
-    auto colC = NamedColumn::create(&df, &col2, ColumnHeader(2));
+    auto colA = NamedColumn::create(&df, &col0, ColumnHeader(tagManager.allocTag()));
+    auto colB = NamedColumn::create(&df, &col1, ColumnHeader(tagManager.allocTag()));
+    auto colC = NamedColumn::create(&df, &col2, ColumnHeader(tagManager.allocTag()));
     ASSERT_TRUE(colA != nullptr);
     ASSERT_TRUE(colB != nullptr);
     ASSERT_TRUE(colC != nullptr);
