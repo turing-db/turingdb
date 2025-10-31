@@ -1,5 +1,6 @@
 #include "WriteStep.h"
 
+#include <limits>
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/chunk.hpp>
 
@@ -104,9 +105,6 @@ void WriteStep::prepare(ExecutionContext* ctxt) {
 }
 
 CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* nodePattern) {
-    // Build a @ref CommitWriteBuffer::PendingNode with empty fields:
-    CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
-
     const TypeConstraint* patternLabels = nodePattern->getTypeConstraint();
     LabelSet labelset;
     if (patternLabels != nullptr) {
@@ -117,7 +115,12 @@ CommitWriteBuffer::PendingNodeOffset WriteStep::writeNode(const EntityPattern* n
         throw PipelineException("Nodes must have at least one label");
     }
 
-    // Set the labelset of the PendingNode
+    // NOTE: Only create a PendingNode after we pass the above check, and no exception
+    // thrown
+
+    // Build a @ref CommitWriteBuffer::PendingNode with empty fields
+    CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
+
     newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(labelset);
 
     // Set the properties of the PendingNode
@@ -163,15 +166,22 @@ CommitWriteBuffer::ExistingOrPendingNode WriteStep::getOrWriteNode(const EntityP
 
 void WriteStep::writeEdge(const ContingentNode src, const ContingentNode tgt,
                           const EntityPattern* edgePattern) {
-    auto& pendingEdge = _writeBuffer->newPendingEdge(src, tgt);
     // Get the EdgeType for PendingEdge
     const TypeConstraint* patternType = edgePattern->getTypeConstraint();
+
+    EdgeTypeID pendingEdgeType {std::numeric_limits<EdgeTypeID>::max()};
+
     if (patternType != nullptr) {
-        pendingEdge.edgeType = _metadataBuilder->getOrCreateEdgeType(
+        pendingEdgeType = _metadataBuilder->getOrCreateEdgeType(
             patternType->getTypeNames().front()->getName());
-    } else { // TODO: This check should be obselete as it should be checked in parser
+    } else [[unlikely]] {
         throw PipelineException("Edges must have at least one label");
     }
+
+    // NOTE: Only create a PendingEdge after we pass the above check, and no exception
+    // thrown
+    auto& pendingEdge = _writeBuffer->newPendingEdge(src, tgt);
+    pendingEdge.edgeType = pendingEdgeType;
 
     const ExprConstraint* patternProperties = edgePattern->getExprConstraint();
     if (patternProperties != nullptr) {
