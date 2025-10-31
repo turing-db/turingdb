@@ -1,5 +1,7 @@
 #include "CountProcessor.h"
 
+#include "dataframe/Dataframe.h"
+
 #include "PipelineException.h"
 
 using namespace db::v2;
@@ -47,8 +49,8 @@ void CountProcessor::execute() {
     PipelineInputPort* inputPort = _input.getPort();
     inputPort->consume();
 
-    const Block& inputBlock = inputPort->getBuffer()->getBlock();
-    const size_t blockRowCount = inputBlock.getBlockRowCount();
+    const Dataframe* inputDf = _input.getDataframe();
+    const size_t blockRowCount = inputDf->getRowCount();
     _countRunning += blockRowCount;
 
     // Write the count value only if the input is finished

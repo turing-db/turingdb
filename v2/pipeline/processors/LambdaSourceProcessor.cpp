@@ -12,19 +12,19 @@ LambdaSourceProcessor::~LambdaSourceProcessor() {
 
 void LambdaSourceProcessor::prepare(ExecutionContext* ctxt) {
     bool isFinished = false;
-    _callback(_output.getPort()->getBuffer()->getBlock(), isFinished, Operation::PREPARE);
+    _callback(_output.getDataframe(), isFinished, Operation::PREPARE);
     markAsPrepared();
 }
 
 void LambdaSourceProcessor::reset() {
     bool isFinished = false;
-    _callback(_output.getPort()->getBuffer()->getBlock(), isFinished, Operation::RESET);
+    _callback(_output.getDataframe(), isFinished, Operation::RESET);
     markAsReset();
 }
 
 void LambdaSourceProcessor::execute() {
     bool isFinished = false;
-    _callback(_output.getPort()->getBuffer()->getBlock(), isFinished, Operation::EXECUTE);
+    _callback(_output.getDataframe(), isFinished, Operation::EXECUTE);
 
     if (isFinished) {
         finish();

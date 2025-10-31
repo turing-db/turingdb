@@ -38,6 +38,10 @@ public:
     
     ~Dataframe();
 
+    size_t size() const { return _cols.size(); }
+
+    size_t getRowCount() const;
+
     const NamedColumns& cols() const { return _cols; }
 
     NamedColumn* getColumn(ColumnTag tag) const {
@@ -49,8 +53,11 @@ public:
         return it->second;
     }
 
+    void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
+    void copyFrom(const Dataframe* other);
+
 private:
-    std::unordered_map<ColumnTag, NamedColumn*> _headerMap;
+    std::unordered_map<ColumnTag, NamedColumn*, ColumnTag::Hash> _headerMap;
     NamedColumns _cols;
 
     void addColumn(NamedColumn* column);

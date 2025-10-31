@@ -1,6 +1,10 @@
 #pragma once
 
-#include "dataframe/Dataframe.h"
+#include <memory>
+
+namespace db {
+class Dataframe;
+}
 
 namespace db::v2 {
 
@@ -16,8 +20,8 @@ public:
 
     bool hasData() const { return _hasData; }
 
-    Dataframe& getDataframe() { return _dataframe; }
-    const Dataframe& getDataframe() const { return _dataframe; }
+    Dataframe* getDataframe() { return _dataframe.get(); }
+    const Dataframe* getDataframe() const { return _dataframe.get(); }
 
     void setSource(PipelinePort* source) { _source = source; }
     void setConsumer(PipelinePort* consumer) { _consumer = consumer; }
@@ -30,11 +34,11 @@ public:
 private:
     PipelinePort* _source {nullptr};
     PipelinePort* _consumer {nullptr};
-    Dataframe _dataframe;
     bool _hasData {false};
+    std::unique_ptr<Dataframe> _dataframe;
 
-    PipelineBuffer() = default;
-    ~PipelineBuffer() = default;
+    PipelineBuffer();
+    ~PipelineBuffer();
 };
 
 }

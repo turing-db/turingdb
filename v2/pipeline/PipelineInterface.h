@@ -26,6 +26,7 @@ private:
 class PipelineInputInterface : public PipelineInterface {
 public:
     PipelineInputPort* getPort() const { return _port; }
+    Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
 
     void setPort(PipelineInputPort* port) { _port = port; }
 
@@ -36,11 +37,13 @@ private:
 class PipelineOutputInterface  : public PipelineInterface {
 public:
     PipelineOutputPort* getPort() const { return _port; }
+    Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
 
     void setPort(PipelineOutputPort* port) { _port = port; }
 
     void connectTo(PipelineInputInterface& input) {
         _port->connectTo(input.getPort());
+        input.setColumn(getColumn());
     }
 
 private:

@@ -1,6 +1,8 @@
 #include "MaterializeProcessor.h"
 
 #include "MaterializeData.h"
+
+#include "dataframe/Dataframe.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnIndices.h"
 
@@ -92,7 +94,7 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
     materialize->_output.setPort(output);
     materialize->addOutput(output);
 
-    materialize->_matData.setOutput(&output->getBuffer()->getBlock());
+    materialize->_matData.setOutput(output->getBuffer()->getDataframe());
 
     materialize->postCreate(pipeline);
     return materialize;
@@ -111,7 +113,7 @@ void MaterializeProcessor::execute() {
     _output.getPort()->writeData();
     finish();
 
-    Block& output = _output.getPort()->getBuffer()->getBlock();
+    const Dataframe::NamedColumns& output = _output.getDataframe()->cols();
     const MaterializeData::Indices& indices = _matData.getIndices();
     const MaterializeData::ColumnsPerStep& columnsPerStep = _matData.getColumnsPerStep();
     const size_t colCount = _matData.getColumnCount();
@@ -121,7 +123,8 @@ void MaterializeProcessor::execute() {
         size_t currentColIndex = 0;
         for (const MaterializeData::Columns& cols : columnsPerStep) {
             for (const Column* col : cols) {
-                copyChunk(col, output[currentColIndex]);
+                NamedColumn* destCol = output[currentColIndex];
+                copyChunk(col, destCol->getColumn());
                 ++currentColIndex;
             }
         }
@@ -145,7 +148,8 @@ void MaterializeProcessor::execute() {
             // Copy columns in reverse order
             for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
                 const Column* colPtr = *colIt;
-                copyChunk(colPtr, output[currentColIndex]);
+                NamedColumn* destCol = output[currentColIndex];
+                copyChunk(colPtr, destCol->getColumn());
                 --currentColIndex;
             }
 
@@ -155,7 +159,8 @@ void MaterializeProcessor::execute() {
         // Else use transform on all columns of the current step
         for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
             const Column* colPtr = *colIt;
-            copyTransformedChunk(_transform, colPtr, output[currentColIndex]);
+            NamedColumn* destCol = output[currentColIndex];
+            copyTransformedChunk(_transform, colPtr, destCol->getColumn());
             --currentColIndex;
         }
 

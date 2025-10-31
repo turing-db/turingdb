@@ -6,7 +6,8 @@
 
 namespace db {
 class LocalMemory;
-class Block;
+class Dataframe;
+class NamedColumn;
 }
 
 namespace db::v2 {
@@ -25,22 +26,22 @@ public:
     MaterializeData(MaterializeData&& other) = delete;
     MaterializeData& operator=(MaterializeData&& other) = delete;
 
-    void setOutput(Block* output) { _output = output; }
+    void setOutput(Dataframe* output) { _output = output; }
 
     const Indices& getIndices() const { return _indices; }
     const ColumnsPerStep& getColumnsPerStep() const { return _columnsPerStep; }
     size_t getColumnCount() const { return _colCount; }
 
     // Call this before adding columns to the step
-    void createStep(const ColumnIndices* indices);
+    void createStep(const NamedColumn* indices);
 
     // Add a column to the same step
-    template <typename T>
-    void addToStep(const T* col);
+    template <typename ColumnType>
+    void addToStep(const NamedColumn* col);
 
 private:
     LocalMemory* _mem {nullptr};
-    Block* _output {nullptr};
+    Dataframe* _output {nullptr};
     size_t _step {0};
     Indices _indices;
     ColumnsPerStep _columnsPerStep;

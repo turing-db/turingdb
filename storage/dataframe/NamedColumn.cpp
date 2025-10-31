@@ -14,7 +14,7 @@ NamedColumn* NamedColumn::create(Dataframe* parent,
     if (parent->getColumn(header.getTag())) {
         throw TuringException(fmt::format(
             "A column with tag {} already exists in dataframe",
-            header.getTag()));
+            header.getTag().value()));
     }
 
     NamedColumn* namedCol = new NamedColumn(parent, header, column);

@@ -15,13 +15,13 @@ void LambdaProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void LambdaProcessor::reset() {
-    _callback(_input.getPort()->getBuffer()->getBlock(), Operation::RESET);
+    _callback(_input.getDataframe(), Operation::RESET);
     markAsReset();
 }
 
 void LambdaProcessor::execute() {
     _input.getPort()->consume();
-    _callback(_input.getPort()->getBuffer()->getBlock(), Operation::EXECUTE);
+    _callback(_input.getDataframe(), Operation::EXECUTE);
     finish();
 }
 

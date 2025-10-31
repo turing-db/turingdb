@@ -1,5 +1,7 @@
 #include "SkipProcessor.h"
 
+#include "dataframe/Dataframe.h"
+
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 
@@ -42,17 +44,17 @@ void SkipProcessor::execute() {
     _input.getPort()->consume();
 
     if (_skipping) {
-        const Block& inputBlock = _input.getPort()->getBuffer()->getBlock();
-        const size_t blockRowCount = inputBlock.getBlockRowCount();
+        const Dataframe* inputDf = _input.getDataframe();
+        const size_t blockRowCount = inputDf->getRowCount();
         const size_t newRowCount = _currentRowCount + blockRowCount;
 
         if (newRowCount > _skipCount) {
             // We have crossed the skipping threshold in this block
             // write the rows that are in excess of the amount to skip
-            Block& outputBlock = _output.getPort()->getBuffer()->getBlock();
+            Dataframe* outputDf = _output.getDataframe();
             const size_t rowsToWrite = newRowCount - _skipCount;
             const size_t startRow = blockRowCount - rowsToWrite;
-            outputBlock.assignFromLine(inputBlock, startRow, rowsToWrite);
+            outputDf->copyFromLine(inputDf, startRow, rowsToWrite);
 
             _skipping = false;
             _currentRowCount += rowsToWrite;
@@ -64,9 +66,9 @@ void SkipProcessor::execute() {
         }
     } else {
         // We are beyond the number of lines to be skipped, just copy the input block
-        const Block& inputBlock = _input.getPort()->getBuffer()->getBlock();
-        Block& outputBlock = _output.getPort()->getBuffer()->getBlock();
-        outputBlock.assignFrom(inputBlock);
+        const Dataframe* inputDf = _input.getDataframe();
+        Dataframe* outputDf = _output.getDataframe();
+        outputDf->copyFrom(inputDf);
 
         _output.getPort()->writeData();
     }

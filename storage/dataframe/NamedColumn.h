@@ -11,6 +11,8 @@ class NamedColumn {
 public:
     friend Dataframe;
 
+    Dataframe* getParent() const { return _parent; }
+
     const ColumnHeader& getHeader() const { return _header; }
     ColumnHeader& getHeader() { return _header; }
 

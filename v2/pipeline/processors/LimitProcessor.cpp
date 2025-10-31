@@ -1,5 +1,7 @@
 #include "LimitProcessor.h"
 
+#include "dataframe/Dataframe.h"
+
 using namespace db::v2;
 
 LimitProcessor::LimitProcessor(size_t limit)
@@ -44,14 +46,14 @@ void LimitProcessor::execute() {
         // We have reached the limit, do nothing
         return;
     } else {
-        const Block& inputBlock = _input.getPort()->getBuffer()->getBlock();
-        Block& outputBlock = _output.getPort()->getBuffer()->getBlock();
-        const size_t blockRowCount = inputBlock.getBlockRowCount();
+        const Dataframe* inputDf = _input.getDataframe();
+        Dataframe* outputDf = _output.getDataframe();
+        const size_t blockRowCount = inputDf->getRowCount();
         const size_t remainingCapacity = _limit - _currentRowCount;
 
         // Write rows of inputBlock that are below the limit
         const size_t rowsToWrite = std::min(blockRowCount, remainingCapacity);
-        outputBlock.assignFromLine(inputBlock, 0, rowsToWrite);
+        outputDf->copyFromLine(inputDf, 0, rowsToWrite);
 
         if (blockRowCount >= remainingCapacity) {
             _reachedLimit = true;

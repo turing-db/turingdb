@@ -7,7 +7,7 @@
 #include "PipelineInterface.h"
 
 namespace db {
-class Block;
+class Dataframe;
 }
 
 namespace db::v2 {
@@ -19,7 +19,7 @@ public:
         EXECUTE
     };
 
-    using Callback = std::function<void(const Block&, Operation)>;
+    using Callback = std::function<void(const Dataframe*, Operation)>;
 
     static LambdaProcessor* create(PipelineV2* pipeline, Callback callback);
 

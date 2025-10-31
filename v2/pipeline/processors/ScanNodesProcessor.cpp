@@ -7,6 +7,8 @@
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
+#include "PipelineException.h"
+
 using namespace db::v2;
 
 ScanNodesProcessor::ScanNodesProcessor()
@@ -29,6 +31,9 @@ ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
 
 void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs.getRawColumn());
+    if (!nodeIDs) {
+        throw PipelineException("ScanNodesProcessor: nodeIDs column is not set correctly");
+    }
 
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);

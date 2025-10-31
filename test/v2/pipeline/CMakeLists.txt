@@ -10,4 +10,4 @@ function(add_v2_pipeline_gtest exe_name cpp_file)
                 tabulate)
 endfunction()
 
-#add_v2_pipeline_gtest(test_v2_pipeline PipelineTest.cpp)
+add_v2_pipeline_gtest(test_v2_pipeline PipelineTest.cpp)

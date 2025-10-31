@@ -1,9 +1,12 @@
 #include "MaterializeData.h"
 
-#include "columns/Block.h"
+#include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
 #include "columns/ColumnVector.h"
 
 #include "LocalMemory.h"
+
+#include "PipelineException.h"
 
 using namespace db::v2;
 using namespace db;
@@ -17,23 +20,28 @@ MaterializeData::MaterializeData(LocalMemory* mem)
 MaterializeData::~MaterializeData() {
 }
 
-void MaterializeData::createStep(const ColumnIndices* indices) {
-    _indices.push_back(indices);
+void MaterializeData::createStep(const NamedColumn* indices) {
+    const ColumnIndices* indicesCol = dynamic_cast<const ColumnIndices*>(indices->getColumn());
+    if (!indicesCol) {
+        throw PipelineException("MaterializeData: indices column is not set correctly");
+    }
+
+    _indices.push_back(indicesCol);
     _columnsPerStep.emplace_back();
     ++_step;
 }
 
-template <typename T>
-void MaterializeData::addToStep(const T* col) {
+template <typename ColumnType>
+void MaterializeData::addToStep(const NamedColumn* col) {
     ++_colCount;
-    _columnsPerStep[_step].push_back(col);
+    _columnsPerStep[_step].push_back(col->getColumn());
 
-    Column* outCol = _mem->alloc<T>();
-    _output->addColumn(outCol);
+    ColumnType* outCol = _mem->alloc<ColumnType>();
+    NamedColumn::create(_output, outCol, col->getHeader());
 }
 
 #define INSTANTIATE(Type) \
-    template void MaterializeData::addToStep<Type>(const Type* col);
+    template void MaterializeData::addToStep<Type>(const NamedColumn* col);
 
 INSTANTIATE(ColumnVector<EntityID>);
 INSTANTIATE(ColumnVector<NodeID>);
