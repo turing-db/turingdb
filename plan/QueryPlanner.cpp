@@ -253,6 +253,7 @@ void QueryPlanner::planInjectNodes(const std::vector<EntityPattern*>& path) {
         }
 
         auto* nodesLabelSetIDs = _mem->alloc<ColumnVector<LabelSetID>>();
+        // TOMBSTONES: base column @ref _result always allocd on function entry
         _pipeline->add<GetLabelSetIDStep>(_result, nodesLabelSetIDs);
 
         auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -380,6 +381,7 @@ void QueryPlanner::planScanNodes(const EntityPattern* entity) {
     const TypeConstraint* typeConstr = entity->getTypeConstraint();
     const ExprConstraint* exprConstr = entity->getExprConstraint();
 
+    // TOMBSTONES: base column @ref nodes always allocd on function entry
     if (exprConstr && typeConstr) {
         const LabelSet* labelSet = getOrCreateLabelSet(typeConstr);
         planScanNodesWithPropertyAndLabelConstraints(nodes, labelSet, exprConstr);
@@ -429,6 +431,7 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
 
             // Gets nodes that have the property of the type in `propType`, putting the values
             // of these properties into `propValues`
+            // TOMBSTONES: base column @ref scannedNodes always allocd on switch case entry
             _pipeline->add<ScanNodesByPropertyStringStep>(scannedNodes, propType, propValues);
 
             ColumnNodeIDs* firstStageOutput = exprs.size() == 1 ? outNodes : filteredScannedNodes;
@@ -456,6 +459,8 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
 
         case BinExpr::OP_STR_APPROX: { // Scan nodes with index.
             // Only returns nodes which match (no need to filter after scan as above)
+            // TOMBSTONES: base column @ref firstStageOutput always allocd by
+            // @ref planScanNodes
             _pipeline->add<ScanNodesStringApproxStep>(firstStageOutput, _view,
                                                      propType._id, queryString);
         break;
@@ -539,6 +544,7 @@ void QueryPlanner::planScanNodesWithPropertyConstraints(ColumnNodeIDs* const& ou
 
         // Gets nodes that have the property of the type in `propType`, putting the values
         // of these properties into `propValues`
+        // TOMBSTONES: base column @ref scannedNodes always allocd on lambda entry
         _pipeline->add<Step>(scannedNodes,
                              propType,
                              propValues);
@@ -668,6 +674,7 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                                    + varExprName + "'");
         }
 
+        // TOMBSTONES: base column @ref scannedNodes always allocd on function entry
         _pipeline->add<StepType>(scannedNodes,
                                  propType,
                                  LabelSetHandle {*labelSet},
@@ -701,6 +708,8 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
             } else if (op == BinExpr::OP_STR_APPROX) {
                 const std::string& queryString = static_cast<StringExprConst*>(rightExpr)->getVal();
                 auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
+                // TOMBSTONES: step does not use a filter => no base column => no need to
+                // check for alloc
                 _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id, queryString);
 
                 // Fill filtermask[i] with a mask for the Nodes that match approx
@@ -737,6 +746,8 @@ void QueryPlanner::planScanNodesWithPropertyAndLabelConstraints(ColumnNodeIDs* c
                 const std::string& queryString = static_cast<StringExprConst*>(rightExpr)->getVal();
                 // Step to generate lookup set with Nodes that match
                 auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
+                // TOMBSTONES: step does not use a filter => no base column => no need to
+                // check for alloc
                 _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id, queryString);
 
                 // Fill filtermask[i] with a mask for the Nodes that match approx
@@ -793,7 +804,10 @@ void QueryPlanner::generateNodePropertyFilterMasks(std::vector<ColumnMask*> filt
 
             // Step to generate lookup set with Node/EdgeIDs that match
             auto* lookupSet = _mem->alloc<ColumnSet<NodeID>>();
-            _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id, queryString);
+            // TOMBSTONES: step does not use a filter => no base column => no need to
+            // check for alloc
+            _pipeline->add<LookupNodeIndexStep>(lookupSet, _view, propType._id,
+                                                queryString);
 
             // Fill filtermask[i] with a mask for the Nodes/Edges that match approx
             auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -864,7 +878,10 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
             auto* lookupSet = _mem->alloc<ColumnSet<EdgeID>>();
 
             // Step to generate lookup set with Node/EdgeIDs that match
-            _pipeline->add<LookupEdgeIndexStep>(lookupSet, _view, propType._id, queryString);
+            // TOMBSTONES: step does not use a filter => no base column => no need to
+            // check for alloc
+            _pipeline->add<LookupEdgeIndexStep>(lookupSet, _view, propType._id,
+                                                queryString);
 
             // Fill filtermask[i] with a mask for the Nodes/Edges that match approx
             auto& filter = _pipeline->add<FilterStep>().get<FilterStep>();
@@ -886,6 +903,7 @@ void QueryPlanner::generateEdgePropertyFilterMasks(std::vector<ColumnMask*> filt
             const Primitive& constVal = static_cast<PropertyTypeExprConst<Type>::ExprConstType*>(rightExpr)->getVal();
             filterConstVal->set(constVal);
 
+            // TOMBSTONES: base column @ref entities always allocd if needed by @ref planExpandEdgeWithNoConstraint
             _pipeline->add<StepType>(entities,
                                      propType,
                                      propValues,
@@ -986,6 +1004,7 @@ void QueryPlanner::planScanEdges(const EntityPattern* source,
         edgeWriteInfo._edges = edges;
     }
 
+    // TOMBSTONES: base column @ref edges always allocd above if needed directly above
     if (!sourceTypeConstr && !targetTypeConstr) {
         _pipeline->add<ScanEdgesStep>(edgeWriteInfo);
     } else if (!sourceTypeConstr) {
@@ -1088,9 +1107,6 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
 
-    const bool needFilter = _view.tombstones().hasEdges() || _view.tombstones().hasNodes();
-    const bool mustWriteEdges =(edgeDecl && edgeDecl->isUsed()) || needFilter;
-
     EdgeWriteInfo edgeWriteInfo;
     edgeWriteInfo._indices = indices;
 
@@ -1100,11 +1116,16 @@ void QueryPlanner::planExpandEdgeWithNoConstraint(const EntityPattern* edge,
     auto* targets = _mem->alloc<ColumnNodeIDs>();
     edgeWriteInfo._targetNodes = targets;
 
+    const bool mustWriteEdges =
+        (edgeDecl && edgeDecl->isUsed()) || _view.tombstones().hasEdges();
+
     if (mustWriteEdges || edgeExprConstr) {
         auto* edges = _mem->alloc<ColumnEdgeIDs>();
         edgeWriteInfo._edges = edges;
     }
 
+    // TOMBSTONES: base column @ref edges allocd if tombstones by @ref mustWriteEdges
+    // above
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
 
     if (edgeExprConstr || targetExprConstr) {
@@ -1222,6 +1243,7 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
     edgeWriteInfo._edges = edges;
     edgeWriteInfo._edgeTypes = edgeTypeIDs;
 
+    // TOMBSTONES: base column @ref edes always allocd on function entry
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
 
     // Filter out edges that do not match the edge type ID
@@ -1262,7 +1284,8 @@ void QueryPlanner::planExpandEdgeWithEdgeConstraint(const EntityPattern* edge,
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
+    const bool mustWriteEdges =
+        (edgeDecl && edgeDecl->isUsed()) || _view.tombstones().hasEdges();
 
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
@@ -1324,6 +1347,7 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
     edgeWriteInfo._edges = edges;
     edgeWriteInfo._edgeTypes = edgeTypeIDs;
 
+    // TOMBSTONES: base column @ref edges always allocd on function entry
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
 
     // Get label set IDs of target nodes
@@ -1403,7 +1427,8 @@ void QueryPlanner::planExpandEdgeWithEdgeAndTargetConstraint(const EntityPattern
 
     const VarExpr* edgeVar = edge->getVar();
     VarDecl* edgeDecl = edgeVar ? edgeVar->getDecl() : nullptr;
-    const bool mustWriteEdges = edgeDecl && edgeDecl->isUsed();
+    const bool mustWriteEdges =
+        (edgeDecl && edgeDecl->isUsed()) || _view.tombstones().hasEdges();
 
     const ExprConstraint* edgeExprConstr = edge->getExprConstraint();
     const ExprConstraint* targetExprConstr = target->getExprConstraint();
@@ -1461,6 +1486,7 @@ void QueryPlanner::planExpandEdgeWithTargetConstraint(const EntityPattern* edge,
         edgeWriteInfo._edges = edges;
     }
 
+    // TOMBSTONES: base column @ref edges allocd based on @ref mustWriteEdges
     _pipeline->add<GetOutEdgesStep>(_result, edgeWriteInfo);
 
     // Get labels of target nodes
@@ -1634,9 +1660,8 @@ void QueryPlanner::planPropertyProjection(ColumnNodeIDs* columnIDs,
 
     const auto process = [&]<SupportedType T> {
         auto propValues = _mem->alloc<ColumnOptVector<typename T::Primitive>>();
-        _pipeline->add<GetNodePropertyStep<T>>(columnIDs,
-                                               propType,
-                                               propValues);
+        // TOMBSTONES: base column @ref columnIDs checked for alloc in @ref planProjection
+        _pipeline->add<GetNodePropertyStep<T>>(columnIDs, propType, propValues);
         _output->addColumn(propValues);
     };
 
@@ -1650,6 +1675,7 @@ void QueryPlanner::planPropertyProjection(ColumnEdgeIDs* columnIDs,
 
     const auto process = [&]<SupportedType T> {
         auto propValues = _mem->alloc<ColumnOptVector<typename T::Primitive>>();
+        // TOMBSTONES: base column @ref columnIDs checked for alloc in @ref planProjection
         _pipeline->add<GetEdgePropertyStep<T>>(columnIDs,
                                                propType,
                                                propValues);
