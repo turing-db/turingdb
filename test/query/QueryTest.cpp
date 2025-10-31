@@ -1898,3 +1898,75 @@ TEST_F(QueryTest, commitWriteBufferBadPendingEdge) {
         .expectVector<EdgeID>({0})
         .execute();
 }
+
+TEST_F(QueryTest, analyzerTypeConstraintCheck) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    const auto newChange = [&]() {
+        auto res = tester.query("CHANGE NEW")
+                       .expectVector<const Change*>({}, false)
+                       .execute()
+                       .outputColumnVector<const Change*>(0);
+        const ChangeID id = res.value()->back()->id();
+        tester.setChangeID(id);
+        return id;
+    };
+    const auto submitChange = [&]() {
+        tester.query("change submit")
+            .execute();
+        tester.setChangeID(ChangeID::head());
+    };
+
+
+    newChange();
+
+    std::string expectedError =
+        "A label/type constraint is required for all entities in CREATE "
+        "queries. Variable n was not provided a label/type constraint.";
+    tester.query("create (n)")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+
+    expectedError = "A label/type constraint is required for all entities in CREATE "
+                    "queries. Variable e was not provided a label/type constraint.";
+    tester.query("create (n:Person)-[e]-(m)")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+
+    expectedError = "Edges require at exactly one type. Edge e was not provided a single type.";
+    tester.query("create (n:Person)-[e:FRIENDSWITH, KNOWS]-(m)")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+
+    expectedError = "A label/type constraint is required for all entities in CREATE "
+                    "queries. Variable m was not provided a label/type constraint.";
+    tester.query("create (n:Person)-[e:FRIENDSWITH]-(m)")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+
+    tester.query("create (n:Person)")
+        .execute();
+
+    submitChange();
+
+    newChange();
+
+    // Ensure injected IDs don't need type constraints
+    expectedError = "A label/type constraint is required for all entities in CREATE "
+                    "queries. Variable e was not provided a label/type constraint.";
+    tester.query("create (n @ 0)-[e]-(m)")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+
+    expectedError = "A label/type constraint is required for all entities in CREATE "
+                    "queries. Variable m was not provided a label/type constraint.";
+    tester.query("create (n @ 0)-[e:FRIENDSWITH]-(m)")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+}
