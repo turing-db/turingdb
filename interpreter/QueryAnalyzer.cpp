@@ -379,8 +379,7 @@ void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
 
     if (!entity->getTypeConstraint()) [[unlikely]] {
         std::string error =
-            fmt::format("A label/type constraint is required for all entities in CREATE "
-                        "queries.");
+            "A label/type constraint is required for all entities in CREATE queries.";
         if (varName != "") {
             error += fmt::format(" Variable {} was not provided a label/type constraint.", varName);
         }
@@ -393,7 +392,7 @@ void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
     switch (entity->getKind()) {
         case DeclKind::NODE_DECL: {
             if (typeConstraints.empty()) [[unlikely]]{
-                std::string error = fmt::format("Nodes require at least one label.");
+                std::string error = "Nodes require at least one label.";
                 if (varName != "") {
                     error += fmt::format(" Node {} was not provided any label constraints.", varName);
                 }
@@ -403,7 +402,7 @@ void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
         }
         case DeclKind::EDGE_DECL: {
             if (typeConstraints.size() != 1) [[unlikely]] {
-                std::string error = fmt::format("Edges require at exactly one type.");
+                std::string error = "Edges require at exactly one type.";
                 if (varName != "") {
                     error += fmt::format(" Edge {} was not provided a single type.", varName);
                 }
