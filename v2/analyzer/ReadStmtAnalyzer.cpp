@@ -4,6 +4,8 @@
 #include "ExprAnalyzer.h"
 #include "FunctionInvocation.h"
 #include "SymbolChain.h"
+#include "YieldClause.h"
+#include "YieldItems.h"
 #include "metadata/GraphMetadata.h"
 
 #include "DiagnosticsManager.h"
@@ -39,8 +41,9 @@ using namespace db::v2;
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(graphView.metadata())
+{
 }
 
 ReadStmtAnalyzer::~ReadStmtAnalyzer() {
@@ -88,10 +91,12 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 }
 
 void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
+    // Step 1. Check OPTIONAL keyword
     if (callStmt->isOptional()) {
         throwError("OPTIONAL CALL not supported", callStmt);
     }
 
+    // Step 2. Analyze function invocation
     FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     if (!funcExpr) [[unlikely]] {
         throwError("CALL statement must have a function invocation", callStmt);
@@ -105,6 +110,25 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     if (!signature->_isDatabaseProcedure) {
         throwError(fmt::format("No such database procedure '{}'", signature->_fullName), callStmt);
     }
+
+    // Step 3. Analyze YIELD clause
+    const YieldClause* yield = callStmt->getYield();
+    analyze(yield);
+}
+
+void ReadStmtAnalyzer::analyze(const YieldClause* yield) {
+    if (!yield) {
+        return;
+    }
+
+    // Check if `YIELD *`
+    if (yield->isAll()) {
+        // For now, it fallbacks to the default behavior, which is to return all columns
+        // In Neo4j, it returns the default columns + deprecated ones.
+        return;
+    }
+
+    // TODO, check items + where clause
 }
 
 void ReadStmtAnalyzer::analyze(OrderBy* orderBySt) {
