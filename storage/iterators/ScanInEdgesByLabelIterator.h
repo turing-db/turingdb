@@ -4,6 +4,7 @@
 
 #include "Iterator.h"
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "EdgeRecord.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
@@ -55,7 +56,7 @@ protected:
 
 class ScanInEdgesByLabelChunkWriter : public ScanInEdgesByLabelIterator {
 public:
-    ScanInEdgesByLabelChunkWriter();
+    ScanInEdgesByLabelChunkWriter() = delete;
     ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset);
 
     void fill(size_t maxCount);
@@ -70,6 +71,8 @@ private:
     ColumnNodeIDs* _srcs {nullptr};
     ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };

@@ -2,7 +2,6 @@
 
 #include "DataPart.h"
 #include "IteratorUtils.h"
-#include "iterators/TombstoneFilter.h"
 #include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"
 #include "Panic.h"

@@ -3,6 +3,7 @@
 #include "Iterator.h"
 
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "EdgeRecord.h"
@@ -51,7 +52,7 @@ protected:
 
 class ScanEdgesChunkWriter : public ScanEdgesIterator {
 public:
-    ScanEdgesChunkWriter();
+    ScanEdgesChunkWriter() = delete;
     explicit ScanEdgesChunkWriter(const GraphView& view);
 
     void fill(size_t maxCount);
@@ -66,6 +67,8 @@ private:
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };

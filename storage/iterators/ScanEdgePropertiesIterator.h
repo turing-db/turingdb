@@ -65,7 +65,7 @@ public:
     using Type = T;
     using Primitive = T::Primitive;
 
-    ScanEdgePropertiesChunkWriter() = default;
+    ScanEdgePropertiesChunkWriter() = delete;
     ScanEdgePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID);
 
     void fill(size_t maxCount);

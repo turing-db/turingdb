@@ -5,7 +5,6 @@
 #include "indexers/EdgeIndexer.h"
 #include "DataPart.h"
 #include "IteratorUtils.h"
-#include "iterators/TombstoneFilter.h"
 
 namespace db {
 

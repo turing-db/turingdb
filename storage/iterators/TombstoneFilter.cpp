@@ -34,6 +34,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
         _nonDeletedRanges = std::make_unique<NonDeletedRanges>();
     }
 
+    // Failsafe
     _nonDeletedRanges->clear();
 
     const ColumnVector<IDT>& col = *baseCol;

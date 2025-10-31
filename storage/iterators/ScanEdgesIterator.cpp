@@ -56,10 +56,9 @@ void ScanEdgesIterator::nextValid() {
     }
 }
 
-ScanEdgesChunkWriter::ScanEdgesChunkWriter() = default;
-
 ScanEdgesChunkWriter::ScanEdgesChunkWriter(const GraphView& view)
-    : ScanEdgesIterator(view)
+    : ScanEdgesIterator(view),
+    _filter(view.tombstones())
 {
 }
 
@@ -67,22 +66,23 @@ void ScanEdgesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
 
-    TombstoneFilter filter(_view.tombstones());
-    filter.populateRanges(_edgeIDs);
-    filter.filter(_edgeIDs);
+    _filter.populateRanges(_edgeIDs);
+    _filter.filter(_edgeIDs);
 
     if (_srcs) {
-        filter.filter(_srcs);
+        _filter.filter(_srcs);
         bioassert(_srcs->size() == _edgeIDs->size());
     }
     if (_tgts) {
-        filter.filter(_tgts);
+        _filter.filter(_tgts);
         bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
-        filter.filter(_types);
+        _filter.filter(_types);
         bioassert(_types->size() == _edgeIDs->size());
     }
+
+    _filter.reset();
 }
 
 static constexpr size_t NColumns = 4;

@@ -3,7 +3,6 @@
 #include "BioAssert.h"
 #include "DataPart.h"
 #include "EdgeContainer.h"
-#include "iterators/TombstoneFilter.h"
 #include "indexers/EdgeIndexer.h"
 #include "IteratorUtils.h"
 #include "Panic.h"
@@ -73,10 +72,9 @@ void ScanInEdgesByLabelIterator::nextValid() {
     }
 }
 
-ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter() = default;
-
 ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
-    : ScanInEdgesByLabelIterator(view, labelset)
+    : ScanInEdgesByLabelIterator(view, labelset),
+    _filter(view.tombstones())
 {
 }
 
@@ -84,21 +82,22 @@ void ScanInEdgesByLabelChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
     bioassert(_edgeIDs);
 
-    TombstoneFilter filter(_view.tombstones());
-    filter.populateRanges(_edgeIDs);
+    _filter.populateRanges(_edgeIDs);
 
     if (_srcs) {
-        filter.filter(_srcs);
+        _filter.filter(_srcs);
         bioassert(_srcs->size() == _edgeIDs->size());
     }
     if (_tgts) {
-        filter.filter(_tgts);
+        _filter.filter(_tgts);
         bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
-        filter.filter(_types);
+        _filter.filter(_types);
         bioassert(_types->size() == _edgeIDs->size());
     }
+
+    _filter.reset();
 }
 
 static constexpr size_t NColumns = 4;
