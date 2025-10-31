@@ -6,6 +6,8 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/algorithm/adjacent_find.hpp>
 
+#include "DeclKind.h"
+#include "TypeConstraint.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "AnalyzeException.h"
@@ -370,6 +372,52 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
     }
 }
 
+void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
+    bioassert(entity);
+
+    const std::string& varName = entity->getVar() ? entity->getVar()->getName() : "";
+
+    if (!entity->getTypeConstraint()) [[unlikely]] {
+        std::string error =
+            fmt::format("A label/type constraint is required for all entities in CREATE "
+                        "queries.");
+        if (varName != "") {
+            error += fmt::format(" Variable {} was not provided a label/type constraint.", varName);
+        }
+        throw AnalyzeException(std::move(error));
+    }
+
+    const TypeConstraint::TypeNames& typeConstraints =
+        entity->getTypeConstraint()->getTypeNames();
+
+    switch (entity->getKind()) {
+        case DeclKind::NODE_DECL: {
+            if (typeConstraints.empty()) [[unlikely]]{
+                std::string error = fmt::format("Nodes require at least one label.");
+                if (varName != "") {
+                    error += fmt::format(" Node {} was not provided any label constraints.", varName);
+                }
+                throw AnalyzeException(std::move(error));
+            }
+            break;
+        }
+        case DeclKind::EDGE_DECL: {
+            if (typeConstraints.size() != 1) [[unlikely]] {
+                std::string error = fmt::format("Edges require at exactly one type.");
+                if (varName != "") {
+                    error += fmt::format(" Edge {} was not provided a single type.", varName);
+                }
+                throw AnalyzeException(std::move(error));
+            }
+            break;
+        }
+        default: {
+            throw AnalyzeException("Unknown entity type with invalid type constraints.");
+            break;
+        }
+    }
+}
+
 void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern* entity,
                                          bool isCreate) {
     VarExpr* var = entity->getVar();
@@ -381,6 +429,8 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
     }
 
     uint64_t idToSet = entity->getEntityID();
+
+    bool needsTypeConstraint {true};
 
     // If attempting to inject IDs in a CREATE, ensure they are all valid
     // NOTE: Attempts to create a node whilst injecting IDs is prevented
@@ -401,6 +451,7 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
             throw AnalyzeException("No such node with ID: '"
                                    + std::to_string(idToSet) + "'");
         }
+        needsTypeConstraint = false; // Injected ID doesn't need a type constraint
     }
 
     // Create the variable declaration in the scope of the command
@@ -418,6 +469,13 @@ void QueryAnalyzer::analyzeEntityPattern(DeclContext* declContext, EntityPattern
             throw AnalyzeException(
                 fmt::format("Variable {} has conflicting declarations.", var->getName()));
         }
+        // Var already declared => already properly defined with type
+        // constraint, so this entity pattern doesn't need a type constraint
+        needsTypeConstraint = false;
+    }
+
+    if (needsTypeConstraint && isCreate) {
+        ensureValidTypeConstraints(entity);
     }
 
     auto* exprConstraint = entity->getExprConstraint();

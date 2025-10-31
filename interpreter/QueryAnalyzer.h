@@ -44,6 +44,7 @@ private:
     void analyzeEntityPattern(DeclContext* declContext,
                               EntityPattern* entity,
                               bool isCreate);
+    void ensureValidTypeConstraints(EntityPattern* entity);
     void ensureMatchVarsUnique(const MatchTarget* target);
     void analyzeBinExprConstraint(const BinExpr* constraint, bool isCreate);
     void typeCheckBinExprConstr(const PropertyType lhs, const ExprConst* rhs);
