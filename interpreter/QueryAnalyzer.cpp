@@ -398,7 +398,7 @@ void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
                 }
                 throw AnalyzeException(std::move(error));
             }
-            break;
+        break;
         }
         case DeclKind::EDGE_DECL: {
             if (typeConstraints.size() != 1) [[unlikely]] {
@@ -408,11 +408,11 @@ void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
                 }
                 throw AnalyzeException(std::move(error));
             }
-            break;
+        break;
         }
         default: {
             throw AnalyzeException("Unknown entity type with invalid type constraints.");
-            break;
+        break;
         }
     }
 }
