@@ -6,6 +6,7 @@
 
 #include "PartIterator.h"
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "EdgeRecord.h"
@@ -67,7 +68,7 @@ protected:
 
 class GetOutEdgesChunkWriter : public GetOutEdgesIterator {
 public:
-    GetOutEdgesChunkWriter() = default;
+    GetOutEdgesChunkWriter() = delete;
     GetOutEdgesChunkWriter(const GraphView& view, const ColumnNodeIDs* inputNodeIDs);
 
     void fill(size_t maxCount);
@@ -83,6 +84,8 @@ private:
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnNodeIDs* _tgts {nullptr};
     ColumnEdgeTypes* _types {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };
