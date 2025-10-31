@@ -21,9 +21,15 @@ public:
         populate();
     }
 
+    
+
     void populate() {
         auto& db = _env->getDB();
         auto& sysMan = _env->getSystemManager();
+
+        auto _callback = [this](const Block& block) {
+            this->_outBlock.assignFrom(block);
+        };
 
         auto res = sysMan.newChange(_workingGraphName);
         if (!res) {
@@ -33,24 +39,27 @@ public:
 
         // populate the graph
         for (size_t i = 0; i < NUM_EDGES; i++) {
-            db.query("create (n)-[e]-(m)",
+            db.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)",
                      _workingGraphName,
                      &_env->getMem(),
                      CommitHash::head(),
                      change->id());
         }
+        spdlog::info("Ran create queries");
 
         db.query("change submit",
                  _workingGraphName,
                  &_env->getMem(),
                  CommitHash::head(),
                  change->id());
+        spdlog::info("Submitted change");
 
         db.query("match (n) return n", _workingGraphName, &_env->getMem(), _callback,
                  CommitHash::head(), ChangeID::head());
         if (_outBlock.empty()) {
             panic("Failed to populate graph.");
         }
+        spdlog::info("Successfully populated graph");
     }
 
 protected:
@@ -60,13 +69,9 @@ protected:
     Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     LocalMemory _mem;
-    static Block _outBlock;
+    Block _outBlock;
 
-    static inline auto _callback = [](const Block& block) {
-        _outBlock.assignFrom(block);
-    };
-
-    static constexpr size_t NUM_EDGES = 100;
+    static constexpr size_t NUM_EDGES = 10;
     static constexpr size_t NUM_NODES = 2 * NUM_EDGES;
 };
 
