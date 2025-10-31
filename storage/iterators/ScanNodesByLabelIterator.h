@@ -3,6 +3,7 @@
 #include "Iterator.h"
 
 #include "ChunkWriter.h"
+#include "TombstoneFilter.h"
 #include "NodeRange.h"
 #include "columns/ColumnIDs.h"
 #include "indexers/LabelSetIndexer.h"
@@ -49,7 +50,7 @@ protected:
 
 class ScanNodesByLabelChunkWriter : public ScanNodesByLabelIterator {
 public:
-    ScanNodesByLabelChunkWriter();
+    ScanNodesByLabelChunkWriter() = delete;
     ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset);
 
     void fill(size_t maxCount);
@@ -58,6 +59,8 @@ public:
 
 private:
     ColumnNodeIDs* _nodeIDs {nullptr};
+
+    TombstoneFilter _filter;
 
     void filterTombstones();
 };

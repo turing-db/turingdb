@@ -70,10 +70,9 @@ void ScanNodesByLabelIterator::nextValid() {
     }
 }
 
-ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter() = default;
-
 ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
-    : ScanNodesByLabelIterator(view, labelset)
+    : ScanNodesByLabelIterator(view, labelset),
+    _filter(view.tombstones())
 {
 }
 
@@ -81,9 +80,9 @@ void ScanNodesByLabelChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _nodeIDs
     bioassert(_nodeIDs);
 
-    TombstoneFilter filter(_view.tombstones());
-    filter.populateRanges(_nodeIDs);
-    filter.filter(_nodeIDs);
+    _filter.populateRanges(_nodeIDs);
+    _filter.filter(_nodeIDs);
+    _filter.reset();
 }
 
 void ScanNodesByLabelChunkWriter::fill(size_t maxCount) {
