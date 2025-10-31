@@ -5,6 +5,7 @@
 #include "AnalyzeException.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
+#include "Overloaded.h"
 
 #include "Literal.h"
 #include "EdgePattern.h"
@@ -249,7 +250,7 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 }
 
 void WriteStmtAnalyzer::analyze(SetItem* item) {
-    const auto visitor = SetItem::Overloaded {
+    const auto visitor = Overloaded {
         // PropertyExprAssign case
         [this, item](const SetItem::PropertyExprAssign& v) {
             // Analyzing rhs

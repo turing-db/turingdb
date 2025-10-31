@@ -3,6 +3,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
+#include "Overloaded.h"
 #include "DiagnosticsManager.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -77,7 +78,7 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
     prepareWriteNode(prevNode);
 
     for (const SetItem* item : stmt->getItems()) {
-        const auto visitor = SetItem::Overloaded {
+        const auto visitor = Overloaded {
             // PropertyExprAssign case
             [this](const SetItem::PropertyExprAssign& v) {
                 const VarDecl* decl = v.propTypeExpr->getDecl();

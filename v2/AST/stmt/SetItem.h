@@ -37,10 +37,6 @@ public:
     Variant& item() { return _item; }
     const Variant& item() const { return _item; }
 
-
-    template<class... Ts>
-    struct Overloaded : Ts... { using Ts::operator()...; };
-
 private:
     friend CypherAST;
 
