@@ -15,6 +15,7 @@ class PlanGraphVariables;
 class PlanGraphTopology;
 class Stmt;
 class MatchStmt;
+class CallStmt;
 class Skip;
 class Limit;
 class WhereClause;
@@ -43,6 +44,7 @@ public:
 
     void generateStmt(const Stmt* stmt);
     void generateMatchStmt(const MatchStmt* stmt);
+    void generateCallStmt(const CallStmt* stmt);
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
 

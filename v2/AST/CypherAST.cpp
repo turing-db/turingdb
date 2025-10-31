@@ -14,6 +14,8 @@
 #include "EntityPattern.h"
 #include "Projection.h"
 #include "WhereClause.h"
+#include "YieldClause.h"
+#include "YieldItems.h"
 #include "FunctionDecls.h"
 #include "stmt/Stmt.h"
 #include "stmt/SubStmt.h"
@@ -76,6 +78,14 @@ CypherAST::~CypherAST() {
 
     for (WhereClause* clause : _whereClauses) {
         delete clause;
+    }
+
+    for (YieldClause* clause : _yieldClauses) {
+        delete clause;
+    }
+
+    for (YieldItems* items: _yieldItems) {
+        delete items;
     }
 
     for (Stmt* stmt : _stmts) {
@@ -180,6 +190,14 @@ void CypherAST::addProjection(Projection* projection) {
 
 void CypherAST::addWhereClause(WhereClause* clause) {
     _whereClauses.push_back(clause);
+}
+
+void CypherAST::addYieldClause(YieldClause* clause) {
+    _yieldClauses.push_back(clause);
+}
+
+void CypherAST::addYieldItems(YieldItems* items) {
+    _yieldItems.push_back(items);
 }
 
 void CypherAST::addStmt(Stmt* stmt) {

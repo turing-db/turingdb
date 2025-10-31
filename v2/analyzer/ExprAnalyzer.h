@@ -39,6 +39,7 @@ public:
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
 
     void analyzeRootExpr(Expr* expr);
+    void analyze(FunctionInvocationExpr* expr);
 
     ValueType analyze(PropertyExpr* expr,
                       bool allowCreate = false,
@@ -65,7 +66,6 @@ private:
     void analyze(StringExpr* expr);
     void analyze(EntityTypeExpr* expr);
     void analyze(PathExpr* expr);
-    void analyze(FunctionInvocationExpr* expr);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

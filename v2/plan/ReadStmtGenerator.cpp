@@ -29,6 +29,7 @@
 
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
+#include "stmt/CallStmt.h"
 
 #include "decl/PatternData.h"
 #include "metadata/LabelSet.h"
@@ -55,6 +56,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             generateMatchStmt(static_cast<const MatchStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::CALL:
+            generateCallStmt(static_cast<const CallStmt*>(stmt));
             break;
 
         default:
@@ -94,6 +99,10 @@ void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
     if (where) {
         generateWhereClause(where);
     }
+}
+
+void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
+
 }
 
 void ReadStmtGenerator::generateWhereClause(const WhereClause* where) {

@@ -11,6 +11,7 @@ struct FunctionSignature {
     std::vector<EvaluatedType> _argumentTypes;
     EvaluatedType _returnType {};
     bool _isAggregate {false};
+    bool _isDatabaseProcedure {false};
 };
 
 }

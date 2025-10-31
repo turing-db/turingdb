@@ -22,6 +22,11 @@ public:
             return *this;
         }
 
+        FunctionSignatureBuilder& setIsDatabaseProcedure(bool isDatabaseProcedure) {
+            _signature->_isDatabaseProcedure = isDatabaseProcedure;
+            return *this;
+        }
+
         FunctionSignatureBuilder& setArguments(std::initializer_list<EvaluatedType> types) {
             _signature->_argumentTypes = types;
             return *this;

@@ -10,6 +10,7 @@ public:
 
     enum class Kind {
         MATCH = 0,
+        CALL,
         CREATE,
         SET,
         DELETE,

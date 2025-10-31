@@ -2,6 +2,7 @@
 
 #include "AnalyzeException.h"
 #include "ExprAnalyzer.h"
+#include "FunctionInvocation.h"
 #include "SymbolChain.h"
 #include "metadata/GraphMetadata.h"
 
@@ -15,6 +16,7 @@
 #include "stmt/Skip.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
+#include "stmt/CallStmt.h"
 #include "QualifiedName.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -31,14 +33,14 @@
 #include "expr/StringExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
+#include "expr/FunctionInvocationExpr.h"
 
 using namespace db::v2;
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(graphView.metadata()) {
 }
 
 ReadStmtAnalyzer::~ReadStmtAnalyzer() {
@@ -48,6 +50,10 @@ void ReadStmtAnalyzer::analyze(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             analyze(static_cast<const MatchStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::CALL:
+            analyze(static_cast<const CallStmt*>(stmt));
             break;
 
         default:
@@ -78,6 +84,26 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 
     if (matchSt->hasLimit()) {
         analyze(matchSt->getLimit());
+    }
+}
+
+void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
+    if (callStmt->isOptional()) {
+        throwError("OPTIONAL CALL not supported", callStmt);
+    }
+
+    FunctionInvocationExpr* funcExpr = callStmt->getFunc();
+    if (!funcExpr) [[unlikely]] {
+        throwError("CALL statement must have a function invocation", callStmt);
+    }
+
+    _exprAnalyzer->analyze(funcExpr);
+
+    const FunctionInvocation* func = funcExpr->getFunctionInvocation();
+    const FunctionSignature* signature = func->getSignature();
+
+    if (!signature->_isDatabaseProcedure) {
+        throwError(fmt::format("No such database procedure '{}'", signature->_fullName), callStmt);
     }
 }
 

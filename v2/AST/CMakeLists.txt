@@ -26,6 +26,7 @@ set(ast_sources
     stmt/MatchStmt.cpp
     stmt/SetStmt.cpp
     stmt/SetItem.cpp
+    stmt/CallStmt.cpp
     stmt/CreateStmt.cpp
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
@@ -48,6 +49,8 @@ set(ast_sources
     QualifiedName.cpp
     FunctionInvocation.cpp
     WhereClause.cpp
+    YieldClause.cpp
+    YieldItems.cpp
 
     CompilerException.cpp)
 
