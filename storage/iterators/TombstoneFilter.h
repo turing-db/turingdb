@@ -49,6 +49,13 @@ public:
     template <typename T>
     void filter(ColumnVector<T>* col);
 
+    void reset() {
+        _initialised = false;
+        if (_nonDeletedRanges) {
+            _nonDeletedRanges->clear();
+        }
+    }
+
 private:
     struct NonDeletedRange;
     using NonDeletedRanges = std::vector<NonDeletedRange>;
