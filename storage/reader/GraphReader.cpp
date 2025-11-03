@@ -106,6 +106,26 @@ size_t GraphReader::getNodePropertyCount(size_t datapartIndex,
     return 0;
 }
 
+size_t GraphReader::getEdgePropertyCount(PropertyTypeID ptID) const {
+    size_t count = 0;
+    for (const auto& part : _view.dataparts()) {
+        const auto& props = part->edgeProperties();
+        if (props.hasPropertyType(ptID)) {
+            count += props.count(ptID);
+        }
+    }
+    return count;
+}
+
+size_t GraphReader::getEdgePropertyCount(size_t datapartIndex,
+                                         PropertyTypeID ptID) const {
+    const auto& props = _view.dataparts()[datapartIndex]->edgeProperties();
+    if (props.hasPropertyType(ptID)) {
+        return props.count(ptID);
+    }
+    return 0;
+}
+
 NodeID GraphReader::getFinalNodeID(size_t partIndex, NodeID tmpID) const {
     // TODO Update with a new Unique-Internal ID System.
     // This implementation does not work if multiple nodes

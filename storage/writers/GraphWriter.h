@@ -5,6 +5,7 @@
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "metadata/LabelSetHandle.h"
+#include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 
 namespace db {
@@ -38,20 +39,28 @@ public:
     NodeID addNode(const LabelSet& labelset);
     NodeID addNode(const LabelSetHandle& labelset);
 
+    void deleteNode(NodeID id);
+    void deleteNodes(const std::vector<NodeID>& ids);
+
     EdgeRecord addEdge(std::string_view edgeType, NodeID src, NodeID tgt);
     EdgeRecord addEdge(EdgeTypeID edgeType, NodeID src, NodeID tgt);
 
-    template<SupportedType T>
+    void deleteEdge(EdgeID id);
+    void deleteEdges(const std::vector<EdgeID>& ids);
+
+    template <SupportedType T>
     void addNodeProperty(NodeID nodeID, std::string_view propertyTypeName, T::Primitive&& value);
 
-    template<SupportedType T>
+    template <SupportedType T>
     void addNodeProperty(NodeID nodeID, PropertyType propertyType, T::Primitive&& value);
 
-    template<SupportedType T>
+    template <SupportedType T>
     void addEdgeProperty(const EdgeRecord& edge, std::string_view propertyTypeName, T::Primitive&& value);
 
-    template<SupportedType T>
+    template <SupportedType T>
     void addEdgeProperty(const EdgeRecord& edge, PropertyType propertyType, T::Primitive&& value);
+
+    PropertyType addPropertyType(const std::string& propTypeName, ValueType valueType);
 
 private:
     Graph* _graph {nullptr};

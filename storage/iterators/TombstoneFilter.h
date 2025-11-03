@@ -1,6 +1,7 @@
 #pragma once
 
 #include "versioning/Tombstones.h"
+#include "versioning/NonDeletedRanges.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
 
@@ -57,14 +58,6 @@ public:
     }
 
 private:
-    struct NonDeletedRange;
-    using NonDeletedRanges = std::vector<NonDeletedRange>;
-
-    struct NonDeletedRange {
-        size_t start;
-        size_t size;
-    };
-
     const Tombstones& _tombstones;
 
     // Pointer indirection to vector: only allocate vector if the owning ChunkWriter needs
