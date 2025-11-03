@@ -101,7 +101,7 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
 }
 
 std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
-    return Change::create(this, ChangeID {_nextChangeID.fetch_add(1)}, base);
+    return Change::create(this, *_partManager, ChangeID {_nextChangeID.fetch_add(1)}, base);
 }
 
 std::unique_lock<std::mutex> VersionController::lock() {

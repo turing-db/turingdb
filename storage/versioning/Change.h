@@ -33,6 +33,7 @@ public:
     Change& operator=(Change&&) = delete;
 
     [[nodiscard]] static std::unique_ptr<Change> create(VersionController* versionController,
+                                                        ArcManager<DataPart>& dataPartManager,
                                                         ChangeID id,
                                                         CommitHash base);
 
@@ -53,6 +54,7 @@ private:
 
     ChangeID _id;
     VersionController* _versionController {nullptr};
+    ArcManager<DataPart>* _dataPartManager {nullptr};
     WeakArc<const CommitData> _base;
 
     // Committed
@@ -61,7 +63,10 @@ private:
 
     CommitBuilder* _tip {nullptr};
 
-    explicit Change(VersionController* versionController, ChangeID id, CommitHash base);
+    explicit Change(VersionController* versionController,
+                    ArcManager<DataPart>& dataPartManager,
+                    ChangeID id,
+                    CommitHash base);
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);

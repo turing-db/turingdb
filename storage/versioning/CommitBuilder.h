@@ -13,7 +13,6 @@ namespace db {
 
 class DataPartBuilder;
 class MetadataBuilder;
-class VersionController;
 class JobSystem;
 class Commit;
 class Change;
@@ -29,7 +28,7 @@ public:
     CommitBuilder& operator=(const CommitBuilder&) = delete;
     CommitBuilder& operator=(CommitBuilder&&) = delete;
 
-    [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(VersionController& controller,
+    [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(ArcManager<DataPart>& dataPartManager,
                                                                 const WeakArc<CommitData>& commitData,
                                                                 Change* change,
                                                                 const GraphView& view);
@@ -66,14 +65,13 @@ public:
 
 private:
     friend CommitWriteBuffer;
-    friend VersionController;
     friend Change;
     friend ChangeRebaser;
 
     mutable std::mutex _mutex;
     std::unique_ptr<CommitWriteBuffer> _writeBuffer;
 
-    VersionController* _controller {nullptr};
+    ArcManager<DataPart>* _dataPartManager {nullptr};
     Change* _change {nullptr};
     GraphView _view;
 
@@ -91,7 +89,7 @@ private:
 
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-    CommitBuilder(VersionController&,
+    CommitBuilder(ArcManager<DataPart>& dataPartManager,
                   const WeakArc<CommitData>& data,
                   Change* change,
                   const GraphView&);

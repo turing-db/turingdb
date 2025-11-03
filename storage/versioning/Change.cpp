@@ -14,11 +14,15 @@ using namespace db;
 
 Change::~Change() = default;
 
-Change::Change(VersionController* versionController, ChangeID id, CommitHash base)
+Change::Change(VersionController* versionController,
+               ArcManager<DataPart>& dataPartManager,
+               ChangeID id,
+               CommitHash base)
     : _id(id),
       _versionController(versionController),
+      _dataPartManager(&dataPartManager),
       _base(versionController->openTransaction(base).commitData()) {
-    auto tip = CommitBuilder::prepare(*_versionController,
+    auto tip = CommitBuilder::prepare(*_dataPartManager,
                                       _versionController->createCommitData(CommitHash::create()),
                                       this,
                                       GraphView {*_base});
@@ -28,9 +32,10 @@ Change::Change(VersionController* versionController, ChangeID id, CommitHash bas
 }
 
 std::unique_ptr<Change> Change::create(VersionController* versionController,
+                                       ArcManager<DataPart>& dataPartManager,
                                        ChangeID id,
                                        CommitHash base) {
-    auto* ptr = new Change(versionController, id, base);
+    auto* ptr = new Change(versionController, dataPartManager, id, base);
 
     return std::unique_ptr<Change> {ptr};
 }
@@ -61,7 +66,7 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
         return res;
     }
 
-    auto newTip = CommitBuilder::prepare(*_versionController,
+    auto newTip = CommitBuilder::prepare(*_dataPartManager,
                                          _versionController->createCommitData(CommitHash::create()),
                                          this,
                                          _commits.back()->viewGraph());
