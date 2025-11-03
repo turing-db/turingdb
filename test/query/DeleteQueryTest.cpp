@@ -1416,3 +1416,39 @@ TEST_F(DeleteQueryTest, validAfterDelEdgeConflictSSIReject) {
             .execute();
     }
 }
+
+TEST_F(DeleteQueryTest, rebasedTombstones) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID firstChange = newChange(tester);
+    ChangeID secondChange = newChange(tester);
+
+    // Create changes under the second
+    tester.setChangeID(firstChange);
+    tester.query(R"(CREATE (n:Person{name="Cyrus"}))") // Node 13
+        .execute();
+    tester.query(R"(CREATE (n:Person{name="Doruk"}))") // Node 14
+        .execute();
+    submitChange(tester);
+
+
+    // Second change creates new nodes too, but deletes them
+    tester.setChangeID(secondChange);
+    tester.query(R"(CREATE (n:Interest{name="Manchester"}))") // Node 13
+        .execute();
+    tester.query(R"(CREATE (n:Interest{name="Music"}))")      // Node 14
+        .execute();
+    tester.query(R"(CREATE (n:Interest{name="Cats"}))")       // Node 15
+        .execute();
+    tester.query("commit")
+        .execute();
+    tester.query("delete nodes 13")
+        .execute();
+    submitChange(tester);
+
+    // Node 13 shouldn't be deleted: 13->15 rebased on main: 15 deleted
+
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17})
+        .execute();
+}
