@@ -126,7 +126,7 @@ public:
         }
 
         for (auto& [partIndex, path] : datapartPaths) {
-            auto res = DataPartLoader::load(path, metadata, *versionController);
+            auto res = DataPartLoader::load(path, metadata, *versionController->_partManager);
 
             if (!res) {
                 return res.get_unexpected();

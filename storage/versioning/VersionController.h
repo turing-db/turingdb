@@ -13,7 +13,6 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
-#include "versioning/WriteSet.h"
 
 namespace db {
 
@@ -22,6 +21,7 @@ class GraphLoader;
 class GraphDumper;
 class JobSystem;
 class FrozenCommitTx;
+class CommitLoader;
 
 struct EntityIDPair {
     NodeID _nodeID;
@@ -54,15 +54,11 @@ public:
         return _dataManager->create(hash);
     }
 
-    WeakArc<DataPart> createDataPart(NodeID firstNodeID, EdgeID firstEdgeID) {
-        Profile profile("VersionController::createDataPart");
-        return _partManager->create(firstNodeID, firstEdgeID);
-    }
-
 private:
     friend GraphLoader;
     friend GraphDumper;
     friend Change;
+    friend CommitLoader;
 
     Graph* _graph {nullptr};
 

@@ -8,14 +8,13 @@ namespace db {
 
 class DataPart;
 class PropertyManager;
-class VersionController;
 class GraphMetadata;
 
 class DataPartLoader {
 public:
     [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(const fs::Path& path,
                                                             const GraphMetadata& metadata,
-                                                            VersionController& versionController);
+                                                            ArcManager<DataPart>& dataPartManager);
 
 private:
     static constexpr std::string_view NODE_PROPS_PREFIX = "node-props-";

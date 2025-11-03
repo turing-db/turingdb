@@ -5,7 +5,6 @@
 #include "DumpResult.h"
 #include "FilePageReader.h"
 #include "FileResult.h"
-#include "Graph.h"
 #include "StringIndexerLoader.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "metadata/PropertyType.h"
@@ -19,20 +18,19 @@
 #include "PropertyContainerLoader.h"
 #include "PropertyIndexerLoader.h"
 #include "spdlog/spdlog.h"
-#include "versioning/VersionController.h"
 
 using namespace db;
 
 DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
                                                    const GraphMetadata& metadata,
-                                                   VersionController& versionController) {
+                                                   ArcManager<DataPart>& dataPartManager) {
     Profile profile {"DataPartLoader::load"};
 
     if (!path.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
     }
 
-    WeakArc<DataPart> part = versionController.createDataPart(0, 0);
+    WeakArc<DataPart> part = dataPartManager.create(0, 0);
 
     // Loading info
     {

@@ -19,8 +19,8 @@ using namespace db;
 
 VersionController::VersionController(Graph* graph)
     : _graph(graph),
-    _dataManager(std::make_unique<ArcManager<CommitData>>()),
-    _partManager(std::make_unique<ArcManager<DataPart>>())
+      _dataManager(std::make_unique<ArcManager<CommitData>>()),
+      _partManager(std::make_unique<ArcManager<DataPart>>())
 {
 }
 
