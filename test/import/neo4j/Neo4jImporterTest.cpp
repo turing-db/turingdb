@@ -86,7 +86,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addEdge(0, 3, 4);
-        ASSERT_TRUE(change->access().submit(*_jobSystem));
+        ASSERT_TRUE(_graph->submit(std::move(change), *_jobSystem));
     }
 
     const FrozenCommitTx transaction = _graph->openTransaction();

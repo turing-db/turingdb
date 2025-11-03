@@ -32,10 +32,10 @@ public:
     Change& operator=(const Change&) = delete;
     Change& operator=(Change&&) = delete;
 
-    [[nodiscard]] static std::unique_ptr<Change> create(VersionController* versionController,
-                                                        ArcManager<DataPart>& dataPartManager,
+    [[nodiscard]] static std::unique_ptr<Change> create(ArcManager<DataPart>& dataPartManager,
+                                                        ArcManager<CommitData>& commitDataManager,
                                                         ChangeID id,
-                                                        CommitHash base);
+                                                        const WeakArc<const CommitData>& base);
 
     [[nodiscard]] PendingCommitWriteTx openWriteTransaction();
     [[nodiscard]] PendingCommitReadTx openReadTransaction(CommitHash commitHash);
@@ -53,8 +53,8 @@ private:
     friend class ChangeConflictChecker;
 
     ChangeID _id;
-    VersionController* _versionController {nullptr};
     ArcManager<DataPart>* _dataPartManager {nullptr};
+    ArcManager<CommitData>* _commitDataManager {nullptr};
     WeakArc<const CommitData> _base;
 
     // Committed
@@ -63,14 +63,13 @@ private:
 
     CommitBuilder* _tip {nullptr};
 
-    explicit Change(VersionController* versionController,
-                    ArcManager<DataPart>& dataPartManager,
+    explicit Change(ArcManager<DataPart>& dataPartManager,
+                    ArcManager<CommitData>& commitDataManager,
                     ChangeID id,
-                    CommitHash base);
+                    const WeakArc<const CommitData>& base);
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
+    [[nodiscard]] CommitResult<void> rebase(const WeakArc<const CommitData>& head);
 
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash) const;
 };

@@ -39,7 +39,8 @@ bool GraphWriter::commit() {
 }
 
 bool GraphWriter::submit() {
-    if (auto res = _change->access().submit(*_jobSystem); !res) {
+    ChangeAccessor accessor = _change->access();
+    if (auto res = _graph->submit(std::move(_change), *_jobSystem); !res) {
         spdlog::error("Could not submit changes: {}", res.error().fmtMessage());
         return false;
     }

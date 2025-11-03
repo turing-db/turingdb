@@ -31,7 +31,7 @@ public:
     }
 
     bool finish(JobSystem& jobs) {
-        return _change->access().submit(jobs).has_value();
+        return _graph->submit(std::move(_change), jobs).has_value();
     }
 
     bool onNodeProperty(std::string_view k, std::string_view v) {

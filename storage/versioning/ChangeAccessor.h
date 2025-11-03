@@ -33,12 +33,9 @@ public:
     [[nodiscard]] auto end() const;
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
 
     [[nodiscard]] ChangeID getID() const;
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash = CommitHash::head()) const;
-    [[nodiscard]] const Graph* getGraph() const;
     [[nodiscard]] std::span<const std::unique_ptr<CommitBuilder>> pendingCommits() const;
 
     void release() {

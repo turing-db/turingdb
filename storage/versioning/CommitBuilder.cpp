@@ -122,7 +122,8 @@ CommitBuilder::CommitBuilder(ArcManager<DataPart>& dataPartManager,
                              const GraphView& view)
     : _dataPartManager(&dataPartManager),
       _view(view),
-      _commitData(commitData) {
+      _commitData(commitData)
+{
 }
 
 void CommitBuilder::initialize() {

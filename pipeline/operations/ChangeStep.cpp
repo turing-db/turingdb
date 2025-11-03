@@ -106,7 +106,7 @@ void ChangeStep::submitChange() const {
     ChangeManager& changeMan = _sysMan->getChangeManager();
 
     // Step 1: Submit the change
-    if (const auto res = changeMan.submitChange(tx.changeAccessor(), *_jobSystem); !res) {
+    if (const auto res = changeMan.submitChange(_graph, tx.changeAccessor(), *_jobSystem); !res) {
         throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 
@@ -131,7 +131,7 @@ void ChangeStep::deleteChange() const {
 
     const ChangeID changeID = std::get<ChangeID>(_changeInfo);
 
-    if (const auto res = _sysMan->getChangeManager().deleteChange(tx.changeAccessor(), changeID); !res) {
+    if (const auto res = _sysMan->getChangeManager().deleteChange(_graph, tx.changeAccessor(), changeID); !res) {
         throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
     }
 }

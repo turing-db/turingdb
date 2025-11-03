@@ -54,6 +54,8 @@ public:
         return _dataManager->create(hash);
     }
 
+    [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
+
 private:
     friend GraphLoader;
     friend GraphDumper;
@@ -74,10 +76,6 @@ private:
     std::unique_lock<std::mutex> lock();
 
     void addCommit(std::unique_ptr<Commit> commit);
-
-    [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
-
-    [[nodiscard]] Commit::CommitSpan getCommitsSinceCommitHash(CommitHash from) const;
 };
 
 }

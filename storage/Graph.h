@@ -7,6 +7,7 @@
 #include "Path.h"
 #include "versioning/CommitHash.h"
 #include "versioning/GraphID.h"
+#include "versioning/ChangeResult.h"
 
 namespace db {
 
@@ -48,6 +49,8 @@ public:
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
     [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const fs::Path& path);
+
+    [[nodiscard]] CommitResult<void> submit(std::unique_ptr<Change> change, JobSystem& jobs);
 
 private:
     friend GraphInfoLoader;

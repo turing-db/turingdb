@@ -37,18 +37,20 @@ std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& pa
     return std::unique_ptr<Graph>(graph);
 }
 
+CommitResult<void> Graph::submit(std::unique_ptr<Change> change, JobSystem& jobs) {
+    return _versionController->submitChange(change.get(), jobs);
+}
+
 Graph::Graph()
     : _graphName("default"),
-    _graphPath("/dev/null"),
-    _versionController(new VersionController {this}),
-    _serializer(new GraphSerializer {this})
-{
+      _graphPath("/dev/null"),
+      _versionController(new VersionController {this}),
+      _serializer(new GraphSerializer {this}) {
 }
 
 Graph::Graph(const std::string& name, const fs::Path& path)
     : _graphName(name),
-    _graphPath(path),
-    _versionController(new VersionController {this}),
-    _serializer(new GraphSerializer {this})
-{
+      _graphPath(path),
+      _versionController(new VersionController {this}),
+      _serializer(new GraphSerializer {this}) {
 }

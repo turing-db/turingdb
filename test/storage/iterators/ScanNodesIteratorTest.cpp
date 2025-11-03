@@ -51,7 +51,7 @@ TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
     auto change = graph->newChange();
     auto* commitBuilder = change->access().getTip();
     [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-    const auto res = change->access().submit(*_jobSystem);
+    const auto res = graph->submit(std::move(change), *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -75,7 +75,7 @@ TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
         auto* commitBuilder = change->access().getTip();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
     }
-    const auto res = change->access().submit(*_jobSystem);
+    const auto res = graph->submit(std::move(change), *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -105,7 +105,7 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        const auto res = change->access().submit(*_jobSystem);
+        const auto res = graph->submit(std::move(change), *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
@@ -159,7 +159,7 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
         ASSERT_TRUE(change->access().commit(*_jobSystem));
     }
 
-    const auto res = change->access().submit(*_jobSystem);
+    const auto res = graph->submit(std::move(change), *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -213,14 +213,13 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
             builder.addNode(labelset);
         }
 
-        const auto res = change->access().submit(*_jobSystem);
+        const auto res = graph->submit(std::move(change), *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
 
         ASSERT_TRUE(res);
     }
-
 
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();

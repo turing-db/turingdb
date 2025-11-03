@@ -26,6 +26,7 @@ public:
     DataPartSpan commitDataparts() const { return _commitDataparts; }
     DataPartSpan commitDataparts() { return _commitDataparts; }
     CommitViewSpan commits() const;
+    CommitViewSpan getAllSince(CommitHash hash) const;
 
     void pushPreviousCommits(std::span<const CommitView> commits) {
         const size_t prevSize = _commits.size();

@@ -31,7 +31,7 @@ public:
 
     [[nodiscard]] CommitHash hash() const { return _hash; }
 
-    [[nodiscard]] const CommitData& data() const { return *_data; }
+    [[nodiscard]] WeakArc<const CommitData> data() const { return _data; }
     [[nodiscard]] bool hasData() const { return _data != nullptr; }
     [[nodiscard]] const CommitHistory& history() const { return _data->history(); }
     [[nodiscard]] CommitHistory& history() { return _data->history(); }

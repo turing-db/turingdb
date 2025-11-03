@@ -29,7 +29,7 @@ public:
 
     [[nodiscard]] bool isValid() const;
     [[nodiscard]] bool hasData() const;
-    [[nodiscard]] const CommitData& data() const;
+    [[nodiscard]] WeakArc<const CommitData> data() const;
     [[nodiscard]] CommitHash hash() const;
     [[nodiscard]] DataPartSpan dataparts() const;
     [[nodiscard]] const CommitHistory& history() const;

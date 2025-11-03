@@ -124,7 +124,7 @@ DataPartBuilder& JsonParser::newDataBuffer() {
 }
 
 CommitResult<void> JsonParser::commit(Graph& graph, JobSystem& jobSystem) {
-    return _change->access().submit(jobSystem);
+    return graph.submit(std::move(_change), jobSystem);
 }
 
 }

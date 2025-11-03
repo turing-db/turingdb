@@ -42,7 +42,7 @@ struct GraphUpdate {
     }
 
     auto submit(JobSystem& jobSystem) {
-        auto res = _change->access().submit(jobSystem);
+        const auto res = _graph->submit(std::move(_change), jobSystem);
         if (!res) {
             spdlog::error("Failed to submit change: {}", res.error().fmtMessage());
         }

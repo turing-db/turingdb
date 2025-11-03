@@ -2,9 +2,7 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "BioAssert.h"
 #include "JobSystem.h"
-#include "Panic.h"
 #include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
@@ -20,8 +18,7 @@ using namespace db;
 VersionController::VersionController(Graph* graph)
     : _graph(graph),
       _dataManager(std::make_unique<ArcManager<CommitData>>()),
-      _partManager(std::make_unique<ArcManager<DataPart>>())
-{
+      _partManager(std::make_unique<ArcManager<DataPart>>()) {
 }
 
 VersionController::~VersionController() {
@@ -69,12 +66,11 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
 
     std::scoped_lock lock(_mutex);
 
-    // atomic load main
-    Commit* mainState = _head.load();
+    Commit* head = _head.load();
 
-    // rebase if main has changed under us
-    if (mainState->hash() != change->baseHash()) {
-        if (auto res = change->rebase(jobSystem); !res) {
+    // Rebase if main has changed
+    if (head->hash() != change->baseHash()) {
+        if (auto res = change->rebase(head->data()); !res) {
             return res;
         }
     }
@@ -101,7 +97,12 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
 }
 
 std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
-    return Change::create(this, *_partManager, ChangeID {_nextChangeID.fetch_add(1)}, base);
+    const WeakArc<const CommitData> baseData = openTransaction(base).commitData();
+
+    return Change::create(*_partManager,
+                          *_dataManager,
+                          ChangeID {_nextChangeID.fetch_add(1)},
+                          baseData);
 }
 
 std::unique_lock<std::mutex> VersionController::lock() {
@@ -124,21 +125,4 @@ ssize_t VersionController::getCommitIndex(CommitHash hash) const {
     }
 
     return it->second;
-}
-
-// NOTE: Called within locked-context
-Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from) const {
-    // Should not be trying to check conflicts if we are not rebasing
-    bioassert(from != CommitHash::head());
-    ssize_t startIndex = getCommitIndex(from);
-    if (startIndex == -1) {
-        panic("Could not find Commit with hash {:x}", from.get());
-    }
-    bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size());
-
-    // +1 to skip the commit we branched from
-    const auto* spanStart = _commits.data() + startIndex + 1;
-    const size_t numCommitsSinceFrom = _commits.size() - (startIndex + 1);
-
-    return {spanStart, numCommitsSinceFrom};
 }
