@@ -10,8 +10,6 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
 
-#include "PipelineException.h"
-
 using namespace db::v2;
 
 GetOutEdgesProcessor::GetOutEdgesProcessor()
@@ -25,37 +23,23 @@ GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
     GetOutEdgesProcessor* getOutEdges = new GetOutEdgesProcessor();
 
     PipelineInputPort* inNodeIDs = PipelineInputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outIndices = PipelineOutputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outEdgeIDs = PipelineOutputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outTargetNodes = PipelineOutputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outEdgeTypes = PipelineOutputPort::create(pipeline, getOutEdges);
+    PipelineOutputPort* outEdges = PipelineOutputPort::create(pipeline, getOutEdges);
 
     getOutEdges->_inNodeIDs.setPort(inNodeIDs);
-    getOutEdges->_outIndices.setPort(outIndices);
-    getOutEdges->_outEdgeIDs.setPort(outEdgeIDs);
-    getOutEdges->_outTargetNodes.setPort(outTargetNodes);
-    getOutEdges->_outEdgeTypes.setPort(outEdgeTypes);
+    getOutEdges->_outEdges.setPort(outEdges);
 
     getOutEdges->addInput(inNodeIDs);
-    getOutEdges->addOutput(outIndices);
-    getOutEdges->addOutput(outEdgeIDs);
-    getOutEdges->addOutput(outTargetNodes);
-    getOutEdges->addOutput(outEdgeTypes);
-
+    getOutEdges->addOutput(outEdges);
     getOutEdges->postCreate(pipeline);
     return getOutEdges;
 }
 
 void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs.getRawColumn());
-    ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices.getRawColumn());
-    ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdgeIDs.getRawColumn());
-    ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outTargetNodes.getRawColumn());
-    ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdgeTypes.getRawColumn());
-
-    if (!nodeIDs || !indices || !edgeIDs || !targetNodes || !edgeTypes) {
-        throw PipelineException("GetOutEdgesProcessor: Invalid columns");
-    }
+    ColumnNodeIDs* nodeIDs = _inNodeIDs.getNodeIDs();
+    ColumnVector<size_t>* indices = _outEdges.getIndices();
+    ColumnEdgeIDs* edgeIDs = _outEdges.getEdgeIDs();
+    ColumnNodeIDs* targetNodes = _outEdges.getTargetNodes();
+    ColumnEdgeTypes* edgeTypes = _outEdges.getEdgeTypes();
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
     _it->setIndices(indices);
@@ -79,9 +63,5 @@ void GetOutEdgesProcessor::execute() {
         finish();
     }
 
-    _outIndices.getPort()->writeData();
-    _outEdgeIDs.getPort()->writeData();
-    _outTargetNodes.getPort()->writeData();
-    _outEdgeTypes.getPort()->writeData();
-    _outIndices.getPort()->writeData();
+    _outEdges.getPort()->writeData();
 }

@@ -20,18 +20,12 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineInputInterface& inNodeIDs() { return _inNodeIDs; }
-    PipelineOutputInterface& outIndices() { return _outIndices; }
-    PipelineOutputInterface& outEdgeIDs() { return _outEdgeIDs; }
-    PipelineOutputInterface& outTargetNodes() { return _outTargetNodes; }
-    PipelineOutputInterface& outEdgeTypes() { return _outEdgeTypes; }
+    PipelineNodeInputInterface& inNodeIDs() { return _inNodeIDs; }
+    PipelineEdgeOutputInterface& outEdges() { return _outEdges; }
 
 private:
-    PipelineInputInterface _inNodeIDs;
-    PipelineOutputInterface _outIndices;
-    PipelineOutputInterface _outEdgeIDs;
-    PipelineOutputInterface _outTargetNodes;
-    PipelineOutputInterface _outEdgeTypes;
+    PipelineNodeInputInterface _inNodeIDs;
+    PipelineEdgeOutputInterface _outEdges;
     std::unique_ptr<GetOutEdgesChunkWriter> _it;
 
     GetOutEdgesProcessor();

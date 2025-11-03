@@ -2,8 +2,6 @@
 
 #include "dataframe/Dataframe.h"
 
-#include "PipelineException.h"
-
 using namespace db::v2;
 
 CountProcessor::CountProcessor()
@@ -30,13 +28,8 @@ CountProcessor* CountProcessor::create(PipelineV2* pipeline) {
 }
 
 void CountProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnConst<size_t>* countColumn = dynamic_cast<ColumnConst<size_t>*>(_output.getRawColumn());
-    if (!countColumn) {
-       throw PipelineException("CountProcessor::prepare: count column is not a ColumnConst<size_t>");
-    }
-
+    ColumnConst<size_t>* countColumn = _output.getValue();
     _countColumn = countColumn;
-
     markAsPrepared();
 }
 

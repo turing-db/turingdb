@@ -21,23 +21,21 @@ class PipelineV2;
 template <typename PropertyChunkWriter>
 class GetPropertiesProcessor : public Processor {
 public:
-    PipelineInputInterface& inIDs() { return _inIDs; }
-    PipelineOutputInterface& outIndices() { return _outIndices; }
-    PipelineOutputInterface& outValues() { return _outValues; }
+    using Values = typename PropertyChunkWriter::Values;
+
+    PipelineNodeInputInterface& inIDs() { return _inIDs; }
+    PipelineValuesOutputInterface<Values>& outValues() { return _outValues; }
 
     static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType) {
         auto* getProps = new GetPropertiesProcessor<PropertyChunkWriter>(propType);
 
         PipelineInputPort* inIDs = PipelineInputPort::create(pipeline, getProps);
-        PipelineOutputPort* outIndices = PipelineOutputPort::create(pipeline, getProps);
         PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
 
         getProps->_inIDs.setPort(inIDs);
-        getProps->_outIndices.setPort(outIndices);
         getProps->_outValues.setPort(outValues);
 
         getProps->addInput(inIDs);
-        getProps->addOutput(outIndices);
         getProps->addOutput(outValues);
 
         getProps->postCreate(pipeline);
@@ -45,14 +43,11 @@ public:
     }
 
     void prepare(ExecutionContext* ctxt) override {
-        ColumnNodeIDs* ids = dynamic_cast<ColumnNodeIDs*>(_inIDs.getRawColumn());
+        ColumnNodeIDs* ids = _inIDs.getNodeIDs();
         _propWriter = std::make_unique<PropertyChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-        ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outIndices.getRawColumn());
-        auto* values = dynamic_cast<PropertyChunkWriter::ColumnValues*>(_outValues.getRawColumn());
-
-        _propWriter->setIndices(indices);
-        _propWriter->setOutput(values);
+        _propWriter->setIndices(_outValues.getIndices());
+        _propWriter->setOutput(_outValues.getValues());
         markAsPrepared();
     }
 
@@ -64,7 +59,6 @@ public:
     void execute() override {
         _inIDs.getPort()->consume();
         _propWriter->fill(ChunkConfig::CHUNK_SIZE);
-        _outIndices.getPort()->writeData();
         _outValues.getPort()->writeData();
 
         if (!_propWriter->isValid()) {
@@ -75,9 +69,8 @@ public:
 protected:
     PropertyType _propType;
     std::unique_ptr<PropertyChunkWriter> _propWriter;
-    PipelineInputInterface _inIDs;
-    PipelineOutputInterface _outIndices;
-    PipelineOutputInterface _outValues;
+    PipelineNodeInputInterface _inIDs;
+    PipelineValuesOutputInterface<Values> _outValues;
 
     GetPropertiesProcessor(PropertyType propType)
         : _propType(propType)

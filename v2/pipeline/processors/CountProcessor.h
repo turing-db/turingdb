@@ -12,16 +12,16 @@ class CountProcessor : public Processor {
 public:
     static CountProcessor* create(PipelineV2* pipeline);
 
-    PipelineInputInterface& input() { return _input; }
-    PipelineOutputInterface& output() { return _output; }
+    PipelineBlockInputInterface& input() { return _input; }
+    PipelineValueOutputInterface<size_t>& output() { return _output; }
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;
 
 private:
-    PipelineInputInterface _input;
-    PipelineOutputInterface _output;
+    PipelineBlockInputInterface _input;
+    PipelineValueOutputInterface<size_t> _output;
     size_t _countRunning {0};
     ColumnConst<size_t>* _countColumn {nullptr};
 

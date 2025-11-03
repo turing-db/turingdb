@@ -2,7 +2,6 @@
 
 #include <math.h>
 
-#include "TuringConfig.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "TuringDB.h"
@@ -114,7 +113,7 @@ TEST_F(PipelineTest, scanNodes) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
@@ -166,30 +165,30 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(&pipeline);
     const ColumnTag getOutEdgesOutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges->outIndices().getDataframe(), getOutEdgesOutIndicesTag);
-    getOutEdges->outIndices().setColumn(getOutEdgesOutIndices);
+    NamedColumn* getOutEdgesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutIndicesTag);
+    getOutEdges->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdgesOutIndices->getColumn()));
 
     const ColumnTag getOutEdgesOutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges->outEdgeIDs().getDataframe(), getOutEdgesOutEdgeIDsTag);
-    getOutEdges->outEdgeIDs().setColumn(getOutEdgesOutEdgeIDs);
+    NamedColumn* getOutEdgesOutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeIDsTag);
 
     const ColumnTag getOutEdgesOutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges->outEdgeTypes().getDataframe(), getOutEdgesOutEdgeTypesTag);
-    getOutEdges->outEdgeTypes().setColumn(getOutEdgesOutEdgeTypes);
+    NamedColumn* getOutEdgesOutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeTypesTag);
 
     const ColumnTag getOutEdgesOutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges->outTargetNodes().getDataframe(), getOutEdgesOutTargetNodesTag);
-    getOutEdges->outTargetNodes().setColumn(getOutEdgesOutTargetNodes);
+    NamedColumn* getOutEdgesOutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutTargetNodesTag);
+    getOutEdges->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdgesOutEdgeIDs->getColumn()), 
+                                     static_cast<ColumnNodeIDs*>(getOutEdgesOutTargetNodes->getColumn()), 
+                                     static_cast<ColumnEdgeTypes*>(getOutEdgesOutEdgeTypes->getColumn()));
 
     scanNodes->outNodeIDs().connectTo(getOutEdges->inNodeIDs());
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    getOutEdges->outTargetNodes().connectTo(materialize->input());
+    getOutEdges->outEdges().connectTo(materialize->input());
 
     // Fill up materialize data
     MaterializeData& matData = materialize->getMaterializeData();
@@ -261,25 +260,25 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     // Get out edges
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(&pipeline);
     const ColumnTag getOutEdgesOutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges->outIndices().getDataframe(), getOutEdgesOutIndicesTag);
-    getOutEdges->outIndices().setColumn(getOutEdgesOutIndices);
+    NamedColumn* getOutEdgesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutIndicesTag);
+    getOutEdges->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdgesOutIndices->getColumn()));
 
     const ColumnTag getOutEdgesOutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges->outTargetNodes().getDataframe(), getOutEdgesOutTargetNodesTag);
-    getOutEdges->outTargetNodes().setColumn(getOutEdgesOutTargetNodes);
+    NamedColumn* getOutEdgesOutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutTargetNodesTag);
 
     const ColumnTag getOutEdgesOutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges->outEdgeIDs().getDataframe(), getOutEdgesOutEdgeIDsTag);
-    getOutEdges->outEdgeIDs().setColumn(getOutEdgesOutEdgeIDs);
+    NamedColumn* getOutEdgesOutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeIDsTag);
 
     const ColumnTag getOutEdgesOutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges->outEdgeTypes().getDataframe(), getOutEdgesOutEdgeTypesTag);
-    getOutEdges->outEdgeTypes().setColumn(getOutEdgesOutEdgeTypes);
+    NamedColumn* getOutEdgesOutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeTypesTag);
+    getOutEdges->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdgesOutEdgeIDs->getColumn()), 
+                                     static_cast<ColumnNodeIDs*>(getOutEdgesOutTargetNodes->getColumn()), 
+                                     static_cast<ColumnEdgeTypes*>(getOutEdgesOutEdgeTypes->getColumn()));
 
     scanNodes->outNodeIDs().connectTo(getOutEdges->inNodeIDs());
 
@@ -288,14 +287,14 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
 
     GetNodePropertiesStringProcessor* getNodeProperties = GetNodePropertiesStringProcessor::create(&pipeline, namePropType);
     const ColumnTag getNodePropertiesOutIndicesTag = tagMan.allocTag();
-    NamedColumn* getNodePropertiesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getNodeProperties->outIndices().getDataframe(), getNodePropertiesOutIndicesTag);
-    getNodeProperties->outIndices().setColumn(getNodePropertiesOutIndices);
+    NamedColumn* getNodePropertiesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getNodeProperties->outValues().getDataframe(), getNodePropertiesOutIndicesTag);
+    getNodeProperties->outValues().setIndices(static_cast<ColumnIndices*>(getNodePropertiesOutIndices->getColumn()));
 
     const ColumnTag getNodePropertiesOutValuesTag = tagMan.allocTag();
     NamedColumn* getNodePropertiesOutValues = addColumnInDataframe<ColumnVector<types::String::Primitive>>(&mem, getNodeProperties->outValues().getDataframe(), getNodePropertiesOutValuesTag);
-    getNodeProperties->outValues().setColumn(getNodePropertiesOutValues);
+    getNodeProperties->outValues().setValues(static_cast<ColumnVector<types::String::Primitive>*>(getNodePropertiesOutValues->getColumn()));
 
-    getOutEdges->outTargetNodes().connectTo(getNodeProperties->inIDs());
+    getOutEdges->outEdges().connectTo(getNodeProperties->inIDs());
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
@@ -365,52 +364,51 @@ TEST_F(PipelineTest, scanNodesExpand2) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     // GetOutEdges1
     GetOutEdgesProcessor* getOutEdges1 = GetOutEdgesProcessor::create(&pipeline);
 
     const ColumnTag getOutEdges1OutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges1->outIndices().getDataframe(), getOutEdges1OutIndicesTag);
-    getOutEdges1->outIndices().setColumn(getOutEdges1OutIndices);
+    NamedColumn* getOutEdges1OutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutIndicesTag);
+    getOutEdges1->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdges1OutIndices->getColumn()));
 
     const ColumnTag getOutEdges1OutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges1->outEdgeIDs().getDataframe(), getOutEdges1OutEdgeIDsTag);
-    getOutEdges1->outEdgeIDs().setColumn(getOutEdges1OutEdgeIDs);
+    NamedColumn* getOutEdges1OutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutEdgeIDsTag);
 
     const ColumnTag getOutEdges1OutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges1->outEdgeTypes().getDataframe(), getOutEdges1OutEdgeTypesTag);
-    getOutEdges1->outEdgeTypes().setColumn(getOutEdges1OutEdgeTypes);
+    NamedColumn* getOutEdges1OutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutEdgeTypesTag);
 
     const ColumnTag getOutEdges1OutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges1->outTargetNodes().getDataframe(), getOutEdges1OutTargetNodesTag);
-    getOutEdges1->outTargetNodes().setColumn(getOutEdges1OutTargetNodes);
-
+    NamedColumn* getOutEdges1OutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutTargetNodesTag);
+    getOutEdges1->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdges1OutEdgeIDs->getColumn()), 
+                                      static_cast<ColumnNodeIDs*>(getOutEdges1OutTargetNodes->getColumn()), 
+                                      static_cast<ColumnEdgeTypes*>(getOutEdges1OutEdgeTypes->getColumn()));
     scanNodes->outNodeIDs().connectTo(getOutEdges1->inNodeIDs());
 
     // GetOutEdges2
     GetOutEdgesProcessor* getOutEdges2 = GetOutEdgesProcessor::create(&pipeline);
     const ColumnTag getOutEdges2OutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges2->outIndices().getDataframe(), getOutEdges2OutIndicesTag);
-    getOutEdges2->outIndices().setColumn(getOutEdges2OutIndices);
+    NamedColumn* getOutEdges2OutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutIndicesTag);
+    getOutEdges2->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdges2OutIndices->getColumn()));
 
     const ColumnTag getOutEdges2OutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges2->outTargetNodes().getDataframe(), getOutEdges2OutTargetNodesTag);
-    getOutEdges2->outTargetNodes().setColumn(getOutEdges2OutTargetNodes);
+    NamedColumn* getOutEdges2OutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutTargetNodesTag);
 
     const ColumnTag getOutEdges2OutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges2->outEdgeIDs().getDataframe(), getOutEdges2OutEdgeIDsTag);
-    getOutEdges2->outEdgeIDs().setColumn(getOutEdges2OutEdgeIDs);
+    NamedColumn* getOutEdges2OutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutEdgeIDsTag);
 
     const ColumnTag getOutEdges2OutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges2->outEdgeTypes().getDataframe(), getOutEdges2OutEdgeTypesTag);
-    getOutEdges2->outEdgeTypes().setColumn(getOutEdges2OutEdgeTypes);
+    NamedColumn* getOutEdges2OutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutEdgeTypesTag);
+    getOutEdges2->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdges2OutEdgeIDs->getColumn()), 
+                                     static_cast<ColumnNodeIDs*>(getOutEdges2OutTargetNodes->getColumn()), 
+                                     static_cast<ColumnEdgeTypes*>(getOutEdges2OutEdgeTypes->getColumn()));
 
-    getOutEdges1->outTargetNodes().connectTo(getOutEdges2->inNodeIDs());
+    getOutEdges1->outEdges().connectTo(getOutEdges2->inNodeIDs());
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    getOutEdges2->outTargetNodes().connectTo(materialize->input());
+    getOutEdges2->outEdges().connectTo(materialize->input());
 
     // Fill up materialize data
     MaterializeData& matData = materialize->getMaterializeData();
@@ -496,7 +494,7 @@ TEST_F(PipelineTest, scanNodesLimit) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
@@ -510,8 +508,7 @@ TEST_F(PipelineTest, scanNodesLimit) {
     constexpr size_t limitCount = 4;
     LimitProcessor* limit = LimitProcessor::create(&pipeline, limitCount);
     const ColumnTag limitOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* limitOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, limit->output().getDataframe(), limitOutNodeIDsTag);
-    limit->output().setColumn(limitOutNodeIDs);
+    addColumnInDataframe<ColumnNodeIDs>(&mem, limit->output().getDataframe(), limitOutNodeIDsTag);
     materialize->output().connectTo(limit->input());
 
     // Lambda
@@ -561,7 +558,7 @@ TEST_F(PipelineTest, scanNodesSkip) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
@@ -575,8 +572,7 @@ TEST_F(PipelineTest, scanNodesSkip) {
     constexpr size_t skipCount = 4;
     SkipProcessor* skip = SkipProcessor::create(&pipeline, skipCount);
     const ColumnTag skipOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* skipOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, skip->output().getDataframe(), skipOutNodeIDsTag);
-    skip->output().setColumn(skipOutNodeIDs);
+    addColumnInDataframe<ColumnNodeIDs>(&mem, skip->output().getDataframe(), skipOutNodeIDsTag);
     materialize->output().connectTo(skip->input());
 
     // Lambda
@@ -626,7 +622,7 @@ TEST_F(PipelineTest, scanNodesCount) {
     ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
     const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
     NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setColumn(scanNodesOutNodeIDs);
+    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
 
     // Materialize
     MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
@@ -640,7 +636,7 @@ TEST_F(PipelineTest, scanNodesCount) {
     CountProcessor* count = CountProcessor::create(&pipeline);
     const ColumnTag countOutCountTag = tagMan.allocTag();
     NamedColumn* countOutCount = addColumnInDataframe<ColumnConst<size_t>>(&mem, count->output().getDataframe(), countOutCountTag);
-    count->output().setColumn(countOutCount);
+    count->output().setValue(static_cast<ColumnConst<size_t>*>(countOutCount->getColumn()));
     materialize->output().connectTo(count->input());
 
     // Lambda
@@ -710,7 +706,7 @@ TEST_F(PipelineTest, multiChunkCount) {
     CountProcessor* count = CountProcessor::create(&pipeline);
     const ColumnTag countOutCountTag = tagMan.allocTag();
     NamedColumn* countOutCount = addColumnInDataframe<ColumnConst<size_t>>(&mem, count->output().getDataframe(), countOutCountTag);
-    count->output().setColumn(countOutCount);
+    count->output().setValue(static_cast<ColumnConst<size_t>*>(countOutCount->getColumn()));
     source->output().connectTo(count->input());
     
     // Lambda

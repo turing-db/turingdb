@@ -10,16 +10,16 @@ class LimitProcessor : public Processor {
 public:
     static LimitProcessor* create(PipelineV2* pipeline, size_t limit);
 
-    PipelineInputInterface& input() { return _input; }
-    PipelineOutputInterface& output() { return _output; }
+    PipelineBlockInputInterface& input() { return _input; }
+    PipelineBlockOutputInterface& output() { return _output; }
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;
 
 private:
-    PipelineInputInterface _input;
-    PipelineOutputInterface _output;
+    PipelineBlockInputInterface _input;
+    PipelineBlockOutputInterface _output;
     size_t _limit {0};
     size_t _currentRowCount {0};
     bool _reachedLimit {false};
