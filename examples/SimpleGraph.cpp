@@ -81,7 +81,6 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
         throw std::runtime_error(fmt::format("Node not found: {}", nodeName));
     };
 
-    // 0
     const auto remy = writer.addNode({"Person", "SoftwareEngineering", "Founder"});
     writer.addNodeProperty<types::String>(remy, "name", "Remy");
     writer.addNodeProperty<types::String>(remy, "dob", "18/01");
@@ -89,7 +88,6 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(remy, "isFrench", true);
     writer.addNodeProperty<types::Bool>(remy, "hasPhD", true);
 
-    // 1
     const auto adam = writer.addNode({"Person", "Bioinformatics", "Founder"});
     writer.addNodeProperty<types::String>(adam, "name", "Adam");
     writer.addNodeProperty<types::String>(adam, "dob", "18/08");
@@ -97,65 +95,52 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(adam, "isFrench", true);
     writer.addNodeProperty<types::Bool>(adam, "hasPhD", true);
 
-    // 2
     const auto computers = writer.addNode({"Interest", "SoftwareEngineering"});
     writer.addNodeProperty<types::String>(computers, "name", "Computers");
     writer.addNodeProperty<types::Bool>(computers, "isReal", true);
 
-    // 3
     const auto eighties = writer.addNode({"Interest", "Exotic"});
     writer.addNodeProperty<types::String>(eighties, "name", "Eighties");
     writer.addNodeProperty<types::Bool>(eighties, "isReal", false);
 
-    // 4
     const auto bio = writer.addNode({"Interest"});
     writer.addNodeProperty<types::String>(bio, "name", "Bio");
 
-    // 5
     const auto cooking = writer.addNode({"Interest"});
     writer.addNodeProperty<types::String>(cooking, "name", "Cooking");
 
-    // 6
     const auto ghosts = writer.addNode({"Interest", "Supernatural", "SleepDisturber", "Exotic"}); //6
     writer.addNodeProperty<types::String>(ghosts, "name", "Ghosts");
     writer.addNodeProperty<types::Bool>(ghosts, "isReal", true);
 
-    // 0,1
     const auto remyAdam = writer.addEdge("KNOWS_WELL", remy, adam);
     writer.addEdgeProperty<types::String>(remyAdam, "name", "Remy -> Adam");
     writer.addEdgeProperty<types::Int64>(remyAdam, "duration", 20);
 
-    // 1,0
     const auto adamRemy = writer.addEdge("KNOWS_WELL", adam, remy);
     writer.addEdgeProperty<types::String>(adamRemy, "name", "Adam -> Remy");
     writer.addEdgeProperty<types::Int64>(adamRemy, "duration", 20);
 
-    // 0,6
     const auto remyGhosts = writer.addEdge("INTERESTED_IN", remy, ghosts);
     writer.addEdgeProperty<types::String>(remyGhosts, "name", "Remy -> Ghosts");
     writer.addEdgeProperty<types::Int64>(remyGhosts, "duration", 20);
     writer.addEdgeProperty<types::String>(remyGhosts, "proficiency", "expert");
 
-    // 0,2
     const auto remyComputers = writer.addEdge("INTERESTED_IN", remy, computers);
     writer.addEdgeProperty<types::String>(remyComputers, "name", "Remy -> Computers");
     writer.addEdgeProperty<types::String>(remyComputers, "proficiency", "expert");
 
-    // 0,3
     const auto remyEighties = writer.addEdge("INTERESTED_IN", remy, eighties);
     writer.addEdgeProperty<types::String>(remyEighties, "name", "Remy -> Eighties");
     writer.addEdgeProperty<types::Int64>(remyEighties, "duration", 20);
     writer.addEdgeProperty<types::String>(remyEighties, "proficiency", "moderate");
 
-    // 1,4
     const auto adamBio = writer.addEdge("INTERESTED_IN", adam, bio);
     writer.addEdgeProperty<types::String>(adamBio, "name", "Adam -> Bio");
 
-    // 1,5
     const auto adamCooking = writer.addEdge("INTERESTED_IN", adam, cooking);
     writer.addEdgeProperty<types::String>(adamCooking, "name", "Adam -> Cooking");
 
-    // 6,0
     const auto ghostsRemy = writer.addEdge("KNOWS_WELL", ghosts, remy);
     writer.addEdgeProperty<types::String>(ghostsRemy, "name", "Ghosts -> Remy");
     writer.addEdgeProperty<types::String>(ghostsRemy, "proficiency", "expert");
@@ -163,18 +148,15 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
 
     writer.commit();
 
-    // 7
     const auto maxime = writer.addNode({"Person", "Bioinformatics"});
     writer.addNodeProperty<types::String>(maxime, "name", "Maxime");
     writer.addNodeProperty<types::String>(maxime, "dob", "24/07");
     writer.addNodeProperty<types::Bool>(maxime, "isFrench", true);
     writer.addNodeProperty<types::Bool>(maxime, "hasPhD", false);
 
-    // 8
     const auto paddle = writer.addNode({"Interest"});
     writer.addNodeProperty<types::String>(paddle, "name", "Paddle");
 
-    
     const auto maximeBio = writer.addEdge("INTERESTED_IN", maxime, findNodeIDInWriter("Bio"));
     writer.addEdgeProperty<types::String>(maximeBio, "name", "Maxime -> Bio");
 
@@ -184,14 +166,12 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
 
     writer.commit();
 
-    // 9
     const auto luc = writer.addNode({"Person", "SoftwareEngineering"});
     writer.addNodeProperty<types::String>(luc, "dob", "28/05");
     writer.addNodeProperty<types::String>(luc, "name", "Luc");
     writer.addNodeProperty<types::Bool>(luc, "isFrench", true);
     writer.addNodeProperty<types::Bool>(luc, "hasPhD", true);
 
-    // 10
     const auto animals = writer.addNode({"Interest", "SleepDisturber"});
     writer.addNodeProperty<types::String>(animals, "name", "Animals");
     writer.addNodeProperty<types::Bool>(animals, "isReal", true);
@@ -206,7 +186,6 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
 
     writer.commit();
 
-    // 11
     const auto martina = writer.addNode({"Person", "Bioinformatics"});
     writer.addNodeProperty<types::String>(martina, "name", "Martina");
     writer.addNodeProperty<types::Bool>(martina, "isFrench", false);
@@ -218,7 +197,6 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
 
     writer.commit();
 
-    // 12
     const auto suhas = writer.addNode({"Person", "SoftwareEngineering"});
     writer.addNodeProperty<types::String>(suhas, "name", "Suhas");
     writer.addNodeProperty<types::Bool>(suhas, "isFrench", false);
