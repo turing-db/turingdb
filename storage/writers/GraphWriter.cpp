@@ -8,17 +8,17 @@
 #include "DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
 #include "versioning/Transaction.h"
+#include "versioning/ChangeManager.h"
 
 using namespace db;
 
 GraphWriter::GraphWriter(Graph* graph)
     : _graph(graph),
-    _jobSystem(JobSystem::create())
-{
+      _jobSystem(JobSystem::create()) {
 
     if (_graph) {
-        _change = _graph->newChange();
-        _commitBuilder = _change->access().getTip();
+        _change = _graph->getChangeManager().createChange();
+        _commitBuilder = _change.getTip();
         _dataPartBuilder = &_commitBuilder->getCurrentBuilder();
     }
 }
@@ -27,29 +27,26 @@ GraphWriter::~GraphWriter() {
 }
 
 bool GraphWriter::commit() {
-    if (auto res = _change->access().commit(*_jobSystem); !res) {
+    if (auto res = _change.commit(*_jobSystem); !res) {
         spdlog::error("Could not commit changes: {}", res.error().fmtMessage());
         return false;
     }
 
-    _commitBuilder = _change->access().getTip();
+    _commitBuilder = _change.getTip();
     _dataPartBuilder = &_commitBuilder->getCurrentBuilder();
 
     return true;
 }
 
 bool GraphWriter::submit() {
-    ChangeAccessor accessor = _change->access();
-    if (auto res = _graph->submit(std::move(_change), *_jobSystem); !res) {
+    auto& changes = _graph->getChangeManager();
+
+    if (auto res = changes.submit(std::move(_change), *_jobSystem); !res) {
         spdlog::error("Could not submit changes: {}", res.error().fmtMessage());
         return false;
     }
 
     return true;
-}
-
-PendingCommitWriteTx GraphWriter::openWriteTransaction() {
-    return _change->openWriteTransaction();
 }
 
 void GraphWriter::setName(const std::string& name) {

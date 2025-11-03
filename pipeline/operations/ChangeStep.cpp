@@ -2,10 +2,10 @@
 
 #include <sstream>
 
-#include "ChangeManager.h"
 #include "ExecutionContext.h"
 #include "Graph.h"
 #include "Profiler.h"
+#include "versioning/ChangeManager.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "SystemManager.h"
@@ -14,10 +14,9 @@
 using namespace db;
 
 ChangeStep::ChangeStep(ChangeOpType type,
-                       ColumnVector<const Change*>* output)
+                       ColumnVector<ChangeID>* output)
     : _type(type),
-    _output(output)
-{
+      _output(output) {
 }
 
 ChangeStep::~ChangeStep() {
@@ -87,7 +86,7 @@ void ChangeStep::createChange() const {
         throw PipelineException(fmt::format("Failed to create change: {}", res.error().fmtMessage()));
     }
 
-    _output->push_back(res.value());
+    _output->push_back(res.value().getID());
 }
 
 void ChangeStep::submitChange() const {
@@ -103,10 +102,10 @@ void ChangeStep::submitChange() const {
         throw PipelineException("ChangeStep: Change info must contain the change hash");
     }
 
-    ChangeManager& changeMan = _sysMan->getChangeManager();
+    ChangeManager& changeMan = _graph->getChangeManager();
 
     // Step 1: Submit the change
-    if (const auto res = changeMan.submitChange(_graph, tx.changeAccessor(), *_jobSystem); !res) {
+    if (const auto res = changeMan.submit(std::move(tx.changeAccessor()), *_jobSystem); !res) {
         throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 
@@ -129,9 +128,9 @@ void ChangeStep::deleteChange() const {
         throw PipelineException("ChangeStep: Change info must contain the change hash");
     }
 
-    const ChangeID changeID = std::get<ChangeID>(_changeInfo);
+    ChangeManager& changeMan = _graph->getChangeManager();
 
-    if (const auto res = _sysMan->getChangeManager().deleteChange(_graph, tx.changeAccessor(), changeID); !res) {
+    if (const auto res = changeMan.deleteChange(std::move(tx.changeAccessor())); !res) {
         throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
     }
 }
@@ -143,5 +142,6 @@ void ChangeStep::listChanges() const {
         throw PipelineException("ChangeStep: List changes requires an allocated column of changes");
     }
 
-    _sysMan->getChangeManager().listChanges(_output->getRaw(), _graph);
+    auto& changeMan = _graph->getChangeManager();
+    changeMan.listChanges(_output);
 }

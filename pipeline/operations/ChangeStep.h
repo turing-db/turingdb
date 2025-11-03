@@ -20,7 +20,7 @@ public:
     struct Tag {};
 
     ChangeStep(ChangeOpType type,
-               ColumnVector<const Change*>* output);
+               ColumnVector<ChangeID>* output);
     ~ChangeStep();
 
     void prepare(ExecutionContext* ctxt);
@@ -40,7 +40,7 @@ private:
     GraphView _view;
     ChangeOpType _type {};
     ChangeInfo _changeInfo;
-    ColumnVector<const Change*>* _output {nullptr};
+    ColumnVector<ChangeID>* _output {nullptr};
     Transaction* _tx {nullptr};
 
     void createChange() const;

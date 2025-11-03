@@ -10,12 +10,12 @@
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SystemManager.h"
-#include "ChangeManager.h"
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
+#include "versioning/ChangeManager.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "FileUtils.h"
@@ -273,12 +273,12 @@ void tabulateWrite(tabulate::RowStream& rs, const std::optional<T>& value) {
     }
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const CommitBuilder* commit) {
-    rs << fmt::format("{:x}", commit->hash().get());
+void tabulateWrite(tabulate::RowStream& rs, CommitHash hash) {
+    rs << fmt::format("{:x}", hash.get());
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
-    rs << fmt::format("{:x}", change->id().get());
+void tabulateWrite(tabulate::RowStream& rs, ChangeID id) {
+    rs << fmt::format("{:x}", id.get());
 }
 
 #define TABULATE_COL_CASE(Type, i)                        \
@@ -362,8 +362,8 @@ void TuringShell::processLine(std::string& line) {
                     TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
                     TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
                     TABULATE_COL_CASE(ColumnVector<std::string>, i)
-                    TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
-                    TABULATE_COL_CASE(ColumnVector<const Change*>, i)
+                    TABULATE_COL_CASE(ColumnVector<CommitHash>, i)
+                    TABULATE_COL_CASE(ColumnVector<ChangeID>, i)
                     TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
                     TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
                     TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
@@ -469,13 +469,15 @@ void TuringShell::printHelp() const {
 }
 
 void TuringShell::checkShellContext() {
-    const auto* graph = _turingDB.getSystemManager().getGraph(_graphName);
+    // Step 1. retrieve the graph
+    Graph* graph = _turingDB.getSystemManager().getGraph(_graphName);
     if (graph == nullptr) {
         fmt::print("Graph '{}' does not exist anymore, switching back to default graph\n", _graphName);
         setGraphName("default");
         return;
     }
 
+    // Step 2. Check if reading from the main branch
     if (_changeID == ChangeID::head()) {
         FrozenCommitTx transaction = graph->openTransaction(_hash);
         if (transaction.isValid()) {
@@ -483,19 +485,16 @@ void TuringShell::checkShellContext() {
         }
     }
 
-    auto res = _turingDB.getSystemManager().getChangeManager().getChange(graph, _changeID);
-    if (!res) {
+    // Step 3. Check if the change/commit pair is valid
+    ChangeManager& changes = graph->getChangeManager();
+    auto tx = changes.openTransaction(_changeID);
+    if (!tx->isValid()) {
         fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());
+        setCommitHash(CommitHash::head());
         return;
     }
 
-    auto* change = res.value();
-    if (auto tx = change->openWriteTransaction(); tx.isValid()) {
-        return;
-    }
-
-    fmt::print("No commit matches hash {:x}, switching back to head\n", _hash.get());
-    setCommitHash(CommitHash::head());
+    // TODO: Check if the new implementation is correct
 }
 

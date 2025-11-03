@@ -6,12 +6,13 @@
 #include "TuringTestEnv.h"
 
 #include "SystemManager.h"
-#include "versioning/Tombstones.h"
 #include "Graph.h"
 #include "dump/GraphLoader.h"
+#include "views/GraphView.h"
 #include "columns/Block.h"
-#include "versioning/Change.h"
+#include "versioning/Tombstones.h"
 #include "versioning/Transaction.h"
+
 #include "Panic.h"
 
 using namespace db;
@@ -32,23 +33,22 @@ public:
         auto& db = _env->getDB();
         auto& sysMan = _env->getSystemManager();
 
-        auto res = sysMan.newChange(_workingGraphName);
-        if (!res) {
+        auto change = sysMan.newChange(_workingGraphName);
+        if (!change) {
             panic("Failed to make change in populate().");
         }
-        Change* change = res.value();
 
         // populate the graph
         for (size_t i = 0; i < NUM_EDGES; i++) {
             ASSERT_TRUE(db.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)",
                                  _workingGraphName, &_env->getMem(), CommitHash::head(),
-                                 change->id()));
+                                 change->getID()));
         }
         spdlog::info("Ran create queries");
 
         // implicit dump on change submit
         ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
-                             CommitHash::head(), change->id()));
+                             CommitHash::head(), change->getID()));
         spdlog::info("Submitted change");
 
         const auto VERIFY = [](const Block& block) {
@@ -70,23 +70,22 @@ public:
         auto& db = _env->getDB();
         auto& sysMan = _env->getSystemManager();
 
-        auto delRes = sysMan.newChange(_workingGraphName);
-        if (!delRes) {
+        auto change = sysMan.newChange(_workingGraphName);
+        if (!change) {
             panic("Failed to make change in populate().");
         }
-        Change* delChange = delRes.value();
 
         for (size_t node : DELETED_NODES) {
             db.query("delete nodes " + std::to_string(node), _workingGraphName,
-                     &_env->getMem(), CommitHash::head(), delChange->id());
+                     &_env->getMem(), CommitHash::head(), change->getID());
         }
         for (size_t node : DELETED_EDGES) {
             db.query("delete edges " + std::to_string(node), _workingGraphName,
-                     &_env->getMem(), CommitHash::head(), delChange->id());
+                     &_env->getMem(), CommitHash::head(), change->getID());
         }
         // implicit dump on change submit
         ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
-                             CommitHash::head(), delChange->id()));
+                             CommitHash::head(), change->getID()));
 
         spdlog::info("Submitted deletions change");
     }

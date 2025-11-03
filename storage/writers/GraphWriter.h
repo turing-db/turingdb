@@ -6,13 +6,15 @@
 #include "ID.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
+#include "reader/GraphReader.h"
+#include "versioning/ChangeAccessor.h"
+#include "views/GraphView.h"
 
 namespace db {
 
 class Graph;
 class JobSystem;
 class DataPartBuilder;
-class Change;
 class CommitBuilder;
 class PendingCommitWriteTx;
 
@@ -29,9 +31,11 @@ public:
     bool commit();
     bool submit();
 
-    PendingCommitWriteTx openWriteTransaction();
-
     void setName(const std::string& name);
+
+    GraphReader readGraph() {
+        return _change.viewGraph().read();
+    }
 
     NodeID addNode(std::initializer_list<std::string_view> labels);
     NodeID addNode(std::initializer_list<LabelID> labels);
@@ -55,7 +59,7 @@ public:
 
 private:
     Graph* _graph {nullptr};
-    std::unique_ptr<Change> _change;
+    ChangeAccessor _change;
     CommitBuilder* _commitBuilder {nullptr};
     DataPartBuilder* _dataPartBuilder {nullptr};
     std::unique_ptr<JobSystem> _jobSystem;

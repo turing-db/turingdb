@@ -1,6 +1,5 @@
 #include "QueryInterpreter.h"
 
-#include "ChangeManager.h"
 #include "SystemManager.h"
 #include "versioning/Transaction.h"
 #include "ASTContext.h"
@@ -19,6 +18,7 @@
 
 #include "Profiler.h"
 #include "TuringTime.h"
+#include "views/GraphView.h"
 
 using namespace db;
 

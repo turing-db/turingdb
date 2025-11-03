@@ -420,17 +420,17 @@ TEST_F(QueryTest, ChangeQuery) {
     QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("CHANGE NEW")
-        .expectVector<const Change*>({}, false)
+        .expectVector<ChangeID>({}, false)
         .execute();
 
     const auto changes = tester.query("CHANGE LIST")
-                             .expectVector<const Change*>({}, false)
+                             .expectVector<ChangeID>({}, false)
                              .execute()
-                             .outputColumnVector<const Change*>(0);
+                             .outputColumnVector<ChangeID>(0);
 
     ASSERT_TRUE(changes);
 
-    tester.setChangeID(changes.value()->back()->id());
+    tester.setChangeID(changes.value()->back());
 
     tester.query(
               R"(CREATE (n:Person { name: "New person" })

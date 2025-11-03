@@ -94,6 +94,8 @@ concept TransactionType = std::is_same_v<T, FrozenCommitTx>
 
 class Transaction {
 public:
+    Transaction() = default;
+
     template <TransactionType T>
     Transaction(T&& tx)
         : _tx(std::forward<T>(tx))

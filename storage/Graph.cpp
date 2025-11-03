@@ -1,6 +1,7 @@
 #include "Graph.h"
 
 #include "GraphSerializer.h"
+#include "versioning/ChangeManager.h"
 #include "views/GraphView.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/Change.h"
@@ -11,10 +12,6 @@
 using namespace db;
 
 Graph::~Graph() {
-}
-
-std::unique_ptr<Change> Graph::newChange(CommitHash base) {
-    return _versionController->newChange(base);
 }
 
 FrozenCommitTx Graph::openTransaction(CommitHash hash) const {
@@ -37,14 +34,13 @@ std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& pa
     return std::unique_ptr<Graph>(graph);
 }
 
-CommitResult<void> Graph::submit(std::unique_ptr<Change> change, JobSystem& jobs) {
-    return _versionController->submitChange(change.get(), jobs);
-}
-
 Graph::Graph()
     : _graphName("default"),
       _graphPath("/dev/null"),
       _versionController(new VersionController {this}),
+      _changeManager(new ChangeManager {this->_versionController.get(),
+                                        _versionController->_partManager.get(),
+                                        _versionController->_dataManager.get()}),
       _serializer(new GraphSerializer {this}) {
 }
 
@@ -52,5 +48,8 @@ Graph::Graph(const std::string& name, const fs::Path& path)
     : _graphName(name),
       _graphPath(path),
       _versionController(new VersionController {this}),
+      _changeManager(new ChangeManager {this->_versionController.get(),
+                                        _versionController->_partManager.get(),
+                                        _versionController->_dataManager.get()}),
       _serializer(new GraphSerializer {this}) {
 }

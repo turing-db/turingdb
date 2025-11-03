@@ -52,10 +52,9 @@ protected:
     }
 
     ChangeID newChange() {
-        auto changeRes = _env->getDB().getSystemManager().newChange("simple");
-        bioassert(changeRes);
-        Change* change = changeRes.value();
-        ChangeID changeID = change->id();
+        auto change = _env->getDB().getSystemManager().newChange("simple");
+        bioassert(change);
+        ChangeID changeID = change->getID();
         return changeID;
     }
 };

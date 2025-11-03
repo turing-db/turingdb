@@ -60,6 +60,7 @@ private:
     friend GraphLoader;
     friend GraphDumper;
     friend Change;
+    friend Graph;
     friend CommitLoader;
 
     Graph* _graph {nullptr};
@@ -67,7 +68,7 @@ private:
     std::atomic<Commit*> _head {nullptr};
     std::atomic<uint64_t> _nextChangeID {0};
 
-    mutable std::mutex _mutex;
+    mutable std::mutex _mainMutex;
     Commit::CommitVector _commits;
     CommitMap _offsets;
     std::unique_ptr<ArcManager<CommitData>> _dataManager;

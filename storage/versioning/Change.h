@@ -18,10 +18,8 @@ class DataPartBuilder;
 class CommitBuilder;
 class Commit;
 class JobSystem;
-class FrozenCommitTx;
+class Transaction;
 class ChangeManager;
-class PendingCommitWriteTx;
-class PendingCommitReadTx;
 
 class Change {
 public:
@@ -37,8 +35,8 @@ public:
                                                         ChangeID id,
                                                         const WeakArc<const CommitData>& base);
 
-    [[nodiscard]] PendingCommitWriteTx openWriteTransaction();
-    [[nodiscard]] PendingCommitReadTx openReadTransaction(CommitHash commitHash);
+    [[nodiscard]] Transaction openWriteTransaction();
+    [[nodiscard]] Transaction openReadTransaction(CommitHash commitHash);
 
     [[nodiscard]] ChangeAccessor access() { return ChangeAccessor {this}; }
     [[nodiscard]] CommitHash baseHash() const;
@@ -46,6 +44,7 @@ public:
 
 private:
     mutable std::mutex _mutex;
+
     friend ChangeManager;
     friend ChangeAccessor;
     friend VersionController;

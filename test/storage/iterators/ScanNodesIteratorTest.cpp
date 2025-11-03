@@ -1,19 +1,22 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+#include "TuringTest.h"
+
 #include "Graph.h"
 #include "iterators/ChunkConfig.h"
 #include "columns/ColumnIDs.h"
 #include "iterators/ScanNodesIterator.h"
-#include "versioning/Transaction.h"
 #include "views/GraphView.h"
+#include "versioning/ChangeManager.h"
+#include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Change.h"
 #include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
+
 #include "FileUtils.h"
 #include "JobSystem.h"
-#include "TuringTest.h"
 
 using namespace db;
 using namespace turing::test;
@@ -34,7 +37,7 @@ protected:
 };
 
 TEST_F(ScanNodesIteratorTest, emptyGraph) {
-    auto graph = Graph::create();
+    std::unique_ptr<Graph> graph = Graph::create();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
@@ -47,11 +50,12 @@ TEST_F(ScanNodesIteratorTest, emptyGraph) {
 }
 
 TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
-    auto graph = Graph::create();
-    auto change = graph->newChange();
-    auto* commitBuilder = change->access().getTip();
-    [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
-    const auto res = graph->submit(std::move(change), *_jobSystem);
+    std::unique_ptr<Graph> graph = Graph::create();
+    ChangeManager& changes = graph->getChangeManager();
+    ChangeAccessor change = changes.createChange();
+    CommitBuilder* commitBuilder = change.getTip();
+    commitBuilder->newBuilder();
+    const auto res = changes.submit(std::move(change), *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -70,12 +74,13 @@ TEST_F(ScanNodesIteratorTest, oneEmptyCommit) {
 TEST_F(ScanNodesIteratorTest, threeEmptyCommits) {
     auto graph = Graph::create();
 
-    auto change = graph->newChange();
+    ChangeManager& changes = graph->getChangeManager();
+    ChangeAccessor change = changes.createChange();
     for (auto i = 0; i < 3; i++) {
-        auto* commitBuilder = change->access().getTip();
+        auto* commitBuilder = change.getTip();
         [[maybe_unused]] auto& builder = commitBuilder->newBuilder();
     }
-    const auto res = graph->submit(std::move(change), *_jobSystem);
+    const auto res = changes.submit(std::move(change), *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -97,15 +102,16 @@ TEST_F(ScanNodesIteratorTest, oneChunkSizePart) {
     LabelSet labelset = LabelSet::fromList({0});
 
     {
-        auto change = graph->newChange();
-        auto* commitBuilder = change->access().getTip();
-        auto& builder = commitBuilder->newBuilder();
+        ChangeManager& changes = graph->getChangeManager();
+        ChangeAccessor change = changes.createChange();
+        CommitBuilder* commitBuilder = change.getTip();
+        DataPartBuilder& builder = commitBuilder->newBuilder();
         for (size_t i = 0; i < ChunkConfig::CHUNK_SIZE; i++) {
             builder.addNode(labelset);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        const auto res = graph->submit(std::move(change), *_jobSystem);
+        const auto res = changes.submit(std::move(change), *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }
@@ -146,20 +152,21 @@ TEST_F(ScanNodesIteratorTest, manyChunkSizePart) {
 
     LabelSet labelset = LabelSet::fromList({0});
 
-    auto change = graph->newChange();
+    ChangeManager& changes = graph->getChangeManager();
+    ChangeAccessor change = changes.createChange();
 
     for (auto i = 0; i < 8; i++) {
-        auto* commitBuilder = change->access().getTip();
+        auto* commitBuilder = change.getTip();
         auto& builder = commitBuilder->newBuilder();
         for (size_t j = 0; j < ChunkConfig::CHUNK_SIZE; j++) {
             builder.addNode(labelset);
         }
 
         ASSERT_EQ(builder.nodeCount(), ChunkConfig::CHUNK_SIZE);
-        ASSERT_TRUE(change->access().commit(*_jobSystem));
+        ASSERT_TRUE(change.commit(*_jobSystem));
     }
 
-    const auto res = graph->submit(std::move(change), *_jobSystem);
+    const auto res = changes.submit(std::move(change), *_jobSystem);
     if (!res) {
         spdlog::info(res.error().fmtMessage());
     }
@@ -205,15 +212,16 @@ TEST_F(ScanNodesIteratorTest, chunkAndALeftover) {
     LabelSet labelset = LabelSet::fromList({0});
 
     {
-        auto change = graph->newChange();
-        auto* commitBuilder = change->access().getTip();
-        auto& builder = commitBuilder->newBuilder();
+        ChangeManager& changes = graph->getChangeManager();
+        ChangeAccessor change = changes.createChange();
+        CommitBuilder* commitBuilder = change.getTip();
+        DataPartBuilder& builder = commitBuilder->newBuilder();
 
         for (size_t i = 0; i < nodeCount; i++) {
             builder.addNode(labelset);
         }
 
-        const auto res = graph->submit(std::move(change), *_jobSystem);
+        const auto res = changes.submit(std::move(change), *_jobSystem);
         if (!res) {
             spdlog::info(res.error().fmtMessage());
         }

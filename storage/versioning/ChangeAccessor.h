@@ -1,7 +1,6 @@
 #pragma once
 
 #include <mutex>
-#include <span>
 
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
@@ -12,7 +11,6 @@ namespace db {
 class Change;
 class CommitBuilder;
 class JobSystem;
-class Graph;
 class GraphView;
 
 class ChangeAccessor {
@@ -26,17 +24,10 @@ public:
     ChangeAccessor& operator=(ChangeAccessor&&) = default;
 
     [[nodiscard]] bool isValid() const { return _change != nullptr; }
-
     [[nodiscard]] CommitBuilder* getTip() const;
-
-    [[nodiscard]] auto begin() const;
-    [[nodiscard]] auto end() const;
-
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
-
     [[nodiscard]] ChangeID getID() const;
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash = CommitHash::head()) const;
-    [[nodiscard]] std::span<const std::unique_ptr<CommitBuilder>> pendingCommits() const;
 
     void release() {
         _lock.unlock();
@@ -44,6 +35,7 @@ public:
 
 private:
     friend Change;
+
     std::unique_lock<std::mutex> _lock;
     Change* _change {nullptr};
 

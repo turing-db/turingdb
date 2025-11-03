@@ -19,11 +19,11 @@ namespace db {
 class Neo4jImporter;
 class TuringConfig;
 class Graph;
-class ChangeManager;
 class JobSystem;
 class FrozenCommitTx;
 class Transaction;
 class Change;
+class ChangeAccessor;
 
 class SystemManager {
 public:
@@ -64,10 +64,7 @@ public:
 
     bool isGraphLoading(const std::string& graphName) const;
 
-    ChangeManager& getChangeManager() { return *_changes; }
-    const ChangeManager& getChangeManager() const { return *_changes; }
-
-    ChangeResult<Change*> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
+    ChangeResult<ChangeAccessor> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
 
     ChangeResult<Transaction> openTransaction(std::string_view graphName,
                                               CommitHash commitHash,
@@ -90,7 +87,6 @@ private:
     Graph* _defaultGraph {nullptr};
     std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
-    std::unique_ptr<ChangeManager> _changes;
     std::unique_ptr<Neo4jImporter> _neo4JImporter;
     GraphLoadStatus _graphLoadStatus;
 

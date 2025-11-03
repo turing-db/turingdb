@@ -5,17 +5,19 @@
 
 #include "Graph.h"
 #include "metadata/PropertyType.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
-#include "reader/GraphReader.h"
 #include "metadata/GraphMetadata.h"
+#include "versioning/ChangeManager.h"
+#include "versioning/Transaction.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Change.h"
+#include "views/GraphView.h"
+#include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
-#include "FileUtils.h"
-#include "JobSystem.h"
 #include "writers/GraphWriter.h"
 #include "writers/MetadataBuilder.h"
+
+#include "FileUtils.h"
+#include "JobSystem.h"
 
 using namespace db;
 using namespace turing::test;
@@ -28,21 +30,23 @@ struct TestEdgeRecord {
 
 struct GraphUpdate {
     Graph* _graph {nullptr};
-    std::unique_ptr<Change> _change;
+    ChangeAccessor _change;
     CommitBuilder& _commit;
     DataPartBuilder& _builder;
     MetadataBuilder& _metadata;
 
     static GraphUpdate create(Graph& graph) {
-        auto change = graph.newChange();
-        auto* commit = change->access().getTip();
+        ChangeManager& changes = graph.getChangeManager();
+        auto change = changes.createChange();
+        auto* commit = change.getTip();
         auto& builder = commit->newBuilder();
         auto& metadata = builder.getMetadata();
         return GraphUpdate {&graph, std::move(change), *commit, builder, metadata};
     }
 
     auto submit(JobSystem& jobSystem) {
-        const auto res = _graph->submit(std::move(_change), jobSystem);
+        ChangeManager& changes = _graph->getChangeManager();
+        const auto res = changes.submit(std::move(_change), jobSystem);
         if (!res) {
             spdlog::error("Failed to submit change: {}", res.error().fmtMessage());
         }

@@ -53,22 +53,23 @@ set(storage_sources
 
         mergers/DataPartMerger.cpp
 
-        versioning/CommitResult.cpp
-        versioning/ChangeResult.cpp
         versioning/VersionController.cpp
         versioning/Change.cpp
+        versioning/ChangeResult.cpp
         versioning/ChangeAccessor.cpp
-        versioning/CommitHash.cpp
-        versioning/CommitData.cpp
-        versioning/Commit.cpp
-        versioning/CommitView.cpp
-        versioning/CommitBuilder.cpp
-        versioning/ChangeRebaser.cpp
+        versioning/ChangeManager.cpp
         versioning/ChangeConflictChecker.cpp
+        versioning/ChangeRebaser.cpp
         versioning/MetadataRebaser.cpp
         versioning/DataPartRebaser.cpp
         versioning/EntityIDRebaser.cpp
         versioning/Transaction.cpp
+        versioning/CommitResult.cpp
+        versioning/Commit.cpp
+        versioning/CommitHash.cpp
+        versioning/CommitData.cpp
+        versioning/CommitView.cpp
+        versioning/CommitBuilder.cpp
         versioning/CommitHistory.cpp
         versioning/CommitHistoryBuilder.cpp
         versioning/CommitHistoryRebaser.cpp

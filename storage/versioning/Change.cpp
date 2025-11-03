@@ -21,8 +21,7 @@ Change::Change(ArcManager<DataPart>& dataPartManager,
     : _id(id),
       _dataPartManager(&dataPartManager),
       _commitDataManager(&commitDataManager),
-      _base(base)
-{
+      _base(base) {
     auto tip = CommitBuilder::prepare(*_dataPartManager,
                                       _commitDataManager->create(CommitHash::create()),
                                       GraphView {*_base});
@@ -40,18 +39,28 @@ std::unique_ptr<Change> Change::create(ArcManager<DataPart>& dataPartManager,
     return std::unique_ptr<Change> {ptr};
 }
 
-PendingCommitWriteTx Change::openWriteTransaction() {
+Transaction Change::openWriteTransaction() {
     return PendingCommitWriteTx {this->access(), this->_tip};
 }
 
-PendingCommitReadTx Change::openReadTransaction(CommitHash commitHash) {
+Transaction Change::openReadTransaction(CommitHash commitHash) {
+    // Step 1. Check if we are reading the tip
     if (commitHash == CommitHash::head()) {
         return PendingCommitReadTx {this->access(), this->_tip};
     }
 
+    // Step 2. Check if we are reading a pending commit
     auto it = _commitOffsets.find(commitHash);
     if (it != _commitOffsets.end()) {
         return PendingCommitReadTx {this->access(), _commits[it->second].get()};
+    }
+
+    // Step 3. Check if we are reading a frozen commit
+    const std::span commits = _base->history().commits();
+    for (const auto& commit : commits) {
+        if (commit.hash() == commitHash) {
+            return FrozenCommitTx {commit.data()};
+        }
     }
 
     return {};
