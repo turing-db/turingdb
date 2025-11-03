@@ -80,6 +80,7 @@ set(storage_sources
         versioning/WriteSet.cpp
         versioning/TombstoneSet.cpp
         versioning/VersionControlException.cpp
+        versioning/TombstoneRanges.cpp
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp

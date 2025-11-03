@@ -44,6 +44,16 @@ bool GraphWriter::submit() {
         return false;
     }
 
+    if (!_graph) {
+        return false;
+    }
+
+    if (_graph) {
+        _change = _graph->newChange();
+        _commitBuilder = _change->access().getTip();
+        _dataPartBuilder = &_commitBuilder->getCurrentBuilder();
+    }
+
     return true;
 }
 
@@ -100,6 +110,24 @@ NodeID GraphWriter::addNode(const LabelSetHandle& labelset) {
     return _dataPartBuilder->addNode(labelset);
 }
 
+void GraphWriter::deleteNode(NodeID id) {
+    if (!_commitBuilder) {
+        return;
+    }
+
+    _commitBuilder->writeBuffer().addDeletedNode(id);
+    _commitBuilder->writeBuffer().addHangingEdges(openWriteTransaction().viewGraph());
+}
+
+void GraphWriter::deleteNodes(const std::vector<NodeID>& ids) {
+    if (!_commitBuilder) {
+        return;
+    }
+
+    _commitBuilder->writeBuffer().addDeletedNodes(ids);
+    _commitBuilder->writeBuffer().addHangingEdges(openWriteTransaction().viewGraph());
+}
+
 EdgeRecord GraphWriter::addEdge(std::string_view edgeType, NodeID src, NodeID tgt) {
     if (!_dataPartBuilder) {
         return {};
@@ -118,6 +146,22 @@ EdgeRecord GraphWriter::addEdge(EdgeTypeID edgeType, NodeID src, NodeID tgt) {
     }
 
     return _dataPartBuilder->addEdge(edgeType, src, tgt);
+}
+
+void GraphWriter::deleteEdge(EdgeID id) {
+    if (!_commitBuilder) {
+        return;
+    }
+
+    _commitBuilder->writeBuffer().addDeletedEdge(id);
+}
+
+void GraphWriter::deleteEdges(const std::vector<EdgeID>& ids) {
+    if (!_commitBuilder) {
+        return;
+    }
+
+    _commitBuilder->writeBuffer().addDeletedEdges(ids);
 }
 
 template <SupportedType T>
@@ -160,6 +204,11 @@ void GraphWriter::addEdgeProperty(const EdgeRecord& edge, PropertyType propertyT
     }
 
     _dataPartBuilder->addEdgeProperty<T>(edge, propertyType._id, std::move(value));
+}
+
+PropertyType GraphWriter::addPropertyType(const std::string& propTypeName, ValueType valueType) {
+    auto& metadata = _commitBuilder->metadata();
+    return metadata.getOrCreatePropertyType(propTypeName, valueType);
 }
 
 template void GraphWriter::addNodeProperty<types::Int64>(NodeID, std::string_view, types::Int64::Primitive&&);

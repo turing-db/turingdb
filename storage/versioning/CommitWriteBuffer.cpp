@@ -38,9 +38,17 @@ void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNod
     _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
 }
 
+void CommitWriteBuffer::addDeletedNode(const NodeID& newDeletedNode) {
+    _deletedNodes.insert(newDeletedNode);
+}
+
 // Called when executing a DELETE EDGES query
 void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
     _deletedEdges.insert(newDeletedEdges.begin(), newDeletedEdges.end());
+}
+
+void CommitWriteBuffer::addDeletedEdge(const EdgeID& newDeletedEdge) {
+    _deletedEdges.insert(newDeletedEdge);
 }
 
 void CommitWriteBuffer::addHangingEdges(const GraphView& view) {

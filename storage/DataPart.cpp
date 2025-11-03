@@ -65,8 +65,11 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     }
 
     // Storing temp node IDs to keep track of the sorting mechanism
-    std::vector<NodeID> tmpNodeIDs(coreNodeLabelSets.size());
-    std::iota(tmpNodeIDs.begin(), tmpNodeIDs.end(), firstTmpNodeID);
+    std::vector<NodeID>& tmpNodeIDs = builder.getTmpNodeIDs();
+    if (tmpNodeIDs.empty()) {
+        tmpNodeIDs.resize(coreNodeLabelSets.size());
+        std::iota(tmpNodeIDs.begin(), tmpNodeIDs.end(), firstTmpNodeID);
+    }
 
     // Sorting based on the labelset
     rg::sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
