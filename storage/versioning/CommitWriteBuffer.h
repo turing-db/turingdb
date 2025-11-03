@@ -114,6 +114,18 @@ public:
      */
     void addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges);
 
+    /**
+     * @brief Adds a single NodeID contained in @param newDeletedNode to the member @ref
+     * _deletedNodes
+     */
+    void addDeletedNode(const NodeID& newDeletedNode);
+
+    /**
+     * @brief Adds a single EdgeID contained in @param newDeletedEdge to the member @ref
+     * _deletedEdges
+     */
+    void addDeletedEdge(const EdgeID& newDeletedEdge);
+
     void addHangingEdges(const GraphView& view);
 
     void setFlushed() { _flushed = true; }

@@ -58,6 +58,7 @@ public:
     size_t getOutPatchEdgeCount() const { return _outPatchEdgeCount; };
     size_t getInPatchEdgeCount() const { return _inPatchEdgeCount; };
     size_t getPartIndex() const { return _partIndex; };
+    std::vector<NodeID>& getTmpNodeIDs() { return _tmpNodeIDVector; }
 
     MetadataBuilder& getMetadata() { return *_metadata; }
 
@@ -77,6 +78,7 @@ private:
     size_t _partIndex {0};
 
     std::vector<LabelSetHandle> _coreNodeLabelSets;
+    std::vector<NodeID> _tmpNodeIDVector;
     std::vector<EdgeRecord> _edges;
     std::unordered_map<EdgeID, const EdgeRecord*> _patchedEdges;
     std::unordered_set<NodeID> _nodeHasPatchEdges;
