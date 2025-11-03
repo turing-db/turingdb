@@ -14,7 +14,8 @@ using namespace db;
 
 GraphWriter::GraphWriter(Graph* graph)
     : _graph(graph),
-      _jobSystem(JobSystem::create()) {
+    _jobSystem(JobSystem::create())
+{
 
     if (_graph) {
         _change = _graph->getChangeManager().createChange();

@@ -17,8 +17,9 @@ using namespace db;
 
 VersionController::VersionController(Graph* graph)
     : _graph(graph),
-      _dataManager(std::make_unique<ArcManager<CommitData>>()),
-      _partManager(std::make_unique<ArcManager<DataPart>>()) {
+    _dataManager(std::make_unique<ArcManager<CommitData>>()),
+    _partManager(std::make_unique<ArcManager<DataPart>>())
+{
 }
 
 VersionController::~VersionController() {
@@ -42,7 +43,7 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
         return _head.load()->openTransaction();
     }
 
-    std::scoped_lock lock {_mainMutex};
+    std::scoped_lock lock {_mutex};
 
     auto it = _offsets.find(hash);
     if (it == _offsets.end()) {
@@ -64,7 +65,7 @@ CommitHash VersionController::getHeadHash() const {
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile {"VersionController::submitChange"};
 
-    std::scoped_lock lock(_mainMutex);
+    std::scoped_lock lock(_mutex);
 
     Commit* head = _head.load();
 
@@ -106,7 +107,7 @@ std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
 }
 
 std::unique_lock<std::mutex> VersionController::lock() {
-    return std::unique_lock<std::mutex> {_mainMutex};
+    return std::unique_lock<std::mutex> {_mutex};
 }
 
 void VersionController::addCommit(std::unique_ptr<Commit> commit) {

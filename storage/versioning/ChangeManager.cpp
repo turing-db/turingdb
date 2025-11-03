@@ -14,8 +14,9 @@ ChangeManager::ChangeManager(VersionController* versionController,
                              ArcManager<DataPart>* partManager,
                              ArcManager<CommitData>* commitDataManager)
     : _versionController(versionController),
-      _dataPartManager(partManager),
-      _commitDataManager(commitDataManager) {
+    _dataPartManager(partManager),
+    _commitDataManager(commitDataManager)
+{
 }
 
 ChangeManager::~ChangeManager() = default;
@@ -64,16 +65,6 @@ ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, Comm
     return tx;
 }
 
-ChangeResult<void> ChangeManager::rebase(ChangeAccessor access, FrozenCommitTx baseTx) const {
-    Profile profile("ChangeManager::rebaseChange");
-
-    std::shared_lock lock(_lock);
-    const ChangeID id = access.getID();
-    access.release();
-
-    return rebaseImpl(id, std::move(baseTx));
-}
-
 ChangeResult<void> ChangeManager::submit(ChangeAccessor access, JobSystem& jobSystem) {
     Profile profile("ChangeManager::submitChange");
 
@@ -92,13 +83,6 @@ ChangeResult<void> ChangeManager::deleteChange(ChangeAccessor access) {
     access.release();
 
     return deleteImpl(id);
-}
-
-ChangeResult<void> ChangeManager::rebase(ChangeID id, FrozenCommitTx baseTx) const {
-    Profile profile("ChangeManager::rebaseChange");
-
-    std::shared_lock lock(_lock);
-    return rebaseImpl(id, std::move(baseTx));
 }
 
 ChangeResult<void> ChangeManager::submit(ChangeID id, JobSystem& jobSystem) {
@@ -122,28 +106,6 @@ void ChangeManager::listChanges(ColumnVector<ChangeID>* output) const {
     for (const auto& change : _changes) {
         output->push_back(change.first);
     }
-}
-
-ChangeResult<void> ChangeManager::rebaseImpl(ChangeID id, FrozenCommitTx baseTx) const {
-    std::shared_lock lock(_lock);
-
-    auto it = _changes.find(id);
-
-    if (it == _changes.end()) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
-    }
-
-    if (!baseTx.isValid()) {
-        baseTx = _versionController->openTransaction();
-    }
-
-    // TODO use ChangeResults in Change instead of CommitResults
-    const CommitResult<void> res = it->second->rebase(baseTx.commitData());
-    if (!res) {
-        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND, res.error());
-    }
-
-    return {};
 }
 
 ChangeResult<void> ChangeManager::submitImpl(ChangeID id, JobSystem& jobSystem) {

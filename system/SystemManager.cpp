@@ -22,7 +22,8 @@ using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
     : _config(config),
-      _neo4JImporter(std::make_unique<Neo4jImporter>()) {
+    _neo4JImporter(std::make_unique<Neo4jImporter>())
+{
 }
 
 SystemManager::~SystemManager() {

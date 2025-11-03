@@ -121,8 +121,8 @@ CommitBuilder::CommitBuilder(ArcManager<DataPart>& dataPartManager,
                              const WeakArc<CommitData>& commitData,
                              const GraphView& view)
     : _dataPartManager(&dataPartManager),
-      _view(view),
-      _commitData(commitData)
+    _view(view),
+    _commitData(commitData)
 {
 }
 

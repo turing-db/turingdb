@@ -38,7 +38,7 @@ public:
 
     ChangeError(ChangeErrorType type, CommitError commitError)
         : _commitError(commitError),
-          _type(type)
+        _type(type)
     {
     }
 

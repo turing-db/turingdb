@@ -29,11 +29,9 @@ public:
     ChangeAccessor createChange(FrozenCommitTx baseTx = {});
     ChangeResult<Transaction> openTransaction(ChangeID id, CommitHash hash = CommitHash::head()) const;
 
-    ChangeResult<void> rebase(ChangeAccessor access, FrozenCommitTx baseTx = {}) const;
     ChangeResult<void> submit(ChangeAccessor access, JobSystem& jobSystem);
     ChangeResult<void> deleteChange(ChangeAccessor access);
 
-    ChangeResult<void> rebase(ChangeID id, FrozenCommitTx baseTx = {}) const;
     ChangeResult<void> submit(ChangeID id, JobSystem& jobSystem);
     ChangeResult<void> deleteChange(ChangeID id);
 
@@ -49,7 +47,6 @@ private:
     std::unordered_map<ChangeID, std::unique_ptr<Change>> _changes;
     std::atomic<ChangeID::ValueType> _nextChangeID {0};
 
-    ChangeResult<void> rebaseImpl(ChangeID id, FrozenCommitTx baseTx = {}) const;
     ChangeResult<void> submitImpl(ChangeID id, JobSystem& jobSystem);
     ChangeResult<void> deleteImpl(ChangeID id);
 };

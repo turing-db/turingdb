@@ -19,9 +19,10 @@ Change::Change(ArcManager<DataPart>& dataPartManager,
                ChangeID id,
                const WeakArc<const CommitData>& base)
     : _id(id),
-      _dataPartManager(&dataPartManager),
-      _commitDataManager(&commitDataManager),
-      _base(base) {
+    _dataPartManager(&dataPartManager),
+    _commitDataManager(&commitDataManager),
+    _base(base)
+{
     auto tip = CommitBuilder::prepare(*_dataPartManager,
                                       _commitDataManager->create(CommitHash::create()),
                                       GraphView {*_base});

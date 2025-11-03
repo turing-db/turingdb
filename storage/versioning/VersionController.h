@@ -68,7 +68,7 @@ private:
     std::atomic<Commit*> _head {nullptr};
     std::atomic<uint64_t> _nextChangeID {0};
 
-    mutable std::mutex _mainMutex;
+    mutable std::mutex _mutex;
     Commit::CommitVector _commits;
     CommitMap _offsets;
     std::unique_ptr<ArcManager<CommitData>> _dataManager;
