@@ -20,10 +20,10 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineOutputInterface& outNodeIDs() { return _outNodeIDs; }
+    PipelineNodeOutputInterface& outNodeIDs() { return _outNodeIDs; }
 
 private:
-    PipelineOutputInterface _outNodeIDs;
+    PipelineNodeOutputInterface _outNodeIDs;
     std::unique_ptr<ScanNodesChunkWriter> _it;
 
     ScanNodesProcessor();

@@ -109,8 +109,9 @@ protected:
 template <IteratedID ID, SupportedType T>
 class GetPropertiesChunkWriter : public GetPropertiesIterator<ID, T> {
 public:
+    using Values = typename T::Primitive;
     using ColumnIDs = ColumnVector<ID>;
-    using ColumnValues = ColumnVector<typename T::Primitive>;
+    using ColumnValues = ColumnVector<Values>;
 
     GetPropertiesChunkWriter(const GraphView& view,
                              PropertyTypeID propTypeID,

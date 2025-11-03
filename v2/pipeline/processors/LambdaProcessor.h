@@ -27,11 +27,11 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineInputInterface& input() { return _input; }
+    PipelineBlockInputInterface& input() { return _input; }
 
 private:
     Callback _callback;
-    PipelineInputInterface _input;
+    PipelineBlockInputInterface _input;
 
     LambdaProcessor(Callback callback);
     ~LambdaProcessor();

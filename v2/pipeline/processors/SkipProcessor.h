@@ -10,16 +10,16 @@ class SkipProcessor : public Processor {
 public:
     static SkipProcessor* create(PipelineV2* pipeline, size_t skipCount);
 
-    PipelineInputInterface& input() { return _input; }
-    PipelineOutputInterface& output() { return _output; }
+    PipelineBlockInputInterface& input() { return _input; }
+    PipelineBlockOutputInterface& output() { return _output; }
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;
 
 private:
-    PipelineInputInterface _input;
-    PipelineOutputInterface _output;
+    PipelineBlockInputInterface _input;
+    PipelineBlockOutputInterface _output;
     const size_t _skipCount {0};
     bool _skipping {true};
     size_t _currentRowCount {0};

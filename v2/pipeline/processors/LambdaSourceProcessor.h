@@ -28,11 +28,11 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineOutputInterface& output() { return _output; }
+    PipelineBlockOutputInterface& output() { return _output; }
 
 private:
     Callback _callback;
-    PipelineOutputInterface _output;
+    PipelineBlockOutputInterface _output;
 
     LambdaSourceProcessor(Callback callback);
     ~LambdaSourceProcessor();

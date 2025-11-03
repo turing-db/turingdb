@@ -23,12 +23,12 @@ public:
     void reset() override;
     void execute() override;
 
-    PipelineInputInterface& input() { return _input; }
-    PipelineOutputInterface& output() { return _output; }
+    PipelineBlockInputInterface& input() { return _input; }
+    PipelineBlockOutputInterface& output() { return _output; }
 
 private:
-    PipelineInputInterface _input;
-    PipelineOutputInterface _output;
+    PipelineBlockInputInterface _input;
+    PipelineBlockOutputInterface _output;
     MaterializeData _matData;
     ColumnVector<size_t> _transform;
 
