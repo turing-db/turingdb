@@ -216,7 +216,7 @@ void GetPropertiesChunkWriter<ID, T>::fill(size_t maxCount) {
 
     while (this->isValid()) {
         const auto& currentProp = this->get();
-        size_t currIndex = std::distance(this->_inputIDs->cbegin(), this->_entityIt);
+        const size_t currIndex = std::distance(this->_inputIDs->cbegin(), this->_entityIt);
 
         _output->push_back(currentProp);
         _indices->push_back(currIndex);

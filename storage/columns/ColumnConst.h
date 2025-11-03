@@ -58,8 +58,8 @@ public:
 
     void set(const T& value) { _value = value; }
 
-    void dump() const override {
-        DebugDump::dump(_value);
+    void dump(std::ostream& out) const override {
+        DebugDump::dump(out, _value);
     }
 
     T& getRaw() { return _value; }

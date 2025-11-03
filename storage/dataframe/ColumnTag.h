@@ -7,7 +7,7 @@ namespace db {
 class ColumnTag {
 public:
     struct Hash {
-        size_t operator()(const ColumnTag& tag) const { return tag.value(); }
+        size_t operator()(const ColumnTag& tag) const { return tag.getValue(); }
     };
 
     explicit ColumnTag(size_t value)
@@ -15,7 +15,7 @@ public:
     {
     }
 
-    size_t value() const { return _value; }
+    size_t getValue() const { return _value; }
 
     bool operator==(const ColumnTag& other) const { return _value == other._value; }
     bool operator!=(const ColumnTag& other) const { return _value != other._value; }

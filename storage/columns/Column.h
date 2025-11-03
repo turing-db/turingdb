@@ -18,7 +18,7 @@ public:
     virtual void assign(const Column* other) = 0;
     virtual void assignFromLine(const Column* other, size_t startLine, size_t rowCount) = 0;
 
-    virtual void dump() const = 0;
+    virtual void dump(std::ostream& out) const = 0;
 
     ColumnKind::ColumnKindCode getKind() const { return _kind; }
 

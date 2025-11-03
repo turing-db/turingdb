@@ -111,10 +111,10 @@ public:
         return _data.emplace_back(std::forward<Args>(args)...);
     }
 
-    void dump() const override {
-        DebugDump::dumpString("ColumnVector of size="+std::to_string(_data.size()));
+    void dump(std::ostream& out) const override {
+        DebugDump::dumpString(out, "ColumnVector of size="+std::to_string(_data.size()));
         for (const auto& elem : _data) {
-            DebugDump::dump(elem);
+            DebugDump::dump(out, elem);
         }
     }
 

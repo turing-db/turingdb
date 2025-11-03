@@ -27,3 +27,31 @@ size_t Dataframe::getRowCount() const {
 
     return _cols[0]->getColumn()->size();
 }
+
+void Dataframe::dump(std::ostream& out) const {
+    for (const NamedColumn* col : _cols) {
+        out << "Column $" << col->getHeader().getTag().getValue() << ": ";
+        col->getColumn()->dump(out);
+        out << '\n';
+    }
+}
+
+void Dataframe::copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount) {
+    const NamedColumns& otherColumns = other->cols();
+    const size_t copySize = std::min(_cols.size(), otherColumns.size());
+    for (size_t i = 0; i < copySize; i++) {
+        Column* otherColumn = otherColumns[i]->getColumn();
+        Column* column = _cols[i]->getColumn();
+        column->assignFromLine(otherColumn, startRow, rowCount);
+    }
+}
+
+void Dataframe::copyFrom(const Dataframe* other) {
+    const NamedColumns& otherColumns = other->cols();
+    const size_t copySize = std::min(_cols.size(), otherColumns.size());
+    for (size_t i = 0; i < copySize; i++) {
+        Column* otherColumn = otherColumns[i]->getColumn();
+        Column* column = _cols[i]->getColumn();
+        column->assign(otherColumn);
+    }
+}

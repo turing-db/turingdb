@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <ostream>
 
 #include "ColumnTag.h"
 
@@ -55,6 +56,8 @@ public:
 
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
     void copyFrom(const Dataframe* other);
+
+    void dump(std::ostream& out) const;
 
 private:
     std::unordered_map<ColumnTag, NamedColumn*, ColumnTag::Hash> _headerMap;

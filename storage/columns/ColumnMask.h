@@ -124,10 +124,10 @@ public:
         return _data.emplace_back(std::forward(args)...);
     }
 
-    void dump() const override {
-        DebugDump::dumpString("ColumnMask of size="+std::to_string(_data.size()));
+    void dump(std::ostream& out) const override {
+        DebugDump::dumpString(out, "ColumnMask of size="+std::to_string(_data.size()));
         for (const auto& elem : _data) {
-            DebugDump::dump(elem);
+            DebugDump::dump(out, elem);
         }
     }
 

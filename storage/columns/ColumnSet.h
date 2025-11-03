@@ -100,10 +100,10 @@ public:
     bool contains(const T& key) const { return _data.contains(key); }
     // NOTE: C++20 templated version not added here
 
-    void dump() const override {
-        DebugDump::dumpString("ColumnSet of size=" + std::to_string(size()));
+    void dump(std::ostream& out) const override {
+        DebugDump::dumpString(out, "ColumnSet of size=" + std::to_string(size()));
         for (const auto& x : _data) {
-            DebugDump::dump(x);
+            DebugDump::dump(out, x);
         }
     }
 
