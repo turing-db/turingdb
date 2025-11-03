@@ -7,7 +7,7 @@ using namespace S3;
 AWSManager::AWSManager()
     :_options(std::make_unique<Aws::SDKOptions>())
 {
-    _options->loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
+    _options->loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Off;
     _options->httpOptions.initAndCleanupCurl = true;
     _options->httpOptions.installSigPipeHandler = true; // Let AWS handle SIGPIPE
 
