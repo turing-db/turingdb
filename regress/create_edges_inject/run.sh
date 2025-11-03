@@ -8,6 +8,7 @@ pkill turingdb
 turingdb -turing-dir $SCRIPT_DIR/.turing
 
 rm -f pyproject.toml
+rm -f uv.lock
 uv init
 uv add turingdb
 
@@ -15,5 +16,6 @@ uv run main.py
 testres=$?
 
 pkill turingdb
+rm -rf .turing
 
 exit $testres

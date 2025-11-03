@@ -15,5 +15,6 @@ uv run main.py
 testres=$?
 
 pkill turingdb
+rm -rf .turing
 
 exit $testres
