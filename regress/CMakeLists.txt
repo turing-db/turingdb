@@ -27,6 +27,7 @@ add_subdirectory(create_edges_inject)
 add_subdirectory(call_labels)
 add_subdirectory(complex_rebases)
 add_subdirectory(serialization)
+add_subdirectory(snapshot_isolation)
 
 # write run_regress target
 set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")
