@@ -1135,7 +1135,7 @@ TEST_F(DeleteQueryTest, resolvedOutEdgesDeleteConflict) {
     { // But create an edge between Luc and Cyrus
         tester.setChangeID(change1);
         // This edge has ID 13
-        tester.query("create (n @ 9)-[e:WorksWith{name=\"Luc -> Cyrus\"}]-(m:Person{name=\"Cyrus\"})")
+        tester.query(R"(create (n @ 9)-[e:WorksWith{name="Luc -> Cyrus"}]-(m:Person{name="Cyrus"}))")
             .execute();
         submitChange(tester);
     }
@@ -1168,7 +1168,7 @@ TEST_F(DeleteQueryTest, resolvedInEdgesDeleteConflict) {
     { // But create an edge between Cyrus and Luc
         tester.setChangeID(change1);
         // This edge has ID 13
-        tester.query("create (m:Person{name=\"Cyrus\"})-[e:WorksWith{name=\"Cyrus -> Luc\"}]-(n @ 9)")
+        tester.query(R"(create (m:Person{name="Cyrus"})-[e:WorksWith{name="Cyrus -> Luc"}]-(n @ 9))")
             .execute();
         submitChange(tester);
     }
@@ -1201,9 +1201,9 @@ TEST_F(DeleteQueryTest, resolvedEdgesDeleteConflict) {
     { // But create an edge between Cyrus and Luc and Luc and Doruk
         tester.setChangeID(change1);
         // This edge has ID 13
-        tester.query("create (m:Person{name=\"Cyrus\"})-[e:WorksWith{name=\"Cyrus -> Luc\"}]-(n @ 9)")
+        tester.query(R"(create (m:Person{name="Cyrus"})-[e:WorksWith{name="Cyrus -> Luc"}]-(n @ 9))")
             .execute();
-        tester.query("create (n @ 9)-[e:WorksWith{name=\"Luc -> Doruk\"}]-(m:Person{name=\"Doruk\"})")
+        tester.query(R"(create (n @ 9)-[e:WorksWith{name="Luc -> Doruk"}]-(m:Person{name="Doruk"}))")
             .execute();
         submitChange(tester);
     }
@@ -1218,5 +1218,201 @@ TEST_F(DeleteQueryTest, resolvedEdgesDeleteConflict) {
     { // So Change 0 can delete Luc as the graph is the same as when it branched
         tester.setChangeID(change0);
         submitChange(tester);
+    }
+}
+
+TEST_F(DeleteQueryTest, validAfterDeletedNodeSSIReject) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID firstID = newChange(tester);
+
+    // Delete Remy
+    tester.query("delete nodes 0")
+        .execute();
+
+    newChange(tester);
+
+    // Also delete Remy
+    tester.query("delete nodes 0")
+        .execute();
+
+    // Second change deletes Remy
+    submitChange(tester);
+
+    tester.setChangeID(firstID);
+
+    // First change also tries to delete Remy
+    tester.query("change submit")
+        .expectError()
+        .expectErrorMessage(
+            "Unexpected exception: This change attempted to delete Node 0 (which is now "
+            "Node 0 on main) which has been modified on main.")
+        .execute();
+
+    // We were just rejected on main, but we should still be in a valid state
+    // Remy is not deleted as we have not committed:
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
+        .execute();
+
+    tester.query("commit")
+        .execute();
+
+    // Now Remy should be deleted
+    tester.query("match (n) return n")
+        .expectVector<NodeID>({1,2,3,4,5,6,7,8,9,10,11,12})
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, validAfterDeletedEdgeSSIReject) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID firstID = newChange(tester);
+
+    // Delete edge 10
+    tester.query("delete edges 10")
+        .execute();
+
+    newChange(tester);
+
+    // Also delete edge 10
+    tester.query("delete edges 10")
+        .execute();
+
+    // Second change deletes edge 10
+    submitChange(tester);
+
+    tester.setChangeID(firstID);
+
+    // First change also tries to delete edge 10
+    tester.query("change submit")
+        .expectError()
+        .expectErrorMessage(
+            "Unexpected exception: This change attempted to delete Edge 10 (which is now "
+            "Edge 10 on main) which has been modified on main.")
+        .execute();
+
+    // We were just rejected on main, but we should still be in a valid state
+    // Edge 10 is not deleted as we have not committed:
+    tester.query("match (n)-[e]-(m) return e")
+        .expectVector<EdgeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
+        .execute();
+
+    tester.query("commit")
+        .execute();
+
+    // Now Edge 10 should be deleted
+    tester.query("match (n)-[e]-(m) return e")
+        .expectVector<EdgeID>({0,1,2,3,4,5,6,7,8,9,11,12})
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, validAfterDeleteEdgeSideEffectSSIReject) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID fstChange = newChange(tester);
+    ChangeID sndChange = newChange(tester);
+
+    { // First Change
+        tester.setChangeID(fstChange);
+        tester.query("create (n @ 12)-[e:WORKS_WITH]-(m:Person{name=\"Cyrus\"})")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // Second Change
+        tester.setChangeID(sndChange);
+        tester.query("delete nodes 12").execute();
+
+        const std::string expectedError =
+            "Unexpected exception: Submit rejected: Commits on main have created an edge "
+            "incident to a node this Change attempts to delete.";
+
+        tester.query("change submit")
+            .expectError()
+            .expectErrorMessage(expectedError)
+            .execute();
+
+        // Nothing has been deleted: we haven't committed/submitted
+        tester.query("match (n) return n")
+            .expectVector<NodeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
+            .execute();
+        tester.query("match (n)-[e]-(m) return e")
+            .expectVector<EdgeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
+            .execute();
+
+        tester.query("commit")
+            .execute();
+
+        // Now we have submitted, we should see our local changes
+        tester.query("match (n) return n")
+            .expectVector<NodeID>({0,1,2,3,4,5,6,7,8,9,10,11})
+            .execute();
+        // Deleting Suhas should not delete any edges
+        tester.query("match (n)-[e]-(m) return e")
+            .expectVector<EdgeID>({0,1,2,3,4,5,6,7,8,9,10,11,12})
+            .execute();
+    }
+}
+
+TEST_F(DeleteQueryTest, validAfterDelEdgeConflictSSIReject) {
+    QueryTester tester {_env->getMem(), *_interp, "default"};
+
+    { // Change 1
+        newChange(tester);
+        //                    node 0    edge 0       node 1
+        tester.query("create (n:SOURCE)-[e:NEWEDGE]-(m:TARGET)").execute();
+        submitChange(tester);
+    }
+
+    ChangeID change2 = newChange(tester);
+    ChangeID change3 = newChange(tester);
+
+    { // Change 2
+        tester.setChangeID(change2);
+        // This should also delete the edge
+        tester.query("delete nodes 0").execute();
+    }
+
+    { // Change 3
+        tester.setChangeID(change3);
+        tester.query("delete nodes 1").execute();
+        submitChange(tester);
+    }
+
+    { // Change 2
+        const std::string expectedError = "Unexpected exception: This change attempted "
+                                          "to delete Edge 0 (which is now Edge "
+                                          "0 on main) which has been modified on main.";
+
+        tester.setChangeID(change2);
+        tester.query("change submit")
+            .expectError()
+            .expectErrorMessage(expectedError)
+            .execute();
+
+        // We tried to delete node 0, but were rejected, we should see both nodes and the
+        // edge
+        tester.query("match (n)-[e]-(m) return n,e,m")
+            .expectVector<NodeID>({0})
+            .expectVector<EdgeID>({0})
+            .expectVector<NodeID>({1})
+            .execute();
+
+        // Now apply the pending changes
+        tester.query("commit")
+            .execute();
+
+        // Node 0 deleted => Edge 0 deleted => no edges
+        tester.query("match (n)-[e]-(m) return n,e,m")
+            .expectVector<NodeID>({})
+            .expectVector<EdgeID>({})
+            .expectVector<NodeID>({})
+            .execute();
+
+        // Only node 1 remains (even thought it was deleted on main)
+        tester.query("match (n) return n")
+            .expectVector<NodeID>({1})
+            .execute();
     }
 }
