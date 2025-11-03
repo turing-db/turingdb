@@ -20,9 +20,8 @@ CommitBuilder::~CommitBuilder() = default;
 
 std::unique_ptr<CommitBuilder> CommitBuilder::prepare(ArcManager<DataPart>& dataPartManager,
                                                       const WeakArc<CommitData>& commitData,
-                                                      Change* change,
                                                       const GraphView& view) {
-    auto* ptr = new CommitBuilder {dataPartManager, commitData, change, view};
+    auto* ptr = new CommitBuilder {dataPartManager, commitData, view};
     ptr->initialize();
     return std::unique_ptr<CommitBuilder> {ptr};
 }
@@ -120,10 +119,8 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
 
 CommitBuilder::CommitBuilder(ArcManager<DataPart>& dataPartManager,
                              const WeakArc<CommitData>& commitData,
-                             Change* change,
                              const GraphView& view)
     : _dataPartManager(&dataPartManager),
-      _change(change),
       _view(view),
       _commitData(commitData) {
 }

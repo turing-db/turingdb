@@ -30,7 +30,6 @@ public:
 
     [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(ArcManager<DataPart>& dataPartManager,
                                                                 const WeakArc<CommitData>& commitData,
-                                                                Change* change,
                                                                 const GraphView& view);
 
     [[nodiscard]] CommitHash hash() const;
@@ -72,7 +71,6 @@ private:
     std::unique_ptr<CommitWriteBuffer> _writeBuffer;
 
     ArcManager<DataPart>* _dataPartManager {nullptr};
-    Change* _change {nullptr};
     GraphView _view;
 
     NodeID _firstNodeID;
@@ -91,7 +89,6 @@ private:
 
     CommitBuilder(ArcManager<DataPart>& dataPartManager,
                   const WeakArc<CommitData>& data,
-                  Change* change,
                   const GraphView&);
 
     void initialize();

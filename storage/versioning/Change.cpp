@@ -24,7 +24,6 @@ Change::Change(VersionController* versionController,
       _base(versionController->openTransaction(base).commitData()) {
     auto tip = CommitBuilder::prepare(*_dataPartManager,
                                       _versionController->createCommitData(CommitHash::create()),
-                                      this,
                                       GraphView {*_base});
     _tip = tip.get();
     _commitOffsets.emplace(_tip->hash(), _commits.size());
@@ -68,7 +67,6 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 
     auto newTip = CommitBuilder::prepare(*_dataPartManager,
                                          _versionController->createCommitData(CommitHash::create()),
-                                         this,
                                          _commits.back()->viewGraph());
     _tip = newTip.get();
     _commitOffsets.emplace(_tip->hash(), _commits.size());
