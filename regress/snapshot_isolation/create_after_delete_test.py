@@ -1,5 +1,5 @@
 from turingdb import TuringDB
-from graph_utils import new_change, submit_current_change, setup_graph, validate_graph_setup
+from graph_utils import *
 
 # CREATE after DELETE as specified in
 # https://www.notion.so/turingbio/Specification-12-9-25-26b3aad664c88075a272d4d1969daf13?source=copy_link#26c3aad664c8806b82fcd28b870ed275

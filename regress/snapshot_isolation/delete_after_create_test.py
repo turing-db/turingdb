@@ -1,6 +1,5 @@
 from turingdb import TuringDB
-
-from graph_utils import setup_graph, validate_graph_setup, new_change, submit_current_change
+from graph_utils import *
 
 # DELETE after CREATE as specified in
 # https://www.notion.so/turingbio/Specification-12-9-25-26b3aad664c88075a272d4d1969daf13?source=copy_link#26c3aad664c880a28025fa531418d5cd
@@ -29,7 +28,7 @@ def run(client: TuringDB) -> None:
   # Try and submit the deletion: we should reject because we have
   # a write conflict on the newly created edge
   try:
-    client.query("change submit")
+    submit_current_change(client)
   except Exception as e:
     assert str(e) == "EXEC_ERROR: Unexpected exception: Submit rejected: Commits on main have created an edge incident to a node this Change attempts to delete."
   else:
