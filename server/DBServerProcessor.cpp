@@ -269,9 +269,10 @@ void DBServerProcessor::history() {
 
     static constexpr auto formatCommitLog = [](PayloadWriter& payload, const CommitView& commit) {
         std::string str = fmt::format("Commit: {:x}", commit.hash().get());
-        if (commit.isHead()) {
-            str += " (HEAD)";
-        }
+        // TODO: re-add
+        // if (commit.isHead()) {
+        //     str += " (HEAD)";
+        // }
         str += "\\n";
 
         size_t i = 0;

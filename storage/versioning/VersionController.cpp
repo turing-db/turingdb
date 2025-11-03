@@ -32,7 +32,7 @@ VersionController::~VersionController() {
 
 void VersionController::createFirstCommit() {
     auto commitData = _dataManager->create(CommitHash::create());
-    auto commit = std::make_unique<Commit>(this, commitData);
+    auto commit = std::make_unique<Commit>(commitData);
 
     // Register itself in the history
     commit->history().pushCommit(CommitView {commit.get()});

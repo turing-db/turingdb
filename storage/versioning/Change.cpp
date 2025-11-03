@@ -16,10 +16,10 @@ Change::~Change() = default;
 
 Change::Change(VersionController* versionController, ChangeID id, CommitHash base)
     : _id(id),
-    _versionController(versionController),
-    _base(versionController->openTransaction(base).commitData())
-{
+      _versionController(versionController),
+      _base(versionController->openTransaction(base).commitData()) {
     auto tip = CommitBuilder::prepare(*_versionController,
+                                      _versionController->createCommitData(CommitHash::create()),
                                       this,
                                       GraphView {*_base});
     _tip = tip.get();
@@ -62,6 +62,7 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
     }
 
     auto newTip = CommitBuilder::prepare(*_versionController,
+                                         _versionController->createCommitData(CommitHash::create()),
                                          this,
                                          _commits.back()->viewGraph());
     _tip = newTip.get();

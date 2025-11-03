@@ -22,9 +22,10 @@ void HistoryStep::execute() {
     static constexpr auto formatCommitLog = [](std::string& str,
                                                const CommitView& commit) {
         str = fmt::format("Commit: {:x}", commit.hash().get());
-        if (commit.isHead()) {
-            str += " (HEAD)";
-        }
+        // TODO: re-add
+        // if (commit.isHead()) {
+        //     str += " (HEAD)";
+        // }
         str += "\\n";
 
         size_t i = 0;

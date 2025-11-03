@@ -17,16 +17,8 @@ const CommitData& CommitView::data() const {
     return _commit->data();
 }
 
-bool CommitView::isHead() const {
-    return _commit->isHead();
-}
-
 CommitHash CommitView::hash() const {
     return _commit->hash();
-}
-
-const VersionController& CommitView::controller() const {
-    return _commit->controller();
 }
 
 DataPartSpan CommitView::dataparts() const {

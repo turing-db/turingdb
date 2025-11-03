@@ -22,7 +22,6 @@ class FrozenCommitTx;
 
 class CommitBuilder {
 public:
-    CommitBuilder();
     ~CommitBuilder();
 
     CommitBuilder(const CommitBuilder&) = delete;
@@ -31,6 +30,7 @@ public:
     CommitBuilder& operator=(CommitBuilder&&) = delete;
 
     [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(VersionController& controller,
+                                                                const WeakArc<CommitData>& commitData,
                                                                 Change* change,
                                                                 const GraphView& view);
 
@@ -91,9 +91,12 @@ private:
 
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-    explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
+    CommitBuilder(VersionController&,
+                  const WeakArc<CommitData>& data,
+                  Change* change,
+                  const GraphView&);
 
     void initialize();
-    };
+};
 }
 

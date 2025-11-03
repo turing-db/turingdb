@@ -44,7 +44,6 @@ public:
         auto& versionController = graph._versionController;
 
         auto commit = std::make_unique<Commit>(
-            graph._versionController.get(),
             versionController->createCommitData(hash));
 
         if (prevHistory) {

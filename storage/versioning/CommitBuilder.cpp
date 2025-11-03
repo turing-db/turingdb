@@ -17,14 +17,13 @@
 
 using namespace db;
 
-CommitBuilder::CommitBuilder() = default;
-
 CommitBuilder::~CommitBuilder() = default;
 
 std::unique_ptr<CommitBuilder> CommitBuilder::prepare(VersionController& controller,
+                                                      const WeakArc<CommitData>& commitData,
                                                       Change* change,
                                                       const GraphView& view) {
-    auto* ptr = new CommitBuilder {controller, change, view};
+    auto* ptr = new CommitBuilder {controller, commitData, change, view};
     ptr->initialize();
     return std::unique_ptr<CommitBuilder> {ptr};
 }
@@ -120,11 +119,14 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     wb.setFlushed();
 }
 
-CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
+CommitBuilder::CommitBuilder(VersionController& controller,
+                             const WeakArc<CommitData>& commitData,
+                             Change* change,
+                             const GraphView& view)
     : _controller(&controller),
-    _change(change),
-    _view(view)
-{
+      _change(change),
+      _view(view),
+      _commitData(commitData) {
 }
 
 void CommitBuilder::initialize() {
@@ -145,8 +147,7 @@ void CommitBuilder::initialize() {
     const CommitView prevCommit = reader.commits().back();
 
     // Create new commit data
-    _commitData = _controller->createCommitData(CommitHash::create());
-    _commit = Commit::createNextCommit(_controller, _commitData, prevCommit);
+    _commit = Commit::createNextCommit(_commitData, prevCommit);
 
     // Create metadata builder
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
