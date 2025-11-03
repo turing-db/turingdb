@@ -11,7 +11,7 @@ class DumpConfig {
 public:
     static constexpr uint32_t ONE_BAD_CAFE = 0x1BADCAFE;
     static constexpr uint64_t VERSION = HEAD_COMMIT_TIMESTAMP;
-    static constexpr uint64_t UP_TO_DATE_VERSION = 1761128034;
+    static constexpr uint64_t UP_TO_DATE_VERSION = 1761936116;
     static constexpr uint64_t PAGE_SIZE = fs::DEFAULT_PAGE_SIZE;
 
     static constexpr size_t SIZEOF_ONE_BAD_CAFE = sizeof(decltype(ONE_BAD_CAFE));
