@@ -35,12 +35,16 @@ public:
     void listChanges(ColumnVector<ChangeID>* output) const;
 
 private:
+    friend class GraphLoader;
+
     mutable RWSpinLock _lock;
 
     VersionController* _versionController {nullptr};
 
     std::unordered_map<ChangeID, std::shared_ptr<Change>> _changes;
     std::atomic<ChangeID::ValueType> _nextChangeID {0};
+
+    void clear();
 };
 
 }

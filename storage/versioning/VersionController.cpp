@@ -65,8 +65,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
 
     std::unique_lock lock(_mutex);
 
-    change->_isSubmitted = true;
-
     Commit* head = _head.load();
 
     // Rebase if main has changed

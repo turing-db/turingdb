@@ -18,6 +18,8 @@ public:
     ChangeAccessor() = default;
     ~ChangeAccessor() = default;
 
+    ChangeAccessor(Change* change);
+
     ChangeAccessor(const ChangeAccessor&) = delete;
     ChangeAccessor(ChangeAccessor&&) = default;
     ChangeAccessor& operator=(const ChangeAccessor&) = delete;
@@ -28,6 +30,7 @@ public:
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] ChangeID getID() const;
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash = CommitHash::head()) const;
+    [[nodiscard]] Change* get() const { return _change; }
 
     void release() {
         _lock.unlock();
@@ -38,8 +41,6 @@ private:
 
     std::unique_lock<std::mutex> _lock;
     Change* _change {nullptr};
-
-    ChangeAccessor(Change* change);
 };
 
 }

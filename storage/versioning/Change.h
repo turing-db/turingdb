@@ -8,7 +8,6 @@
 #include "versioning/CommitHash.h"
 #include "versioning/CommitResult.h"
 #include "versioning/ChangeID.h"
-#include "versioning/ChangeAccessor.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -29,19 +28,18 @@ public:
     Change& operator=(const Change&) = delete;
     Change& operator=(Change&&) = delete;
 
-    [[nodiscard]] ChangeAccessor access() { return ChangeAccessor {this}; }
     [[nodiscard]] CommitHash baseHash() const;
     [[nodiscard]] ChangeID id() const { return _id; }
     [[nodiscard]] bool isSubmitted() const { return _isSubmitted; }
 
 private:
-    mutable std::mutex _mutex;
-
     friend VersionController;
     friend class ChangeAccessor;
     friend class ChangeManager;
     friend class ChangeRebaser;
     friend class ChangeConflictChecker;
+
+    mutable std::mutex _mutex;
 
     ChangeID _id;
     ArcManager<DataPart>* _dataPartManager {nullptr};

@@ -38,7 +38,7 @@ ChangeAccessor ChangeManager::createChange(FrozenCommitTx baseTx) {
 
     _changes[id] = {change};
 
-    return ptr->access();
+    return ChangeAccessor {ptr};
 }
 
 ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, CommitHash hash) const {
@@ -55,11 +55,9 @@ ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, Comm
     // Step 2. Increment the reference count to keep the change alive
     std::shared_ptr<Change> change = it->second;
 
-    // Step 3. Unlock the ChangeManager.
+    // Step 3. Lock the change and unlock the ChangeManager
+    ChangeAccessor access {change.get()};
     _lock.unlock();
-
-    // Step 4. Lock the change
-    ChangeAccessor access {change->access()};
 
     // Step 5. Check if it was already submitted
     if (change->isSubmitted()) {
@@ -95,37 +93,40 @@ ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, Comm
 ChangeResult<void> ChangeManager::submit(ChangeAccessor access, JobSystem& jobSystem) {
     Profile profile("ChangeManager::submitChange");
 
-    std::unique_lock lock(_lock);
+    {
+        std::unique_lock lock(_lock);
 
-    const ChangeID id = access.getID();
+        const ChangeID id = access.getID();
 
-    // Step 1. Retrieve the change
-    auto it = _changes.find(id);
-    if (it == _changes.end()) {
-        // Should never happen
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        // Step 1. Retrieve the change
+        auto it = _changes.find(id);
+        if (it == _changes.end()) {
+            // Should never happen
+            return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        }
+
+        // Step 2. Increment the reference count to keep the change alive
+        std::shared_ptr<Change> change = it->second;
+
+        // Step 3. Erase the change from the map so that no one else can access it
+        _changes.erase(it);
     }
 
-    // Step 2. Increment the reference count to keep the change alive
-    std::shared_ptr<Change> change = it->second;
+    Change* change = access.get();
 
-    // Step 3. Erase the change from the map so that no one else can access it
-    _changes.erase(it);
-
-    // Step 4. Unlock the ChangeManager
-    _lock.unlock();
-
-    // Step 5. Check if the change was already submitted
+    // Step 4. Check if the change was already submitted (should never happen)
     if (change->isSubmitted()) {
-        // Should never happen
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
+    // Step 5. - Tag the change as submitted and submit it
+    change->_isSubmitted = true;
     access.release();
-    const auto res = _versionController->submitChange(change.get(), jobSystem);
+    const auto res = _versionController->submitChange(change, jobSystem);
 
     if (!res) {
-        // TODO, check if we should delete the change here
+        // TODO, check if we should delete the change here.
+        //       this leaks a change if the submit fails. What should we do?
         return ChangeError::result(ChangeErrorType::COULD_NOT_ACCEPT_CHANGE, res.error());
     }
 
@@ -139,13 +140,22 @@ ChangeResult<void> ChangeManager::remove(ChangeAccessor access) {
 
     const ChangeID id = access.getID();
 
+    // Step 1. Retrieve the change
     auto it = _changes.find(id);
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
-    _changes.erase(it);
+    // Step 2. Increment the reference count to keep the change alive
+    std::shared_ptr<Change> change = it->second;
 
+    // Step 3. Erase the change from the map so that no one else can access it
+    //         and unlock the change so that it can be destroyed safely
+    _changes.erase(it);
+    access.get()->_isSubmitted = true;
+    access.release();
+
+    // At the end of the scope, the change is destroyed (last reference released)
     return {};
 }
 
@@ -159,4 +169,25 @@ void ChangeManager::listChanges(ColumnVector<ChangeID>* output) const {
     for (const auto& change : _changes) {
         output->push_back(change.first);
     }
+}
+
+void ChangeManager::clear() {
+    std::unique_lock lock(_lock);
+
+    for (auto it = _changes.begin(); it != _changes.end();) {
+        // Acquire a lock on the change
+        ChangeAccessor access {it->second.get()};
+
+        // Increment the reference count to keep the change alive
+        std::shared_ptr<Change> change = it->second;
+
+        // Erase the change from the map so that no one else can access it
+        // and unlock the change so that it can be destroyed safely
+        it = _changes.erase(it);
+        access.release();
+
+        // At the end of this scope, the change is destroyed (last reference released)
+    }
+
+    _nextChangeID.store(0);
 }

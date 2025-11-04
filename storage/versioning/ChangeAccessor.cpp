@@ -6,6 +6,12 @@
 
 using namespace db;
 
+ChangeAccessor::ChangeAccessor(Change* change)
+    : _lock(change->_mutex),
+    _change(change)
+{
+}
+
 CommitBuilder* ChangeAccessor::getTip() const {
     return _change->_tip;
 }
@@ -20,10 +26,4 @@ ChangeID ChangeAccessor::getID() const {
 
 GraphView ChangeAccessor::viewGraph(CommitHash commitHash) const {
     return _change->viewGraph(commitHash);
-}
-
-ChangeAccessor::ChangeAccessor(Change* change)
-    : _lock(change->_mutex),
-    _change(change)
-{
 }

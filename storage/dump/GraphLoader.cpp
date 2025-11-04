@@ -3,6 +3,7 @@
 #include "CommitLoader.h"
 #include "GraphInfoLoader.h"
 #include "Graph.h"
+#include "versioning/ChangeManager.h"
 #include "versioning/Commit.h"
 #include "versioning/VersionController.h"
 #include "versioning/CommitView.h"
@@ -46,6 +47,7 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
 
     static constexpr std::string_view COMMIT_FOLDER_PREFIX = "commit-";
 
+    graph->_changeManager->clear();
     graph->_versionController->clear();
 
     std::map<uint64_t, std::pair<CommitHash, fs::Path>> commitInfo;
