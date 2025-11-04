@@ -236,7 +236,7 @@ NodeID DataPart::getFirstNodeID(const LabelSetHandle& labelset) const {
     return _nodes->getFirstNodeID(labelset);
 }
 
-size_t DataPart::getNodeCount() const {
+size_t DataPart::getNodeContainerSize() const {
     return _nodes->size();
 }
 
@@ -244,7 +244,7 @@ EdgeID DataPart::getFirstEdgeID() const {
     return _firstEdgeID;
 }
 
-size_t DataPart::getEdgeCount() const {
+size_t DataPart::getEdgeContainerSize() const {
     return _edges->size();
 }
 

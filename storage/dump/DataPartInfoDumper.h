@@ -15,8 +15,8 @@ public:
     [[nodiscard]] DumpResult<void> dump(const DataPart& part) {
         GraphDumpHelper::writeFileHeader(_writer);
 
-        const uint64_t nodeCount = part.getNodeCount();
-        const uint64_t edgeCount = part.getEdgeCount();
+        const uint64_t nodeCount = part.getNodeContainerSize();
+        const uint64_t edgeCount = part.getEdgeContainerSize();
         const NodeID firstNodeID = part.getFirstNodeID();
         const EdgeID firstEdgeID = part.getFirstEdgeID();
 

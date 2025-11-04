@@ -29,8 +29,8 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
     _prevFirstNodeID = part._firstNodeID;
     _prevFirstEdgeID = part._firstEdgeID;
 
-    const auto newFirstNodeID = prevPart._firstNodeID + prevPart.getNodeCount();
-    const auto newFirstEdgeID = prevPart._firstEdgeID + prevPart.getEdgeCount();
+    const auto newFirstNodeID = prevPart._firstNodeID + prevPart.getNodeContainerSize();
+    const auto newFirstEdgeID = prevPart._firstEdgeID + prevPart.getEdgeContainerSize();
     _nodeOffset = (newFirstNodeID - _prevFirstNodeID).getValue();
     _edgeOffset = (newFirstEdgeID - _prevFirstEdgeID).getValue();
 

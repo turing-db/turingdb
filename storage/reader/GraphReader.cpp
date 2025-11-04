@@ -15,7 +15,7 @@ size_t GraphReader::getTotalNodesAllocated() const {
     }
 
     const auto& lastPart = _view.dataparts().back();
-    return lastPart->getFirstNodeID().getValue() + lastPart->getNodeCount();
+    return lastPart->getFirstNodeID().getValue() + lastPart->getNodeContainerSize();
 }
 
 size_t GraphReader::getTotalEdgesAllocated() const {
@@ -24,7 +24,7 @@ size_t GraphReader::getTotalEdgesAllocated() const {
     }
 
     const auto& lastPart = _view.dataparts().back();
-    return lastPart->getFirstEdgeID().getValue() + lastPart->getEdgeCount();
+    return lastPart->getFirstEdgeID().getValue() + lastPart->getEdgeContainerSize();
 }
 
 size_t GraphReader::getNodeCount() const {
