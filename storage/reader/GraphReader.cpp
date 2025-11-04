@@ -27,6 +27,24 @@ size_t GraphReader::getTotalEdgesAllocated() const {
     return lastPart->getFirstEdgeID().getValue() + lastPart->getEdgeCount();
 }
 
+size_t GraphReader::getNodeCount() const {
+    const size_t totalCount = getTotalNodesAllocated();
+    const size_t deletedCount = _view.tombstones().nodeTombstones().size();
+
+    bioassert(deletedCount <= totalCount);
+
+    return totalCount - deletedCount;
+}
+
+size_t GraphReader::getEdgeCount() const {
+    const size_t totalCount = getTotalEdgesAllocated();
+    const size_t deletedCount = _view.tombstones().edgeTombstones().size();
+
+    bioassert(deletedCount <= totalCount);
+
+    return totalCount - deletedCount;
+}
+
 LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {
     for (const auto& part : _view.dataparts()) {
         if (part->hasNode(nodeID)) {

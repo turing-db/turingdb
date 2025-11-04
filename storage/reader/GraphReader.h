@@ -47,6 +47,18 @@ public:
      */
     [[nodiscard]] size_t getTotalEdgesAllocated() const;
 
+    /**
+     * @brief Returns the number of nodes in the graph which are not marked as implicitly
+     * deleted by the presence of a tombstone.
+     */
+    [[nodiscard]] size_t getNodeCount() const;
+
+    /**
+     * @brief Returns the number of edges in the graph which are not marked as implicitly
+     * deleted by the presence of a tombstone.
+     */
+    [[nodiscard]] size_t getEdgeCount() const;
+
     [[nodiscard]] const GraphView& getView() const { return _view; }
     [[nodiscard]] DataPartSpan dataparts() const { return _view.dataparts(); }
     [[nodiscard]] std::span<const CommitView> commits() const { return _view.commits(); }
