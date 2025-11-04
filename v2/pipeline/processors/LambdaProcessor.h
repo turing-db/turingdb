@@ -21,7 +21,7 @@ public:
 
     using Callback = std::function<void(const Dataframe*, Operation)>;
 
-    static LambdaProcessor* create(PipelineV2* pipeline, Callback callback);
+    static LambdaProcessor* create(PipelineV2* pipeline, const Callback& callback);
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
@@ -33,7 +33,7 @@ private:
     Callback _callback;
     PipelineBlockInputInterface _input;
 
-    LambdaProcessor(Callback callback);
+    LambdaProcessor(const Callback& callback);
     ~LambdaProcessor();
 };
 

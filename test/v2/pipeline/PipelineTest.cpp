@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "PipelineInterface.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "TuringDB.h"
@@ -13,6 +14,9 @@
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
+#include "columns/ColumnIndices.h"
+
+#include "iterators/ChunkConfig.h"
 
 #include "dataframe/Dataframe.h"
 #include "dataframe/ColumnTagManager.h"
@@ -20,22 +24,15 @@
 
 #include "PipelineV2.h"
 #include "PipelineBuffer.h"
-#include "processors/ScanNodesProcessor.h"
-#include "processors/GetOutEdgesProcessor.h"
-#include "processors/MaterializeProcessor.h"
-#include "processors/MaterializeData.h"
-#include "processors/LambdaProcessor.h"
-#include "processors/GetPropertiesProcessor.h"
-#include "processors/LimitProcessor.h"
-#include "processors/SkipProcessor.h"
-#include "processors/CountProcessor.h"
-#include "processors/LambdaSourceProcessor.h"
 #include "reader/GraphReader.h"
-#include "TuringTest.h"
-#include "TuringTestEnv.h"
+
+#include "PipelineBuilder.h"
 
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
+
+#include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 using namespace db;
 using namespace db::v2;
@@ -110,20 +107,12 @@ TEST_F(PipelineTest, scanNodes) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
+    builder.addScanNodes();
+    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
 
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    scanNodes->outNodeIDs().connectTo(materialize->input());
-
-    // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-
-    // Lambda
+    builder.addMaterialize();
 
     // Get all expected node IDs
     std::vector<NodeID> allNodeIDs;
@@ -136,7 +125,7 @@ TEST_F(PipelineTest, scanNodes) {
         }
     }
 
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
 
         const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanOutNodeIDsTag)->getColumn());
@@ -145,8 +134,7 @@ TEST_F(PipelineTest, scanNodes) {
         EXPECT_EQ(nodeIDs->getRaw(), allNodeIDs);
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    materialize->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -162,39 +150,16 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
+    builder.addScanNodes();
+    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
 
-    GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(&pipeline);
-    const ColumnTag getOutEdgesOutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutIndicesTag);
-    getOutEdges->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdgesOutIndices->getColumn()));
-
-    const ColumnTag getOutEdgesOutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeIDsTag);
-
-    const ColumnTag getOutEdgesOutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeTypesTag);
-
-    const ColumnTag getOutEdgesOutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutTargetNodesTag);
-    getOutEdges->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdgesOutEdgeIDs->getColumn()), 
-                                     static_cast<ColumnNodeIDs*>(getOutEdgesOutTargetNodes->getColumn()), 
-                                     static_cast<ColumnEdgeTypes*>(getOutEdgesOutEdgeTypes->getColumn()));
-
-    scanNodes->outNodeIDs().connectTo(getOutEdges->inNodeIDs());
-
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    getOutEdges->outEdges().connectTo(materialize->input());
-
-    // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-    matData.createStep(getOutEdgesOutIndices);
-    matData.addToStep<ColumnNodeIDs>(getOutEdgesOutTargetNodes);
+    builder.addGetOutEdges();
+    PipelineEdgeOutputInterface* getOutEdgesOut = static_cast<PipelineEdgeOutputInterface*>(builder.getOutput());
+    const ColumnTag getOutEdgesOutTargetNodesTag = getOutEdgesOut->getTargetNodes()->getHeader().getTag();
+    
+    builder.addMaterialize();
 
     // Lambda
 
@@ -209,8 +174,8 @@ TEST_F(PipelineTest, scanNodesExpand1) {
         }
     }
 
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
-        EXPECT_EQ(df->size(), 2);
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        EXPECT_EQ(df->size(), 4);
 
         const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanOutNodeIDsTag)->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
@@ -239,8 +204,7 @@ TEST_F(PipelineTest, scanNodesExpand1) {
         EXPECT_EQ(targetNodes->getRaw(), expectedTargets);
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    materialize->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -256,57 +220,20 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    // Scan nodes
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
+    builder.addScanNodes();
+    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
 
-    // Get out edges
-    GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(&pipeline);
-    const ColumnTag getOutEdgesOutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutIndicesTag);
-    getOutEdges->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdgesOutIndices->getColumn()));
-
-    const ColumnTag getOutEdgesOutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutTargetNodesTag);
-
-    const ColumnTag getOutEdgesOutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeIDsTag);
-
-    const ColumnTag getOutEdgesOutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdgesOutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges->outEdges().getDataframe(), getOutEdgesOutEdgeTypesTag);
-    getOutEdges->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdgesOutEdgeIDs->getColumn()), 
-                                     static_cast<ColumnNodeIDs*>(getOutEdgesOutTargetNodes->getColumn()), 
-                                     static_cast<ColumnEdgeTypes*>(getOutEdgesOutEdgeTypes->getColumn()));
-
-    scanNodes->outNodeIDs().connectTo(getOutEdges->inNodeIDs());
+    builder.addGetOutEdges();
 
     // Get properties
     const PropertyType namePropType = _graph->openTransaction().readGraph().getMetadata().propTypes().get("name").value();
+    builder.addGetNodeProperties<types::String>(namePropType);
+    PipelineValuesOutputInterface* getNodePropertiesOut = static_cast<PipelineValuesOutputInterface*>(builder.getOutput());
+    const ColumnTag getNodePropertiesOutValuesTag = getNodePropertiesOut->getValues()->getHeader().getTag();
 
-    GetNodePropertiesStringProcessor* getNodeProperties = GetNodePropertiesStringProcessor::create(&pipeline, namePropType);
-    const ColumnTag getNodePropertiesOutIndicesTag = tagMan.allocTag();
-    NamedColumn* getNodePropertiesOutIndices = addColumnInDataframe<ColumnIndices>(&mem, getNodeProperties->outValues().getDataframe(), getNodePropertiesOutIndicesTag);
-    getNodeProperties->outValues().setIndices(static_cast<ColumnIndices*>(getNodePropertiesOutIndices->getColumn()));
-
-    const ColumnTag getNodePropertiesOutValuesTag = tagMan.allocTag();
-    NamedColumn* getNodePropertiesOutValues = addColumnInDataframe<ColumnVector<types::String::Primitive>>(&mem, getNodeProperties->outValues().getDataframe(), getNodePropertiesOutValuesTag);
-    getNodeProperties->outValues().setValues(static_cast<ColumnVector<types::String::Primitive>*>(getNodePropertiesOutValues->getColumn()));
-
-    getOutEdges->outEdges().connectTo(getNodeProperties->inIDs());
-
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    getNodeProperties->outValues().connectTo(materialize->input());
-    {
-        MaterializeData& matData = materialize->getMaterializeData();
-        matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-        matData.createStep(getOutEdgesOutIndices);
-        matData.addToStep<ColumnNodeIDs>(getOutEdgesOutTargetNodes);
-        matData.createStep(getNodePropertiesOutIndices);
-        matData.addToStep<ColumnVector<types::String::Primitive>>(getNodePropertiesOutValues);
-    }
+    builder.addMaterialize();
 
     // Lambda
 
@@ -321,10 +248,10 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
         }
     }
 
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
-        EXPECT_EQ(df->size(), 3);
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        EXPECT_EQ(df->size(), 5);
 
-        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanNodesOutNodeIDsTag)->getColumn());
+        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanOutNodeIDsTag)->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(!nodeIDs->empty());
 
@@ -344,8 +271,7 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
         EXPECT_EQ(properties->getRaw(), expectedProperties.getRaw());
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    materialize->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -361,68 +287,27 @@ TEST_F(PipelineTest, scanNodesExpand2) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
 
-    // GetOutEdges1
-    GetOutEdgesProcessor* getOutEdges1 = GetOutEdgesProcessor::create(&pipeline);
-
-    const ColumnTag getOutEdges1OutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutIndicesTag);
-    getOutEdges1->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdges1OutIndices->getColumn()));
-
-    const ColumnTag getOutEdges1OutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutEdgeIDsTag);
-
-    const ColumnTag getOutEdges1OutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutEdgeTypesTag);
-
-    const ColumnTag getOutEdges1OutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges1OutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges1->outEdges().getDataframe(), getOutEdges1OutTargetNodesTag);
-    getOutEdges1->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdges1OutEdgeIDs->getColumn()), 
-                                      static_cast<ColumnNodeIDs*>(getOutEdges1OutTargetNodes->getColumn()), 
-                                      static_cast<ColumnEdgeTypes*>(getOutEdges1OutEdgeTypes->getColumn()));
-    scanNodes->outNodeIDs().connectTo(getOutEdges1->inNodeIDs());
-
-    // GetOutEdges2
-    GetOutEdgesProcessor* getOutEdges2 = GetOutEdgesProcessor::create(&pipeline);
-    const ColumnTag getOutEdges2OutIndicesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutIndices = addColumnInDataframe<ColumnIndices>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutIndicesTag);
-    getOutEdges2->outEdges().setIndices(static_cast<ColumnVector<size_t>*>(getOutEdges2OutIndices->getColumn()));
-
-    const ColumnTag getOutEdges2OutTargetNodesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutTargetNodes = addColumnInDataframe<ColumnNodeIDs>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutTargetNodesTag);
-
-    const ColumnTag getOutEdges2OutEdgeIDsTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutEdgeIDs = addColumnInDataframe<ColumnEdgeIDs>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutEdgeIDsTag);
-
-    const ColumnTag getOutEdges2OutEdgeTypesTag = tagMan.allocTag();
-    NamedColumn* getOutEdges2OutEdgeTypes = addColumnInDataframe<ColumnEdgeTypes>(&mem, getOutEdges2->outEdges().getDataframe(), getOutEdges2OutEdgeTypesTag);
-    getOutEdges2->outEdges().setEdges(static_cast<ColumnEdgeIDs*>(getOutEdges2OutEdgeIDs->getColumn()), 
-                                     static_cast<ColumnNodeIDs*>(getOutEdges2OutTargetNodes->getColumn()), 
-                                     static_cast<ColumnEdgeTypes*>(getOutEdges2OutEdgeTypes->getColumn()));
-
-    getOutEdges1->outEdges().connectTo(getOutEdges2->inNodeIDs());
-
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    getOutEdges2->outEdges().connectTo(materialize->input());
-
-    // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-    matData.createStep(getOutEdges1OutIndices);
-    matData.addToStep<ColumnNodeIDs>(getOutEdges1OutTargetNodes);
-    matData.createStep(getOutEdges2OutIndices);
-    matData.addToStep<ColumnNodeIDs>(getOutEdges2OutTargetNodes);
+    builder.addScanNodes();
+    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
+    
+    builder.addGetOutEdges();
+    PipelineEdgeOutputInterface* getOutEdges1Out = static_cast<PipelineEdgeOutputInterface*>(builder.getOutput());
+    const ColumnTag getOutEdges1OutTargetNodesTag = getOutEdges1Out->getTargetNodes()->getHeader().getTag();
+    
+    builder.addGetOutEdges();
+    PipelineEdgeOutputInterface* getOutEdges2Out = static_cast<PipelineEdgeOutputInterface*>(builder.getOutput());
+    const ColumnTag getOutEdges2OutTargetNodesTag = getOutEdges2Out->getTargetNodes()->getHeader().getTag();
+    
+    builder.addMaterialize();
 
     // Lambda
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
-        EXPECT_EQ(df->size(), 3);
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        EXPECT_EQ(df->size(), 7);
 
-        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanNodesOutNodeIDsTag)->getColumn());
+        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanOutNodeIDsTag)->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(!nodeIDs->empty());
 
@@ -473,8 +358,7 @@ TEST_F(PipelineTest, scanNodesExpand2) {
         EXPECT_EQ(targetNodes2->getRaw(), expectedTargets2);
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    materialize->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -490,40 +374,29 @@ TEST_F(PipelineTest, scanNodesLimit) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    // Scan nodes
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
 
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    scanNodes->outNodeIDs().connectTo(materialize->input());
-    {
-        MaterializeData& matData = materialize->getMaterializeData();
-        matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-    }
+    builder.addScanNodes();
+    builder.addMaterialize();
 
     // Limit
     constexpr size_t limitCount = 4;
-    LimitProcessor* limit = LimitProcessor::create(&pipeline, limitCount);
-    const ColumnTag limitOutNodeIDsTag = tagMan.allocTag();
-    addColumnInDataframe<ColumnNodeIDs>(&mem, limit->output().getDataframe(), limitOutNodeIDsTag);
-    materialize->output().connectTo(limit->input());
+    builder.addLimit(limitCount);
 
     // Lambda
     std::vector<NodeID> resultNodeIds;
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
-        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(limitOutNodeIDsTag)->getColumn());
+
+        const NamedColumn* limitOut = df->cols().front();
+        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(limitOut->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(!nodeIDs->empty());
 
         resultNodeIds.insert(resultNodeIds.end(), nodeIDs->getRaw().begin(), nodeIDs->getRaw().end());
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    limit->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -554,40 +427,26 @@ TEST_F(PipelineTest, scanNodesSkip) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    // Scan nodes
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
-
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    scanNodes->outNodeIDs().connectTo(materialize->input());
-    {
-        MaterializeData& matData = materialize->getMaterializeData();
-        matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-    }
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
+    builder.addScanNodes();
+    builder.addMaterialize();
 
     // Skip
     constexpr size_t skipCount = 4;
-    SkipProcessor* skip = SkipProcessor::create(&pipeline, skipCount);
-    const ColumnTag skipOutNodeIDsTag = tagMan.allocTag();
-    addColumnInDataframe<ColumnNodeIDs>(&mem, skip->output().getDataframe(), skipOutNodeIDsTag);
-    materialize->output().connectTo(skip->input());
+    builder.addSkip(skipCount);
 
     // Lambda
     std::vector<NodeID> resultNodeIds;
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
-        EXPECT_EQ(df->size(), 1);
-        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(skipOutNodeIDsTag)->getColumn());
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        ASSERT_EQ(df->size(), 1);
+        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->cols().front()->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(!nodeIDs->empty());
 
         resultNodeIds.insert(resultNodeIds.end(), nodeIDs->getRaw().begin(), nodeIDs->getRaw().end());
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    skip->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -619,25 +478,10 @@ TEST_F(PipelineTest, scanNodesCount) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    ScanNodesProcessor* scanNodes = ScanNodesProcessor::create(&pipeline);
-    const ColumnTag scanNodesOutNodeIDsTag = tagMan.allocTag();
-    NamedColumn* scanNodesOutNodeIDs = addColumnInDataframe<ColumnNodeIDs>(&mem, scanNodes->outNodeIDs().getDataframe(), scanNodesOutNodeIDsTag);
-    scanNodes->outNodeIDs().setNodeIDs(static_cast<ColumnNodeIDs*>(scanNodesOutNodeIDs->getColumn()));
-
-    // Materialize
-    MaterializeProcessor* materialize = MaterializeProcessor::create(&pipeline, &mem);
-    scanNodes->outNodeIDs().connectTo(materialize->input());
-
-    // Fill up materialize data
-    MaterializeData& matData = materialize->getMaterializeData();
-    matData.addToStep<ColumnNodeIDs>(scanNodesOutNodeIDs);
-
-    // Count
-    CountProcessor* count = CountProcessor::create(&pipeline);
-    const ColumnTag countOutCountTag = tagMan.allocTag();
-    NamedColumn* countOutCount = addColumnInDataframe<ColumnConst<size_t>>(&mem, count->output().getDataframe(), countOutCountTag);
-    count->output().setValue(static_cast<ColumnConst<size_t>*>(countOutCount->getColumn()));
-    materialize->output().connectTo(count->input());
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
+    builder.addScanNodes();
+    builder.addMaterialize();
+    builder.addCount();
 
     // Lambda
     size_t expectedCount = 0;
@@ -647,18 +491,17 @@ TEST_F(PipelineTest, scanNodesCount) {
         expectedCount = reader.getTotalNodesAllocated();
     }
 
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
 
-        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->getColumn(countOutCountTag)->getColumn());
+        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->cols().front()->getColumn());
         ASSERT_TRUE(count != nullptr);
 
         EXPECT_TRUE(count->getRaw() != 0);
         EXPECT_EQ(count->getRaw(), expectedCount);
     };
 
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    count->output().connectTo(lambda->input());
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
@@ -674,20 +517,20 @@ TEST_F(PipelineTest, multiChunkCount) {
     PipelineV2 pipeline;
     ColumnTagManager tagMan;
 
-    const ColumnTag sourceTag = tagMan.allocTag();
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
 
     // Create a source of 100 chunks
     size_t currentChunk = 0;
     constexpr size_t chunkCount = 1000;
     constexpr size_t chunkSize = ChunkConfig::CHUNK_SIZE;
-    auto sourceCallback = [&](Dataframe* df, bool& isFinished, auto operation) {
+    auto sourceCallback = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
         }
 
-        EXPECT_EQ(df->size(), 1);
+        ASSERT_EQ(df->size(), 1);
 
-        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->getColumn(sourceTag)->getColumn());
+        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
 
         nodeIDs->resize(chunkSize);
@@ -699,25 +542,21 @@ TEST_F(PipelineTest, multiChunkCount) {
         }
     };
 
-    LambdaSourceProcessor* source = LambdaSourceProcessor::create(&pipeline, sourceCallback);
-    addColumnInDataframe<ColumnNodeIDs>(&mem, source->output().getDataframe(), sourceTag);
+    builder.addLambdaSource(sourceCallback);
+    builder.addColumnToOutput<ColumnNodeIDs>(tagMan.allocTag());
 
     // Count
-    CountProcessor* count = CountProcessor::create(&pipeline);
-    const ColumnTag countOutCountTag = tagMan.allocTag();
-    NamedColumn* countOutCount = addColumnInDataframe<ColumnConst<size_t>>(&mem, count->output().getDataframe(), countOutCountTag);
-    count->output().setValue(static_cast<ColumnConst<size_t>*>(countOutCount->getColumn()));
-    source->output().connectTo(count->input());
+    builder.addCount();
     
     // Lambda
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
+    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
-        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->getColumn(countOutCountTag)->getColumn());
+        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->cols().front()->getColumn());
         ASSERT_TRUE(count != nullptr);
         EXPECT_EQ(count->getRaw(), chunkCount * chunkSize);
     };
-    LambdaProcessor* lambda = LambdaProcessor::create(&pipeline, callback);
-    count->output().connectTo(lambda->input());
+
+    builder.addLambda(callback);
 
     // Execute pipeline
     const auto transaction = _graph->openTransaction();

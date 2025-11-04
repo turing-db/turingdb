@@ -13,7 +13,7 @@ public:
     static CountProcessor* create(PipelineV2* pipeline);
 
     PipelineBlockInputInterface& input() { return _input; }
-    PipelineValueOutputInterface<size_t>& output() { return _output; }
+    PipelineValueOutputInterface& output() { return _output; }
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
@@ -21,7 +21,7 @@ public:
 
 private:
     PipelineBlockInputInterface _input;
-    PipelineValueOutputInterface<size_t> _output;
+    PipelineValueOutputInterface _output;
     size_t _countRunning {0};
     ColumnConst<size_t>* _countColumn {nullptr};
 

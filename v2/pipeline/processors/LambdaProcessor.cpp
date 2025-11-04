@@ -2,7 +2,7 @@
 
 using namespace db::v2;
 
-LambdaProcessor::LambdaProcessor(Callback callback)
+LambdaProcessor::LambdaProcessor(const Callback& callback)
     : _callback(callback)
 {
 }
@@ -25,7 +25,7 @@ void LambdaProcessor::execute() {
     finish();
 }
 
-LambdaProcessor* LambdaProcessor::create(PipelineV2* pipeline, Callback callback) {
+LambdaProcessor* LambdaProcessor::create(PipelineV2* pipeline, const Callback& callback) {
     LambdaProcessor* lambda = new LambdaProcessor(callback);
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, lambda);

@@ -23,9 +23,7 @@ public:
     ColumnKind::ColumnKindCode getKind() const { return _kind; }
 
     template <typename T>
-    T* cast() {
-        return static_cast<T*>(this);
-    }
+    T* cast() { return static_cast<T*>(this); }
 
 protected:
     explicit Column(ColumnKind::ColumnKindCode kind)

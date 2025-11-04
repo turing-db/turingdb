@@ -2,13 +2,17 @@
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
+
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ChunkConfig.h"
-#include "PipelineBuffer.h"
-#include "ExecutionContext.h"
+
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
+#include "dataframe/NamedColumn.h"
+
+#include "PipelineBuffer.h"
+#include "ExecutionContext.h"
 
 using namespace db::v2;
 
@@ -35,11 +39,11 @@ GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
 }
 
 void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = _inNodeIDs.getNodeIDs();
-    ColumnVector<size_t>* indices = _outEdges.getIndices();
-    ColumnEdgeIDs* edgeIDs = _outEdges.getEdgeIDs();
-    ColumnNodeIDs* targetNodes = _outEdges.getTargetNodes();
-    ColumnEdgeTypes* edgeTypes = _outEdges.getEdgeTypes();
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs.getNodeIDs()->getColumn());
+    ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outEdges.getIndices()->getColumn());
+    ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdges.getEdgeIDs()->getColumn());
+    ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outEdges.getTargetNodes()->getColumn());
+    ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdges.getEdgeTypes()->getColumn());
     
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
     _it->setIndices(indices);
