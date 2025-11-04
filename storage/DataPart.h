@@ -50,14 +50,14 @@ public:
      * @detail Does not decrement the count for any nodes which are implicitly deleted by
      * an owning Commit's Tombstones
      */
-    size_t getNodeCount() const;
+    size_t getNodeContainerSize() const;
 
     /**
      * @brief Returns the total number of edges stored in @ref _edges.
      * @detail Does not decrement the count for any edges which are implicitly deleted by
      * an owning Commit's Tombstones
      */
-    size_t getEdgeCount() const;
+    size_t getEdgeContainerSize() const;
 
     bool hasNode(NodeID nodeID) const;
     bool hasEdge(EdgeID edgeID) const;

@@ -26,7 +26,7 @@ void ScanNodesIterator::init() {
     if (_partIt.isNotEnd()) {
         const DataPart* part = _partIt.get();
         _currentNodeID = part->getFirstNodeID();
-        _partEnd = _currentNodeID + part->getNodeCount();
+        _partEnd = _currentNodeID + part->getNodeContainerSize();
     }
 }
 
@@ -70,7 +70,7 @@ void ScanNodesIterator::nextValid() {
 
         const DataPart* part = _partIt.get();
         _currentNodeID = part->getFirstNodeID();
-        _partEnd = _currentNodeID + part->getNodeCount();
+        _partEnd = _currentNodeID + part->getNodeContainerSize();
     }
 }
 
@@ -96,7 +96,7 @@ void ScanNodesChunkWriter::fill(size_t maxCount) {
 
     while (isValid() && remainingToMax > 0) {
         const auto* part = _partIt.get();
-        const auto partLastNode = part->getFirstNodeID() + part->getNodeCount();
+        const auto partLastNode = part->getFirstNodeID() + part->getNodeContainerSize();
         const size_t availInPart = partLastNode.getValue() - _currentNodeID.getValue();
         const size_t rangeSize = std::min(remainingToMax, availInPart);
         const size_t prevSize = _nodeIDs->size();
