@@ -64,8 +64,15 @@ int main(int argc, const char** argv) {
     // Delete existing `default` graph if requested
     if (resetDefault) {
         spdlog::info("Resetting default graph.");
-        FileUtils::Path graphsDir = config.getGraphsDir().c_str();
-        toolInit.resetDefaultGraph(graphsDir);
+
+        spdlog::info("Searching for default in {}.", config.getGraphsDir().get());
+        const auto& defaultGraphPath = config.getGraphsDir() / "default";
+        if (defaultGraphPath.exists()) {
+            defaultGraphPath.rm();
+            spdlog::info("Default graph deleted.");
+        } else {
+            spdlog::warn("Default graph not found.");
+        }
     }
 
     // Run TuringDB

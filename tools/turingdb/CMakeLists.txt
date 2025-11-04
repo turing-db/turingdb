@@ -5,7 +5,6 @@ set(turingdb_sources
 
 add_executable(turingdb ${turingdb_sources})
 target_link_libraries(turingdb PUBLIC
-    turing_db_tools_common_s
     turing_db_s
     turing_db_storage_s
     turing_db_server_s
