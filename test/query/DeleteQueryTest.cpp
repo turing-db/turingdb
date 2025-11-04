@@ -1079,7 +1079,7 @@ TEST_F(DeleteQueryTest, injectDeletedNode) {
 
     {
         newChange(tester);
-        tester.query("delete edges 8") // Delete Maxime
+        tester.query("delete nodes 8") // Delete Maxime
             .execute();
         submitChange(tester);
     }
@@ -1087,10 +1087,8 @@ TEST_F(DeleteQueryTest, injectDeletedNode) {
     {
         newChange(tester);
         tester.query("create (n @ 8)-[e:NEWEDGE]-(m:NEWNODE)")
-            .execute();
-        tester.query("change submit")
             .expectError()
-            .expectErrorMessage("ERROR")
+            .expectErrorMessage("No such node with ID: '8'")
             .execute();
     }
 
