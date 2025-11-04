@@ -599,7 +599,7 @@ TEST_F(DeleteQueryTest, delNodeGetOutEdges) {
 
     { // Remy, then use NodeID injection to force GetOutEdges
         auto VERIFY = [&]() {
-            tester.query("match (n @ 0)-[e]-(m) return e")
+            tester.query("match (n{name=\"Remy\"})-[e]-(m) return e")
                 .expectVector<EdgeID>({})
                 .execute();
         };
@@ -642,7 +642,7 @@ TEST_F(DeleteQueryTest, delNodeGetOutEdgesNoEdges) {
 
     { // Remy, then use NodeID injection to force GetOutEdges
         auto VERIFY = [&]() { // Only return n so e is not allocced
-            tester.query("match (n @ 0)-[e]-(m) return n")
+            tester.query("match (n{name=\"Remy\"})-[e]-(m) return n")
                 .expectVector<NodeID>({})
                 .execute();
         };
