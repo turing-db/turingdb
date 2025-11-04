@@ -245,11 +245,15 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
 }
 
 bool GraphReader::graphHasNode(NodeID nodeID) const {
-    return (nodeID < getNodeCount());
+    bool exists = nodeID < getNodeCount();
+    bool isDeleted = _view.tombstones().contains(nodeID);
+    return exists && !isDeleted;
 }
 
 bool GraphReader::graphHasEdge(EdgeID edgeID) const {
-    return (edgeID < getEdgeCount());
+    bool exists = edgeID < getEdgeCount();
+    bool isDeleted = _view.tombstones().contains(edgeID);
+    return exists && !isDeleted;
 }
 
 bool GraphReader::nodeIsDeleted(NodeID nodeID) const {

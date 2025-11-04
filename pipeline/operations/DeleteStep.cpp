@@ -41,9 +41,9 @@ void DeleteStep<IDT>::execute() {
     for (IDT id : _deletions) {
         bool existsAndNotDeleted {false};
         if constexpr (std::is_same_v<IDT, NodeID>) {
-            existsAndNotDeleted = reader.graphHasNode(id) && !reader.nodeIsDeleted(id);
+            existsAndNotDeleted = reader.graphHasNode(id);
         } else if constexpr (std::is_same_v<IDT, EdgeID>) {
-            existsAndNotDeleted = reader.graphHasEdge(id) && !reader.edgeIsDeleted(id);
+            existsAndNotDeleted = reader.graphHasEdge(id);
         }
 
         if (!existsAndNotDeleted) [[unlikely]] {
