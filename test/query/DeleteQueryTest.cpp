@@ -1072,3 +1072,26 @@ TEST_F(DeleteQueryTest, deleteAllEdges) {
         .expectVector<NodeID>({})
         .execute();
 }
+
+// Test to ensure we cannot create edges between nodes which have been deleted
+TEST_F(DeleteQueryTest, injectDeletedNode) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    {
+        newChange(tester);
+        tester.query("delete edges 8") // Delete Maxime
+            .execute();
+        submitChange(tester);
+    }
+
+    {
+        newChange(tester);
+        tester.query("create (n @ 8)-[e:NEWEDGE]-(m:NEWNODE)")
+            .execute();
+        tester.query("change submit")
+            .expectError()
+            .expectErrorMessage("ERROR")
+            .execute();
+    }
+
+}
