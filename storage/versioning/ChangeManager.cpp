@@ -11,12 +11,8 @@
 
 using namespace db;
 
-ChangeManager::ChangeManager(VersionController* versionController,
-                             ArcManager<DataPart>* partManager,
-                             ArcManager<CommitData>* commitDataManager)
-    : _versionController(versionController),
-    _dataPartManager(partManager),
-    _commitDataManager(commitDataManager)
+ChangeManager::ChangeManager(VersionController* versionController)
+    : _versionController(versionController)
 {
 }
 
@@ -32,8 +28,8 @@ ChangeAccessor ChangeManager::createChange(FrozenCommitTx baseTx) {
         baseTx = _versionController->openTransaction();
     }
 
-    std::shared_ptr<Change> change(new Change(*_dataPartManager,
-                                              *_commitDataManager,
+    std::shared_ptr<Change> change(new Change(*_versionController->_partManager,
+                                              *_versionController->_dataManager,
                                               ChangeID {_nextChangeID.fetch_add(1)},
                                               baseTx.commitData()));
 

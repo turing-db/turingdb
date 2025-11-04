@@ -488,13 +488,18 @@ void TuringShell::checkShellContext() {
     // Step 3. Check if the change/commit pair is valid
     ChangeManager& changes = graph->getChangeManager();
     auto tx = changes.openTransaction(_changeID);
-    if (!tx->isValid()) {
+    if (!tx) {
         fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());
         setCommitHash(CommitHash::head());
         return;
     }
 
-    // TODO: Check if the new implementation is correct
+    if (!tx->isValid()) {
+        fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
+        setChangeID(ChangeID::head());
+        setCommitHash(CommitHash::head());
+        return;
+    }
 }
 

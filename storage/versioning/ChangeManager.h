@@ -18,7 +18,7 @@ class ColumnVector;
 
 class ChangeManager {
 public:
-    ChangeManager(VersionController*, ArcManager<DataPart>*, ArcManager<CommitData>*);
+    ChangeManager(VersionController*);
     ~ChangeManager();
 
     ChangeManager(const ChangeManager&) = delete;
@@ -38,8 +38,6 @@ private:
     mutable RWSpinLock _lock;
 
     VersionController* _versionController {nullptr};
-    ArcManager<DataPart>* _dataPartManager {nullptr};
-    ArcManager<CommitData>* _commitDataManager {nullptr};
 
     std::unordered_map<ChangeID, std::shared_ptr<Change>> _changes;
     std::atomic<ChangeID::ValueType> _nextChangeID {0};

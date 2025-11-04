@@ -418,6 +418,10 @@ ChangeResult<ChangeAccessor> SystemManager::newChange(const std::string& graphNa
     // Step 2. Open  a transaction on the base commit
     const auto baseTx = graph->openTransaction(baseHash);
 
+    if (!baseTx.isValid()) {
+        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+    }
+
     // Step 3. Create the new change
     return changeManager.createChange(baseTx);
 }

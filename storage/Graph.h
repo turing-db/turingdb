@@ -7,7 +7,6 @@
 #include "Path.h"
 #include "versioning/CommitHash.h"
 #include "versioning/GraphID.h"
-#include "versioning/ChangeResult.h"
 
 namespace db {
 

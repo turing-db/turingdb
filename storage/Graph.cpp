@@ -37,10 +37,8 @@ std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& pa
 Graph::Graph()
     : _graphName("default"),
     _graphPath("/dev/null"),
-    _versionController(new VersionController {this}),
-    _changeManager(new ChangeManager {this->_versionController.get(),
-                                      _versionController->_partManager.get(),
-                                      _versionController->_dataManager.get()}),
+    _versionController(new VersionController),
+    _changeManager(new ChangeManager {this->_versionController.get()}),
     _serializer(new GraphSerializer {this})
 {
 }
@@ -48,10 +46,8 @@ Graph::Graph()
 Graph::Graph(const std::string& name, const fs::Path& path)
     : _graphName(name),
     _graphPath(path),
-    _versionController(new VersionController {this}),
-    _changeManager(new ChangeManager {this->_versionController.get(),
-                                      _versionController->_partManager.get(),
-                                      _versionController->_dataManager.get()}),
+    _versionController(new VersionController),
+    _changeManager(new ChangeManager {this->_versionController.get()}),
     _serializer(new GraphSerializer {this})
 {
 }

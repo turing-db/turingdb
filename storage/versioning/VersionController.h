@@ -16,7 +16,6 @@
 
 namespace db {
 
-class Graph;
 class GraphLoader;
 class GraphDumper;
 class JobSystem;
@@ -32,7 +31,7 @@ class VersionController {
 public:
     using CommitMap = std::unordered_map<CommitHash, size_t>;
 
-    explicit VersionController(Graph* graph);
+    VersionController();
     ~VersionController();
 
     VersionController(const VersionController&) = delete;
@@ -44,7 +43,6 @@ public:
 
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] CommitHash getHeadHash() const;
-    [[nodiscard]] const Graph* getGraph() const { return _graph; }
 
     ssize_t getCommitIndex(CommitHash hash) const;
 
@@ -56,13 +54,11 @@ public:
     [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
 
 private:
+    friend class ChangeManager;
     friend GraphLoader;
     friend GraphDumper;
     friend Change;
-    friend Graph;
     friend CommitLoader;
-
-    Graph* _graph {nullptr};
 
     std::atomic<Commit*> _head {nullptr};
     std::atomic<uint64_t> _nextChangeID {0};
@@ -76,6 +72,8 @@ private:
     std::unique_lock<std::mutex> lock();
 
     void addCommit(std::unique_ptr<Commit> commit);
+
+    void clear();
 };
 
 }

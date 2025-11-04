@@ -4,7 +4,6 @@
 
 #include "JobSystem.h"
 #include "Profiler.h"
-#include "Graph.h"
 #include "CommitView.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
@@ -15,9 +14,8 @@
 
 using namespace db;
 
-VersionController::VersionController(Graph* graph)
-    : _graph(graph),
-    _dataManager(std::make_unique<ArcManager<CommitData>>()),
+VersionController::VersionController()
+    : _dataManager(std::make_unique<ArcManager<CommitData>>()),
     _partManager(std::make_unique<ArcManager<DataPart>>())
 {
 }
@@ -119,4 +117,13 @@ ssize_t VersionController::getCommitIndex(CommitHash hash) const {
     }
 
     return it->second;
+}
+
+void VersionController::clear() {
+    std::unique_lock lock(_mutex);
+
+    _commits.clear();
+    _offsets.clear();
+    _head.store(nullptr);
+    _nextChangeID.store(0);
 }
