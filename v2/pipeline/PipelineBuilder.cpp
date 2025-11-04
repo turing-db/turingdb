@@ -18,10 +18,10 @@ using namespace db;
 
 namespace {
 
-void duplicateDataframeShape(LocalMemory* mem,Dataframe* src, Dataframe* dst) {
+void duplicateDataframeShape(LocalMemory* mem, Dataframe* src, Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
-        NamedColumn::create(dst, newCol, col->getHeader());
+        NamedColumn::create(dest, newCol, col->getHeader());
     }
 }
 
@@ -31,7 +31,7 @@ PipelineBuilder& PipelineBuilder::addScanNodes() {
     openMaterialize();
 
     ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
-    auto& outNodeIDs = proc->outNodeIDs();
+    PipelineNodeOutputInterface& outNodeIDs = proc->outNodeIDs();
 
     NamedColumn* nodeIDs = allocColumn<ColumnNodeIDs>(outNodeIDs.getDataframe());
     outNodeIDs.setNodeIDs(nodeIDs);
@@ -65,18 +65,18 @@ PipelineBuilder& PipelineBuilder::addGetOutEdges() {
         break;
     }
 
-    auto& outEdges = getOutEdges->outEdges();
-    Dataframe* df = outEdges.getDataframe();
+    PipelineEdgeOutputInterface& outEdges = getOutEdges->outEdges();
+    Dataframe* outDf = outEdges.getDataframe();
 
-    NamedColumn* indices = allocColumn<ColumnIndices>(df);
+    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
     outEdges.setIndices(indices);
     
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
 
-    NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(df);
-    NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(df);
-    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(df);
+    NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(outDf);
+    NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(outDf);
+    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
     outEdges.setEdges(edgeIDs, edgeTypes, targetNodes);
     matData.addToStep<ColumnEdgeIDs>(edgeIDs);
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
@@ -180,7 +180,7 @@ PipelineBuilder& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::C
 
 template <db::SupportedType T>
 PipelineBuilder& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
-    GetNodePropertiesProcessor<T>* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
+    auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
 
     switch (_pendingOutput->getKind()) {
         case PipelineInterfaceKind::NODE:
@@ -201,15 +201,17 @@ PipelineBuilder& PipelineBuilder::addGetNodeProperties(PropertyType propertyType
     }
 
     using ColumnValues = ColumnVector<typename T::Primitive>;
-    auto& outValues = getProps->outValues();
-    Dataframe* df = outValues.getDataframe();
 
-    NamedColumn* indices = allocColumn<ColumnIndices>(df);
+    PipelineValuesOutputInterface& outValues = getProps->outValues();
+    Dataframe* outDf = outValues.getDataframe();
+
+    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
     outValues.setIndices(indices);
+
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
 
-    NamedColumn* values = allocColumn<ColumnValues>(df);
+    NamedColumn* values = allocColumn<ColumnValues>(outDf);
     outValues.setValues(values);
     matData.addToStep<ColumnValues>(values);
 
