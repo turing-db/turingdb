@@ -66,7 +66,7 @@ int main(int argc, const char** argv) {
         spdlog::info("Resetting default graph.");
 
         spdlog::info("Searching for default in {}.", config.getGraphsDir().get());
-        const auto& defaultGraphPath = config.getGraphsDir() / "default";
+        const fs::Path defaultGraphPath = config.getGraphsDir() / "default";
         if (defaultGraphPath.exists()) {
             defaultGraphPath.rm();
             spdlog::info("Default graph deleted.");
