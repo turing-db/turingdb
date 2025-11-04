@@ -1,5 +1,6 @@
 set(memory_sources
-    LocalMemory.cpp)
+    LocalMemory.cpp
+    ColumnAllocator.cpp)
 
 add_library(turing_db_memory_s STATIC ${memory_sources})
 target_include_directories(turing_db_memory_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

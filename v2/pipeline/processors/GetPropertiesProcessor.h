@@ -11,8 +11,10 @@
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnIndices.h"
 #include "iterators/ChunkConfig.h"
 #include "iterators/GetPropertiesIterator.h"
+#include "dataframe/NamedColumn.h"
 
 namespace db::v2 {
 
@@ -22,9 +24,10 @@ template <typename PropertyChunkWriter>
 class GetPropertiesProcessor : public Processor {
 public:
     using Values = typename PropertyChunkWriter::Values;
+    using ColumnValues = typename PropertyChunkWriter::ColumnValues;
 
     PipelineNodeInputInterface& inIDs() { return _inIDs; }
-    PipelineValuesOutputInterface<Values>& outValues() { return _outValues; }
+    PipelineValuesOutputInterface& outValues() { return _outValues; }
 
     static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType) {
         auto* getProps = new GetPropertiesProcessor<PropertyChunkWriter>(propType);
@@ -43,11 +46,14 @@ public:
     }
 
     void prepare(ExecutionContext* ctxt) override {
-        ColumnNodeIDs* ids = _inIDs.getNodeIDs();
+        const ColumnNodeIDs* ids = dynamic_cast<const ColumnNodeIDs*>(_inIDs.getNodeIDs()->getColumn());
         _propWriter = std::make_unique<PropertyChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-        _propWriter->setIndices(_outValues.getIndices());
-        _propWriter->setOutput(_outValues.getValues());
+        ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_outValues.getIndices()->getColumn());
+        _propWriter->setIndices(indices);
+
+        ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
+        _propWriter->setOutput(values);
         markAsPrepared();
     }
 
@@ -70,7 +76,7 @@ protected:
     PropertyType _propType;
     std::unique_ptr<PropertyChunkWriter> _propWriter;
     PipelineNodeInputInterface _inIDs;
-    PipelineValuesOutputInterface<Values> _outValues;
+    PipelineValuesOutputInterface _outValues;
 
     GetPropertiesProcessor(PropertyType propType)
         : _propType(propType)

@@ -4,6 +4,7 @@
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ChunkConfig.h"
 #include "columns/ColumnIDs.h"
+#include "dataframe/NamedColumn.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
@@ -28,7 +29,7 @@ ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
 }
 
 void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnNodeIDs* nodeIDs = _outNodeIDs.getNodeIDs();
+    ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs.getNodeIDs()->getColumn());
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
 

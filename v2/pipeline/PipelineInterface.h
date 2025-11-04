@@ -1,17 +1,28 @@
 #pragma once
 
 #include "PipelinePort.h"
-#include "columns/ColumnIDs.h"
-#include "columns/ColumnEdgeTypes.h"
-#include "columns/ColumnIndices.h"
+
+namespace db {
+class NamedColumn;
+}
 
 namespace db::v2 {
 
 class PipelineInputPort;
 class PipelineOutputPort;
 
+enum class PipelineInterfaceKind {
+    NODE,
+    EDGE,
+    BLOCK,
+    VALUES,
+    VALUE
+};
+
 class PipelineInputInterface {
 public:
+    virtual PipelineInterfaceKind getKind() const = 0;
+
     PipelineInputPort* getPort() const { return _port; }
     Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
 
@@ -26,40 +37,47 @@ protected:
 
 class PipelineBlockInputInterface : public PipelineInputInterface {
 public:
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
 };
 
 class PipelineNodeInputInterface : public PipelineInputInterface {
 public:
-    ColumnNodeIDs* getNodeIDs() const { return _nodeIDs; }
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
 
-    void setNodeIDs(ColumnNodeIDs* nodeIDs) { _nodeIDs = nodeIDs; }
+    NamedColumn* getNodeIDs() const { return _nodeIDs; }
+
+    void setNodeIDs(NamedColumn* nodeIDs) { _nodeIDs = nodeIDs; }
 
 private:
-    ColumnNodeIDs* _nodeIDs {nullptr};
+    NamedColumn* _nodeIDs {nullptr};
 };
 
 class PipelineEdgeInputInterface : public PipelineInputInterface {
 public:
-    void setEdges(ColumnEdgeIDs* edgeIDs,
-                  ColumnNodeIDs* targetNodes,
-                  ColumnEdgeTypes* edgeTypes) {
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
+
+    void setEdges(NamedColumn* edgeIDs,
+                  NamedColumn* targetNodes,
+                  NamedColumn* edgeTypes) {
         _edgeIDs = edgeIDs;
         _targetNodes = targetNodes;
         _edgeTypes = edgeTypes;
     }
 
-    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
-    ColumnNodeIDs* getTargetNodes() const { return _targetNodes; }
-    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
+    NamedColumn* getEdgeIDs() const { return _edgeIDs; }
+    NamedColumn* getTargetNodes() const { return _targetNodes; }
+    NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
 private:
-    ColumnEdgeIDs* _edgeIDs {nullptr};
-    ColumnNodeIDs* _targetNodes {nullptr};
-    ColumnEdgeTypes* _edgeTypes {nullptr};
+    NamedColumn* _edgeIDs {nullptr};
+    NamedColumn* _targetNodes {nullptr};
+    NamedColumn* _edgeTypes {nullptr};
 };
 
 class PipelineOutputInterface {
 public:
+    virtual PipelineInterfaceKind getKind() const = 0;
+
     PipelineOutputPort* getPort() const { return _port; }
     Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
 
@@ -74,6 +92,8 @@ protected:
 
 class PipelineBlockOutputInterface : public PipelineOutputInterface {
 public:
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
+
     void connectTo(PipelineBlockInputInterface& input) {
         _port->connectTo(input.getPort());
     }
@@ -81,12 +101,14 @@ public:
 
 class PipelineNodeOutputInterface : public PipelineOutputInterface {
 public:
-    void setNodeIDs(ColumnNodeIDs* nodeIDs) { _nodeIDs = nodeIDs; }
-    void setIndices(ColumnIndices* indices) { _indices = indices; }
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
 
-    ColumnIndices* getIndices() const { return _indices; }
+    void setNodeIDs(NamedColumn* nodeIDs) { _nodeIDs = nodeIDs; }
+    void setIndices(NamedColumn* indices) { _indices = indices; }
 
-    ColumnNodeIDs* getNodeIDs() const { return _nodeIDs; }
+    NamedColumn* getIndices() const { return _indices; }
+
+    NamedColumn* getNodeIDs() const { return _nodeIDs; }
 
     void connectTo(PipelineNodeInputInterface& input) {
         input.setNodeIDs(_nodeIDs);
@@ -98,27 +120,29 @@ public:
     }
 
 private:
-    ColumnIndices* _indices {nullptr};
-    ColumnNodeIDs* _nodeIDs {nullptr};
+    NamedColumn* _indices {nullptr};
+    NamedColumn* _nodeIDs {nullptr};
 };
 
 class PipelineEdgeOutputInterface : public PipelineOutputInterface {
 public:
-    void setEdges(ColumnEdgeIDs* edgeIDs,
-                  ColumnNodeIDs* targetNodes,
-                  ColumnEdgeTypes* edgeTypes) {
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
+
+    void setEdges(NamedColumn* edgeIDs,
+                  NamedColumn* edgeTypes,
+                  NamedColumn* targetNodes) {
         _edgeIDs = edgeIDs;
-        _targetNodes = targetNodes;
         _edgeTypes = edgeTypes;
+        _targetNodes = targetNodes;
     }
 
-    void setIndices(ColumnIndices* indices) { _indices = indices; }
+    void setIndices(NamedColumn* indices) { _indices = indices; }
 
-    ColumnIndices* getIndices() const { return _indices; }
+    NamedColumn* getIndices() const { return _indices; }
 
-    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
-    ColumnNodeIDs* getTargetNodes() const { return _targetNodes; }
-    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
+    NamedColumn* getEdgeIDs() const { return _edgeIDs; }
+    NamedColumn* getTargetNodes() const { return _targetNodes; }
+    NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
     void connectTo(PipelineEdgeInputInterface& input) {
         input.setEdges(_edgeIDs, _targetNodes, _edgeTypes);
@@ -135,50 +159,48 @@ public:
     }
 
 private:
-    ColumnIndices* _indices {nullptr};
-    ColumnEdgeIDs* _edgeIDs {nullptr};
-    ColumnNodeIDs* _targetNodes {nullptr};
-    ColumnEdgeTypes* _edgeTypes {nullptr};
+    NamedColumn* _indices {nullptr};
+    NamedColumn* _edgeIDs {nullptr};
+    NamedColumn* _targetNodes {nullptr};
+    NamedColumn* _edgeTypes {nullptr};
 };
 
-template <typename ValueType>
 class PipelineValuesOutputInterface : public PipelineOutputInterface {
 public:
-    using ColumnValues = ColumnVector<ValueType>;
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUES; }
 
-    void setIndices(ColumnIndices* indices) { _indices = indices; }
-    void setValues(ColumnValues* values) { _values = values; }
+    void setIndices(NamedColumn* indices) { _indices = indices; }
+    void setValues(NamedColumn* values) { _values = values; }
 
-    ColumnIndices* getIndices() const { return _indices; }
-    ColumnValues* getValues() const { return _values; }
+    NamedColumn* getIndices() const { return _indices; }
+    NamedColumn* getValues() const { return _values; }
 
     void connectTo(PipelineBlockInputInterface& input) {
         _port->connectTo(input.getPort());
     }
 
 private:
-    ColumnIndices* _indices {nullptr};
-    ColumnValues* _values {nullptr};
+    NamedColumn* _indices {nullptr};
+    NamedColumn* _values {nullptr};
 };
 
-template <typename ValueType>
 class PipelineValueOutputInterface : public PipelineOutputInterface {
 public:
-    using ColumnConstValue = ColumnConst<ValueType>;
+    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUE; }
 
-    void setIndices(ColumnIndices* indices) { _indices = indices; }
-    void setValue(ColumnConstValue* value) { _value = value; }
+    void setIndices(NamedColumn* indices) { _indices = indices; }
+    void setValue(NamedColumn* value) { _value = value; }
 
-    ColumnIndices* getIndices() const { return _indices; }
-    ColumnConstValue* getValue() const { return _value; }
+    NamedColumn* getIndices() const { return _indices; }
+    NamedColumn* getValue() const { return _value; }
 
     void connectTo(PipelineBlockInputInterface& input) {
         _port->connectTo(input.getPort());
     }
 
 private:
-    ColumnIndices* _indices {nullptr};
-    ColumnConstValue* _value {nullptr};
+    NamedColumn* _indices {nullptr};
+    NamedColumn* _value {nullptr};
 };
 
 }

@@ -5,12 +5,14 @@
 
 #include "MemoryPool.h"
 #include "TypeValueMap.h"
+#include "ColumnAllocator.h"
 
 #include "columns/ColumnSet.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
+
 #include "metadata/PropertyType.h"
 #include "ID.h"
 
@@ -60,7 +62,6 @@ public:
         MakeMemoryPool<ColumnOptVector<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type,
-
         MakeMemoryPool<ColumnSet<NodeID>>::type,
         MakeMemoryPool<ColumnSet<EdgeID>>::type
         >;
@@ -85,12 +86,17 @@ public:
         return _pools.get<ObjT>().alloc(args...);
     }
 
+    Column* allocSame(Column* col) {
+        return _columnAllocators.get(col->getKind())->alloc();
+    }
+
     void clear() {
         _pools.transform<ClearTransform>();
     }
 
 private:
     MemoryPools _pools;
+    ColumnAllocatorMap _columnAllocators;
 };
 
 }
