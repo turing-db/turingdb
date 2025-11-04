@@ -31,42 +31,6 @@ Change::Change(ArcManager<DataPart>& dataPartManager,
     _commits.emplace_back(std::move(tip));
 }
 
-std::unique_ptr<Change> Change::create(ArcManager<DataPart>& dataPartManager,
-                                       ArcManager<CommitData>& commitDataManager,
-                                       ChangeID id,
-                                       const WeakArc<const CommitData>& base) {
-    auto* ptr = new Change(dataPartManager, commitDataManager, id, base);
-
-    return std::unique_ptr<Change> {ptr};
-}
-
-Transaction Change::openWriteTransaction() {
-    return PendingCommitWriteTx {this->access(), this->_tip};
-}
-
-Transaction Change::openReadTransaction(CommitHash commitHash) {
-    // Step 1. Check if we are reading the tip
-    if (commitHash == CommitHash::head()) {
-        return PendingCommitReadTx {this->access(), this->_tip};
-    }
-
-    // Step 2. Check if we are reading a pending commit
-    auto it = _commitOffsets.find(commitHash);
-    if (it != _commitOffsets.end()) {
-        return PendingCommitReadTx {this->access(), _commits[it->second].get()};
-    }
-
-    // Step 3. Check if we are reading a frozen commit
-    const std::span commits = _base->history().commits();
-    for (const auto& commit : commits) {
-        if (commit.hash() == commitHash) {
-            return FrozenCommitTx {commit.data()};
-        }
-    }
-
-    return {};
-}
-
 CommitResult<void> Change::commit(JobSystem& jobsystem) {
     Profile profile {"Change::commit"};
 

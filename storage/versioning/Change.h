@@ -19,7 +19,6 @@ class CommitBuilder;
 class Commit;
 class JobSystem;
 class Transaction;
-class ChangeManager;
 
 class Change {
 public:
@@ -30,14 +29,6 @@ public:
     Change& operator=(const Change&) = delete;
     Change& operator=(Change&&) = delete;
 
-    [[nodiscard]] static std::unique_ptr<Change> create(ArcManager<DataPart>& dataPartManager,
-                                                        ArcManager<CommitData>& commitDataManager,
-                                                        ChangeID id,
-                                                        const WeakArc<const CommitData>& base);
-
-    [[nodiscard]] Transaction openWriteTransaction();
-    [[nodiscard]] Transaction openReadTransaction(CommitHash commitHash);
-
     [[nodiscard]] ChangeAccessor access() { return ChangeAccessor {this}; }
     [[nodiscard]] CommitHash baseHash() const;
     [[nodiscard]] ChangeID id() const { return _id; }
@@ -46,9 +37,9 @@ public:
 private:
     mutable std::mutex _mutex;
 
-    friend ChangeManager;
-    friend ChangeAccessor;
     friend VersionController;
+    friend class ChangeAccessor;
+    friend class ChangeManager;
     friend class ChangeRebaser;
     friend class ChangeConflictChecker;
 
@@ -64,10 +55,10 @@ private:
 
     CommitBuilder* _tip {nullptr};
 
-    explicit Change(ArcManager<DataPart>& dataPartManager,
-                    ArcManager<CommitData>& commitDataManager,
-                    ChangeID id,
-                    const WeakArc<const CommitData>& base);
+    Change(ArcManager<DataPart>& dataPartManager,
+           ArcManager<CommitData>& commitDataManager,
+           ChangeID id,
+           const WeakArc<const CommitData>& base);
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(const WeakArc<const CommitData>& head);

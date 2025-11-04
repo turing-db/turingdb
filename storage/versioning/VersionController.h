@@ -41,7 +41,6 @@ public:
     VersionController& operator=(VersionController&&) = delete;
 
     void createFirstCommit();
-    [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
 
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] CommitHash getHeadHash() const;

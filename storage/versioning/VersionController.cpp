@@ -99,15 +99,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     return {};
 }
 
-std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
-    const WeakArc<const CommitData> baseData = openTransaction(base).commitData();
-
-    return Change::create(*_partManager,
-                          *_dataManager,
-                          ChangeID {_nextChangeID.fetch_add(1)},
-                          baseData);
-}
-
 std::unique_lock<std::mutex> VersionController::lock() {
     return std::unique_lock<std::mutex> {_mutex};
 }
