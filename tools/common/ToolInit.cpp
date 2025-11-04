@@ -89,9 +89,13 @@ void ToolInit::createOutputDir() {
 
 void ToolInit::resetDefaultGraph(const FileUtils::Path& graphsDir) {
     FileUtils::Path defaultGraphPath = graphsDir / "default";
+    spdlog::info("Searching for default in {}", graphsDir.c_str());
     if (FileUtils::isDirectory(defaultGraphPath)) {
         FileUtils::removeDirectory(defaultGraphPath);
+        spdlog::info("Default graph deleted.");
+        return;
     }
+    spdlog::warn("Default graph not found at {}", defaultGraphPath.c_str());
 }
 
 void ToolInit::init(int argc, const char** argv) {

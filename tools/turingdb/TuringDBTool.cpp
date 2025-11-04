@@ -56,19 +56,21 @@ int main(int argc, const char** argv) {
     TuringConfig config = TuringConfig::createDefault();
     config.setSyncedOnDisk(!inMemory);
 
-    fmt::println("TuringDB path: {}", config.getTuringDir().get());
+    spdlog::info("TuringDB path: {}", config.getTuringDir().get());
     if (!turingDir.empty()) {
         config.setTuringDirectory(fs::Path {turingDir});
     }
 
-    // Run TuringDB
-    TuringDB turingDB(&config);
-    turingDB.run();
-
+    // Delete existing `default` graph if requested
     if (resetDefault) {
+        spdlog::info("Resetting default graph.");
         FileUtils::Path graphsDir = config.getGraphsDir().c_str();
         toolInit.resetDefaultGraph(graphsDir);
     }
+
+    // Run TuringDB
+    TuringDB turingDB(&config);
+    turingDB.run(); // If `default` does not exist, it is created here
 
     // Load graphs
     LocalMemory mem;
