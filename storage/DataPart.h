@@ -44,7 +44,19 @@ public:
     NodeID getFirstNodeID() const;
     NodeID getFirstNodeID(const LabelSetHandle& labelset) const;
     EdgeID getFirstEdgeID() const;
+
+    /**
+     * @brief Returns the total number of nodes stored in @ref _nodes.
+     * @detail Does not decrement the count for any nodes which are implicitly deleted by
+     * an owning Commit's Tombstones
+     */
     size_t getNodeCount() const;
+
+    /**
+     * @brief Returns the total number of edges stored in @ref _edges.
+     * @detail Does not decrement the count for any edges which are implicitly deleted by
+     * an owning Commit's Tombstones
+     */
     size_t getEdgeCount() const;
 
     bool hasNode(NodeID nodeID) const;

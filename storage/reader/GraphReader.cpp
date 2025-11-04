@@ -9,28 +9,22 @@
 
 using namespace db;
 
-size_t GraphReader::getNodeCount() const {
+size_t GraphReader::getTotalNodesAllocated() const {
     if (_view.dataparts().empty()) {
         return 0;
     }
 
-    // Due to deletions, NodeIDs are no longer guaranteed to be contiguous across
-    // dataparts. Hence we must manually now sum up the nodes in each datapart.
-    return std::accumulate(
-        _view.dataparts().begin(), _view.dataparts().end(), 0,
-        [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getNodeCount(); });
+    const auto& lastPart = _view.dataparts().back();
+    return lastPart->getFirstNodeID().getValue() + lastPart->getNodeCount();
 }
 
-size_t GraphReader::getEdgeCount() const {
+size_t GraphReader::getTotalEdgesAllocated() const {
     if (_view.dataparts().empty()) {
         return 0;
     }
 
-    // Due to deletions, EdgeIDs are no longer guaranteed to be contiguous across
-    // dataparts. Hence we must manually now sum up the edges in each datapart.
-    return std::accumulate(
-        _view.dataparts().begin(), _view.dataparts().end(), 0,
-        [](int acc, const WeakArc<DataPart>& dp) { return acc + dp->getEdgeCount(); });
+    const auto& lastPart = _view.dataparts().back();
+    return lastPart->getFirstEdgeID().getValue() + lastPart->getEdgeCount();
 }
 
 LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {
@@ -245,13 +239,13 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
 }
 
 bool GraphReader::graphHasNode(NodeID nodeID) const {
-    const bool exists = nodeID < getNodeCount();
+    const bool exists = nodeID < getTotalNodesAllocated();
     const bool isDeleted = _view.tombstones().contains(nodeID);
     return exists && !isDeleted;
 }
 
 bool GraphReader::graphHasEdge(EdgeID edgeID) const {
-    const bool exists = edgeID < getEdgeCount();
+    const bool exists = edgeID < getTotalEdgesAllocated();
     const bool isDeleted = _view.tombstones().contains(edgeID);
     return exists && !isDeleted;
 }

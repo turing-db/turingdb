@@ -30,8 +30,23 @@ public:
     }
 
     [[nodiscard]] const GraphMetadata& getMetadata() const;
-    [[nodiscard]] size_t getNodeCount() const;
-    [[nodiscard]] size_t getEdgeCount() const;
+
+    /**
+     * @brief Returns the total number of nodes which were ever allocated and visible to
+     * @ref _view.
+     * @detail Does not decrement the count based on how many nodes are implicitly deleted
+     * by any Commit's Tombstones.
+     */
+    [[nodiscard]] size_t getTotalNodesAllocated() const;
+
+    /**
+     * @brief Returns the total number of edges which were ever allocated and visible to
+     * @ref _view.
+     * @detail Does not decrement the count based on how many edges are implicitly deleted
+     * by any Commit's Tombstones.
+     */
+    [[nodiscard]] size_t getTotalEdgesAllocated() const;
+
     [[nodiscard]] const GraphView& getView() const { return _view; }
     [[nodiscard]] DataPartSpan dataparts() const { return _view.dataparts(); }
     [[nodiscard]] std::span<const CommitView> commits() const { return _view.commits(); }

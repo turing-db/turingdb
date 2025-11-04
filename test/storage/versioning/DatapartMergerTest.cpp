@@ -402,10 +402,10 @@ TEST_F(DataPartMergerTest, labels) {
         _edgeMap.addNewId(it.second, static_cast<db::EdgeID>(it.first.getValue()));
     }
 
-    ASSERT_EQ(mergedDataPart.nodes().size(), reader.getNodeCount());
+    ASSERT_EQ(mergedDataPart.nodes().size(), reader.getTotalNodesAllocated());
     ASSERT_EQ(mergedDataPart.edgeIndexer().getCoreNodeCount(), mergedDataPart.nodes().size());
 
-    ASSERT_EQ(mergedDataPart.edges().size(), reader.getEdgeCount());
+    ASSERT_EQ(mergedDataPart.edges().size(), reader.getTotalEdgesAllocated());
 
     ASSERT_EQ(mergedDataPart.edgeIndexer().getPatchNodeCount(), 0);
 

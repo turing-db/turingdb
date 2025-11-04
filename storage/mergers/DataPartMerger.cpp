@@ -44,8 +44,8 @@ DataPartMerger::DataPartMerger(CommitData* commitData,
 
 std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) const {
     const auto& graphReader = _graphView.read();
-    const size_t nodeCount = graphReader.getNodeCount();
-    const size_t edgeCount = graphReader.getEdgeCount();
+    const size_t nodeCount = graphReader.getTotalNodesAllocated();
+    const size_t edgeCount = graphReader.getTotalEdgesAllocated();
 
     std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepare(_metadataBuilder, 0, 0, 0);
 

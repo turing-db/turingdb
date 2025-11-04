@@ -32,10 +32,10 @@ void ChangeRebaser::init(const GraphReader& mainReader,
     _branchTimeReader = &branchTimeReader;
     _newMainReader = &mainReader;
 
-    NodeID branchTimeNextNodeID = branchTimeReader.getNodeCount();
-    EdgeID branchTimeNextEdgeID = branchTimeReader.getEdgeCount();
-    _newNextNodeID = mainReader.getNodeCount();
-    _newNextEdgeID = mainReader.getEdgeCount();
+    NodeID branchTimeNextNodeID = branchTimeReader.getTotalNodesAllocated();
+    EdgeID branchTimeNextEdgeID = branchTimeReader.getTotalEdgesAllocated();
+    _newNextNodeID = mainReader.getTotalNodesAllocated();
+    _newNextEdgeID = mainReader.getTotalEdgesAllocated();
 
     _entityIDRebaser = EntityIDRebaser(branchTimeNextNodeID,
                                        branchTimeNextEdgeID,

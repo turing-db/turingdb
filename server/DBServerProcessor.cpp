@@ -232,9 +232,9 @@ void DBServerProcessor::get_graph_status() {
         const auto transaction = graph->openTransaction();
         const auto reader = transaction.readGraph();
         payload.key("nodeCount");
-        payload.value(reader.getNodeCount());
+        payload.value(reader.getTotalNodesAllocated());
         payload.key("edgeCount");
-        payload.value(reader.getEdgeCount());
+        payload.value(reader.getTotalEdgesAllocated());
     }
 }
 

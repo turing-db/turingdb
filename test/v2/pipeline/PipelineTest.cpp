@@ -648,7 +648,7 @@ TEST_F(PipelineTest, scanNodesCount) {
     {
         auto transaction = _graph->openTransaction();
         auto reader = transaction.readGraph();
-        expectedCount = reader.getNodeCount();
+        expectedCount = reader.getTotalNodesAllocated();
     }
 
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
