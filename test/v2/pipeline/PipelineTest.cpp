@@ -2,21 +2,20 @@
 
 #include <math.h>
 
-#include "PipelineInterface.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "TuringDB.h"
-#include "iterators/GetPropertiesIterator.h"
+
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "SimpleGraph.h"
 #include "LocalMemory.h"
 
+#include "iterators/ChunkConfig.h"
+
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnIndices.h"
-
-#include "iterators/ChunkConfig.h"
 
 #include "dataframe/Dataframe.h"
 #include "dataframe/ColumnTagManager.h"
@@ -25,11 +24,11 @@
 #include "PipelineV2.h"
 #include "PipelineBuffer.h"
 #include "reader/GraphReader.h"
-
 #include "PipelineBuilder.h"
-
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
+
+#include "PipelineException.h"
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -564,4 +563,16 @@ TEST_F(PipelineTest, multiChunkCount) {
     ExecutionContext execCtxt(view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
+}
+
+TEST_F(PipelineTest, testLambdaWithoutMaterialize) {
+    LocalMemory mem;
+    PipelineV2 pipeline;
+    ColumnTagManager tagMan;
+
+    PipelineBuilder builder(&mem, &pipeline, tagMan);
+    builder.addScanNodes();
+
+    EXPECT_THROW(builder.addLambda([](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    }), PipelineException);
 }
