@@ -41,6 +41,7 @@ public:
     [[nodiscard]] ChangeAccessor access() { return ChangeAccessor {this}; }
     [[nodiscard]] CommitHash baseHash() const;
     [[nodiscard]] ChangeID id() const { return _id; }
+    [[nodiscard]] bool isSubmitted() const { return _isSubmitted; }
 
 private:
     mutable std::mutex _mutex;
@@ -55,6 +56,7 @@ private:
     ArcManager<DataPart>* _dataPartManager {nullptr};
     ArcManager<CommitData>* _commitDataManager {nullptr};
     WeakArc<const CommitData> _base;
+    bool _isSubmitted {false};
 
     // Committed
     std::vector<std::unique_ptr<CommitBuilder>> _commits;

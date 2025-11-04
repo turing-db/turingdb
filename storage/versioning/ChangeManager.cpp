@@ -7,6 +7,7 @@
 
 #include "columns/ColumnVector.h"
 #include "Profiler.h"
+#include "versioning/CommitBuilder.h"
 
 using namespace db;
 
@@ -14,9 +15,8 @@ ChangeManager::ChangeManager(VersionController* versionController,
                              ArcManager<DataPart>* partManager,
                              ArcManager<CommitData>* commitDataManager)
     : _versionController(versionController),
-    _dataPartManager(partManager),
-    _commitDataManager(commitDataManager)
-{
+      _dataPartManager(partManager),
+      _commitDataManager(commitDataManager) {
 }
 
 ChangeManager::~ChangeManager() = default;
@@ -38,7 +38,8 @@ ChangeAccessor ChangeManager::createChange(FrozenCommitTx baseTx) {
 
     Change* ptr = change.get();
     ChangeID id = change->id();
-    _changes[id] = std::move(change);
+
+    _changes[id] = {std::move(change)};
 
     return ptr->access();
 }
@@ -48,78 +49,83 @@ ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, Comm
 
     std::shared_lock lock(_lock);
 
+    // Step 1. Retrieve the change
     auto it = _changes.find(changeID);
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
+    // Step 2. Increment the reference count to keep the change alive
+    std::shared_ptr<Change> change = it->second;
+
+    // Step 3. Unlock the ChangeManager.
+    _lock.unlock();
+
+    // Step 4. Lock the change
+    ChangeAccessor access {change->access()};
+
+    // Step 5. Check if it was already submitted
+    if (change->isSubmitted()) {
+        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+    }
+
+    // Step 6. Return the transaction
+
+    //      6.1. Check if we are reading the tip
     if (hash == CommitHash::head()) {
-        return it->second->openWriteTransaction();
+        return PendingCommitWriteTx {std::move(access), change->_tip};
     }
 
-    auto tx = it->second->openReadTransaction(hash);
-    if (!tx.isValid()) {
-        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+    //      6.2. Check if we are reading a pending commit
+    auto& commitOffsets = change->_commitOffsets;
+    auto& commitBuilders = change->_commits;
+    auto commitIt = commitOffsets.find(hash);
+    if (commitIt != commitOffsets.end()) {
+        return PendingCommitReadTx {std::move(access), commitBuilders[commitIt->second].get()};
     }
 
-    return tx;
+    //      6.3. Check if we are reading a frozen commit
+    std::span commits = change->_base->history().commits();
+    for (const auto& commit : commits) {
+        if (commit.hash() == hash) {
+            return FrozenCommitTx {commit.data()};
+        }
+    }
+
+    return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
 }
 
 ChangeResult<void> ChangeManager::submit(ChangeAccessor access, JobSystem& jobSystem) {
     Profile profile("ChangeManager::submitChange");
 
     std::unique_lock lock(_lock);
+
     const ChangeID id = access.getID();
-    access.release();
 
-    return submitImpl(id, jobSystem);
-}
-
-ChangeResult<void> ChangeManager::deleteChange(ChangeAccessor access) {
-    Profile profile("ChangeManager::deleteChange");
-
-    std::unique_lock lock(_lock);
-    const ChangeID id = access.getID();
-    access.release();
-
-    return deleteImpl(id);
-}
-
-ChangeResult<void> ChangeManager::submit(ChangeID id, JobSystem& jobSystem) {
-    Profile profile("ChangeManager::submitChange");
-
-    std::unique_lock lock(_lock);
-    return submitImpl(id, jobSystem);
-}
-
-ChangeResult<void> ChangeManager::deleteChange(ChangeID changeID) {
-    Profile profile("ChangeManager::deleteChange");
-
-    std::unique_lock lock(_lock);
-    return deleteImpl(changeID);
-}
-
-void ChangeManager::listChanges(ColumnVector<ChangeID>* output) const {
-    std::shared_lock lock(_lock);
-    output->clear();
-
-    for (const auto& change : _changes) {
-        output->push_back(change.first);
-    }
-}
-
-ChangeResult<void> ChangeManager::submitImpl(ChangeID id, JobSystem& jobSystem) {
-    std::unique_lock lock(_lock);
-
+    // Step 1. Retrieve the change
     auto it = _changes.find(id);
-
     if (it == _changes.end()) {
+        // Should never happen
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
-    const auto res = _versionController->submitChange(it->second.get(), jobSystem);
+    // Step 2. Increment the reference count to keep the change alive
+    std::shared_ptr<Change> change = it->second;
 
+    // Step 3. Erase the change from the map so that no one else can access it
     _changes.erase(it);
+
+    // Step 4. Unlock the ChangeManager
+    _lock.unlock();
+
+    // Step 5. Check if the change was already submitted
+    if (change->isSubmitted()) {
+        // Should never happen
+        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+    }
+
+    access.release();
+    const auto res = _versionController->submitChange(change.get(), jobSystem);
 
     if (!res) {
         // TODO, check if we should delete the change here
@@ -129,11 +135,14 @@ ChangeResult<void> ChangeManager::submitImpl(ChangeID id, JobSystem& jobSystem) 
     return {};
 }
 
-ChangeResult<void> ChangeManager::deleteImpl(ChangeID changeID) {
+ChangeResult<void> ChangeManager::remove(ChangeAccessor access) {
+    Profile profile("ChangeManager::deleteChange");
+
     std::unique_lock lock(_lock);
 
-    auto it = _changes.find(changeID);
+    const ChangeID id = access.getID();
 
+    auto it = _changes.find(id);
     if (it == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
@@ -141,4 +150,16 @@ ChangeResult<void> ChangeManager::deleteImpl(ChangeID changeID) {
     _changes.erase(it);
 
     return {};
+}
+
+void ChangeManager::listChanges(ColumnVector<ChangeID>* output) const {
+    Profile profile("ChangeManager::listChanges");
+
+    std::shared_lock lock(_lock);
+
+    output->clear();
+
+    for (const auto& change : _changes) {
+        output->push_back(change.first);
+    }
 }

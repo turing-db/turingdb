@@ -30,10 +30,7 @@ public:
     ChangeResult<Transaction> openTransaction(ChangeID id, CommitHash hash = CommitHash::head()) const;
 
     ChangeResult<void> submit(ChangeAccessor access, JobSystem& jobSystem);
-    ChangeResult<void> deleteChange(ChangeAccessor access);
-
-    ChangeResult<void> submit(ChangeID id, JobSystem& jobSystem);
-    ChangeResult<void> deleteChange(ChangeID id);
+    ChangeResult<void> remove(ChangeAccessor access);
 
     void listChanges(ColumnVector<ChangeID>* output) const;
 
@@ -44,11 +41,8 @@ private:
     ArcManager<DataPart>* _dataPartManager {nullptr};
     ArcManager<CommitData>* _commitDataManager {nullptr};
 
-    std::unordered_map<ChangeID, std::unique_ptr<Change>> _changes;
+    std::unordered_map<ChangeID, std::shared_ptr<Change>> _changes;
     std::atomic<ChangeID::ValueType> _nextChangeID {0};
-
-    ChangeResult<void> submitImpl(ChangeID id, JobSystem& jobSystem);
-    ChangeResult<void> deleteImpl(ChangeID id);
 };
 
 }

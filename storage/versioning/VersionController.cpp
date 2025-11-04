@@ -43,7 +43,7 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
         return _head.load()->openTransaction();
     }
 
-    std::scoped_lock lock {_mutex};
+    std::unique_lock lock {_mutex};
 
     auto it = _offsets.find(hash);
     if (it == _offsets.end()) {
@@ -65,14 +65,16 @@ CommitHash VersionController::getHeadHash() const {
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile {"VersionController::submitChange"};
 
-    std::scoped_lock lock(_mutex);
+    std::unique_lock lock(_mutex);
+
+    change->_isSubmitted = true;
 
     Commit* head = _head.load();
 
     // Rebase if main has changed
     if (head->hash() != change->baseHash()) {
         if (auto res = change->rebase(head->data()); !res) {
-            return res;
+            return res; // TODO Check, why do we return??
         }
     }
 

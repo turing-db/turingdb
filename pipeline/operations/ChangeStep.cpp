@@ -131,7 +131,7 @@ void ChangeStep::deleteChange() const {
 
     ChangeManager& changeMan = _graph->getChangeManager();
 
-    if (const auto res = changeMan.deleteChange(std::move(tx.changeAccessor())); !res) {
+    if (const auto res = changeMan.remove(std::move(tx.changeAccessor())); !res) {
         throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
     }
 }
