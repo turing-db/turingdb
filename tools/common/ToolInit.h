@@ -32,6 +32,8 @@ public:
 
     argparse::ArgumentParser& getArgParser() { return *_argParser; }
 
+    void resetDefaultGraph(const FileUtils::Path& graphsDir);
+
 private:
     const std::string _toolName;
     std::string _outputsDir;

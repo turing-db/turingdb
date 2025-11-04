@@ -22,6 +22,7 @@ int main(int argc, const char** argv) {
     bool noServer = false;
     bool nodemon = false;
     bool inMemory = false;
+    bool resetDefault = false;
     unsigned port = 6666;
     std::string address {"127.0.0.1"};
     std::string turingDir;
@@ -35,6 +36,8 @@ int main(int argc, const char** argv) {
              .store_into(address);
     argParser.add_argument("-nodemon")
              .store_into(nodemon);
+    argParser.add_argument("-reset-default")
+             .store_into(resetDefault);
     argParser.add_argument("-load")
              .store_into(graphsToLoad);
     argParser.add_argument("-in-memory")
@@ -61,6 +64,11 @@ int main(int argc, const char** argv) {
     // Run TuringDB
     TuringDB turingDB(&config);
     turingDB.run();
+
+    if (resetDefault) {
+        FileUtils::Path graphsDir = config.getGraphsDir().c_str();
+        toolInit.resetDefaultGraph(graphsDir);
+    }
 
     // Load graphs
     LocalMemory mem;

@@ -87,6 +87,13 @@ void ToolInit::createOutputDir() {
     PerfStat::init(reportsPath/(_toolName + ".perf"));
 }
 
+void ToolInit::resetDefaultGraph(const FileUtils::Path& graphsDir) {
+    FileUtils::Path defaultGraphPath = graphsDir / "default";
+    if (FileUtils::isDirectory(defaultGraphPath)) {
+        FileUtils::removeDirectory(defaultGraphPath);
+    }
+}
+
 void ToolInit::init(int argc, const char** argv) {
     LogSetup::setupLogConsole();
 
