@@ -31,25 +31,24 @@ public:
     PipelineOutputInterface* getOutput() const { return _pendingOutput; }
 
     template <typename ColumnType>
-    PipelineBuilder& addColumnToOutput(ColumnTag tag) {
-        allocColumn<ColumnType>(_pendingOutput->getDataframe(), tag);
-        return *this;
+    NamedColumn* addColumnToOutput(ColumnTag tag) {
+        return allocColumn<ColumnType>(_pendingOutput->getDataframe(), tag);
     }
 
-    PipelineBuilder& addScanNodes();
-    PipelineBuilder& addGetOutEdges();
-    PipelineBuilder& addLambda(const LambdaProcessor::Callback& callback);
+    PipelineOutputInterface& addScanNodes();
+    PipelineOutputInterface& addGetOutEdges();
+    void addLambda(const LambdaProcessor::Callback& callback);
 
     template <SupportedType T>
-    PipelineBuilder& addGetNodeProperties(PropertyType propertyType);
+    PipelineOutputInterface& addGetNodeProperties(PropertyType propertyType);
 
-    PipelineBuilder& addSkip(size_t count);
-    PipelineBuilder& addLimit(size_t count);
-    PipelineBuilder& addCount();
+    PipelineOutputInterface& addSkip(size_t count);
+    PipelineOutputInterface& addLimit(size_t count);
+    PipelineOutputInterface& addCount();
 
-    PipelineBuilder& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
+    PipelineOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
 
-    PipelineBuilder& addMaterialize();
+    PipelineOutputInterface& addMaterialize();
 
 private:
     LocalMemory* _mem {nullptr};
@@ -69,8 +68,8 @@ private:
         return allocColumn<ColumnType>(df, _tagManager.allocTag());
     }
 
-    PipelineBuilder& openMaterialize();
-    PipelineBuilder& closeMaterialize();
+    void openMaterialize();
+    void closeMaterialize();
 };
 
 }

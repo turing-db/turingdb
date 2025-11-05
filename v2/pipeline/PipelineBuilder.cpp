@@ -27,7 +27,7 @@ void duplicateDataframeShape(LocalMemory* mem, Dataframe* src, Dataframe* dest) 
 
 }
 
-PipelineBuilder& PipelineBuilder::addScanNodes() {
+PipelineOutputInterface& PipelineBuilder::addScanNodes() {
     openMaterialize();
 
     ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
@@ -40,10 +40,10 @@ PipelineBuilder& PipelineBuilder::addScanNodes() {
 
     _pendingOutput = &outNodeIDs;
 
-    return *this;
+    return outNodeIDs;
 }
 
-PipelineBuilder& PipelineBuilder::addGetOutEdges() {
+PipelineOutputInterface& PipelineBuilder::addGetOutEdges() {
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
     _pendingOutput->connectTo(getOutEdges->inNodeIDs());
 
@@ -66,28 +66,26 @@ PipelineBuilder& PipelineBuilder::addGetOutEdges() {
 
     _pendingOutput = &outEdges;
 
-    return *this;
+    return outEdges;
 }
 
-PipelineBuilder& PipelineBuilder::openMaterialize() {
+void PipelineBuilder::openMaterialize() {
     _matProc = MaterializeProcessor::create(_pipeline, _mem);
-    return *this;
 }
 
-PipelineBuilder& PipelineBuilder::closeMaterialize() {
+void PipelineBuilder::closeMaterialize() {
     _matProc = nullptr;
-    return *this;
 }
 
-PipelineBuilder& PipelineBuilder::addMaterialize() {
+PipelineOutputInterface& PipelineBuilder::addMaterialize() {
     _pendingOutput->connectTo(_matProc->input());
     _pendingOutput = &_matProc->output();
     closeMaterialize();
 
-    return *this;
+    return _matProc->output();
 }
 
-PipelineBuilder& PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
+void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
     if (_matProc) {
         throw PipelineException("PipelineBuilder: cannot add lambda on pipeline with active materialize");
     }
@@ -95,11 +93,9 @@ PipelineBuilder& PipelineBuilder::addLambda(const LambdaProcessor::Callback& cal
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
     _pendingOutput->connectTo(lambda->input());
     _pendingOutput = nullptr;
-
-    return *this;
 }
 
-PipelineBuilder& PipelineBuilder::addSkip(size_t count) {
+PipelineOutputInterface& PipelineBuilder::addSkip(size_t count) {
     SkipProcessor* skip = SkipProcessor::create(_pipeline, count);
     _pendingOutput->connectTo(skip->input());
 
@@ -107,10 +103,10 @@ PipelineBuilder& PipelineBuilder::addSkip(size_t count) {
     
     _pendingOutput = &skip->output();
 
-    return *this;
+    return skip->output();
 }
 
-PipelineBuilder& PipelineBuilder::addLimit(size_t count) {
+PipelineOutputInterface& PipelineBuilder::addLimit(size_t count) {
     LimitProcessor* limit = LimitProcessor::create(_pipeline, count);
     _pendingOutput->connectTo(limit->input());
 
@@ -118,10 +114,10 @@ PipelineBuilder& PipelineBuilder::addLimit(size_t count) {
 
     _pendingOutput = &limit->output();
 
-    return *this;
+    return limit->output();
 }
 
-PipelineBuilder& PipelineBuilder::addCount() {
+PipelineOutputInterface& PipelineBuilder::addCount() {
     CountProcessor* count = CountProcessor::create(_pipeline);
     _pendingOutput->connectTo(count->input());
 
@@ -129,17 +125,17 @@ PipelineBuilder& PipelineBuilder::addCount() {
     count->output().setValue(countColumn);
 
     _pendingOutput = &count->output();
-    return *this;
+    return count->output();
 }
 
-PipelineBuilder& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
+PipelineOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
     LambdaSourceProcessor* source = LambdaSourceProcessor::create(_pipeline, callback);
     _pendingOutput = &source->output();
-    return *this;
+    return source->output();
 }
 
 template <db::SupportedType T>
-PipelineBuilder& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
+PipelineOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
     auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
     _pendingOutput->connectTo(getProps->inIDs());
 
@@ -160,11 +156,11 @@ PipelineBuilder& PipelineBuilder::addGetNodeProperties(PropertyType propertyType
 
     _pendingOutput = &getProps->outValues();
     
-    return *this;
+    return getProps->outValues();
 }
 
-template PipelineBuilder& PipelineBuilder::addGetNodeProperties<db::types::Int64>(PropertyType propertyType);
-template PipelineBuilder& PipelineBuilder::addGetNodeProperties<db::types::UInt64>(PropertyType propertyType);
-template PipelineBuilder& PipelineBuilder::addGetNodeProperties<db::types::Double>(PropertyType propertyType);
-template PipelineBuilder& PipelineBuilder::addGetNodeProperties<db::types::String>(PropertyType propertyType);
-template PipelineBuilder& PipelineBuilder::addGetNodeProperties<db::types::Bool>(PropertyType propertyType);
+template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Int64>(PropertyType propertyType);
+template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::UInt64>(PropertyType propertyType);
+template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Double>(PropertyType propertyType);
+template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::String>(PropertyType propertyType);
+template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Bool>(PropertyType propertyType);
