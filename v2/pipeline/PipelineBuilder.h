@@ -71,8 +71,6 @@ private:
 
     PipelineBuilder& openMaterialize();
     PipelineBuilder& closeMaterialize();
-
-    PipelineBuilder& connectToBlockInput(PipelineBlockInputInterface& input);
 };
 
 }
