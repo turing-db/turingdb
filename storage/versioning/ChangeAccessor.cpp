@@ -6,9 +6,10 @@
 
 using namespace db;
 
-ChangeAccessor::ChangeAccessor(Change* change)
-    : _lock(change->_mutex),
-    _change(change)
+ChangeAccessor::ChangeAccessor(Change* change,
+                               std::unique_lock<std::mutex> lock)
+    : _change(change),
+    _lock(std::move(lock))
 {
 }
 

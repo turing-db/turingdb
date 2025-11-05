@@ -41,7 +41,7 @@ private:
 
     VersionController* _versionController {nullptr};
 
-    std::unordered_map<ChangeID, std::shared_ptr<Change>> _changes;
+    std::unordered_map<ChangeID, std::shared_ptr<struct ChangeHolder>> _changes;
     std::atomic<ChangeID::ValueType> _nextChangeID {0};
 
     void clear();

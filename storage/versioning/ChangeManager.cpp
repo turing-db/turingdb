@@ -11,6 +11,26 @@
 
 using namespace db;
 
+namespace db {
+
+struct ChangeHolder {
+    Change _change;
+    mutable std::mutex _mutex;
+    bool _valid {true};
+
+    ChangeHolder(ArcManager<DataPart>& partManager, ArcManager<CommitData>& commitDataManager,
+                 ChangeID id, const WeakArc<const CommitData>& base)
+        : _change(partManager, commitDataManager, id, base)
+    {
+    }
+
+    ChangeAccessor acquire() {
+        return ChangeAccessor {&_change, std::unique_lock {_mutex}};
+    }
+};
+
+}
+
 ChangeManager::ChangeManager(VersionController* versionController)
     : _versionController(versionController)
 {
@@ -28,59 +48,59 @@ ChangeAccessor ChangeManager::createChange(FrozenCommitTx baseTx) {
         baseTx = _versionController->openTransaction();
     }
 
-    std::shared_ptr<Change> change(new Change(*_versionController->_partManager,
-                                              *_versionController->_dataManager,
-                                              ChangeID {_nextChangeID.fetch_add(1)},
-                                              baseTx.commitData()));
+    ChangeID id {_nextChangeID.fetch_add(1)};
 
-    Change* ptr = change.get();
-    ChangeID id = change->id();
+    auto& partManager = *_versionController->_partManager;
+    auto& dataManager = *_versionController->_dataManager;
 
-    _changes[id] = {change};
+    auto changeHolder = std::make_shared<ChangeHolder>(partManager, dataManager, id, baseTx.commitData());
 
-    return ChangeAccessor {ptr};
+    _changes.emplace(id, changeHolder);
+
+    return changeHolder->acquire();
 }
 
 ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, CommitHash hash) const {
     Profile profile("ChangeManager::getChange");
 
-    std::shared_lock lock(_lock);
+    std::shared_ptr<ChangeHolder> changeHolder;
 
-    // Step 1. Retrieve the change
-    auto it = _changes.find(changeID);
-    if (it == _changes.end()) {
+    {
+        std::shared_lock lock(_lock);
+
+        auto it = _changes.find(changeID);
+        if (it == _changes.end()) {
+            return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        }
+
+        changeHolder = it->second;
+    }
+
+    ChangeAccessor access = changeHolder->acquire();
+
+    if (!changeHolder->_valid) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
-    // Step 2. Increment the reference count to keep the change alive
-    std::shared_ptr<Change> change = it->second;
-
-    // Step 3. Lock the change and unlock the ChangeManager
-    ChangeAccessor access {change.get()};
-    _lock.unlock();
-
-    // Step 5. Check if it was already submitted
-    if (change->isSubmitted()) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
-    }
+    Change& change = changeHolder->_change;
 
     // Step 6. Return the transaction
 
     //      6.1. Check if we are reading the tip
     if (hash == CommitHash::head()) {
-        return PendingCommitWriteTx {std::move(access), change->_tip};
+        return PendingCommitWriteTx {std::move(access), change._tip};
     }
 
     //      6.2. Check if we are reading a pending commit
-    auto& commitOffsets = change->_commitOffsets;
-    auto& commitBuilders = change->_commits;
+    auto& commitOffsets = change._commitOffsets;
+    auto& commitBuilders = change._commits;
     auto commitIt = commitOffsets.find(hash);
     if (commitIt != commitOffsets.end()) {
         return PendingCommitReadTx {std::move(access), commitBuilders[commitIt->second].get()};
     }
 
     //      6.3. Check if we are reading a frozen commit
-    std::span commits = change->_base->history().commits();
+    std::span commits = change._base->history().commits();
     for (const auto& commit : commits) {
         if (commit.hash() == hash) {
             return FrozenCommitTx {commit.data()};
@@ -92,6 +112,8 @@ ChangeResult<Transaction> ChangeManager::openTransaction(ChangeID changeID, Comm
 
 ChangeResult<void> ChangeManager::submit(ChangeAccessor access, JobSystem& jobSystem) {
     Profile profile("ChangeManager::submitChange");
+
+    std::shared_ptr<ChangeHolder> changeHolder;
 
     {
         std::unique_lock lock(_lock);
@@ -105,28 +127,25 @@ ChangeResult<void> ChangeManager::submit(ChangeAccessor access, JobSystem& jobSy
             return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
         }
 
-        // Step 2. Increment the reference count to keep the change alive
-        std::shared_ptr<Change> change = it->second;
-
         // Step 3. Erase the change from the map so that no one else can access it
+        changeHolder = it->second;
         _changes.erase(it);
     }
 
-    Change* change = access.get();
+    Change& change = changeHolder->_change;
 
-    // Step 4. Check if the change was already submitted (should never happen)
-    if (change->isSubmitted()) {
+    // Step 4. Check if the change was already submitted
+    if (!changeHolder->_valid) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
     // Step 5. - Tag the change as submitted and submit it
-    change->_isSubmitted = true;
-    access.release();
-    const auto res = _versionController->submitChange(change, jobSystem);
+    changeHolder->_valid = false;
+    const CommitResult<void> res = _versionController->submitChange(&change, jobSystem);
 
     if (!res) {
-        // TODO, check if we should delete the change here.
-        //       this leaks a change if the submit fails. What should we do?
+        // TODO: What should we do here? The change disappears if the submittion fails, do we want
+        // to keep it around? So that the user can re-try later on?
         return ChangeError::result(ChangeErrorType::COULD_NOT_ACCEPT_CHANGE, res.error());
     }
 
@@ -146,16 +165,13 @@ ChangeResult<void> ChangeManager::remove(ChangeAccessor access) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
-    // Step 2. Increment the reference count to keep the change alive
-    std::shared_ptr<Change> change = it->second;
-
-    // Step 3. Erase the change from the map so that no one else can access it
-    //         and unlock the change so that it can be destroyed safely
+    // Step 2. Remove the change from the map so that no one else can access it
+    it->second->_valid = false;
     _changes.erase(it);
-    access.get()->_isSubmitted = true;
-    access.release();
 
-    // At the end of the scope, the change is destroyed (last reference released)
+    // At the end of the scope, the change is marked for deletion and unlocked.
+    // Once all readers are done, the change is destroyed
+
     return {};
 }
 
@@ -175,18 +191,19 @@ void ChangeManager::clear() {
     std::unique_lock lock(_lock);
 
     for (auto it = _changes.begin(); it != _changes.end();) {
-        // Acquire a lock on the change
-        ChangeAccessor access {it->second.get()};
 
-        // Increment the reference count to keep the change alive
-        std::shared_ptr<Change> change = it->second;
+        // Increment the reference count to keep the change alive during logic deletion
+        std::shared_ptr<ChangeHolder> changeHolder = it->second;
+
+        // Acquire a lock and mark the change as invalid
+        ChangeAccessor access = changeHolder->acquire();
+        changeHolder->_valid = false;
 
         // Erase the change from the map so that no one else can access it
-        // and unlock the change so that it can be destroyed safely
         it = _changes.erase(it);
-        access.release();
 
-        // At the end of this scope, the change is destroyed (last reference released)
+        // At the end of this scope, the change is marked for deletion and unlocked.
+        // Once all readers are done, the change is destroyed
     }
 
     _nextChangeID.store(0);

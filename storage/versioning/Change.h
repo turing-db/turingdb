@@ -21,6 +21,11 @@ class Transaction;
 
 class Change {
 public:
+    Change(ArcManager<DataPart>& dataPartManager,
+           ArcManager<CommitData>& commitDataManager,
+           ChangeID id,
+           const WeakArc<const CommitData>& base);
+
     ~Change();
 
     Change(const Change&) = delete;
@@ -30,7 +35,6 @@ public:
 
     [[nodiscard]] CommitHash baseHash() const;
     [[nodiscard]] ChangeID id() const { return _id; }
-    [[nodiscard]] bool isSubmitted() const { return _isSubmitted; }
 
 private:
     friend VersionController;
@@ -39,24 +43,16 @@ private:
     friend class ChangeRebaser;
     friend class ChangeConflictChecker;
 
-    mutable std::mutex _mutex;
-
     ChangeID _id;
     ArcManager<DataPart>* _dataPartManager {nullptr};
     ArcManager<CommitData>* _commitDataManager {nullptr};
     WeakArc<const CommitData> _base;
-    bool _isSubmitted {false};
 
     // Committed
     std::vector<std::unique_ptr<CommitBuilder>> _commits;
     std::unordered_map<CommitHash, size_t> _commitOffsets;
 
     CommitBuilder* _tip {nullptr};
-
-    Change(ArcManager<DataPart>& dataPartManager,
-           ArcManager<CommitData>& commitDataManager,
-           ChangeID id,
-           const WeakArc<const CommitData>& base);
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(const WeakArc<const CommitData>& head);

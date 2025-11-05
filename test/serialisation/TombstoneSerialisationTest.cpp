@@ -30,25 +30,35 @@ public:
     }
 
     void populateAndDump() {
-        auto& db = _env->getDB();
-        auto& sysMan = _env->getSystemManager();
+        TuringDB& db = _env->getDB();
+        SystemManager& sysMan = _env->getSystemManager();
+        ChangeID changeID;
 
-        auto change = sysMan.newChange(_workingGraphName);
-        if (!change) {
-            panic("Failed to make change in populate().");
+        {
+            ChangeResult<ChangeAccessor> change = sysMan.newChange(_workingGraphName);
+            if (!change) {
+                panic("Failed to make change in populate().");
+            }
+            changeID = change->getID();
         }
 
         // populate the graph
         for (size_t i = 0; i < NUM_EDGES; i++) {
             ASSERT_TRUE(db.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)",
-                                 _workingGraphName, &_env->getMem(), CommitHash::head(),
-                                 change->getID()));
+                                 _workingGraphName,
+                                 &_env->getMem(),
+                                 CommitHash::head(),
+                                 changeID));
         }
         spdlog::info("Ran create queries");
 
         // implicit dump on change submit
-        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
-                             CommitHash::head(), change->getID()));
+        ASSERT_TRUE(db.query("change submit",
+                             _workingGraphName,
+                             &_env->getMem(),
+                             CommitHash::head(),
+                             changeID));
+
         spdlog::info("Submitted change");
 
         const auto VERIFY = [](const Block& block) {
@@ -60,32 +70,51 @@ public:
             }
         };
 
-        ASSERT_TRUE(db.query("match (n) return n", _workingGraphName, &_env->getMem(),
-                             VERIFY, CommitHash::head(), ChangeID::head()));
+        ASSERT_TRUE(db.query("match (n) return n",
+                             _workingGraphName,
+                             &_env->getMem(),
+                             VERIFY,
+                             CommitHash::head(),
+                             ChangeID::head()));
 
         spdlog::info("Successfully populated graph");
     }
 
     void applyDeletesAndDump() {
-        auto& db = _env->getDB();
-        auto& sysMan = _env->getSystemManager();
+        TuringDB& db = _env->getDB();
+        SystemManager& sysMan = _env->getSystemManager();
+        ChangeID changeID;
 
-        auto change = sysMan.newChange(_workingGraphName);
-        if (!change) {
-            panic("Failed to make change in populate().");
+        {
+            ChangeResult<ChangeAccessor> change = sysMan.newChange(_workingGraphName);
+            if (!change) {
+                panic("Failed to make change in populate().");
+            }
+            changeID = change->getID();
         }
 
         for (size_t node : DELETED_NODES) {
-            db.query("delete nodes " + std::to_string(node), _workingGraphName,
-                     &_env->getMem(), CommitHash::head(), change->getID());
+            db.query("delete nodes " + std::to_string(node),
+                     _workingGraphName,
+                     &_env->getMem(),
+                     CommitHash::head(),
+                     changeID);
         }
+
         for (size_t node : DELETED_EDGES) {
-            db.query("delete edges " + std::to_string(node), _workingGraphName,
-                     &_env->getMem(), CommitHash::head(), change->getID());
+            db.query("delete edges " + std::to_string(node),
+                     _workingGraphName,
+                     &_env->getMem(),
+                     CommitHash::head(),
+                     changeID);
         }
+
         // implicit dump on change submit
-        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
-                             CommitHash::head(), change->getID()));
+        ASSERT_TRUE(db.query("change submit",
+                             _workingGraphName,
+                             &_env->getMem(),
+                             CommitHash::head(),
+                             changeID));
 
         spdlog::info("Submitted deletions change");
     }
@@ -112,7 +141,6 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
         _loadedGraph.get(),
         _env->getSystemManager().getGraph(_workingGraphName)->getPath());
     ASSERT_TRUE(res);
-
 
     const Tombstones& tombstones =
         _loadedGraph->openTransaction().viewGraph().commits().back().tombstones();
