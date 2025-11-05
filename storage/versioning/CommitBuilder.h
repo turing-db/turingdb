@@ -13,7 +13,6 @@ namespace db {
 
 class DataPartBuilder;
 class MetadataBuilder;
-class VersionController;
 class JobSystem;
 class Commit;
 class Change;
@@ -22,7 +21,6 @@ class FrozenCommitTx;
 
 class CommitBuilder {
 public:
-    CommitBuilder();
     ~CommitBuilder();
 
     CommitBuilder(const CommitBuilder&) = delete;
@@ -30,8 +28,8 @@ public:
     CommitBuilder& operator=(const CommitBuilder&) = delete;
     CommitBuilder& operator=(CommitBuilder&&) = delete;
 
-    [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(VersionController& controller,
-                                                                Change* change,
+    [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(ArcManager<DataPart>& dataPartManager,
+                                                                const WeakArc<CommitData>& commitData,
                                                                 const GraphView& view);
 
     [[nodiscard]] CommitHash hash() const;
@@ -66,15 +64,13 @@ public:
 
 private:
     friend CommitWriteBuffer;
-    friend VersionController;
     friend Change;
     friend ChangeRebaser;
 
     mutable std::mutex _mutex;
     std::unique_ptr<CommitWriteBuffer> _writeBuffer;
 
-    VersionController* _controller {nullptr};
-    Change* _change {nullptr};
+    ArcManager<DataPart>* _dataPartManager {nullptr};
     GraphView _view;
 
     NodeID _firstNodeID;
@@ -91,9 +87,11 @@ private:
 
     std::vector<std::unique_ptr<DataPartBuilder>> _builders;
 
-    explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
+    CommitBuilder(ArcManager<DataPart>& dataPartManager,
+                  const WeakArc<CommitData>& data,
+                  const GraphView&);
 
     void initialize();
-    };
+};
 }
 

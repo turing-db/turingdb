@@ -18,7 +18,7 @@ using namespace db;
 
 ChangeConflictChecker::ChangeConflictChecker(const Change& change,
                                              const EntityIDRebaser& entityRebaser,
-                                             const Commit::CommitSpan commits)
+                                             std::span<const CommitView> commits)
     : _change(change),
     _entityIDRebaser(entityRebaser),
     _commitsSinceBranch(commits)
@@ -26,8 +26,8 @@ ChangeConflictChecker::ChangeConflictChecker(const Change& change,
 }
 
 void ChangeConflictChecker::getWritesSinceCommit(ConflictCheckSets& writes) {
-    for (const std::unique_ptr<Commit>& commit : _commitsSinceBranch) {
-        const CommitHistory& history = commit->history();
+    for (const CommitView& commit : _commitsSinceBranch) {
+        const CommitHistory& history = commit.history();
         const CommitJournal& journal = history.journal();
         bioassert(&journal);
         WriteSet<NodeID>::setUnion(writes.writtenNodes, journal.nodeWriteSet());
@@ -48,9 +48,9 @@ void ChangeConflictChecker::checkConflicts() {
 
     // Check the latest commit for newly created edges that are incident to nodes this
     // change attempts to delete
-    const std::unique_ptr<Commit>& latestCommit = _commitsSinceBranch.back();
-    const CommitData& latestCommitData = latestCommit->data();
-    checkNewEdgesIncidentToDeleted(latestCommitData);
+    const CommitView& latestCommit = _commitsSinceBranch.back();
+    const WeakArc<const CommitData> latestCommitData = latestCommit.data();
+    checkNewEdgesIncidentToDeleted(*latestCommitData);
 }
 
 void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& latestCommitData) {
@@ -67,8 +67,8 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 
     // Calculate the total number of DPs created by each commit on main since we branched
     size_t numDPsCreatedSinceBranch = 0;
-    for (const auto& commit : _commitsSinceBranch) {
-        numDPsCreatedSinceBranch += commit->data().commitDataparts().size();
+    for (const CommitView& commit : _commitsSinceBranch) {
+        numDPsCreatedSinceBranch += commit.data()->commitDataparts().size();
     }
 
     bioassert(totalDPsOnMain >= numDPsCreatedSinceBranch);

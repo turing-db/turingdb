@@ -124,7 +124,7 @@ public:
     PipelineStep(HistoryStep::Tag, ColumnVector<std::string>*);
     PipelineStep(ChangeStep::Tag,
                  ChangeOpType,
-                 ColumnVector<const Change*>*);
+                 ColumnVector<ChangeID>*);
 
     PipelineStep(LoadGraphStep::Tag, const std::string& graphName);
 

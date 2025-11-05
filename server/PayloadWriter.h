@@ -4,8 +4,7 @@
 
 #include "ID.h"
 #include "metadata/GraphMetadata.h"
-#include "versioning/Change.h"
-#include "versioning/CommitBuilder.h"
+#include "versioning/CommitHash.h"
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
 #include "metadata/PropertyType.h"
@@ -155,8 +154,9 @@ public:
         _comma = true;
     }
 
-    void value(const CommitBuilder* v) {
-        value(v->hash().get());
+    template <int I>
+    void value(const TemplateCommitHash<I>& v) {
+        value(v.get());
     }
 
     void nullValue() {
@@ -176,10 +176,6 @@ public:
         } else {
             nullValue();
         }
-    }
-
-    void value(const Change* v) {
-        value(v->id().get());
     }
 
     void finish() {

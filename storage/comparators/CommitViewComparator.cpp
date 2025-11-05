@@ -35,8 +35,8 @@ bool CommitViewComparator::same(const CommitView& a, const CommitView& b) {
 
     // Verifiying tombstones
     {
-        const Tombstones& tombstonesA = a.data().tombstones();
-        const Tombstones& tombstonesB = b.data().tombstones();
+        const Tombstones& tombstonesA = a.data()->tombstones();
+        const Tombstones& tombstonesB = b.data()->tombstones();
 
         const Tombstones::NodeTombstones& nodesA = tombstonesA.nodeTombstones();
         const Tombstones::NodeTombstones& nodesB = tombstonesB.nodeTombstones();

@@ -44,7 +44,6 @@ public:
         auto& versionController = graph._versionController;
 
         auto commit = std::make_unique<Commit>(
-            graph._versionController.get(),
             versionController->createCommitData(hash));
 
         if (prevHistory) {
@@ -127,7 +126,7 @@ public:
         }
 
         for (auto& [partIndex, path] : datapartPaths) {
-            auto res = DataPartLoader::load(path, metadata, *versionController);
+            auto res = DataPartLoader::load(path, metadata, *versionController->_partManager);
 
             if (!res) {
                 return res.get_unexpected();

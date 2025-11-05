@@ -1,12 +1,14 @@
 #pragma once
 
-#include "writers/DataPartBuilder.h"
 #include "GMLParser.h"
-#include "ControlCharacters.h"
 #include "Graph.h"
+#include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+#include "versioning/ChangeManager.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Change.h"
-#include "writers/MetadataBuilder.h"
+
+#include "ControlCharacters.h"
 
 namespace db {
 
@@ -18,8 +20,8 @@ public:
     }
 
     bool prepare() {
-        _change = _graph->newChange();
-        _commitBuilder = _change->access().getTip();
+        _change = _graph->getChangeManager().createChange();
+        _commitBuilder = _change.getTip();
         _builder = &_commitBuilder->newBuilder();
         _metadata = &_commitBuilder->metadata();
 
@@ -31,7 +33,8 @@ public:
     }
 
     bool finish(JobSystem& jobs) {
-        return _change->access().submit(jobs).has_value();
+        ChangeManager& changes = _graph->getChangeManager();
+        return changes.submit(std::move(_change), jobs).has_value();
     }
 
     bool onNodeProperty(std::string_view k, std::string_view v) {
@@ -175,7 +178,7 @@ public:
 
 private:
     Graph* _graph {nullptr};
-    std::unique_ptr<Change> _change;
+    ChangeAccessor _change;
     CommitBuilder* _commitBuilder {nullptr};
     MetadataBuilder* _metadata {nullptr};
     DataPartBuilder* _builder {nullptr};

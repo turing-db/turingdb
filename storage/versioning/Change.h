@@ -8,7 +8,6 @@
 #include "versioning/CommitHash.h"
 #include "versioning/CommitResult.h"
 #include "versioning/ChangeID.h"
-#include "versioning/ChangeAccessor.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -18,13 +17,15 @@ class DataPartBuilder;
 class CommitBuilder;
 class Commit;
 class JobSystem;
-class FrozenCommitTx;
-class ChangeManager;
-class PendingCommitWriteTx;
-class PendingCommitReadTx;
+class Transaction;
 
 class Change {
 public:
+    Change(ArcManager<DataPart>& dataPartManager,
+           ArcManager<CommitData>& commitDataManager,
+           ChangeID id,
+           const WeakArc<const CommitData>& base);
+
     ~Change();
 
     Change(const Change&) = delete;
@@ -32,27 +33,19 @@ public:
     Change& operator=(const Change&) = delete;
     Change& operator=(Change&&) = delete;
 
-    [[nodiscard]] static std::unique_ptr<Change> create(VersionController* versionController,
-                                                        ChangeID id,
-                                                        CommitHash base);
-
-    [[nodiscard]] PendingCommitWriteTx openWriteTransaction();
-    [[nodiscard]] PendingCommitReadTx openReadTransaction(CommitHash commitHash);
-
-    [[nodiscard]] ChangeAccessor access() { return ChangeAccessor {this}; }
     [[nodiscard]] CommitHash baseHash() const;
     [[nodiscard]] ChangeID id() const { return _id; }
 
 private:
-    mutable std::mutex _mutex;
-    friend ChangeManager;
-    friend ChangeAccessor;
     friend VersionController;
+    friend class ChangeAccessor;
+    friend class ChangeManager;
     friend class ChangeRebaser;
     friend class ChangeConflictChecker;
 
     ChangeID _id;
-    VersionController* _versionController {nullptr};
+    ArcManager<DataPart>* _dataPartManager {nullptr};
+    ArcManager<CommitData>* _commitDataManager {nullptr};
     WeakArc<const CommitData> _base;
 
     // Committed
@@ -61,11 +54,8 @@ private:
 
     CommitBuilder* _tip {nullptr};
 
-    explicit Change(VersionController* versionController, ChangeID id, CommitHash base);
-
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
+    [[nodiscard]] CommitResult<void> rebase(const WeakArc<const CommitData>& head);
 
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash) const;
 };

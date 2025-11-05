@@ -4,7 +4,6 @@
 
 #include "LocalMemory.h"
 #include "QueryInterpreter.h"
-#include "versioning/CommitBuilder.h"
 #include "TuringDB.h"
 #include "Panic.h"
 #include "columns/Block.h"
@@ -133,8 +132,8 @@ public:
                     COL_CASE(ColumnConst<types::Double::Primitive>)
                     COL_CASE(ColumnConst<types::String::Primitive>)
                     COL_CASE(ColumnConst<types::Bool::Primitive>)
-                    COL_CASE(ColumnVector<const CommitBuilder*>)
-                    COL_CASE(ColumnVector<const Change*>)
+                    COL_CASE(ColumnVector<CommitHash>)
+                    COL_CASE(ColumnVector<ChangeID>)
 
                     default: {
                         panic("can not check result for column of kind {}", col->getKind());

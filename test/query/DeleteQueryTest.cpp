@@ -7,7 +7,6 @@
 #include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "SimpleGraph.h"
-#include "versioning/Change.h"
 
 using namespace db;
 using namespace turing::test;
@@ -31,10 +30,10 @@ protected:
 
     inline static const auto newChange = [](QueryTester& tester) {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };

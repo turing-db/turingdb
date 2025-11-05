@@ -2,7 +2,6 @@
 
 #include <limits>
 
-#include "Commit.h"
 #include "DataPartRebaser.h"
 #include "EntityIDRebaser.h"
 #include "MetadataRebaser.h"
@@ -13,9 +12,11 @@ namespace db {
 class CommitBuilder;
 class CommitData;
 class CommitHistory;
-struct ConflictCheckSets;
+class ConflictCheckSets;
 class Change;
 class GraphReader;
+class CommitView;
+class Tombstones;
 
 class ChangeRebaser {
 public:
@@ -32,7 +33,7 @@ public:
     /**
     * @brief Constructs a ChangeConflictChecker to compare against @param commits
     */
-    void checkConflicts(const Commit::CommitSpan commits);
+    void checkConflicts(std::span<const CommitView> commits);
 
     /**
      * @brief Rebases the provided @param commitBuilder according to the views of @ref

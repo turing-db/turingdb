@@ -24,6 +24,7 @@ class CommitBuilder;
 class FrozenCommitTx;
 class GraphSerializer;
 class GraphWriter;
+class ChangeManager;
 
 class Graph {
 public:
@@ -39,7 +40,6 @@ public:
     const std::string& getName() const { return _graphName; }
     const fs::Path& getPath() const { return _graphPath; }
 
-    [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
 
     [[nodiscard]] GraphID getID() const { return _graphID; }
@@ -48,6 +48,9 @@ public:
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
     [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const fs::Path& path);
+
+    [[nodiscard]] ChangeManager& getChangeManager() { return *_changeManager; }
+    [[nodiscard]] const ChangeManager& getChangeManager() const { return *_changeManager; }
 
 private:
     friend GraphInfoLoader;
@@ -65,6 +68,7 @@ private:
     fs::Path _graphPath;
 
     std::unique_ptr<VersionController> _versionController;
+    std::unique_ptr<ChangeManager> _changeManager;
     std::unique_ptr<GraphSerializer> _serializer;
 
     explicit Graph();

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "Graph.h"
+#include "versioning/ChangeManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
@@ -58,8 +59,9 @@ protected:
 
 TEST_F(Neo4jImporterTest, Simple) {
     {
-        auto change = _graph->newChange();
-        auto* commitBuilder = change->access().getTip();
+        auto& changes = _graph->getChangeManager();
+        auto change = changes.createChange();
+        auto* commitBuilder = change.getTip();
         auto& builder1 = commitBuilder->newBuilder();
         builder1.addNode(LabelSet::fromList({1})); // 0
         builder1.addNode(LabelSet::fromList({0})); // 1
@@ -86,7 +88,7 @@ TEST_F(Neo4jImporterTest, Simple) {
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addNode(LabelSet::fromList({1}));
         builder2.addEdge(0, 3, 4);
-        ASSERT_TRUE(change->access().submit(*_jobSystem));
+        ASSERT_TRUE(changes.submit(std::move(change), *_jobSystem));
     }
 
     const FrozenCommitTx transaction = _graph->openTransaction();

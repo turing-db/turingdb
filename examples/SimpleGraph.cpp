@@ -68,8 +68,7 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.setName("simpledb");
 
     auto findNodeIDInWriter = [&](std::string_view nodeName) -> NodeID {
-        const auto transaction = writer.openWriteTransaction();
-        const auto reader = transaction.readGraph();
+        const auto reader = writer.readGraph();
         
         auto it = reader.scanNodeProperties<types::String>(0).begin();
         for (; it.isValid(); it.next()) {

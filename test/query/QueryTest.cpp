@@ -2,9 +2,7 @@
 #include <gmock/gmock.h>
 
 #include "ID.h"
-#include "LocalMemory.h"
 #include "metadata/PropertyType.h"
-#include "versioning/Change.h"
 #include "SystemManager.h"
 #include "QueryInterpreter.h"
 #include "TuringDB.h"
@@ -420,17 +418,17 @@ TEST_F(QueryTest, ChangeQuery) {
     QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("CHANGE NEW")
-        .expectVector<const Change*>({}, false)
+        .expectVector<ChangeID>({}, false)
         .execute();
 
     const auto changes = tester.query("CHANGE LIST")
-                             .expectVector<const Change*>({}, false)
+                             .expectVector<ChangeID>({}, false)
                              .execute()
-                             .outputColumnVector<const Change*>(0);
+                             .outputColumnVector<ChangeID>(0);
 
     ASSERT_TRUE(changes);
 
-    tester.setChangeID(changes.value()->back()->id());
+    tester.setChangeID(changes.value()->back());
 
     tester.query(
               R"(CREATE (n:Person { name: "New person" })
@@ -525,13 +523,13 @@ TEST_F(QueryTest, ChangeWithRebaseQueries) {
     QueryTester tester {_env->getMem(), *_interp};
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
     ASSERT_TRUE(change1Res);
 
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     fmt::print("ChangeID 1: {}\n", change1.get());
     tester.setChangeID(change1);
@@ -540,11 +538,11 @@ TEST_F(QueryTest, ChangeWithRebaseQueries) {
         .execute();
 
     auto change2Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
-    const ChangeID change2 = change2Res.value()->back()->id();
+    const ChangeID change2 = change2Res.value()->back();
 
     fmt::print("ChangeID 2: {}\n", change2.get());
     tester.setChangeID(change2);
@@ -587,20 +585,20 @@ TEST_F(QueryTest, ChangeWithRebaseFromEmpty) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
     ASSERT_TRUE(change1Res);
 
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     auto change2Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
-    const ChangeID change2 = change2Res.value()->back()->id();
+    const ChangeID change2 = change2Res.value()->back();
 
     // First change
     tester.setChangeID(change1);
@@ -631,10 +629,10 @@ TEST_F(QueryTest, threeCreateTargets) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -667,10 +665,10 @@ TEST_F(QueryTest, manyCreateTargets) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -702,11 +700,11 @@ TEST_F(QueryTest, edgeSpanningCommits) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
     ASSERT_TRUE(change1Res);
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     tester.setChangeID(change1);
 
@@ -751,11 +749,11 @@ TEST_F(QueryTest, edgeSpanningCommits) {
     tester.setChangeID(ChangeID::head());
 
     auto change2Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
     ASSERT_TRUE(change2Res);
-    const ChangeID change2 = change2Res.value()->back()->id();
+    const ChangeID change2 = change2Res.value()->back();
 
     tester.setChangeID(change2);
 
@@ -841,10 +839,10 @@ TEST_F(QueryTest, threeChangeRebase) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -930,20 +928,20 @@ TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
     constexpr size_t CHANGE3_SIZE = 5;
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
     ASSERT_TRUE(change1Res);
 
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     auto change2Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
-    const ChangeID change2 = change2Res.value()->back()->id();
+    const ChangeID change2 = change2Res.value()->back();
 
     tester.setChangeID(change1);
     for (size_t i = 0; i < CHANGE1_SIZE; i++) {
@@ -974,10 +972,10 @@ TEST_F(QueryTest, threeChangeRebaseLabelsProps) {
         .execute();
 
     auto change3Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
-    const ChangeID change3 = change3Res.value()->back()->id();
+                          .outputColumnVector<ChangeID>(0);
+    const ChangeID change3 = change3Res.value()->back();
 
     tester.setChangeID(change3);
     for (size_t i = 0; i < CHANGE3_SIZE; i++) {
@@ -1033,10 +1031,10 @@ TEST_F(QueryTest, threeChangeRebaseDifferingProps) {
 
     const auto newChange = [&](){
         auto res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                          .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -1189,11 +1187,11 @@ TEST_F(QueryTest, changeCommitsThenRebase) {
     QueryTester tester {_env->getMem(), *_interp, "default"};
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
     ASSERT_TRUE(change1Res);
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     tester.setChangeID(change1);
 
@@ -1239,11 +1237,11 @@ TEST_F(QueryTest, changeCommitsThenRebase) {
         .execute();
 
     auto change2Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
     ASSERT_TRUE(change2Res);
-    const ChangeID change2 = change2Res.value()->back()->id();
+    const ChangeID change2 = change2Res.value()->back();
 
     tester.setChangeID(change2);
 
@@ -1291,17 +1289,17 @@ TEST_F(QueryTest, ChangeQueryErrors) {
     QueryTester tester {_env->getMem(), *_interp};
 
     tester.query("CHANGE NEW")
-        .expectVector<const Change*>({}, false)
+        .expectVector<ChangeID>({}, false)
         .execute();
 
     const auto changes = tester.query("CHANGE LIST")
-                             .expectVector<const Change*>({}, false)
+                             .expectVector<ChangeID>({}, false)
                              .execute()
-                             .outputColumnVector<const Change*>(0);
+                             .outputColumnVector<ChangeID>(0);
 
     ASSERT_TRUE(changes);
 
-    tester.setChangeID(changes.value()->back()->id());
+    tester.setChangeID(changes.value()->back());
 
     tester.query("CREATE (n)")
         .expectError() // Requires label
@@ -1411,10 +1409,10 @@ TEST_F(QueryTest, injectNodesCreate) {
     QueryTester tester {_env->getMem(), *_interp};
 
     const auto change0res = tester.query("CHANGE NEW")
-                                .expectVector<const Change*>({}, false)
+                                .expectVector<ChangeID>({}, false)
                                 .execute()
-                                .outputColumnVector<const Change*>(0);
-    const ChangeID change0 = change0res.value()->back()->id();
+                                .outputColumnVector<ChangeID>(0);
+    const ChangeID change0 = change0res.value()->back();
     tester.setChangeID(change0);
 
     // Ensure nodes cannot be create with a specifc ID
@@ -1434,10 +1432,10 @@ TEST_F(QueryTest, injectNodesCreate) {
     tester.setChangeID(ChangeID::head());
 
     const auto change1res = tester.query("CHANGE NEW")
-                                .expectVector<const Change*>({}, false)
+                                .expectVector<ChangeID>({}, false)
                                 .execute()
-                                .outputColumnVector<const Change*>(0);
-    const ChangeID change1 = change1res.value()->back()->id();
+                                .outputColumnVector<ChangeID>(0);
+    const ChangeID change1 = change1res.value()->back();
     tester.setChangeID(change1);
 
     tester.query("create (a @ 0, 1)-[:BADEDGE]-(b @ 2)")
@@ -1521,11 +1519,11 @@ TEST_F(QueryTest, stringApproxTest) {
     QueryTester tester {_env->getMem(), *_interp};
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
 
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     tester.setChangeID(change1);
 
@@ -1616,11 +1614,11 @@ TEST_F(QueryTest, StringAproxMultiExpr) {
 
     const std::string createQuery = "create (n:NewNode{poem=\"the cat jumped\", rating=5u})";
     const auto change1Res = tester.query("change new")
-                                .expectVector<const Change*>({}, false)
+                                .expectVector<ChangeID>({}, false)
                                 .execute()
-                                .outputColumnVector<const Change*>(0);
+                                .outputColumnVector<ChangeID>(0);
 
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     tester.setChangeID(change1);
 
@@ -1641,11 +1639,11 @@ TEST_F(QueryTest, personGraphApproxMatching) {
     using StrOpt = std::optional<types::String::Primitive>;
 
     const auto changeRes = tester.query("change new")
-                               .expectVector<const Change*>({}, false)
+                               .expectVector<ChangeID>({}, false)
                                .execute()
-                               .outputColumnVector<const Change*>(0);
+                               .outputColumnVector<ChangeID>(0);
 
-    const ChangeID change = changeRes.value()->back()->id();
+    const ChangeID change = changeRes.value()->back();
     tester.setChangeID(change);
 
     tester.query(
@@ -1690,12 +1688,12 @@ TEST_F(QueryTest, createChunkingTest) {
     QueryTester tester {_env->getMem(), *_interp};
 
     auto change1Res = tester.query("CHANGE NEW")
-                          .expectVector<const Change*>({}, false)
+                          .expectVector<ChangeID>({}, false)
                           .execute()
-                          .outputColumnVector<const Change*>(0);
+                          .outputColumnVector<ChangeID>(0);
     ASSERT_TRUE(change1Res);
 
-    const ChangeID change1 = change1Res.value()->back()->id();
+    const ChangeID change1 = change1Res.value()->back();
 
     tester.setChangeID(change1);
 
@@ -1756,10 +1754,10 @@ TEST_F(QueryTest, historyCorrectParts) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -1836,10 +1834,10 @@ TEST_F(QueryTest, commitWriteBufferBadPendingNode) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -1870,10 +1868,10 @@ TEST_F(QueryTest, commitWriteBufferBadPendingEdge) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };
@@ -1904,10 +1902,10 @@ TEST_F(QueryTest, analyzerTypeConstraintCheck) {
 
     const auto newChange = [&]() {
         auto res = tester.query("CHANGE NEW")
-                       .expectVector<const Change*>({}, false)
+                       .expectVector<ChangeID>({}, false)
                        .execute()
-                       .outputColumnVector<const Change*>(0);
-        const ChangeID id = res.value()->back()->id();
+                       .outputColumnVector<ChangeID>(0);
+        const ChangeID id = res.value()->back();
         tester.setChangeID(id);
         return id;
     };

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "versioning/CommitResult.h"
+#include "versioning/ChangeAccessor.h"
+#include "versioning/ChangeResult.h"
 #include "writers/DataPartBuilder.h"
 
 namespace db {
@@ -46,11 +47,11 @@ public:
 
     DataPartBuilder& getCurrentDataBuffer();
     DataPartBuilder& newDataBuffer();
-    CommitResult<void> commit(Graph& graph, JobSystem& jobSystem);
+    ChangeResult<void> commit(Graph& graph, JobSystem& jobSystem);
 
 private:
     Graph* _graph {nullptr};
-    std::unique_ptr<Change> _change;
+    ChangeAccessor _change;
     CommitBuilder* _commitBuilder {nullptr};
     std::unique_ptr<IDMapper> _nodeIDMapper;
 };

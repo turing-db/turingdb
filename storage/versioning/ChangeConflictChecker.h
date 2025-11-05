@@ -13,14 +13,14 @@ class ChangeConflictChecker {
 public:
     ChangeConflictChecker(const Change& change,
                           const EntityIDRebaser& entityRebaser,
-                          const Commit::CommitSpan commits);
+                          std::span<const CommitView> commits);
 
     void checkConflicts();
 
 private:
     const Change& _change;
     const EntityIDRebaser& _entityIDRebaser;
-    const Commit::CommitSpan _commitsSinceBranch;
+    std::span<const CommitView> _commitsSinceBranch;
 
     ColumnVector<NodeID> _deletedExistingNodes; // Filled to pass to GetOut/InEdges
 

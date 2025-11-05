@@ -7,6 +7,8 @@
 #include <optional>
 
 #include "ID.h"
+#include "versioning/ChangeID.h"
+#include "versioning/CommitHash.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -19,8 +21,6 @@ class ColumnConst;
 
 class ColumnMask;
 class NodeView;
-class CommitBuilder;
-class Change;
 
 template <std::integral TType, size_t TCount>
 class TemplateLabelSet;
@@ -40,12 +40,12 @@ public:
 
     using LabelSet = TemplateLabelSet<uint64_t, 4>;
 
-    inline static consteval ColumnKindCode getBaseColumnKindCount() {
+    static consteval ColumnKindCode getBaseColumnKindCount() {
         return (ColumnKindCode)BaseColumnKind::_SIZE;
     }
 
     template <typename T>
-    inline static consteval ColumnKindCode getInternalTypeKind() {
+    static consteval ColumnKindCode getInternalTypeKind() {
         const ColumnKindCode minKind = __COUNTER__ + 1;
         static_assert(minKind == 1);
 
@@ -91,32 +91,32 @@ public:
             return  __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, NodeView>) {
             return __COUNTER__ - minKind;
-        } else if constexpr (std::is_same_v<T, const CommitBuilder*>) {
+        } else if constexpr (std::is_same_v<T, CommitHash>) {
             return __COUNTER__ - minKind;
-        } else if constexpr (std::is_same_v<T, const Change*>) {
+        } else if constexpr (std::is_same_v<T, ChangeID>) {
             return __COUNTER__ - minKind;
         }
 
         return -1;
     }
 
-    inline static consteval ColumnKindCode getInternalTypeKindCount() {
+    static consteval ColumnKindCode getInternalTypeKindCount() {
         return __COUNTER__ - 1;
     }
 
     template <typename T>
-    inline static consteval ColumnKindCode getColumnKind() {
+    static consteval ColumnKindCode getColumnKind() {
         const ColumnKindCode baseColumnKind = T::BaseKind;
         const ColumnKindCode internalTypeColumnKind = getInternalTypeKind<typename T::ValueType>();
         const ColumnKindCode internalTypeKindCount = getInternalTypeKindCount();
         return baseColumnKind * internalTypeKindCount + internalTypeColumnKind;
     }
 
-    inline static consteval ColumnKindCode getColumnKindCount() {
+    static consteval ColumnKindCode getColumnKindCount() {
         return getBaseColumnKindCount() * getInternalTypeKindCount();
     }
 
-    inline static consteval ColumnKindCode getBasePairColumnCount() {
+    static consteval ColumnKindCode getBasePairColumnCount() {
         ColumnKindCode count = 2;
         for (size_t i = 1; i < getBaseColumnKindCount(); i++) {
             count *= 2;

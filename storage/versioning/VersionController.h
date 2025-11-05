@@ -13,15 +13,14 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
-#include "versioning/WriteSet.h"
 
 namespace db {
 
-class Graph;
 class GraphLoader;
 class GraphDumper;
 class JobSystem;
 class FrozenCommitTx;
+class CommitLoader;
 
 struct EntityIDPair {
     NodeID _nodeID;
@@ -32,7 +31,7 @@ class VersionController {
 public:
     using CommitMap = std::unordered_map<CommitHash, size_t>;
 
-    explicit VersionController(Graph* graph);
+    VersionController();
     ~VersionController();
 
     VersionController(const VersionController&) = delete;
@@ -41,11 +40,9 @@ public:
     VersionController& operator=(VersionController&&) = delete;
 
     void createFirstCommit();
-    [[nodiscard]] std::unique_ptr<Change> newChange(CommitHash base = CommitHash::head());
 
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] CommitHash getHeadHash() const;
-    [[nodiscard]] const Graph* getGraph() const { return _graph; }
 
     ssize_t getCommitIndex(CommitHash hash) const;
 
@@ -54,17 +51,14 @@ public:
         return _dataManager->create(hash);
     }
 
-    WeakArc<DataPart> createDataPart(NodeID firstNodeID, EdgeID firstEdgeID) {
-        Profile profile("VersionController::createDataPart");
-        return _partManager->create(firstNodeID, firstEdgeID);
-    }
+    [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
 
 private:
+    friend class ChangeManager;
     friend GraphLoader;
     friend GraphDumper;
     friend Change;
-
-    Graph* _graph {nullptr};
+    friend CommitLoader;
 
     std::atomic<Commit*> _head {nullptr};
     std::atomic<uint64_t> _nextChangeID {0};
@@ -79,9 +73,7 @@ private:
 
     void addCommit(std::unique_ptr<Commit> commit);
 
-    [[nodiscard]] CommitResult<void> submitChange(Change* change, JobSystem&);
-
-    [[nodiscard]] Commit::CommitSpan getCommitsSinceCommitHash(CommitHash from) const;
+    void clear();
 };
 
 }

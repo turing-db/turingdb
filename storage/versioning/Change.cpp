@@ -2,10 +2,10 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "VersionController.h"
 #include "ChangeRebaser.h"
 #include "Commit.h"
 #include "CommitBuilder.h"
+#include "Profiler.h"
 #include "writers/DataPartBuilder.h"
 #include "reader/GraphReader.h"
 #include "Transaction.h"
@@ -14,42 +14,21 @@ using namespace db;
 
 Change::~Change() = default;
 
-Change::Change(VersionController* versionController, ChangeID id, CommitHash base)
+Change::Change(ArcManager<DataPart>& dataPartManager,
+               ArcManager<CommitData>& commitDataManager,
+               ChangeID id,
+               const WeakArc<const CommitData>& base)
     : _id(id),
-    _versionController(versionController),
-    _base(versionController->openTransaction(base).commitData())
+    _dataPartManager(&dataPartManager),
+    _commitDataManager(&commitDataManager),
+    _base(base)
 {
-    auto tip = CommitBuilder::prepare(*_versionController,
-                                      this,
+    auto tip = CommitBuilder::prepare(*_dataPartManager,
+                                      _commitDataManager->create(CommitHash::create()),
                                       GraphView {*_base});
     _tip = tip.get();
     _commitOffsets.emplace(_tip->hash(), _commits.size());
     _commits.emplace_back(std::move(tip));
-}
-
-std::unique_ptr<Change> Change::create(VersionController* versionController,
-                                       ChangeID id,
-                                       CommitHash base) {
-    auto* ptr = new Change(versionController, id, base);
-
-    return std::unique_ptr<Change> {ptr};
-}
-
-PendingCommitWriteTx Change::openWriteTransaction() {
-    return PendingCommitWriteTx {this->access(), this->_tip};
-}
-
-PendingCommitReadTx Change::openReadTransaction(CommitHash commitHash) {
-    if (commitHash == CommitHash::head()) {
-        return PendingCommitReadTx {this->access(), this->_tip};
-    }
-
-    auto it = _commitOffsets.find(commitHash);
-    if (it != _commitOffsets.end()) {
-        return PendingCommitReadTx {this->access(), _commits[it->second].get()};
-    }
-
-    return {};
 }
 
 CommitResult<void> Change::commit(JobSystem& jobsystem) {
@@ -61,8 +40,8 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
         return res;
     }
 
-    auto newTip = CommitBuilder::prepare(*_versionController,
-                                         this,
+    auto newTip = CommitBuilder::prepare(*_dataPartManager,
+                                         _commitDataManager->create(CommitHash::create()),
                                          _commits.back()->viewGraph());
     _tip = newTip.get();
     _commitOffsets.emplace(_tip->hash(), _commits.size());
@@ -83,30 +62,20 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
  * each pending @ref CommitBuilder in @ref _commits. This modifies the builders in-place
  * in order to be in sync with main.
  */
-CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
+CommitResult<void> Change::rebase(const WeakArc<const CommitData>& head) {
     Profile profile {"Change::rebase"};
 
-    // Get the state of main at time of rebase
-    const WeakArc<const CommitData> currentMainHead =
-        _versionController->openTransaction().commitData();
-    // CommitData of current head of main
-    const CommitData* currentHeadCommitData = currentMainHead.get();
     // CommitHistory of current head of main
-    const CommitHistory* currentHeadHistory = &currentMainHead->history();
+    const CommitHistory* headHistory = &head->history();
 
-    // Read the graph as it was when this change was created
-    const GraphReader branchTimeReader =
-        _base->commits().back().openTransaction().readGraph();
-    // Read the graph as it is now on main
-    const GraphReader mainReader =
-        currentMainHead->commits().back().openTransaction().readGraph();
+    const GraphReader baseReader = GraphView {*_base}.read();
+    const GraphReader headReader = GraphView {*head}.read();
 
-    ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
-    rebaser.init(mainReader, branchTimeReader);
+    ChangeRebaser rebaser(*this, head.get(), headHistory);
+    rebaser.init(headReader, baseReader);
 
     // Get the commits that occured on main since branch time
-    const Commit::CommitSpan commitsSinceBranch =
-        _versionController->getCommitsSinceCommitHash(baseHash());
+    const std::span<const CommitView> commitsSinceBranch = headHistory->getAllSince(_base->hash());
 
     // Check the write buffer for each commit to be made for write conflicts
     rebaser.checkConflicts(commitsSinceBranch);
@@ -120,17 +89,13 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     }
 
     // Update the base commit to be main
-    _base = currentMainHead;
+    _base = head;
 
     return {};
 }
 
 CommitHash Change::baseHash() const {
     return _base->hash();
-}
-
-CommitResult<void> Change::submit(JobSystem& jobsystem) {
-    return _versionController->submitChange(this, jobsystem);
 }
 
 GraphView Change::viewGraph(CommitHash commitHash) const {

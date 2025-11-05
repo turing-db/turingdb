@@ -8,7 +8,6 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitHistoryBuilder.h"
 #include "versioning/Tombstones.h"
-#include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
 #include "writers/DataPartBuilder.h"
@@ -17,14 +16,12 @@
 
 using namespace db;
 
-CommitBuilder::CommitBuilder() = default;
-
 CommitBuilder::~CommitBuilder() = default;
 
-std::unique_ptr<CommitBuilder> CommitBuilder::prepare(VersionController& controller,
-                                                      Change* change,
+std::unique_ptr<CommitBuilder> CommitBuilder::prepare(ArcManager<DataPart>& dataPartManager,
+                                                      const WeakArc<CommitData>& commitData,
                                                       const GraphView& view) {
-    auto* ptr = new CommitBuilder {controller, change, view};
+    auto* ptr = new CommitBuilder {dataPartManager, commitData, view};
     ptr->initialize();
     return std::unique_ptr<CommitBuilder> {ptr};
 }
@@ -66,7 +63,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
         // the current next ID for the latest commit on main. If the caller is @ref
         // Change::commit we do not want to perform this sync, and can continue with our
         // local next ID.
-        auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
+        auto part = _dataPartManager->create(_nextNodeID, _nextEdgeID);
 
         // Update these values so the next builder which is created starts where the last
         // left off
@@ -120,10 +117,12 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     wb.setFlushed();
 }
 
-CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
-    : _controller(&controller),
-    _change(change),
-    _view(view)
+CommitBuilder::CommitBuilder(ArcManager<DataPart>& dataPartManager,
+                             const WeakArc<CommitData>& commitData,
+                             const GraphView& view)
+    : _dataPartManager(&dataPartManager),
+    _view(view),
+    _commitData(commitData)
 {
 }
 
@@ -145,8 +144,7 @@ void CommitBuilder::initialize() {
     const CommitView prevCommit = reader.commits().back();
 
     // Create new commit data
-    _commitData = _controller->createCommitData(CommitHash::create());
-    _commit = Commit::createNextCommit(_controller, _commitData, prevCommit);
+    _commit = Commit::createNextCommit(_commitData, prevCommit);
 
     // Create metadata builder
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);

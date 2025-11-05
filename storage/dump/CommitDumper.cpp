@@ -33,7 +33,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
         return DumpError::result(DumpErrorType::CANNOT_MKDIR_COMMIT, res.get_unexpected().error());
     }
 
-    const auto& metadata = commit.data().metadata();
+    const auto& metadata = commit.data()->metadata();
 
     // Dumping labels
     {
@@ -131,7 +131,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
             return DumpError::result(DumpErrorType::CANNOT_OPEN_TOMBSTONES, writerRes.error());
         }
 
-        const Tombstones& tombstones = commit.data().tombstones();
+        const Tombstones& tombstones = commit.data()->tombstones();
 
         TombstonesDumper dumper(writerRes.value());
         if (auto res = dumper.dump(tombstones); !res) {
@@ -140,7 +140,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
         
     }
 
-    for (const auto& [i, part] : commit.data().commitDataparts() | rv::enumerate) {
+    for (const auto& [i, part] : commit.data()->commitDataparts() | rv::enumerate) {
         const fs::Path partPath = path / "datapart-" + std::to_string(i);
 
         if (auto res = DataPartDumper::dump(*part, partPath); !res) {

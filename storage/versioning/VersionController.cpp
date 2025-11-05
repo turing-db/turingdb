@@ -2,11 +2,8 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "BioAssert.h"
 #include "JobSystem.h"
-#include "Panic.h"
 #include "Profiler.h"
-#include "Graph.h"
 #include "CommitView.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
@@ -17,9 +14,8 @@
 
 using namespace db;
 
-VersionController::VersionController(Graph* graph)
-    : _graph(graph),
-    _dataManager(std::make_unique<ArcManager<CommitData>>()),
+VersionController::VersionController()
+    : _dataManager(std::make_unique<ArcManager<CommitData>>()),
     _partManager(std::make_unique<ArcManager<DataPart>>())
 {
 }
@@ -32,7 +28,7 @@ VersionController::~VersionController() {
 
 void VersionController::createFirstCommit() {
     auto commitData = _dataManager->create(CommitHash::create());
-    auto commit = std::make_unique<Commit>(this, commitData);
+    auto commit = std::make_unique<Commit>(commitData);
 
     // Register itself in the history
     commit->history().pushCommit(CommitView {commit.get()});
@@ -45,7 +41,7 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
         return _head.load()->openTransaction();
     }
 
-    std::scoped_lock lock {_mutex};
+    std::unique_lock lock {_mutex};
 
     auto it = _offsets.find(hash);
     if (it == _offsets.end()) {
@@ -67,15 +63,14 @@ CommitHash VersionController::getHeadHash() const {
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile {"VersionController::submitChange"};
 
-    std::scoped_lock lock(_mutex);
+    std::unique_lock lock(_mutex);
 
-    // atomic load main
-    Commit* mainState = _head.load();
+    Commit* head = _head.load();
 
-    // rebase if main has changed under us
-    if (mainState->hash() != change->baseHash()) {
-        if (auto res = change->rebase(jobSystem); !res) {
-            return res;
+    // Rebase if main has changed
+    if (head->hash() != change->baseHash()) {
+        if (auto res = change->rebase(head->data()); !res) {
+            return res; // TODO Check, why do we return??
         }
     }
 
@@ -100,10 +95,6 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     return {};
 }
 
-std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
-    return Change::create(this, ChangeID {_nextChangeID.fetch_add(1)}, base);
-}
-
 std::unique_lock<std::mutex> VersionController::lock() {
     return std::unique_lock<std::mutex> {_mutex};
 }
@@ -126,19 +117,11 @@ ssize_t VersionController::getCommitIndex(CommitHash hash) const {
     return it->second;
 }
 
-// NOTE: Called within locked-context
-Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from) const {
-    // Should not be trying to check conflicts if we are not rebasing
-    bioassert(from != CommitHash::head());
-    ssize_t startIndex = getCommitIndex(from);
-    if (startIndex == -1) {
-        panic("Could not find Commit with hash {:x}", from.get());
-    }
-    bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size());
+void VersionController::clear() {
+    std::unique_lock lock(_mutex);
 
-    // +1 to skip the commit we branched from
-    const auto* spanStart = _commits.data() + startIndex + 1;
-    const size_t numCommitsSinceFrom = _commits.size() - (startIndex + 1);
-
-    return {spanStart, numCommitsSinceFrom};
+    _commits.clear();
+    _offsets.clear();
+    _head.store(nullptr);
+    _nextChangeID.store(0);
 }

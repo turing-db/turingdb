@@ -6,6 +6,7 @@
 #include "Profiler.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/Change.h"
+#include "versioning/ChangeManager.h"
 #include "versioning/CommitBuilder.h"
 #include "IDMapper.h"
 #include "Neo4j/EdgeParser.h"
@@ -22,8 +23,8 @@ namespace db {
 
 JsonParser::JsonParser(Graph* graph)
     : _graph(graph),
-    _change(graph->newChange()),
-    _commitBuilder(_change->access().getTip()),
+    _change(graph->getChangeManager().createChange()),
+    _commitBuilder(_change.getTip()),
     _nodeIDMapper(new IDMapper)
 {
 }
@@ -123,8 +124,9 @@ DataPartBuilder& JsonParser::newDataBuffer() {
     return _commitBuilder->newBuilder();
 }
 
-CommitResult<void> JsonParser::commit(Graph& graph, JobSystem& jobSystem) {
-    return _change->access().submit(jobSystem);
+ChangeResult<void> JsonParser::commit(Graph& graph, JobSystem& jobSystem) {
+    auto& changes = graph.getChangeManager();
+    return changes.submit(std::move(_change), jobSystem);
 }
 
 }

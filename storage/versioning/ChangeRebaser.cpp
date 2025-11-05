@@ -1,11 +1,11 @@
 #include "ChangeRebaser.h"
 
 #include "Change.h"
-#include "Commit.h"
 #include "CommitBuilder.h"
 #include "CommitHistory.h"
 #include "CommitHistoryRebaser.h"
 #include "EntityIDRebaser.h"
+#include "CommitView.h"
 #include "CommitWriteBuffer.h"
 #include "DataPartRebaser.h"
 #include "reader/GraphReader.h"
@@ -46,7 +46,7 @@ void ChangeRebaser::init(const GraphReader& mainReader,
     _dataPartRebaser = DataPartRebaser(&_entityIDRebaser);
 }
 
-void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
+void ChangeRebaser::checkConflicts(std::span<const CommitView> commits) {
     ChangeConflictChecker conflictChecker(*_change, _entityIDRebaser, commits);
     conflictChecker.checkConflicts();
 }

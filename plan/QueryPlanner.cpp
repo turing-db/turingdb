@@ -1739,7 +1739,7 @@ bool QueryPlanner::planChange(const ChangeCommand* cmd) {
     switch (cmd->getChangeOpType()) {
         case ChangeOpType::LIST:
         case ChangeOpType::NEW: {
-            auto* output = _mem->alloc<ColumnVector<const Change*>>();
+            auto* output = _mem->alloc<ColumnVector<ChangeID>>();
             _pipeline->add<ChangeStep>(cmd->getChangeOpType(), output);
             _output->addColumn(output);
             planOutputLambda();

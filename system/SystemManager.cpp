@@ -4,7 +4,7 @@
 #include <mutex>
 #include <spdlog/spdlog.h>
 
-#include "ChangeManager.h"
+#include "versioning/ChangeManager.h"
 #include "Graph.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
@@ -22,7 +22,6 @@ using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
     : _config(config),
-    _changes(std::make_unique<ChangeManager>()),
     _neo4JImporter(std::make_unique<Neo4jImporter>())
 {
 }
@@ -38,7 +37,8 @@ void SystemManager::init() {
                                           _config->getGraphsDir().get()));
     }
 
-    const fs::Path defaultPath = _config->getGraphsDir() / "default"; auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
+    const fs::Path defaultPath = _config->getGraphsDir() / "default";
+    auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
 
     if (found != list->end()) {
         _defaultGraph = loadGraph("default");
@@ -403,18 +403,27 @@ void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
     }
 }
 
-ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
+ChangeResult<ChangeAccessor> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
     std::shared_lock graphGuard(_graphsLock);
 
+    // Step 1. Retrieve the graph
     const auto it = _graphs.find(graphName);
     if (it == _graphs.end()) {
         return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
     }
 
     Graph* graph = it->second.get();
-    auto change = graph->newChange(baseHash);
+    auto& changeManager = graph->getChangeManager();
 
-    return _changes->storeChange(graph, std::move(change));
+    // Step 2. Open  a transaction on the base commit
+    const auto baseTx = graph->openTransaction(baseHash);
+
+    if (!baseTx.isValid()) {
+        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+    }
+
+    // Step 3. Create the new change
+    return changeManager.createChange(baseTx);
 }
 
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,
@@ -422,12 +431,14 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
                                                          ChangeID changeID) {
     std::shared_lock guard(_graphsLock);
 
+    // Step 1. Retrieve the graph
     Graph* graph = graphName.empty() ? this->getDefaultGraph()
                                      : this->getGraph(std::string(graphName));
     if (!graph) {
         return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
     }
 
+    // Step 2. Checking if we are reading the main branch
     if (changeID == ChangeID::head()) {
         // Not in a change, reading frozen commit
         if (auto tx = graph->openTransaction(commitHash); tx.isValid()) {
@@ -437,31 +448,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
         return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
     }
 
-    auto changeRes = this->getChangeManager().getChange(graph, changeID);
-    if (!changeRes) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
-    }
-
-    // In a valid change
-    auto* change = changeRes.value();
-
-    // If hash == head: Requesting a write on the tip of the change
-    if (commitHash == CommitHash::head()) {
-        if (auto tx = change->openWriteTransaction(); tx.isValid()) {
-            return tx;
-        }
-
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
-    }
-
-    // if hash != head: Requesting a read on a specific commit (either pending or frozen)
-    if (auto tx = change->openReadTransaction(commitHash); tx.isValid()) {
-        // Reading pending commit
-        return tx;
-    } else if (auto tx = graph->openTransaction(commitHash); tx.isValid()) {
-        // Reading frozen commit
-        return tx;
-    }
-
-    return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+    // Step 3. Open the transaction
+    auto& changeManager = graph->getChangeManager();
+    return changeManager.openTransaction(changeID);
 }
