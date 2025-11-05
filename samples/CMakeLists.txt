@@ -43,6 +43,7 @@ add_subdirectory(plan2-test-generator)
 add_subdirectory(parser2)
 add_subdirectory(analyzer2)
 add_subdirectory(v2)
+add_subdirectory(deletions)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
