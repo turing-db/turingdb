@@ -34,8 +34,8 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
   echo "SUCCESS: turingdb started whilst resetting invalid 'default' graph"
+  pkill turingdb
 fi
-pkill turingdb
 
 # Have no default graph, without trying to reset it
 rm -rf ~/.turing/graphs/default/
@@ -47,8 +47,8 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
     echo "SUCCESS: turingdb started with no 'default' graph dumped"
+    pkill turingdb
 fi
-pkill turingdb
 
 # Have no default graph, and try to reset it
 rm -rf ~/.turing/graphs/default/
@@ -60,9 +60,8 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
   echo "SUCCESS: turingdb started with no 'default' graph dumped and attempting to reset it"
+  pkill turingdb
 fi
-
-pkill turingdb
 
 echo "ALL TESTS PASSED"
 exit 0
