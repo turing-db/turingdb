@@ -34,6 +34,7 @@ TEST_F(DataframeTest, testOneCol) {
 
     const ColumnHeader aHeader(tagManager.allocTag());
     NamedColumn* col1 = mem.alloc<NamedColumn>(&df, aHeader, &colNodes1);
+    df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
 
     ASSERT_EQ(df.cols().size(), 1);
@@ -54,13 +55,18 @@ TEST_F(DataframeTest, testSameTag) {
 
     const ColumnHeader aHeader(tagManager.allocTag());
     NamedColumn* col1 = mem.alloc<NamedColumn>(&df, aHeader, &colNodes1);
+    df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
 
     const ColumnHeader bHeader(tagManager.allocTag());
     NamedColumn* col2 = mem.alloc<NamedColumn>(&df, bHeader, &colNodes2);
+    df.addColumn(col2);
     ASSERT_TRUE(col2 != nullptr);
 
-    EXPECT_THROW(mem.alloc<NamedColumn>(&df, aHeader, &colEdges1), TuringException);
+    EXPECT_THROW({
+        NamedColumn* col3 = mem.alloc<NamedColumn>(&df, aHeader, &colEdges1);
+        df.addColumn(col3);
+    }, TuringException);
 
     ASSERT_EQ(df.cols().size(), 2);
 }
@@ -86,17 +92,22 @@ TEST_F(DataframeTest, anonymous) {
     ColumnNodeIDs nodes2;
 
     NamedColumn* col0 = mem.alloc<NamedColumn>(&df, v0Header, &nodes0);
+    df.addColumn(col0);
     ASSERT_TRUE(col0 != nullptr);
     ASSERT_EQ(col0->getColumn(), &nodes0);
 
     NamedColumn* col1 = mem.alloc<NamedColumn>(&df, v1Header, &nodes1);
+    df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
     ASSERT_EQ(col1->getColumn(), &nodes1);
 
     ASSERT_EQ(df.getColumn(v0Header.getTag()), col0);
 
     // Try to add a column with same anonymous tag
-    EXPECT_THROW(mem.alloc<NamedColumn>(&df, v0Header, &nodes2), TuringException);
+    EXPECT_THROW({
+        NamedColumn* col2 = mem.alloc<NamedColumn>(&df, v0Header, &nodes2);
+        df.addColumn(col2);
+    }, TuringException);
 
     // Compare columns of dataframe
     ASSERT_EQ(df.cols().size(), 2);
@@ -116,6 +127,9 @@ TEST_F(DataframeTest, testColNames) {
     auto colA = mem.alloc<NamedColumn>(&df, ColumnHeader(tagManager.allocTag()), &col0);
     auto colB = mem.alloc<NamedColumn>(&df, ColumnHeader(tagManager.allocTag()), &col1);
     auto colC = mem.alloc<NamedColumn>(&df, ColumnHeader(tagManager.allocTag()), &col2);
+    df.addColumn(colA);
+    df.addColumn(colB);
+    df.addColumn(colC);
     ASSERT_TRUE(colA != nullptr);
     ASSERT_TRUE(colB != nullptr);
     ASSERT_TRUE(colC != nullptr);

@@ -85,12 +85,6 @@ protected:
     Graph* _graph {nullptr};
 };
 
-template <typename ColumnType>
-NamedColumn* addColumnInDataframe(LocalMemory* mem, Dataframe* df, ColumnTag tag) {
-    ColumnType* col = mem->alloc<ColumnType>();
-    return mem->alloc<NamedColumn>(df, ColumnHeader(tag), col);
-}
-
 TEST_F(PipelineTest, emptyPipeline) {
     LocalMemory mem;
     PipelineV2 pipeline;

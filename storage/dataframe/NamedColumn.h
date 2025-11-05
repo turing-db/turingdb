@@ -20,6 +20,8 @@ public:
     {
     }
 
+    NamedColumn() = delete;
+
     ~NamedColumn() = default;
 
     Dataframe* getParent() const { return _parent; }

@@ -21,7 +21,8 @@ namespace {
 void duplicateDataframeShape(LocalMemory* mem, Dataframe* src, Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
-        mem->alloc<NamedColumn>(dest, col->getHeader(), newCol);
+        NamedColumn* namedCol = mem->alloc<NamedColumn>(dest, col->getHeader(), newCol);
+        dest->addColumn(namedCol);
     }
 }
 

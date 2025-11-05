@@ -58,19 +58,21 @@ private:
     PipelineOutputInterface* _pendingOutput {nullptr};
     MaterializeProcessor* _matProc {nullptr};
 
+    void openMaterialize();
+    void closeMaterialize();
+
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {
         ColumnType* col = _mem->alloc<ColumnType>();
-        return _mem->alloc<NamedColumn>(df, ColumnHeader(tag), col);
+        NamedColumn* namedCol = _mem->alloc<NamedColumn>(df, ColumnHeader(tag), col);
+        df->addColumn(namedCol);
+        return namedCol;
     }
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df) {
         return allocColumn<ColumnType>(df, _tagManager.allocTag());
     }
-
-    void openMaterialize();
-    void closeMaterialize();
 };
 
 }

@@ -3,6 +3,8 @@
 #include "NamedColumn.h"
 #include "columns/Column.h"
 
+#include "FatalException.h"
+
 using namespace db;
 
 Dataframe::Dataframe()
@@ -10,14 +12,16 @@ Dataframe::Dataframe()
 }
 
 Dataframe::~Dataframe() {
-    for (NamedColumn* col : _cols) {
-        delete col;
-    }
 }
 
 void Dataframe::addColumn(NamedColumn* column) {
+    const ColumnTag tag = column->getHeader().getTag();
+    if (_headerMap.find(tag) != _headerMap.end()) {
+        throw FatalException(fmt::format("Dataframe: column with tag {} already exists", tag.getValue()));
+    }
+
     _cols.push_back(column);
-    _headerMap[column->getHeader().getTag()] = column;
+    _headerMap[tag] = column;
 }
 
 size_t Dataframe::getRowCount() const {

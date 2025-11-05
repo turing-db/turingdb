@@ -54,6 +54,8 @@ public:
         return it->second;
     }
 
+    void addColumn(NamedColumn* column);
+
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
     void copyFrom(const Dataframe* other);
 
@@ -62,8 +64,6 @@ public:
 private:
     std::unordered_map<ColumnTag, NamedColumn*, ColumnTag::Hash> _headerMap;
     NamedColumns _cols;
-
-    void addColumn(NamedColumn* column);
 };
 
 }
