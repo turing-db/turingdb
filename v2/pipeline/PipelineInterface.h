@@ -26,7 +26,7 @@ enum class PipelineInterfaceKind {
 
 class PipelineInputInterface {
 public:
-    virtual PipelineInterfaceKind getKind() const = 0;
+    virtual consteval PipelineInterfaceKind getKind() const = 0;
 
     PipelineInputPort* getPort() const { return _port; }
     Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
@@ -42,12 +42,12 @@ protected:
 
 class PipelineBlockInputInterface : public PipelineInputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
 };
 
 class PipelineNodeInputInterface : public PipelineInputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
 
     NamedColumn* getNodeIDs() const { return _nodeIDs; }
 
@@ -59,7 +59,7 @@ private:
 
 class PipelineEdgeInputInterface : public PipelineInputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
 
     void setEdges(NamedColumn* edgeIDs,
                   NamedColumn* otherNodes,
@@ -81,7 +81,7 @@ private:
 
 class PipelineOutputInterface {
 public:
-    virtual PipelineInterfaceKind getKind() const = 0;
+    virtual consteval PipelineInterfaceKind getKind() const = 0;
 
     PipelineOutputPort* getPort() const { return _port; }
     Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
@@ -103,7 +103,7 @@ protected:
 
 class PipelineBlockOutputInterface : public PipelineOutputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
 
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
@@ -119,7 +119,7 @@ public:
 
 class PipelineNodeOutputInterface : public PipelineOutputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
 
     void setNodeIDs(NamedColumn* nodeIDs) { _nodeIDs = nodeIDs; }
     void setIndices(NamedColumn* indices) { _indices = indices; }
@@ -149,7 +149,7 @@ private:
 
 class PipelineEdgeOutputInterface : public PipelineOutputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
 
     void setEdges(NamedColumn* edgeIDs,
                   NamedColumn* edgeTypes,
@@ -193,7 +193,7 @@ private:
 
 class PipelineValuesOutputInterface : public PipelineOutputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUES; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUES; }
 
     void setIndices(NamedColumn* indices) { _indices = indices; }
     void setValues(NamedColumn* values) { _values = values; }
@@ -218,7 +218,7 @@ private:
 
 class PipelineValueOutputInterface : public PipelineOutputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUE; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUE; }
 
     void setIndices(NamedColumn* indices) { _indices = indices; }
     void setValue(NamedColumn* value) { _value = value; }

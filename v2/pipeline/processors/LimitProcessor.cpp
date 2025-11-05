@@ -11,7 +11,8 @@ LimitProcessor::LimitProcessor(size_t limit)
 {
 }
 
-LimitProcessor::~LimitProcessor() {
+LimitProcessor::~LimitProcessor()
+{
 }
 
 std::string LimitProcessor::describe() const {
