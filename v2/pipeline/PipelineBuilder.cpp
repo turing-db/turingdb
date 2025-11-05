@@ -45,25 +45,7 @@ PipelineBuilder& PipelineBuilder::addScanNodes() {
 
 PipelineBuilder& PipelineBuilder::addGetOutEdges() {
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
-
-    switch (_pendingOutput->getKind()) {
-        case PipelineInterfaceKind::NODE:
-        {
-            auto* nodeInput = static_cast<PipelineNodeOutputInterface*>(_pendingOutput);
-            nodeInput->connectTo(getOutEdges->inNodeIDs());
-        }
-        break;
-        case PipelineInterfaceKind::EDGE:
-        {
-            auto* edgeInput = static_cast<PipelineEdgeOutputInterface*>(_pendingOutput);
-            edgeInput->connectTo(getOutEdges->inNodeIDs());
-        }
-        break;
-
-        default:
-            throw PipelineException("PipelineBuilder: cannot add get out edges to non-node or edge output");
-        break;
-    }
+    _pendingOutput->connectTo(getOutEdges->inNodeIDs());
 
     PipelineEdgeOutputInterface& outEdges = getOutEdges->outEdges();
     Dataframe* outDf = outEdges.getDataframe();
@@ -97,30 +79,8 @@ PipelineBuilder& PipelineBuilder::closeMaterialize() {
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::connectToBlockInput(PipelineBlockInputInterface& input) {
-    switch (_pendingOutput->getKind()) {
-        case PipelineInterfaceKind::NODE:
-            static_cast<PipelineNodeOutputInterface*>(_pendingOutput)->connectTo(input);
-        break;
-        case PipelineInterfaceKind::EDGE:
-            static_cast<PipelineEdgeOutputInterface*>(_pendingOutput)->connectTo(input);
-        break;
-        case PipelineInterfaceKind::BLOCK:
-            static_cast<PipelineBlockOutputInterface*>(_pendingOutput)->connectTo(input);
-        break;
-        case PipelineInterfaceKind::VALUES:
-            static_cast<PipelineValuesOutputInterface*>(_pendingOutput)->connectTo(input);
-        break;
-        case PipelineInterfaceKind::VALUE:
-            static_cast<PipelineValueOutputInterface*>(_pendingOutput)->connectTo(input);
-        break;
-    }
-
-    return *this;
-}
-
 PipelineBuilder& PipelineBuilder::addMaterialize() {
-    connectToBlockInput(_matProc->input());
+    _pendingOutput->connectTo(_matProc->input());
     _pendingOutput = &_matProc->output();
     closeMaterialize();
 
@@ -133,7 +93,7 @@ PipelineBuilder& PipelineBuilder::addLambda(const LambdaProcessor::Callback& cal
     }
 
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
-    connectToBlockInput(lambda->input());
+    _pendingOutput->connectTo(lambda->input());
     _pendingOutput = nullptr;
 
     return *this;
@@ -141,7 +101,7 @@ PipelineBuilder& PipelineBuilder::addLambda(const LambdaProcessor::Callback& cal
 
 PipelineBuilder& PipelineBuilder::addSkip(size_t count) {
     SkipProcessor* skip = SkipProcessor::create(_pipeline, count);
-    connectToBlockInput(skip->input());
+    _pendingOutput->connectTo(skip->input());
 
     duplicateDataframeShape(_mem, skip->input().getDataframe(), skip->output().getDataframe());
     
@@ -152,7 +112,7 @@ PipelineBuilder& PipelineBuilder::addSkip(size_t count) {
 
 PipelineBuilder& PipelineBuilder::addLimit(size_t count) {
     LimitProcessor* limit = LimitProcessor::create(_pipeline, count);
-    connectToBlockInput(limit->input());
+    _pendingOutput->connectTo(limit->input());
 
     duplicateDataframeShape(_mem, limit->input().getDataframe(), limit->output().getDataframe());
 
@@ -163,7 +123,7 @@ PipelineBuilder& PipelineBuilder::addLimit(size_t count) {
 
 PipelineBuilder& PipelineBuilder::addCount() {
     CountProcessor* count = CountProcessor::create(_pipeline);
-    connectToBlockInput(count->input());
+    _pendingOutput->connectTo(count->input());
 
     NamedColumn* countColumn = allocColumn<ColumnConst<size_t>>(count->output().getDataframe());
     count->output().setValue(countColumn);
@@ -181,24 +141,7 @@ PipelineBuilder& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::C
 template <db::SupportedType T>
 PipelineBuilder& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
     auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
-
-    switch (_pendingOutput->getKind()) {
-        case PipelineInterfaceKind::NODE:
-        {
-            auto* nodeInput = static_cast<PipelineNodeOutputInterface*>(_pendingOutput);
-            nodeInput->connectTo(getProps->inIDs());
-        }
-        break;
-        case PipelineInterfaceKind::EDGE:
-        {
-            auto* edgeInput = static_cast<PipelineEdgeOutputInterface*>(_pendingOutput);
-            edgeInput->connectTo(getProps->inIDs());
-        }
-        break;
-        default:
-            throw PipelineException("PipelineBuilder: cannot add GetNodeProperties to non-node output");
-        break;
-    }
+    _pendingOutput->connectTo(getProps->inIDs());
 
     using ColumnValues = ColumnVector<typename T::Primitive>;
 
