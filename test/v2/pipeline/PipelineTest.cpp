@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "PipelineInterface.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "TuringDB.h"
@@ -107,9 +108,9 @@ TEST_F(PipelineTest, scanNodes) {
     ColumnTagManager tagMan;
 
     PipelineBuilder builder(&mem, &pipeline, tagMan);
-    builder.addScanNodes();
-    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
+    
+    PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
 
     builder.addMaterialize();
 
@@ -150,13 +151,12 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     ColumnTagManager tagMan;
 
     PipelineBuilder builder(&mem, &pipeline, tagMan);
-    builder.addScanNodes();
-    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
+    
+    PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
 
-    builder.addGetOutEdges();
-    PipelineEdgeOutputInterface* getOutEdgesOut = static_cast<PipelineEdgeOutputInterface*>(builder.getOutput());
-    const ColumnTag getOutEdgesOutTargetNodesTag = getOutEdgesOut->getTargetNodes()->getHeader().getTag();
+    PipelineEdgeOutputInterface& getOutEdgesOut = builder.addGetOutEdges();
+    const ColumnTag getOutEdgesOutTargetNodesTag = getOutEdgesOut.getTargetNodes()->getHeader().getTag();
     
     builder.addMaterialize();
 
@@ -220,17 +220,17 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     ColumnTagManager tagMan;
 
     PipelineBuilder builder(&mem, &pipeline, tagMan);
-    builder.addScanNodes();
-    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
+    
+    PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
 
     builder.addGetOutEdges();
 
     // Get properties
     const PropertyType namePropType = _graph->openTransaction().readGraph().getMetadata().propTypes().get("name").value();
-    builder.addGetNodeProperties<types::String>(namePropType);
-    PipelineValuesOutputInterface* getNodePropertiesOut = static_cast<PipelineValuesOutputInterface*>(builder.getOutput());
-    const ColumnTag getNodePropertiesOutValuesTag = getNodePropertiesOut->getValues()->getHeader().getTag();
+
+    PipelineValuesOutputInterface& getNodePropertiesOut = builder.addGetNodeProperties<types::String>(namePropType);
+    const ColumnTag getNodePropertiesOutValuesTag = getNodePropertiesOut.getValues()->getHeader().getTag();
 
     builder.addMaterialize();
 
@@ -288,17 +288,14 @@ TEST_F(PipelineTest, scanNodesExpand2) {
 
     PipelineBuilder builder(&mem, &pipeline, tagMan);
 
-    builder.addScanNodes();
-    PipelineNodeOutputInterface* scanNodesOut = static_cast<PipelineNodeOutputInterface*>(builder.getOutput());
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut->getNodeIDs()->getHeader().getTag();
+    PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
     
-    builder.addGetOutEdges();
-    PipelineEdgeOutputInterface* getOutEdges1Out = static_cast<PipelineEdgeOutputInterface*>(builder.getOutput());
-    const ColumnTag getOutEdges1OutTargetNodesTag = getOutEdges1Out->getTargetNodes()->getHeader().getTag();
+    PipelineEdgeOutputInterface& getOutEdges1Out = builder.addGetOutEdges();
+    const ColumnTag getOutEdges1OutTargetNodesTag = getOutEdges1Out.getTargetNodes()->getHeader().getTag();
     
-    builder.addGetOutEdges();
-    PipelineEdgeOutputInterface* getOutEdges2Out = static_cast<PipelineEdgeOutputInterface*>(builder.getOutput());
-    const ColumnTag getOutEdges2OutTargetNodesTag = getOutEdges2Out->getTargetNodes()->getHeader().getTag();
+    PipelineEdgeOutputInterface& getOutEdges2Out = builder.addGetOutEdges();
+    const ColumnTag getOutEdges2OutTargetNodesTag = getOutEdges2Out.getTargetNodes()->getHeader().getTag();
     
     builder.addMaterialize();
 

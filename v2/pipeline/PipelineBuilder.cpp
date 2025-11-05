@@ -27,7 +27,7 @@ void duplicateDataframeShape(LocalMemory* mem, Dataframe* src, Dataframe* dest) 
 
 }
 
-PipelineOutputInterface& PipelineBuilder::addScanNodes() {
+PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
     openMaterialize();
 
     ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
@@ -43,7 +43,7 @@ PipelineOutputInterface& PipelineBuilder::addScanNodes() {
     return outNodeIDs;
 }
 
-PipelineOutputInterface& PipelineBuilder::addGetOutEdges() {
+PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
     _pendingOutput->connectTo(getOutEdges->inNodeIDs());
 
@@ -77,7 +77,7 @@ void PipelineBuilder::closeMaterialize() {
     _matProc = nullptr;
 }
 
-PipelineOutputInterface& PipelineBuilder::addMaterialize() {
+PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
     _pendingOutput->connectTo(_matProc->input());
     _pendingOutput = &_matProc->output();
     closeMaterialize();
@@ -95,7 +95,7 @@ void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
     _pendingOutput = nullptr;
 }
 
-PipelineOutputInterface& PipelineBuilder::addSkip(size_t count) {
+PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     SkipProcessor* skip = SkipProcessor::create(_pipeline, count);
     _pendingOutput->connectTo(skip->input());
 
@@ -106,7 +106,7 @@ PipelineOutputInterface& PipelineBuilder::addSkip(size_t count) {
     return skip->output();
 }
 
-PipelineOutputInterface& PipelineBuilder::addLimit(size_t count) {
+PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     LimitProcessor* limit = LimitProcessor::create(_pipeline, count);
     _pendingOutput->connectTo(limit->input());
 
@@ -117,7 +117,7 @@ PipelineOutputInterface& PipelineBuilder::addLimit(size_t count) {
     return limit->output();
 }
 
-PipelineOutputInterface& PipelineBuilder::addCount() {
+PipelineValueOutputInterface& PipelineBuilder::addCount() {
     CountProcessor* count = CountProcessor::create(_pipeline);
     _pendingOutput->connectTo(count->input());
 
@@ -128,14 +128,14 @@ PipelineOutputInterface& PipelineBuilder::addCount() {
     return count->output();
 }
 
-PipelineOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
+PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
     LambdaSourceProcessor* source = LambdaSourceProcessor::create(_pipeline, callback);
     _pendingOutput = &source->output();
     return source->output();
 }
 
 template <db::SupportedType T>
-PipelineOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
+PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
     auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
     _pendingOutput->connectTo(getProps->inIDs());
 
@@ -159,8 +159,8 @@ PipelineOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType prop
     return getProps->outValues();
 }
 
-template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Int64>(PropertyType propertyType);
-template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::UInt64>(PropertyType propertyType);
-template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Double>(PropertyType propertyType);
-template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::String>(PropertyType propertyType);
-template PipelineOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Bool>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Int64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::UInt64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Double>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::String>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Bool>(PropertyType propertyType);
