@@ -6,7 +6,7 @@ target_link_libraries(turing-import
             turing_db_import_json_s
             turing_db_import_neo4j_s
             turing_db_import_gml_s
-            turing_db_tools_common_s)
+)
 
 install(
     TARGETS     turing-import

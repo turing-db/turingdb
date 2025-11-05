@@ -1,4 +1,4 @@
-#include <spdlog/fmt/bundled/core.h>
+#include <spdlog/spdlog.h>
 
 #include <memory>
 #include <vector>

@@ -9,7 +9,6 @@ target_link_libraries(s3testcli PUBLIC
     turing_db_storage_s
     turing_db_server_s
     turing_db_memory_s
-    turing_db_tools_common_s
     turing_db_io_s3_s 
     turing_db_io_filecache_s
     argparse
