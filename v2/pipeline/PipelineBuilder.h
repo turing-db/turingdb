@@ -61,7 +61,7 @@ private:
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {
         ColumnType* col = _mem->alloc<ColumnType>();
-        return NamedColumn::create(df, col, ColumnHeader(tag));
+        return _mem->alloc<NamedColumn>(df, ColumnHeader(tag), col);
     }
 
     template <typename ColumnType>

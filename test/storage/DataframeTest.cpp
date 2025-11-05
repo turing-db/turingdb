@@ -5,6 +5,8 @@
 #include "dataframe/NamedColumn.h"
 #include "dataframe/ColumnTagManager.h"
 
+#include "LocalMemory.h"
+
 #include "TuringException.h"
 
 using namespace db;
@@ -24,13 +26,14 @@ TEST_F(DataframeTest, testEmpty) {
 }
 
 TEST_F(DataframeTest, testOneCol) {
+    LocalMemory mem;
     Dataframe df;
     ColumnTagManager tagManager;
 
     ColumnNodeIDs colNodes1;
 
     const ColumnHeader aHeader(tagManager.allocTag());
-    NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aHeader);
+    NamedColumn* col1 = mem.alloc<NamedColumn>(&df, aHeader, &colNodes1);
     ASSERT_TRUE(col1 != nullptr);
 
     ASSERT_EQ(df.cols().size(), 1);
@@ -41,6 +44,7 @@ TEST_F(DataframeTest, testOneCol) {
 }
 
 TEST_F(DataframeTest, testSameTag) {
+    LocalMemory mem;
     Dataframe df;
     ColumnTagManager tagManager;
 
@@ -49,19 +53,20 @@ TEST_F(DataframeTest, testSameTag) {
     ColumnEdgeIDs colEdges1;
 
     const ColumnHeader aHeader(tagManager.allocTag());
-    NamedColumn* col1 = NamedColumn::create(&df, &colNodes1, aHeader);
+    NamedColumn* col1 = mem.alloc<NamedColumn>(&df, aHeader, &colNodes1);
     ASSERT_TRUE(col1 != nullptr);
 
     const ColumnHeader bHeader(tagManager.allocTag());
-    NamedColumn* col2 = NamedColumn::create(&df, &colNodes2, bHeader);
+    NamedColumn* col2 = mem.alloc<NamedColumn>(&df, bHeader, &colNodes2);
     ASSERT_TRUE(col2 != nullptr);
 
-    EXPECT_THROW(NamedColumn::create(&df, &colEdges1, aHeader), TuringException);
+    EXPECT_THROW(mem.alloc<NamedColumn>(&df, aHeader, &colEdges1), TuringException);
 
     ASSERT_EQ(df.cols().size(), 2);
 }
 
 TEST_F(DataframeTest, anonymous) {
+    LocalMemory mem;
     ColumnTagManager tagManager;
 
     const auto v0Header = ColumnHeader(tagManager.allocTag());
@@ -80,18 +85,18 @@ TEST_F(DataframeTest, anonymous) {
     ColumnNodeIDs nodes1;
     ColumnNodeIDs nodes2;
 
-    NamedColumn* col0 = NamedColumn::create(&df, &nodes0, v0Header);
+    NamedColumn* col0 = mem.alloc<NamedColumn>(&df, v0Header, &nodes0);
     ASSERT_TRUE(col0 != nullptr);
     ASSERT_EQ(col0->getColumn(), &nodes0);
 
-    NamedColumn* col1 = NamedColumn::create(&df, &nodes1, v1Header);
+    NamedColumn* col1 = mem.alloc<NamedColumn>(&df, v1Header, &nodes1);
     ASSERT_TRUE(col1 != nullptr);
     ASSERT_EQ(col1->getColumn(), &nodes1);
 
     ASSERT_EQ(df.getColumn(v0Header.getTag()), col0);
 
     // Try to add a column with same anonymous tag
-    EXPECT_THROW(NamedColumn::create(&df, &nodes2, v0Header), TuringException);
+    EXPECT_THROW(mem.alloc<NamedColumn>(&df, v0Header, &nodes2), TuringException);
 
     // Compare columns of dataframe
     ASSERT_EQ(df.cols().size(), 2);
@@ -100,6 +105,7 @@ TEST_F(DataframeTest, anonymous) {
 }
 
 TEST_F(DataframeTest, testColNames) {
+    LocalMemory mem;
     Dataframe df;
     ColumnTagManager tagManager;
 
@@ -107,9 +113,9 @@ TEST_F(DataframeTest, testColNames) {
     ColumnNodeIDs col1;
     ColumnNodeIDs col2;
 
-    auto colA = NamedColumn::create(&df, &col0, ColumnHeader(tagManager.allocTag()));
-    auto colB = NamedColumn::create(&df, &col1, ColumnHeader(tagManager.allocTag()));
-    auto colC = NamedColumn::create(&df, &col2, ColumnHeader(tagManager.allocTag()));
+    auto colA = mem.alloc<NamedColumn>(&df, ColumnHeader(tagManager.allocTag()), &col0);
+    auto colB = mem.alloc<NamedColumn>(&df, ColumnHeader(tagManager.allocTag()), &col1);
+    auto colC = mem.alloc<NamedColumn>(&df, ColumnHeader(tagManager.allocTag()), &col2);
     ASSERT_TRUE(colA != nullptr);
     ASSERT_TRUE(colB != nullptr);
     ASSERT_TRUE(colC != nullptr);

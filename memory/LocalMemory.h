@@ -13,6 +13,8 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 
+#include "dataframe/NamedColumn.h"
+
 #include "metadata/PropertyType.h"
 #include "ID.h"
 
@@ -63,7 +65,8 @@ public:
         MakeMemoryPool<ColumnOptVector<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnSet<NodeID>>::type,
-        MakeMemoryPool<ColumnSet<EdgeID>>::type
+        MakeMemoryPool<ColumnSet<EdgeID>>::type,
+        MakeMemoryPool<NamedColumn>::type
         >;
 
     template <typename KeyT, typename ValueT>

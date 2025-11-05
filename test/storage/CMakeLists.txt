@@ -3,6 +3,7 @@ function(add_storage_tests exe_name cpp_file)
     target_link_libraries(${exe_name} PRIVATE
             turing_common_s
             turing_db_storage_s
+            turing_db_memory_s
             turing_db_examples_s
             turing_db_jobs_s)
 endfunction()

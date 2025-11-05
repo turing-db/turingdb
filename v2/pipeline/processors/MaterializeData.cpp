@@ -37,7 +37,7 @@ void MaterializeData::addToStep(const NamedColumn* col) {
     _columnsPerStep[_step].push_back(col->getColumn());
 
     ColumnType* outCol = _mem->alloc<ColumnType>();
-    NamedColumn::create(_output, outCol, col->getHeader());
+    _mem->alloc<NamedColumn>(_output, col->getHeader(), outCol);
 }
 
 #define INSTANTIATE(Type) \

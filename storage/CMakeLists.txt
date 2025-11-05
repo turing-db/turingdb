@@ -38,7 +38,6 @@ set(storage_sources
         columns/Column.cpp
 
         dataframe/Dataframe.cpp
-        dataframe/NamedColumn.cpp
 
         indexers/EdgeIndexer.cpp
 

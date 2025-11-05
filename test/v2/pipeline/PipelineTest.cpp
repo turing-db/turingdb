@@ -88,7 +88,7 @@ protected:
 template <typename ColumnType>
 NamedColumn* addColumnInDataframe(LocalMemory* mem, Dataframe* df, ColumnTag tag) {
     ColumnType* col = mem->alloc<ColumnType>();
-    return NamedColumn::create(df, col, ColumnHeader(tag));
+    return mem->alloc<NamedColumn>(df, ColumnHeader(tag), col);
 }
 
 TEST_F(PipelineTest, emptyPipeline) {
