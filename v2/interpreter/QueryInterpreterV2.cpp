@@ -8,6 +8,12 @@
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "PlanGraphGenerator.h"
+#include "PipelineV2.h"
+#include "PipelineGenerator.h"
+#include "PipelineExecutor.h"
+#include "ExecutionContext.h"
+
+#include "PipelineException.h"
 #include "CompilerException.h"
 
 #include "Profiler.h"
@@ -31,7 +37,9 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
 
     const auto start = Clock::now();
 
-    auto txRes = _sysMan->openTransaction(graphName, ctxt.getCommitHash(), ctxt.getChangeID());
+    auto txRes = _sysMan->openTransaction(graphName,
+                                          ctxt.getCommitHash(),
+                                          ctxt.getChangeID());
     if (!txRes) {
         switch (txRes.error().getType()) {
             case ChangeErrorType::GRAPH_NOT_FOUND:
@@ -85,6 +93,39 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                            std::string("Unexpected exception: ") + e.what());
     } catch (...) {
         return QueryStatus(QueryStatus::Status::PLAN_ERROR,
+                           "Unknown exception occurred");
+    }
+
+    const PlanGraph& planGraph = planGen.getPlanGraph();
+
+    // Generate pipeline
+    LocalMemory* mem = ctxt.getLocalMemory();
+    PipelineV2 pipeline;
+    PipelineGenerator pipelineGen(&planGraph, &pipeline, mem, ctxt.getQueryCallback());
+    try {
+        pipelineGen.generate();
+    } catch (const CompilerException& e) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
+    } catch (const std::exception& e) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
+                           std::string("Unexpected exception: ") + e.what());
+    } catch (...) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
+                           "Unknown exception occurred");
+    }
+
+    // Execute pipeline
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    try {
+        executor.execute();
+    } catch (const PipelineException& e) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
+    } catch (const std::exception& e) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
+                           std::string("Unexpected exception: ") + e.what());
+    } catch (...) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
                            "Unknown exception occurred");
     }
 

@@ -26,9 +26,9 @@ class JoinNode;
 class PipelineGenerator {
 public:
     PipelineGenerator(const PlanGraph* graph,
-                        PipelineV2* pipeline,
-                        LocalMemory* mem,
-                        const QueryCallback& callback)
+                      PipelineV2* pipeline,
+                      LocalMemory* mem,
+                      const QueryCallback& callback)
         : _graph(graph),
         _pipeline(pipeline),
         _mem(mem),

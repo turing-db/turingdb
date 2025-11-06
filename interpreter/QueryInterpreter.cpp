@@ -2,7 +2,6 @@
 
 #include "ChangeManager.h"
 #include "SystemManager.h"
-#include "versioning/Transaction.h"
 #include "ASTContext.h"
 #include "QueryParser.h"
 #include "QueryAnalyzer.h"
