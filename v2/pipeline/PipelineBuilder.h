@@ -3,8 +3,8 @@
 #include "PipelineV2.h"
 #include "PipelineInterface.h"
 
-#include "dataframe/ColumnTagManager.h"
 #include "dataframe/Dataframe.h"
+#include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
 
 #include "processors/LambdaProcessor.h"
@@ -23,12 +23,10 @@ class MaterializeProcessor;
 class PipelineBuilder {
 public:
     PipelineBuilder(LocalMemory* mem,
-                    PipelineV2* pipeline,
-                    ColumnTagManager* tagManager)
+                    PipelineV2* pipeline)
         : _mem(mem),
         _pipeline(pipeline),
-        _dfMan(pipeline->getDataframeManager()),
-        _tagManager(tagManager)
+        _dfMan(pipeline->getDataframeManager())
     {
     }
 
@@ -58,7 +56,6 @@ private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};
     DataframeManager* _dfMan {nullptr};
-    ColumnTagManager* _tagManager {nullptr};
     PipelineOutputInterface* _pendingOutput {nullptr};
     MaterializeProcessor* _matProc {nullptr};
 
@@ -72,7 +69,7 @@ private:
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df) {
-        return allocColumn<ColumnType>(df, _tagManager->allocTag());
+        return allocColumn<ColumnType>(df, _dfMan->allocTag());
     }
 
     void openMaterialize();
