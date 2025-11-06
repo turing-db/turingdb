@@ -96,7 +96,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
         
         outEdgesIt.goToPart(startingIndex);
 
-        while (outEdgesIt.isValid()) {
+        for (; outEdgesIt.isValid(); outEdgesIt.next()) {
             const EdgeRecord& record = outEdgesIt.get();
             const EdgeID& edgeID = record._edgeID;
 
@@ -107,8 +107,6 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
                     edgeID, record._nodeID);
                 throw VersionControlException(std::move(errorMsg));
             }
-
-            outEdgesIt.next();
         }
     }
 
@@ -119,7 +117,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 
         inEdgesIt.goToPart(startingIndex);
 
-        while (inEdgesIt.isValid()) {
+        for (; inEdgesIt.isValid(); inEdgesIt.next()) {
             const EdgeRecord& record = inEdgesIt.get();
             const EdgeID& edgeID = record._edgeID;
 
