@@ -27,51 +27,51 @@ ExprAnalyzer::~ExprAnalyzer() {
 }
 
 void ExprAnalyzer::analyzeRootExpr(Expr* expr) {
-    analyze(expr);
+    analyzeExpr(expr);
 
     if (!expr->getExprVarDecl()) {
         expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
     }
 }
 
-void ExprAnalyzer::analyze(Expr* expr) {
+void ExprAnalyzer::analyzeExpr(Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY:
-            analyze(static_cast<BinaryExpr*>(expr));
+            analyzeBinaryExpr(static_cast<BinaryExpr*>(expr));
             break;
         case Expr::Kind::UNARY:
-            analyze(static_cast<UnaryExpr*>(expr));
+            analyzeUnaryExpr(static_cast<UnaryExpr*>(expr));
             break;
         case Expr::Kind::STRING:
-            analyze(static_cast<StringExpr*>(expr));
+            analyzeStringExpr(static_cast<StringExpr*>(expr));
             break;
         case Expr::Kind::ENTITY_TYPES:
-            analyze(static_cast<EntityTypeExpr*>(expr));
+            analyzeEntityTypeExpr(static_cast<EntityTypeExpr*>(expr));
             break;
         case Expr::Kind::PROPERTY:
-            analyze(static_cast<PropertyExpr*>(expr));
+            analyzePropertyExpr(static_cast<PropertyExpr*>(expr));
             break;
         case Expr::Kind::PATH:
-            analyze(static_cast<PathExpr*>(expr));
+            analyzePathExpr(static_cast<PathExpr*>(expr));
             break;
         case Expr::Kind::SYMBOL:
-            analyze(static_cast<SymbolExpr*>(expr));
+            analyzeSymbolExpr(static_cast<SymbolExpr*>(expr));
             break;
         case Expr::Kind::LITERAL:
-            analyze(static_cast<LiteralExpr*>(expr));
+            analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
             break;
         case Expr::Kind::FUNCTION_INVOCATION:
-            analyze(static_cast<FunctionInvocationExpr*>(expr));
+            analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr));
             break;
     }
 }
 
-void ExprAnalyzer::analyze(BinaryExpr* expr) {
+void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     Expr* lhs = expr->getLHS();
     Expr* rhs = expr->getRHS();
 
-    analyze(lhs);
-    analyze(rhs);
+    analyzeExpr(lhs);
+    analyzeExpr(rhs);
 
     const EvaluatedType a = lhs->getType();
     const EvaluatedType b = rhs->getType();
@@ -192,9 +192,9 @@ void ExprAnalyzer::analyze(BinaryExpr* expr) {
     }
 }
 
-void ExprAnalyzer::analyze(UnaryExpr* expr) {
+void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
     Expr* operand = expr->getSubExpr();
-    analyze(operand);
+    analyzeExpr(operand);
 
     EvaluatedType type = EvaluatedType::Invalid;
 
@@ -236,7 +236,7 @@ void ExprAnalyzer::analyze(UnaryExpr* expr) {
     }
 }
 
-void ExprAnalyzer::analyze(SymbolExpr* expr) {
+void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
     VarDecl* varDecl = _ctxt->getDecl(expr->getSymbol()->getName());
     if (!varDecl) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
@@ -251,7 +251,7 @@ void ExprAnalyzer::analyze(SymbolExpr* expr) {
     expr->setDynamic();
 }
 
-void ExprAnalyzer::analyze(LiteralExpr* expr) {
+void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
     const Literal* literal = expr->getLiteral();
 
     switch (literal->getKind()) {
@@ -282,7 +282,7 @@ void ExprAnalyzer::analyze(LiteralExpr* expr) {
     }
 }
 
-ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
+ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
     if (qualifiedName->size() != 2) {
@@ -370,12 +370,12 @@ ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueType 
     return vt;
 }
 
-void ExprAnalyzer::analyze(StringExpr* expr) {
+void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
     Expr* lhs = expr->getLHS();
     Expr* rhs = expr->getRHS();
 
-    analyze(lhs);
-    analyze(rhs);
+    analyzeExpr(lhs);
+    analyzeExpr(rhs);
 
     if (lhs->getType() != EvaluatedType::String || rhs->getType() != EvaluatedType::String) {
         const std::string error = fmt::format(
@@ -401,7 +401,7 @@ void ExprAnalyzer::analyze(StringExpr* expr) {
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
-void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
+void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
     expr->setType(EvaluatedType::Bool);
 
     VarDecl* decl = _ctxt->getDecl(expr->getSymbol()->getName());
@@ -423,11 +423,11 @@ void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
-void ExprAnalyzer::analyze(PathExpr* expr) {
+void ExprAnalyzer::analyzePathExpr(PathExpr* expr) {
     throwError("Path expressions not supported", expr);
 }
 
-void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
+void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
     const FunctionDecls* funcs = _ast->getFunctionDecls();
     const FunctionInvocation* invoc = expr->getFunctionInvocation();
     const std::vector<Symbol*>& names = invoc->getName()->names();
@@ -456,7 +456,7 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
     bool isAggregate = false;
 
     for (Expr* arg : requestedArgs) {
-        analyze(arg);
+        analyzeExpr(arg);
 
         isDynamic |= arg->isDynamic();
         isAggregate |= arg->isAggregate();
@@ -495,7 +495,11 @@ void ExprAnalyzer::analyze(FunctionInvocationExpr* expr) {
         }
 
         // Found a valid signature
-        expr->setType(signature._returnType);
+        if (signature._returnTypes.size() == 1) {
+            expr->setType(signature._returnTypes[0]);
+        } else {
+            expr->setType(EvaluatedType::Tuple);
+        }
 
         if (signature._isAggregate) {
             expr->setAggregate();
@@ -550,6 +554,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Map:
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:
+        case EvaluatedType::Tuple:
         case EvaluatedType::_SIZE:
             return false;
     }

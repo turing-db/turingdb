@@ -306,6 +306,7 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::Map:
         case EvaluatedType::Invalid:
         case EvaluatedType::Wildcard:
+        case EvaluatedType::Tuple:
         case EvaluatedType::_SIZE:
             return ValueType::Invalid;
     }

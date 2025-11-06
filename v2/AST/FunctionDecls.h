@@ -32,8 +32,8 @@ public:
             return *this;
         }
 
-        FunctionSignatureBuilder& setReturnType(EvaluatedType type) {
-            _signature->_returnType = type;
+        FunctionSignatureBuilder& setReturnTypes(std::initializer_list<EvaluatedType> types) {
+            _signature->_returnTypes = types;
             return *this;
         }
 

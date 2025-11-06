@@ -14,7 +14,6 @@ public:
     void setItems(YieldItems* items) { _items = items; }
 
     YieldItems* getItems() const { return _items; }
-    bool isAll() const { return _items == nullptr; }
 
 private:
     YieldItems* _items {nullptr};

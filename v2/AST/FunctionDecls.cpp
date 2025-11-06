@@ -15,59 +15,59 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
     // Metadata
     decls->create("db.labels")
         .setIsDatabaseProcedure(true)
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
     decls->create("db.propertyTypes")
         .setIsDatabaseProcedure(true)
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
     decls->create("db.edgeTypes")
         .setIsDatabaseProcedure(true)
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
     decls->create("db.history")
         .setIsDatabaseProcedure(true)
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
 
     // Entity patterns
     decls->create("edgeTypes")
         .setArguments({EvaluatedType::EdgePattern})
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
     decls->create("labels")
         .setArguments({EvaluatedType::NodePattern})
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
     decls->create("keys")
         .setArguments({EvaluatedType::NodePattern})
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
     decls->create("keys")
         .setArguments({EvaluatedType::EdgePattern})
-        .setReturnType(EvaluatedType::String);
+        .setReturnTypes({EvaluatedType::String});
 
     // Aggregate functions
     decls->create("count")
         .setArguments({EvaluatedType::NodePattern})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::EdgePattern})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Integer})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Double})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::String})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Char})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Bool})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Wildcard})
@@ -76,29 +76,29 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
 
     decls->create("min")
         .setArguments({EvaluatedType::Integer})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("min")
         .setArguments({EvaluatedType::Double})
-        .setReturnType(EvaluatedType::Double)
+        .setReturnTypes({EvaluatedType::Double})
         .setIsAggregate(true);
 
     decls->create("max")
         .setArguments({EvaluatedType::Integer})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({EvaluatedType::Integer})
         .setIsAggregate(true);
     decls->create("max")
         .setArguments({EvaluatedType::Double})
-        .setReturnType(EvaluatedType::Double)
+        .setReturnTypes({EvaluatedType::Double})
         .setIsAggregate(true);
 
     decls->create("avg")
         .setArguments({EvaluatedType::Integer})
-        .setReturnType(EvaluatedType::Double)
+        .setReturnTypes({EvaluatedType::Double})
         .setIsAggregate(true);
     decls->create("avg")
         .setArguments({EvaluatedType::Double})
-        .setReturnType(EvaluatedType::Double)
+        .setReturnTypes({EvaluatedType::Double})
         .setIsAggregate(true);
 
     return decls;

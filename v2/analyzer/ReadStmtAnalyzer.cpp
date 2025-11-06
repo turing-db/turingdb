@@ -37,6 +37,8 @@
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
 
+#include "BioAssert.h"
+
 using namespace db::v2;
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
@@ -102,7 +104,7 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
         throwError("CALL statement must have a function invocation", callStmt);
     }
 
-    _exprAnalyzer->analyze(funcExpr);
+    _exprAnalyzer->analyzeFuncInvocExpr(funcExpr);
 
     const FunctionInvocation* func = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = func->getSignature();
@@ -113,22 +115,35 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
 
     // Step 3. Analyze YIELD clause
     const YieldClause* yield = callStmt->getYield();
-    analyze(yield);
+    analyze(*func, yield);
 }
 
-void ReadStmtAnalyzer::analyze(const YieldClause* yield) {
+void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {
+    // Step 1. Check if there is a YIELD clause
     if (!yield) {
         return;
     }
 
-    // Check if `YIELD *`
-    if (yield->isAll()) {
+    YieldItems* yieldItems = yield->getItems();
+
+    // Step 2. Check if `YIELD *` (in this case, yield == nullptr)
+    if (yield != nullptr) {
         // For now, it fallbacks to the default behavior, which is to return all columns
         // In Neo4j, it returns the default columns + deprecated ones.
         return;
     }
 
-    // TODO, check items + where clause
+
+    // Step 3. Create the decls for the yield items
+    for (Symbol* item : *yieldItems) {
+        const VarDecl* decl = _ctxt->getDecl(item->getName());
+
+        if (decl) {
+            throwError(fmt::format("Variable '{}' already declared", item->getName()), item);
+        }
+
+        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Invalid, item->getName());
+    }
 }
 
 void ReadStmtAnalyzer::analyze(OrderBy* orderBySt) {

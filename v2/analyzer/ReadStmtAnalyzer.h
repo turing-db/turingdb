@@ -23,15 +23,7 @@ class Pattern;
 class PatternElement;
 class NodePattern;
 class EdgePattern;
-class Expr;
-class BinaryExpr;
-class UnaryExpr;
-class SymbolExpr;
-class LiteralExpr;
-class PropertyExpr;
-class StringExpr;
-class EntityTypeExpr;
-class PathExpr;
+class FunctionInvocation;
 
 class ReadStmtAnalyzer {
 public:
@@ -50,7 +42,7 @@ public:
     void analyze(const Stmt* stmt);
     void analyze(const MatchStmt* matchSt);
     void analyze(const CallStmt* callSt);
-    void analyze(const YieldClause* yieldSt);
+    void analyze(const FunctionInvocation& func, const YieldClause* yieldSt);
     void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
