@@ -118,7 +118,7 @@ TEST_F(DeleteQueryTest, deletedNodeConflict) {
     tester.query("change submit")
         .expectError()
         .expectErrorMessage(
-            "Unexpected exception: This change attempted to delete Node 0 (which is now "
+            "This change attempted to delete Node 0 (which is now "
             "Node 0 on main) which has been modified on main.")
         .execute();
 }
@@ -147,12 +147,12 @@ TEST_F(DeleteQueryTest, deleteEdgeConflict) {
     tester.query("change submit")
         .expectError()
         .expectErrorMessage(
-            "Unexpected exception: This change attempted to delete Edge 10 (which is now "
+            "This change attempted to delete Edge 10 (which is now "
             "Edge 10 on main) which has been modified on main.")
         .execute();
 }
 
-TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
+TEST_F(DeleteQueryTest, deleteOutEdgeSideEffect) {
     QueryTester tester {_env->getMem(), *_interp};
 
     ChangeID fstChange = newChange(tester);
@@ -168,8 +168,33 @@ TEST_F(DeleteQueryTest, deleteEdgeSideEffect) {
         .execute();
 
     const std::string expectedError =
-        "Unexpected exception: Submit rejected: Commits on main have created an edge incident to a "
-        "node this Change attempts to delete.";
+        "Submit rejected: Commits on main have created an edge (ID: 13) incident to Node "
+        "12, which this Change attempts to delete.";
+
+    tester.query("change submit")
+        .expectError()
+        .expectErrorMessage(expectedError)
+        .execute();
+}
+
+TEST_F(DeleteQueryTest, deleteInEdgeSideEffect) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID fstChange = newChange(tester);
+    ChangeID sndChange = newChange(tester);
+
+    tester.setChangeID(fstChange);
+    tester.query("create (m:Person{name=\"Cyrus\"})-[e:WORKS_WITH]-(n @ 12)")
+        .execute();
+    submitChange(tester);
+
+    tester.setChangeID(sndChange);
+    tester.query("delete nodes 12")
+        .execute();
+
+    const std::string expectedError =
+        "Submit rejected: Commits on main have created an edge (ID: 13) incident to Node "
+        "12, which this Change attempts to delete.";
 
     tester.query("change submit")
         .expectError()
@@ -245,7 +270,7 @@ TEST_F(DeleteQueryTest, conflictOnDeletedEdge) {
     submitChange(tester);
 
     const std::string expectedError =
-        "Unexpected exception: This change attempted to delete Edge 0 (which is now Edge "
+        "This change attempted to delete Edge 0 (which is now Edge "
         "0 on main) which has been modified on main.";
 
     tester.setChangeID(change2);
@@ -1095,7 +1120,7 @@ TEST_F(DeleteQueryTest, injectDeletedNode) {
 
 }
 
-TEST_F(DeleteQueryTest, resolvedDeleteConflict) {
+TEST_F(DeleteQueryTest, resolvedOutEdgesDeleteConflict) {
     QueryTester tester {_env->getMem(), *_interp};
 
     ChangeID change0 = newChange(tester);
@@ -1118,6 +1143,74 @@ TEST_F(DeleteQueryTest, resolvedDeleteConflict) {
     { // Change 2 actually just deletes the new edge from Luc
         newChange(tester); // Change 2
         tester.query("delete edges 13")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // So Change 0 can delete Luc as the graph is the same as when it branched
+        tester.setChangeID(change0);
+        submitChange(tester);
+    }
+}
+
+TEST_F(DeleteQueryTest, resolvedInEdgesDeleteConflict) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID change0 = newChange(tester);
+    ChangeID change1 = newChange(tester);
+
+    { // Try and delete Luc
+        tester.setChangeID(change0);
+        tester.query("delete nodes 9")
+            .execute();
+    }
+
+    { // But create an edge between Cyrus and Luc
+        tester.setChangeID(change1);
+        // This edge has ID 13
+        tester.query("create (m:Person{name=\"Cyrus\"})-[e:WorksWith{name=\"Cyrus -> Luc\"}]-(n @ 9)")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // Change 2 actually just deletes the new edge from Cyrus
+        newChange(tester); // Change 2
+        tester.query("delete edges 13")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // So Change 0 can delete Luc as the graph is the same as when it branched
+        tester.setChangeID(change0);
+        submitChange(tester);
+    }
+}
+
+TEST_F(DeleteQueryTest, resolvedEdgesDeleteConflict) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID change0 = newChange(tester);
+    ChangeID change1 = newChange(tester);
+
+    { // Try and delete Luc
+        tester.setChangeID(change0);
+        tester.query("delete nodes 9")
+            .execute();
+    }
+
+    { // But create an edge between Cyrus and Luc and Luc and Doruk
+        tester.setChangeID(change1);
+        // This edge has ID 13
+        tester.query("create (m:Person{name=\"Cyrus\"})-[e:WorksWith{name=\"Cyrus -> Luc\"}]-(n @ 9)")
+            .execute();
+        tester.query("create (n @ 9)-[e:WorksWith{name=\"Luc -> Doruk\"}]-(m:Person{name=\"Doruk\"})")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // Change 2 actually just deletes the new edge from Cyrus and to Doruk
+        newChange(tester); // Change 2
+        tester.query("delete edges 13, 14")
             .execute();
         submitChange(tester);
     }

@@ -4,15 +4,16 @@
 
 #include "Change.h"
 #include "CommitBuilder.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "EntityIDRebaser.h"
-#include "ID.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "columns/ColumnVector.h"
+#include "ID.h"
+#include "EdgeRecord.h"
 
 #include "BioAssert.h"
-#include "Panic.h"
-#include "versioning/CommitWriteBuffer.h"
+#include "VersionControlException.h"
 
 using namespace db;
 
@@ -84,21 +85,30 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 
     // Check dataparts that have been created on main since we branched, skipping all
     // dataparts we have already seen: there cannot be conflicts there. Try and
-    // advance to the first datapart that has been added since we branched. If any
-    // dataparts in the range [startingIndex, end] contain edges from a deleted node,
-    // @ref outEdgesIt will be valid. If there are such edges, then a commit on main has
-    // created an edge from a node this change is trying to delete: write conflict.
-    // Otherwise, @ref goToPart will advance to the `end` part iterator, and @ref
-    // outEdgesIt.isValid() will return false.
+    // advance to the first datapart that has been added since we branched. Check all in
+    // and out edges of the deleted nodes, and ensure that if any exist, they have been
+    // deleted. If not, performing these deletions would be a write conflict: reject.
+
     // 1. Check out edges
     {
         GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
         GetOutEdgesIterator outEdgesIt = outEdges.begin();
         
         outEdgesIt.goToPart(startingIndex);
-        if (outEdgesIt.isValid()) {
-            panic("Submit rejected: Commits on main have created an edge incident to a "
-                  "node this Change attempts to delete.");
+
+        while (outEdgesIt.isValid()) {
+            const EdgeRecord& record = outEdgesIt.get();
+            const EdgeID& edgeID = record._edgeID;
+
+            if (!mostRecentView.tombstones().contains(edgeID)) [[unlikely]] {
+                std::string errorMsg = fmt::format(
+                    "Submit rejected: Commits on main have created an edge (ID: {}) "
+                    "incident to Node {}, which this Change attempts to delete.",
+                    edgeID, record._nodeID);
+                throw VersionControlException(std::move(errorMsg));
+            }
+
+            outEdgesIt.next();
         }
     }
 
@@ -106,10 +116,22 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
     {
         GetInEdgesRange inEdges {mostRecentView, &_deletedExistingNodes};
         GetInEdgesIterator inEdgesIt = inEdges.begin();
+
         inEdgesIt.goToPart(startingIndex);
-        if (inEdgesIt.isValid()) {
-            panic("Submit rejected: Commits on main have created an edge incident to a "
-                  "node this Change attempts to delete.");
+
+        while (inEdgesIt.isValid()) {
+            const EdgeRecord& record = inEdgesIt.get();
+            const EdgeID& edgeID = record._edgeID;
+
+            if (!mostRecentView.tombstones().contains(edgeID)) [[unlikely]] {
+                std::string errorMsg = fmt::format(
+                    "Submit rejected: Commits on main have created an edge (ID: {}) "
+                    "incident to Node {}, which this Change attempts to delete.",
+                    edgeID, record._nodeID);
+                throw VersionControlException(std::move(errorMsg));
+            }
+
+            inEdgesIt.next();
         }
     }
 }
@@ -122,19 +144,23 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
         // Check if source node was modified
         if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
             const NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};
-            if (writes.writtenNodes.contains(newSrc)) {
-                panic("This change attempted to create an edge with source Node {} "
-                      "(which is now Node {} on main) which has been modified on main.",
-                      *oldSrcID, newSrc);
+            if (writes.writtenNodes.contains(newSrc)) [[unlikely]] {
+                std::string errorMsg = fmt::format(
+                    "This change attempted to create an edge with source Node {} "
+                    "(which is now Node {} on main) which has been modified on main.",
+                    *oldSrcID, newSrc);
+                throw VersionControlException(std::move(errorMsg));
             }
         }
         // Check if target node was modified
         if (const NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
             const NodeID newTgt = {_entityIDRebaser.rebaseNodeID(*oldTgtID)};
-            if (writes.writtenNodes.contains(newTgt)) {
-                panic("This change attempted to create an edge with target Node {} "
-                      "(which is now Node {} on main) which has been modified on main.",
-                      *oldTgtID, newTgt);
+            if (writes.writtenNodes.contains(newTgt)) [[unlikely]] {
+                std::string errorMsg = fmt::format(
+                    "This change attempted to create an edge with target Node {} "
+                    "(which is now Node {} on main) which has been modified on main.",
+                    *oldTgtID, newTgt);
+                throw VersionControlException(std::move(errorMsg));
             }
         }
     }
@@ -150,10 +176,12 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
         if (deletedNode == newID) {
             _deletedExistingNodes.push_back(newID);
         }
-        if (writes.writtenNodes.contains(newID)) {
-            panic("This change attempted to delete Node {} "
-                  "(which is now Node {} on main) which has been modified on main.",
-                  deletedNode, newID);
+        if (writes.writtenNodes.contains(newID)) [[unlikely]] {
+            std::string errorMsg = fmt::format(
+                "This change attempted to delete Node {} "
+                "(which is now Node {} on main) which has been modified on main.",
+                deletedNode, newID);
+            throw VersionControlException(std::move(errorMsg));
         }
     }
 }
@@ -161,12 +189,14 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
 void ChangeConflictChecker::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
                                               const CommitWriteBuffer& writeBuffer) {
     const CommitWriteBuffer::DeletedEdges& deletedEdges = writeBuffer.deletedEdges();
-    for (const EdgeID deletedEdge : deletedEdges) {
+    for (const EdgeID deletedEdge : deletedEdges) [[unlikely]] {
         const EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
         if (writes.writtenEdges.contains(newID)) {
-            panic("This change attempted to delete Edge {} "
-                  "(which is now Edge {} on main) which has been modified on main.",
-                  deletedEdge, newID);
+            std::string errorMsg = fmt::format(
+                "This change attempted to delete Edge {} "
+                "(which is now Edge {} on main) which has been modified on main.",
+                deletedEdge, newID);
+            throw VersionControlException(std::move(errorMsg));
         }
     }
 }

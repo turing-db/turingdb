@@ -76,6 +76,7 @@ set(storage_sources
         versioning/CommitJournal.cpp
         versioning/WriteSet.cpp
         versioning/TombstoneSet.cpp
+        versioning/VersionControlException.cpp
 
         comparators/DataPartComparator.cpp
         comparators/StringIndexerComparator.cpp
