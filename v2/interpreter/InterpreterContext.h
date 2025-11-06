@@ -5,9 +5,7 @@
 #include "versioning/ChangeID.h"
 
 namespace db {
-
 class LocalMemory;
-
 }
 
 namespace db::v2 {
@@ -15,13 +13,11 @@ namespace db::v2 {
 class InterpreterContext {
 public:
     InterpreterContext(db::LocalMemory* mem,
-                       db::QueryCallback callback,
-                       db::QueryHeaderCallback headerCallback,
+                       db::QueryCallbackV2 callback,
                        db::CommitHash commitHash = CommitHash::head(),
                        db::ChangeID changeID = ChangeID::head())
         : _mem(mem),
         _callback(callback),
-        _headerCallback(headerCallback),
         _commitHash(commitHash),
         _changeID(changeID)
     {
@@ -30,15 +26,13 @@ public:
     ~InterpreterContext() = default;
 
     db::LocalMemory* getLocalMemory() const { return _mem; }
-    db::QueryCallback getQueryCallback() const { return _callback; }
-    db::QueryHeaderCallback getQueryHeaderCallback() const { return _headerCallback; }
+    db::QueryCallbackV2 getQueryCallback() const { return _callback; }
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 
 private:
     db::LocalMemory* _mem {nullptr};
-    db::QueryCallback _callback;
-    db::QueryHeaderCallback _headerCallback;
+    db::QueryCallbackV2 _callback;
     db::CommitHash _commitHash;
     db::ChangeID _changeID;
 };

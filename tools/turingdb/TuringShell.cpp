@@ -11,14 +11,20 @@
 #include "Graph.h"
 #include "SystemManager.h"
 #include "ChangeManager.h"
+
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
+#include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
+
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
+
 #include "FileUtils.h"
+
 #include "Panic.h"
 #include "Profiler.h"
 
@@ -294,6 +300,95 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
     } break;
 
 
+void queryCallbackV1(const Block& block, tabulate::Table& table) {
+    const size_t rowCount = block.getRowCount();
+
+    for (size_t i = 0; i < rowCount; ++i) {
+        tabulate::RowStream rs;
+        for (const Column* col : block.columns()) {
+            switch (col->getKind()) {
+                TABULATE_COL_CASE(ColumnVector<EntityID>, i)
+                TABULATE_COL_CASE(ColumnVector<NodeID>, i)
+                TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
+                TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
+                TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
+                TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<std::string>, i)
+                TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
+                TABULATE_COL_CASE(ColumnVector<const Change*>, i)
+                TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
+                TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
+                TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
+
+                default: {
+                    panic("can not print columns of kind {}", col->getKind());
+                }
+            }
+        }
+
+        table.add_row(std::move(rs));
+    }
+}
+
+void queryCallbackV2(const Dataframe* df, tabulate::Table& table) {
+    const size_t rowCount = df->getRowCount();
+
+    for (size_t i = 0; i < rowCount; ++i) {
+        tabulate::RowStream rs;
+        for (const NamedColumn* namedCol : df->cols()) {
+            const Column* col = namedCol->getColumn();
+            switch (col->getKind()) {
+                TABULATE_COL_CASE(ColumnVector<EntityID>, i)
+                TABULATE_COL_CASE(ColumnVector<NodeID>, i)
+                TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
+                TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
+                TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
+                TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnVector<std::string>, i)
+                TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
+                TABULATE_COL_CASE(ColumnVector<const Change*>, i)
+                TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
+                TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
+                TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
+                TABULATE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
+
+                default: {
+                    panic("can not print columns of kind {}", col->getKind());
+                }
+            }
+        }
+
+        table.add_row(std::move(rs));
+    }
+}
+
 // Cleans double-escaped characters to single-escaped characters
 void TuringShell::formatMessage(std::string& msg) {
     const std::regex newLine(R"(\\n)");
@@ -339,53 +434,26 @@ void TuringShell::processLine(std::string& line) {
     // Execute query
     tabulate::Table table;
 
-    auto queryCallback = [&table](const Block& block) {
-        const size_t rowCount = block.getBlockRowCount();
+    QueryStatus res;
+    if (line.starts_with("#v2")) {
+        const std::string_view query = std::string_view(line).substr(3);
 
-        for (size_t i = 0; i < rowCount; ++i) {
-            tabulate::RowStream rs;
-            for (const Column* col : block.columns()) {
-                switch (col->getKind()) {
-                    TABULATE_COL_CASE(ColumnVector<EntityID>, i)
-                    TABULATE_COL_CASE(ColumnVector<NodeID>, i)
-                    TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
-                    TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
-                    TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
-                    TABULATE_COL_CASE(ColumnVector<std::string>, i)
-                    TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
-                    TABULATE_COL_CASE(ColumnVector<const Change*>, i)
-                    TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
-                    TABULATE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
+        auto queryCallback = [&table](const Dataframe* df) -> void {
+            queryCallbackV2(df, table);
+        };
 
-                    default: {
-                        panic("can not print columns of kind {}", col->getKind());
-                    }
-                }
-            }
-
-            table.add_row(std::move(rs));
-        }
-    };
-
-    const auto res = _quiet
-                       ? _turingDB.query(line, _graphName, _mem, [](const Block&) {}, _hash, _changeID)
-                       : _turingDB.query(line, _graphName, _mem, queryCallback, _hash, _changeID);
+        res = _quiet 
+            ? _turingDB.queryV2(query, _graphName, _mem, [](const Dataframe*) {}, _hash, _changeID)
+            : _turingDB.queryV2(query, _graphName, _mem, queryCallback, _hash, _changeID);
+    } else {
+        auto queryCallback = [&table](const Block& block) -> void {
+            queryCallbackV1(block, table);
+        };
+    
+        res = _quiet 
+            ? _turingDB.query(line, _graphName, _mem, [](const Block&) {}, _hash, _changeID)
+            : _turingDB.query(line, _graphName, _mem, queryCallback, _hash, _changeID);
+    }
 
     checkShellContext();
 

@@ -3,13 +3,16 @@
 #include <spdlog/spdlog.h>
 
 #include "SystemManager.h"
-#include "QueryInterpreter.h"
 #include "JobSystem.h"
+#include "QueryInterpreter.h"
+#include "QueryInterpreterV2.h"
+#include "InterpreterContext.h"
 
 #include "Panic.h"
 #include "TuringConfig.h"
 
 using namespace db;
+using namespace db::v2;
 
 TuringDB::TuringDB(const TuringConfig* config)
     : _config(config),
@@ -99,4 +102,16 @@ QueryStatus TuringDB::query(std::string_view query,
                             ChangeID change) {
     QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
     return interp.execute(query, graphName, mem, [](const auto&) {}, [](const auto) {}, commit, change);
+}
+
+QueryStatus TuringDB::queryV2(std::string_view query,
+                              std::string_view graphName,
+                              LocalMemory* mem,
+                              QueryCallbackV2 callback,
+                              CommitHash commit,
+                              ChangeID change) {
+    QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
+
+    InterpreterContext ctxt(mem, callback, commit, change);
+    return interp.execute(ctxt, query, graphName);
 }

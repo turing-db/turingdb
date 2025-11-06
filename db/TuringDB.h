@@ -44,6 +44,13 @@ public:
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 
+    QueryStatus queryV2(std::string_view query,
+                        std::string_view graphName,
+                        LocalMemory* mem,
+                        QueryCallbackV2 callback,
+                        CommitHash hash = CommitHash::head(),
+                        ChangeID change = ChangeID::head());
+
     SystemManager& getSystemManager() {
         return *_systemManager;
     }

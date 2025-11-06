@@ -2,6 +2,8 @@
 
 #include "QueryCallback.h"
 
+#include "PipelineBuilder.h"
+
 namespace db {
 class LocalMemory;
 }
@@ -28,11 +30,12 @@ public:
     PipelineGenerator(const PlanGraph* graph,
                       PipelineV2* pipeline,
                       LocalMemory* mem,
-                      const QueryCallback& callback)
+                      const QueryCallbackV2& callback)
         : _graph(graph),
         _pipeline(pipeline),
         _mem(mem),
-        _callback(callback)
+        _callback(callback),
+        _builder(pipeline, mem)
     {
     }
 
@@ -44,7 +47,8 @@ private:
     const PlanGraph* _graph {nullptr};
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
-    QueryCallback _callback;
+    QueryCallbackV2 _callback;
+    PipelineBuilder _builder;
 
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
     void translateVarNode(VarNode* node, PlanGraphStream& stream);

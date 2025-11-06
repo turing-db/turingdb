@@ -36,7 +36,7 @@ public:
     void assignFrom(const Block &other);
     void assignFromLine(const Block &other, size_t startLine, size_t rowCount);
 
-    size_t getBlockRowCount() const;
+    size_t getRowCount() const;
 
   private:
     Columns _columns;

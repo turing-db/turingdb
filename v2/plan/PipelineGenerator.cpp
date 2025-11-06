@@ -120,6 +120,7 @@ void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream)
 }
 
 void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
+    _builder.addScanNodes();
 }
 
 void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
@@ -132,6 +133,7 @@ void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, Plan
 }
 
 void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {
+    _builder.addMaterialize();
 }
 
 void PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node, PlanGraphStream& stream) {
@@ -141,6 +143,7 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
+    _builder.addLambda(_callback);
 }
 
 void PipelineGenerator::translateJoinNode(JoinNode* node, PlanGraphStream& stream) {

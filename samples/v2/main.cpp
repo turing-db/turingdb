@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
     LocalMemory mem;
     PipelineV2 pipeline;
     {
-        auto callback = [](const Block& block) {};
+        auto callback = [](const Dataframe* dataframe) {};
 
         PipelineGenerator pipelineGen(&planGraph, &pipeline, &mem, callback);
         try {

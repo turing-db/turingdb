@@ -32,7 +32,7 @@ void Block::append(const Block &other) {
               std::back_inserter(_columns));
 }
 
-size_t Block::getBlockRowCount() const {
+size_t Block::getRowCount() const {
     if (_columns.empty()) {
         return 0;
     }
