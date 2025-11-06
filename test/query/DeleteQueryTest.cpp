@@ -38,6 +38,7 @@ protected:
         tester.setChangeID(id);
         return id;
     };
+
     inline static const auto submitChange = [](QueryTester& tester) {
         tester.query("change submit")
             .execute();
@@ -1092,4 +1093,37 @@ TEST_F(DeleteQueryTest, injectDeletedNode) {
             .execute();
     }
 
+}
+
+TEST_F(DeleteQueryTest, resolvedDeleteConflict) {
+    QueryTester tester {_env->getMem(), *_interp};
+
+    ChangeID change0 = newChange(tester);
+    ChangeID change1 = newChange(tester);
+
+    { // Try and delete Luc
+        tester.setChangeID(change0);
+        tester.query("delete nodes 9")
+            .execute();
+    }
+
+    { // But create an edge between Luc and Cyrus
+        tester.setChangeID(change1);
+        // This edge has ID 13
+        tester.query("create (n @ 9)-[e:WorksWith{name=\"Luc -> Cyrus\"}]-(m:Person{name=\"Cyrus\"})")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // Change 2 actually just deletes the new edge from Luc
+        newChange(tester); // Change 2
+        tester.query("delete edges 13")
+            .execute();
+        submitChange(tester);
+    }
+
+    { // So Change 0 can delete Luc as the graph is the same as when it branched
+        tester.setChangeID(change0);
+        submitChange(tester);
+    }
 }
