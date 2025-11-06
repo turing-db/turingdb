@@ -4,10 +4,11 @@
 
 namespace db {
 
+class DataframeManager;
+
 class ColumnTagManager {
 public:
-    ColumnTagManager() = default;
-    ~ColumnTagManager() = default;
+    friend DataframeManager;
 
     ColumnTag allocTag() {
         const ColumnTag tag = _nextFreeTag;
@@ -17,6 +18,9 @@ public:
 
 private:
     ColumnTag _nextFreeTag {0};
+
+    ColumnTagManager() = default;
+    ~ColumnTagManager() = default;
 };
 
 }

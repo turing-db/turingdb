@@ -105,9 +105,8 @@ TEST_F(PipelineTest, emptyPipeline) {
 TEST_F(PipelineTest, scanNodes) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
     
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
@@ -148,9 +147,8 @@ TEST_F(PipelineTest, scanNodes) {
 TEST_F(PipelineTest, scanNodesExpand1) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
     
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
@@ -217,9 +215,8 @@ TEST_F(PipelineTest, scanNodesExpand1) {
 TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
     
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
@@ -284,9 +281,8 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
 TEST_F(PipelineTest, scanNodesExpand2) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
 
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
@@ -368,9 +364,8 @@ TEST_F(PipelineTest, scanNodesExpand2) {
 TEST_F(PipelineTest, scanNodesLimit) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
 
     builder.addScanNodes();
     builder.addMaterialize();
@@ -421,9 +416,8 @@ TEST_F(PipelineTest, scanNodesLimit) {
 TEST_F(PipelineTest, scanNodesSkip) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
     builder.addScanNodes();
     builder.addMaterialize();
 
@@ -472,9 +466,8 @@ TEST_F(PipelineTest, scanNodesSkip) {
 TEST_F(PipelineTest, scanNodesCount) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
     builder.addScanNodes();
     builder.addMaterialize();
     builder.addCount();
@@ -511,9 +504,8 @@ TEST_F(PipelineTest, scanNodesCount) {
 TEST_F(PipelineTest, multiChunkCount) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
 
     // Create a source of 100 chunks
     size_t currentChunk = 0;
@@ -539,7 +531,7 @@ TEST_F(PipelineTest, multiChunkCount) {
     };
 
     builder.addLambdaSource(sourceCallback);
-    builder.addColumnToOutput<ColumnNodeIDs>(tagMan.allocTag());
+    builder.addColumnToOutput<ColumnNodeIDs>(pipeline.getDataframeManager()->allocTag());
 
     // Count
     builder.addCount();
@@ -565,9 +557,8 @@ TEST_F(PipelineTest, multiChunkCount) {
 TEST_F(PipelineTest, testLambdaWithoutMaterialize) {
     LocalMemory mem;
     PipelineV2 pipeline;
-    ColumnTagManager tagMan;
 
-    PipelineBuilder builder(&mem, &pipeline, &tagMan);
+    PipelineBuilder builder(&mem, &pipeline);
     builder.addScanNodes();
 
     EXPECT_THROW(builder.addLambda([](const Dataframe* df, LambdaProcessor::Operation operation) -> void {

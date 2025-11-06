@@ -4,7 +4,6 @@
 #include "dataframe/DataframeManager.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-#include "dataframe/ColumnTagManager.h"
 
 #include "TuringException.h"
 
@@ -27,11 +26,10 @@ TEST_F(DataframeTest, testEmpty) {
 TEST_F(DataframeTest, testOneCol) {
     DataframeManager dfMan;
     Dataframe df;
-    ColumnTagManager tagManager;
 
     ColumnNodeIDs colNodes1;
 
-    const ColumnHeader aHeader(tagManager.allocTag());
+    const ColumnHeader aHeader(dfMan.allocTag());
     NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, aHeader);
     df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
@@ -46,18 +44,17 @@ TEST_F(DataframeTest, testOneCol) {
 TEST_F(DataframeTest, testSameTag) {
     DataframeManager dfMan;
     Dataframe df;
-    ColumnTagManager tagManager;
 
     ColumnNodeIDs colNodes1;
     ColumnNodeIDs colNodes2;
     ColumnEdgeIDs colEdges1;
 
-    const ColumnHeader aHeader(tagManager.allocTag());
+    const ColumnHeader aHeader(dfMan.allocTag());
     NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, aHeader);
     df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
 
-    const ColumnHeader bHeader(tagManager.allocTag());
+    const ColumnHeader bHeader(dfMan.allocTag());
     NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, bHeader);
     df.addColumn(col2);
     ASSERT_TRUE(col2 != nullptr);
@@ -72,12 +69,11 @@ TEST_F(DataframeTest, testSameTag) {
 
 TEST_F(DataframeTest, anonymous) {
     DataframeManager dfMan;
-    ColumnTagManager tagManager;
 
-    const auto v0Header = ColumnHeader(tagManager.allocTag());
-    const auto v1Header = ColumnHeader(tagManager.allocTag());
-    const auto v2Header = ColumnHeader(tagManager.allocTag());
-    const auto v3Header = ColumnHeader(tagManager.allocTag());
+    const auto v0Header = ColumnHeader(dfMan.allocTag());
+    const auto v1Header = ColumnHeader(dfMan.allocTag());
+    const auto v2Header = ColumnHeader(dfMan.allocTag());
+    const auto v3Header = ColumnHeader(dfMan.allocTag());
 
     ASSERT_EQ(v0Header.getTag(), ColumnTag(0));
     ASSERT_EQ(v1Header.getTag(), ColumnTag(1));
@@ -117,15 +113,14 @@ TEST_F(DataframeTest, anonymous) {
 TEST_F(DataframeTest, testColNames) {
     DataframeManager dfMan;
     Dataframe df;
-    ColumnTagManager tagManager;
 
     ColumnNodeIDs col0;
     ColumnNodeIDs col1;
     ColumnNodeIDs col2;
 
-    auto colA = NamedColumn::create(&dfMan, &col0, ColumnHeader(tagManager.allocTag()));
-    auto colB = NamedColumn::create(&dfMan, &col1, ColumnHeader(tagManager.allocTag()));
-    auto colC = NamedColumn::create(&dfMan, &col2, ColumnHeader(tagManager.allocTag()));
+    auto colA = NamedColumn::create(&dfMan, &col0, ColumnHeader(dfMan.allocTag()));
+    auto colB = NamedColumn::create(&dfMan, &col1, ColumnHeader(dfMan.allocTag()));
+    auto colC = NamedColumn::create(&dfMan, &col2, ColumnHeader(dfMan.allocTag()));
     df.addColumn(colA);
     df.addColumn(colB);
     df.addColumn(colC);
@@ -146,16 +141,15 @@ TEST_F(DataframeTest, testColNames) {
 
 TEST_F(DataframeTest, dataframes2) {
     DataframeManager dfMan;
-    ColumnTagManager tagManager;
     Dataframe df1;
     Dataframe df2;
 
     ColumnNodeIDs colNodes1;
     ColumnNodeIDs colNodes2;
 
-    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, ColumnHeader(tagManager.allocTag()));
+    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, ColumnHeader(dfMan.allocTag()));
     df1.addColumn(col1);
-    NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, ColumnHeader(tagManager.allocTag()));
+    NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, ColumnHeader(dfMan.allocTag()));
     df2.addColumn(col2);
 
     df2.addColumn(col1);
