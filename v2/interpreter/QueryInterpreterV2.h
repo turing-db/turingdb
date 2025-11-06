@@ -19,6 +19,7 @@ class QueryInterpreterV2 {
 public:
     QueryInterpreterV2(db::SystemManager* sysMan,
                        db::JobSystem* jobSystem);
+
     ~QueryInterpreterV2();
 
     db::QueryStatus execute(const InterpreterContext& ctxt,
