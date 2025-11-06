@@ -47,7 +47,7 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
     ColumnVector<NodeID> deletedNodesCol;
     deletedNodesCol.reserve(_deletedNodes.size());
 
-    // TODO: Is there a better way to construct this columns?
+    // Collate all deleted nodes in a column to pass to edge iterators
     for (const NodeID deletedNode : _deletedNodes) {
         deletedNodesCol.push_back(deletedNode);
     }
@@ -55,14 +55,20 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
     { // Add the out edges of all deleted nodes
         GetOutEdgesRange outEdgesRg {view, &deletedNodesCol};
         for (const EdgeRecord& record : outEdgesRg) {
-            _deletedEdges.insert(record._edgeID);
+            // Only add edges which are not already deleted
+            if (!view.tombstones().containsEdge(record._edgeID)) {
+                _deletedEdges.insert(record._edgeID);
+            }
         }
     }
 
     { // Add the in edges of all deleted nodes
         GetInEdgesRange inEdgesRg {view, &deletedNodesCol};
         for (const EdgeRecord& record : inEdgesRg) {
-            _deletedEdges.insert(record._edgeID);
+            // Only add edges which are not already deleted
+            if (!view.tombstones().containsEdge(record._edgeID)) {
+                _deletedEdges.insert(record._edgeID);
+            }
         }
     }
 }
