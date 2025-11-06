@@ -35,7 +35,7 @@ public:
         _pipeline(pipeline),
         _mem(mem),
         _callback(callback),
-        _builder(pipeline, mem)
+        _builder(mem, pipeline)
     {
     }
 

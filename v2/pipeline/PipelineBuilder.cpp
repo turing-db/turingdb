@@ -34,12 +34,15 @@ void duplicateDataframeShape(LocalMemory* mem,
 PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
     openMaterialize();
 
+    // Create scan nodes processor
     ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
     PipelineNodeOutputInterface& outNodeIDs = proc->outNodeIDs();
 
+    // Allocate output node IDs column
     NamedColumn* nodeIDs = allocColumn<ColumnNodeIDs>(outNodeIDs.getDataframe());
     outNodeIDs.setNodeIDs(nodeIDs);
 
+    // Register output in materialize data
     _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(nodeIDs);
 
     _pendingOutput = &outNodeIDs;
@@ -48,22 +51,26 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
+    // Create get out edges processor
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
     _pendingOutput->connectTo(getOutEdges->inNodeIDs());
 
     PipelineEdgeOutputInterface& outEdges = getOutEdges->outEdges();
     Dataframe* outDf = outEdges.getDataframe();
 
+    // Allocate indices column
     NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
     outEdges.setIndices(indices);
-    
-    MaterializeData& matData = _matProc->getMaterializeData();
-    matData.createStep(indices);
 
+    // Allocate output columns for edges
     NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(outDf);
     NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(outDf);
     NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
     outEdges.setEdges(edgeIDs, edgeTypes, targetNodes);
+
+    // Register output in materialize data
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
     matData.addToStep<ColumnEdgeIDs>(edgeIDs);
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
@@ -140,22 +147,26 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
 
 template <db::SupportedType T>
 PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
+    using ColumnValues = ColumnVector<typename T::Primitive>;
+
+    // Create get node properties processor
     auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
     _pendingOutput->connectTo(getProps->inIDs());
-
-    using ColumnValues = ColumnVector<typename T::Primitive>;
 
     PipelineValuesOutputInterface& outValues = getProps->outValues();
     Dataframe* outDf = outValues.getDataframe();
 
+    // Allocate indices column
     NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
     outValues.setIndices(indices);
 
-    MaterializeData& matData = _matProc->getMaterializeData();
-    matData.createStep(indices);
-
+    // Allocate output values column
     NamedColumn* values = allocColumn<ColumnValues>(outDf);
     outValues.setValues(values);
+
+    // Register output in materialize data
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
     matData.addToStep<ColumnValues>(values);
 
     _pendingOutput = &getProps->outValues();

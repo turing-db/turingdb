@@ -143,7 +143,14 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
-    _builder.addLambda(_callback);
+    auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+
+        _callback(df);
+    };
+    _builder.addLambda(lambdaCallback);
 }
 
 void PipelineGenerator::translateJoinNode(JoinNode* node, PlanGraphStream& stream) {

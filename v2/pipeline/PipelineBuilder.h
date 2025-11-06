@@ -32,13 +32,18 @@ public:
 
     PipelineOutputInterface* getOutput() const { return _pendingOutput; }
 
+    // Sources
     PipelineNodeOutputInterface& addScanNodes();
+
+    // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
     void addLambda(const LambdaProcessor::Callback& callback);
 
+    // Properties
     template <SupportedType T>
     PipelineValuesOutputInterface& addGetNodeProperties(PropertyType propertyType);
 
+    // Aggregations
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);
     PipelineValueOutputInterface& addCount();
@@ -47,6 +52,7 @@ public:
 
     PipelineBlockOutputInterface& addMaterialize();
 
+    // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
     NamedColumn* addColumnToOutput(ColumnTag tag) {
         return allocColumn<ColumnType>(_pendingOutput->getDataframe(), tag);
