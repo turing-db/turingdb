@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Path.h"
 #include "TuringTestEnv.h"
 
 namespace db {
@@ -16,7 +17,7 @@ using TuringTestEnv = turing::test::TuringTestEnv;
 
 class DeleteTest {
 public:
-    DeleteTest(const std::string& graph);
+    DeleteTest(const std::string& testName, const std::string& graph);
     ~DeleteTest() = default;
 
     DeleteTest(const DeleteTest&) = delete;
@@ -31,12 +32,17 @@ public:
     void deleteNodes(std::vector<NodeID>&& nodes);
     void deleteEdges(std::vector<EdgeID>&& edges);
 
+    static inline const fs::Path WORKING_PATH {SAMPLE_DIR "/.turing"};
+
 private:
+    const std::string _testName;
     std::unique_ptr<TuringTestEnv> _env;
     std::string _graphName;
     std::vector<NodeID> _nodesToDelete;
     std::vector<EdgeID> _edgesToDelete;
     std::vector<std::string> _queries;
+
+    void addIncidentEdges(const std::vector<NodeID>& nodes);
 
     bool runDeleteQueries(bool nodes);
     bool runNodeDeleteQueries() { return runDeleteQueries(true); }
@@ -45,9 +51,6 @@ private:
 
     template<TypedInternalID IDT>
     void filterColumn(ColumnVector<IDT>* col);
-
-    bool blocksEqual(const Block& a, const Block& b);
-
     
 };
 

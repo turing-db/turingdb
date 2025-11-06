@@ -8,15 +8,49 @@
 #include "SystemManager.h"
 #include "columns/Block.h"
 #include "columns/ColumnVector.h"
+#include "iterators/GetInEdgesIterator.h"
+#include "iterators/GetOutEdgesIterator.h"
 #include "versioning/Change.h"
+#include "versioning/CommitHash.h"
+#include "versioning/Transaction.h"
 
-DeleteTest::DeleteTest(const std::string& graph)
-    : _graphName {graph}
-{
+using namespace db;
+
+DeleteTest::DeleteTest(const std::string& testName, const std::string& graph)
+    : _testName {testName},
+    _graphName {graph} {
 }
 
 void DeleteTest::addQuery(const std::string& query) {
     _queries.emplace_back(query);
+}
+
+void DeleteTest::addIncidentEdges(const std::vector<NodeID>& nodes) {
+    // Should probably not use ChangeID::head()
+    TuringDB& db = _env->getDB();
+    SystemManager& sysMan = db.getSystemManager();
+    auto txRes = sysMan.openTransaction(_graphName, CommitHash::head(), ChangeID::head());
+    if (!txRes) {
+        spdlog::error("Failed to open transaction to get incident edges.");
+        std::abort();
+    }
+    auto& tx = txRes.value();
+    GraphView view = tx.viewGraph();
+
+    ColumnVector<NodeID> deletedNodes(nodes);
+
+    {
+        GetOutEdgesRange rg(view, &deletedNodes);
+        for (const EdgeRecord& rec : rg) {
+            _edgesToDelete.push_back(rec._edgeID);
+        }
+    }
+    {
+        GetInEdgesRange rg(view, &deletedNodes);
+        for (const EdgeRecord& rec : rg) {
+            _edgesToDelete.push_back(rec._edgeID);
+        }
+    }
 }
 
 void DeleteTest::deleteNodes(std::vector<NodeID>&& nodes) {
@@ -62,7 +96,6 @@ bool DeleteTest::runDeleteQueries(bool nodes) {
         spdlog::error("Failed to submit {} deletion change.", type);
         return false;
     }
-    spdlog::info("Ran {}", deleteQuery);
     return true;
 }
 
@@ -94,8 +127,8 @@ void DeleteTest::filterBlocks(std::vector<Block>& expectedBlocks) {
 }
 
 bool DeleteTest::run() {
-    const fs::Path path {SAMPLE_DIR "/.turing"};
-    _env = TuringTestEnv::create(path);
+    spdlog::info("RUNNING TEST {}", _testName);
+    _env = TuringTestEnv::create(DeleteTest::WORKING_PATH);
 
     SystemManager& sysMan = _env->getSystemManager();
     TuringDB& db = _env->getDB();
@@ -104,6 +137,8 @@ bool DeleteTest::run() {
         spdlog::error("Failed to load graph {}", _graphName);
         return false;
     }
+
+    addIncidentEdges(_nodesToDelete);
 
     // Perform queries, get outputs as blocks
     std::vector<Block> queryOutputBlocks;
@@ -154,7 +189,7 @@ bool DeleteTest::run() {
         const auto ASSERT_EQ = [&](const Block& block) -> void {
             const auto PRINT_COL = [](ColumnVector<EntityID>* col) {
                 for (auto id : *col) {
-                    spdlog::info("\t{}", id);
+                    spdlog::error("\t{}", id);
                 }
             };
 
@@ -178,9 +213,9 @@ bool DeleteTest::run() {
                 if (blockCol->size() != expCol->size()) {
                     spdlog::error("Column {} sizes: Expected: {}; Actual: {}", i,
                                   expCol->size(), blockCol->size());
-                    spdlog::info("Expected:");
+                    spdlog::error("Expected:");
                     PRINT_COL(expCol);
-                    spdlog::info("Actual:");
+                    spdlog::error("Actual:");
                     PRINT_COL(blockCol);
                     same = false;
                     return;
@@ -210,5 +245,6 @@ bool DeleteTest::run() {
         }
     }
 
+    spdlog::info("PASSED TEST {}", _testName);
     return true;
 }
