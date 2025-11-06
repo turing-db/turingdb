@@ -1,5 +1,6 @@
 #include "MaterializeData.h"
 
+#include "dataframe/DataframeManager.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnVector.h"
@@ -11,8 +12,9 @@
 using namespace db::v2;
 using namespace db;
 
-MaterializeData::MaterializeData(LocalMemory* mem)
+MaterializeData::MaterializeData(LocalMemory* mem, DataframeManager* dfMan)
     : _mem(mem),
+    _dfMan(dfMan),
     _columnsPerStep(1)
 {
 }
@@ -37,7 +39,9 @@ void MaterializeData::addToStep(const NamedColumn* col) {
     _columnsPerStep[_step].push_back(col->getColumn());
 
     ColumnType* outCol = _mem->alloc<ColumnType>();
-    NamedColumn::create(_output, outCol, col->getHeader());
+    NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getHeader());
+    _output->addColumn(outNamedCol);
+
 }
 
 #define INSTANTIATE(Type) \

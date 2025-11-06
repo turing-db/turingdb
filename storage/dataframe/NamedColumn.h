@@ -4,34 +4,29 @@
 
 namespace db {
 
-class Dataframe;
+class DataframeManager;
 class Column;
 
 class NamedColumn {
 public:
-    friend Dataframe;
-
-    Dataframe* getParent() const { return _parent; }
+    friend DataframeManager;
 
     const ColumnHeader& getHeader() const { return _header; }
     ColumnHeader& getHeader() { return _header; }
 
     Column* getColumn() const { return _column; }
 
-    static NamedColumn* create(Dataframe* df,
+    static NamedColumn* create(DataframeManager* dfMan,
                                Column* column,
                                const ColumnHeader& header);
 
 private:
-    Dataframe* _parent {nullptr};
     ColumnHeader _header;
     Column* _column {nullptr};
 
-    NamedColumn(Dataframe* parent,
-                const ColumnHeader& header,
+    NamedColumn(const ColumnHeader& header,
                 Column* column)
-        : _parent(parent),
-        _header(header),
+        : _header(header),
         _column(column)
     {
     }

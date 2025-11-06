@@ -9,6 +9,7 @@
 
 namespace db {
 class LocalMemory;
+class DataframeManager;
 }
 
 namespace db::v2 {
@@ -32,7 +33,7 @@ private:
     MaterializeData _matData;
     ColumnVector<size_t> _transform;
 
-    MaterializeProcessor(LocalMemory* mem);
+    MaterializeProcessor(LocalMemory* mem, DataframeManager* dfMan);
     ~MaterializeProcessor();
 };
 

@@ -1,23 +1,13 @@
 #include "NamedColumn.h"
 
-#include <spdlog/fmt/fmt.h>
-
-#include "Dataframe.h"
-
-#include "TuringException.h"
+#include "DataframeManager.h"
 
 using namespace db;
 
-NamedColumn* NamedColumn::create(Dataframe* parent,
+NamedColumn* NamedColumn::create(DataframeManager* dfMan,
                                  Column* column,
                                  const ColumnHeader& header) {
-    if (parent->getColumn(header.getTag())) {
-        throw TuringException(fmt::format(
-            "A column with tag {} already exists in dataframe",
-            header.getTag().getValue()));
-    }
-
-    NamedColumn* namedCol = new NamedColumn(parent, header, column);
-    parent->addColumn(namedCol);
+    NamedColumn* namedCol = new NamedColumn(header, column);
+    dfMan->addColumn(namedCol);
     return namedCol;
 }

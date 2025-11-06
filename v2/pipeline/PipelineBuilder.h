@@ -1,6 +1,8 @@
 #pragma once
 
+#include "PipelineV2.h"
 #include "PipelineInterface.h"
+
 #include "dataframe/ColumnTagManager.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
@@ -22,9 +24,10 @@ class PipelineBuilder {
 public:
     PipelineBuilder(LocalMemory* mem,
                     PipelineV2* pipeline,
-                    ColumnTagManager& tagManager)
+                    ColumnTagManager* tagManager)
         : _mem(mem),
         _pipeline(pipeline),
+        _dfMan(pipeline->getDataframeManager()),
         _tagManager(tagManager)
     {
     }
@@ -54,19 +57,22 @@ public:
 private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};
-    ColumnTagManager& _tagManager;
+    DataframeManager* _dfMan {nullptr};
+    ColumnTagManager* _tagManager {nullptr};
     PipelineOutputInterface* _pendingOutput {nullptr};
     MaterializeProcessor* _matProc {nullptr};
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {
         ColumnType* col = _mem->alloc<ColumnType>();
-        return NamedColumn::create(df, col, ColumnHeader(tag));
+        NamedColumn* newCol = NamedColumn::create(_dfMan, col, ColumnHeader(tag));
+        df->addColumn(newCol);
+        return newCol;
     }
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df) {
-        return allocColumn<ColumnType>(df, _tagManager.allocTag());
+        return allocColumn<ColumnType>(df, _tagManager->allocTag());
     }
 
     void openMaterialize();

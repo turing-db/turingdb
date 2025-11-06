@@ -76,8 +76,8 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
 
 }
 
-MaterializeProcessor::MaterializeProcessor(LocalMemory* mem)
-    : _matData(mem)
+MaterializeProcessor::MaterializeProcessor(LocalMemory* mem, DataframeManager* dfMan)
+    : _matData(mem, dfMan)
 {
 }
 
@@ -85,7 +85,7 @@ MaterializeProcessor::~MaterializeProcessor() {
 }
 
 MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMemory* mem) {
-    MaterializeProcessor* materialize = new MaterializeProcessor(mem);
+    MaterializeProcessor* materialize = new MaterializeProcessor(mem, pipeline->getDataframeManager());
 
     PipelineInputPort* input = PipelineInputPort::create(pipeline, materialize);
     materialize->_input.setPort(input);

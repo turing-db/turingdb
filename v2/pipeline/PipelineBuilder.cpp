@@ -18,10 +18,14 @@ using namespace db;
 
 namespace {
 
-void duplicateDataframeShape(LocalMemory* mem, Dataframe* src, Dataframe* dest) {
+void duplicateDataframeShape(LocalMemory* mem,
+                             DataframeManager* dfMan,
+                             Dataframe* src,
+                             Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
-        NamedColumn::create(dest, newCol, col->getHeader());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getHeader());
+        dest->addColumn(newNamedCol);
     }
 }
 
@@ -99,7 +103,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     SkipProcessor* skip = SkipProcessor::create(_pipeline, count);
     _pendingOutput->connectTo(skip->input());
 
-    duplicateDataframeShape(_mem, skip->input().getDataframe(), skip->output().getDataframe());
+    duplicateDataframeShape(_mem, _dfMan, skip->input().getDataframe(), skip->output().getDataframe());
     
     _pendingOutput = &skip->output();
 
@@ -110,7 +114,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     LimitProcessor* limit = LimitProcessor::create(_pipeline, count);
     _pendingOutput->connectTo(limit->input());
 
-    duplicateDataframeShape(_mem, limit->input().getDataframe(), limit->output().getDataframe());
+    duplicateDataframeShape(_mem, _dfMan, limit->input().getDataframe(), limit->output().getDataframe());
 
     _pendingOutput = &limit->output();
 

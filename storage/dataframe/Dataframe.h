@@ -45,6 +45,8 @@ public:
 
     const NamedColumns& cols() const { return _cols; }
 
+    void addColumn(NamedColumn* column);
+
     NamedColumn* getColumn(ColumnTag tag) const {
         const auto it = _headerMap.find(tag);
         if (it == _headerMap.end()) {
@@ -62,8 +64,6 @@ public:
 private:
     std::unordered_map<ColumnTag, NamedColumn*, ColumnTag::Hash> _headerMap;
     NamedColumns _cols;
-
-    void addColumn(NamedColumn* column);
 };
 
 }

@@ -3,6 +3,8 @@
 #include <vector>
 #include <unordered_set>
 
+#include "dataframe/DataframeManager.h"
+
 namespace db::v2 {
 
 class Processor;
@@ -22,6 +24,8 @@ public:
     PipelineV2();
     ~PipelineV2();
 
+    DataframeManager* getDataframeManager() { return &_dfMan; }
+
     const SourcesSet& sources() const { return _sources; }
 
     const Processors& processors() const { return _processors; }
@@ -31,6 +35,7 @@ private:
     Buffers _buffers;
     Ports _ports;
     SourcesSet _sources;
+    DataframeManager _dfMan;
 
     void addProcessor(Processor* processor);
     void addPort(PipelinePort* port);

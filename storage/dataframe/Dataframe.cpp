@@ -1,7 +1,11 @@
 #include "Dataframe.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "NamedColumn.h"
 #include "columns/Column.h"
+
+#include "FatalException.h"
 
 using namespace db;
 
@@ -10,12 +14,15 @@ Dataframe::Dataframe()
 }
 
 Dataframe::~Dataframe() {
-    for (NamedColumn* col : _cols) {
-        delete col;
-    }
 }
 
 void Dataframe::addColumn(NamedColumn* column) {
+    if (getColumn(column->getHeader().getTag())) {
+        throw FatalException(fmt::format(
+            "A column with tag {} already exists in Dataframe",
+            column->getHeader().getTag().getValue()));
+    }
+
     _cols.push_back(column);
     _headerMap[column->getHeader().getTag()] = column;
 }

@@ -6,6 +6,7 @@
 
 namespace db {
 class LocalMemory;
+class DataframeManager;
 class Dataframe;
 class NamedColumn;
 }
@@ -18,7 +19,9 @@ public:
     using ColumnsPerStep = std::vector<Columns>;
     using Indices = std::vector<const ColumnIndices*>;
 
-    explicit MaterializeData(LocalMemory* mem);
+    explicit MaterializeData(LocalMemory* mem,
+                             DataframeManager* dfMan);
+
     ~MaterializeData();
 
     MaterializeData(const MaterializeData& other) = delete;
@@ -41,6 +44,7 @@ public:
 
 private:
     LocalMemory* _mem {nullptr};
+    DataframeManager* _dfMan {nullptr};
     Dataframe* _output {nullptr};
     size_t _step {0};
     Indices _indices;
