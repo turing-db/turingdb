@@ -5,10 +5,11 @@
 #include <ostream>
 
 #include "ColumnTag.h"
+#include "NamedColumn.h"
 
 namespace db {
 
-class NamedColumn;
+class Column;
 
 // A basic Dataframe class where columns are indexed by numerical ColumnTag.
 // Columns can have optional names as string_views, but only tags can be used
@@ -54,6 +55,17 @@ public:
         }
 
         return it->second;
+    }
+
+    template <typename T>
+        requires std::is_base_of_v<Column, T>
+    const T* getColumn(ColumnTag tag) const {
+        const auto* col = getColumn(tag);
+        if (!col) {
+            return nullptr;
+        }
+
+        return dynamic_cast<const T*>(col->getColumn());
     }
 
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);

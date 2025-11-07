@@ -20,6 +20,8 @@ public:
                                Column* column,
                                const ColumnHeader& header);
 
+    ColumnTag getTag() const { return _header.getTag(); }
+
 private:
     ColumnHeader _header;
     Column* _column {nullptr};

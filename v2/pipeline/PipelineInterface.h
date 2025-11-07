@@ -60,20 +60,20 @@ public:
     constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
 
     void setEdges(NamedColumn* edgeIDs,
-                  NamedColumn* targetNodes,
+                  NamedColumn* neighbourNodes,
                   NamedColumn* edgeTypes) {
         _edgeIDs = edgeIDs;
-        _targetNodes = targetNodes;
+        _neighbourNodes = neighbourNodes;
         _edgeTypes = edgeTypes;
     }
 
     NamedColumn* getEdgeIDs() const { return _edgeIDs; }
-    NamedColumn* getTargetNodes() const { return _targetNodes; }
+    NamedColumn* getNeighbourNodes() const { return _neighbourNodes; }
     NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
 private:
     NamedColumn* _edgeIDs {nullptr};
-    NamedColumn* _targetNodes {nullptr};
+    NamedColumn* _neighbourNodes {nullptr};
     NamedColumn* _edgeTypes {nullptr};
 };
 
@@ -144,10 +144,10 @@ public:
 
     void setEdges(NamedColumn* edgeIDs,
                   NamedColumn* edgeTypes,
-                  NamedColumn* targetNodes) {
+                  NamedColumn* neighbourNodes) {
         _edgeIDs = edgeIDs;
         _edgeTypes = edgeTypes;
-        _targetNodes = targetNodes;
+        _neighbourNodes = neighbourNodes;
     }
 
     void setIndices(NamedColumn* indices) { _indices = indices; }
@@ -155,16 +155,16 @@ public:
     NamedColumn* getIndices() const { return _indices; }
 
     NamedColumn* getEdgeIDs() const { return _edgeIDs; }
-    NamedColumn* getTargetNodes() const { return _targetNodes; }
+    NamedColumn* getNeighbourNodes() const { return _neighbourNodes; }
     NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
     void connectTo(PipelineEdgeInputInterface& input) override {
-        input.setEdges(_edgeIDs, _targetNodes, _edgeTypes);
+        input.setEdges(_edgeIDs, _neighbourNodes, _edgeTypes);
         _port->connectTo(input.getPort());
     }
 
     void connectTo(PipelineNodeInputInterface& input) override {
-        input.setNodeIDs(_targetNodes);
+        input.setNodeIDs(_neighbourNodes);
         _port->connectTo(input.getPort());
     }
 
@@ -175,7 +175,7 @@ public:
 private:
     NamedColumn* _indices {nullptr};
     NamedColumn* _edgeIDs {nullptr};
-    NamedColumn* _targetNodes {nullptr};
+    NamedColumn* _neighbourNodes {nullptr};
     NamedColumn* _edgeTypes {nullptr};
 };
 

@@ -7,14 +7,14 @@
 #include "PipelineInterface.h"
 
 namespace db {
-class GetOutEdgesChunkWriter;
+class GetInEdgesChunkWriter;
 }
 
 namespace db::v2 {
 
-class GetOutEdgesProcessor : public Processor {
+class GetInEdgesProcessor : public Processor {
 public:
-    static GetOutEdgesProcessor* create(PipelineV2* pipeline);
+    static GetInEdgesProcessor* create(PipelineV2* pipeline);
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
@@ -26,11 +26,11 @@ public:
 private:
     PipelineNodeInputInterface _inNodeIDs;
     PipelineEdgeOutputInterface _outEdges;
-    std::unique_ptr<GetOutEdgesChunkWriter> _it;
+    std::unique_ptr<GetInEdgesChunkWriter> _it;
     size_t _chunkSize = 0;
 
-    GetOutEdgesProcessor();
-    ~GetOutEdgesProcessor();
+    GetInEdgesProcessor();
+    ~GetInEdgesProcessor();
 };
 
 }

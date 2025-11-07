@@ -75,13 +75,13 @@ public:
     void setInputNodeIDs(const ColumnNodeIDs* inputNodeIDs) { _inputNodeIDs = inputNodeIDs; }
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
     void setEdgeIDs(ColumnEdgeIDs* edgeIDs) { _edgeIDs = edgeIDs; }
-    void setTgtIDs(ColumnNodeIDs* tgts) { _tgts = tgts; }
+    void setSrcIDs(ColumnNodeIDs* srcs) { _srcs = srcs; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
     ColumnVector<size_t>* _indices {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
-    ColumnNodeIDs* _tgts {nullptr};
+    ColumnNodeIDs* _srcs {nullptr};
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
@@ -100,7 +100,7 @@ struct GetInEdgesRange {
 
 static_assert(NonRootChunkWriter<GetInEdgesChunkWriter>);
 static_assert(EdgeIDsChunkWriter<GetInEdgesChunkWriter>);
-static_assert(TgtIDsChunkWriter<GetInEdgesChunkWriter>);
+static_assert(SrcIDsChunkWriter<GetInEdgesChunkWriter>);
 static_assert(EdgeTypesChunkWriter<GetInEdgesChunkWriter>);
 
 }

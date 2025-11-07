@@ -1,6 +1,7 @@
 #include "PipelineBuilder.h"
 
 #include "processors/ScanNodesProcessor.h"
+#include "processors/GetInEdgesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
 #include "processors/MaterializeProcessor.h"
 #include "processors/LambdaProcessor.h"
@@ -76,6 +77,32 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     _pendingOutput = &outEdges;
 
     return outEdges;
+}
+
+PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
+    GetInEdgesProcessor* getInEdges = GetInEdgesProcessor::create(_pipeline);
+    _pendingOutput->connectTo(getInEdges->inNodeIDs());
+
+    PipelineEdgeOutputInterface& inEdges = getInEdges->outEdges();
+    Dataframe* df = inEdges.getDataframe();
+
+    NamedColumn* indices = allocColumn<ColumnIndices>(df);
+    inEdges.setIndices(indices);
+    
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+
+    NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(df);
+    NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(df);
+    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(df);
+    inEdges.setEdges(edgeIDs, edgeTypes, targetNodes);
+    matData.addToStep<ColumnEdgeIDs>(edgeIDs);
+    matData.addToStep<ColumnEdgeTypes>(edgeTypes);
+    matData.addToStep<ColumnNodeIDs>(targetNodes);
+
+    _pendingOutput = &inEdges;
+
+    return inEdges;
 }
 
 void PipelineBuilder::openMaterialize() {

@@ -118,9 +118,9 @@ void GetInEdgesChunkWriter::filterTombstones() {
 
     bioassert(_indices->size() == _edgeIDs->size());
 
-    if (_tgts) {
-        _filter.filter(_tgts);
-        bioassert(_tgts->size() == _edgeIDs->size());
+    if (_srcs) {
+        _filter.filter(_srcs);
+        bioassert(_srcs->size() == _edgeIDs->size());
     }
     if (_types) {
         _filter.filter(_types);
@@ -143,8 +143,8 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     if (_edgeIDs) {
         _edgeIDs->clear();
     }
-    if (_tgts) {
-        _tgts->clear();
+    if (_srcs) {
+        _srcs->clear();
     }
     if (_types) {
         _types->clear();
@@ -175,9 +175,9 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
                               });
             }
             if constexpr (conditions[1]) {
-                _tgts->resize(newSize);
-                std::generate((_tgts)->begin() + prevSize,
-                              (_tgts)->end(),
+                _srcs->resize(newSize);
+                std::generate((_srcs)->begin() + prevSize,
+                              (_srcs)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
                                   const NodeID id = edgeIt->_otherID;
                                   ++edgeIt;
@@ -200,7 +200,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
         };
     };
 
-    switch (bitmask::create(_edgeIDs, _tgts, _types)) {
+    switch (bitmask::create(_edgeIDs, _srcs, _types)) {
         CASE(0);
         CASE(1);
         CASE(2);
