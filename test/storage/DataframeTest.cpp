@@ -37,7 +37,7 @@ TEST_F(DataframeTest, testOneCol) {
     ASSERT_EQ(df.cols().size(), 1);
 
     for (const NamedColumn* namedCol : df.cols()) {
-        ASSERT_EQ(namedCol->getHeader().getTag(), aHeader.getTag());
+        ASSERT_EQ(namedCol->getTag(), aHeader.getTag());
     }
 }
 

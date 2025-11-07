@@ -109,7 +109,7 @@ TEST_F(PipelineTest, scanNodes) {
     PipelineBuilder builder(&mem, &pipeline);
     
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
 
     builder.addMaterialize();
 
@@ -151,10 +151,10 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     PipelineBuilder builder(&mem, &pipeline);
     
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
 
     PipelineEdgeOutputInterface& getOutEdgesOut = builder.addGetOutEdges();
-    const ColumnTag getOutEdgesOutTargetNodesTag = getOutEdgesOut.getNeighbourNodes()->getHeader().getTag();
+    const ColumnTag getOutEdgesOutTargetNodesTag = getOutEdgesOut.getOtherNodes()->getTag();
     
     builder.addMaterialize();
 
@@ -219,7 +219,7 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     PipelineBuilder builder(&mem, &pipeline);
     
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
 
     builder.addGetOutEdges();
 
@@ -227,7 +227,7 @@ TEST_F(PipelineTest, scanNodesExpandGetProperties) {
     const PropertyType namePropType = _graph->openTransaction().readGraph().getMetadata().propTypes().get("name").value();
 
     PipelineValuesOutputInterface& getNodePropertiesOut = builder.addGetNodeProperties<types::String>(namePropType);
-    const ColumnTag getNodePropertiesOutValuesTag = getNodePropertiesOut.getValues()->getHeader().getTag();
+    const ColumnTag getNodePropertiesOutValuesTag = getNodePropertiesOut.getValues()->getTag();
 
     builder.addMaterialize();
 
@@ -285,13 +285,13 @@ TEST_F(PipelineTest, scanNodesExpand2) {
     PipelineBuilder builder(&mem, &pipeline);
 
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getHeader().getTag();
+    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
     
     PipelineEdgeOutputInterface& getOutEdges1Out = builder.addGetOutEdges();
-    const ColumnTag getOutEdges1OutTargetNodesTag = getOutEdges1Out.getNeighbourNodes()->getHeader().getTag();
+    const ColumnTag getOutEdges1OutTargetNodesTag = getOutEdges1Out.getOtherNodes()->getTag();
     
     PipelineEdgeOutputInterface& getOutEdges2Out = builder.addGetOutEdges();
-    const ColumnTag getOutEdges2OutTargetNodesTag = getOutEdges2Out.getNeighbourNodes()->getHeader().getTag();
+    const ColumnTag getOutEdges2OutTargetNodesTag = getOutEdges2Out.getOtherNodes()->getTag();
     
     builder.addMaterialize();
 

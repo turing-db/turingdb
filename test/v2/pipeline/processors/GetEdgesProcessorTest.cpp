@@ -37,7 +37,7 @@ TEST_F(GetEdgesProcessorTest, test) {
     const auto edgeInterface = _builder->addGetEdges();
     const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();
     const ColumnTag edgeTypesTag = edgeInterface.getEdgeTypes()->getTag();
-    const ColumnTag otherIDsTag = edgeInterface.getNeighbourNodes()->getTag();
+    const ColumnTag otherIDsTag = edgeInterface.getOtherNodes()->getTag();
 
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {

@@ -17,14 +17,14 @@ Dataframe::~Dataframe() {
 }
 
 void Dataframe::addColumn(NamedColumn* column) {
-    if (getColumn(column->getHeader().getTag())) {
+    if (getColumn(column->getTag())) {
         throw FatalException(fmt::format(
             "A column with tag {} already exists in Dataframe",
-            column->getHeader().getTag().getValue()));
+            column->getTag().getValue()));
     }
 
     _cols.push_back(column);
-    _headerMap[column->getHeader().getTag()] = column;
+    _headerMap[column->getTag()] = column;
 }
 
 size_t Dataframe::getRowCount() const {
@@ -37,7 +37,7 @@ size_t Dataframe::getRowCount() const {
 
 void Dataframe::dump(std::ostream& out) const {
     for (const NamedColumn* col : _cols) {
-        out << "Column $" << col->getHeader().getTag().getValue() << ": ";
+        out << "Column $" << col->getTag().getValue() << ": ";
         col->getColumn()->dump(out);
         out << '\n';
     }
