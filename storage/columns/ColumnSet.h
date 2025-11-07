@@ -75,6 +75,8 @@ public:
 
     void clear() noexcept { _data.clear(); }
 
+    std::pair<Iterator, bool> insert(const T& val) { return _data.insert(val); }
+
     void resize([[maybe_unused]] size_t size) override {
         throw FatalException("Attempted to resize ColumnSet.");
     }
