@@ -353,7 +353,7 @@ void queryCallbackV2(const Dataframe* df, tabulate::Table& table) {
         const ColumnHeader& header = namedCol->getHeader();
         const std::string_view name = header.getName();
         if (name.empty()) {
-            headerRow << "$" << header.getTag().getValue();
+            headerRow << "$" + std::to_string(header.getTag().getValue());
         } else {
             headerRow << name;
         }
