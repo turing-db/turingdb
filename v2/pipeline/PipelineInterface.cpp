@@ -2,32 +2,45 @@
 
 #include "PipelineException.h"
 
+using namespace db;
 using namespace db::v2;
 
-void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) {
-    throw PipelineException("PipelineBlockOutputInterface: cannot connect to node input");
+NamedColumn* PipelineOutputInterface::getIndices() const {
+    throw PipelineException("PipelineOutputInterface: cannot get indices");
 }
 
-void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    throw PipelineException("PipelineBlockOutputInterface: cannot connect to edge input");
+NamedColumn* PipelineOutputInterface::getNodeIDs() const {
+    throw PipelineException("PipelineOutputInterface: cannot get node IDs");
 }
 
-void PipelineNodeOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    throw PipelineException("PipelineNodeOutputInterface: cannot connect to edge input");
+NamedColumn* PipelineOutputInterface::getEdgeIDs() const {
+    throw PipelineException("PipelineOutputInterface: cannot get edge IDs");
 }
 
-void PipelineValuesOutputInterface::connectTo(PipelineNodeInputInterface& input) {
-    throw PipelineException("PipelineValuesOutputInterface: cannot connect to node input");
+NamedColumn* PipelineOutputInterface::getTargetNodes() const {
+    throw PipelineException("PipelineOutputInterface: cannot get target nodes");
 }
 
-void PipelineValuesOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    throw PipelineException("PipelineValuesOutputInterface: cannot connect to edge input");
+NamedColumn* PipelineOutputInterface::getEdgeTypes() const {
+    throw PipelineException("PipelineOutputInterface: cannot get edge types");
 }
 
-void PipelineValueOutputInterface::connectTo(PipelineNodeInputInterface& input) {
-    throw PipelineException("PipelineValueOutputInterface: cannot connect to node input");
+NamedColumn* PipelineOutputInterface::getValues() const {
+    throw PipelineException("PipelineOutputInterface: cannot get values");
 }
 
-void PipelineValueOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    throw PipelineException("PipelineValueOutputInterface: cannot connect to edge input");
+NamedColumn* PipelineOutputInterface::getValue() const {
+    throw PipelineException("PipelineOutputInterface: cannot get value");
+}
+
+void PipelineOutputInterface::connectTo(PipelineNodeInputInterface& input) {
+    throw PipelineException("PipelineOutputInterface: cannot connect to node input");
+}
+
+void PipelineOutputInterface::connectTo(PipelineBlockInputInterface& input) {
+    throw PipelineException("PipelineOutputInterface: cannot connect to block input");
+}
+
+void PipelineOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
+    throw PipelineException("PipelineOutputInterface: cannot connect to edge input");
 }

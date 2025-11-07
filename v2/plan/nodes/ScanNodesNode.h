@@ -13,14 +13,14 @@ public:
     {
     }
 
-    VarDecl* getNodeIDsDecl() const { return _nodeIDsDecl; }
+    VarDecl* getNodeDecl() const { return _nodeDecl; }
 
-    void setNodeIDsDecl(VarDecl* nodeIDsDecl) {
-        _nodeIDsDecl = nodeIDsDecl;
+    void setNodeDecl(VarDecl* nodeDecl) {
+        _nodeDecl = nodeDecl;
     }
 
 private:
-    VarDecl* _nodeIDsDecl {nullptr};
+    VarDecl* _nodeDecl {nullptr};
 };
 
 }

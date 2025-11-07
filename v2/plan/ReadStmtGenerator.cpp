@@ -147,7 +147,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         ScanNodesNode* scan = _tree->create<ScanNodesNode>();
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
 
-        scan->setNodeIDsDecl(decl);
+        scan->setNodeDecl(decl);
         scan->connectOut(filter);
     }
 
@@ -182,18 +182,26 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
 
 VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
                                                        const EdgePattern* edge) {
+    VarDecl* decl = edge->getDecl();
+
     // Expand edge based on direction
 
     PlanGraphNode* currentNode = nullptr;
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
-            currentNode = _tree->newOut<GetEdgesNode>(prevNode);
+            GetEdgesNode* n = _tree->newOut<GetEdgesNode>(prevNode);
+            n->setEdgeDecl(decl);
+            currentNode = n;
         } break;
         case EdgePattern::Direction::Backward: {
-            currentNode = _tree->newOut<GetInEdgesNode>(prevNode);
+            GetInEdgesNode* n = _tree->newOut<GetInEdgesNode>(prevNode);
+            n->setEdgeDecl(decl);
+            currentNode = n;
         } break;
         case EdgePattern::Direction::Forward: {
-            currentNode = _tree->newOut<GetOutEdgesNode>(prevNode);
+            GetOutEdgesNode* n = _tree->newOut<GetOutEdgesNode>(prevNode);
+            n->setEdgeDecl(decl);
+            currentNode = n;
         } break;
     }
 
@@ -203,7 +211,6 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     const auto& exprConstraints = data->exprConstraints();
     const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
     const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
-    const VarDecl* decl = edge->getDecl();
 
     if (edgeTypes.size() > 1) {
         throwError("Only one edge type constraint is supported for now", edge);
@@ -246,14 +253,17 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
 VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
                                                          const NodePattern* target) {
     // Target nodes
+    VarDecl* decl = target->getDecl();
+
     const NodePatternData* data = target->getData();
     const std::span labels = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
-    const VarDecl* decl = target->getDecl();
     const LabelMap& labelMap = _graphMetadata.labels();
     const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
-    PlanGraphNode* currentNode = _tree->newOut<GetEdgeTargetNode>(prevNode);
+    GetEdgeTargetNode* n = _tree->newOut<GetEdgeTargetNode>(prevNode);
+    n->setNodeDecl(decl);
+    PlanGraphNode* currentNode = n;
 
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {

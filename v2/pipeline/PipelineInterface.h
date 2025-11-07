@@ -84,11 +84,19 @@ public:
     PipelineOutputPort* getPort() const { return _port; }
     Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
 
+    virtual NamedColumn* getIndices() const;
+    virtual NamedColumn* getNodeIDs() const;
+    virtual NamedColumn* getEdgeIDs() const;
+    virtual NamedColumn* getTargetNodes() const;
+    virtual NamedColumn* getEdgeTypes() const;
+    virtual NamedColumn* getValues() const;
+    virtual NamedColumn* getValue() const;
+
     void setPort(PipelineOutputPort* port) { _port = port; }
 
-    virtual void connectTo(PipelineNodeInputInterface& input) = 0;
-    virtual void connectTo(PipelineBlockInputInterface& input) = 0;
-    virtual void connectTo(PipelineEdgeInputInterface& input) = 0;
+    virtual void connectTo(PipelineNodeInputInterface& input);
+    virtual void connectTo(PipelineBlockInputInterface& input);
+    virtual void connectTo(PipelineEdgeInputInterface& input);
 
 protected:
     PipelineOutputPort* _port {nullptr};
@@ -104,10 +112,6 @@ public:
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
     }
-
-    // Invalid connections, throws PipelineException
-    void connectTo(PipelineNodeInputInterface& input) override;
-    void connectTo(PipelineEdgeInputInterface& input) override;
 };
 
 class PipelineNodeOutputInterface : public PipelineOutputInterface {
@@ -117,9 +121,9 @@ public:
     void setNodeIDs(NamedColumn* nodeIDs) { _nodeIDs = nodeIDs; }
     void setIndices(NamedColumn* indices) { _indices = indices; }
 
-    NamedColumn* getIndices() const { return _indices; }
+    NamedColumn* getIndices() const override { return _indices; }
 
-    NamedColumn* getNodeIDs() const { return _nodeIDs; }
+    NamedColumn* getNodeIDs() const override { return _nodeIDs; }
 
     void connectTo(PipelineNodeInputInterface& input) override {
         input.setNodeIDs(_nodeIDs);
@@ -129,9 +133,6 @@ public:
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
     }
-
-    // Invalid connection, throws PipelineException
-    void connectTo(PipelineEdgeInputInterface& input) override;
 
 private:
     NamedColumn* _indices {nullptr};
@@ -152,11 +153,11 @@ public:
 
     void setIndices(NamedColumn* indices) { _indices = indices; }
 
-    NamedColumn* getIndices() const { return _indices; }
+    NamedColumn* getIndices() const override { return _indices; }
 
-    NamedColumn* getEdgeIDs() const { return _edgeIDs; }
-    NamedColumn* getTargetNodes() const { return _targetNodes; }
-    NamedColumn* getEdgeTypes() const { return _edgeTypes; }
+    NamedColumn* getEdgeIDs() const override { return _edgeIDs; }
+    NamedColumn* getTargetNodes() const override { return _targetNodes; }
+    NamedColumn* getEdgeTypes() const override { return _edgeTypes; }
 
     void connectTo(PipelineEdgeInputInterface& input) override {
         input.setEdges(_edgeIDs, _targetNodes, _edgeTypes);
@@ -186,16 +187,12 @@ public:
     void setIndices(NamedColumn* indices) { _indices = indices; }
     void setValues(NamedColumn* values) { _values = values; }
 
-    NamedColumn* getIndices() const { return _indices; }
-    NamedColumn* getValues() const { return _values; }
+    NamedColumn* getIndices() const override { return _indices; }
+    NamedColumn* getValues() const override { return _values; }
 
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
     }
-
-    // Invalid connections, throws PipelineException
-    void connectTo(PipelineNodeInputInterface& input) override;
-    void connectTo(PipelineEdgeInputInterface& input) override;
 
 private:
     NamedColumn* _indices {nullptr};
@@ -209,16 +206,12 @@ public:
     void setIndices(NamedColumn* indices) { _indices = indices; }
     void setValue(NamedColumn* value) { _value = value; }
 
-    NamedColumn* getIndices() const { return _indices; }
-    NamedColumn* getValue() const { return _value; }
+    NamedColumn* getIndices() const override { return _indices; }
+    NamedColumn* getValue() const override { return _value; }
 
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
     }
-
-    // Invalid connections, throws PipelineException
-    void connectTo(PipelineNodeInputInterface& input) override;
-    void connectTo(PipelineEdgeInputInterface& input) override;
 
 private:
     NamedColumn* _indices {nullptr};

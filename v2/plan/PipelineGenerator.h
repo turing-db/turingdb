@@ -50,6 +50,8 @@ private:
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
 
+    PipelineOutputInterface* _currentOutput {nullptr};
+
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
     void translateVarNode(VarNode* node, PlanGraphStream& stream);
     void translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream);

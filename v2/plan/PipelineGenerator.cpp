@@ -7,8 +7,9 @@
 #include "PlanGraph.h"
 #include "PipelineV2.h"
 #include "PlanGraphStream.h"
-
 #include "decl/VarDecl.h"
+
+#include "nodes/GetEdgeTargetNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -85,8 +86,11 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node), stream);
         break;
 
-        case PlanGraphOpcode::GET_EDGES:
         case PlanGraphOpcode::GET_EDGE_TARGET:
+            translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node), stream);
+        break;
+
+        case PlanGraphOpcode::GET_EDGES:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::GET_IN_EDGES:
         case PlanGraphOpcode::CREATE_NODE:
@@ -111,7 +115,7 @@ void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream)
 }
 
 void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
-    VarDecl* decl = node->getNodeIDsDecl();
+    VarDecl* decl = node->getNodeDecl();
     bioassert(decl);
 
     PipelineNodeOutputInterface& interface = _builder.addScanNodes();
@@ -120,16 +124,36 @@ void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStr
 
     decl->setTag(header.getTag());
     header.setName(decl->getName());
+
+    _currentOutput = &interface;
 }
 
 void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
-    _builder.addGetOutEdges();
+    VarDecl* decl = node->getEdgeDecl();
+    bioassert(decl);
+
+    PipelineEdgeOutputInterface& interface = _builder.addGetOutEdges();
+    NamedColumn* edgeIDs = interface.getEdgeIDs();
+    ColumnHeader& header = edgeIDs->getHeader();
+
+    decl->setTag(header.getTag());
+    header.setName(decl->getName());
+
+    _currentOutput = &interface;
 }
 
 void PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node, PlanGraphStream& stream) {
 }
 
 void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
+    VarDecl* decl = node->getNodeDecl();
+    bioassert(decl);
+
+    NamedColumn* nodeIDs = _currentOutput->getTargetNodes();
+    ColumnHeader& header = nodeIDs->getHeader();
+
+    decl->setTag(header.getTag());
+    header.setName(decl->getName());
 }
 
 void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {
@@ -143,6 +167,9 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
+    // TODO, this is a hack, the way to fix this is to get the plan graph to always add a materialize itself
+    _builder.addMaterialize();
+
     auto lambdaCallback = [this, node](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
