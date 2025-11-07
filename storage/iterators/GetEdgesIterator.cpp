@@ -96,13 +96,12 @@ void GetEdgesIterator::nextValid() {
             return;
         }
 
-        const DataPart* part = _partIt.get();
-        const NodeID nodeID = *_nodeIt;
-        const EdgeIndexer& indexer = part->edgeIndexer();
-
         if (_direction == Direction::Outgoing) {
             // Now iterate incoming edges
-            _edges = indexer.getNodeInEdges(nodeID);
+            const EdgeIndexer* indexer = &_partIt.get()->edgeIndexer();
+            const NodeID nodeID = *_nodeIt;
+
+            _edges = indexer->getNodeInEdges(nodeID);
             _edgeIt = _edges.begin();
             _direction = Direction::Incoming;
             continue;
@@ -123,7 +122,10 @@ void GetEdgesIterator::nextValid() {
             return;
         }
 
-        _edges = indexer.getNodeOutEdges(nodeID);
+        const NodeID nodeID = *_nodeIt;
+        const EdgeIndexer* indexer = &_partIt.get()->edgeIndexer();
+
+        _edges = indexer->getNodeOutEdges(nodeID);
         _edgeIt = _edges.begin();
     }
 }
@@ -183,14 +185,10 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
         _types->clear();
     }
 
-    const auto fillDirection = [&]<Direction dir, std::array<bool, NColumns> conditions>() {
+    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
-            const auto nodeEdges = dir == Direction::Outgoing
-                ?_partIt.get()->edgeIndexer().getNodeOutEdges(*_nodeIt)
-                : _partIt.get()->edgeIndexer().getNodeInEdges(*_nodeIt);
-            const auto nodeEdgesEnd = nodeEdges.end();
-            const size_t availInPart = std::distance(_edgeIt, nodeEdgesEnd);
-            const size_t rangeSize = std::min(remainingToMax, availInPart);
+            const size_t avail = std::distance(_edgeIt, _edges.end());
+            const size_t rangeSize = std::min(remainingToMax, avail);
             const size_t prevSize = _indices->size();
             const size_t newSize = prevSize + rangeSize;
             _indices->resize(newSize);
@@ -233,11 +231,6 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
             _edgeIt += rangeSize;
             nextValid();
         };
-    };
-
-    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
-        fillDirection.template operator()<Direction::Outgoing, conditions>();
-        fillDirection.template operator()<Direction::Incoming, conditions>();
     };
 
     switch (bitmask::create(_edgeIDs, _others, _types)) {

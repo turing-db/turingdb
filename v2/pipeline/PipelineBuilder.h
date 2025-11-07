@@ -38,6 +38,7 @@ public:
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
     PipelineEdgeOutputInterface& addGetInEdges();
+    PipelineEdgeOutputInterface& addGetEdges();
     void addLambda(const LambdaProcessor::Callback& callback);
 
     // Properties

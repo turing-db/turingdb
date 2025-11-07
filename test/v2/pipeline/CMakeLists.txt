@@ -13,3 +13,4 @@ endfunction()
 
 add_v2_pipeline_gtest(test_v2_pipeline PipelineTest.cpp)
 add_v2_pipeline_gtest(test_v2_pipeline_GetInEdgesProcessor processors/GetInEdgesProcessorTest.cpp)
+add_v2_pipeline_gtest(test_v2_pipeline_GetEdgesProcessor processors/GetEdgesProcessorTest.cpp)

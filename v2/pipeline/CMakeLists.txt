@@ -11,6 +11,7 @@ set(pipeline_sources
 set(processors_sources
     processors/ScanNodesProcessor.cpp
     processors/GetInEdgesProcessor.cpp
+    processors/GetEdgesProcessor.cpp
     processors/GetOutEdgesProcessor.cpp
     processors/MaterializeProcessor.cpp
     processors/MaterializeData.cpp
