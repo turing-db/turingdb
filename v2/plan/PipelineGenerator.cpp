@@ -14,6 +14,8 @@
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/FilterNode.h"
 
+#include "decl/VarDecl.h"
+
 #include "PlannerException.h"
 
 using namespace db::v2;
@@ -106,6 +108,12 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
 }
 
 void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream) {
+    const std::string_view varName = node->getVarDecl()->getName();
+    if (varName.empty()) {
+        throw PlannerException("VarNode with empty name");
+    }
+
+    _builder.getOutput()->rename(varName);
 }
 
 void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {

@@ -347,6 +347,21 @@ void queryCallbackV1(const Block& block, tabulate::Table& table) {
 void queryCallbackV2(const Dataframe* df, tabulate::Table& table) {
     const size_t rowCount = df->getRowCount();
 
+    // Write header row
+    tabulate::RowStream headerRow;
+    for (const NamedColumn* namedCol : df->cols()) {
+        const ColumnHeader& header = namedCol->getHeader();
+        const std::string_view name = header.getName();
+        if (name.empty()) {
+            headerRow << "$" << header.getTag().getValue();
+        } else {
+            headerRow << name;
+        }
+    }
+
+    table.add_row(std::move(headerRow));
+
+    // Write data rows
     for (size_t i = 0; i < rowCount; ++i) {
         tabulate::RowStream rs;
         for (const NamedColumn* namedCol : df->cols()) {

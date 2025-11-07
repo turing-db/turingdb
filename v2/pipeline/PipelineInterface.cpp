@@ -1,5 +1,7 @@
 #include "PipelineInterface.h"
 
+#include "dataframe/NamedColumn.h"
+
 #include "PipelineException.h"
 
 using namespace db::v2;
@@ -30,4 +32,24 @@ void PipelineValueOutputInterface::connectTo(PipelineNodeInputInterface& input) 
 
 void PipelineValueOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
     throw PipelineException("PipelineValueOutputInterface: cannot connect to edge input");
+}
+
+void PipelineBlockOutputInterface::rename(const std::string_view& name) {
+    throw PipelineException("PipelineBlockOutputInterface: cannot rename");
+}
+
+void PipelineNodeOutputInterface::rename(const std::string_view& name) {
+    _nodeIDs->getHeader().setName(name);
+}
+
+void PipelineEdgeOutputInterface::rename(const std::string_view& name) {
+    _targetNodes->getHeader().setName(name);
+}
+
+void PipelineValuesOutputInterface::rename(const std::string_view& name) {
+    _values->getHeader().setName(name);
+}
+
+void PipelineValueOutputInterface::rename(const std::string_view& name) {
+    _value->getHeader().setName(name);
 }
