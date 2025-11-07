@@ -13,8 +13,12 @@
 #include "nodes/MaterializeNode.h"
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/FilterNode.h"
+#include "nodes/SkipNode.h"
+#include "nodes/LimitNode.h"
 
 #include "decl/VarDecl.h"
+#include "expr/LiteralExpr.h"
+#include "Literal.h"
 
 #include "PlannerException.h"
 
@@ -85,6 +89,14 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node), stream);
         break;
 
+        case PlanGraphOpcode::SKIP:
+            translateSkipNode(static_cast<SkipNode*>(node), stream);
+        break;
+
+        case PlanGraphOpcode::LIMIT:
+            translateLimitNode(static_cast<LimitNode*>(node), stream);
+        break;
+
         case PlanGraphOpcode::GET_EDGES:
         case PlanGraphOpcode::GET_EDGE_TARGET:
         case PlanGraphOpcode::JOIN:
@@ -98,8 +110,6 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::AGGREGATE_EVAL:
         case PlanGraphOpcode::ORDER_BY:
-        case PlanGraphOpcode::SKIP:
-        case PlanGraphOpcode::LIMIT:
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
             throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
@@ -152,4 +162,42 @@ void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, Pl
 }
 
 void PipelineGenerator::translateJoinNode(JoinNode* node, PlanGraphStream& stream) {
+}
+
+void PipelineGenerator::translateSkipNode(SkipNode* node, PlanGraphStream& stream) {
+    const Expr* skipExpr = node->getExpr();
+    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(skipExpr);
+    if (!literalExpr) {
+        throw PlannerException("Skip expression must be a literal");
+    }
+
+    const IntegerLiteral* integerLiteral = dynamic_cast<const IntegerLiteral*>(literalExpr->getLiteral());
+    if (!integerLiteral) {
+        throw PlannerException("Skip expression must be an integer");
+    }
+
+    if (integerLiteral->getValue() < 0) {
+        throw PlannerException("Skip expression must be a positive integer");
+    }
+
+    _builder.addSkip(static_cast<size_t>(integerLiteral->getValue()));
+}
+
+void PipelineGenerator::translateLimitNode(LimitNode* node, PlanGraphStream& stream) {
+    const Expr* limitExpr = node->getExpr();
+    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(limitExpr);
+    if (!literalExpr) {
+        throw PlannerException("Limit expression must be a literal");
+    }
+
+    const IntegerLiteral* integerLiteral = dynamic_cast<const IntegerLiteral*>(literalExpr->getLiteral());
+    if (!integerLiteral) {
+        throw PlannerException("Limit expression must be an integer");
+    }
+
+    if (integerLiteral->getValue() < 0) {
+        throw PlannerException("Limit expression must be a positive integer");
+    }
+
+    _builder.addLimit(static_cast<size_t>(integerLiteral->getValue()));
 }
