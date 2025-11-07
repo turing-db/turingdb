@@ -63,9 +63,15 @@ void CartesianProductProcessor::execute() {
     const size_t m = lDF->getRowCount();
     const size_t q = rDF->size();
 
-    msgbioassert(m * n <= ChunkConfig::CHUNK_SIZE,
+    msgbioassert(n * m <= ChunkConfig::CHUNK_SIZE,
                  "Cartesian Product is only supported in the strongly bounded case "
                  "(output size <= CHUNK_SIZE).");
 
+    // We know the output size ahead of time: resize so we can memset/cpy into it
+    oDF->resizeAllColumns(n * m);
+
+    size_t outDFRowWritePtr {0};
+    for (size_t lhsRowPtr {0}; lhsRowPtr < n; lhsRowPtr++) {
+    }
 }
 
