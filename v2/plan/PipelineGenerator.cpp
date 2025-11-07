@@ -12,6 +12,7 @@
 #include "nodes/GetOutEdgesNode.h"
 #include "nodes/MaterializeNode.h"
 #include "nodes/ProduceResultsNode.h"
+#include "nodes/FilterNode.h"
 
 #include "PlannerException.h"
 
@@ -75,7 +76,13 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         break;
 
         case PlanGraphOpcode::FILTER_NODE:
+            translateNodeFilterNode(static_cast<NodeFilterNode*>(node), stream);
+        break;
+
         case PlanGraphOpcode::FILTER_EDGE:
+            translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node), stream);
+        break;
+
         case PlanGraphOpcode::GET_EDGES:
         case PlanGraphOpcode::GET_EDGE_TARGET:
         case PlanGraphOpcode::JOIN:
