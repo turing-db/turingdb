@@ -20,6 +20,7 @@ set(storage_sources
         iterators/GetInEdgesIterator.cpp
         iterators/GetPropertiesIterator.cpp
         iterators/GetOutEdgesIterator.cpp
+        iterators/GetEdgesIterator.cpp
         iterators/GetNodeViewsIterator.cpp
         iterators/PartIterator.cpp
         iterators/ScanEdgesIterator.cpp

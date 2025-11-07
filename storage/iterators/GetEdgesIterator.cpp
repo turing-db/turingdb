@@ -1,7 +1,8 @@
-#include "GetOutEdgesIterator.h"
+#include "GetEdgesIterator.h"
 
 #include <algorithm>
 
+#include "Panic.h"
 #include "columns/ColumnIDs.h"
 #include "indexers/EdgeIndexer.h"
 #include "DataPart.h"
@@ -9,7 +10,7 @@
 
 namespace db {
 
-GetOutEdgesIterator::GetOutEdgesIterator(const GraphView& view, const ColumnNodeIDs* inputNodeIDs)
+GetEdgesIterator::GetEdgesIterator(const GraphView& view, const ColumnNodeIDs* inputNodeIDs)
     : Iterator(view),
     _inputNodeIDs(inputNodeIDs),
     _nodeIt(inputNodeIDs->cend())
@@ -17,16 +18,16 @@ GetOutEdgesIterator::GetOutEdgesIterator(const GraphView& view, const ColumnNode
     init();
 }
 
-GetOutEdgesIterator::~GetOutEdgesIterator() {
+GetEdgesIterator::~GetEdgesIterator() {
 }
 
-void GetOutEdgesIterator::reset() {
+void GetEdgesIterator::reset() {
     Iterator::reset();
     _nodeIt = _inputNodeIDs->cend();
     init();
 }
 
-void GetOutEdgesIterator::init() {
+void GetEdgesIterator::init() {
     for (; _partIt.isNotEnd(); _partIt.next()) {
         _nodeIt = _inputNodeIDs->cbegin();
 
@@ -39,47 +40,77 @@ void GetOutEdgesIterator::init() {
 
             if (!_edges.empty()) {
                 _edgeIt = _edges.begin();
+                _direction = Direction::Outgoing;
+                return;
+            }
+
+            _edges = indexer.getNodeInEdges(nodeID);
+
+            if (!_edges.empty()) {
+                _edgeIt = _edges.begin();
+                _direction = Direction::Incoming;
                 return;
             }
         }
     }
 }
 
-void GetOutEdgesIterator::next() {
+void GetEdgesIterator::next() {
     _edgeIt++;
     nextValid();
 }
 
-void GetOutEdgesIterator::goToPart(size_t partIdx) {
+void GetEdgesIterator::goToPart(size_t partIdx) {
     Iterator::reset();
     advancePartIterator(partIdx);
 }
 
-void GetOutEdgesIterator::advancePartIterator(size_t n) {
+void GetEdgesIterator::advancePartIterator(size_t n) {
     // Advance n dataparts forward
     for (size_t i = 0; i < n && _partIt.isNotEnd(); i++) {
         _partIt.next();
     }
+
     // If we have not reached the end, update the _node members
     if (_partIt.isNotEnd()) {
         _nodeIt = _inputNodeIDs->cbegin();
+
         const DataPart* part = _partIt.get();
         const NodeID nodeID = *_nodeIt;
         const EdgeIndexer& indexer = part->edgeIndexer();
 
         _edges = indexer.getNodeOutEdges(nodeID);
         _edgeIt = _edges.begin();
+        _direction = Direction::Outgoing;
 
-        // This datapart might have no out edges for this NodeID. Advance again until we
-        // are at a valid part
+        // If no outgoing edges in the current datapart, nextValid will check incoming edges,
+        // then advance to the next datapart.
         nextValid();
     }
 }
 
-void GetOutEdgesIterator::nextValid() {
-    while (_edgeIt == _edges.end()) {
+void GetEdgesIterator::nextValid() {
+    while (true) {
+        if (_edgeIt != _edges.end()) {
+            // Valid edge found
+            return;
+        }
+
+        const DataPart* part = _partIt.get();
+        const NodeID nodeID = *_nodeIt;
+        const EdgeIndexer& indexer = part->edgeIndexer();
+
+        if (_direction == Direction::Outgoing) {
+            // Now iterate incoming edges
+            _edges = indexer.getNodeInEdges(nodeID);
+            _edgeIt = _edges.begin();
+            _direction = Direction::Incoming;
+            continue;
+        }
+
         // No more edges for the current node -> next node
         _nodeIt++;
+        _direction = Direction::Outgoing;
 
         while (_nodeIt == _inputNodeIDs->cend()) {
             // No more requested node in the current datapart.
@@ -92,37 +123,36 @@ void GetOutEdgesIterator::nextValid() {
             return;
         }
 
-        const DataPart* part = _partIt.get();
-        const NodeID nodeID = *_nodeIt;
-        const EdgeIndexer& indexer = part->edgeIndexer();
-
         _edges = indexer.getNodeOutEdges(nodeID);
         _edgeIt = _edges.begin();
     }
 }
 
-GetOutEdgesChunkWriter::GetOutEdgesChunkWriter(const GraphView& view,
-                                               const ColumnNodeIDs* inputNodeIDs)
-    : GetOutEdgesIterator(view, inputNodeIDs),
+GetEdgesChunkWriter::GetEdgesChunkWriter(const GraphView& view,
+                                         const ColumnNodeIDs* inputNodeIDs)
+    : GetEdgesIterator(view, inputNodeIDs),
     _filter(view.tombstones())
 {
 }
 
-void GetOutEdgesChunkWriter::filterTombstones() {
+void GetEdgesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
-    bioassert(_edgeIDs);
+    if (!_edgeIDs) {
+        panic("Cannot filter tombstones if the edge ID column is not set");
+    }
 
     _filter.populateRanges(_edgeIDs);
 
     _filter.filter(_edgeIDs);
-
     _filter.filter(_indices);
+
     bioassert(_indices->size() == _edgeIDs->size());
 
-    if (_tgts) {
-        _filter.filter(_tgts);
-        bioassert(_tgts->size() == _edgeIDs->size());
+    if (_others) {
+        _filter.filter(_others);
+        bioassert(_others->size() == _edgeIDs->size());
     }
+
     if (_types) {
         _filter.filter(_types);
         bioassert(_types->size() == _edgeIDs->size());
@@ -134,7 +164,7 @@ void GetOutEdgesChunkWriter::filterTombstones() {
 static constexpr size_t NColumns = 3;
 static constexpr size_t NCombinations = 1 << NColumns;
 
-void GetOutEdgesChunkWriter::fill(size_t maxCount) {
+void GetEdgesChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
@@ -144,19 +174,23 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
     if (_edgeIDs) {
         _edgeIDs->clear();
     }
-    if (_tgts) {
-        _tgts->clear();
+
+    if (_others) {
+        _others->clear();
     }
+
     if (_types) {
         _types->clear();
     }
 
-    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+    const auto fillDirection = [&]<Direction dir, std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
-            const auto nodeOutEdges = _partIt.get()->edgeIndexer().getNodeOutEdges(*_nodeIt);
-            const auto nodeOutEdgesEnd = nodeOutEdges.end();
-            const size_t availOutPart = std::distance(_edgeIt, nodeOutEdgesEnd);
-            const size_t rangeSize = std::min(remainingToMax, availOutPart);
+            const auto nodeEdges = dir == Direction::Outgoing
+                ?_partIt.get()->edgeIndexer().getNodeOutEdges(*_nodeIt)
+                : _partIt.get()->edgeIndexer().getNodeInEdges(*_nodeIt);
+            const auto nodeEdgesEnd = nodeEdges.end();
+            const size_t availInPart = std::distance(_edgeIt, nodeEdgesEnd);
+            const size_t rangeSize = std::min(remainingToMax, availInPart);
             const size_t prevSize = _indices->size();
             const size_t newSize = prevSize + rangeSize;
             _indices->resize(newSize);
@@ -176,9 +210,9 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
                               });
             }
             if constexpr (conditions[1]) {
-                _tgts->resize(newSize);
-                std::generate((_tgts)->begin() + prevSize,
-                              (_tgts)->end(),
+                _others->resize(newSize);
+                std::generate((_others)->begin() + prevSize,
+                              (_others)->end(),
                               [edgeIt = this->_edgeIt]() mutable {
                                   const NodeID id = edgeIt->_otherID;
                                   ++edgeIt;
@@ -201,7 +235,12 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         };
     };
 
-    switch (bitmask::create(_edgeIDs, _tgts, _types)) {
+    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+        fillDirection.template operator()<Direction::Outgoing, conditions>();
+        fillDirection.template operator()<Direction::Incoming, conditions>();
+    };
+
+    switch (bitmask::create(_edgeIDs, _others, _types)) {
         CASE(0);
         CASE(1);
         CASE(2);
@@ -210,6 +249,9 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
         CASE(5);
         CASE(6);
         CASE(7);
+
+        default:
+            panic("Unexpected column combination");
     }
 
     // Base column is _edgeIDs: only need to check if there are edge tombstones

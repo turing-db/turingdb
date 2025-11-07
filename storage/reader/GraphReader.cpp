@@ -135,6 +135,10 @@ GetInEdgesRange GraphReader::getInEdges(const ColumnNodeIDs* inputNodeIDs) const
     return {_view, inputNodeIDs};
 }
 
+GetEdgesRange GraphReader::getEdges(const ColumnNodeIDs* inputNodeIDs) const {
+    return {_view, inputNodeIDs};
+}
+
 ScanEdgesRange GraphReader::scanOutEdges() const {
     return {_view};
 }

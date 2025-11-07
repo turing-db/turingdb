@@ -4,6 +4,7 @@
 #include "views/GraphView.h"
 #include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetInEdgesIterator.h"
+#include "iterators/GetEdgesIterator.h"
 #include "iterators/GetNodeViewsIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ScanEdgesIterator.h"
@@ -75,6 +76,7 @@ public:
     [[nodiscard]] GetNodeViewsRange getNodeViews(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] GetOutEdgesRange getOutEdges(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] GetInEdgesRange getInEdges(const ColumnNodeIDs* inputNodeIDs) const;
+    [[nodiscard]] GetEdgesRange getEdges(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] ScanEdgesRange scanOutEdges() const;
     [[nodiscard]] ScanNodesRange scanNodes() const;
     [[nodiscard]] ScanNodesByLabelRange scanNodesByLabel(const LabelSetHandle& labelset) const;

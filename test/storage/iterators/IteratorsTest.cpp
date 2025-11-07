@@ -671,6 +671,30 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
     }
 
     ASSERT_EQ(count, compareSet.size());
+
+    count = 0;
+    compareSet = {
+        {0, 1, 0},
+        {1, 2, 0},
+        {3, 3, 4},
+        {4, 3, 4},
+        {2, 3, 4},
+        {5, 2, 8},
+        {5, 8, 2},
+    };
+    it = compareSet.begin();
+
+    spdlog::info("-- Out/In Edges");
+
+    for (const EdgeRecord& v : reader.getEdges(&inputNodeIDs)) {
+        spdlog::info("[{}: {}<->{}]", v._edgeID, v._nodeID, v._otherID);
+        ASSERT_EQ(it->_nodeID.getValue(), v._nodeID.getValue());
+        ASSERT_EQ(it->_otherID.getValue(), v._otherID.getValue());
+        count++;
+        it++;
+    }
+
+    ASSERT_EQ(count, compareSet.size());
 }
 
 TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {

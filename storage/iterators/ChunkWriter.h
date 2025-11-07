@@ -35,6 +35,11 @@ concept SrcIDsChunkWriter = requires(T it) {
 };
 
 template <typename T>
+concept OtherIDsChunkWriter = requires(T it) {
+    { it.setOtherIDs(new ColumnVector<NodeID>) };
+};
+
+template <typename T>
 concept EdgeIDsChunkWriter = requires(T it) {
     { it.setEdgeIDs(new ColumnVector<EdgeID>) };
 };
