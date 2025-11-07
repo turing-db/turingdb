@@ -10,7 +10,6 @@
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "PipelineV2.h"
-#include "dataframe/ColumnTagManager.h"
 
 #include "TuringTestEnv.h"
 
@@ -31,7 +30,7 @@ class ProcessorTester : public TuringTest {
 public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _builder = std::make_unique<PipelineBuilder>(&_env->getMem(), &_pipeline, _tagMan);
+        _builder = std::make_unique<PipelineBuilder>(&_env->getMem(), &_pipeline);
     }
 
     auto readGraph() {
@@ -52,5 +51,4 @@ protected:
     Graph* _graph {nullptr};
 
     PipelineV2 _pipeline;
-    ColumnTagManager _tagMan;
 };
