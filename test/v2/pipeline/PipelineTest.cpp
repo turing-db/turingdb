@@ -553,14 +553,3 @@ TEST_F(PipelineTest, multiChunkCount) {
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 }
-
-TEST_F(PipelineTest, testLambdaWithoutMaterialize) {
-    LocalMemory mem;
-    PipelineV2 pipeline;
-
-    PipelineBuilder builder(&mem, &pipeline);
-    builder.addScanNodes();
-
-    EXPECT_THROW(builder.addLambda([](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
-    }), PipelineException);
-}

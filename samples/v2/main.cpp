@@ -18,6 +18,8 @@
 #include "PipelineV2.h"
 #include "LocalMemory.h"
 #include "PipelineGenerator.h"
+#include "PipelineExecutor.h"
+#include "ExecutionContext.h"
 
 using namespace db;
 using namespace db::v2;
@@ -31,9 +33,10 @@ int main(int argc, char** argv) {
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
+    bool pipelineGenEnabled = false;
     if (argc > 1 && strlen(argv[1]) > 0) {
         queryStr = argv[1];
-
+        pipelineGenEnabled = true;
     } else {
         fs::Path path(SAMPLE_DIR "/queries.txt");
         fmt::print("Reading query from file: {}\n", path.get());
@@ -98,24 +101,40 @@ int main(int argc, char** argv) {
         PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
     }
 
-    LocalMemory mem;
-    PipelineV2 pipeline;
-    {
-        auto callback = [](const Dataframe* dataframe) {};
+    if (pipelineGenEnabled) {
+        LocalMemory mem;
+        PipelineV2 pipeline;
+        {
+            auto callback = [](const Dataframe* dataframe) {};
 
-        PipelineGenerator pipelineGen(&planGraph, &pipeline, &mem, callback);
-        try {
-            auto t0 = Clock::now();
-            pipelineGen.generate();
-            auto t1 = Clock::now();
-            fmt::print("Query pipeline generated in {} us\n", duration<Microseconds>(t0, t1));
-        } catch (const CompilerException& e) {
-            fmt::print("{}\n", e.what());
-            return EXIT_FAILURE;
+            PipelineGenerator pipelineGen(&planGraph, &pipeline, &mem, callback);
+            try {
+                auto t0 = Clock::now();
+                pipelineGen.generate();
+                auto t1 = Clock::now();
+                fmt::print("Query pipeline generated in {} us\n", duration<Microseconds>(t0, t1));
+            } catch (const CompilerException& e) {
+                fmt::print("{}\n", e.what());
+                return EXIT_FAILURE;
+            }
+            const PlanGraph& planGraph = planGen.getPlanGraph();
+
+            PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
         }
-        const PlanGraph& planGraph = planGen.getPlanGraph();
 
-        PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
+        {
+            ExecutionContext execCtxt(view);
+            PipelineExecutor executor(&pipeline, &execCtxt);
+            try {
+                auto t0 = Clock::now();
+                executor.execute();
+                auto t1 = Clock::now();
+                fmt::print("Query pipeline executed in {} us\n", duration<Microseconds>(t0, t1));
+            } catch (const CompilerException& e) {
+                fmt::print("{}\n", e.what());
+                return EXIT_FAILURE;
+            }
+        }
     }
 
     return EXIT_SUCCESS;
