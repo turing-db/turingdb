@@ -11,8 +11,6 @@
 
 #include "columns/ColumnEdgeTypes.h"
 
-#include "PipelineException.h"
-
 using namespace db::v2;
 using namespace db;
 
@@ -97,10 +95,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
 }
 
 void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
-    if (_matProc) {
-        throw PipelineException("PipelineBuilder: cannot add lambda on pipeline with active materialize");
-    }
-
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
     _pendingOutput->connectTo(lambda->input());
     _pendingOutput = nullptr;
