@@ -18,6 +18,7 @@
 #include "Literal.h"
 #include "decl/VarDecl.h"
 #include "QualifiedName.h"
+#include "FunctionInvocation.h"
 
 #include "expr/All.h"
 
@@ -38,6 +39,18 @@ std::string sanitizeString(std::string_view str) {
     });
 
     return result;
+}
+
+void dumpQualifiedName(std::ostream& out, const QualifiedName* name) {
+    size_t i = 0;
+    for (const Symbol* sym : name->names()) {
+        if (i != 0) {
+            out << "_";
+        }
+
+        out << sym->getName();
+        i++;
+    }
 }
 
 }
@@ -357,9 +370,8 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::LITERAL:
             dump(out, dynamic_cast<const LiteralExpr*>(expr));
             break;
-
-        default:
-            throw CompilerException("Unknown expression type");
+        case Expr::Kind::FUNCTION_INVOCATION:
+            dump(out, dynamic_cast<const FunctionInvocationExpr*>(expr));
             break;
     }
 }
@@ -595,15 +607,7 @@ void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
 
     out << "        QualifiedName ";
 
-    size_t i = 0;
-    for (const Symbol* name : expr->getFullName()->names()) {
-        if (i != 0) {
-            out << "_";
-        }
-
-        out << name->getName();
-        i++;
-    }
+    dumpQualifiedName(out, expr->getFullName());
 
     out << "\n    }\n";
 
@@ -612,6 +616,24 @@ void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
     }
 
     out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getDecl() << " : \"\"\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const FunctionInvocationExpr* expr) {
+    out << "    _" << std::hex << expr << " {\n";
+    out << "        ASTType FunctionInvocationExpr\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
+
+    const FunctionInvocation* invocation = expr->getFunctionInvocation();
+    out << "        FunctionName ";
+    dumpQualifiedName(out, invocation->getName());
+    out << "\n";
+
+    out << "    }\n";
+
+    for (const Expr* arg : invocation->getArguments()->getExprs()) {
+        out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << arg << " : \"\"\n";
+        dump(out, arg);
+    }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {

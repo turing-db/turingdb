@@ -29,6 +29,7 @@ class EntityTypeExpr;
 class StringExpr;
 class PropertyExpr;
 class VarDecl;
+class FunctionInvocationExpr;
 
 class NodePatternData;
 class EdgePatternData;
@@ -71,6 +72,7 @@ private:
     void dump(std::ostream& out, const StringExpr* expr);
     void dump(std::ostream& out, const PropertyExpr* expr);
     void dump(std::ostream& out, const VarDecl* decl);
+    void dump(std::ostream& out, const FunctionInvocationExpr* expr);
 };
 
 }
