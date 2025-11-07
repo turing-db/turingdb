@@ -12,5 +12,6 @@ function(add_v2_pipeline_gtest exe_name cpp_file)
 endfunction()
 
 add_v2_pipeline_gtest(test_v2_pipeline PipelineTest.cpp)
+add_v2_pipeline_gtest(test_v2_pipeline_GetOutEdgesProcessor processors/GetOutEdgesProcessorTest.cpp)
 add_v2_pipeline_gtest(test_v2_pipeline_GetInEdgesProcessor processors/GetInEdgesProcessorTest.cpp)
 add_v2_pipeline_gtest(test_v2_pipeline_GetEdgesProcessor processors/GetEdgesProcessorTest.cpp)

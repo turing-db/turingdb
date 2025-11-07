@@ -22,11 +22,16 @@ TEST_F(GetEdgesProcessorTest, test) {
 
     LineContainer<NodeID, EdgeID, NodeID, EdgeTypeID> expLines;
     LineContainer<NodeID, EdgeID, NodeID, EdgeTypeID> resLines;
+    const Tombstones& tombstones = view.tombstones();
 
     for (const NodeID originID : reader.scanNodes()) {
         ColumnVector<NodeID> tmpNodeIDs = {originID};
 
         for (const EdgeRecord& edge : reader.getEdges(&tmpNodeIDs)) {
+            if (tombstones.contains(edge._edgeID)) {
+                continue;
+            }
+
             expLines.add({originID, edge._edgeID, edge._otherID, edge._edgeTypeID});
         }
     }

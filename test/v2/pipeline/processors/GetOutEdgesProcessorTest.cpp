@@ -8,7 +8,7 @@ using namespace db;
 using namespace db::v2;
 using namespace turing::test;
 
-class GetInEdgesProcessorTest : public ProcessorTester {
+class GetOutEdgesProcessorTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
@@ -17,15 +17,15 @@ public:
     }
 };
 
-TEST_F(GetInEdgesProcessorTest, test) {
+TEST_F(GetOutEdgesProcessorTest, test) {
     auto [transaction, view, reader] = readGraph();
 
     LineContainer<NodeID, EdgeID, NodeID, EdgeTypeID> expLines;
     LineContainer<NodeID, EdgeID, NodeID, EdgeTypeID> resLines;
     const Tombstones& tombstones = view.tombstones();
 
-    for (const NodeID tgtID : reader.scanNodes()) {
-        ColumnVector<NodeID> tmpNodeIDs = {tgtID};
+    for (const NodeID originID : reader.scanNodes()) {
+        ColumnVector<NodeID> tmpNodeIDs = {originID};
 
         for (const EdgeRecord& edge : reader.getInEdges(&tmpNodeIDs)) {
             if (tombstones.contains(edge._edgeID)) {
@@ -37,12 +37,12 @@ TEST_F(GetInEdgesProcessorTest, test) {
     }
 
     // Pipeline definition
-    const ColumnTag tgtIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
+    const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
-    const auto edgeInterface = _builder->addGetInEdges();
+    const auto edgeInterface = _builder->addGetOutEdges();
     const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();
     const ColumnTag edgeTypesTag = edgeInterface.getEdgeTypes()->getTag();
-    const ColumnTag srcIDsTag = edgeInterface.getOtherNodes()->getTag();
+    const ColumnTag otherIDsTag = edgeInterface.getOtherNodes()->getTag();
 
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -52,25 +52,25 @@ TEST_F(GetInEdgesProcessorTest, test) {
         // Retrieve the results of the current pipeline iteration (chunk)
         EXPECT_EQ(df->size(), 4);
 
-        const ColumnNodeIDs* tgtIDs = df->getColumn<ColumnNodeIDs>(tgtIDsTag);
-        ASSERT_TRUE(tgtIDs != nullptr);
+        const ColumnNodeIDs* originIDs = df->getColumn<ColumnNodeIDs>(originIDsTag);
+        ASSERT_TRUE(originIDs != nullptr);
 
         const ColumnEdgeIDs* edgeIDs = df->getColumn<ColumnEdgeIDs>(edgeIDsTag);
         ASSERT_TRUE(edgeIDs != nullptr);
 
-        const ColumnNodeIDs* srcIDs = df->getColumn<ColumnNodeIDs>(srcIDsTag);
-        ASSERT_TRUE(srcIDs != nullptr);
+        const ColumnNodeIDs* otherIDs = df->getColumn<ColumnNodeIDs>(otherIDsTag);
+        ASSERT_TRUE(otherIDs != nullptr);
 
         const ColumnEdgeTypes* edgeTypes = df->getColumn<ColumnEdgeTypes>(edgeTypesTag);
         ASSERT_TRUE(edgeTypes != nullptr);
 
-        const size_t lineCount = tgtIDs->size();
+        const size_t lineCount = originIDs->size();
         ASSERT_EQ(edgeIDs->size(), lineCount);
-        ASSERT_EQ(srcIDs->size(), lineCount);
+        ASSERT_EQ(otherIDs->size(), lineCount);
         ASSERT_EQ(edgeTypes->size(), lineCount);
 
         for (size_t i = 0; i < lineCount; i++) {
-            resLines.add({tgtIDs->at(i), edgeIDs->at(i), srcIDs->at(i), edgeTypes->at(i)});
+            resLines.add({originIDs->at(i), edgeIDs->at(i), otherIDs->at(i), edgeTypes->at(i)});
         }
     };
 
