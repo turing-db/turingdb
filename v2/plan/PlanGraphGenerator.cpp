@@ -118,6 +118,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
     // GetPropertyNode* getProperty = _tree.create<GetPropertyNode>(prevNode);
     FuncEvalNode* funcEval = _tree.create<FuncEvalNode>();
     AggregateEvalNode* aggregateEval = _tree.create<AggregateEvalNode>();
+    ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
 
     for (Expr* item : proj->items()) {
         ExprDependencies deps;
@@ -145,6 +146,13 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
             }
 
             aggregateEval->addGroupByKey(item);
+        }
+
+        if (const auto* symbolExpr = dynamic_cast<const SymbolExpr*>(item)) {
+            if (item->getType() == EvaluatedType::NodePattern
+                || item->getType() == EvaluatedType::EdgePattern) {
+                results->addReturnValue(symbolExpr->getDecl());
+            }
         }
     }
 
@@ -176,7 +184,7 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
         prevNode = limit;
     }
 
-    _tree.newOut<ProduceResultsNode>(prevNode);
+    prevNode->connectOut(results);
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
