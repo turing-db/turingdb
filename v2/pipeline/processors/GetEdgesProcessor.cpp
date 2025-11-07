@@ -38,6 +38,8 @@ GetEdgesProcessor* GetEdgesProcessor::create(PipelineV2* pipeline) {
 }
 
 void GetEdgesProcessor::prepare(ExecutionContext* ctxt) {
+    _ctxt = ctxt;
+
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs.getNodeIDs()->getColumn());
     ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outEdges.getIndices()->getColumn());
     ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdges.getEdgeIDs()->getColumn());
@@ -49,7 +51,6 @@ void GetEdgesProcessor::prepare(ExecutionContext* ctxt) {
     _it->setEdgeIDs(edgeIDs);
     _it->setOtherIDs(otherNodes);
     _it->setEdgeTypes(edgeTypes);
-    _chunkSize = ctxt->getChunkSize();
 
     markAsPrepared();
 }
@@ -60,7 +61,7 @@ void GetEdgesProcessor::reset() {
 }
 
 void GetEdgesProcessor::execute() {
-    _it->fill(_chunkSize);
+    _it->fill(_ctxt->getChunkSize());
 
     if (!_it->isValid()) {
         _inNodeIDs.getPort()->consume();

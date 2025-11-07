@@ -27,7 +27,6 @@ private:
     PipelineNodeInputInterface _inNodeIDs;
     PipelineEdgeOutputInterface _outEdges;
     std::unique_ptr<GetEdgesChunkWriter> _it;
-    size_t _chunkSize = 0;
 
     GetEdgesProcessor();
     ~GetEdgesProcessor();
