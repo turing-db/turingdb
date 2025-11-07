@@ -53,6 +53,11 @@ void LimitProcessor::execute() {
 
         // Write rows of inputBlock that are below the limit
         const size_t rowsToWrite = std::min(blockRowCount, remainingCapacity);
+        if (rowsToWrite == 0) {
+            _reachedLimit = true;
+            return;
+        }
+        
         outputDf->copyFromLine(inputDf, 0, rowsToWrite);
 
         if (blockRowCount >= remainingCapacity) {
