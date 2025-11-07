@@ -58,7 +58,7 @@ public:
     }
 
     template <typename T>
-        requires std::is_base_of_v<Column, T>
+    requires std::is_base_of_v<Column, T>
     const T* getColumn(ColumnTag tag) const {
         const auto* col = getColumn(tag);
         if (!col) {
