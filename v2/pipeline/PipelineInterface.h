@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string_view>
+
 #include "PipelinePort.h"
 
 namespace db {
@@ -90,6 +92,8 @@ public:
     virtual void connectTo(PipelineBlockInputInterface& input) = 0;
     virtual void connectTo(PipelineEdgeInputInterface& input) = 0;
 
+    virtual void rename(const std::string_view& name) = 0;
+
 protected:
     PipelineOutputPort* _port {nullptr};
 
@@ -108,6 +112,9 @@ public:
     // Invalid connections, throws PipelineException
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineEdgeInputInterface& input) override;
+
+    // Invalid rename, throws PipelineException
+    void rename(const std::string_view& name) override;
 };
 
 class PipelineNodeOutputInterface : public PipelineOutputInterface {
@@ -120,6 +127,8 @@ public:
     NamedColumn* getIndices() const { return _indices; }
 
     NamedColumn* getNodeIDs() const { return _nodeIDs; }
+
+    void rename(const std::string_view& name) override;
 
     void connectTo(PipelineNodeInputInterface& input) override {
         input.setNodeIDs(_nodeIDs);
@@ -172,6 +181,8 @@ public:
         _port->connectTo(input.getPort());
     }
 
+    void rename(const std::string_view& name) override;
+
 private:
     NamedColumn* _indices {nullptr};
     NamedColumn* _edgeIDs {nullptr};
@@ -188,6 +199,8 @@ public:
 
     NamedColumn* getIndices() const { return _indices; }
     NamedColumn* getValues() const { return _values; }
+
+    void rename(const std::string_view& name) override;
 
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
@@ -211,6 +224,8 @@ public:
 
     NamedColumn* getIndices() const { return _indices; }
     NamedColumn* getValue() const { return _value; }
+
+    void rename(const std::string_view& name) override;
 
     void connectTo(PipelineBlockInputInterface& input) override {
         _port->connectTo(input.getPort());
