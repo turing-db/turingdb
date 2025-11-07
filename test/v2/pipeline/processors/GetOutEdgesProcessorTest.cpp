@@ -27,7 +27,7 @@ TEST_F(GetOutEdgesProcessorTest, test) {
     for (const NodeID originID : reader.scanNodes()) {
         ColumnVector<NodeID> tmpNodeIDs = {originID};
 
-        for (const EdgeRecord& edge : reader.getInEdges(&tmpNodeIDs)) {
+        for (const EdgeRecord& edge : reader.getOutEdges(&tmpNodeIDs)) {
             if (tombstones.contains(edge._edgeID)) {
                 continue;
             }
@@ -35,6 +35,9 @@ TEST_F(GetOutEdgesProcessorTest, test) {
             expLines.add({edge._nodeID, edge._edgeID, edge._otherID, edge._edgeTypeID});
         }
     }
+
+    fmt::println("- Expected results");
+    expLines.print(std::cout);
 
     // Pipeline definition
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();

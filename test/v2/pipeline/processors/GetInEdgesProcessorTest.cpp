@@ -36,6 +36,9 @@ TEST_F(GetInEdgesProcessorTest, test) {
         }
     }
 
+    fmt::println("- Expected results");
+    expLines.print(std::cout);
+
     // Pipeline definition
     const ColumnTag tgtIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 

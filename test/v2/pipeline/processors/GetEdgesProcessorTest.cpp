@@ -35,6 +35,9 @@ TEST_F(GetEdgesProcessorTest, test) {
             expLines.add({originID, edge._edgeID, edge._otherID, edge._edgeTypeID});
         }
     }
+    
+    fmt::println("- Expected results");
+    expLines.print(std::cout);
 
     // Pipeline definition
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();

@@ -95,11 +95,11 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
 
     NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(df);
     NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(df);
-    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(df);
-    inEdges.setEdges(edgeIDs, edgeTypes, targetNodes);
+    NamedColumn* sourceNodes = allocColumn<ColumnNodeIDs>(df);
+    inEdges.setEdges(edgeIDs, edgeTypes, sourceNodes);
     matData.addToStep<ColumnEdgeIDs>(edgeIDs);
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
-    matData.addToStep<ColumnNodeIDs>(targetNodes);
+    matData.addToStep<ColumnNodeIDs>(sourceNodes);
 
     _pendingOutput = &inEdges;
 
@@ -121,11 +121,11 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
 
     NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(df);
     NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(df);
-    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(df);
-    inEdges.setEdges(edgeIDs, edgeTypes, targetNodes);
+    NamedColumn* otherNodes = allocColumn<ColumnNodeIDs>(df);
+    inEdges.setEdges(edgeIDs, edgeTypes, otherNodes);
     matData.addToStep<ColumnEdgeIDs>(edgeIDs);
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
-    matData.addToStep<ColumnNodeIDs>(targetNodes);
+    matData.addToStep<ColumnNodeIDs>(otherNodes);
 
     _pendingOutput = &inEdges;
 
