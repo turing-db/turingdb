@@ -62,10 +62,10 @@ public:
     constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::EDGE; }
 
     void setEdges(NamedColumn* edgeIDs,
-                  NamedColumn* neighbourNodes,
+                  NamedColumn* otherNodes,
                   NamedColumn* edgeTypes) {
         _edgeIDs = edgeIDs;
-        _otherNodes = neighbourNodes;
+        _otherNodes = otherNodes;
         _edgeTypes = edgeTypes;
     }
 
@@ -153,10 +153,10 @@ public:
 
     void setEdges(NamedColumn* edgeIDs,
                   NamedColumn* edgeTypes,
-                  NamedColumn* neighbourNodes) {
+                  NamedColumn* otherNodes) {
         _edgeIDs = edgeIDs;
         _edgeTypes = edgeTypes;
-        _neighbourNodes = neighbourNodes;
+        _otherNodes = otherNodes;
     }
 
     void setIndices(NamedColumn* indices) { _indices = indices; }
@@ -164,16 +164,16 @@ public:
     NamedColumn* getIndices() const { return _indices; }
 
     NamedColumn* getEdgeIDs() const { return _edgeIDs; }
-    NamedColumn* getOtherNodes() const { return _neighbourNodes; }
+    NamedColumn* getOtherNodes() const { return _otherNodes; }
     NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
     void connectTo(PipelineEdgeInputInterface& input) override {
-        input.setEdges(_edgeIDs, _neighbourNodes, _edgeTypes);
+        input.setEdges(_edgeIDs, _otherNodes, _edgeTypes);
         _port->connectTo(input.getPort());
     }
 
     void connectTo(PipelineNodeInputInterface& input) override {
-        input.setNodeIDs(_neighbourNodes);
+        input.setNodeIDs(_otherNodes);
         _port->connectTo(input.getPort());
     }
 
@@ -186,7 +186,7 @@ public:
 private:
     NamedColumn* _indices {nullptr};
     NamedColumn* _edgeIDs {nullptr};
-    NamedColumn* _neighbourNodes {nullptr};
+    NamedColumn* _otherNodes {nullptr};
     NamedColumn* _edgeTypes {nullptr};
 };
 
