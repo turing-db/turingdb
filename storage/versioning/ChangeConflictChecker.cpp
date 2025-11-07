@@ -185,11 +185,11 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
 }
 
 void ChangeConflictChecker::checkDeletedEdgeConflicts(const ConflictCheckSets& writes,
-                                              const CommitWriteBuffer& writeBuffer) {
+                                                      const CommitWriteBuffer& writeBuffer) {
     const CommitWriteBuffer::DeletedEdges& deletedEdges = writeBuffer.deletedEdges();
-    for (const EdgeID deletedEdge : deletedEdges) [[unlikely]] {
+    for (const EdgeID deletedEdge : deletedEdges) {
         const EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
-        if (writes.writtenEdges.contains(newID)) {
+        if (writes.writtenEdges.contains(newID)) [[unlikely]] {
             std::string errorMsg = fmt::format(
                 "This change attempted to delete Edge {} "
                 "(which is now Edge {} on main) which has been modified on main.",
