@@ -1,11 +1,7 @@
 #include "Dataframe.h"
 
-#include <spdlog/fmt/fmt.h>
-
 #include "NamedColumn.h"
 #include "columns/Column.h"
-
-#include "FatalException.h"
 
 using namespace db;
 
@@ -17,14 +13,16 @@ Dataframe::~Dataframe() {
 }
 
 void Dataframe::addColumn(NamedColumn* column) {
-    if (getColumn(column->getTag())) {
-        throw FatalException(fmt::format(
-            "A column with tag {} already exists in Dataframe",
-            column->getTag().getValue()));
+    _cols.push_back(column);
+
+    // Record column in the headerMap using its tag
+    // Resize the table if needed
+    const size_t tagValue = column->getTag().getValue();
+    if (tagValue >= _headerMap.size()) {
+        _headerMap.resize(tagValue+1);
     }
 
-    _cols.push_back(column);
-    _headerMap[column->getTag()] = column;
+    _headerMap[tagValue] = column;
 }
 
 size_t Dataframe::getRowCount() const {

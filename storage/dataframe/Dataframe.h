@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <unordered_map>
 #include <ostream>
 
 #include "ColumnTag.h"
@@ -11,11 +10,7 @@ namespace db {
 
 class Column;
 
-// A basic Dataframe class where columns are indexed by numerical ColumnTag.
-// Columns can have optional names as string_views, but only tags can be used
-// to uniquely retrieve a column.
-// A Dataframe can possibly have several columns with the same name strings.
-// Uniqueness is only enforced on ColumnTags.
+// A basic Dataframe class with columns indexed by ColumnTag.
 class Dataframe {
 public:
     using NamedColumns = std::vector<NamedColumn*>;
@@ -24,14 +19,14 @@ public:
     Dataframe();
 
     Dataframe(Dataframe&& other)
-        : _headerMap(std::move(other._headerMap)),
-        _cols(std::move(other._cols))
+        : _cols(std::move(other._cols)),
+        _headerMap(std::move(other._headerMap))
     {
     }
 
     Dataframe& operator=(Dataframe&& other) {
-        _headerMap = std::move(other._headerMap);
         _cols = std::move(other._cols);
+        _headerMap = std::move(other._headerMap);
         return *this;
     }
 
@@ -49,12 +44,12 @@ public:
     void addColumn(NamedColumn* column);
 
     NamedColumn* getColumn(ColumnTag tag) const {
-        const auto it = _headerMap.find(tag);
-        if (it == _headerMap.end()) {
+        const size_t tagValue = tag.getValue();
+        if (tagValue > _headerMap.size()) {
             return nullptr;
         }
 
-        return it->second;
+        return _headerMap[tagValue];
     }
 
     template <typename T>
@@ -74,8 +69,8 @@ public:
     void dump(std::ostream& out) const;
 
 private:
-    std::unordered_map<ColumnTag, NamedColumn*, ColumnTag::Hash> _headerMap;
     NamedColumns _cols;
+    std::vector<NamedColumn*> _headerMap;
 };
 
 }
