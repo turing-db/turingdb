@@ -112,7 +112,7 @@ public:
 
     void clear() { _data.clear(); }
 
-    void resize(size_t size) { _data.resize(size); }
+    void resize(size_t size) override { _data.resize(size); }
 
     void push_back(bool v) { _data.push_back(Bool_t{v}); }
     void reserve(size_t capacity) { _data.reserve(capacity); }

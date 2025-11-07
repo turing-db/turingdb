@@ -48,6 +48,11 @@ public:
         return dynamic_cast<T*>(col->getColumn());
     }
 
+    /**
+    * @warn Assumes all columns are ColumnVectors, otherwise @throws
+    */
+    void resizeAllColumns(size_t newSize);
+
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
     void copyFrom(const Dataframe* other);
 

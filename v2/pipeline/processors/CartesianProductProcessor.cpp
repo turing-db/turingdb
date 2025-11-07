@@ -1,7 +1,11 @@
 #include "CartesianProductProcessor.h"
 
-#include "PipelinePort.h"
 #include "PipelineV2.h"
+#include "PipelinePort.h"
+#include "dataframe/Dataframe.h"
+
+#include "BioAssert.h"
+#include "iterators/ChunkConfig.h"
 
 using namespace db::v2;
 
@@ -41,6 +45,27 @@ void CartesianProductProcessor::reset() {
 }
 
 void CartesianProductProcessor::execute() {
-    finish();
+    PipelineInputPort* lPort = _lhs.getPort();
+    PipelineInputPort* rPort = _rhs.getPort();
+    PipelineOutputPort* oPort = _out.getPort();
+    
+    Dataframe* lDF = _lhs.getDataframe();
+    lPort->consume();
+    Dataframe* rDF = _rhs.getDataframe();
+    rPort->consume();
+    Dataframe* oDF = _out.getDataframe();
+
+    // Left DF is n x p dimensional
+    const size_t n = lDF->getRowCount();
+    const size_t p = rDF->size();
+
+    // Right DF is m x q dimensional
+    const size_t m = lDF->getRowCount();
+    const size_t q = rDF->size();
+
+    msgbioassert(m * n <= ChunkConfig::CHUNK_SIZE,
+                 "Cartesian Product is only supported in the strongly bounded case "
+                 "(output size <= CHUNK_SIZE).");
+
 }
 

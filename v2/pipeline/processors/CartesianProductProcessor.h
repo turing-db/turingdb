@@ -1,8 +1,12 @@
 #pragma once
 
+#include <memory>
+
 #include "Processor.h"
 
 #include "PipelineInterface.h"
+
+class Dataframe;
 
 namespace db::v2 {
 
@@ -23,6 +27,13 @@ private:
     PipelineBlockInputInterface _lhs;
     PipelineBlockInputInterface _rhs;
     PipelineBlockOutputInterface _out;
+
+    size_t _lhsTotalRowCount;
+    size_t _rhsTotalRowCount;
+
+    size_t _lhsRowPtr;
+    size_t _rhsRowPtr;
 };
-  
+
 }
+

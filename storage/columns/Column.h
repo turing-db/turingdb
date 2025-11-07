@@ -15,6 +15,8 @@ public:
 
     virtual size_t size() const = 0;
 
+    virtual void resize(size_t newSize) = 0;
+
     virtual void assign(const Column* other) = 0;
     virtual void assignFromLine(const Column* other, size_t startLine, size_t rowCount) = 0;
 
