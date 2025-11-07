@@ -36,3 +36,11 @@ void PipelineV2::addBuffer(PipelineBuffer* buffer) {
 void PipelineV2::addPort(PipelinePort* port) {
     _ports.push_back(port);
 }
+
+void PipelineV2::clear() {
+    for (Processor* processor : _processors) {
+        processor->_prepared = false;
+        processor->_finished = false;
+        processor->_scheduled = false;
+    }
+}

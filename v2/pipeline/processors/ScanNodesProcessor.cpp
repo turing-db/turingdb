@@ -2,7 +2,6 @@
 
 #include "PipelineV2.h"
 #include "iterators/ScanNodesIterator.h"
-#include "iterators/ChunkConfig.h"
 #include "columns/ColumnIDs.h"
 #include "dataframe/NamedColumn.h"
 #include "PipelinePort.h"
@@ -32,6 +31,7 @@ void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs.getNodeIDs()->getColumn());
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
+    _chunkSize = ctxt->getChunkSize();
 
     markAsPrepared();
 }
@@ -41,7 +41,7 @@ void ScanNodesProcessor::reset() {
 }
 
 void ScanNodesProcessor::execute() {
-    _it->fill(ChunkConfig::CHUNK_SIZE);
+    _it->fill(_chunkSize);
 
     if (!_it->isValid()) {
         finish();

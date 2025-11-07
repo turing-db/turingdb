@@ -30,6 +30,8 @@ public:
 
     const Processors& processors() const { return _processors; }
 
+    void clear();
+
 private:
     Processors _processors;
     Buffers _buffers;

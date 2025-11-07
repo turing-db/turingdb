@@ -1,9 +1,9 @@
-#include "GetOutEdgesProcessor.h"
+#include "GetInEdgesProcessor.h"
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 
-#include "iterators/GetOutEdgesIterator.h"
+#include "iterators/GetInEdgesIterator.h"
 #include "iterators/ChunkConfig.h"
 
 #include "columns/ColumnIDs.h"
@@ -16,52 +16,51 @@
 
 using namespace db::v2;
 
-GetOutEdgesProcessor::GetOutEdgesProcessor()
+GetInEdgesProcessor::GetInEdgesProcessor()
 {
 }
 
-GetOutEdgesProcessor::~GetOutEdgesProcessor() {
+GetInEdgesProcessor::~GetInEdgesProcessor() {
 }
 
-GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
-    GetOutEdgesProcessor* getOutEdges = new GetOutEdgesProcessor();
+GetInEdgesProcessor* GetInEdgesProcessor::create(PipelineV2* pipeline) {
+    GetInEdgesProcessor* getInEdges = new GetInEdgesProcessor();
 
-    PipelineInputPort* inNodeIDs = PipelineInputPort::create(pipeline, getOutEdges);
-    PipelineOutputPort* outEdges = PipelineOutputPort::create(pipeline, getOutEdges);
+    PipelineInputPort* inNodeIDs = PipelineInputPort::create(pipeline, getInEdges);
+    PipelineOutputPort* outEdges = PipelineOutputPort::create(pipeline, getInEdges);
 
-    getOutEdges->_inNodeIDs.setPort(inNodeIDs);
-    getOutEdges->_outEdges.setPort(outEdges);
+    getInEdges->_inNodeIDs.setPort(inNodeIDs);
+    getInEdges->_outEdges.setPort(outEdges);
 
-    getOutEdges->addInput(inNodeIDs);
-    getOutEdges->addOutput(outEdges);
-    getOutEdges->postCreate(pipeline);
-    return getOutEdges;
+    getInEdges->addInput(inNodeIDs);
+    getInEdges->addOutput(outEdges);
+    getInEdges->postCreate(pipeline);
+    return getInEdges;
 }
 
-void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
+void GetInEdgesProcessor::prepare(ExecutionContext* ctxt) {
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs.getNodeIDs()->getColumn());
     ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outEdges.getIndices()->getColumn());
     ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdges.getEdgeIDs()->getColumn());
-    ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outEdges.getNeighbourNodes()->getColumn());
+    ColumnNodeIDs* sourceNodes = dynamic_cast<ColumnNodeIDs*>(_outEdges.getNeighbourNodes()->getColumn());
     ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdges.getEdgeTypes()->getColumn());
     
-    _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
+    _it = std::make_unique<GetInEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
     _it->setIndices(indices);
     _it->setEdgeIDs(edgeIDs);
-    _it->setTgtIDs(targetNodes);
+    _it->setSrcIDs(sourceNodes);
     _it->setEdgeTypes(edgeTypes);
-    
     _chunkSize = ctxt->getChunkSize();
 
     markAsPrepared();
 }
 
-void GetOutEdgesProcessor::reset() {
+void GetInEdgesProcessor::reset() {
     _it->reset();
     markAsReset();
 }
 
-void GetOutEdgesProcessor::execute() {
+void GetInEdgesProcessor::execute() {
     _it->fill(_chunkSize);
 
     if (!_it->isValid()) {

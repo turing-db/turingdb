@@ -8,6 +8,8 @@ function(add_v2_pipeline_gtest exe_name cpp_file)
                 turing_db_s
                 turing_testenv_s
                 tabulate)
+    target_include_directories(${exe_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endfunction()
 
 add_v2_pipeline_gtest(test_v2_pipeline PipelineTest.cpp)
+add_v2_pipeline_gtest(test_v2_pipeline_GetInEdgesProcessor processors/GetInEdgesProcessorTest.cpp)
