@@ -24,6 +24,8 @@ class NodeFilterNode;
 class EdgeFilterNode;
 class ProduceResultsNode;
 class JoinNode;
+class SkipNode;
+class LimitNode;
 
 class PipelineGenerator {
 public:
@@ -61,6 +63,8 @@ private:
     void translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphStream& stream);
     void translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream);
     void translateJoinNode(JoinNode* node, PlanGraphStream& stream);
+    void translateSkipNode(SkipNode* node, PlanGraphStream& stream);
+    void translateLimitNode(LimitNode* node, PlanGraphStream& stream);
 };
 
 }
