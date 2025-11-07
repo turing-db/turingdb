@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     const GraphView view = transaction.viewGraph();
 
     bool pipelineGenEnabled = false;
-    if (argc > 1 && strlen(argv[1]) > 0) {
+    if (argc >= 2 && strlen(argv[1]) > 0) {
         queryStr = argv[1];
         pipelineGenEnabled = true;
     } else {
@@ -49,6 +49,12 @@ int main(int argc, char** argv) {
         auto it = reader.iterateBuffer();
 
         queryStr = it.get<char>(file.getInfo()._size);
+    }
+
+    {
+        if (argc >= 3 && strcmp(argv[2], "-nopipeline") == 0) {
+            pipelineGenEnabled = false;
+        }
     }
 
     CypherAST ast(queryStr);
