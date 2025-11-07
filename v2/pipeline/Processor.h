@@ -61,6 +61,8 @@ protected:
     void markAsReset() { _finished = false; }
     void finish();
 
+    ExecutionContext* _ctxt {nullptr};
+
 private:
     InputPorts _inputs;
     OutputPorts _outputs;

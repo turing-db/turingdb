@@ -25,7 +25,6 @@ public:
 private:
     PipelineNodeOutputInterface _outNodeIDs;
     std::unique_ptr<ScanNodesChunkWriter> _it;
-    size_t _chunkSize = 0;
 
     ScanNodesProcessor();
     ~ScanNodesProcessor();

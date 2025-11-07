@@ -28,10 +28,11 @@ ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
 }
 
 void ScanNodesProcessor::prepare(ExecutionContext* ctxt) {
+    _ctxt = ctxt;
+
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs.getNodeIDs()->getColumn());
     _it = std::make_unique<ScanNodesChunkWriter>(ctxt->getGraphView());
     _it->setNodeIDs(nodeIDs);
-    _chunkSize = ctxt->getChunkSize();
 
     markAsPrepared();
 }
@@ -41,7 +42,7 @@ void ScanNodesProcessor::reset() {
 }
 
 void ScanNodesProcessor::execute() {
-    _it->fill(_chunkSize);
+    _it->fill(_ctxt->getChunkSize());
 
     if (!_it->isValid()) {
         finish();
