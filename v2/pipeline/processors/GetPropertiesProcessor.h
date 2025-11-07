@@ -12,7 +12,6 @@
 #include "metadata/SupportedType.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
-#include "iterators/ChunkConfig.h"
 #include "iterators/GetPropertiesIterator.h"
 #include "dataframe/NamedColumn.h"
 
@@ -46,13 +45,13 @@ public:
     }
 
     void prepare(ExecutionContext* ctxt) override {
+        _ctxt = ctxt;
+
         const ColumnNodeIDs* ids = dynamic_cast<const ColumnNodeIDs*>(_inIDs.getNodeIDs()->getColumn());
         _propWriter = std::make_unique<PropertyChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
         ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_outValues.getIndices()->getColumn());
         _propWriter->setIndices(indices);
-
-        _chunkSize = ctxt->getChunkSize();
 
         ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
         _propWriter->setOutput(values);
@@ -66,7 +65,7 @@ public:
 
     void execute() override {
         _inIDs.getPort()->consume();
-        _propWriter->fill(_chunkSize);
+        _propWriter->fill(_ctxt->getChunkSize());
         _outValues.getPort()->writeData();
 
         if (!_propWriter->isValid()) {
@@ -79,7 +78,6 @@ protected:
     std::unique_ptr<PropertyChunkWriter> _propWriter;
     PipelineNodeInputInterface _inIDs;
     PipelineValuesOutputInterface _outValues;
-    size_t _chunkSize = 0;
 
     GetPropertiesProcessor(PropertyType propType)
         : _propType(propType)
