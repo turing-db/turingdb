@@ -47,24 +47,22 @@ TEST_F(DataframeTest, testSameTag) {
 
     ColumnNodeIDs colNodes1;
     ColumnNodeIDs colNodes2;
-    ColumnEdgeIDs colEdges1;
+    ColumnNodeIDs colNodes3;
 
     const ColumnHeader aHeader(dfMan.allocTag());
     NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, aHeader);
-    df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
+    df.addColumn(col1);
 
     const ColumnHeader bHeader(dfMan.allocTag());
     NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, bHeader);
-    df.addColumn(col2);
     ASSERT_TRUE(col2 != nullptr);
+    df.addColumn(col2);
 
-    EXPECT_THROW({
-        auto col = NamedColumn::create(&dfMan, &colEdges1, aHeader);
-        df.addColumn(col);
-    }, TuringException);
+    NamedColumn* col3 = NamedColumn::create(&dfMan, &colNodes2, bHeader);
+    df.addColumn(col3);
 
-    ASSERT_EQ(df.cols().size(), 2);
+    ASSERT_EQ(df.size(), 3);
 }
 
 TEST_F(DataframeTest, anonymous) {
@@ -84,7 +82,6 @@ TEST_F(DataframeTest, anonymous) {
 
     ColumnNodeIDs nodes0;
     ColumnNodeIDs nodes1;
-    ColumnNodeIDs nodes2;
 
     NamedColumn* col0 = NamedColumn::create(&dfMan, &nodes0, v0Header);
     df.addColumn(col0);
@@ -98,15 +95,8 @@ TEST_F(DataframeTest, anonymous) {
 
     ASSERT_EQ(df.getColumn(v0Header.getTag()), col0);
 
-    // Try to add a column with same anonymous tag
-    EXPECT_THROW({
-        auto col = NamedColumn::create(&dfMan, &nodes2, v0Header);
-        df.addColumn(col);
-    }, TuringException);
-
     // Compare columns of dataframe
-    ASSERT_EQ(df.cols().size(), 2);
-    std::vector<NamedColumn*> goldVec = {col0, col1};
+    const std::vector<NamedColumn*> goldVec = {col0, col1};
     ASSERT_EQ(df.cols(), goldVec);
 }
 
@@ -158,4 +148,24 @@ TEST_F(DataframeTest, dataframes2) {
     ASSERT_EQ(df2.cols().size(), 2);
     ASSERT_EQ(df1.cols(), std::vector<NamedColumn*>({col1}));
     ASSERT_EQ(df2.cols(), std::vector<NamedColumn*>({col2, col1}));
+}
+
+TEST_F(DataframeTest, nonMonoticTags) {
+    DataframeManager dfMan;
+    Dataframe df;
+
+    NamedColumn* col1 = NamedColumn::create(&dfMan, nullptr, ColumnHeader(ColumnTag(42)));
+    df.addColumn(col1);
+    NamedColumn* col2 = NamedColumn::create(&dfMan, nullptr, ColumnHeader(ColumnTag(24)));
+    df.addColumn(col2);
+    NamedColumn* col3 = NamedColumn::create(&dfMan, nullptr, ColumnHeader(ColumnTag(0)));
+    df.addColumn(col3);
+
+    ASSERT_EQ(df.cols().size(), 3);
+    ASSERT_EQ(df.cols(), std::vector<NamedColumn*>({col1, col2, col3}));
+
+    ASSERT_EQ(df.getColumn(ColumnTag(0)), col3);
+    ASSERT_EQ(df.getColumn(ColumnTag(24)), col2);
+    ASSERT_EQ(df.getColumn(ColumnTag(42)), col1);
+    ASSERT_EQ(df.getColumn(ColumnTag(17)), nullptr);
 }
