@@ -5,8 +5,10 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PlanGraph.h"
+#include "PipelineV2.h"
 #include "PlanGraphStream.h"
 
+#include "decl/VarDecl.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -109,7 +111,15 @@ void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream)
 }
 
 void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
-    _builder.addScanNodes();
+    VarDecl* decl = node->getNodeIDsDecl();
+    bioassert(decl);
+
+    PipelineNodeOutputInterface& interface = _builder.addScanNodes();
+    NamedColumn* nodeIDs = interface.getNodeIDs();
+    ColumnHeader& header = nodeIDs->getHeader();
+
+    decl->setTag(header.getTag());
+    header.setName(decl->getName());
 }
 
 void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
@@ -133,13 +143,24 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
-    auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    auto lambdaCallback = [this, node](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
 
-        _callback(df);
+        Dataframe projected;
+        for (const VarDecl* decl : node->getReturnValues()) {
+            const ColumnTag tag = decl->getTag();
+            if (tag.getValue() == UINT64_MAX) {
+                throw std::runtime_error("Unknown error. Return value has no tag");
+            }
+
+            projected.addColumn(df->getColumn(tag));
+        }
+
+        _callback(&projected);
     };
+
     _builder.addLambda(lambdaCallback);
 }
 

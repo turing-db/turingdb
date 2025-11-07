@@ -135,9 +135,10 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
     const NodePatternData* data = origin->getData();
     const std::span labels = data->labelConstraints();
     const auto& exprConstraints = data->exprConstraints();
-    const VarDecl* decl = origin->getDecl();
     const LabelMap& labelMap = _graphMetadata.labels();
     const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
+
+    VarDecl* decl = origin->getDecl();
 
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
 
@@ -146,6 +147,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         ScanNodesNode* scan = _tree->create<ScanNodesNode>();
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
 
+        scan->setNodeIDsDecl(decl);
         scan->connectOut(filter);
     }
 
