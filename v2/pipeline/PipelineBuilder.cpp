@@ -24,7 +24,7 @@ void duplicateDataframeShape(LocalMemory* mem,
                              Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
-        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getHeader());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
 }

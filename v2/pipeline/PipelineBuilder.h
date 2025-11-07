@@ -70,7 +70,7 @@ private:
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {
         ColumnType* col = _mem->alloc<ColumnType>();
-        NamedColumn* newCol = NamedColumn::create(_dfMan, col, ColumnHeader(tag));
+        NamedColumn* newCol = NamedColumn::create(_dfMan, col, tag);
         df->addColumn(newCol);
         return newCol;
     }

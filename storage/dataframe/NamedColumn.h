@@ -1,6 +1,9 @@
 #pragma once
 
-#include "ColumnHeader.h"
+#include <type_traits>
+#include <string_view>
+
+#include "ColumnTag.h"
 
 namespace db {
 
@@ -11,10 +14,15 @@ class NamedColumn {
 public:
     friend DataframeManager;
 
-    const ColumnHeader& getHeader() const { return _header; }
-    ColumnHeader& getHeader() { return _header; }
+    static NamedColumn* create(DataframeManager* dfMan,
+                               Column* column,
+                               ColumnTag tag);
 
-    ColumnTag getTag() const { return _header.getTag(); }
+    ColumnTag getTag() const { return _tag; }
+
+    std::string_view getName() const;
+
+    void setName(std::string_view name);
 
     Column* getColumn() const { return _column; }
 
@@ -24,17 +32,15 @@ public:
         return dynamic_cast<const T*>(_column);
     }
 
-    static NamedColumn* create(DataframeManager* dfMan,
-                               Column* column,
-                               const ColumnHeader& header);
-
 private:
-    ColumnHeader _header;
+    DataframeManager* _dfMan {nullptr};
+    ColumnTag _tag;
     Column* _column {nullptr};
 
-    NamedColumn(const ColumnHeader& header,
+    NamedColumn(DataframeManager* dfMan,
+                ColumnTag tag,
                 Column* column)
-        : _header(header),
+        : _tag(tag),
         _column(column)
     {
     }
