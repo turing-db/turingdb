@@ -63,17 +63,17 @@ public:
                   NamedColumn* neighbourNodes,
                   NamedColumn* edgeTypes) {
         _edgeIDs = edgeIDs;
-        _neighbourNodes = neighbourNodes;
+        _otherNodes = neighbourNodes;
         _edgeTypes = edgeTypes;
     }
 
     NamedColumn* getEdgeIDs() const { return _edgeIDs; }
-    NamedColumn* getNeighbourNodes() const { return _neighbourNodes; }
+    NamedColumn* getOtherNodes() const { return _otherNodes; }
     NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
 private:
     NamedColumn* _edgeIDs {nullptr};
-    NamedColumn* _neighbourNodes {nullptr};
+    NamedColumn* _otherNodes {nullptr};
     NamedColumn* _edgeTypes {nullptr};
 };
 
@@ -155,7 +155,7 @@ public:
     NamedColumn* getIndices() const { return _indices; }
 
     NamedColumn* getEdgeIDs() const { return _edgeIDs; }
-    NamedColumn* getNeighbourNodes() const { return _neighbourNodes; }
+    NamedColumn* getOtherNodes() const { return _neighbourNodes; }
     NamedColumn* getEdgeTypes() const { return _edgeTypes; }
 
     void connectTo(PipelineEdgeInputInterface& input) override {

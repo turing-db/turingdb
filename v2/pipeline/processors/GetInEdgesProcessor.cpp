@@ -43,7 +43,7 @@ void GetInEdgesProcessor::prepare(ExecutionContext* ctxt) {
     ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(_inNodeIDs.getNodeIDs()->getColumn());
     ColumnVector<size_t>* indices = dynamic_cast<ColumnVector<size_t>*>(_outEdges.getIndices()->getColumn());
     ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdges.getEdgeIDs()->getColumn());
-    ColumnNodeIDs* sourceNodes = dynamic_cast<ColumnNodeIDs*>(_outEdges.getNeighbourNodes()->getColumn());
+    ColumnNodeIDs* sourceNodes = dynamic_cast<ColumnNodeIDs*>(_outEdges.getOtherNodes()->getColumn());
     ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdges.getEdgeTypes()->getColumn());
     
     _it = std::make_unique<GetInEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
