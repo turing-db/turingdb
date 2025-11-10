@@ -418,3 +418,54 @@ TEST_F(QueriesTest, scanExpandIn2) {
 
     ASSERT_TRUE(returnedLines.equals(expectedLines));
 }
+
+TEST_F(QueriesTest, scanEdges) {
+    const std::string query = "MATCH (n)--(m) RETURN n";
+
+    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> returnedLines;
+    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> expectedLines;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 4);
+        ASSERT_EQ(df->size(), 4);
+
+        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(sourceIDs != nullptr);
+        ASSERT_FALSE(sourceIDs->empty());
+
+        const ColumnEdgeIDs* edgeIDs = df->cols()[1]->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(edgeIDs != nullptr);
+        ASSERT_FALSE(edgeIDs->empty());
+
+        const ColumnEdgeTypes* edgeTypes = df->cols()[2]->as<ColumnEdgeTypes>();
+        ASSERT_TRUE(edgeTypes != nullptr);
+        ASSERT_FALSE(edgeTypes->empty());
+
+        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs != nullptr);
+        ASSERT_FALSE(targetIDs->empty());
+
+        const size_t lineCount = targetIDs->size();
+        for (size_t i = 0; i < lineCount; i++) {
+            returnedLines.add({sourceIDs->at(i), edgeIDs->at(i), edgeTypes->at(i), targetIDs->at(i)});
+        }
+    });
+
+    // Get all expected node IDs
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (auto edge : edgeView.inEdges()) {
+                expectedLines.add({edge._nodeID, edge._edgeID, edge._edgeTypeID, edge._otherID});
+            }
+            for (auto edge : edgeView.outEdges()) {
+                expectedLines.add({edge._nodeID, edge._edgeID, edge._edgeTypeID, edge._otherID});
+            }
+        }
+    }
+
+    ASSERT_TRUE(returnedLines.equals(expectedLines));
+}
