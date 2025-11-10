@@ -32,7 +32,7 @@ public:
     void deleteNodes(std::vector<NodeID>&& nodes);
     void deleteEdges(std::vector<EdgeID>&& edges);
 
-    static inline const fs::Path WORKING_PATH {SAMPLE_DIR "/.turing"};
+    static inline fs::Path WORKING_PATH {SAMPLE_DIR "/.turing"};
 
 private:
     const std::string _testName;
