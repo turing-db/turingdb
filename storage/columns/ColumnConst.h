@@ -5,7 +5,6 @@
 
 #include "DebugDump.h"
 #include "BioAssert.h"
-#include "FatalException.h"
 
 namespace db {
 
@@ -39,10 +38,6 @@ public:
     explicit operator T() const { return _value; }
 
     size_t size() const override { return 1; }
-
-    void resize([[maybe_unused]] size_t newSize) override {
-        throw FatalException("Attempted to resize ColumnConst.");
-    }
 
     void assign(const Column* other) override {
         const ColumnConst<T>* otherCol = dynamic_cast<const ColumnConst<T>*>(other);
