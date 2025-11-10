@@ -16,7 +16,6 @@
 using namespace db;
 using Step = ScanNodesStringApproxStep;
 
-
 Step::ScanNodesStringApproxStep(ColumnVector<NodeID>* nodes, const GraphView& view,
                                 PropertyTypeID propID, std::string_view strQuery)
     : _nodes(nodes),
@@ -32,7 +31,7 @@ Step::~ScanNodesStringApproxStep()
 
 void Step::describe(std::string& descr) const {
     std::stringstream ss;
-    ss << "ScanNodesByPropertyStep";
+    ss << "ScanNodesStringApproxStep";
     ss << " nodes=" << std::hex << _nodes;
     ss << " propID=" << std::hex << _pId;
     ss << " query=" << std::hex << _strQuery;

@@ -465,9 +465,9 @@ void QueryPlanner::caseScanNodesStringConstraint(const std::vector<const BinExpr
             // TOMBSTONES: base column @ref firstStageOutput always allocd by
             // @ref planScanNodes
             _pipeline->add<ScanNodesStringApproxStep>(firstStageOutput, _view,
-                                                     propType._id, queryString);
-        break;
+                                                      propType._id, queryString);
         }
+        break;
 
         default:
             throw PlannerException("Unsupported operator for type 'String'");

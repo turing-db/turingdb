@@ -2,13 +2,16 @@
 
 #include <concepts>
 
+#include "StringIndex.h"
 #include "DataPart.h"
 #include "DataPartSpan.h"
 #include "ID.h"
-#include "TuringException.h"
 #include "indexers/StringPropertyIndexer.h"
+#include "iterators/ChunkConfig.h"
 #include "views/GraphView.h"
-#include "indexes/StringIndex.h"
+
+#include "PipelineException.h"
+#include "TuringException.h"
 
 namespace db {
 
@@ -77,6 +80,9 @@ public:
                 // Get any matches for the query string in the index
                 strIndex->query<IDT>(output, query);
             }
+        }
+        if (output.size() > ChunkConfig::CHUNK_SIZE) {
+            throw PipelineException("String Index output exceeded CHUNK_SIZE. Please try a more restrictive query.");
         }
     }
 };
