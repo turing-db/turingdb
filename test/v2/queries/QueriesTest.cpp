@@ -8,6 +8,7 @@
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
 
+#include "LineContainer.h"
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
 
@@ -306,28 +307,36 @@ TEST_F(QueriesTest, scanExpand2) {
 TEST_F(QueriesTest, scanExpandIn) {
     const std::string query = "MATCH (n)<--(m) RETURN n";
 
-    std::vector<NodeID> returnedTargets;
-    std::vector<NodeID> returnedSources;
+    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> returnedLines;
+    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> expectedLines;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 4);
         ASSERT_EQ(df->size(), 4);
 
-        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
-        ASSERT_TRUE(targetIDs != nullptr);
-        ASSERT_FALSE(targetIDs->empty());
-
         const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
 
-        returnedTargets.insert(returnedTargets.end(), targetIDs->begin(), targetIDs->end());
-        returnedSources.insert(returnedSources.end(), sourceIDs->begin(), sourceIDs->end());
+        const ColumnEdgeIDs* edgeIDs = df->cols()[1]->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(edgeIDs != nullptr);
+        ASSERT_FALSE(edgeIDs->empty());
+
+        const ColumnEdgeTypes* edgeTypes = df->cols()[2]->as<ColumnEdgeTypes>();
+        ASSERT_TRUE(edgeTypes != nullptr);
+        ASSERT_FALSE(edgeTypes->empty());
+
+        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs != nullptr);
+        ASSERT_FALSE(targetIDs->empty());
+
+        const size_t lineCount = targetIDs->size();
+        for (size_t i = 0; i < lineCount; i++) {
+            returnedLines.add({sourceIDs->at(i), edgeIDs->at(i), edgeTypes->at(i), targetIDs->at(i)});
+        }
     });
 
     // Get all expected node IDs
-    std::vector<NodeID> expectedSources;
-    std::vector<NodeID> expectedTargets;
     {
         auto transaction = _graph->openTransaction();
         auto reader = transaction.readGraph();
@@ -335,14 +344,77 @@ TEST_F(QueriesTest, scanExpandIn) {
         for (auto node : nodes) {
             const auto edgeView = reader.getNodeView(node).edges();
             for (auto edge : edgeView.inEdges()) {
-                expectedSources.push_back(node);
-                expectedTargets.push_back(edge._otherID);
+                expectedLines.add({node, edge._edgeID, edge._edgeTypeID, edge._otherID});
             }
         }
     }
 
-    ASSERT_FALSE(returnedSources.empty());
-    ASSERT_FALSE(returnedTargets.empty());
-    ASSERT_EQ(returnedSources, expectedSources);
-    ASSERT_EQ(returnedTargets, expectedTargets);
+    ASSERT_TRUE(returnedLines.equals(expectedLines));
+}
+
+TEST_F(QueriesTest, scanExpandIn2) {
+    const std::string query = "MATCH (n)<--(m)<--(t) RETURN n";
+
+    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID, EdgeID, EdgeTypeID, NodeID> returnedLines;
+    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID, EdgeID, EdgeTypeID, NodeID> expectedLines;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 7);
+        ASSERT_EQ(df->size(), 7);
+
+        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(sourceIDs != nullptr);
+        ASSERT_FALSE(sourceIDs->empty());
+
+        const ColumnEdgeIDs* edgeIDs1 = df->cols()[1]->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(edgeIDs1 != nullptr);
+        ASSERT_FALSE(edgeIDs1->empty());
+
+        const ColumnEdgeTypes* edgeTypes1 = df->cols()[2]->as<ColumnEdgeTypes>();
+        ASSERT_TRUE(edgeTypes1 != nullptr);
+        ASSERT_FALSE(edgeTypes1->empty());
+
+        const ColumnNodeIDs* targetIDs1 = df->cols()[3]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs1 != nullptr);
+        ASSERT_FALSE(targetIDs1->empty());
+
+        const ColumnEdgeIDs* edgeIDs2 = df->cols()[4]->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(edgeIDs2 != nullptr);
+        ASSERT_FALSE(edgeIDs2->empty());
+
+        const ColumnEdgeTypes* edgeTypes2 = df->cols()[5]->as<ColumnEdgeTypes>();
+        ASSERT_TRUE(edgeTypes2 != nullptr);
+        ASSERT_FALSE(edgeTypes2->empty());
+
+        const ColumnNodeIDs* targetIDs2 = df->cols()[6]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs2 != nullptr);
+        ASSERT_FALSE(targetIDs2->empty());
+
+        const size_t lineCount = df->getRowCount();
+        for (size_t i = 0; i < lineCount; i++) {
+            returnedLines.add({sourceIDs->at(i),
+                               edgeIDs1->at(i), edgeTypes1->at(i), targetIDs1->at(i),
+                               edgeIDs2->at(i), edgeTypes2->at(i), targetIDs2->at(i)});
+        }
+    });
+
+    // Get all expected node IDs
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const auto edgeView1 = reader.getNodeView(node).edges();
+            for (auto edge1 : edgeView1.inEdges()) {
+                const auto edgeView2 = reader.getNodeView(edge1._otherID).edges();
+                for (auto edge2 : edgeView2.inEdges()) {
+                    expectedLines.add({node,
+                                       edge1._edgeID, edge1._edgeTypeID, edge1._otherID,
+                                       edge2._edgeID, edge2._edgeTypeID, edge2._otherID});
+                }
+            }
+        }
+    }
+
+    ASSERT_TRUE(returnedLines.equals(expectedLines));
 }
