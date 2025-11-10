@@ -302,3 +302,47 @@ TEST_F(QueriesTest, scanExpand2) {
     ASSERT_EQ(returnedTargets1, expectedTargets1);
     ASSERT_EQ(returnedTargets2, expectedTargets2);
 }
+
+TEST_F(QueriesTest, scanExpandIn) {
+    const std::string query = "MATCH (n)<--(m) RETURN n";
+
+    std::vector<NodeID> returnedTargets;
+    std::vector<NodeID> returnedSources;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 4);
+        ASSERT_EQ(df->size(), 4);
+
+        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs != nullptr);
+        ASSERT_FALSE(targetIDs->empty());
+
+        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(sourceIDs != nullptr);
+        ASSERT_FALSE(sourceIDs->empty());
+
+        returnedTargets.insert(returnedTargets.end(), targetIDs->begin(), targetIDs->end());
+        returnedSources.insert(returnedSources.end(), sourceIDs->begin(), sourceIDs->end());
+    });
+
+    // Get all expected node IDs
+    std::vector<NodeID> expectedSources;
+    std::vector<NodeID> expectedTargets;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (auto edge : edgeView.inEdges()) {
+                expectedSources.push_back(node);
+                expectedTargets.push_back(edge._otherID);
+            }
+        }
+    }
+
+    ASSERT_FALSE(returnedSources.empty());
+    ASSERT_FALSE(returnedTargets.empty());
+    ASSERT_EQ(returnedSources, expectedSources);
+    ASSERT_EQ(returnedTargets, expectedTargets);
+}

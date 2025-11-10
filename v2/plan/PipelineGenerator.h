@@ -17,6 +17,7 @@ class PlanGraphStream;
 class VarNode;
 class ScanNodesNode;
 class GetOutEdgesNode;
+class GetInEdgesNode;
 class GetEdgesNode;
 class GetEdgeTargetNode;
 class MaterializeNode;
@@ -56,6 +57,7 @@ private:
     void translateVarNode(VarNode* node, PlanGraphStream& stream);
     void translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream);
     void translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream);
+    void translateGetInEdgesNode(GetInEdgesNode* node, PlanGraphStream& stream);
     void translateGetEdgesNode(GetEdgesNode* node, PlanGraphStream& stream);
     void translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream);
     void translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream);

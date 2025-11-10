@@ -16,6 +16,8 @@
 #include "nodes/SkipNode.h"
 #include "nodes/LimitNode.h"
 #include "nodes/GetEdgeTargetNode.h"
+#include "nodes/GetEdgesNode.h"
+#include "nodes/GetInEdgesNode.h"
 
 #include "decl/VarDecl.h"
 #include "expr/LiteralExpr.h"
@@ -102,9 +104,15 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node), stream);
         break;
 
-        case PlanGraphOpcode::GET_EDGES:
-        case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::GET_IN_EDGES:
+            translateGetInEdgesNode(static_cast<GetInEdgesNode*>(node), stream);
+        break;
+
+        case PlanGraphOpcode::GET_EDGES:
+            translateGetEdgesNode(static_cast<GetEdgesNode*>(node), stream);
+        break;
+
+        case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_NODE:
         case PlanGraphOpcode::CREATE_EDGE:
         case PlanGraphOpcode::CREATE_GRAPH:
@@ -138,10 +146,16 @@ void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGrap
     _builder.addGetOutEdges();
 }
 
+void PipelineGenerator::translateGetInEdgesNode(GetInEdgesNode* node, PlanGraphStream& stream) {
+    _builder.addGetInEdges();
+}
+
 void PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node, PlanGraphStream& stream) {
+    _builder.addGetEdges();
 }
 
 void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
+    // Do nothing because this is handled by PipelineOutputInterface::connect
 }
 
 void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {
