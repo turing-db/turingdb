@@ -7,9 +7,11 @@
 
 #include "FatalException.h"
 
-#define COL_CASE(Column)                                                                 \
-    case Column::staticKind(): {                                                         \
-        CASE_COMPONENT(col, Column::staticKind())                                        \
+namespace db {
+
+#define COL_CASE(ColumnType)                                                             \
+    case ColumnType::staticKind(): {                                                     \
+        CASE_COMPONENT(col, ColumnType)                                                  \
     } break;
 
 #define COLUMN_SWITCH(col)                                                               \
@@ -45,3 +47,5 @@
             throw FatalException(fmt::format(                                            \
                 "Can not check result for column of kind {}", (col)->getKind()));        \
         }
+
+}
