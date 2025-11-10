@@ -18,7 +18,9 @@ using namespace db;
 
 DeleteTest::DeleteTest(const std::string& testName, const std::string& graph)
     : _testName {testName},
-    _graphName {graph} {
+    _graphName {graph}
+{
+    _env = TuringTestEnv::create(WORKING_PATH);
 }
 
 void DeleteTest::addQuery(const std::string& query) {
@@ -128,7 +130,6 @@ void DeleteTest::filterBlocks(std::vector<Block>& expectedBlocks) {
 
 bool DeleteTest::run() {
     spdlog::info("RUNNING TEST {}", _testName);
-    _env = TuringTestEnv::create(DeleteTest::WORKING_PATH);
 
     SystemManager& sysMan = _env->getSystemManager();
     TuringDB& db = _env->getDB();

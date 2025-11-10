@@ -1,7 +1,5 @@
 #include "DeleteTest.h"
-
-#include <spdlog/spdlog.h>
-
+ #include <spdlog/spdlog.h>
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "dump/GraphDumper.h"
@@ -13,7 +11,9 @@ namespace {
 void getSimpleDB() {
     auto graph = Graph::create();
     SimpleGraph::createSimpleGraph(graph.get());
-    if (auto res = GraphDumper::dump(*graph, DeleteTest::WORKING_PATH); !res) {
+    if (auto res =
+            GraphDumper::dump(*graph, DeleteTest::WORKING_PATH / "graphs" / "simpledb");
+        !res) {
         spdlog::error("{}\n", res.error().fmtMessage());
         std::abort();
     }
@@ -22,7 +22,6 @@ void getSimpleDB() {
 }
 
 int main() {
-
     { // Add simpledb to script directory
         getSimpleDB();
     }
@@ -46,6 +45,12 @@ int main() {
         tester.addQuery("match (n)-[e]-(m) return e");
         tester.deleteNodes({0});
         tester.run();
+    }
+
+    { // Clean up graph directory
+        if (DeleteTest::WORKING_PATH.exists()) {
+            DeleteTest::WORKING_PATH.rm();
+        }
     }
 
     return 0;
