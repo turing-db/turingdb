@@ -2,6 +2,7 @@
 
 #include "processors/CartesianProductProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
+#include "processors/HashJoinProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
 #include "processors/GetEdgesProcessor.h"
@@ -46,6 +47,44 @@ void concatDataframeShape(LocalMemory* mem,
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
+}
+
+void createHashJoinDataFrameShape(LocalMemory* mem,
+                                  DataframeManager* dfMan,
+                                  Dataframe* leftSrc,
+                                  Dataframe* rightSrc,
+                                  Dataframe* dest,
+                                  ColumnTag leftJoinKeyTag,
+                                  ColumnTag rightJoinKeyTag) {
+    // Add left input columns
+    for (const NamedColumn* col : leftSrc->cols()) {
+        if (col->getTag() == leftJoinKeyTag) {
+            continue;
+        }
+
+        Column* newCol = mem->allocSame(col->getColumn());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
+        dest->addColumn(newNamedCol);
+    }
+
+    // Add right input columns
+    for (const NamedColumn* col : rightSrc->cols()) {
+        // Skip Columns present in the left input
+        if (leftSrc->getColumn(col->getTag()) != nullptr || col->getTag() == rightJoinKeyTag) {
+            continue;
+        }
+
+        Column* newCol = mem->allocSame(col->getColumn());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
+        dest->addColumn(newNamedCol);
+    }
+
+    // allocate a join-key column tag in the output with a new column tag if the left
+    // and right join column tags aren't the same
+    const ColumnTag joinColTag = leftJoinKeyTag == rightJoinKeyTag ? leftJoinKeyTag : dfMan->allocTag();
+    Column* newCol = mem->allocSame(leftSrc->getColumn(leftJoinKeyTag)->getColumn());
+    auto* newNamedCol = NamedColumn::create(dfMan, newCol, joinColTag);
+    dest->addColumn(newNamedCol);
 }
 
 }
@@ -301,6 +340,35 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     _pendingOutput.updateInterface(&output);
 
     return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineBlockOutputInterface* rhs,
+                                                           ColumnTag leftJoinKey,
+                                                           ColumnTag rightJoinKey) {
+    HashJoinProcessor* join = HashJoinProcessor::create(_pipeline,
+                                                        leftJoinKey,
+                                                        rightJoinKey);
+
+    _pendingOutput.connectTo(join->leftInput());
+    rhs->connectTo(join->rightInput());
+
+    Dataframe* leftDf = join->leftInput().getDataframe();
+    Dataframe* rightDf = join->rightInput().getDataframe();
+
+    PipelineBlockOutputInterface& outInterface = join->output();
+    Dataframe* outDf = outInterface.getDataframe();
+
+    // need to change output shape
+    createHashJoinDataFrameShape(_mem,
+                                 _dfMan,
+                                 leftDf,
+                                 rightDf,
+                                 outDf,
+                                 leftJoinKey,
+                                 rightJoinKey);
+
+    _pendingOutput.setInterface(&outInterface);
+    return outInterface;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {

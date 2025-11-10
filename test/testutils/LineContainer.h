@@ -120,7 +120,7 @@ private:
 
     template <typename Tuple, std::size_t... Is>
     static void printTupleImpl(std::ostream& os, const Tuple& tup, std::index_sequence<Is...>) {
-        (fmt::print(os, Is == 0 ? "{}" : ", {}", getFormat(std::get<Is>(tup))), ...);
+        ((os << (Is == 0 ? "" : ", ") << getFormat(std::get<Is>(tup))), ...);
     }
 
     template <typename... Ts>

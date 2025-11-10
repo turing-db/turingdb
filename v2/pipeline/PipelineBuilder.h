@@ -110,6 +110,11 @@ public:
     bool isMaterializeOpen() const { return _isMaterializeOpen; }
     bool isSingleMaterializeStep() const;
 
+    // Join
+    PipelineBlockOutputInterface& addHashJoin(PipelineBlockOutputInterface* rhs,
+                                              ColumnTag leftJoinKey,
+                                              ColumnTag rightJoinKey);
+
     // Rename output
     void rename(std::string_view name) { _pendingOutput.rename(name); }
 

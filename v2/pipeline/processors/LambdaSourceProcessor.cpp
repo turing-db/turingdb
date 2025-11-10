@@ -34,6 +34,7 @@ void LambdaSourceProcessor::execute() {
     _output.getPort()->writeData();
 
     if (isFinished) {
+        _output.getPort()->writeData();
         finish();
     }
 }

@@ -26,7 +26,8 @@ set(processors_sources
     processors/LambdaSourceProcessor.cpp
     processors/LambdaTransformProcessor.cpp
     processors/CartesianProductProcessor.cpp
-)
+    processors/HashJoinProcessor.cpp
+    processors/LambdaSourceProcessor.cpp)
 
 set(procedures_sources
     procedures/ProcedureBlueprint.cpp
