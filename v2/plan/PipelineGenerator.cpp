@@ -15,6 +15,7 @@
 #include "nodes/FilterNode.h"
 #include "nodes/SkipNode.h"
 #include "nodes/LimitNode.h"
+#include "nodes/GetEdgeTargetNode.h"
 
 #include "decl/VarDecl.h"
 #include "expr/LiteralExpr.h"
@@ -97,8 +98,11 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateLimitNode(static_cast<LimitNode*>(node), stream);
         break;
 
-        case PlanGraphOpcode::GET_EDGES:
         case PlanGraphOpcode::GET_EDGE_TARGET:
+            translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node), stream);
+        break;
+
+        case PlanGraphOpcode::GET_EDGES:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::GET_IN_EDGES:
         case PlanGraphOpcode::CREATE_NODE:
@@ -151,6 +155,14 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
+    // If not MaterializeNode has been seen at that point, we do materialize
+    // if we have materialize data in flight
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    _builder.closeMaterialize();
+
     auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
