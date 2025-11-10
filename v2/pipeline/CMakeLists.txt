@@ -22,7 +22,9 @@ set(processors_sources
     processors/CountProcessor.cpp
     processors/ProjectionProcessor.cpp
     processors/LambdaSourceProcessor.cpp
-    processors/LambdaTransformProcessor.cpp)
+    processors/LambdaTransformProcessor.cpp
+    processors/CartesianProductProcessor.cpp
+)
 
 add_library(turing_db_v2_pipeline_s STATIC ${pipeline_sources} ${processors_sources})
 

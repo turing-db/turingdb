@@ -6,7 +6,11 @@
 
 #include "PipelineInterface.h"
 
+namespace db {
+
 class Dataframe;
+
+}
 
 namespace db::v2 {
 

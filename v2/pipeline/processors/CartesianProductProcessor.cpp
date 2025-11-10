@@ -33,6 +33,12 @@ CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipelin
         processor->addInput(rhsInput);
     }
 
+    {
+        PipelineOutputPort* output = PipelineOutputPort::create(pipeline, processor);
+        processor->_out.setPort(output);
+        processor->addOutput(output);
+    }
+
     processor->postCreate(pipeline);
     return processor;
 }
@@ -48,7 +54,7 @@ void CartesianProductProcessor::reset() {
 void CartesianProductProcessor::execute() {
     PipelineInputPort* lPort = _lhs.getPort();
     PipelineInputPort* rPort = _rhs.getPort();
-    PipelineOutputPort* oPort = _out.getPort();
+    [[maybe_unused]] PipelineOutputPort* oPort = _out.getPort();
     
     Dataframe* lDF = _lhs.getDataframe();
     lPort->consume();
@@ -62,7 +68,7 @@ void CartesianProductProcessor::execute() {
 
     // Right DF is m x q dimensional
     const size_t m = lDF->getRowCount();
-    const size_t q = rDF->size();
+    [[maybe_unused]] const size_t q = rDF->size();
 
     msgbioassert(n * m <= ChunkConfig::CHUNK_SIZE,
                  "Cartesian Product is only supported in the strongly bounded case "
@@ -93,5 +99,7 @@ void CartesianProductProcessor::execute() {
         }
     }
 
+    finish();
+    oPort->writeData();
 }
 
