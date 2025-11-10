@@ -6,6 +6,7 @@ set(storage_sources
         DebugDump.cpp
         NodeContainer.cpp
         EdgeContainer.cpp
+        RowStore.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp
