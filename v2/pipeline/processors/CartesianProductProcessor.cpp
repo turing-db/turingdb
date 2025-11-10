@@ -70,8 +70,5 @@ void CartesianProductProcessor::execute() {
     // We know the output size ahead of time: resize so we can memset/cpy into it
     oDF->resizeAllColumns(n * m);
 
-    size_t outDFRowWritePtr {0};
-    for (size_t lhsRowPtr {0}; lhsRowPtr < n; lhsRowPtr++) {
-    }
 }
 
