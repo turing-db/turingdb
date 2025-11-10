@@ -1,5 +1,7 @@
 #include "PipelineBuilder.h"
 
+#include "PipelineInterface.h"
+#include "processors/CartesianProductProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
 #include "processors/GetEdgesProcessor.h"
@@ -21,8 +23,8 @@ namespace {
 
 void duplicateDataframeShape(LocalMemory* mem,
                              DataframeManager* dfMan,
-                             Dataframe* src,
-                             Dataframe* dest) {
+                             db::Dataframe* src,
+                             db::Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
@@ -79,6 +81,28 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     _pendingOutput.setInterface(&outEdges);
 
     return outEdges;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutputInterface* rhs) {
+    CartesianProductProcessor* cartProd = CartesianProductProcessor::create(_pipeline);
+
+    // LHS is implict in @ref _pendingOutput
+    _pendingOutput->connectTo(cartProd->leftHandSide());
+    rhs->connectTo(cartProd->rightHandSide());
+
+    PipelineBlockOutputInterface& output = cartProd->output();
+    Dataframe* outDf = output.getDataframe();
+
+    Dataframe* leftDf = cartProd->leftHandSide().getDataframe();
+    Dataframe* rightDf = cartProd->rightHandSide().getDataframe();
+
+    // The output DF should be the same as the inputs, concatenated
+    duplicateDataframeShape(_mem, _dfMan, leftDf, outDf);
+    duplicateDataframeShape(_mem, _dfMan, rightDf, outDf);
+
+    _pendingOutput = &output;
+
+    return output;
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {

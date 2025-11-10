@@ -175,7 +175,7 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
     }
 
 template <typename F>
-inline decltype(auto) dispatchColumn(db::Column* col, F&& f) {
+inline decltype(auto) dispatchColumnVector(db::Column* col, F&& f) {
     using namespace db;
     COLUMN_VECTOR_SWITCH(col);
 }

@@ -20,6 +20,10 @@ public:
     void reset() override;
     void execute() override;
 
+    PipelineBlockInputInterface& leftHandSide() { return _lhs; }
+    PipelineBlockInputInterface& rightHandSide() { return _rhs; }
+    PipelineBlockOutputInterface& output() { return _out; }
+
 private:
     CartesianProductProcessor();
     ~CartesianProductProcessor() override;
@@ -28,11 +32,11 @@ private:
     PipelineBlockInputInterface _rhs;
     PipelineBlockOutputInterface _out;
 
-    size_t _lhsTotalRowCount;
-    size_t _rhsTotalRowCount;
+    size_t _lhsTotalRowCount {0};
+    size_t _rhsTotalRowCount {0};
 
-    size_t _lhsRowPtr;
-    size_t _rhsRowPtr;
+    size_t _lhsRowPtr {0};
+    size_t _rhsRowPtr {0};
 };
 
 }
