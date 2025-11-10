@@ -201,3 +201,104 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
         }
     }
 }
+
+TEST_F(QueriesTest, scanExpand1) {
+    const std::string query = "MATCH (n)-->(m) RETURN n";
+
+    std::vector<NodeID> returnedTargets;
+    std::vector<NodeID> returnedSources;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 4);
+        ASSERT_EQ(df->size(), 4);
+
+        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs != nullptr);
+        ASSERT_FALSE(targetIDs->empty());
+
+        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(sourceIDs != nullptr);
+        ASSERT_FALSE(sourceIDs->empty());
+
+        returnedTargets.insert(returnedTargets.end(), targetIDs->begin(), targetIDs->end());
+        returnedSources.insert(returnedSources.end(), sourceIDs->begin(), sourceIDs->end());
+    });
+
+    // Get all expected node IDs
+    std::vector<NodeID> expectedSources;
+    std::vector<NodeID> expectedTargets;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (auto edge : edgeView.outEdges()) {
+                expectedSources.push_back(node);
+                expectedTargets.push_back(edge._otherID);
+            }
+        }
+    }
+
+    ASSERT_FALSE(returnedSources.empty());
+    ASSERT_FALSE(returnedTargets.empty());
+    ASSERT_EQ(returnedSources, expectedSources);
+    ASSERT_EQ(returnedTargets, expectedTargets);
+}
+
+TEST_F(QueriesTest, scanExpand2) {
+    const std::string query = "MATCH (n)-->(m)-->(t) RETURN n";
+
+    std::vector<NodeID> returnedTargets1;
+    std::vector<NodeID> returnedTargets2;
+    std::vector<NodeID> returnedSources;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 7);
+        ASSERT_EQ(df->size(), 7);
+
+        const ColumnNodeIDs* targetIDs1 = df->cols()[3]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs1 != nullptr);
+        ASSERT_FALSE(targetIDs1->empty());
+
+        const ColumnNodeIDs* targetIDs2 = df->cols()[6]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(targetIDs2 != nullptr);
+        ASSERT_FALSE(targetIDs2->empty());
+
+        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        ASSERT_TRUE(sourceIDs != nullptr);
+        ASSERT_FALSE(sourceIDs->empty());
+
+        returnedTargets1.insert(returnedTargets1.end(), targetIDs1->begin(), targetIDs1->end());
+        returnedTargets2.insert(returnedTargets2.end(), targetIDs2->begin(), targetIDs2->end());
+        returnedSources.insert(returnedSources.end(), sourceIDs->begin(), sourceIDs->end());
+    });
+
+    // Get all expected node IDs
+    std::vector<NodeID> expectedSources;
+    std::vector<NodeID> expectedTargets1;
+    std::vector<NodeID> expectedTargets2;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const auto edgeView1 = reader.getNodeView(node).edges();
+            for (auto edge1 : edgeView1.outEdges()) {
+                const auto edgeView2 = reader.getNodeView(edge1._otherID).edges();
+                for (auto edge2 : edgeView2.outEdges()) {
+                    expectedSources.push_back(node);
+                    expectedTargets1.push_back(edge1._otherID);
+                    expectedTargets2.push_back(edge2._otherID);
+                }
+            }
+        }
+    }
+
+    ASSERT_FALSE(returnedSources.empty());
+    ASSERT_FALSE(returnedTargets1.empty());
+    ASSERT_FALSE(returnedTargets2.empty());
+    ASSERT_EQ(returnedSources, expectedSources);
+    ASSERT_EQ(returnedTargets1, expectedTargets1);
+    ASSERT_EQ(returnedTargets2, expectedTargets2);
+}
