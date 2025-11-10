@@ -34,12 +34,13 @@ public:
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
+    PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
 
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
-    void addLambda(const LambdaProcessor::Callback& callback);
+
 
     // Properties
     template <SupportedType T>
@@ -51,7 +52,7 @@ public:
     PipelineValueOutputInterface& addCount();
 
     // Lambda sink
-    PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
+    void addLambda(const LambdaProcessor::Callback& callback);
 
     // Materialize
     PipelineBlockOutputInterface& addMaterialize();
