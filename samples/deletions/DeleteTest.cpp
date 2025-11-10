@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "ID.h"
+#include "Path.h"
 #include "SystemManager.h"
 #include "columns/Block.h"
 #include "columns/ColumnVector.h"
@@ -28,7 +29,6 @@ void DeleteTest::addQuery(const std::string& query) {
 }
 
 void DeleteTest::addIncidentEdges(const std::vector<NodeID>& nodes) {
-    // Should probably not use ChangeID::head()
     TuringDB& db = _env->getDB();
     SystemManager& sysMan = db.getSystemManager();
     auto txRes = sysMan.openTransaction(_graphName, CommitHash::head(), ChangeID::head());
@@ -134,14 +134,20 @@ bool DeleteTest::run() {
     SystemManager& sysMan = _env->getSystemManager();
     TuringDB& db = _env->getDB();
 
-    if (!sysMan.loadGraph(_graphName)) {
-        spdlog::error("Failed to load graph {}", _graphName);
+    bool loaded = sysMan.loadGraph(_graphName);
+    if (!loaded) {
+        loaded =
+            sysMan.importGraph(_graphName, fs::Path {_graphName}, _env->getJobSystem());
+    }
+    if (!loaded) {
+        spdlog::error("Failed to load/import graph {}", _graphName);
         return false;
     }
 
+    // Add edges that should also be deleted due to detach
     addIncidentEdges(_nodesToDelete);
 
-    // Perform queries, get outputs as blocks
+    // Perform queries, get outputs as blocks to compare later
     std::vector<Block> queryOutputBlocks;
     Block thisBlock;
     for (const auto& query : _queries) {
@@ -153,6 +159,7 @@ bool DeleteTest::run() {
         queryOutputBlocks.push_back(std::move(thisBlock));
     }
 
+    // NOTE: Only supports queries that output Node/EdgeIDs
     for (Block& block : queryOutputBlocks) {
         if (block.empty()) {
             continue;
@@ -174,15 +181,26 @@ bool DeleteTest::run() {
         runEdgeDeleteQueries();
     }
 
-    std::ranges::sort(_nodesToDelete);
-    std::ranges::sort(_edgesToDelete);
+    // Sort and unique for lookups
+    {
+        std::ranges::sort(_nodesToDelete);
+        auto [newEnd, oldEnd] = std::ranges::unique(_nodesToDelete);
+        _nodesToDelete.erase(newEnd, oldEnd);
+    }
+    {
+        std::ranges::sort(_edgesToDelete);
+        auto [newEnd, oldEnd] = std::ranges::unique(_edgesToDelete);
+        _edgesToDelete.erase(newEnd, oldEnd);
+    }
 
+    // Generate "expected" blocks which is what the tester thinks the output of the MATCH
+    // queries should be after the deletions
     std::vector<Block> expectedBlocks;
     expectedBlocks.reserve(queryOutputBlocks.size());
     for (auto& block : queryOutputBlocks) {
         expectedBlocks.emplace_back(std::move(block));
     }
-    filterBlocks(expectedBlocks);
+    filterBlocks(expectedBlocks); // Remove nodes/edges that should've been deleted
 
     for (size_t i {0}; const auto& query : _queries) {
         auto& thisExpectedBlock = expectedBlocks[i];
