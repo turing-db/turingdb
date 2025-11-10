@@ -2,6 +2,7 @@
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
+#include "columns/ColumnSwitch.h"
 #include "dataframe/Dataframe.h"
 
 #include "BioAssert.h"
@@ -67,8 +68,30 @@ void CartesianProductProcessor::execute() {
                  "Cartesian Product is only supported in the strongly bounded case "
                  "(output size <= CHUNK_SIZE).");
 
-    // We know the output size ahead of time: resize so we can memset/cpy into it
-    oDF->resizeAllColumns(n * m);
+    // Resize all columns in the output to be the correct size
+    for (NamedColumn* col : oDF->cols()) {
+        dispatchColumnVector(col->getColumn(),
+                             [&](auto* columnVector) { columnVector->resize(n * m); });
+    }
+
+    // Iterate down each column, per column, for better cache performance
+    for (size_t colPtr{0}; colPtr < p; colPtr++) {
+        for (size_t rowPtr{0}; rowPtr < n; rowPtr++) {
+            dispatchColumnVector(
+                lDF->cols()[colPtr]->getColumn(), [&](auto* columnVector) -> void {
+                    auto x = columnVector->at(rowPtr);
+
+                    // Respective column in output DF should be same type: cast it
+                    auto* respectiveOutputCol = oDF->cols()[colPtr]->getColumn();
+                    auto* casted = static_cast<decltype(columnVector)>(respectiveOutputCol);
+
+                    auto& raw = casted->getRaw();
+                    auto startIt = raw.begin() + rowPtr;
+                    auto endIt = startIt + m;
+                    std::fill(startIt, endIt, x);
+                });
+        }
+    }
 
 }
 

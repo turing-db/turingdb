@@ -52,6 +52,10 @@ public:
     template <SupportedType T>
     PipelineValuesOutputInterface& addGetNodeProperties(PropertyType propertyType);
 
+    // Joins/Products
+    // LHS is implict in @ref _pendingOutput
+    PipelineBlockOutputInterface& addCartesianProduct(PipelineOutputInterface* rhs);
+
     // Aggregations
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);
