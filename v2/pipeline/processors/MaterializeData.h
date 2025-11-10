@@ -31,6 +31,8 @@ public:
 
     void setOutput(Dataframe* output) { _output = output; }
 
+    bool isSingleStep() const { return _step == 0; }
+
     const Indices& getIndices() const { return _indices; }
     const ColumnsPerStep& getColumnsPerStep() const { return _columnsPerStep; }
     size_t getColumnCount() const { return _colCount; }

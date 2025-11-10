@@ -50,9 +50,14 @@ public:
     PipelineBlockOutputInterface& addLimit(size_t count);
     PipelineValueOutputInterface& addCount();
 
+    // Lambda sink
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
 
+    // Materialize
     PipelineBlockOutputInterface& addMaterialize();
+    bool isMaterializeOpen() const { return _matProc != nullptr; }
+    bool isSingleMaterializeStep() const;
+    void closeMaterialize();
 
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
@@ -81,7 +86,6 @@ private:
     }
 
     void openMaterialize();
-    void closeMaterialize();
 };
 
 }

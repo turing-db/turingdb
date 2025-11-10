@@ -140,6 +140,10 @@ void PipelineBuilder::closeMaterialize() {
     _matProc = nullptr;
 }
 
+bool PipelineBuilder::isSingleMaterializeStep() const {
+    return _matProc->getMaterializeData().isSingleStep();
+}
+
 PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
     _pendingOutput->connectTo(_matProc->input());
     _pendingOutput = &_matProc->output();
