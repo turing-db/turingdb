@@ -1,5 +1,7 @@
 #include "DeleteTest.h"
- #include <spdlog/spdlog.h>
+
+#include <spdlog/spdlog.h>
+
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "dump/GraphDumper.h"
@@ -44,6 +46,20 @@ int main() {
         DeleteTest tester {"DELETE NODES MATCH EDGES", "simpledb"};
         tester.addQuery("match (n)-[e]-(m) return e");
         tester.deleteNodes({0});
+        tester.run();
+    }
+
+    {
+        DeleteTest tester {"REACTOME DELETE NODES", "reactome"};
+        tester.addQuery(R"(match (n{`displayName (String)`~="Autophagy"}) return n)");
+        tester.deleteNodes({821835, 821826, 829209});
+        tester.run();
+    }
+
+    {
+        DeleteTest tester {"REACTOME DELETE NODES", "reactome"};
+        tester.addQuery(R"(match (n{`displayName (String)`~="Autophagy"}) return n)");
+        tester.deleteNodes({821835, 821826, 829209});
         tester.run();
     }
 
