@@ -63,6 +63,13 @@ int main() {
         tester.run();
     }
 
+    {
+        DeleteTest tester {"REACTOME DELETE ALL NODES FROM QUERY", "reactome"};
+        tester.addQuery(R"(match (n{`displayName (String)`~="oblivion"}) return n)");
+        tester.deleteNodes({1054602}); // This query returns only a single node
+        tester.run();
+    }
+
     { // Clean up graph directory
         if (DeleteTest::WORKING_PATH.exists()) {
             DeleteTest::WORKING_PATH.rm();
