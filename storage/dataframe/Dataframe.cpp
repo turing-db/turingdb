@@ -3,6 +3,8 @@
 #include "NamedColumn.h"
 #include "columns/Column.h"
 
+#include <sstream>
+
 using namespace db;
 
 Dataframe::Dataframe()
@@ -26,10 +28,47 @@ size_t Dataframe::getRowCount() const {
 }
 
 void Dataframe::dump(std::ostream& out) const {
+    if (_cols.empty()) {
+        return;
+    }
+
+    std::vector<std::ostringstream> colStreams(_cols.size());
+    for (size_t i = 0; i < _cols.size(); ++i) {
+        const NamedColumn* col = _cols[i];
+        col->getColumn()->dump(colStreams[i]);
+    }
+
+    std::vector<std::vector<std::string>> colLines;
+    colLines.reserve(_cols.size());
+    size_t maxLines = 0;
+
+    for (auto& ss : colStreams) {
+        std::vector<std::string> lines;
+        std::string line;
+        std::istringstream in(ss.str());
+        while (std::getline(in, line)) {
+            lines.push_back(line);
+        }
+        maxLines = std::max(maxLines, lines.size());
+        colLines.push_back(std::move(lines));
+    }
+
     for (const NamedColumn* col : _cols) {
-        out << "Column $" << col->getTag().getValue() << ": ";
-        col->getColumn()->dump(out);
-        out << '\n';
+        out << "Column $" << col->getTag().getValue() << "\t";
+    }
+    out << '\n';
+
+    for (size_t row = 0; row < maxLines; ++row) {
+        for (size_t c = 0; c < _cols.size(); ++c) {
+            const auto& lines = colLines[c];
+            if (row < lines.size()) {
+                out << lines[row];
+            } else {
+                out << "_";
+            }
+            out << "\t";
+        }
+        out << "\n";
     }
 }
 
