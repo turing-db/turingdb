@@ -182,6 +182,7 @@ public:
     }
 
     void rename(const std::string_view& name) override;
+    void renameOtherIDs(const std::string_view& name);
 
 private:
     NamedColumn* _indices {nullptr};

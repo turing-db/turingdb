@@ -39,17 +39,21 @@ void PipelineBlockOutputInterface::rename(const std::string_view& name) {
 }
 
 void PipelineNodeOutputInterface::rename(const std::string_view& name) {
-    _nodeIDs->getHeader().setName(name);
+    _nodeIDs->rename(name);
 }
 
 void PipelineEdgeOutputInterface::rename(const std::string_view& name) {
-    _otherNodes->getHeader().setName(name);
+    _edgeIDs->rename(name);
+}
+
+void PipelineEdgeOutputInterface::renameOtherIDs(const std::string_view& name) {
+    _otherNodes->rename(name);
 }
 
 void PipelineValuesOutputInterface::rename(const std::string_view& name) {
-    _values->getHeader().setName(name);
+    _values->rename(name);
 }
 
 void PipelineValueOutputInterface::rename(const std::string_view& name) {
-    _value->getHeader().setName(name);
+    _value->rename(name);
 }

@@ -15,7 +15,7 @@ public:
     DataframeManager();
     ~DataframeManager();
 
-    ColumnTagManager* getTagManager() { return &_tagManager; }
+    ColumnTagManager& getTagManager() { return _tagManager; }
 
     ColumnTag allocTag() { return _tagManager.allocTag(); }
 

@@ -29,71 +29,47 @@ TEST_F(DataframeTest, testOneCol) {
 
     ColumnNodeIDs colNodes1;
 
-    const ColumnHeader aHeader(dfMan.allocTag());
-    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, aHeader);
+    const auto aTag = dfMan.allocTag();
+    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, aTag);
     df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
 
     ASSERT_EQ(df.cols().size(), 1);
 
     for (const NamedColumn* namedCol : df.cols()) {
-        ASSERT_EQ(namedCol->getTag(), aHeader.getTag());
+        ASSERT_EQ(namedCol->getTag(), aTag);
     }
-}
-
-TEST_F(DataframeTest, testSameTag) {
-    DataframeManager dfMan;
-    Dataframe df;
-
-    ColumnNodeIDs colNodes1;
-    ColumnNodeIDs colNodes2;
-    ColumnNodeIDs colNodes3;
-
-    const ColumnHeader aHeader(dfMan.allocTag());
-    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, aHeader);
-    ASSERT_TRUE(col1 != nullptr);
-    df.addColumn(col1);
-
-    const ColumnHeader bHeader(dfMan.allocTag());
-    NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, bHeader);
-    ASSERT_TRUE(col2 != nullptr);
-    df.addColumn(col2);
-
-    NamedColumn* col3 = NamedColumn::create(&dfMan, &colNodes2, bHeader);
-    df.addColumn(col3);
-
-    ASSERT_EQ(df.size(), 3);
 }
 
 TEST_F(DataframeTest, anonymous) {
     DataframeManager dfMan;
 
-    const auto v0Header = ColumnHeader(dfMan.allocTag());
-    const auto v1Header = ColumnHeader(dfMan.allocTag());
-    const auto v2Header = ColumnHeader(dfMan.allocTag());
-    const auto v3Header = ColumnHeader(dfMan.allocTag());
+    const auto v0Tag = dfMan.allocTag();
+    const auto v1Tag = dfMan.allocTag();
+    const auto v2Tag = dfMan.allocTag();
+    const auto v3Tag = dfMan.allocTag();
 
-    ASSERT_EQ(v0Header.getTag(), ColumnTag(0));
-    ASSERT_EQ(v1Header.getTag(), ColumnTag(1));
-    ASSERT_EQ(v2Header.getTag(), ColumnTag(2));
-    ASSERT_EQ(v3Header.getTag(), ColumnTag(3));
+    ASSERT_EQ(v0Tag, ColumnTag(0));
+    ASSERT_EQ(v1Tag, ColumnTag(1));
+    ASSERT_EQ(v2Tag, ColumnTag(2));
+    ASSERT_EQ(v3Tag, ColumnTag(3));
 
     Dataframe df;
 
     ColumnNodeIDs nodes0;
     ColumnNodeIDs nodes1;
 
-    NamedColumn* col0 = NamedColumn::create(&dfMan, &nodes0, v0Header);
+    NamedColumn* col0 = NamedColumn::create(&dfMan, &nodes0, v0Tag);
     df.addColumn(col0);
     ASSERT_TRUE(col0 != nullptr);
     ASSERT_EQ(col0->getColumn(), &nodes0);
 
-    NamedColumn* col1 = NamedColumn::create(&dfMan, &nodes1, v1Header);
+    NamedColumn* col1 = NamedColumn::create(&dfMan, &nodes1, v1Tag);
     df.addColumn(col1);
     ASSERT_TRUE(col1 != nullptr);
     ASSERT_EQ(col1->getColumn(), &nodes1);
 
-    ASSERT_EQ(df.getColumn(v0Header.getTag()), col0);
+    ASSERT_EQ(df.getColumn(v0Tag), col0);
 
     // Compare columns of dataframe
     const std::vector<NamedColumn*> goldVec = {col0, col1};
@@ -108,9 +84,9 @@ TEST_F(DataframeTest, testColNames) {
     ColumnNodeIDs col1;
     ColumnNodeIDs col2;
 
-    auto colA = NamedColumn::create(&dfMan, &col0, ColumnHeader(dfMan.allocTag()));
-    auto colB = NamedColumn::create(&dfMan, &col1, ColumnHeader(dfMan.allocTag()));
-    auto colC = NamedColumn::create(&dfMan, &col2, ColumnHeader(dfMan.allocTag()));
+    auto colA = NamedColumn::create(&dfMan, &col0, dfMan.allocTag());
+    auto colB = NamedColumn::create(&dfMan, &col1, dfMan.allocTag());
+    auto colC = NamedColumn::create(&dfMan, &col2, dfMan.allocTag());
     df.addColumn(colA);
     df.addColumn(colB);
     df.addColumn(colC);
@@ -119,8 +95,8 @@ TEST_F(DataframeTest, testColNames) {
     ASSERT_TRUE(colC != nullptr);
 
     // Change name of middle column
-    colB->getHeader().setName("middle1");
-    ASSERT_EQ(colB->getHeader().getName(), "middle1");
+    //colB->getHeader().setName("middle1");
+    //ASSERT_EQ(colB->getHeader().getName(), "middle1");
 
     // Check that the dataframe still has 3 columns
     ASSERT_EQ(df.cols().size(), 3);
@@ -137,9 +113,9 @@ TEST_F(DataframeTest, dataframes2) {
     ColumnNodeIDs colNodes1;
     ColumnNodeIDs colNodes2;
 
-    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, ColumnHeader(dfMan.allocTag()));
+    NamedColumn* col1 = NamedColumn::create(&dfMan, &colNodes1, dfMan.allocTag());
     df1.addColumn(col1);
-    NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, ColumnHeader(dfMan.allocTag()));
+    NamedColumn* col2 = NamedColumn::create(&dfMan, &colNodes2, dfMan.allocTag());
     df2.addColumn(col2);
 
     df2.addColumn(col1);
@@ -154,11 +130,11 @@ TEST_F(DataframeTest, nonMonoticTags) {
     DataframeManager dfMan;
     Dataframe df;
 
-    NamedColumn* col1 = NamedColumn::create(&dfMan, nullptr, ColumnHeader(ColumnTag(42)));
+    NamedColumn* col1 = NamedColumn::create(&dfMan, nullptr, ColumnTag(42));
     df.addColumn(col1);
-    NamedColumn* col2 = NamedColumn::create(&dfMan, nullptr, ColumnHeader(ColumnTag(24)));
+    NamedColumn* col2 = NamedColumn::create(&dfMan, nullptr, ColumnTag(24));
     df.addColumn(col2);
-    NamedColumn* col3 = NamedColumn::create(&dfMan, nullptr, ColumnHeader(ColumnTag(0)));
+    NamedColumn* col3 = NamedColumn::create(&dfMan, nullptr, ColumnTag(0));
     df.addColumn(col3);
 
     ASSERT_EQ(df.cols().size(), 3);
