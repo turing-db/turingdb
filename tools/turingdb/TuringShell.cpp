@@ -350,10 +350,10 @@ void queryCallbackV2(const Dataframe* df, tabulate::Table& table) {
     // Write header row
     tabulate::RowStream headerRow;
     for (const NamedColumn* namedCol : df->cols()) {
-        const ColumnHeader& header = namedCol->getHeader();
-        const std::string_view name = header.getName();
+        const std::string_view name = namedCol->getName();
         if (name.empty()) {
-            headerRow << "$" + std::to_string(header.getTag().getValue());
+            const ColumnTag tag = namedCol->getTag();
+            headerRow << "$" + std::to_string(tag.getValue());
         } else {
             headerRow << name;
         }

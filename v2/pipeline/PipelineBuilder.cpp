@@ -24,7 +24,7 @@ void duplicateDataframeShape(LocalMemory* mem,
                              Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
-        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getHeader());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
 }
@@ -45,7 +45,7 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
     // Register output in materialize data
     _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(nodeIDs);
 
-    _pendingOutput = &outNodeIDs;
+    _pendingOutput.setInterface(&outNodeIDs);
 
     return outNodeIDs;
 }
@@ -53,7 +53,7 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
 PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     // Create get out edges processor
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
-    _pendingOutput->connectTo(getOutEdges->inNodeIDs());
+    _pendingOutput.connectTo(getOutEdges->inNodeIDs());
 
     PipelineEdgeOutputInterface& outEdges = getOutEdges->outEdges();
     Dataframe* outDf = outEdges.getDataframe();
@@ -75,14 +75,14 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
 
-    _pendingOutput = &outEdges;
+    _pendingOutput.setInterface(&outEdges);
 
     return outEdges;
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
     GetInEdgesProcessor* getInEdges = GetInEdgesProcessor::create(_pipeline);
-    _pendingOutput->connectTo(getInEdges->inNodeIDs());
+    _pendingOutput.connectTo(getInEdges->inNodeIDs());
 
     PipelineEdgeOutputInterface& inEdges = getInEdges->outEdges();
     Dataframe* df = inEdges.getDataframe();
@@ -101,14 +101,14 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(sourceNodes);
 
-    _pendingOutput = &inEdges;
+    _pendingOutput.setInterface(&inEdges);
 
     return inEdges;
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     GetEdgesProcessor* getInEdges = GetEdgesProcessor::create(_pipeline);
-    _pendingOutput->connectTo(getInEdges->inNodeIDs());
+    _pendingOutput.connectTo(getInEdges->inNodeIDs());
 
     PipelineEdgeOutputInterface& inEdges = getInEdges->outEdges();
     Dataframe* df = inEdges.getDataframe();
@@ -127,7 +127,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(otherNodes);
 
-    _pendingOutput = &inEdges;
+    _pendingOutput.setInterface(&inEdges);
 
     return inEdges;
 }
@@ -145,8 +145,8 @@ bool PipelineBuilder::isSingleMaterializeStep() const {
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
-    _pendingOutput->connectTo(_matProc->input());
-    _pendingOutput = &_matProc->output();
+    _pendingOutput.connectTo(_matProc->input());
+    _pendingOutput.setInterface(&_matProc->output());
     closeMaterialize();
 
     return _matProc->output();
@@ -154,46 +154,46 @@ PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
 
 void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
-    _pendingOutput->connectTo(lambda->input());
-    _pendingOutput = nullptr;
+    _pendingOutput.connectTo(lambda->input());
+    _pendingOutput.setInterface(nullptr);
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     SkipProcessor* skip = SkipProcessor::create(_pipeline, count);
-    _pendingOutput->connectTo(skip->input());
+    _pendingOutput.connectTo(skip->input());
 
     duplicateDataframeShape(_mem, _dfMan, skip->input().getDataframe(), skip->output().getDataframe());
     
-    _pendingOutput = &skip->output();
+    _pendingOutput.setInterface(&skip->output());
 
     return skip->output();
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     LimitProcessor* limit = LimitProcessor::create(_pipeline, count);
-    _pendingOutput->connectTo(limit->input());
+    _pendingOutput.connectTo(limit->input());
 
     duplicateDataframeShape(_mem, _dfMan, limit->input().getDataframe(), limit->output().getDataframe());
 
-    _pendingOutput = &limit->output();
+    _pendingOutput.setInterface(&limit->output());
 
     return limit->output();
 }
 
 PipelineValueOutputInterface& PipelineBuilder::addCount() {
     CountProcessor* count = CountProcessor::create(_pipeline);
-    _pendingOutput->connectTo(count->input());
+    _pendingOutput.connectTo(count->input());
 
     NamedColumn* countColumn = allocColumn<ColumnConst<size_t>>(count->output().getDataframe());
     count->output().setValue(countColumn);
 
-    _pendingOutput = &count->output();
+    _pendingOutput.setInterface(&count->output());
     return count->output();
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
     LambdaSourceProcessor* source = LambdaSourceProcessor::create(_pipeline, callback);
-    _pendingOutput = &source->output();
+    _pendingOutput.setInterface(&source->output());
     return source->output();
 }
 
@@ -203,7 +203,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyTyp
 
     // Create get node properties processor
     auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
-    _pendingOutput->connectTo(getProps->inIDs());
+    _pendingOutput.connectTo(getProps->inIDs());
 
     PipelineValuesOutputInterface& outValues = getProps->outValues();
     Dataframe* outDf = outValues.getDataframe();
@@ -221,7 +221,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyTyp
     matData.createStep(indices);
     matData.addToStep<ColumnValues>(values);
 
-    _pendingOutput = &getProps->outValues();
+    _pendingOutput.setInterface(&getProps->outValues());
     
     return getProps->outValues();
 }

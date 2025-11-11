@@ -135,7 +135,7 @@ void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream)
         throw PlannerException("VarNode with empty name");
     }
 
-    _builder.getOutput()->rename(varName);
+    _builder.rename(varName);
 }
 
 void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
@@ -155,7 +155,7 @@ void PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node, PlanGraphStrea
 }
 
 void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
-    // Do nothing because this is handled by PipelineOutputInterface::connect
+    _builder.projectEdgesOnOtherIDs();
 }
 
 void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {

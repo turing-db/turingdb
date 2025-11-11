@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string_view>
-
 #include "ColumnTag.h"
 
 namespace db {
@@ -21,15 +19,8 @@ public:
 
     ColumnTag getTag() const { return _tag; }
 
-    bool hasName() const { return _name.empty(); }
-
-    std::string_view getName() const { return _name; }
-
-    void setName(std::string_view name) { _name = name; }
-
 private:
     const ColumnTag _tag;
-    std::string_view _name;
 };
 
 }

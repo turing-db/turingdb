@@ -1,7 +1,10 @@
 #pragma once
 
+#include <string_view>
+
 #include "PipelineV2.h"
 #include "PipelineInterface.h"
+#include "PendingOutputView.h"
 
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
@@ -30,7 +33,7 @@ public:
     {
     }
 
-    PipelineOutputInterface* getOutput() const { return _pendingOutput; }
+    PipelineOutputInterface* getOutput() const { return _pendingOutput.getInterface(); }
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
@@ -40,7 +43,7 @@ public:
     PipelineEdgeOutputInterface& addGetOutEdges();
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
-
+    void projectEdgesOnOtherIDs() { _pendingOutput.projectEdgesOnOtherIDs(); }
 
     // Properties
     template <SupportedType T>
@@ -60,23 +63,27 @@ public:
     bool isSingleMaterializeStep() const;
     void closeMaterialize();
 
+
+    // Rename output
+    void rename(std::string_view name) { _pendingOutput.rename(name); }
+
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
     NamedColumn* addColumnToOutput(ColumnTag tag) {
-        return allocColumn<ColumnType>(_pendingOutput->getDataframe(), tag);
+        return allocColumn<ColumnType>(_pendingOutput.getDataframe(), tag);
     }
 
 private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};
     DataframeManager* _dfMan {nullptr};
-    PipelineOutputInterface* _pendingOutput {nullptr};
+    PendingOutputView _pendingOutput;
     MaterializeProcessor* _matProc {nullptr};
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {
         ColumnType* col = _mem->alloc<ColumnType>();
-        NamedColumn* newCol = NamedColumn::create(_dfMan, col, ColumnHeader(tag));
+        NamedColumn* newCol = NamedColumn::create(_dfMan, col, tag);
         df->addColumn(newCol);
         return newCol;
     }
