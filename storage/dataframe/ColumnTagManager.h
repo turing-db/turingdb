@@ -20,15 +20,17 @@ public:
         return tag;
     }
 
-    std::string_view getName(ColumnTag tag) const { return _nameMap.lookup(tag.getValue()); }
+    std::string_view getName(ColumnTag tag) const {
+        return _tagToNameMap.lookup(tag.getValue());
+    }
 
     void setTagName(ColumnTag tag, std::string_view name) {
-        _nameMap.insert(tag.getValue(), name);
+        _tagToNameMap.insert(tag.getValue(), name);
     }
 
 private:
     ColumnTag _nextFreeTag {0};
-    DynamicLookupTable<std::string_view> _nameMap;
+    DynamicLookupTable<std::string_view> _tagToNameMap;
 
     ColumnTagManager() = default;
     ~ColumnTagManager() = default;

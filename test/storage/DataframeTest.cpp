@@ -95,8 +95,8 @@ TEST_F(DataframeTest, testColNames) {
     ASSERT_TRUE(colC != nullptr);
 
     // Change name of middle column
-    //colB->getHeader().setName("middle1");
-    //ASSERT_EQ(colB->getHeader().getName(), "middle1");
+    colB->rename("middle1");
+    ASSERT_EQ(colB->getName(), "middle1");
 
     // Check that the dataframe still has 3 columns
     ASSERT_EQ(df.cols().size(), 3);

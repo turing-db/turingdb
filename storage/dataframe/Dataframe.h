@@ -6,6 +6,8 @@
 #include "ColumnTag.h"
 #include "NamedColumn.h"
 
+#include "DynamicLookupTable.h"
+
 namespace db {
 
 class Column;
@@ -17,18 +19,6 @@ public:
     friend NamedColumn;
 
     Dataframe();
-
-    Dataframe(Dataframe&& other)
-        : _cols(std::move(other._cols)),
-        _headerMap(std::move(other._headerMap))
-    {
-    }
-
-    Dataframe& operator=(Dataframe&& other) {
-        _cols = std::move(other._cols);
-        _headerMap = std::move(other._headerMap);
-        return *this;
-    }
 
     Dataframe(const Dataframe&) = delete;
     Dataframe& operator=(const Dataframe&) = delete;
@@ -44,12 +34,7 @@ public:
     void addColumn(NamedColumn* column);
 
     NamedColumn* getColumn(ColumnTag tag) const {
-        const size_t tagValue = tag.getValue();
-        if (tagValue > _headerMap.size()) {
-            return nullptr;
-        }
-
-        return _headerMap[tagValue];
+        return _tagToColumnMap.lookup(tag.getValue());
     }
 
     template <typename T>
@@ -70,7 +55,7 @@ public:
 
 private:
     NamedColumns _cols;
-    std::vector<NamedColumn*> _headerMap;
+    DynamicLookupTable<NamedColumn*> _tagToColumnMap;
 };
 
 }

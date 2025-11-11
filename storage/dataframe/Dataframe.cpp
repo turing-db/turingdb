@@ -14,15 +14,7 @@ Dataframe::~Dataframe() {
 
 void Dataframe::addColumn(NamedColumn* column) {
     _cols.push_back(column);
-
-    // Record column in the headerMap using its tag
-    // Resize the table if needed
-    const size_t tagValue = column->getTag().getValue();
-    if (tagValue >= _headerMap.size()) {
-        _headerMap.resize(tagValue+1);
-    }
-
-    _headerMap[tagValue] = column;
+    _tagToColumnMap.insert(column->getTag().getValue(), column);
 }
 
 size_t Dataframe::getRowCount() const {
