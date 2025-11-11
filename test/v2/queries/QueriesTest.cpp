@@ -47,10 +47,13 @@ TEST_F(QueriesTest, scanAll) {
         ASSERT_EQ(df->cols().size(), 1);
         ASSERT_EQ(df->size(), 1);
 
-        const ColumnNodeIDs* nodeIDs = df->cols()[0]->as<ColumnNodeIDs>();
-        ASSERT_TRUE(nodeIDs != nullptr);
-        ASSERT_FALSE(nodeIDs->empty());
-        returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
+        for (auto col : df->cols()) {
+            const ColumnNodeIDs* nodeIDs = col->as<ColumnNodeIDs>();
+            ASSERT_TRUE(nodeIDs != nullptr);
+            ASSERT_FALSE(nodeIDs->empty());
+            ASSERT_EQ(col->getName(), "n");
+            returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
+        }
     });
 
     // Get all expected node IDs
@@ -95,10 +98,13 @@ TEST_F(QueriesTest, scanAllSkip) {
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->size(), 1);
 
-            const ColumnNodeIDs* nodeIDs = df->cols()[0]->as<ColumnNodeIDs>();
-            ASSERT_TRUE(nodeIDs != nullptr);
-            ASSERT_FALSE(nodeIDs->empty());
-            returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
+            for (auto col : df->cols()) {
+                const ColumnNodeIDs* nodeIDs = col->as<ColumnNodeIDs>();
+                ASSERT_TRUE(nodeIDs != nullptr);
+                ASSERT_FALSE(nodeIDs->empty());
+                ASSERT_EQ(col->getName(), "n");
+                returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
+            }
         });
 
         if (skip >= allNodeIDs.size()) {
@@ -145,10 +151,13 @@ TEST_F(QueriesTest, scanAllLimit) {
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->size(), 1);
 
-            const ColumnNodeIDs* nodeIDs = df->cols()[0]->as<ColumnNodeIDs>();
-            ASSERT_TRUE(nodeIDs != nullptr);
-            ASSERT_FALSE(nodeIDs->empty());
-            returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
+            for (auto col : df->cols()) {
+                const ColumnNodeIDs* nodeIDs = col->as<ColumnNodeIDs>();
+                ASSERT_TRUE(nodeIDs != nullptr);
+                ASSERT_FALSE(nodeIDs->empty());
+                ASSERT_EQ(col->getName(), "n");
+                returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
+            }
         });
 
         const size_t limitCompare = std::min(limit, allNodeIDs.size());
@@ -213,14 +222,21 @@ TEST_F(QueriesTest, scanExpand1) {
         ASSERT_EQ(df->cols().size(), 4);
         ASSERT_EQ(df->size(), 4);
 
-        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
+        const ColumnNodeIDs* targetIDs = nullptr;
+        const ColumnNodeIDs* sourceIDs = nullptr;
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "m") {
+                targetIDs = col->as<ColumnNodeIDs>();
+            } else if (name == "n") {
+                sourceIDs = col->as<ColumnNodeIDs>();
+            }
+        }
+
         ASSERT_TRUE(targetIDs != nullptr);
         ASSERT_FALSE(targetIDs->empty());
-
-        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
-
         returnedTargets.insert(returnedTargets.end(), targetIDs->begin(), targetIDs->end());
         returnedSources.insert(returnedSources.end(), sourceIDs->begin(), sourceIDs->end());
     });
@@ -258,18 +274,26 @@ TEST_F(QueriesTest, scanExpand2) {
         ASSERT_EQ(df->cols().size(), 7);
         ASSERT_EQ(df->size(), 7);
 
-        const ColumnNodeIDs* targetIDs1 = df->cols()[3]->as<ColumnNodeIDs>();
+        const ColumnNodeIDs* targetIDs1 = nullptr;
+        const ColumnNodeIDs* targetIDs2 = nullptr;
+        const ColumnNodeIDs* sourceIDs = nullptr;
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "m") {
+                targetIDs1 = col->as<ColumnNodeIDs>();
+            } else if (name == "t") {
+                targetIDs2 = col->as<ColumnNodeIDs>();
+            } else if (name == "n") {
+                sourceIDs = col->as<ColumnNodeIDs>();
+            }
+        }
+
         ASSERT_TRUE(targetIDs1 != nullptr);
         ASSERT_FALSE(targetIDs1->empty());
-
-        const ColumnNodeIDs* targetIDs2 = df->cols()[6]->as<ColumnNodeIDs>();
         ASSERT_TRUE(targetIDs2 != nullptr);
         ASSERT_FALSE(targetIDs2->empty());
-
-        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
-
         returnedTargets1.insert(returnedTargets1.end(), targetIDs1->begin(), targetIDs1->end());
         returnedTargets2.insert(returnedTargets2.end(), targetIDs2->begin(), targetIDs2->end());
         returnedSources.insert(returnedSources.end(), sourceIDs->begin(), sourceIDs->end());
@@ -307,32 +331,32 @@ TEST_F(QueriesTest, scanExpand2) {
 TEST_F(QueriesTest, scanExpandIn) {
     const std::string query = "MATCH (n)<--(m) RETURN n";
 
-    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> returnedLines;
-    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> expectedLines;
+    LineContainer<NodeID,NodeID> returned;
+    LineContainer<NodeID,NodeID> expected;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 4);
         ASSERT_EQ(df->size(), 4);
 
-        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        const ColumnNodeIDs* targetIDs = nullptr;
+        const ColumnNodeIDs* sourceIDs = nullptr;
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "m") {
+                targetIDs = col->as<ColumnNodeIDs>();
+            } else if (name == "n") {
+                sourceIDs = col->as<ColumnNodeIDs>();
+            }
+        }
+
+        ASSERT_TRUE(targetIDs != nullptr);
+        ASSERT_FALSE(targetIDs->empty());
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
 
-        const ColumnEdgeIDs* edgeIDs = df->cols()[1]->as<ColumnEdgeIDs>();
-        ASSERT_TRUE(edgeIDs != nullptr);
-        ASSERT_FALSE(edgeIDs->empty());
-
-        const ColumnEdgeTypes* edgeTypes = df->cols()[2]->as<ColumnEdgeTypes>();
-        ASSERT_TRUE(edgeTypes != nullptr);
-        ASSERT_FALSE(edgeTypes->empty());
-
-        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
-        ASSERT_TRUE(targetIDs != nullptr);
-        ASSERT_FALSE(targetIDs->empty());
-
-        const size_t lineCount = targetIDs->size();
+        const size_t lineCount = df->getRowCount();
         for (size_t i = 0; i < lineCount; i++) {
-            returnedLines.add({sourceIDs->at(i), edgeIDs->at(i), edgeTypes->at(i), targetIDs->at(i)});
+            returned.add({sourceIDs->at(i), targetIDs->at(i)});
         }
     });
 
@@ -344,57 +368,61 @@ TEST_F(QueriesTest, scanExpandIn) {
         for (auto node : nodes) {
             const auto edgeView = reader.getNodeView(node).edges();
             for (auto edge : edgeView.inEdges()) {
-                expectedLines.add({node, edge._edgeID, edge._edgeTypeID, edge._otherID});
+                expected.add({edge._nodeID, edge._otherID});
             }
         }
     }
 
-    ASSERT_TRUE(returnedLines.equals(expectedLines));
+    ASSERT_TRUE(expected.equals(returned));
 }
 
 TEST_F(QueriesTest, scanExpandIn2) {
-    const std::string query = "MATCH (n)<--(m)<--(t) RETURN n";
+    const std::string query = "MATCH (n)<-[e1]-(m)<-[e2]-(t) RETURN n";
 
-    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID, EdgeID, EdgeTypeID, NodeID> returnedLines;
-    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID, EdgeID, EdgeTypeID, NodeID> expectedLines;
+    LineContainer<NodeID, EdgeID, NodeID, EdgeID, NodeID> returnedLines;
+    LineContainer<NodeID, EdgeID, NodeID, EdgeID, NodeID> expectedLines;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 7);
         ASSERT_EQ(df->size(), 7);
 
-        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        const ColumnNodeIDs* sourceIDs = nullptr;
+        const ColumnEdgeIDs* edgeIDs1 = nullptr;
+        const ColumnNodeIDs* targetIDs1 = nullptr;
+        const ColumnEdgeIDs* edgeIDs2 = nullptr;
+        const ColumnNodeIDs* targetIDs2 = nullptr;
+
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "n") {
+                sourceIDs = col->as<ColumnNodeIDs>();
+            } else if (name == "e1") {
+                edgeIDs1 = col->as<ColumnEdgeIDs>();
+            } else if (name == "m") {
+                targetIDs1 = col->as<ColumnNodeIDs>();
+            } else if (name == "e2") {
+                edgeIDs2 = col->as<ColumnEdgeIDs>();
+            } else if (name == "t") {
+                targetIDs2 = col->as<ColumnNodeIDs>();
+            }
+        }
+
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
-
-        const ColumnEdgeIDs* edgeIDs1 = df->cols()[1]->as<ColumnEdgeIDs>();
         ASSERT_TRUE(edgeIDs1 != nullptr);
         ASSERT_FALSE(edgeIDs1->empty());
-
-        const ColumnEdgeTypes* edgeTypes1 = df->cols()[2]->as<ColumnEdgeTypes>();
-        ASSERT_TRUE(edgeTypes1 != nullptr);
-        ASSERT_FALSE(edgeTypes1->empty());
-
-        const ColumnNodeIDs* targetIDs1 = df->cols()[3]->as<ColumnNodeIDs>();
         ASSERT_TRUE(targetIDs1 != nullptr);
         ASSERT_FALSE(targetIDs1->empty());
-
-        const ColumnEdgeIDs* edgeIDs2 = df->cols()[4]->as<ColumnEdgeIDs>();
         ASSERT_TRUE(edgeIDs2 != nullptr);
         ASSERT_FALSE(edgeIDs2->empty());
-
-        const ColumnEdgeTypes* edgeTypes2 = df->cols()[5]->as<ColumnEdgeTypes>();
-        ASSERT_TRUE(edgeTypes2 != nullptr);
-        ASSERT_FALSE(edgeTypes2->empty());
-
-        const ColumnNodeIDs* targetIDs2 = df->cols()[6]->as<ColumnNodeIDs>();
         ASSERT_TRUE(targetIDs2 != nullptr);
         ASSERT_FALSE(targetIDs2->empty());
 
         const size_t lineCount = df->getRowCount();
         for (size_t i = 0; i < lineCount; i++) {
             returnedLines.add({sourceIDs->at(i),
-                               edgeIDs1->at(i), edgeTypes1->at(i), targetIDs1->at(i),
-                               edgeIDs2->at(i), edgeTypes2->at(i), targetIDs2->at(i)});
+                               edgeIDs1->at(i), targetIDs1->at(i),
+                               edgeIDs2->at(i), targetIDs2->at(i)});
         }
     });
 
@@ -409,8 +437,8 @@ TEST_F(QueriesTest, scanExpandIn2) {
                 const auto edgeView2 = reader.getNodeView(edge1._otherID).edges();
                 for (auto edge2 : edgeView2.inEdges()) {
                     expectedLines.add({node,
-                                       edge1._edgeID, edge1._edgeTypeID, edge1._otherID,
-                                       edge2._edgeID, edge2._edgeTypeID, edge2._otherID});
+                                       edge1._edgeID, edge1._otherID,
+                                       edge2._edgeID, edge2._otherID});
                 }
             }
         }
@@ -420,34 +448,40 @@ TEST_F(QueriesTest, scanExpandIn2) {
 }
 
 TEST_F(QueriesTest, scanEdges) {
-    const std::string query = "MATCH (n)--(m) RETURN n";
+    const std::string query = "MATCH (n)-[e]-(m) RETURN n";
 
-    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> returnedLines;
-    LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID> expectedLines;
+    LineContainer<NodeID, EdgeID, NodeID> returnedLines;
+    LineContainer<NodeID, EdgeID, NodeID> expectedLines;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 4);
         ASSERT_EQ(df->size(), 4);
 
-        const ColumnNodeIDs* sourceIDs = df->cols()[0]->as<ColumnNodeIDs>();
+        const ColumnNodeIDs* sourceIDs = nullptr;
+        const ColumnEdgeIDs* edgeIDs = nullptr;
+        const ColumnNodeIDs* targetIDs = nullptr;
+
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "n") {
+                sourceIDs = col->as<ColumnNodeIDs>();
+            } else if (name == "e") {
+                edgeIDs = col->as<ColumnEdgeIDs>();
+            } else if (name == "m") {
+                targetIDs = col->as<ColumnNodeIDs>();
+            }
+        }
+
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
-
-        const ColumnEdgeIDs* edgeIDs = df->cols()[1]->as<ColumnEdgeIDs>();
         ASSERT_TRUE(edgeIDs != nullptr);
         ASSERT_FALSE(edgeIDs->empty());
-
-        const ColumnEdgeTypes* edgeTypes = df->cols()[2]->as<ColumnEdgeTypes>();
-        ASSERT_TRUE(edgeTypes != nullptr);
-        ASSERT_FALSE(edgeTypes->empty());
-
-        const ColumnNodeIDs* targetIDs = df->cols()[3]->as<ColumnNodeIDs>();
         ASSERT_TRUE(targetIDs != nullptr);
         ASSERT_FALSE(targetIDs->empty());
 
         const size_t lineCount = targetIDs->size();
         for (size_t i = 0; i < lineCount; i++) {
-            returnedLines.add({sourceIDs->at(i), edgeIDs->at(i), edgeTypes->at(i), targetIDs->at(i)});
+            returnedLines.add({sourceIDs->at(i), edgeIDs->at(i), targetIDs->at(i)});
         }
     });
 
@@ -459,10 +493,10 @@ TEST_F(QueriesTest, scanEdges) {
         for (auto node : nodes) {
             const auto edgeView = reader.getNodeView(node).edges();
             for (auto edge : edgeView.inEdges()) {
-                expectedLines.add({edge._nodeID, edge._edgeID, edge._edgeTypeID, edge._otherID});
+                expectedLines.add({edge._nodeID, edge._edgeID, edge._otherID});
             }
             for (auto edge : edgeView.outEdges()) {
-                expectedLines.add({edge._nodeID, edge._edgeID, edge._edgeTypeID, edge._otherID});
+                expectedLines.add({edge._nodeID, edge._edgeID, edge._otherID});
             }
         }
     }
