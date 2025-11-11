@@ -1,4 +1,5 @@
 #include "processors/LambdaProcessor.h"
+#include "processors/LambdaSourceProcessor.h"
 #include "processors/ProcessorTester.h"
 
 #include "processors/CartesianProductProcessor.h"
@@ -23,6 +24,9 @@ public:
 TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     auto [transaction, view, reader] = readGraph();
 
+    constexpr size_t OUTPUT_NUM_ROWS = 169;
+    constexpr size_t NUM_NODES_IN_SCAN = 13;
+
     auto& scanNodes2 = _builder->addScanNodes();
     [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
 
@@ -31,20 +35,89 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
 
     ASSERT_EQ(cartProd.getDataframe()->cols().size(), 2);
 
-    [[maybe_unused]] const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
-    [[maybe_unused]] const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
+    const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
+    const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
     const auto callback = [&](const Dataframe* df,
                               LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+
+        const ColumnNodeIDs* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
+        const ColumnNodeIDs* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
+
+        size_t rowPtr = 0;
+        for (const NodeID actualID : reader.scanNodes()) {
+            for (size_t i = 0; i < NUM_NODES_IN_SCAN; i++) {
+                ASSERT_EQ(actualID, outputLHS->at(rowPtr));
+                rowPtr++;
+            }
+        }
+
+        for (size_t i = 0; i < OUTPUT_NUM_ROWS;) {
+            for (const NodeID actualID : reader.scanNodes()) {
+                ASSERT_EQ(actualID, outputRHS->at(i));
+                i++;
+            }
+        }
+    };
+
+    _builder->addLambda(callback);
+    EXECUTE(view, 13 * 13UL);
+}
+
+TEST_F(CartesianProductProcessorTest, remyProdRest) {
+    auto [transaction, view, reader] = readGraph();
+
+    const auto genRemyCallback = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        ASSERT_EQ(df->size(), 1);
+        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
+        ASSERT_TRUE(nodeIDs != nullptr);
+        ASSERT_TRUE(nodeIDs->empty());
+        nodeIDs->emplace_back(0); // Add Remy
+        isFinished = true;
+    };
+    const auto fakeScanNodesCallback = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        ASSERT_EQ(df->size(), 1);
+        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
+        ASSERT_TRUE(nodeIDs != nullptr);
+        ASSERT_TRUE(nodeIDs->empty());
+        nodeIDs->resize(13);
+        std::iota(nodeIDs->begin(), nodeIDs->end(), 0);
+        isFinished = true;
+    };
+
+    auto& remyIF = _builder->addLambdaSource(genRemyCallback);
+    remyIF.getPort()->writeData();
+    _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+    remyIF.getDataframe()->dump(std::cout);
+
+    auto& l = _builder->addLambdaSource(fakeScanNodesCallback);
+    l.getPort()->writeData();
+    _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+    l.getDataframe()->dump(std::cout);
+
+    const auto& cartProd = _builder->addCartesianProduct(&remyIF);
+    ASSERT_EQ(cartProd.getDataframe()->cols().size(), 2);
+
+    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        spdlog::info("DF:");
+        ASSERT_TRUE(false);
         df->dump(std::cout);
     };
 
     _builder->addLambda(callback);
-    EXECUTE(view, 100);
-
+    EXECUTE(view, 1 * 13UL);
 }
 
 int main(int argc, char** argv) {

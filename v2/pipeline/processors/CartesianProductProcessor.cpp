@@ -1,5 +1,6 @@
 #include "CartesianProductProcessor.h"
 
+#include "ExecutionContext.h"
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "columns/ColumnSwitch.h"
@@ -43,7 +44,9 @@ CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipelin
     return processor;
 }
 
-void CartesianProductProcessor::prepare([[maybe_unused]] ExecutionContext* ctxt) {
+void CartesianProductProcessor::prepare(ExecutionContext* ctxt) {
+    _ctxt = ctxt;
+
     markAsPrepared();
 }
 
@@ -70,7 +73,7 @@ void CartesianProductProcessor::execute() {
     const size_t m = lDF->getRowCount();
     [[maybe_unused]] const size_t q = rDF->size();
 
-    msgbioassert(n * m <= ChunkConfig::CHUNK_SIZE,
+    msgbioassert(n * m <= _ctxt->getChunkSize(),
                  "Cartesian Product is only supported in the strongly bounded case "
                  "(output size <= CHUNK_SIZE).");
 
