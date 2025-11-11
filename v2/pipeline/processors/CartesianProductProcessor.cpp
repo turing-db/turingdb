@@ -83,19 +83,38 @@ void CartesianProductProcessor::execute() {
     // Iterate down each column, per column, for better cache performance
     for (size_t colPtr{0}; colPtr < p; colPtr++) {
         for (size_t rowPtr{0}; rowPtr < n; rowPtr++) {
-            dispatchColumnVector(
-                lDF->cols()[colPtr]->getColumn(), [&](auto* columnVector) -> void {
-                    auto x = columnVector->at(rowPtr);
+            // Fill output with m copies of this row from the LHS
+            dispatchColumnVector(lDF->cols()[colPtr]->getColumn(),
+                [&](auto* columnVector) -> void {
+                    auto& currentLHSElement = columnVector->at(rowPtr);
 
                     // Respective column in output DF should be same type: cast it
-                    auto* respectiveOutputCol = oDF->cols()[colPtr]->getColumn();
-                    auto* casted = static_cast<decltype(columnVector)>(respectiveOutputCol);
+                    Column* respectiveOutputCol = oDF->cols()[colPtr]->getColumn();
+                    auto* casted =
+                        static_cast<decltype(columnVector)>(respectiveOutputCol);
 
-                    auto& raw = casted->getRaw();
-                    auto startIt = raw.begin() + rowPtr;
+                    auto& rawOut = casted->getRaw();
+
+                    // Set m rows to be the current element
+                    auto startIt = rawOut.begin() + rowPtr * m;
                     auto endIt = startIt + m;
-                    std::fill(startIt, endIt, x);
-                });
+                    std::fill(startIt, endIt, currentLHSElement);
+                }
+            );
+            // Fill output with m copies of this column from the RHS
+            dispatchColumnVector(rDF->cols()[colPtr]->getColumn(),
+                 [&](auto* columnVector) -> void {
+                     Column* respectiveOutputCol = oDF->cols()[colPtr + p]->getColumn();
+                     auto* casted =
+                         static_cast<decltype(columnVector)>(respectiveOutputCol);
+
+                     auto& rawOut = casted->getRaw();
+                     auto& rawRHS = columnVector->getRaw();
+
+                     auto startIt = rawOut.begin() + rowPtr * m;
+                     std::copy(rawRHS.begin(), rawRHS.end(), startIt);
+                 }
+            );
         }
     }
 

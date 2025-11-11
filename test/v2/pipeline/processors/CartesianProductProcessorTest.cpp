@@ -39,14 +39,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        for (NamedColumn* col : df->cols()) {
-            const ColumnNodeIDs* nodes = col->as<ColumnNodeIDs>();
-            spdlog::info("{}", col->getHeader().getName());
-            for (NodeID n : *nodes) {
-                spdlog::info("\t{}", n.getValue());
-                
-            }
-        }
+        df->dump(std::cout);
     };
 
     _builder->addLambda(callback);
