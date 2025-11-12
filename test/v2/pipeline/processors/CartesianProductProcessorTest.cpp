@@ -259,16 +259,16 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
     constexpr size_t LHS_NUM_ROWS = 5;
     constexpr size_t LHS_NUM_COLS = 2;
 
-    constexpr size_t RHS_NUM_ROWS = 3;
-    constexpr size_t RHS_NUM_COLS = 4;
+    constexpr size_t RHS_NUM_ROWS = 4;
+    constexpr size_t RHS_NUM_COLS = 3;
 
     /*
      * Generate Dataframe looking like:
-     * 101 102
-     * 103 104
-     * 105 106
-     * 107 108
-     * 109 110
+     * 101 106
+     * 102 107
+     * 103 108
+     * 104 109
+     * 105 110
      */
      const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
@@ -292,10 +292,10 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
 
     /*
     * Generate Dataframe looking like:
-    * 1  2  3
-    * 4  5  6
-    * 7  8  9
-    * 10 11 12
+    * 1  5  9
+    * 2  6  10
+    * 3  7  11
+    * 4  8  12
     */
     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {

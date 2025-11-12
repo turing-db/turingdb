@@ -70,54 +70,54 @@ void CartesianProductProcessor::execute() {
 
     // Right DF is m x q dimensional
     const size_t m = rDF->getRowCount();
-    [[maybe_unused]] const size_t q = rDF->size();
+    const size_t q = rDF->size();
 
     msgbioassert(n * m <= _ctxt->getChunkSize(),
                  "Cartesian Product is only supported in the strongly bounded case "
                  "(output size <= CHUNK_SIZE).");
 
-    // Resize all columns in the output to be the correct size
+    // Resize all columns in the output to be the correct size, then we can just copy in
     for (NamedColumn* col : oDF->cols()) {
         dispatchColumnVector(col->getColumn(),
                              [&](auto* columnVector) { columnVector->resize(n * m); });
     }
 
-    // Iterate down each column, per column, for better cache performance
-    for (size_t colPtr{0}; colPtr < p; colPtr++) {
-        for (size_t rowPtr{0}; rowPtr < n; rowPtr++) {
-            // Fill output with m copies of this row from the LHS
-            dispatchColumnVector(lDF->cols()[colPtr]->getColumn(),
-                [&](auto* columnVector) -> void {
-                    auto& currentLHSElement = columnVector->at(rowPtr);
+    // Copy over LHS columns to output, column-wise
+    for (size_t colPtr = 0; colPtr < p; ++colPtr) {
+        dispatchColumnVector(lDF->cols()[colPtr]->getColumn(), [&](auto* lhsColumn) {
+            auto* outCol =
+                static_cast<decltype(lhsColumn)>(oDF->cols()[colPtr]->getColumn());
 
-                    // Respective column in output DF should be same type: cast it
-                    Column* respectiveOutputCol = oDF->cols()[colPtr]->getColumn();
-                    auto* casted =
-                        static_cast<decltype(columnVector)>(respectiveOutputCol);
+            auto& outRaw = outCol->getRaw();
 
-                    auto& rawOut = casted->getRaw();
+            // Each row from LHS needs to appear m times consecutively, so we can use a
+            // memset-esque approach to materialise each row from LHS m times
+            // consecutively in output
+            for (size_t lhsRow = 0; lhsRow < n; lhsRow++) {
+                const auto& currentLSHElement = lhsColumn->at(lhsRow);
+                auto startIt = outRaw.begin() + (lhsRow * m);
+                std::fill(startIt, startIt + m, currentLSHElement);
+            }
+        });
+    }
 
-                    // Set m rows to be the current element
-                    auto startIt = rawOut.begin() + rowPtr * m;
-                    auto endIt = startIt + m;
-                    std::fill(startIt, endIt, currentLHSElement);
-                }
-            );
-            // Fill output with m copies of this column from the RHS
-            dispatchColumnVector(rDF->cols()[colPtr]->getColumn(),
-                 [&](auto* columnVector) -> void {
-                     Column* respectiveOutputCol = oDF->cols()[colPtr + p]->getColumn();
-                     auto* casted =
-                         static_cast<decltype(columnVector)>(respectiveOutputCol);
+    // Copy over RHS columns to output, column-wise
+    for (size_t colPtr = 0; colPtr < q; colPtr++) {
+        dispatchColumnVector(rDF->cols()[colPtr]->getColumn(), [&](auto* rhsColumn) {
+            auto* outCol =
+                static_cast<decltype(rhsColumn)>(oDF->cols()[p + colPtr]->getColumn());
 
-                     auto& rawOut = casted->getRaw();
-                     auto& rawRHS = columnVector->getRaw();
+            const auto& rhsRaw = rhsColumn->getRaw();
+            auto& outRaw = outCol->getRaw();
 
-                     auto startIt = rawOut.begin() + rowPtr * m;
-                     std::copy(rawRHS.begin(), rawRHS.end(), startIt);
-                 }
-            );
-        }
+            // All rows from RHS needed for each row in LHS; for each unique row on LHS
+            // copy the entire RHS column over starting from that unique LHS row's first
+            // index
+            for (size_t lhsRow = 0; lhsRow < n; lhsRow++) {
+                auto startIt = outRaw.begin() + lhsRow * m;
+                std::copy(rhsRaw.begin(), rhsRaw.end(), startIt);
+            }
+        });
     }
 
     finish();
