@@ -7,7 +7,6 @@
 #include "dataframe/Dataframe.h"
 
 #include "BioAssert.h"
-#include "iterators/ChunkConfig.h"
 
 using namespace db::v2;
 
