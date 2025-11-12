@@ -43,3 +43,11 @@ void PlanGraph::removeIsolatedNodes() {
 
     _nodes = std::move(newNodes);
 }
+
+bool PlanGraph::cacheGetProperty(const VarDecl* var, std::string_view propName) {
+    return _getPropertyCache.insert(var, propName);
+}
+
+bool PlanGraph::cacheGetEntityType(const VarDecl* var) {
+    return _getEntityTypeCache.insert(var);
+}

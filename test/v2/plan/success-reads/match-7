@@ -27,15 +27,27 @@ flowchart TD
         __FILTER_NODE__
     `"]
     6["`
-        __JOIN__
+        __GET_PROPERTY__
+        __var__ n
+        __prop__ duration
     `"]
     7["`
+        __GET_PROPERTY__
+        __var__ m
+        __prop__ duration
+    `"]
+    8["`
+        __JOIN__
+    `"]
+    9["`
         __PRODUCE_RESULTS__
     `"]
     0-->6
-    1-->7
+    1-->9
     2-->1
-    3-->5
-    4-->6
+    3-->7
+    4-->8
     5-->4
-    6-->2
+    6-->8
+    7-->5
+    8-->2

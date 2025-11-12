@@ -40,14 +40,26 @@ flowchart TD
         __FILTER_NODE__
     `"]
     9["`
+        __GET_PROPERTY__
+        __var__ n
+        __prop__ name
+    `"]
+    10["`
+        __GET_PROPERTY__
+        __var__ e
+        __prop__ name
+    `"]
+    11["`
         __PRODUCE_RESULTS__
     `"]
-    0-->2
+    0-->9
     1-->3
     2-->1
-    3-->5
+    3-->10
     4-->6
     5-->4
     6-->8
-    7-->9
+    7-->11
     8-->7
+    9-->2
+    10-->5

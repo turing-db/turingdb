@@ -24,7 +24,6 @@
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/JoinNode.h"
-#include "nodes/MaterializeNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
 
@@ -445,8 +444,16 @@ void ReadStmtGenerator::placePredicateJoins() {
             FilterNode* filter = _variables->getNodeFilter(dep._var);
 
             if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+                if (!_tree->cacheGetProperty(expr->getDecl(), expr->getPropName())) {
+                    continue;
+                }
+
                 _tree->insertBefore<GetPropertyNode>(filter, expr->getDecl(), expr->getPropName());
             } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
+                if (!_tree->cacheGetEntityType(expr->getDecl())) {
+                    continue;
+                }
+
                 _tree->insertBefore<GetEntityTypeNode>(filter, expr->getDecl());
             } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
                 // Symbol value should already be in a column in a block, no need to change anything
@@ -573,7 +580,7 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
         case PlanGraphTopology::PathToDependency::BackwardPath: {
             // If only walked backward
             // Materialize
-            _tree->insertBefore<MaterializeNode>(filter);
+            // _tree->insertBefore<MaterializeNode>(filter);
             return;
         }
 
