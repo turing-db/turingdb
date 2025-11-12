@@ -210,7 +210,7 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         }
 
         const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
-        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS * RHS_NUM_COLS);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
     /*
@@ -225,7 +225,7 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
             return;
         }
 
-        ASSERT_EQ(df->size(), LHS_NUM_COLS * RHS_NUM_COLS);
+        ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
 
         auto* fstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
         ASSERT_EQ(fstCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
@@ -249,6 +249,97 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         }
     };
 
+    _builder->addLambda(callback);
+    EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
+}
+
+TEST_F(CartesianProductProcessorTest, nonSymmetric) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 5;
+    constexpr size_t LHS_NUM_COLS = 2;
+
+    constexpr size_t RHS_NUM_ROWS = 3;
+    constexpr size_t RHS_NUM_COLS = 4;
+
+    /*
+     * Generate Dataframe looking like:
+     * 101 102
+     * 103 104
+     * 105 106
+     * 107 108
+     * 109 110
+     */
+     const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        NodeID nextID = 101;
+        for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
+            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->resize(LHS_NUM_ROWS);
+            for (size_t rowPtr = 0; rowPtr < LHS_NUM_ROWS; rowPtr++) {
+                col->at(rowPtr) = nextID++;
+            }
+        }
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        isFinished = true;
+    };
+
+    /*
+    * Generate Dataframe looking like:
+    * 1  2  3
+    * 4  5  6
+    * 7  8  9
+    * 10 11 12
+    */
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        NodeID nextID = 1;
+        for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
+            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->resize(RHS_NUM_ROWS);
+            for (size_t rowPtr = 0; rowPtr < RHS_NUM_ROWS; rowPtr++) {
+                col->at(rowPtr) = nextID++;
+            }
+        }
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < RHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < LHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
+    }
+
+    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        df->dump(std::cout);
+    };
     _builder->addLambda(callback);
     EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
 }
