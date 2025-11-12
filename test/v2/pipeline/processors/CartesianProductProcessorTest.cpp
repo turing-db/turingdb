@@ -70,6 +70,9 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
 TEST_F(CartesianProductProcessorTest, remyProdRest) {
     auto [transaction, view, reader] = readGraph();
 
+    constexpr size_t LHS_SIZE = 1;
+    constexpr size_t RHS_SIZE = 13;
+
     const auto genRemyCallback = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -89,7 +92,7 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
         ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(nodeIDs->empty());
-        nodeIDs->resize(13);
+        nodeIDs->resize(RHS_SIZE);
         std::iota(nodeIDs->begin(), nodeIDs->end(), 0);
         isFinished = true;
     };
@@ -103,12 +106,34 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
     const auto& cartProd = _builder->addCartesianProduct(&scanNodesLambda);
     ASSERT_EQ(cartProd.getDataframe()->cols().size(), 2);
 
+    const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
+    const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
+
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        spdlog::info("DF:");
-        df->dump(std::cout);
+
+        const ColumnNodeIDs* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
+        const ColumnNodeIDs* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
+
+        ASSERT_EQ(outputLHS->size(), LHS_SIZE * RHS_SIZE);
+        ASSERT_EQ(outputRHS->size(), LHS_SIZE * RHS_SIZE);
+
+        {
+            NodeID actualID = 0; // All should be Remy
+            for (size_t i = 0; i < LHS_SIZE * RHS_SIZE; i++) {
+                EXPECT_EQ(actualID, outputLHS->at(i));
+            }
+        }
+
+        // RHS should be scan nodes (0-12)
+        for (size_t i = 0; i < LHS_SIZE * RHS_SIZE;) {
+            for (auto actualID : std::views::iota(0UL, RHS_SIZE)) {
+                EXPECT_EQ(actualID, outputRHS->at(i));
+                i++;
+            }
+        }
     };
 
     _builder->addLambda(callback);
