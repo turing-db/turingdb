@@ -39,16 +39,22 @@ flowchart TD
         __label__: Person
     `"]
     9["`
+        __GET_PROPERTY__
+        __var__ n
+        __prop__ name
+    `"]
+    10["`
         __WRITE__
         __delete_node__ n
         __delete_edge__ e
     `"]
-    0-->2
+    0-->9
     1-->3
     2-->1
     3-->5
     4-->6
     5-->4
     6-->8
-    7-->9
+    7-->10
     8-->7
+    9-->2

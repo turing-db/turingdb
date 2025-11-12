@@ -3,6 +3,8 @@
 #include <memory>
 #include <span>
 
+#include "GetEntityTypeCache.h"
+#include "GetPropertyCache.h"
 #include "nodes/PlanGraphNode.h"
 
 namespace db::v2 {
@@ -61,11 +63,16 @@ public:
 
     void removeIsolatedNodes();
 
+    bool cacheGetProperty(const VarDecl* var, std::string_view propName);
+    bool cacheGetEntityType(const VarDecl* var);
+
 private:
     friend class PlanGraphDebug;
 
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
     std::vector<std::unique_ptr<Predicate>> _predicates;
+    GetPropertyCache _getPropertyCache;
+    GetEntityTypeCache _getEntityTypeCache;
 };
 
 }

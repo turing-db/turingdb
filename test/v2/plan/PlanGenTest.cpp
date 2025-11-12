@@ -228,6 +228,7 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
         .expect(PlanGraphOpcode::FILTER_NODE)
         .expectVar("n")
         .expect(PlanGraphOpcode::GET_OUT_EDGES)
+        .expect(PlanGraphOpcode::GET_PROPERTY)
         .expect(PlanGraphOpcode::FILTER_EDGE)
         .expectVar("e")
         .expect(PlanGraphOpcode::GET_EDGE_TARGET)
