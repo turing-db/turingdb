@@ -32,6 +32,20 @@ void duplicateDataframeShape(LocalMemory* mem,
     }
 }
 
+/*
+* @brief Column-wise concatenation of @param src onto @param dest
+*/
+void concatDataframeShape(LocalMemory* mem,
+                          DataframeManager* dfMan,
+                          db::Dataframe* src,
+                          db::Dataframe* dest) {
+    for (const NamedColumn* col : src->cols()) {
+        Column* newCol = mem->allocSame(col->getColumn());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
+        dest->addColumn(newNamedCol);
+    }
+}
+
 }
 
 PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
@@ -87,7 +101,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     CartesianProductProcessor* cartProd = CartesianProductProcessor::create(_pipeline);
 
     // LHS is implict in @ref _pendingOutput
-    _pendingOutput->connectTo(cartProd->leftHandSide());
+    _pendingOutput.connectTo(cartProd->leftHandSide());
     rhs->connectTo(cartProd->rightHandSide());
 
     PipelineBlockOutputInterface& output = cartProd->output();
@@ -98,9 +112,9 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
 
     // The output DF should be the same as the inputs, concatenated
     duplicateDataframeShape(_mem, _dfMan, leftDf, outDf);
-    duplicateDataframeShape(_mem, _dfMan, rightDf, outDf);
+    concatDataframeShape(_mem, _dfMan, rightDf, outDf);
 
-    _pendingOutput = &output;
+    _pendingOutput.setInterface(&output);
 
     return output;
 }

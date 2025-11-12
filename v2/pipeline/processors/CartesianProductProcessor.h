@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "Processor.h"
 
 #include "PipelineInterface.h"
@@ -16,13 +14,13 @@ namespace db::v2 {
 
 class PipelineV2;
 
-class CartesianProductProcessor : public Processor {
+class CartesianProductProcessor final : public Processor {
 public:
     static CartesianProductProcessor* create(PipelineV2* pipeline);
 
-    void prepare(ExecutionContext* ctxt) override;
-    void reset() override;
-    void execute() override;
+    void prepare(ExecutionContext* ctxt) final;
+    void reset() final;
+    void execute() final;
 
     PipelineBlockInputInterface& leftHandSide() { return _lhs; }
     PipelineBlockInputInterface& rightHandSide() { return _rhs; }
@@ -30,7 +28,7 @@ public:
 
 private:
     CartesianProductProcessor();
-    ~CartesianProductProcessor() override;
+    ~CartesianProductProcessor() final;
 
     PipelineBlockInputInterface _lhs;
     PipelineBlockInputInterface _rhs;

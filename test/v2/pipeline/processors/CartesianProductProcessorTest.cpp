@@ -1,12 +1,15 @@
-#include "processors/LambdaProcessor.h"
-#include "processors/LambdaSourceProcessor.h"
+#include <gtest/gtest.h>
+
+#include "iterators/ChunkConfig.h"
 #include "processors/ProcessorTester.h"
 
 #include "processors/CartesianProductProcessor.h"
-
+#include "dataframe/Dataframe.h"
+#include "processors/LambdaProcessor.h"
+#include "processors/LambdaSourceProcessor.h"
+#include "columns/ColumnIDs.h"
 #include "SystemManager.h"
 #include "SimpleGraph.h"
-#include "LineContainer.h"
 
 using namespace db;
 using namespace db::v2;
@@ -64,7 +67,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     };
 
     _builder->addLambda(callback);
-    EXECUTE(view, 13 * 13UL);
+    EXECUTE(view, NUM_NODES_IN_SCAN * NUM_NODES_IN_SCAN);
 }
 
 TEST_F(CartesianProductProcessorTest, remyProdRest) {
@@ -137,7 +140,117 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
     };
 
     _builder->addLambda(callback);
-    EXECUTE(view, 1 * 13UL);
+    EXECUTE(view, LHS_SIZE * RHS_SIZE);
+}
+
+TEST_F(CartesianProductProcessorTest, twoByTwo) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 2;
+    constexpr size_t LHS_NUM_COLS = 2;
+
+    constexpr size_t RHS_NUM_ROWS = 2;
+    constexpr size_t RHS_NUM_COLS = 2;
+
+    /*
+     * Generate Dataframe looking like:
+     * 1   2
+     * 2   3
+     */
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
+            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->resize(LHS_NUM_ROWS);
+            std::iota(col->begin(), col->end(), colPtr + 1);
+        }
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        isFinished = true;
+    };
+
+    /*
+     * Generate Dataframe looking like:
+     * 101   102
+     * 102   103
+     */
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
+            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->resize(RHS_NUM_ROWS);
+            std::iota(col->begin(), col->end(), colPtr + 101);
+        }
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < RHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < LHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS * RHS_NUM_COLS);
+    }
+
+    /*
+     * Output Dataframe should be looking like:
+     * 1 2 101 102
+     * 1 2 102 103
+     * 2 3 101 102
+     * 2 3 102 103
+     */
+    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS * RHS_NUM_COLS);
+
+        auto* fstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
+        ASSERT_EQ(fstCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+        for (size_t i {0}; NodeID expected : {1, 1, 2, 2}) {
+            EXPECT_EQ(fstCol->at(i++), expected);
+        }
+        auto* sndCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
+        ASSERT_EQ(sndCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+        for (size_t i {0}; NodeID expected : {2, 2, 3, 3}) {
+            EXPECT_EQ(sndCol->at(i++), expected);
+        }
+        auto* thdCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
+        ASSERT_EQ(thdCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+        for (size_t i {0}; NodeID expected : {101, 102, 101, 102}) {
+            EXPECT_EQ(thdCol->at(i++), expected);
+        }
+        auto* fthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
+        ASSERT_EQ(fthCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+        for (size_t i {0}; NodeID expected : {102, 103, 102, 103}) {
+            EXPECT_EQ(fthCol->at(i++), expected);
+        }
+    };
+
+    _builder->addLambda(callback);
+    EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
 }
 
 int main(int argc, char** argv) {

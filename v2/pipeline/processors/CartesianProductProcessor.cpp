@@ -56,7 +56,7 @@ void CartesianProductProcessor::reset() {
 void CartesianProductProcessor::execute() {
     PipelineInputPort* lPort = _lhs.getPort();
     PipelineInputPort* rPort = _rhs.getPort();
-    [[maybe_unused]] PipelineOutputPort* oPort = _out.getPort();
+    PipelineOutputPort* oPort = _out.getPort();
     
     Dataframe* lDF = _lhs.getDataframe();
     lPort->consume();
