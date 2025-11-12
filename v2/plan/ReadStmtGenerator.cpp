@@ -21,6 +21,8 @@
 #include "nodes/GetEdgesNode.h"
 #include "nodes/GetInEdgesNode.h"
 #include "nodes/GetOutEdgesNode.h"
+#include "nodes/GetPropertyNode.h"
+#include "nodes/GetEntityTypeNode.h"
 #include "nodes/JoinNode.h"
 #include "nodes/MaterializeNode.h"
 #include "nodes/ScanNodesNode.h"
@@ -440,6 +442,18 @@ void ReadStmtGenerator::placePredicateJoins() {
 
         // Step 2: Place joins
         for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+            FilterNode* filter = _variables->getNodeFilter(dep._var);
+
+            if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+                _tree->insertBefore<GetPropertyNode>(filter, expr->getDecl(), expr->getPropName());
+            } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
+                _tree->insertBefore<GetEntityTypeNode>(filter, expr->getDecl());
+            } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
+                // Symbol value should already be in a column in a block, no need to change anything
+            } else {
+                throwError("Expression dependency could not be handled in the predicate evaluation");
+            }
+
             insertDataFlowNode(var, dep._var);
         }
 

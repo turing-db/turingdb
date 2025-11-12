@@ -112,9 +112,9 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
             translateGetEdgesNode(static_cast<GetEdgesNode*>(node), stream);
         break;
 
+        case PlanGraphOpcode::GET_PROPERTY:
+        case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
-        case PlanGraphOpcode::CREATE_NODE:
-        case PlanGraphOpcode::CREATE_EDGE:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
