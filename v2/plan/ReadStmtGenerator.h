@@ -21,8 +21,11 @@ class WhereClause;
 class PatternElement;
 class Expr;
 class VarNode;
+class FilterNode;
 class NodePattern;
 class EdgePattern;
+class PropertyExpr;
+class EntityTypeExpr;
 
 class ReadStmtGenerator {
 public:
@@ -52,6 +55,7 @@ public:
     void placeJoinsOnVars();
     void placePredicateJoins();
     PlanGraphNode* generateEndpoint();
+
     void insertDataFlowNode(VarNode* node, VarNode* dependency);
 
 private:
