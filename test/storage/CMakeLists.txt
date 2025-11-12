@@ -31,3 +31,6 @@ add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
 add_storage_tests(test_storage_dump_propertycontainerdumper dump/PropertyContainerDumperTest.cpp)
 add_storage_tests(test_storage_dump_graphloader dump/GraphLoaderTest.cpp)
 add_storage_tests(test_storage_dump_stringindexloader dump/StringIndexLoaderTest.cpp)
+
+add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
+
