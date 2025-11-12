@@ -94,17 +94,13 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
         isFinished = true;
     };
 
-    auto& remyIF = _builder->addLambdaSource(genRemyCallback);
-    remyIF.getPort()->writeData();
+    auto& scanNodesLambda = _builder->addLambdaSource(fakeScanNodesCallback);
     _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
-    remyIF.getDataframe()->dump(std::cout);
 
-    auto& l = _builder->addLambdaSource(fakeScanNodesCallback);
-    l.getPort()->writeData();
+    [[maybe_unused]] auto& remyIF = _builder->addLambdaSource(genRemyCallback);
     _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
-    l.getDataframe()->dump(std::cout);
 
-    const auto& cartProd = _builder->addCartesianProduct(&remyIF);
+    const auto& cartProd = _builder->addCartesianProduct(&scanNodesLambda);
     ASSERT_EQ(cartProd.getDataframe()->cols().size(), 2);
 
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
@@ -112,7 +108,6 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
             return;
         }
         spdlog::info("DF:");
-        ASSERT_TRUE(false);
         df->dump(std::cout);
     };
 

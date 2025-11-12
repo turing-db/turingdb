@@ -67,10 +67,10 @@ void CartesianProductProcessor::execute() {
 
     // Left DF is n x p dimensional
     const size_t n = lDF->getRowCount();
-    const size_t p = rDF->size();
+    const size_t p = lDF->size();
 
     // Right DF is m x q dimensional
-    const size_t m = lDF->getRowCount();
+    const size_t m = rDF->getRowCount();
     [[maybe_unused]] const size_t q = rDF->size();
 
     msgbioassert(n * m <= _ctxt->getChunkSize(),
