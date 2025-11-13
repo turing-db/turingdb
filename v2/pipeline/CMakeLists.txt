@@ -46,6 +46,9 @@ set(processors_sources
     processors/ComputeExprProcessor.cpp
     processors/ExprProgram.cpp
     processors/FilterProcessor.cpp
+    processors/LambdaSourceProcessor.cpp
+    processors/EvalExprProcessor.cpp
+    processors/EvalProgram.cpp
 )
 
 set(procedures_sources
