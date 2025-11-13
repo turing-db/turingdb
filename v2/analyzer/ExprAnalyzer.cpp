@@ -15,11 +15,10 @@
 
 using namespace db::v2;
 
-ExprAnalyzer::ExprAnalyzer(const CypherAST* ast, const GraphView& graphView)
+ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
-{
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata()) {
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
@@ -27,6 +26,10 @@ ExprAnalyzer::~ExprAnalyzer() {
 
 void ExprAnalyzer::analyzeRootExpr(Expr* expr) {
     analyze(expr);
+
+    if (!expr->getExprVarDecl()) {
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+    }
 }
 
 void ExprAnalyzer::analyze(Expr* expr) {
@@ -221,7 +224,7 @@ void ExprAnalyzer::analyze(UnaryExpr* expr) {
     }
 
     expr->setType(type);
-    
+
     if (operand->isDynamic()) {
         expr->setDynamic();
     }
@@ -239,6 +242,7 @@ void ExprAnalyzer::analyze(SymbolExpr* expr) {
 
     expr->setDecl(varDecl);
     expr->setType(varDecl->getType());
+    expr->setExprVarDecl(varDecl);
 
     // For now, variable expressions cannot be evaluated at compile time
     // TODO: We could check if the variable is actually a constexpr

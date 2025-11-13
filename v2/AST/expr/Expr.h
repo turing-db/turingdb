@@ -7,6 +7,7 @@
 namespace db::v2 {
 
 class CypherAST;
+class VarDecl;
 
 class Expr {
 public:
@@ -34,7 +35,11 @@ public:
 
     virtual EvaluatedType getType() const { return _type; }
 
+    const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
+
     void setType(EvaluatedType type) { _type = type; }
+
+    void setExprVarDecl(const VarDecl* decl) { _exprVarDecl = decl; }
 
     [[nodiscard]] bool isAggregate() const {
         return ((uint8_t)_flags & (uint8_t)Flags::AGGREGATE) != 0;
@@ -66,6 +71,7 @@ protected:
     virtual ~Expr() = default;
 
 private:
+    const VarDecl* _exprVarDecl {nullptr};
     Kind _exprKind;
     EvaluatedType _type {EvaluatedType::Invalid};
     Flags _flags {Flags::NONE};

@@ -28,7 +28,7 @@ class FunctionInvocationExpr;
 
 class ExprAnalyzer {
 public:
-    ExprAnalyzer(const CypherAST* ast, const GraphView& graphView);
+    ExprAnalyzer(CypherAST* ast, const GraphView& graphView);
     ~ExprAnalyzer();
 
     ExprAnalyzer(const ExprAnalyzer&) = delete;
@@ -49,7 +49,7 @@ public:
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
 private:
-    const CypherAST* _ast {nullptr};
+    CypherAST* _ast {nullptr};
     GraphView _graphView;
     DeclContext* _ctxt {nullptr};
     const GraphMetadata& _graphMetadata;
