@@ -118,8 +118,6 @@ void CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     const size_t rowsCanWrite = chunkSize - existingSize;
     bioassert(rowsCanWrite > 0);
 
-
-
     const size_t newSize = std::min(chunkSize, existingSize + n * m);
 
     // Resize all columns in the output to be the correct size, then we can just copy in
@@ -243,16 +241,18 @@ void CartesianProductProcessor::execute() {
     [[maybe_unused]] Dataframe* oDF = _out.getDataframe();
 
     // Left DF is n x p dimensional
-    const size_t n = lDF->getRowCount();
+    [[maybe_unused]] const size_t n = lDF->getRowCount();
     [[maybe_unused]] const size_t p = lDF->size();
 
     // Right DF is m x q dimensional
-    const size_t m = rDF->getRowCount();
+    [[maybe_unused]] const size_t m = rDF->getRowCount();
     [[maybe_unused]] const size_t q = rDF->size();
 
+    /*
     msgbioassert(n * m <= _ctxt->getChunkSize(),
                  "Cartesian Product is only supported in the strongly bounded case "
                  "(output size <= CHUNK_SIZE).");
+    */
 
     fillOutput(lDF, rDF);
 

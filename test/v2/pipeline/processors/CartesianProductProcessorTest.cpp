@@ -435,6 +435,96 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
     EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
 }
 
+TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 3;
+    constexpr size_t LHS_NUM_COLS = 1;
+
+    constexpr size_t RHS_NUM_ROWS = 5;
+    constexpr size_t RHS_NUM_COLS = 1;
+
+    /*
+     * Generate Dataframe looking like:
+     * a
+     * b
+     * c
+     */
+     const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
+            ColumnVector<std::string>* col = dynamic_cast<ColumnVector<std::string>*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back("a");
+            col->push_back("b");
+            col->push_back("c");
+        }
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        isFinished = true;
+    };
+
+     /*
+      * Generate Dataframe looking like:
+      * v
+      * w
+      * x
+      * y
+      * z
+      */
+     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+             return;
+         }
+
+         ASSERT_EQ(df->size(), RHS_NUM_COLS);
+         for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
+             ColumnVector<std::string>* col = dynamic_cast<ColumnVector<std::string>*>(
+                 df->cols()[colPtr]->getColumn());
+             ASSERT_TRUE(col != nullptr);
+             ASSERT_TRUE(col->empty());
+             col->push_back("v");
+             col->push_back("w");
+             col->push_back("x");
+             col->push_back("y");
+             col->push_back("z");
+         }
+         ASSERT_EQ(df->size(), RHS_NUM_COLS);
+         isFinished = true;
+     };
+
+     { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < RHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnVector<std::string>>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < LHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnVector<std::string>>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
+    }
+
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
+        df->dump(std::cout);
+
+        ASSERT_FALSE(true);
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, (LHS_NUM_ROWS * RHS_NUM_ROWS) / 2);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 1;
