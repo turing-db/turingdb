@@ -200,6 +200,10 @@ void CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
         // And start writing pairs from as far as we got
         _rhsPtr = rowsCanWrite % m;
     }
+
+    const size_t rowsWritten = numUniqueLhsRowsCanWrite * m + rowsCanWrite % m;
+    bioassert(rowsCanWrite == rowsWritten);
+    _rowsWrittenThisCycle += rowsWritten;
 }
 
 void CartesianProductProcessor::executeFromIdle() {
@@ -209,7 +213,7 @@ void CartesianProductProcessor::executeFromIdle() {
     bioassert(_rhsPtr == 0);
     bioassert(_rowsWrittenThisCycle == 0);
 
-    nextState(); // Sets state to IMMEDIATE
+    nextState(); // Sets state to @ref IMMEDIATE
 
     executeFromImmediate();
 }
@@ -224,39 +228,51 @@ void CartesianProductProcessor::executeFromImmediate() {
         return;
     }
 
-}
-
-void CartesianProductProcessor::execute() {
-    // We start with our output port being empty, and not have written any rows
-    _rowsWrittenThisCycle = 0;
-
-    PipelineInputPort* lPort = _lhs.getPort();
-    PipelineInputPort* rPort = _rhs.getPort();
-    PipelineOutputPort* oPort = _out.getPort();
-
     Dataframe* lDF = _lhs.getDataframe();
-    lPort->consume();
     Dataframe* rDF = _rhs.getDataframe();
-    rPort->consume();
-    [[maybe_unused]] Dataframe* oDF = _out.getDataframe();
-
-    // Left DF is n x p dimensional
-    [[maybe_unused]] const size_t n = lDF->getRowCount();
-    [[maybe_unused]] const size_t p = lDF->size();
-
-    // Right DF is m x q dimensional
-    [[maybe_unused]] const size_t m = rDF->getRowCount();
-    [[maybe_unused]] const size_t q = rDF->size();
-
-    /*
-    msgbioassert(n * m <= _ctxt->getChunkSize(),
-                 "Cartesian Product is only supported in the strongly bounded case "
-                 "(output size <= CHUNK_SIZE).");
-    */
 
     fillOutput(lDF, rDF);
 
+    if (remainingSpace == 0) {
+        return;
+    }
+
+    nextState(); // Sets state to @ref RIGHT_MEMORY
+    executeFromRightMem();
+}
+
+void CartesianProductProcessor::executeFromRightMem() {
+    return;
+}
+
+void CartesianProductProcessor::executeFromLeftMem() {
+    return;
+}
+
+void CartesianProductProcessor::execute() {
+    // We start with our output port being empty, and not having written any rows
+    _rowsWrittenThisCycle = 0;
+
+    switch (_currentState) {
+        case State::IDLE: {
+            executeFromIdle();
+        }
+        break;
+        case State::IMMEDIATE: {
+            executeFromImmediate();
+        }
+        break;
+        case State::RIGHT_MEMORY: {
+            executeFromRightMem();
+        } break;
+        case State::LEFT_MEMORY: {
+            executeFromLeftMem();
+        } break;
+        default:
+            throw FatalException("Unknown state of CartesianProductProcessor");
+    }
+
+    _out.getPort()->writeData();
     finish();
-    oPort->writeData();
 }
 

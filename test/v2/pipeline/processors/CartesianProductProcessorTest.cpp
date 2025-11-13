@@ -517,12 +517,11 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
                                      LambdaProcessor::Operation operation) -> void {
         df->dump(std::cout);
-
-        ASSERT_FALSE(true);
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, (LHS_NUM_ROWS * RHS_NUM_ROWS) / 2);
+    ASSERT_FALSE(true);
 }
 
 int main(int argc, char** argv) {
