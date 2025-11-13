@@ -53,18 +53,26 @@ private:
     PipelineBlockInputInterface _rhs;
     PipelineBlockOutputInterface _out;
 
-    size_t _lhsTotalRowCount {0};
-    size_t _rhsTotalRowCount {0};
-
+    // Depending on state, keeps track of how far in the input chunk/memory we have
+    // processed
     size_t _lhsPtr {0};
     size_t _rhsPtr {0};
+
+    size_t _rowsWrittenThisCycle {0};
 
     std::unique_ptr<Dataframe> _leftMemory;
     std::unique_ptr<Dataframe> _rightMemory;
 
     State _currentState {State::IDLE};
 
+    void executeFromIdle();
+    void executeFromImmediate();
+    void executeFromLeftMem();
+    void executeFromRightMem();
+
     void nextState();
+
+    void emitKRows(Dataframe* left, Dataframe* right, size_t k);
 };
 
 }

@@ -125,7 +125,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     duplicateDataframeShape(_mem, _dfMan, rightDf, rightMemory);
     cartProd->setRightMemory(std::unique_ptr<Dataframe>(rightMemory));
 
-
     return output;
 }
 
