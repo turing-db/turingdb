@@ -8,7 +8,7 @@ using namespace db;
 using namespace db::v2;
 using namespace turing::test;
 
-class GetEdgesProcessorTest : public ProcessorTester {
+class ProjectionProcessorTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
@@ -17,35 +17,32 @@ public:
     }
 };
 
-TEST_F(GetEdgesProcessorTest, test) {
+TEST_F(ProjectionProcessorTest, test) {
     auto [transaction, view, reader] = readGraph();
 
-    LineContainer<NodeID, EdgeID, NodeID, EdgeTypeID> expLines;
-    LineContainer<NodeID, EdgeID, NodeID, EdgeTypeID> resLines;
+    LineContainer<NodeID> expLines;
+    LineContainer<NodeID> resLines;
     const Tombstones& tombstones = view.tombstones();
 
     for (const NodeID originID : reader.scanNodes()) {
         ColumnVector<NodeID> tmpNodeIDs = {originID};
 
-        for (const EdgeRecord& edge : reader.getEdges(&tmpNodeIDs)) {
+        for (const EdgeRecord& edge : reader.getOutEdges(&tmpNodeIDs)) {
             if (tombstones.contains(edge._edgeID)) {
                 continue;
             }
 
-            expLines.add({originID, edge._edgeID, edge._otherID, edge._edgeTypeID});
+            expLines.add({edge._nodeID});
         }
     }
-    
+
     fmt::println("- Expected results");
     expLines.print(std::cout);
 
     // Pipeline definition
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
-    const auto& edgeInterface = _builder->addGetEdges();
-    const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();
-    const ColumnTag edgeTypesTag = edgeInterface.getEdgeTypes()->getTag();
-    const ColumnTag otherIDsTag = edgeInterface.getOtherNodes()->getTag();
+    _builder->addGetOutEdges();
 
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -53,34 +50,23 @@ TEST_F(GetEdgesProcessorTest, test) {
         }
 
         // Retrieve the results of the current pipeline iteration (chunk)
-        EXPECT_EQ(df->size(), 4);
+        EXPECT_EQ(df->size(), 1);
 
-        const ColumnNodeIDs* originIDs = df->getColumn<ColumnNodeIDs>(originIDsTag);
+        const ColumnNodeIDs* originIDs = df->getColumn<ColumnNodeIDs>(ColumnTag {0});
+
         ASSERT_TRUE(originIDs != nullptr);
 
-        const ColumnEdgeIDs* edgeIDs = df->getColumn<ColumnEdgeIDs>(edgeIDsTag);
-        ASSERT_TRUE(edgeIDs != nullptr);
-
-        const ColumnNodeIDs* otherIDs = df->getColumn<ColumnNodeIDs>(otherIDsTag);
-        ASSERT_TRUE(otherIDs != nullptr);
-
-        const ColumnEdgeTypes* edgeTypes = df->getColumn<ColumnEdgeTypes>(edgeTypesTag);
-        ASSERT_TRUE(edgeTypes != nullptr);
-
         const size_t lineCount = originIDs->size();
-        ASSERT_EQ(edgeIDs->size(), lineCount);
-        ASSERT_EQ(otherIDs->size(), lineCount);
-        ASSERT_EQ(edgeTypes->size(), lineCount);
 
         for (size_t i = 0; i < lineCount; i++) {
-            resLines.add({originIDs->at(i), edgeIDs->at(i), otherIDs->at(i), edgeTypes->at(i)});
+            resLines.add({originIDs->at(i)});
         }
     };
 
+    std::vector<ColumnTag> tags = {originIDsTag};
     _builder->addMaterialize();
+    _builder->addProjection(tags);
     _builder->addLambda(callback);
-    fmt::println("\n- Expected:\n");
-    expLines.print(std::cout);
 
     fmt::println("\n- Executing pipeline with chunk size 100...");
     EXECUTE(view, 100);

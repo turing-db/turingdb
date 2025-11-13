@@ -53,6 +53,7 @@ public:
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);
     PipelineValueOutputInterface& addCount();
+    PipelineBlockOutputInterface& addProjection(std::span<ColumnTag> tags);
 
     // Lambda sink
     void addLambda(const LambdaProcessor::Callback& callback);

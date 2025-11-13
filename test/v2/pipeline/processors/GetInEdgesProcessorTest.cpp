@@ -42,7 +42,7 @@ TEST_F(GetInEdgesProcessorTest, test) {
     // Pipeline definition
     const ColumnTag tgtIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
-    const auto edgeInterface = _builder->addGetInEdges();
+    const auto& edgeInterface = _builder->addGetInEdges();
     const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();
     const ColumnTag edgeTypesTag = edgeInterface.getEdgeTypes()->getTag();
     const ColumnTag srcIDsTag = edgeInterface.getOtherNodes()->getTag();

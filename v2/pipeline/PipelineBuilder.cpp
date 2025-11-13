@@ -5,6 +5,7 @@
 #include "processors/GetEdgesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
 #include "processors/MaterializeProcessor.h"
+#include "processors/ProjectionProcessor.h"
 #include "processors/LambdaProcessor.h"
 #include "processors/GetPropertiesProcessor.h"
 #include "processors/SkipProcessor.h"
@@ -189,6 +190,26 @@ PipelineValueOutputInterface& PipelineBuilder::addCount() {
 
     _pendingOutput.setInterface(&count->output());
     return count->output();
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ColumnTag> tags) {
+    ProjectionProcessor* projection = ProjectionProcessor::create(_pipeline);
+    
+    PipelineBlockInputInterface& input = projection->input();
+    PipelineBlockOutputInterface& output = projection->output();
+
+    _pendingOutput.connectTo(input);
+
+    Dataframe* inDf = input.getDataframe();
+    Dataframe* outDf = output.getDataframe();
+
+    for (const ColumnTag& tag : tags) {
+        outDf->addColumn(inDf->getColumn(tag));
+    }
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
