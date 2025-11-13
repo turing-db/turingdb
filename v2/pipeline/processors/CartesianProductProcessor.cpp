@@ -8,6 +8,7 @@
 #include "BioAssert.h"
 #include "FatalException.h"
 #include "columns/ColumnSwitch.h"
+#include "spdlog/spdlog.h"
 
 using namespace db::v2;
 
@@ -87,20 +88,36 @@ void CartesianProductProcessor::nextState() {
 
         case State::LEFT_MEMORY : {
             // TODO: Assert preconditions
-            _currentState = State::IDLE;
+            _currentState = State::RESET;
             // TODO: Reset counters if needed
         }
         break;
-        default:
+        case State::RESET: {
+            resetState();
+        }
+        break;
+        case State::STATE_SPACE_SIZE: {
             throw FatalException("CartesianProduct Processor in invalid state.");
+        }
+        break;
     }
+}
+
+void CartesianProductProcessor::resetState() {
+    _lhsPtr = 0;
+    _rhsPtr = 0;
+
+    _rowsWrittenSinceLastFinished += _rowsWrittenThisCycle;
+    _rowsWrittenThisCycle = 0;
+
+    _currentState = State::IDLE;
 }
 
 /**
  * @brief Computes the @param k rows of the Cartesian product of @param left and @param
  * right, and stores them in @ref _out's Dataframe.
  */
-void CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
+size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     // Left DF is n x p dimensional
     const size_t n = left->getRowCount();
     const size_t p = left->size();
@@ -112,13 +129,19 @@ void CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     const size_t chunkSize = _ctxt->getChunkSize();
 
     Dataframe* oDF = _out.getDataframe();
-    const size_t existingSize = oDF->getRowCount(); // XXX This just checks the first column
-    bioassert(existingSize == _rowsWrittenThisCycle);
+    // XXX: Below there is an implicit assumption that _rowsWrittenThisCycle is the number
+    // of rows in the dataframe that contain meaningful data (i.e. should not be
+    // overwritten). Because we resize the output DF on first call to @ref fillOutput, it
+    // is not shrunk again after the data is read by the reader, so its size remains the
+    // same, even though the data is safe to overwrite because the reader has marked the
+    // port with @ref consume
 
-    const size_t rowsCanWrite = chunkSize - existingSize;
+    // const size_t existingSize = oDF->getRowCount(); // XXX This just checks the first column
+
+    const size_t rowsCanWrite = chunkSize - _rowsWrittenThisCycle;
     bioassert(rowsCanWrite > 0);
 
-    const size_t newSize = std::min(chunkSize, existingSize + n * m);
+    const size_t newSize = std::min(chunkSize, _rowsWrittenThisCycle + n * m);
 
     // Resize all columns in the output to be the correct size, then we can just copy in
     for (NamedColumn* col : oDF->cols()) {
@@ -202,16 +225,34 @@ void CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     }
 
     const size_t rowsWritten = numUniqueLhsRowsCanWrite * m + rowsCanWrite % m;
-    bioassert(rowsCanWrite == rowsWritten);
+    bioassert(rowsCanWrite == rowsWritten); // Sanity check
+
     _rowsWrittenThisCycle += rowsWritten;
+    _rowsWrittenSinceLastFinished += rowsWritten;
+
+    _out.getPort()->writeData();
+
+    return rowsWritten;
 }
 
 void CartesianProductProcessor::executeFromIdle() {
     bioassert(_currentState == State::IDLE);
-    // We should not be in the middle of reading/writing anything if in IDLE
-    bioassert(_lhsPtr == 0);
+    // We should not be in the middle of reading/writing anything if in IDLE bioassert(_lhsPtr == 0);
     bioassert(_rhsPtr == 0);
     bioassert(_rowsWrittenThisCycle == 0);
+
+    const size_t n = _lhs.getDataframe()->getRowCount();
+    const size_t m = _rhs.getDataframe()->getRowCount();
+
+    // LHS x RHS
+    const size_t numRowsFromInputProd = n * m;
+    // LHS x port-memory(R)
+    const size_t numRowsFromRightMem = n * _rightMemory->getRowCount();
+    // port-memory(L) x RHS
+    const size_t numRowsFromLeftMem = _leftMemory->getRowCount() * m;
+
+    _rowsToWriteBeforeFinished =
+        numRowsFromInputProd + numRowsFromRightMem + numRowsFromLeftMem;
 
     nextState(); // Sets state to @ref IMMEDIATE
 
@@ -222,18 +263,27 @@ void CartesianProductProcessor::executeFromImmediate() {
     bioassert(_currentState == State::IMMEDIATE);
 
     bioassert(_rowsWrittenThisCycle <= _ctxt->getChunkSize());
-    size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
 
-    if (remainingSpace == 0) {
-        return;
+    {
+        const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
+
+        if (remainingSpace == 0) {
+            // No space, have not written what we need: stay in same state
+            return;
+        }
     }
 
     Dataframe* lDF = _lhs.getDataframe();
     Dataframe* rDF = _rhs.getDataframe();
 
-    fillOutput(lDF, rDF);
+    const size_t rowsWritten = fillOutput(lDF, rDF); // Fill from immediate ports
+    // n * m - rows we already wrote
+    const size_t rowsNeededToWrite =
+        lDF->getRowCount() * rDF->getRowCount() - (_rowsToWriteBeforeFinished -_rowsWrittenSinceLastFinished);
 
-    if (remainingSpace == 0) {
+    if (rowsWritten != rowsNeededToWrite) {
+        spdlog::info("We wrote {} rows but we wanted {}", rowsWritten, rowsNeededToWrite);
+        // We could not write all we needed -> return, remaining in same state
         return;
     }
 
@@ -242,16 +292,51 @@ void CartesianProductProcessor::executeFromImmediate() {
 }
 
 void CartesianProductProcessor::executeFromRightMem() {
-    return;
+    if (_rightMemory->getRowCount() == 0) {
+        // No right memory: nothing to do
+        nextState();
+        return;
+    }
+    
+    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
+    if (remainingSpace == 0 ) {
+        // No space, have not written what we need: stay in same state
+        return;
+    }
+
+    // fillOutput(left input, right memory)
+    // TODO: Check if we wrote all we need
+
+    nextState(); // Set state to @ref LEFT_MEMORY
 }
 
 void CartesianProductProcessor::executeFromLeftMem() {
-    return;
+    if (_leftMemory->getRowCount() == 0) {
+        // No right memory: nothing to do
+        nextState();
+        return;
+    }
+
+    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
+    if (remainingSpace == 0) {
+        // No space, have not written what we need: stay in same state
+        return;
+    }
+
+    // fillOutput(left memory, right input)
+    // TODO: Check if we wrote all we need
+     
+    nextState(); // Set state to @ref RESET
 }
 
 void CartesianProductProcessor::execute() {
     // We start with our output port being empty, and not having written any rows
     _rowsWrittenThisCycle = 0;
+    
+    spdlog::info("CartProd::exec");
+    spdlog::info("We are in state {}", (int)_currentState);
+    spdlog::info("lhsPtr  = {}", _lhsPtr);
+    spdlog::info("rhsPtr  = {}", _rhsPtr);
 
     switch (_currentState) {
         case State::IDLE: {
@@ -264,15 +349,24 @@ void CartesianProductProcessor::execute() {
         break;
         case State::RIGHT_MEMORY: {
             executeFromRightMem();
-        } break;
+        }
+        break;
         case State::LEFT_MEMORY: {
             executeFromLeftMem();
-        } break;
-        default:
+        }
+        break;
+        case State::RESET: {
+            resetState();
+        }
+        break;
+        case State::STATE_SPACE_SIZE: {
             throw FatalException("Unknown state of CartesianProductProcessor");
+        } break;
     }
 
-    _out.getPort()->writeData();
-    finish();
+    if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
+        finish();
+        _rowsWrittenSinceLastFinished = 0;
+    }
 }
 
