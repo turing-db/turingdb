@@ -7,6 +7,10 @@ namespace db::v2 {
 
 class VarDecl;
 
+/// @brief A cache of property dependencies.
+//
+// @details Its sole purpose is to know if a property dependency has already been
+//          handled, in which case, it is already present in the cache
 class GetPropertyCache {
 public:
     struct Dependency {
@@ -27,6 +31,13 @@ public:
         };
     };
 
+    /// @brief Inserts a dependency into the cache.
+    //
+    // @details Unique way to interact with the cache. If an attempt to insert
+    //          a dependency fails, it means that the dependency was already
+    //          handled.
+    //
+    // @return true if the dependency was inserted, false if it was already present.
     bool insert(const VarDecl* var, std::string_view property) {
         return _dependencies.insert({var, property}).second;
     }

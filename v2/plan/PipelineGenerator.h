@@ -20,7 +20,6 @@ class GetOutEdgesNode;
 class GetInEdgesNode;
 class GetEdgesNode;
 class GetEdgeTargetNode;
-class MaterializeNode;
 class NodeFilterNode;
 class EdgeFilterNode;
 class ProduceResultsNode;
@@ -60,7 +59,6 @@ private:
     void translateGetInEdgesNode(GetInEdgesNode* node, PlanGraphStream& stream);
     void translateGetEdgesNode(GetEdgesNode* node, PlanGraphStream& stream);
     void translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream);
-    void translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream);
     void translateNodeFilterNode(NodeFilterNode* node, PlanGraphStream& stream);
     void translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphStream& stream);
     void translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream);

@@ -572,15 +572,8 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
     const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(node, dependency);
 
     switch (path) {
-        case PlanGraphTopology::PathToDependency::SameVar: {
-            // Nothing to be done
-            return;
-        }
-
+        case PlanGraphTopology::PathToDependency::SameVar:
         case PlanGraphTopology::PathToDependency::BackwardPath: {
-            // If only walked backward
-            // Materialize
-            // _tree->insertBefore<MaterializeNode>(filter);
             return;
         }
 

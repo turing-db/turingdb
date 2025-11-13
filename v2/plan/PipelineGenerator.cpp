@@ -10,7 +10,6 @@
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
-#include "nodes/MaterializeNode.h"
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/SkipNode.h"
@@ -78,10 +77,6 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
 
         case PlanGraphOpcode::PRODUCE_RESULTS:
             translateProduceResultsNode(static_cast<ProduceResultsNode*>(node), stream);
-        break;
-
-        case PlanGraphOpcode::MATERIALIZE:
-            translateMaterializeNode(static_cast<MaterializeNode*>(node), stream);
         break;
 
         case PlanGraphOpcode::FILTER_NODE:
@@ -157,10 +152,6 @@ void PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node, PlanGraphStrea
 
 void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream) {
     _builder.projectEdgesOnOtherIDs();
-}
-
-void PipelineGenerator::translateMaterializeNode(MaterializeNode* node, PlanGraphStream& stream) {
-    _builder.addMaterialize();
 }
 
 void PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node, PlanGraphStream& stream) {
