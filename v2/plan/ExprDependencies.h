@@ -1,8 +1,10 @@
 #pragma once
 
+#include "FunctionInvocation.h"
 #include "PlanGraphVariables.h"
 #include "PlannerException.h"
 #include "PlanGraphTopology.h"
+#include "expr/ExprChain.h"
 #include "expr/SymbolExpr.h"
 #include "nodes/VarNode.h"
 
@@ -69,6 +71,12 @@ public:
 
             case Expr::Kind::FUNCTION_INVOCATION: {
                 const FunctionInvocationExpr* func = static_cast<const FunctionInvocationExpr*>(expr);
+                const ExprChain* arguments = func->getFunctionInvocation()->getArguments();
+
+                for (const Expr* arg : *arguments) {
+                    genExprDependencies(variables, arg);
+                }
+
                 _funcDeps.emplace_back(func);
             } break;
 
