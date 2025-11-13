@@ -151,12 +151,12 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-        requires OptionallyComparable<T, U>
-    static void equal(ColumnMask& mask,
-                      const ColumnConst<T>& lhs,
-                      const ColumnConst<U>& rhs) {
-        mask.resize(1);
-        mask[0] = lhs.getRaw() == rhs.getRaw();
+        requires(Stringy<T, U> || std::same_as<T, U>)
+    static void equal(ColumnMask* mask, const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+        auto* maskd = mask->data();
+        maskd[0] = (lhs->getRaw() == rhs->getRaw());
     }
 
     /**
@@ -166,16 +166,16 @@ public:
      * @param lhs Right hand side column
      * @param lhs Light hand side column
      */
-    static void andOp(ColumnMask& mask,
-                       const ColumnMask& lhs,
-                       const ColumnMask& rhs) {
-        bioassert(lhs.size() == rhs.size(),
-                  "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto* rhsd = rhs.data();
-        const auto size = rhs.size();
+    static void andOp(ColumnMask* mask,
+                      const ColumnMask* lhs,
+                      const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+        auto* maskd = mask->data();
+        const auto* lhsd = lhs->data();
+        const auto* rhsd = rhs->data();
+        const auto size = rhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i]._value && rhsd[i]._value;
         }
@@ -188,17 +188,16 @@ public:
      * @param lhs Right hand side column
      * @param lhs Light hand side column
      */
-    static void orOp(ColumnMask& mask,
-                      const ColumnMask& lhs,
-                      const ColumnMask& rhs) {
-        bioassert(lhs.size() == rhs.size(),
-                  "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto* rhsd = rhs.data();
-        const auto size = rhs.size();
-
+    static void orOp(ColumnMask* mask,
+                     const ColumnMask* lhs,
+                     const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+        auto* maskd = mask->data();
+        const auto* lhsd = lhs->data();
+        const auto* rhsd = rhs->data();
+        const auto size = rhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i]._value || rhsd[i]._value;
         }
@@ -233,29 +232,29 @@ public:
         }
     }
 
-    static void projectOp(ColumnMask& mask,
-                          const ColumnVector<size_t>& lhs,
-                          const ColumnMask& rhs) {
-        bioassert(lhs.size() == rhs.size(),
-                  "Columns must have matching dimensions");
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto* rhsd = rhs.data();
-        const auto size = lhs.size();
+    static void projectOp(ColumnMask* mask,
+                          const ColumnVector<size_t>* lhs,
+                          const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+        auto* maskd = mask->data();
+        const auto* lhsd = lhs->data();
+        const auto* rhsd = rhs->data();
+        const auto size = lhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[lhsd[i]]._value = rhsd[i];
         }
     }
 
-    static void projectOp(ColumnMask& mask,
-                          const ColumnMask& lhs,
-                          const ColumnVector<size_t>& rhs) {
-        bioassert(rhs.size() == lhs.size(),
-                  "Columns must have matching dimensions");
-        auto* maskd = mask.data();
-        const auto* rhsd = rhs.data();
-        const auto* lhsd = lhs.data();
-        const auto size = rhs.size();
+    static void projectOp(ColumnMask* mask,
+                          const ColumnMask* lhs,
+                          const ColumnVector<size_t>* rhs) {
+        bioassert(rhs->size() == lhs->size(),
+                     "Columns must have matching dimensions");
+        auto* maskd = mask->data();
+        const auto* rhsd = rhs->data();
+        const auto* lhsd = lhs->data();
+        const auto size = rhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[rhsd[i]]._value = lhsd[i];
         }
@@ -264,21 +263,24 @@ public:
     template <typename T>
     static void copyChunk(ColumnVector<T>::ConstIterator srcStart,
                           ColumnVector<T>::ConstIterator srcEnd,
-                          ColumnVector<T>& dst) {
+                          ColumnVector<T>* dst) {
         const size_t count = std::distance(srcStart, srcEnd);
-        dst.resize(count);
-        std::copy(srcStart, srcEnd, dst.begin());
+        dst->resize(count);
+        std::copy(srcStart, srcEnd, dst->begin());
     }
 
     template <typename T>
-    static void copyTransformedChunk(const ColumnVector<size_t>& transform,
-                                     const ColumnVector<T>& src,
-                                     ColumnVector<T>& dst) {
-        const size_t count = transform.size();
-        dst.resize(count);
+    static void copyTransformedChunk(const ColumnVector<size_t>* transform,
+                                     const ColumnVector<T>* src,
+                                     ColumnVector<T>* dst) {
+        const auto* srcd = src->data();
+        const auto* transformd = transform->data();
+        const size_t count = transform->size();
+        dst->resize(count);
 
+        auto* dstd = dst->data();
         for (size_t i = 0; i < count; i++) {
-            dst[i] = src[transform[i]];
+            dstd[i] = srcd[transformd[i]];
         }
     }
 };

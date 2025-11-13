@@ -64,45 +64,45 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op, Lhs::staticKi
 #define EQUAL_CASE(Lhs, Rhs)                      \
     case OpCase<OP_EQUAL, Lhs, Rhs>: {            \
         ColumnOperators::equal(                   \
-            *expr._mask,                          \
-            *static_cast<const Lhs*>(expr._lhs),  \
-            *static_cast<const Rhs*>(expr._rhs)); \
+            expr._mask,                           \
+            static_cast<const Lhs*>(expr._lhs),   \
+            static_cast<const Rhs*>(expr._rhs));  \
         break;                                    \
     }
 
 #define AND_CASE(Lhs, Rhs)                        \
     case OpCase<OP_AND, Lhs, Rhs>: {              \
         ColumnOperators::andOp(                   \
-            *expr._mask,                          \
-            *static_cast<const Lhs*>(expr._lhs),  \
-            *static_cast<const Rhs*>(expr._rhs)); \
+            expr._mask,                           \
+            static_cast<const Lhs*>(expr._lhs),   \
+            static_cast<const Rhs*>(expr._rhs));  \
         break;                                    \
     }
 
 #define OR_CASE(Lhs, Rhs)                         \
     case OpCase<OP_OR, Lhs, Rhs>: {               \
         ColumnOperators::orOp(                    \
-            *expr._mask,                          \
-            *static_cast<const Lhs*>(expr._lhs),  \
-            *static_cast<const Rhs*>(expr._rhs)); \
+            expr._mask,                           \
+            static_cast<const Lhs*>(expr._lhs),   \
+            static_cast<const Rhs*>(expr._rhs));  \
         break;                                    \
     }
 
 #define PROJECT_CASE(Lhs, Rhs)                    \
     case OpCase<OP_PROJECT, Lhs, Rhs>: {          \
         ColumnOperators::projectOp(               \
-            *expr._mask,                          \
-            *static_cast<const Lhs*>(expr._lhs),  \
-            *static_cast<const Rhs*>(expr._rhs)); \
+            expr._mask,                           \
+            static_cast<const Lhs*>(expr._lhs),   \
+            static_cast<const Rhs*>(expr._rhs));  \
         break;                                    \
     }
 
 #define IN_CASE(Lhs, Rhs)                         \
     case OpCase<OP_IN, Lhs, Rhs>: {               \
         ColumnOperators::inOp(                    \
-            *expr._mask,                          \
-            *static_cast<const Lhs*>(expr._lhs),  \
-            *static_cast<const Rhs*>(expr._rhs)); \
+            expr._mask,                           \
+            static_cast<const Lhs*>(expr._lhs),   \
+            static_cast<const Rhs*>(expr._rhs));  \
         break;                                    \
     }
 
@@ -220,20 +220,23 @@ void FilterStep::generateIndices() {
 #define APPLY_MASK_CASE(Type)               \
     case Type::staticKind(): {              \
         applyMask<Type>(                    \
-            *mask,                          \
-            *static_cast<const Type*>(src), \
-            *static_cast<Type*>(dst));      \
+            mask,                           \
+            static_cast<const Type*>(src),  \
+            static_cast<Type*>(dst));       \
         return;                             \
     }
 
 template <typename T>
-void applyMask(const ColumnMask& mask, const T& src, T& dst) {
-    bioassert(mask.size() == src.size(),
-              "Mask and source must have matching dimensions");
-    dst.clear();
-    for (size_t i = 0; i < mask.size(); i++) {
-        if (mask[i]) {
-            dst.push_back(src[i]);
+void applyMask(const ColumnMask* mask, const T* src, T* dst) {
+    bioassert(mask->size() == src->size(),
+                 "Mask and source must have matching dimensions");
+    dst->clear();
+    const auto maskSize = mask->size();
+    const auto* maskd = mask->data();
+    const auto* srcd = src->data();
+    for (size_t i = 0; i < maskSize; i++) {
+        if (maskd[i]) {
+            dst->push_back(srcd[i]);
         }
     }
 }
