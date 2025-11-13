@@ -19,12 +19,12 @@ using namespace db;
 
 namespace {
 
-#define COPY_CHUNK_CASE(TType)                                                              \
-    case TType::staticKind(): {                                                             \
-        const auto& src = *static_cast<const TType*>(srcPtr);                               \
-        auto& dst = *static_cast<TType*>(dstPtr);                                           \
-        ColumnOperators::copyChunk<typename TType::ValueType>(src.begin(), src.end(), dst); \
-        return;                                                                             \
+#define COPY_CHUNK_CASE(TType)                                                                \
+    case TType::staticKind(): {                                                               \
+        const auto* src = static_cast<const TType*>(srcPtr);                                  \
+        auto* dst = static_cast<TType*>(dstPtr);                                              \
+        ColumnOperators::copyChunk<typename TType::ValueType>(src->begin(), src->end(), dst); \
+        return;                                                                               \
     }
 
 inline void copyChunk(const Column* srcPtr,
@@ -59,12 +59,12 @@ inline void copyChunk(const Column* srcPtr,
     case TType::staticKind(): {                                           \
         ColumnOperators::copyTransformedChunk<typename TType::ValueType>( \
             transform,                                                    \
-            *static_cast<const TType*>(srcPtr),                           \
-            *static_cast<TType*>(dstPtr));                                \
+            static_cast<const TType*>(srcPtr),                            \
+            static_cast<TType*>(dstPtr));                                 \
         return;                                                           \
     }
 
-inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
+inline void copyTransformedChunk(const ColumnVector<size_t>* transform,
                                  const Column* srcPtr,
                                  Column* dstPtr) {
     switch (srcPtr->getKind()) {
@@ -210,7 +210,7 @@ void MaterializeProcessor::execute() {
         for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
             const Column* colPtr = *colIt;
             NamedColumn* destCol = output[currentColIndex];
-            copyTransformedChunk(_transform, colPtr, destCol->getColumn());
+            copyTransformedChunk(&_transform, colPtr, destCol->getColumn());
             --currentColIndex;
         }
 

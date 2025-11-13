@@ -31,7 +31,6 @@ set(processors_sources
     processors/LambdaTransformProcessor.cpp
     processors/CartesianProductProcessor.cpp
     processors/HashJoinProcessor.cpp
-    processors/LambdaSourceProcessor.cpp
     processors/WriteProcessor.cpp
     processors/GetLabelSetIDProcessor.cpp
     processors/GetEdgeTypeIDProcessor.cpp
@@ -43,6 +42,9 @@ set(processors_sources
     processors/S3ConnectProcessor.cpp
     processors/S3PullProcessor.cpp
     processors/S3PushProcessor.cpp
+    processors/LambdaSourceProcessor.cpp
+    processors/EvalExprProcessor.cpp
+    processors/EvalProgram.cpp
 )
 
 set(procedures_sources
