@@ -100,27 +100,7 @@ void CartesianProductProcessor::nextState() {
  * @brief Computes the @param k rows of the Cartesian product of @param left and @param
  * right, and stores them in @ref _out's Dataframe.
  */
-void CartesianProductProcessor::emitKRows(Dataframe* left, Dataframe* right, size_t k) {
-    bioassert(k <= _ctxt->getChunkSize());
-    bioassert(_rowsWrittenThisCycle + k <= _ctxt->getChunkSize());
-
-    if (k == 0) {
-        return;
-    }
-
-    [[maybe_unused]] size_t chunkSize = _ctxt->getChunkSize();
-
-    Dataframe* oDF = _out.getDataframe();
-    size_t existingSize = oDF->getRowCount(); // XXX This just checks the first column
-    bioassert(existingSize == _rowsWrittenThisCycle);
-
-    // Resize all columns in the output to be the correct size, then we can just copy in
-    for (NamedColumn* col : oDF->cols()) {
-        dispatchColumnVector(col->getColumn(),
-            [&](auto* columnVector) { columnVector->resize(existingSize + k); }
-        );
-    }
-
+void CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     // Left DF is n x p dimensional
     const size_t n = left->getRowCount();
     const size_t p = left->size();
@@ -129,20 +109,55 @@ void CartesianProductProcessor::emitKRows(Dataframe* left, Dataframe* right, siz
     const size_t m = right->getRowCount();
     const size_t q = right->size();
 
+    const size_t chunkSize = _ctxt->getChunkSize();
+
+    Dataframe* oDF = _out.getDataframe();
+    const size_t existingSize = oDF->getRowCount(); // XXX This just checks the first column
+    bioassert(existingSize == _rowsWrittenThisCycle);
+
+    const size_t rowsCanWrite = chunkSize - existingSize;
+    bioassert(rowsCanWrite > 0);
+
+
+
+    const size_t newSize = std::min(chunkSize, existingSize + n * m);
+
+    // Resize all columns in the output to be the correct size, then we can just copy in
+    for (NamedColumn* col : oDF->cols()) {
+        dispatchColumnVector(col->getColumn(),
+            [&](auto* columnVector) { columnVector->resize(newSize); }
+        );
+    }
+
+    // Each row on LHS needs m rows allocated for it
+    const size_t numUniqueLhsRowsCanWrite = std::min(n, rowsCanWrite / m);
+
     // Copy over LHS columns to output, column-wise
     for (size_t colPtr = 0; colPtr < p; colPtr++) {
         dispatchColumnVector(left->cols()[colPtr]->getColumn(), [&](auto* lhsColumn) {
             auto* outCol = static_cast<decltype(lhsColumn)>(oDF->cols()[colPtr]->getColumn());
-
             auto& outRaw = outCol->getRaw();
 
-            // Each row from LHS needs to appear m times consecutively, so we can use a
-            // memset-esque approach to materialise each row from LHS m times
-            // consecutively in output
-            for (size_t lhsRow = 0; lhsRow < n; lhsRow++) {
-                const auto& currentLSHElement = lhsColumn->at(lhsRow);
-                auto startIt = outRaw.begin() + (lhsRow * m);
-                std::fill(startIt, startIt + m, currentLSHElement);
+            // Write the rows from LHS that we can fit all m rows in output
+            for (size_t lhsRow = _lhsPtr; lhsRow < numUniqueLhsRowsCanWrite; lhsRow++) {
+                const auto& currentLhsElement = lhsColumn->at(lhsRow);
+                const auto startIt = outRaw.begin() + (lhsRow * m);
+                bioassert((lhsRow * m) + m <= outRaw.size());
+                const auto endIt = startIt + m; // We know we can fit m rows here
+
+                std::fill(startIt, endIt, currentLhsElement);
+            }
+
+            // If we didn't fit all n rows, and there is space left:
+            if (numUniqueLhsRowsCanWrite < n) {
+                // We have one more row that needs writing, but we cannot
+                // fit all m rows, so we have to truncate it, and keep track of where
+                // we truncated
+                const auto& lhsElement = lhsColumn->at(numUniqueLhsRowsCanWrite);
+                const auto startIt = outRaw.begin() + (numUniqueLhsRowsCanWrite * m);
+                const auto endIt = outRaw.end();
+
+                std::fill(startIt, endIt, lhsElement);
             }
         });
     }
@@ -151,18 +166,41 @@ void CartesianProductProcessor::emitKRows(Dataframe* left, Dataframe* right, siz
     for (size_t colPtr = 0; colPtr < q; colPtr++) {
         dispatchColumnVector(right->cols()[colPtr]->getColumn(), [&](auto* rhsColumn) {
             auto* outCol = static_cast<decltype(rhsColumn)>(oDF->cols()[p + colPtr]->getColumn());
-
-            const auto& rhsRaw = rhsColumn->getRaw();
             auto& outRaw = outCol->getRaw();
 
-            // All rows from RHS needed for each row in LHS; for each unique row on LHS
-            // copy the entire RHS column over starting from that unique LHS row's first
-            // index
-            for (size_t lhsRow = 0; lhsRow < n; lhsRow++) {
-                auto startIt = outRaw.begin() + lhsRow * m;
-                std::copy(rhsRaw.begin(), rhsRaw.end(), startIt);
+            const auto& rhsRaw = rhsColumn->getRaw();
+
+            // We know we can fill each of these entirely with m entries
+            for (size_t forLhsRow = _lhsPtr; forLhsRow < numUniqueLhsRowsCanWrite; forLhsRow++) {
+                const auto rhsStart = rhsRaw.begin() + _rhsPtr;
+                const auto rhsEnd = rhsStart + m;
+                bioassert(rhsEnd == rhsRaw.end());
+                const auto outStart = outRaw.begin() + (forLhsRow * m);
+
+                std::copy(rhsStart, rhsEnd, outStart);
+                // _rhsPtr = 0
+            }
+            // If we didn't fit all n rows, and there is space left:
+            if (numUniqueLhsRowsCanWrite < n) {
+                const auto spaceLeft = rowsCanWrite % m;
+                const auto rhsStart = rhsRaw.begin() + _rhsPtr;
+                const auto rhsEnd = rhsStart + spaceLeft;
+                const auto outStart = outRaw.begin() + (numUniqueLhsRowsCanWrite * m);
+
+                std::copy(rhsStart, rhsEnd, outStart);
+
             }
         });
+    }
+
+    if (numUniqueLhsRowsCanWrite == n) { // Wrote all pairs for all rows
+        _lhsPtr += numUniqueLhsRowsCanWrite;
+        _rhsPtr = 0;
+    } else if (numUniqueLhsRowsCanWrite < n) { // Could not fit all rows/all pairs
+        // Start next time from the first LHS row we didnt complete
+        _lhsPtr = numUniqueLhsRowsCanWrite;
+        // And start writing pairs from as far as we got
+        _rhsPtr = rowsCanWrite % m;
     }
 }
 
@@ -216,7 +254,7 @@ void CartesianProductProcessor::execute() {
                  "Cartesian Product is only supported in the strongly bounded case "
                  "(output size <= CHUNK_SIZE).");
 
-    emitKRows(lDF, rDF, n * m);
+    fillOutput(lDF, rDF);
 
     finish();
     oPort->writeData();

@@ -72,7 +72,7 @@ private:
 
     void nextState();
 
-    void emitKRows(Dataframe* left, Dataframe* right, size_t k);
+    void fillOutput(Dataframe* left, Dataframe* right);
 };
 
 }
