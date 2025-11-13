@@ -354,22 +354,24 @@ void queryCallbackV1(const Block& block, tabulate::Table& table) {
     }
 }
 
-void queryCallbackV2(const Dataframe* df, tabulate::Table& table) {
+void queryCallbackV2(const Dataframe* df, tabulate::Table& table, size_t execCount) {
     const size_t rowCount = df->getRowCount();
 
-    // Write header row
-    tabulate::RowStream headerRow;
-    for (const NamedColumn* namedCol : df->cols()) {
-        const std::string_view name = namedCol->getName();
-        if (name.empty()) {
-            const ColumnTag tag = namedCol->getTag();
-            headerRow << "$" + std::to_string(tag.getValue());
-        } else {
-            headerRow << name;
+    if (execCount == 0) {
+        // Write header row
+        tabulate::RowStream headerRow;
+        for (const NamedColumn* namedCol : df->cols()) {
+            const std::string_view name = namedCol->getName();
+            if (name.empty()) {
+                const ColumnTag tag = namedCol->getTag();
+                headerRow << "$" + std::to_string(tag.getValue());
+            } else {
+                headerRow << name;
+            }
         }
-    }
 
-    table.add_row(std::move(headerRow));
+        table.add_row(std::move(headerRow));
+    }
 
     // Write data rows
     for (size_t i = 0; i < rowCount; ++i) {
@@ -462,9 +464,10 @@ void TuringShell::processLine(std::string& line) {
     QueryStatus res;
     if (line.starts_with("#v2")) {
         const std::string_view query = std::string_view(line).substr(3);
+        size_t execCount = 0;
 
-        auto queryCallback = [&table](const Dataframe* df) -> void {
-            queryCallbackV2(df, table);
+        auto queryCallback = [&table, &execCount](const Dataframe* df) -> void {
+            queryCallbackV2(df, table, execCount++);
         };
 
         res = _quiet 

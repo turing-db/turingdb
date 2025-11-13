@@ -15,6 +15,7 @@ class PipelineV2;
 class PlanGraphNode;
 class PlanGraphStream;
 class VarNode;
+class VarDecl;
 class ScanNodesNode;
 class GetOutEdgesNode;
 class GetInEdgesNode;
@@ -51,6 +52,8 @@ private:
     LocalMemory* _mem {nullptr};
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
+
+    std::unordered_map<const VarDecl*, ColumnTag> _declToColumn;
 
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
     void translateVarNode(VarNode* node, PlanGraphStream& stream);

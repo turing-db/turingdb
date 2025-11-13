@@ -7,6 +7,7 @@
 #include "PlanGraph.h"
 #include "PlanGraphStream.h"
 
+#include "Projection.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -132,6 +133,22 @@ void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream)
     }
 
     _builder.rename(varName);
+
+    const PipelineOutputInterface* output = _builder.getOutput();
+
+    if (const auto* out = dynamic_cast<const PipelineNodeOutputInterface*>(output)) {
+        _declToColumn[node->getVarDecl()] = out->getNodeIDs()->getTag();
+    } else if (const auto* out = dynamic_cast<const PipelineEdgeOutputInterface*>(output)) {
+        const PendingOutputView& outView = _builder.getOutputView();
+
+        if (outView.isEdgesProjectedOnOtherIDs()) {
+            _declToColumn[node->getVarDecl()] = out->getOtherNodes()->getTag();
+        } else {
+            _declToColumn[node->getVarDecl()] = out->getEdgeIDs()->getTag();
+        }
+    } else {
+        throw PlannerException("VarNode output is not a node or edge");
+    }
 }
 
 void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
@@ -161,13 +178,30 @@ void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphS
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
-    // If not MaterializeNode has been seen at that point, we do materialize
-    // if we have materialize data in flight
+    // If MaterializeNode has not been seen at that point,
+    // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
     _builder.closeMaterialize();
+    const Projection* projNode = node->getProjection();
+
+    std::vector<ColumnTag> tags;
+
+    for (const Expr* item : projNode->items()) {
+        const VarDecl* decl = item->getExprVarDecl();
+
+        if (!decl) {
+            throw PlannerException("Projection item does not have a variable declaration");
+        }
+
+        const ColumnTag tag = _declToColumn.at(decl);
+
+        tags.push_back(tag);
+    }
+
+    _builder.addProjection(tags);
 
     auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -176,6 +210,7 @@ void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, Pl
 
         _callback(df);
     };
+
     _builder.addLambda(lambdaCallback);
 }
 
@@ -183,6 +218,12 @@ void PipelineGenerator::translateJoinNode(JoinNode* node, PlanGraphStream& strea
 }
 
 void PipelineGenerator::translateSkipNode(SkipNode* node, PlanGraphStream& stream) {
+    // If MaterializeNode has not been seen at that point,
+    // we materialize if we have data in flight
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
     const Expr* skipExpr = node->getExpr();
     const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(skipExpr);
     if (!literalExpr) {
@@ -202,6 +243,12 @@ void PipelineGenerator::translateSkipNode(SkipNode* node, PlanGraphStream& strea
 }
 
 void PipelineGenerator::translateLimitNode(LimitNode* node, PlanGraphStream& stream) {
+    // If MaterializeNode has not been seen at that point,
+    // we materialize if we have data in flight
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
     const Expr* limitExpr = node->getExpr();
     const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(limitExpr);
     if (!literalExpr) {

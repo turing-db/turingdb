@@ -40,7 +40,6 @@ void LimitProcessor::prepare(ExecutionContext* ctxt) {
 
 void LimitProcessor::reset() {
     _currentRowCount = 0;
-    _reachedLimit = false;
     markAsReset();
 }
 

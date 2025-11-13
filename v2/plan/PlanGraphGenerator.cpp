@@ -197,7 +197,8 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
         prevNode = limit;
     }
 
-    _tree.newOut<ProduceResultsNode>(prevNode);
+    ProduceResultsNode* results = _tree.newOut<ProduceResultsNode>(prevNode);
+    results->setProjection(proj);
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {

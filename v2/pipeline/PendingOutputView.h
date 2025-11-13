@@ -36,6 +36,10 @@ public:
         _edgesProjectedOnOtherIDs = true;
     }
 
+    bool isEdgesProjectedOnOtherIDs() const {
+        return _edgesProjectedOnOtherIDs;
+    }
+
     void rename(std::string_view name) {
         if (auto* edgeIface = dynamic_cast<PipelineEdgeOutputInterface*>(_iface)) {
             if (_edgesProjectedOnOtherIDs) {

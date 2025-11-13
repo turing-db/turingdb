@@ -10,10 +10,18 @@ public:
         size_t operator()(const ColumnTag& tag) const { return tag.getValue(); }
     };
 
+    ColumnTag() = default;
+    ~ColumnTag() = default;
+
     explicit ColumnTag(size_t value)
         : _value(value)
     {
     }
+
+    ColumnTag(ColumnTag&& other) noexcept = default;
+    ColumnTag(const ColumnTag& other) = default;
+    ColumnTag& operator=(ColumnTag&& other) noexcept = default;
+    ColumnTag& operator=(const ColumnTag& other) = default;
 
     size_t getValue() const { return _value; }
 
