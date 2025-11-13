@@ -37,7 +37,9 @@ GetOutEdgesProcessor* GetOutEdgesProcessor::create(PipelineV2* pipeline) {
 
     getOutEdges->addInput(inNodeIDs);
     getOutEdges->addOutput(outEdges);
+
     getOutEdges->postCreate(pipeline);
+
     return getOutEdges;
 }
 

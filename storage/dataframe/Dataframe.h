@@ -57,6 +57,10 @@ public:
 
     void append(const Dataframe* other);
 
+    // Returns true if the dataframes have the same number of columns
+    // and each pair of columns has the same kind
+    bool hasSameShape(const Dataframe* other) const;
+
     void dump(std::ostream& out) const;
 
 private:
