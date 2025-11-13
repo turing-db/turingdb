@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "Processor.h"
 
 #include "PipelineInterface.h"
@@ -26,7 +28,24 @@ public:
     PipelineBlockInputInterface& rightHandSide() { return _rhs; }
     PipelineBlockOutputInterface& output() { return _out; }
 
+    void setLeftMemory(std::unique_ptr<Dataframe> leftMem) {
+        _leftMemory = std::move(leftMem);
+    }
+
+    void setRightMemory(std::unique_ptr<Dataframe> rightMem) {
+        _rightMemory = std::move(rightMem);
+    }
+
 private:
+    enum class State {
+        IDLE,
+        IMMEDIATE,
+        RIGHT_MEMORY,
+        LEFT_MEMORY,
+
+        STATE_SPACE_SIZE
+    };
+
     CartesianProductProcessor();
     ~CartesianProductProcessor() final;
 
@@ -37,8 +56,15 @@ private:
     size_t _lhsTotalRowCount {0};
     size_t _rhsTotalRowCount {0};
 
-    size_t _lhsRowPtr {0};
-    size_t _rhsRowPtr {0};
+    size_t _lhsPtr {0};
+    size_t _rhsPtr {0};
+
+    std::unique_ptr<Dataframe> _leftMemory;
+    std::unique_ptr<Dataframe> _rightMemory;
+
+    State _currentState {State::IDLE};
+
+    void nextState();
 };
 
 }
