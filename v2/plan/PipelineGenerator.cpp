@@ -113,6 +113,7 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
         break;
 
         case PlanGraphOpcode::GET_PROPERTY:
+        case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:

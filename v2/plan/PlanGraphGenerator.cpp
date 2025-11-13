@@ -26,6 +26,8 @@
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/FuncEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
+#include "nodes/GetEntityTypeNode.h"
+#include "nodes/GetPropertyWithNullNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -115,13 +117,32 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
         throwError("DISTINCT not supported", stmt);
     }
 
-    // GetPropertyNode* getProperty = _tree.create<GetPropertyNode>(prevNode);
     FuncEvalNode* funcEval = _tree.create<FuncEvalNode>();
     AggregateEvalNode* aggregateEval = _tree.create<AggregateEvalNode>();
 
     for (Expr* item : proj->items()) {
         ExprDependencies deps;
         deps.genExprDependencies(*_variables, item);
+
+        for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+            if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+                if (!_tree.cacheGetProperty(expr->getDecl(), expr->getPropName())) {
+                    continue;
+                }
+
+                prevNode = _tree.newOut<GetPropertyWithNullNode>(prevNode, expr->getDecl(), expr->getPropName());
+            } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
+                if (!_tree.cacheGetEntityType(expr->getDecl())) {
+                    continue;
+                }
+
+                _tree.newOut<GetEntityTypeNode>(prevNode, expr->getDecl());
+            } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
+                // Symbol value should already be in a column in a block, no need to change anything
+            } else {
+                throwError("Expression dependency could not be handled in the predicate evaluation");
+            }
+        }
 
         for (const ExprDependencies::FuncDependency& dep : deps.getFuncDeps()) {
             const FunctionInvocation* func = dep._expr->getFunctionInvocation();

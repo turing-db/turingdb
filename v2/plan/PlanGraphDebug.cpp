@@ -6,6 +6,7 @@
 #include "nodes/FuncEvalNode.h"
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyNode.h"
+#include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
@@ -247,6 +248,13 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::GET_PROPERTY: {
                 const auto* n = dynamic_cast<GetPropertyNode*>(node.get());
+                bioassert(n->getVarDecl());
+                output << "        __var__ " << n->getVarDecl()->getName() << "\n";
+                output << "        __prop__ " << n->getPropName() << "\n";
+            } break;
+
+            case PlanGraphOpcode::GET_PROPERTY_WITH_NULL: {
+                const auto* n = dynamic_cast<GetPropertyWithNullNode*>(node.get());
                 bioassert(n->getVarDecl());
                 output << "        __var__ " << n->getVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
