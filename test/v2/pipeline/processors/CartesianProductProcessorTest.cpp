@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "iterators/ChunkConfig.h"
+#include <range/v3/view/zip.hpp>
+
 #include "processors/ProcessorTester.h"
 
 #include "processors/CartesianProductProcessor.h"
@@ -14,6 +15,8 @@
 using namespace db;
 using namespace db::v2;
 using namespace turing::test;
+namespace rg = ranges;
+namespace rv = rg::views;
 
 class CartesianProductProcessorTest : public ProcessorTester {
 public:
@@ -334,13 +337,101 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    /*
+     * Output should be:
+     * 101 106 1  5  9
+     * 101 106 2  6  10
+     * 101 106 3  7  11
+     * 101 106 4  8  12
+     *
+     * 102 107 1  5  9
+     * 102 107 2  6  10
+     * 102 107 3  7  11
+     * 102 107 4  8  12
+     *
+     * 103 108 1  5  9
+     * 103 108 2  6  10
+     * 103 108 3  7  11
+     * 103 108 4  8  12
+     *
+     * 104 109 1  5  9
+     * 104 109 2  6  10
+     * 104 109 3  7  11
+     * 104 109 4  8  12
+     *
+     * 105 110 1  5  9
+     * 105 110 2  6  10
+     * 105 110 3  7  11
+     * 105 110 4  8  12
+     */
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump(std::cout);
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
+
+        {
+            auto* fstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
+            ASSERT_EQ(fstCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+            const ColumnNodeIDs expected {101, 101, 101, 101, 102, 102, 102,
+                                          102, 103, 103, 103, 103, 104, 104,
+                                          104, 104, 105, 105, 105, 105};
+            for (const auto& [exp, actual] : rv::zip(expected, *fstCol)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+
+        {
+            auto* sndCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
+            ASSERT_EQ(sndCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+
+            const ColumnNodeIDs expected {106, 106, 106, 106, 107, 107, 107,
+                                          107, 108, 108, 108, 108, 109, 109,
+                                          109, 109, 110, 110, 110, 110};
+            for (const auto& [exp, actual] : rv::zip(expected, *sndCol)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+
+        {
+            auto* thdCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
+            ASSERT_EQ(thdCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+
+            const ColumnNodeIDs expected {
+                1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
+            };
+            for (const auto& [exp, actual] : rv::zip(expected, *thdCol)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+
+        {
+            auto* frtCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
+            ASSERT_EQ(frtCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+
+            const ColumnNodeIDs expected {
+                5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8,
+            };
+            for (const auto& [exp, actual] : rv::zip(expected, *frtCol)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+
+        {
+            auto* fthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
+            ASSERT_EQ(fthCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+
+            const ColumnNodeIDs expected {
+                9, 10, 11, 12, 9, 10, 11, 12, 9, 10, 11, 12, 9, 10, 11, 12, 9, 10, 11, 12,
+            };
+            for (const auto& [exp, actual] : rv::zip(expected, *fthCol)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
     };
-    _builder->addLambda(callback);
+
+    _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
 }
 
