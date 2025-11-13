@@ -1,12 +1,12 @@
 #include "CartesianProductProcessor.h"
 
-#include "ExecutionContext.h"
 #include "PipelineV2.h"
 #include "PipelinePort.h"
-#include "columns/ColumnSwitch.h"
+#include "ExecutionContext.h"
 #include "dataframe/Dataframe.h"
 
 #include "BioAssert.h"
+#include "columns/ColumnSwitch.h"
 
 using namespace db::v2;
 
@@ -45,6 +45,13 @@ CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipelin
 
 void CartesianProductProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
+
+    _lhsPtr = 0;
+    _rhsPtr = 0;
+
+    // Should be initialised in @ref PipelineBuilder
+    bioassert(_leftMemory);
+    bioassert(_rightMemory);
 
     markAsPrepared();
 }
