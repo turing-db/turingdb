@@ -42,6 +42,7 @@ private:
         IMMEDIATE,
         RIGHT_MEMORY,
         LEFT_MEMORY,
+        RESET,
 
         STATE_SPACE_SIZE
     };
@@ -59,6 +60,8 @@ private:
     size_t _rhsPtr {0};
 
     size_t _rowsWrittenThisCycle {0};
+    size_t _rowsWrittenSinceLastFinished {0};
+    size_t _rowsToWriteBeforeFinished {0};
 
     std::unique_ptr<Dataframe> _leftMemory;
     std::unique_ptr<Dataframe> _rightMemory;
@@ -71,8 +74,9 @@ private:
     void executeFromRightMem();
 
     void nextState();
+    void resetState();
 
-    void fillOutput(Dataframe* left, Dataframe* right);
+    size_t fillOutput(Dataframe* left, Dataframe* right);
 };
 
 }
