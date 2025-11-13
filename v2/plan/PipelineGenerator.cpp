@@ -544,16 +544,18 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
 }
 
 PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
-    if (!node->isEmpty()) {
-        throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
     }
+
     return _builder.getPendingOutputInterface();
 }
 
 PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
-    if (!node->isEmpty()) {
-        throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
     }
+
     return _builder.getPendingOutputInterface();
 }
 

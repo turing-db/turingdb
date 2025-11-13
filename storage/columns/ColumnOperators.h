@@ -283,5 +283,24 @@ public:
             dstd[i] = srcd[transformd[i]];
         }
     }
+
+    template <typename T>
+    static void applyMask(const ColumnVector<T>* src, 
+                          const ColumnMask* mask,
+                          ColumnVector<T>* dest) {
+        msgbioassert(src->size() == mask->size(), "src and mask must have same size");
+
+        dest->clear();
+        dest->reserve(mask->size());
+
+        const auto* srcd = src->data();
+        const auto* maskd = mask->data();
+        const size_t size = mask->size();
+        for (size_t i = 0; i < size; i++) {
+            if (maskd[i]) {
+                dest->push_back(srcd[i]);
+            }
+        }
+    }
 };
 }

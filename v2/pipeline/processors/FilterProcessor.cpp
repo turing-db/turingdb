@@ -1,0 +1,111 @@
+#include "FilterProcessor.h"
+
+#include <spdlog/fmt/fmt.h>
+
+#include "columns/ColumnMask.h"
+#include "columns/ColumnOperators.h"
+#include "dataframe/NamedColumn.h"
+#include "dataframe/Dataframe.h"
+
+#include "PipelinePort.h"
+
+#include "PipelineException.h"
+
+using namespace db;
+using namespace db::v2;
+
+namespace {
+
+#define APPLY_MASK_CASE(Type)                \
+    case Type::staticKind(): {               \
+        ColumnOperators::applyMask(          \
+            static_cast<const Type*>(src),   \
+            mask,                            \
+            static_cast<Type*>(dest));       \
+    }                                        \
+    break;
+
+
+void applyMask(const Column* src,
+               const ColumnMask* mask,
+               Column* dest) {
+    switch (src->getKind()) {
+        APPLY_MASK_CASE(ColumnVector<size_t>)
+        APPLY_MASK_CASE(ColumnVector<EntityID>)
+        APPLY_MASK_CASE(ColumnVector<NodeID>)
+        APPLY_MASK_CASE(ColumnVector<EdgeID>)
+        APPLY_MASK_CASE(ColumnVector<LabelSetID>)
+        APPLY_MASK_CASE(ColumnVector<std::string>)
+        APPLY_MASK_CASE(ColumnVector<std::string_view>)
+
+        default: {
+            throw PipelineException(fmt::format("Unsupported mask application for kind {}",
+                                                src->getKind()));
+        }
+    }
+}
+
+}
+
+FilterProcessor::FilterProcessor()
+{
+}
+
+FilterProcessor::~FilterProcessor() {
+}
+
+FilterProcessor* FilterProcessor::create(PipelineV2* pipeline) {
+    FilterProcessor* proc = new FilterProcessor();
+
+    PipelineInputPort* toFilterIn = PipelineInputPort::create(pipeline, proc);
+    PipelineInputPort* maskIn = PipelineInputPort::create(pipeline, proc);
+    PipelineOutputPort* out = PipelineOutputPort::create(pipeline, proc);
+
+    proc->_toFilterInput.setPort(toFilterIn);
+    proc->_maskInput.setPort(maskIn);
+    proc->_output.setPort(out);
+
+    proc->addInput(toFilterIn);
+    proc->addInput(maskIn);
+    proc->addOutput(out);
+
+    proc->postCreate(pipeline);
+
+    return proc;
+}
+
+void FilterProcessor::prepare(ExecutionContext* ctxt) {
+    // Check dataframes have same number of columns
+    const Dataframe* srcDF = _toFilterInput.getDataframe();
+    const Dataframe* destDF = _output.getDataframe();
+    if (!srcDF->hasSameShape(destDF)) {
+        throw PipelineException("FilterProcessor input and output dataframes must have same size and columns of same type");
+    }
+
+    markAsPrepared();
+}
+
+void FilterProcessor::reset() {
+    markAsReset();
+}
+
+void FilterProcessor::execute() {
+    _toFilterInput.getPort()->consume();
+    _maskInput.getPort()->consume();
+    _output.getPort()->writeData();
+
+    const ColumnMask* mask = _maskInput.getValues()->as<ColumnMask>();
+    const Dataframe* srcDF = _toFilterInput.getDataframe();
+    Dataframe* destDF = _output.getDataframe();
+
+    const size_t colCount = srcDF->size();
+    const auto& srcCols = srcDF->cols();
+    const auto& destCols = destDF->cols();
+    for (size_t i = 0; i < colCount; i++) {
+        const Column* srcCol = srcCols[i]->getColumn();
+        Column* destCol = destCols[i]->getColumn(); 
+        applyMask(srcCol, mask, destCol);
+    }
+
+    finish();
+}

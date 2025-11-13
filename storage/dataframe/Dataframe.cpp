@@ -131,3 +131,21 @@ void Dataframe::copyFrom(const Dataframe* other) {
         column->assign(otherColumn);
     }
 }
+
+bool Dataframe::hasSameShape(const Dataframe* other) const {
+    const size_t colCount = _cols.size();
+    if (colCount != other->size()) {
+        return false;
+    }
+
+    const auto& otherCols = other->cols();
+    for (size_t i = 0; i < colCount; i++) {
+        const Column* col = _cols[i]->getColumn();
+        const Column* otherCol = otherCols[i]->getColumn();
+        if (col->getKind() != otherCol->getKind()) {
+            return false;
+        }
+    }
+
+    return true;
+}
