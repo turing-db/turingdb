@@ -3,6 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "dataframe/Dataframe.h"
+#include "spdlog/fmt/bundled/base.h"
 
 using namespace db::v2;
 
@@ -39,7 +40,6 @@ void LimitProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void LimitProcessor::reset() {
-    _currentRowCount = 0;
     markAsReset();
 }
 
