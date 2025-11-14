@@ -112,7 +112,7 @@ void CartesianProductProcessor::resetState() {
 }
 
 // Assumes that the entire column is writable
-void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
+void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* right,
                                               size_t colIdx, size_t fromRow,
                                               size_t spaceAvailable) {
     size_t remainingSpace = spaceAvailable;
@@ -152,7 +152,7 @@ void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
             ourRowPtr += canWrite;
             ourRhsPtr += canWrite;
             // If we wrote all `m` rows for this LHS row, then reset, otherwise increment
-            if (canWrite == m - ourRhsPtr) { // If we wrote all we needed
+            if (canWrite == needToWrite) { // If we wrote all we needed
                 ourLhsPtr++; // We now need to write the next LHS
                 ourRhsPtr = 0; // And start from the first RHS
             }
@@ -182,6 +182,8 @@ void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
 
             ourRowPtr += m;
             ourRhsPtr = 0;
+
+            remainingSpace -= m;
         }
 
         if (canWriteAll) { // We wrote everything we need
@@ -201,7 +203,7 @@ void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
     });
 }
 
-void CartesianProductProcessor::copyRightColumn(Dataframe* left, Dataframe* right,
+void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* right,
                                                 size_t colIdx, size_t fromRow,
                                                 size_t spaceAvailable) {
     size_t remainingSpace = spaceAvailable;
@@ -226,7 +228,8 @@ void CartesianProductProcessor::copyRightColumn(Dataframe* left, Dataframe* righ
         const auto& rhsRaw = rhsCol->getRaw();
         // If we were halfway through writing tuples for a left hand row, try and finish
         if (ourRhsPtr != 0) {
-            const size_t canWrite = std::min(remainingSpace, m - ourRhsPtr);
+            const size_t needToWrite = m - ourRhsPtr;
+            const size_t canWrite = std::min(remainingSpace, needToWrite);
 
             // Copy as much of the column as we can
             const auto rStart = begin(rhsRaw) + ourRhsPtr;
@@ -239,7 +242,7 @@ void CartesianProductProcessor::copyRightColumn(Dataframe* left, Dataframe* righ
             ourRowPtr += canWrite;
             ourRhsPtr += canWrite;
             // If we copied all the remainder of the column, we start again on RHS
-            if (canWrite == m - ourRhsPtr) {
+            if (canWrite == needToWrite) {
                 ourLhsPtr++;
                 ourRhsPtr = 0;
             }
@@ -266,6 +269,7 @@ void CartesianProductProcessor::copyRightColumn(Dataframe* left, Dataframe* righ
             const auto outStart = begin(outRaw) + ourRowPtr;
 
             std::copy(rStart, rEnd, outStart);
+
             ourRhsPtr = 0;
             ourRowPtr += m;
 
@@ -335,12 +339,12 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
 
     // Copy over LHS columns to output, column-wise
     for (size_t colPtr = 0; colPtr < p; colPtr++) {
-        setLeftColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
+        setFromLeftColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
     }
 
     // Copy over RHS columns to output, column-wise
     for (size_t colPtr = 0; colPtr < q; colPtr++) {
-        copyRightColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
+        copyFromRightColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
     }
 
     size_t remainingSpace = rowsCanWrite;
