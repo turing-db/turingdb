@@ -326,9 +326,11 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     // const size_t existingSize = oDF->getRowCount(); // XXX This just checks the first column
 
     const size_t rowsCanWrite = chunkSize - _rowsWrittenThisCycle;
+    const size_t rowsNeedWrite = (m - _rhsPtr) + (n - _lhsPtr - 1) * (m);
+    const size_t rowsShouldWrite = std::min(rowsCanWrite, rowsNeedWrite);
     bioassert(rowsCanWrite > 0);
 
-    const size_t newSize = std::min(chunkSize, _rowsWrittenThisCycle + n * m);
+    const size_t newSize = std::min(chunkSize, rowsShouldWrite);
 
     // Resize all columns in the output to be the correct size, then we can just copy in
     for (NamedColumn* col : oDF->cols()) {
@@ -339,42 +341,45 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
 
     // Copy over LHS columns to output, column-wise
     for (size_t colPtr = 0; colPtr < p; colPtr++) {
-        setFromLeftColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
+        setFromLeftColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsShouldWrite);
     }
 
     // Copy over RHS columns to output, column-wise
     for (size_t colPtr = 0; colPtr < q; colPtr++) {
-        copyFromRightColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
+        copyFromRightColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsShouldWrite);
     }
 
-    size_t remainingSpace = rowsCanWrite;
+    // Below computes the next _lhsPtr and _rhsPtrs
+    size_t remainingSpaceOnEntry = rowsShouldWrite;
     const size_t rowsNeededforEntryLhsPtr = m - _rhsPtr;
     const size_t rowsUsedForEntryLhsPtr =
-        std::min(remainingSpace, rowsNeededforEntryLhsPtr);
+        std::min(remainingSpaceOnEntry, rowsNeededforEntryLhsPtr);
 
     if (rowsUsedForEntryLhsPtr == rowsNeededforEntryLhsPtr) {
         _lhsPtr++;
         _rhsPtr = 0;
     }
-    remainingSpace -= rowsUsedForEntryLhsPtr;
-    if (remainingSpace == 0) {
-        return rowsCanWrite;
+    remainingSpaceOnEntry -= rowsUsedForEntryLhsPtr;
+    if (remainingSpaceOnEntry == 0) {
+        _out.getPort()->writeData();
+        return rowsShouldWrite;
     }
 
-    const size_t remainingCompleteLhsRows = (remainingSpace / m);
+    const size_t remainingCompleteLhsRows = (remainingSpaceOnEntry / m);
     _lhsPtr += remainingCompleteLhsRows;
 
-    remainingSpace -= remainingCompleteLhsRows * m;
-    if (remainingSpace == 0) {
-        return rowsCanWrite;
+    remainingSpaceOnEntry -= remainingCompleteLhsRows * m;
+    if (remainingSpaceOnEntry == 0) {
+        _out.getPort()->writeData();
+        return rowsShouldWrite;
     }
 
-    const size_t partialRhsRowsWritten = remainingSpace;
+    const size_t partialRhsRowsWritten = remainingSpaceOnEntry;
     _rhsPtr+= partialRhsRowsWritten;
 
     _out.getPort()->writeData();
 
-    return rowsCanWrite;
+    return rowsShouldWrite;
 }
 
 void CartesianProductProcessor::executeFromIdle() {
@@ -421,7 +426,7 @@ void CartesianProductProcessor::executeFromImmediate() {
     // n * m - rows we already wrote
     const size_t rowsNeededToWrite = lDF->getRowCount() * rDF->getRowCount();
 
-    if (rowsWritten != rowsNeededToWrite) {
+    if (_rowsWrittenSinceLastFinished != rowsNeededToWrite) {
         // We could not write all we needed -> return, remaining in same state
         return;
     }
@@ -470,7 +475,7 @@ void CartesianProductProcessor::executeFromLeftMem() {
 void CartesianProductProcessor::execute() {
     // We start with our output port being empty, and not having written any rows
     _rowsWrittenThisCycle = 0;
-    
+
     switch (_currentState) {
         case State::IDLE: {
             executeFromIdle();
@@ -499,6 +504,8 @@ void CartesianProductProcessor::execute() {
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
         finish();
+        _lhs.getPort()->consume();
+        _rhs.getPort()->consume();
         _rowsWrittenSinceLastFinished = 0;
     }
 }
