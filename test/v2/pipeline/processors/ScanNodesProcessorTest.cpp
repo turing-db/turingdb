@@ -33,8 +33,6 @@ TEST_F(ScanNodesProcessorTest, scanNodesOneChunk) {
 
     ASSERT_FALSE(allNodeIDs.empty());
 
-    std::cout << "allNodeIDs size=" << allNodeIDs.size() << '\n';
-
     const size_t extra = 1000;
     const size_t maxChunkSize = allNodeIDs.size()+extra;
 
