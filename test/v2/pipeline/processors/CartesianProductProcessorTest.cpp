@@ -436,6 +436,8 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
 }
 
 TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
+    using StringCol = ColumnVector<std::string>;
+
     auto [transaction, view, reader] = readGraph();
 
     constexpr size_t LHS_NUM_ROWS = 3;
@@ -444,20 +446,27 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
     constexpr size_t RHS_NUM_ROWS = 5;
     constexpr size_t RHS_NUM_COLS = 1;
 
+    constexpr size_t CHUNK_SIZE = (LHS_NUM_ROWS * RHS_NUM_ROWS) / 2;
+
+    constexpr size_t EXP_NUM_CHUNKS = LHS_NUM_ROWS * RHS_NUM_ROWS / CHUNK_SIZE + 1;
+
+    constexpr std::array<size_t, EXP_NUM_CHUNKS> EXPECTED_CHUNK_SIZES = {
+        CHUNK_SIZE, CHUNK_SIZE, (LHS_NUM_ROWS * RHS_NUM_ROWS) - 2 * CHUNK_SIZE};
+
     /*
      * Generate Dataframe looking like:
      * a
      * b
      * c
      */
-     const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
         }
 
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
         for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
-            ColumnVector<std::string>* col = dynamic_cast<ColumnVector<std::string>*>(df->cols()[colPtr]->getColumn());
+            auto* col = dynamic_cast<StringCol*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
             col->push_back("a");
@@ -468,45 +477,45 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
         isFinished = true;
     };
 
-     /*
-      * Generate Dataframe looking like:
-      * v
-      * w
-      * x
-      * y
-      * z
-      */
-     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
-         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
-             return;
-         }
+    /*
+     * Generate Dataframe looking like:
+     * v
+     * w
+     * x
+     * y
+     * z
+     */
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
 
-         ASSERT_EQ(df->size(), RHS_NUM_COLS);
-         for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
-             ColumnVector<std::string>* col = dynamic_cast<ColumnVector<std::string>*>(
-                 df->cols()[colPtr]->getColumn());
-             ASSERT_TRUE(col != nullptr);
-             ASSERT_TRUE(col->empty());
-             col->push_back("v");
-             col->push_back("w");
-             col->push_back("x");
-             col->push_back("y");
-             col->push_back("z");
-         }
-         ASSERT_EQ(df->size(), RHS_NUM_COLS);
-         isFinished = true;
-     };
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
+            auto* col =
+                dynamic_cast<StringCol*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back("v");
+            col->push_back("w");
+            col->push_back("x");
+            col->push_back("y");
+            col->push_back("z");
+        }
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        isFinished = true;
+    };
 
-     { // Wire up the cartesian product to the two inputs
+    { // Wire up the cartesian product to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
-            _builder->addColumnToOutput<ColumnVector<std::string>>(
+            _builder->addColumnToOutput<StringCol>(
                 _pipeline.getDataframeManager()->allocTag());
         }
 
         [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
         for (size_t i = 0; i < LHS_NUM_COLS; i++) {
-            _builder->addColumnToOutput<ColumnVector<std::string>>(
+            _builder->addColumnToOutput<StringCol>(
                 _pipeline.getDataframeManager()->allocTag());
         }
 
@@ -514,14 +523,47 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
-                                     LambdaProcessor::Operation operation) -> void {
-        df->dump(std::cout);
+    size_t numChunks = 0;
+    std::vector<size_t> chunkSizes;
+    StringCol expectedFstCol {
+        "a", "a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "c", "c", "c", "c",
+    };
+    StringCol expectedSndCol {
+        "v", "w", "x", "y", "z", "v", "w", "x", "y", "z", "v", "w", "x", "y", "z",
+    };
+    auto expFstColIt = begin(expectedFstCol);
+    auto expSndColIt = begin(expectedSndCol);
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+
+        numChunks++;
+        chunkSizes.push_back(df->getRowCount());
+        {
+            auto* fstCol = dynamic_cast<StringCol*>(df->cols().at(0)->getColumn());
+            for (const std::string& actual : *fstCol) {
+                EXPECT_EQ(*expFstColIt, actual);
+                expFstColIt++;
+            }
+        }
+        {
+            auto* sndCol = dynamic_cast<StringCol*>(df->cols().at(1)->getColumn());
+            for (const std::string& actual : *sndCol) {
+                EXPECT_EQ(*expSndColIt, actual);
+                expSndColIt++;
+            }
+        }
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
-    EXECUTE(view, (LHS_NUM_ROWS * RHS_NUM_ROWS) / 2);
-    ASSERT_FALSE(true);
+    {
+        EXECUTE(view, CHUNK_SIZE);
+        EXPECT_EQ(EXP_NUM_CHUNKS, numChunks);
+        for (const auto [expected, actual] : rv::zip(EXPECTED_CHUNK_SIZES, chunkSizes)) {
+            EXPECT_EQ(expected, actual);
+        }
+    }
 }
 
 int main(int argc, char** argv) {
