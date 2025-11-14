@@ -63,7 +63,7 @@ private:
     size_t _rowsWrittenSinceLastFinished {0};
     size_t _rowsToWriteBeforeFinished {0};
 
-    std::unique_ptr<Dataframe> _leftMemory;
+    std::unique_ptr<Dataframe> _leftMemory; // TODO Make stack member
     std::unique_ptr<Dataframe> _rightMemory;
 
     State _currentState {State::IDLE};
