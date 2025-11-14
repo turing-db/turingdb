@@ -354,7 +354,7 @@ void queryCallbackV1(const Block& block, tabulate::Table& table) {
     }
 }
 
-void queryCallbackV2(const Dataframe* df, tabulate::Table& table, size_t execCount) {
+void queryCallbackV2(size_t execCount, const Dataframe* df, tabulate::Table& table) {
     const size_t rowCount = df->getRowCount();
 
     if (execCount == 0) {
@@ -467,7 +467,7 @@ void TuringShell::processLine(std::string& line) {
         size_t execCount = 0;
 
         auto queryCallback = [&table, &execCount](const Dataframe* df) -> void {
-            queryCallbackV2(df, table, execCount++);
+            queryCallbackV2(execCount++, df, table);
         };
 
         res = _quiet 
@@ -497,11 +497,11 @@ void TuringShell::processLine(std::string& line) {
         return;
     }
 
-    std::cout << "Query executed in " << res.getTotalTime().count() << " ms.\n";
-
     if (!_quiet) {
         std::cout << table << "\n";
     }
+
+    std::cout << "Query executed in " << res.getTotalTime().count() << " ms.\n";
 
     {
         std::string profilerOutput;

@@ -65,11 +65,17 @@ public:
     }
 
     void execute() override {
-        _inIDs.getPort()->consume();
-        _propWriter->fill(_ctxt->getChunkSize());
-        _outValues.getPort()->writeData();
+        if (_propWriter->isValid()) {
+            _propWriter->fill(_ctxt->getChunkSize());
+            _outValues.getPort()->writeData();
 
-        if (!_propWriter->isValid()) {
+            return;
+        }
+
+        // Iterator is invalid, just check if the output was consumed
+        // if so, we can finish the processor and consume the input
+        if (!_outValues.getPort()->hasData()) {
+            _inIDs.getPort()->consume();
             finish();
         }
     }

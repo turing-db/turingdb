@@ -60,6 +60,7 @@ void LimitProcessor::execute() {
         const size_t rowsToWrite = std::min(blockRowCount, remainingCapacity);
         if (rowsToWrite == 0) {
             _reachedLimit = true;
+            _input.getPort()->close();
             return;
         }
         
@@ -67,6 +68,7 @@ void LimitProcessor::execute() {
 
         if (blockRowCount >= remainingCapacity) {
             _reachedLimit = true;
+            _input.getPort()->close();
         }
 
         _currentRowCount += rowsToWrite;

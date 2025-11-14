@@ -4,7 +4,6 @@
 #include "PipelinePort.h"
 
 #include "iterators/GetOutEdgesIterator.h"
-#include "iterators/ChunkConfig.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -50,7 +49,7 @@ void GetOutEdgesProcessor::prepare(ExecutionContext* ctxt) {
     ColumnEdgeIDs* edgeIDs = dynamic_cast<ColumnEdgeIDs*>(_outEdges.getEdgeIDs()->getColumn());
     ColumnNodeIDs* targetNodes = dynamic_cast<ColumnNodeIDs*>(_outEdges.getOtherNodes()->getColumn());
     ColumnEdgeTypes* edgeTypes = dynamic_cast<ColumnEdgeTypes*>(_outEdges.getEdgeTypes()->getColumn());
-    
+
     _it = std::make_unique<GetOutEdgesChunkWriter>(ctxt->getGraphView(), nodeIDs);
     _it->setIndices(indices);
     _it->setEdgeIDs(edgeIDs);
@@ -66,12 +65,17 @@ void GetOutEdgesProcessor::reset() {
 }
 
 void GetOutEdgesProcessor::execute() {
-    _it->fill(_ctxt->getChunkSize());
+    if (_it->isValid()) {
+        _it->fill(_ctxt->getChunkSize());
+        _outEdges.getPort()->writeData();
 
-    if (!_it->isValid()) {
+        return;
+    }
+
+    // Iterator is invalid, just check if the output was consumed
+    // if so, we can finish the processor and consume the input
+    if (!_outEdges.getPort()->hasData()) {
         _inNodeIDs.getPort()->consume();
         finish();
     }
-
-    _outEdges.getPort()->writeData();
 }
