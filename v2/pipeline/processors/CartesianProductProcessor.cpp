@@ -8,20 +8,15 @@
 #include "BioAssert.h"
 #include "FatalException.h"
 #include "columns/ColumnSwitch.h"
-#include "spdlog/spdlog.h"
 
 using namespace db::v2;
 
-CartesianProductProcessor::CartesianProductProcessor()
-{
-}
+CartesianProductProcessor::CartesianProductProcessor() = default;
 
-CartesianProductProcessor::~CartesianProductProcessor()
-{
-}
+CartesianProductProcessor::~CartesianProductProcessor() = default;
 
 CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipeline) {
-    CartesianProductProcessor* processor = new CartesianProductProcessor();
+    auto* processor = new CartesianProductProcessor();
 
     {
         PipelineInputPort* lhsInput = PipelineInputPort::create(pipeline, processor);
@@ -69,6 +64,7 @@ void CartesianProductProcessor::nextState() {
             bioassert(_lhsPtr == 0);
             bioassert(_rhsPtr == 0);
             _currentState = State::IMMEDIATE;
+            executeFromImmediate();
         }
         break;
 
@@ -76,6 +72,7 @@ void CartesianProductProcessor::nextState() {
             // TODO: Assert preconditions
             _currentState = State::RIGHT_MEMORY;
             // TODO: Reset counters if needed
+            executeFromRightMem();
         }
         break;
 
@@ -83,6 +80,7 @@ void CartesianProductProcessor::nextState() {
             // TODO: Assert preconditions
             _currentState = State::LEFT_MEMORY;
             // TODO: Reset counters if needed
+            executeFromLeftMem();
         }
         break;
 
@@ -91,7 +89,7 @@ void CartesianProductProcessor::nextState() {
             _currentState = State::RESET;
             // TODO: Reset counters if needed
         }
-        break;
+        [[fallthrough]];
         case State::RESET: {
             resetState();
         }
@@ -139,7 +137,8 @@ void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
         // If we were halfway through writing tuples for a left hand row, try and finish
         if (ourRhsPtr != 0) {
             // Write as many as we need, or as many as we can
-            const size_t canWrite = std::min(remainingSpace, m - ourRhsPtr);
+            const size_t needToWrite = m - ourRhsPtr;
+            const size_t canWrite = std::min(remainingSpace, needToWrite);
 
             const auto startIt = begin(outRaw) + ourRowPtr;
             const auto endIt = startIt + canWrite;
@@ -151,7 +150,7 @@ void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
             // Reduce the space we have left to right
             remainingSpace -= canWrite;
             ourRowPtr += canWrite;
-            // ourRhsPtr += canWrite;
+            ourRhsPtr += canWrite;
             // If we wrote all `m` rows for this LHS row, then reset, otherwise increment
             if (canWrite == m - ourRhsPtr) { // If we wrote all we needed
                 ourLhsPtr++; // We now need to write the next LHS
@@ -188,7 +187,17 @@ void CartesianProductProcessor::setLeftColumn(Dataframe* left, Dataframe* right,
         if (canWriteAll) { // We wrote everything we need
             return;
         }
-        // TODO: Write leftovers, update global state
+
+        // TODO: Write leftovers
+        bioassert(remainingSpace < m);
+        bioassert(ourRhsPtr == 0);
+
+        const auto& lhsElement = lhsCol->at(ourLhsPtr);
+        const auto startIt = begin(outRaw) + ourRowPtr;
+        const auto endIt = startIt + remainingSpace;
+        bioassert(endIt == end(outRaw));
+
+        std::fill(startIt, endIt, lhsElement);
     });
 }
 
@@ -229,7 +238,7 @@ void CartesianProductProcessor::copyRightColumn(Dataframe* left, Dataframe* righ
             remainingSpace -= canWrite;
             ourRowPtr += canWrite;
             ourRhsPtr += canWrite;
-            // If we copied all the remainder of the column, we start again
+            // If we copied all the remainder of the column, we start again on RHS
             if (canWrite == m - ourRhsPtr) {
                 ourLhsPtr++;
                 ourRhsPtr = 0;
@@ -259,12 +268,31 @@ void CartesianProductProcessor::copyRightColumn(Dataframe* left, Dataframe* righ
             std::copy(rStart, rEnd, outStart);
             ourRhsPtr = 0;
             ourRowPtr += m;
+
+            remainingSpace -= m;
         }
 
         if (canWriteAll) {
             return;
         }
-        // TODO: Write leftovers, update global state
+
+        bioassert(remainingSpace < m);
+        bioassert(ourRhsPtr == 0);
+
+        const auto rStart = begin(rhsRaw) + ourRhsPtr;
+        const auto rEnd = rStart + remainingSpace;
+        bioassert(rEnd != end(rhsRaw));
+
+        const auto outStart = begin(outRaw) + ourRowPtr;
+        bioassert(outStart + remainingSpace == end(outRaw));
+
+        std::copy(rStart, rEnd, outStart);
+
+        ourRhsPtr += remainingSpace;
+        ourRowPtr += remainingSpace;
+        remainingSpace -= remainingSpace;
+
+        bioassert(remainingSpace == 0);
     });
 }
 
@@ -305,9 +333,6 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
         );
     }
 
-    // Each row on LHS needs m rows allocated for it
-    const size_t numUniqueLhsRowsCanWrite = std::min(n, rowsCanWrite / m);
-
     // Copy over LHS columns to output, column-wise
     for (size_t colPtr = 0; colPtr < p; colPtr++) {
         setLeftColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
@@ -318,25 +343,34 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
         copyRightColumn(left, right, colPtr, _rowsWrittenThisCycle, rowsCanWrite);
     }
 
-    if (numUniqueLhsRowsCanWrite == n) { // Wrote all pairs for all rows
-        _lhsPtr += numUniqueLhsRowsCanWrite;
+    size_t remainingSpace = rowsCanWrite;
+    const size_t rowsNeededforEntryLhsPtr = m - _rhsPtr;
+    const size_t rowsUsedForEntryLhsPtr =
+        std::min(remainingSpace, rowsNeededforEntryLhsPtr);
+
+    if (rowsUsedForEntryLhsPtr == rowsNeededforEntryLhsPtr) {
+        _lhsPtr++;
         _rhsPtr = 0;
-    } else if (numUniqueLhsRowsCanWrite < n) { // Could not fit all rows/all pairs
-        // Start next time from the first LHS row we didnt complete
-        _lhsPtr = numUniqueLhsRowsCanWrite;
-        // And start writing pairs from as far as we got
-        _rhsPtr = rowsCanWrite % m;
+    }
+    remainingSpace -= rowsUsedForEntryLhsPtr;
+    if (remainingSpace == 0) {
+        return rowsCanWrite;
     }
 
-    const size_t rowsWritten = numUniqueLhsRowsCanWrite * m + rowsCanWrite % m;
-    bioassert(rowsCanWrite == rowsWritten); // Sanity check
+    const size_t remainingCompleteLhsRows = (remainingSpace / m);
+    _lhsPtr += remainingCompleteLhsRows;
 
-    _rowsWrittenThisCycle += rowsWritten;
-    _rowsWrittenSinceLastFinished += rowsWritten;
+    remainingSpace -= remainingCompleteLhsRows * m;
+    if (remainingSpace == 0) {
+        return rowsCanWrite;
+    }
+
+    const size_t partialRhsRowsWritten = remainingSpace;
+    _rhsPtr+= partialRhsRowsWritten;
 
     _out.getPort()->writeData();
 
-    return rowsWritten;
+    return rowsCanWrite;
 }
 
 void CartesianProductProcessor::executeFromIdle() {
@@ -359,8 +393,6 @@ void CartesianProductProcessor::executeFromIdle() {
         numRowsFromInputProd + numRowsFromRightMem + numRowsFromLeftMem;
 
     nextState(); // Sets state to @ref IMMEDIATE
-
-    executeFromImmediate();
 }
 
 void CartesianProductProcessor::executeFromImmediate() {
@@ -381,18 +413,16 @@ void CartesianProductProcessor::executeFromImmediate() {
     Dataframe* rDF = _rhs.getDataframe();
 
     const size_t rowsWritten = fillOutput(lDF, rDF); // Fill from immediate ports
+    _rowsWrittenSinceLastFinished += rowsWritten;
     // n * m - rows we already wrote
-    const size_t rowsNeededToWrite =
-        lDF->getRowCount() * rDF->getRowCount() - (_rowsToWriteBeforeFinished -_rowsWrittenSinceLastFinished);
+    const size_t rowsNeededToWrite = lDF->getRowCount() * rDF->getRowCount();
 
     if (rowsWritten != rowsNeededToWrite) {
-        spdlog::info("We wrote {} rows but we wanted {}", rowsWritten, rowsNeededToWrite);
         // We could not write all we needed -> return, remaining in same state
         return;
     }
 
     nextState(); // Sets state to @ref RIGHT_MEMORY
-    executeFromRightMem();
 }
 
 void CartesianProductProcessor::executeFromRightMem() {
@@ -437,11 +467,6 @@ void CartesianProductProcessor::execute() {
     // We start with our output port being empty, and not having written any rows
     _rowsWrittenThisCycle = 0;
     
-    spdlog::info("CartProd::exec");
-    spdlog::info("We are in state {}", (int)_currentState);
-    spdlog::info("lhsPtr  = {}", _lhsPtr);
-    spdlog::info("rhsPtr  = {}", _rhsPtr);
-
     switch (_currentState) {
         case State::IDLE: {
             executeFromIdle();
