@@ -79,6 +79,8 @@ private:
     size_t fillOutput(Dataframe* left, Dataframe* right);
     void setLeftColumn(Dataframe* left, Dataframe* right, size_t colIdx, size_t fromRow,
                        size_t spaceAvailable);
+    void copyRightColumn(Dataframe* left, Dataframe* right, size_t colIdx, size_t fromRow,
+                         size_t spaceAvailable);
 };
 
 }
