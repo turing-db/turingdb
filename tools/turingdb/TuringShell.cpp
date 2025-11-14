@@ -174,10 +174,20 @@ void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell
 }
 
 void quietCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    if (args.size() != 1) {
+        spdlog::error("The quiet command does not accept any argument");
+        return;
+    }
+
     shell.setQuiet(true);
 }
 
 void unquietCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    if (args.size() != 1) {
+        spdlog::error("The unquiet command does not accept any argument");
+        return;
+    }
+
     shell.setQuiet(false);
 }
 
