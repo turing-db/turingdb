@@ -71,12 +71,14 @@ TEST_F(SkipLimitProcessorTest, scanNodesSkip) {
             builder.addLambda(callback);
 
             // Execute pipeline
-            const auto transaction = _graph->openTransaction();
-            const GraphView view = transaction.viewGraph();
-            ExecutionContext execCtxt(view);
-            execCtxt.setChunkSize(chunkSize);
-            PipelineExecutor executor(&pipeline, &execCtxt);
-            executor.execute();
+            {
+                const auto transaction = _graph->openTransaction();
+                const GraphView view = transaction.viewGraph();
+                ExecutionContext execCtxt(view);
+                execCtxt.setChunkSize(chunkSize);
+                PipelineExecutor executor(&pipeline, &execCtxt);
+                executor.execute();
+            }
 
             ASSERT_TRUE(resultNodeIDs.size() <= allNodeIDs.size());
             ASSERT_EQ(resultNodeIDs.size(), allNodeIDs.size()-skipCount);
