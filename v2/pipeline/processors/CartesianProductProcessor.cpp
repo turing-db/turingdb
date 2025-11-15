@@ -158,7 +158,7 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
             }
         }
 
-        if (ourLhsPtr == n) { // We have written all rows from LHS
+        if (ourLhsPtr == n + 1) { // We have written all rows from LHS
             return;
         }
 
@@ -171,6 +171,7 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
         const size_t rowsLeftToWrite = n - ourLhsPtr;
         const size_t numCompleteLhsRowsCanWrite = std::min(rowsLeftToWrite, remainingSpace / m);
         const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
+        const bool canWriteLeftovers = remainingSpace % m != 0;
 
         for (; ourLhsPtr < numCompleteLhsRowsCanWrite; ourLhsPtr++) {
             const auto& currentLhsElement = lhsCol->at(ourLhsPtr);
@@ -186,11 +187,10 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
             remainingSpace -= m;
         }
 
-        if (canWriteAll) { // We wrote everything we need
+        if (canWriteAll || !canWriteLeftovers) { // We wrote everything we need
             return;
         }
 
-        // TODO: Write leftovers
         bioassert(remainingSpace < m);
         bioassert(ourRhsPtr == 0);
 
@@ -248,7 +248,7 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* 
             }
         }
 
-        if (ourLhsPtr == n) {
+        if (ourLhsPtr == n + 1) {
             return;
         }
 
@@ -260,6 +260,7 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* 
         const size_t numCompleteLhsRowsCanWrite =
             std::min(rowsLeftToWrite, remainingSpace / m);
         const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
+        const bool canWriteLeftovers = remainingSpace % m != 0;
 
         bioassert(ourRhsPtr == 0);
         for (; ourLhsPtr < numCompleteLhsRowsCanWrite; ourLhsPtr++) {
@@ -276,7 +277,7 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* 
             remainingSpace -= m;
         }
 
-        if (canWriteAll) {
+        if (canWriteAll || !canWriteLeftovers) {
             return;
         }
 
