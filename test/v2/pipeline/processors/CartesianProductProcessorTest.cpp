@@ -470,7 +470,6 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
      //  x
      //  y
      //  z
-     // 
     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -523,6 +522,7 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        df->dump();
 
         numChunks++;
         chunkSizes.push_back(df->getRowCount());
@@ -685,7 +685,6 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump();
 
         numChunks++;
         chunkSizes.push_back(df->getRowCount());

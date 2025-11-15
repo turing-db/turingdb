@@ -1,9 +1,11 @@
 #include "Dataframe.h"
 
+#include <sstream>
+
 #include "NamedColumn.h"
 #include "columns/Column.h"
 
-#include <sstream>
+#include "columns/ColumnSwitch.h"
 
 using namespace db;
 
@@ -80,6 +82,36 @@ void Dataframe::copyFromLine(const Dataframe* other, size_t startRow, size_t row
         Column* otherColumn = otherColumns[i]->getColumn();
         Column* column = _cols[i]->getColumn();
         column->assignFromLine(otherColumn, startRow, rowCount);
+    }
+}
+
+void Dataframe::append(const Dataframe* other) {
+    bioassert(this->size() == other->size());
+
+    const size_t oldRows = this->getRowCount();
+    const size_t addRows = other->getRowCount();
+    const size_t newRows = oldRows + addRows;
+
+    const NamedColumns& otherCols = other->cols();
+
+    for (size_t i = 0; i < _cols.size(); i++) {
+        NamedColumn* dstNamed = _cols[i];
+        NamedColumn* srcNamed = otherCols[i];
+
+        Column* dst = dstNamed->getColumn();
+        Column* src = srcNamed->getColumn();
+
+        // Resize destination to fit new data
+        dispatchColumnVector(dst, [&](auto* dstColumnVector) {
+            auto* srcColumnVector = static_cast<decltype(dstColumnVector)>(src);
+            bioassert(srcColumnVector);
+
+            dstColumnVector->resize(newRows);
+            auto& srcRaw = srcColumnVector->getRaw();
+            auto& dstRaw = dstColumnVector->getRaw();
+
+            std::copy(begin(srcRaw),end(srcRaw),begin(dstRaw) + oldRows);
+        });
     }
 }
 

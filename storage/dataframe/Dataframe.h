@@ -52,6 +52,8 @@ public:
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
     void copyFrom(const Dataframe* other);
 
+    void append(const Dataframe* other);
+
     void dump(std::ostream& out = std::cout) const;
 
 private:
