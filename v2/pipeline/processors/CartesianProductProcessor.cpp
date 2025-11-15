@@ -467,10 +467,8 @@ void CartesianProductProcessor::init() {
     bioassert(_rhsPtr == 0);
     bioassert(_lhsPtr == 0);
     bioassert(_rowsWrittenThisCycle == 0);
-
-    // Add to memory
-    // _leftMemory->append(_lhs.getDataframe());
-    // _rightMemory->append(_rhs.getDataframe());
+    bioassert(_leftMemory);
+    bioassert(_rightMemory);
 
     const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getRowCount() : 0;
     const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getRowCount() : 0;
@@ -496,22 +494,28 @@ void CartesianProductProcessor::execute() {
         init();
     }
 
+    // Emit L x R
     if (_currentState == State::IMMEDIATE) {
         executeFromImmediate();
     }
 
+    // Emit L x MEM(R)
     if (_currentState == State::RIGHT_MEMORY) {
         executeFromRightMem();
     }
 
+    // Emit MEM(L) x R
     if (_currentState == State::LEFT_MEMORY) {
         executeFromLeftMem();
     }
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
-        finish();
+        // Memorise the new chunks
+        _leftMemory->append(_lhs.getDataframe());
+        _rightMemory->append(_rhs.getDataframe());
         _lhs.getPort()->consume();
         _rhs.getPort()->consume();
+        finish();
         _rowsWrittenSinceLastFinished = 0;
     }
 }

@@ -30,7 +30,7 @@ public:
     PipelineBlockOutputInterface& output() { return _out; }
 
     Dataframe& leftMemory() { return *_leftMemory; }
-    Dataframe& rightMemory() { return *_leftMemory; }
+    Dataframe& rightMemory() { return *_rightMemory; }
 
 private:
     enum class State {
