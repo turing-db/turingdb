@@ -1244,9 +1244,8 @@ TEST_F(DeleteQueryTest, validAfterDeletedNodeSSIReject) {
     // First change also tries to delete Remy
     tester.query("change submit")
         .expectError()
-        .expectErrorMessage(
-            "Unexpected exception: This change attempted to delete Node 0 (which is now "
-            "Node 0 on main) which has been modified on main.")
+        .expectErrorMessage("This change attempted to delete Node 0 (which is now "
+                            "Node 0 on main) which has been modified on main.")
         .execute();
 
     // We were just rejected on main, but we should still be in a valid state
@@ -1288,7 +1287,7 @@ TEST_F(DeleteQueryTest, validAfterDeletedEdgeSSIReject) {
     tester.query("change submit")
         .expectError()
         .expectErrorMessage(
-            "Unexpected exception: This change attempted to delete Edge 10 (which is now "
+            "This change attempted to delete Edge 10 (which is now "
             "Edge 10 on main) which has been modified on main.")
         .execute();
 
@@ -1325,8 +1324,8 @@ TEST_F(DeleteQueryTest, validAfterDeleteEdgeSideEffectSSIReject) {
         tester.query("delete nodes 12").execute();
 
         const std::string expectedError =
-            "Unexpected exception: Submit rejected: Commits on main have created an edge "
-            "incident to a node this Change attempts to delete.";
+            "Submit rejected: Commits on main have created an edge (ID: 13) incident to "
+            "Node 12, which this Change attempts to delete.";
 
         tester.query("change submit")
             .expectError()
@@ -1381,7 +1380,7 @@ TEST_F(DeleteQueryTest, validAfterDelEdgeConflictSSIReject) {
     }
 
     { // Change 2
-        const std::string expectedError = "Unexpected exception: This change attempted "
+        const std::string expectedError = "This change attempted "
                                           "to delete Edge 0 (which is now Edge "
                                           "0 on main) which has been modified on main.";
 

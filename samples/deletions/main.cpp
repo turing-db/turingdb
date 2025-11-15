@@ -49,6 +49,7 @@ int main() {
         tester.run();
     }
 
+    /* Reactome commented out as not currently available on CI
     {
         DeleteTest tester {"REACTOME DELETE NODES", "reactome"};
         tester.addQuery(R"(match (n{`displayName (String)`~="Autophagy"}) return n)");
@@ -69,6 +70,7 @@ int main() {
         tester.deleteNodes({1054602}); // This query returns only a single node
         tester.run();
     }
+    */
 
     { // Clean up graph directory
         if (DeleteTest::WORKING_PATH.exists()) {
