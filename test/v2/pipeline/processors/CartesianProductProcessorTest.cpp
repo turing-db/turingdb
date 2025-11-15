@@ -736,7 +736,6 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
     }
 }
 
-/*
 TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     auto [transaction, view, reader] = readGraph();
 
@@ -766,7 +765,6 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, CHUNK_SIZE);
 }
-*/
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {

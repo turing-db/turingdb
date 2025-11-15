@@ -1,15 +1,18 @@
 #include "CartesianProductProcessor.h"
 
+#include <cstdlib>
 #include <memory>
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
+#include "columns/ColumnIDs.h"
 #include "dataframe/Dataframe.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
 #include "columns/ColumnSwitch.h"
+#include "spdlog/spdlog.h"
 
 using namespace db::v2;
 
@@ -133,18 +136,21 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
             remainingSpace -= canWrite;
             ourRowPtr += canWrite;
             ourRhsPtr += canWrite;
-            // If we wrote all `m` rows for this LHS row, then reset, otherwise increment
+            // If we wrote all `m` rows for this LHS row, then reset,
+            // otherwise increment
             if (canWrite == needToWrite) { // If we wrote all we needed
-                ourLhsPtr++; // We now need to write the next LHS
-                ourRhsPtr = 0; // And start from the first RHS
+                ourLhsPtr++;               // We now need to write the next LHS
+                ourRhsPtr = 0;             // And start from the first RHS
             }
         }
 
         if (ourLhsPtr == n + 1) { // We have written all rows from LHS
+            spdlog::info("Exiting early becuse ptr = n+ 1 ({} == {}", ourLhsPtr, n + 1);
             return;
         }
 
         if (remainingSpace == 0) { // We have ran out of space
+            spdlog::info("Exiting early because no space (in set lhs col)");
             return;
         }
 
@@ -155,7 +161,7 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
         const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
         const bool canWriteLeftovers = remainingSpace % m != 0;
 
-        for (; ourLhsPtr < numCompleteLhsRowsCanWrite; ourLhsPtr++) {
+        for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
             const auto& currentLhsElement = lhsCol->at(ourLhsPtr);
 
             const auto startIt = begin(outRaw) + ourRowPtr;
@@ -163,8 +169,10 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
 
             std::fill(startIt, endIt, currentLhsElement);
 
-            ourRowPtr += m;
+            ourLhsPtr++;
             ourRhsPtr = 0;
+
+            ourRowPtr += m;
 
             remainingSpace -= m;
         }
@@ -245,7 +253,7 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* 
         const bool canWriteLeftovers = remainingSpace % m != 0;
 
         bioassert(ourRhsPtr == 0);
-        for (; ourLhsPtr < numCompleteLhsRowsCanWrite; ourLhsPtr++) {
+        for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
             const auto rStart = begin(rhsRaw) + ourRhsPtr;
             const auto rEnd = rStart + m; // We know we can fit m rows here
             bioassert(rEnd == end(rhsRaw));
@@ -253,7 +261,9 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* 
 
             std::copy(rStart, rEnd, outStart);
 
+            ourLhsPtr++;
             ourRhsPtr = 0;
+
             ourRowPtr += m;
 
             remainingSpace -= m;
@@ -341,6 +351,9 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     if (rowsUsedForEntryLhsPtr == rowsNeededforEntryLhsPtr) {
         _lhsPtr++;
         _rhsPtr = 0;
+    } else {
+        _rhsPtr += rowsUsedForEntryLhsPtr;
+        spdlog::info("used != needed ({} != {}) ==> rhs = {}", rowsUsedForEntryLhsPtr, rowsNeededforEntryLhsPtr, _rhsPtr);
     }
     remainingSpaceOnEntry -= rowsUsedForEntryLhsPtr;
     if (remainingSpaceOnEntry == 0) {
@@ -518,5 +531,14 @@ void CartesianProductProcessor::execute() {
         finish();
         _rowsWrittenSinceLastFinished = 0;
     }
-}
 
+    // spdlog::info("AFTER THIS CYCLE:");
+    // spdlog::info("In state {}", (int)_currentState);
+    // spdlog::info("Emitting:");
+    // _out.getDataframe()->dump();
+    // spdlog::info("Left memory:");
+    // _leftMemory->dump();
+    // spdlog::info("Right memory:");
+    // _rightMemory->dump();
+    // spdlog::info("LHSPTR = {}, RHSPTR = {}", _lhsPtr, _rhsPtr);
+}
