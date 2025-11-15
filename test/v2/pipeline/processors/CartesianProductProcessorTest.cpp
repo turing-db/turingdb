@@ -566,6 +566,133 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
     }
 }
 
+TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
+    using StringCol = ColumnVector<std::string>;
+
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 3;
+    constexpr size_t LHS_NUM_COLS = 3;
+
+    constexpr size_t RHS_NUM_ROWS = 4;
+    constexpr size_t RHS_NUM_COLS = 2;
+
+    constexpr size_t CHUNK_SIZE = (LHS_NUM_ROWS * RHS_NUM_ROWS) / 2 - 1;
+
+    constexpr size_t EXP_NUM_CHUNKS = LHS_NUM_ROWS * RHS_NUM_ROWS / CHUNK_SIZE + 1;
+
+    [[maybe_unused]] constexpr std::array<size_t, EXP_NUM_CHUNKS> EXPECTED_CHUNK_SIZES = {
+        CHUNK_SIZE, CHUNK_SIZE, (LHS_NUM_ROWS * RHS_NUM_ROWS) - 2 * CHUNK_SIZE};
+
+    /*
+     * Generate Dataframe looking like:
+     * a x p
+     * b y q
+     * c z r
+     */
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        {
+            auto* col = dynamic_cast<StringCol*>(df->cols()[0]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back("a");
+            col->push_back("b");
+            col->push_back("c");
+        }
+        {
+            auto* col = dynamic_cast<StringCol*>(df->cols()[1]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back("x");
+            col->push_back("y");
+            col->push_back("z");
+        }
+        {
+            auto* col = dynamic_cast<StringCol*>(df->cols()[2]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back("p");
+            col->push_back("q");
+            col->push_back("r");
+        }
+
+        isFinished = true;
+    };
+
+    /*
+     * Generate Dataframe looking like:
+     * 1 5
+     * 2 6
+     * 3 7
+     * 4 8
+     */
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back(1);
+            col->push_back(2);
+            col->push_back(3);
+            col->push_back(4);
+        }
+        {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[1]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back(5);
+            col->push_back(6);
+            col->push_back(7);
+            col->push_back(8);
+        }
+
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < RHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < LHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<StringCol>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
+    }
+
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        df->dump(std::cout);
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    {
+        EXECUTE(view, CHUNK_SIZE);
+        // EXPECT_EQ(EXP_NUM_CHUNKS, numChunks);
+        // for (const auto [expected, actual] : rv::zip(EXPECTED_CHUNK_SIZES, chunkSizes)) {
+            // EXPECT_EQ(expected, actual);
+        // }
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 1;
