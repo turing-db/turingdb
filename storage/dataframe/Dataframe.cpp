@@ -11,7 +11,8 @@ Dataframe::Dataframe()
 {
 }
 
-Dataframe::~Dataframe() {
+Dataframe::~Dataframe()
+{
 }
 
 void Dataframe::addColumn(NamedColumn* column) {

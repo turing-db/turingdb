@@ -5,6 +5,7 @@
 #include "Processor.h"
 
 #include "PipelineInterface.h"
+#include "dataframe/Dataframe.h"
 
 namespace db {
 
@@ -28,21 +29,15 @@ public:
     PipelineBlockInputInterface& rightHandSide() { return _rhs; }
     PipelineBlockOutputInterface& output() { return _out; }
 
-    void setLeftMemory(std::unique_ptr<Dataframe> leftMem) {
-        _leftMemory = std::move(leftMem);
-    }
-
-    void setRightMemory(std::unique_ptr<Dataframe> rightMem) {
-        _rightMemory = std::move(rightMem);
-    }
+    Dataframe& leftMemory() { return *_leftMemory; }
+    Dataframe& rightMemory() { return *_leftMemory; }
 
 private:
     enum class State {
-        IDLE,
+        INIT,
         IMMEDIATE,
         RIGHT_MEMORY,
         LEFT_MEMORY,
-        RESET,
 
         STATE_SPACE_SIZE
     };
@@ -62,11 +57,14 @@ private:
     size_t _rowsWrittenThisCycle {0};
     size_t _rowsWrittenSinceLastFinished {0};
     size_t _rowsToWriteBeforeFinished {0};
+    size_t _rowsWrittenThisState {0};
 
-    std::unique_ptr<Dataframe> _leftMemory; // TODO Make stack member
+    bool _finishedThisState {false};
+
+    std::unique_ptr<Dataframe> _leftMemory;
     std::unique_ptr<Dataframe> _rightMemory;
 
-    State _currentState {State::IDLE};
+    State _currentState {State::INIT};
 
     void executeFromIdle();
     void executeFromImmediate();
@@ -74,7 +72,8 @@ private:
     void executeFromRightMem();
 
     void nextState();
-    void resetState();
+
+    void init();
 
     size_t fillOutput(Dataframe* left, Dataframe* right);
     void setFromLeftColumn(Dataframe* left, Dataframe* right, size_t colIdx,

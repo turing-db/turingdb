@@ -44,14 +44,14 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
     const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
-    const auto callback = [&](const Dataframe* df,
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
                               LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
 
-        const ColumnNodeIDs* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
-        const ColumnNodeIDs* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
+        const auto* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
+        const auto* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
 
         size_t rowPtr = 0;
         for (const NodeID actualID : reader.scanNodes()) {
@@ -69,7 +69,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
         }
     };
 
-    _builder->addLambda(callback);
+    _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, NUM_NODES_IN_SCAN * NUM_NODES_IN_SCAN);
 }
 
@@ -84,7 +84,7 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
             return;
         }
         ASSERT_EQ(df->size(), 1);
-        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
+        auto* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(nodeIDs->empty());
         nodeIDs->emplace_back(0); // Add Remy
@@ -95,7 +95,7 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
             return;
         }
         ASSERT_EQ(df->size(), 1);
-        ColumnNodeIDs* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
+        auto* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
         ASSERT_TRUE(nodeIDs != nullptr);
         ASSERT_TRUE(nodeIDs->empty());
         nodeIDs->resize(RHS_SIZE);
@@ -120,8 +120,8 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
             return;
         }
 
-        const ColumnNodeIDs* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
-        const ColumnNodeIDs* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
+        const auto* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
+        const auto* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
 
         ASSERT_EQ(outputLHS->size(), LHS_SIZE * RHS_SIZE);
         ASSERT_EQ(outputRHS->size(), LHS_SIZE * RHS_SIZE);
@@ -155,11 +155,9 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
     constexpr size_t RHS_NUM_ROWS = 2;
     constexpr size_t RHS_NUM_COLS = 2;
 
-    /*
-     * Generate Dataframe looking like:
-     * 1   2
-     * 2   3
-     */
+     // Generate Dataframe looking like:
+     //  1   2
+     //  2   3
     const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -167,7 +165,7 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
 
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
         for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
-            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
             col->resize(LHS_NUM_ROWS);
@@ -177,11 +175,10 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         isFinished = true;
     };
 
-    /*
-     * Generate Dataframe looking like:
-     * 101   102
-     * 102   103
-     */
+     // Generate Dataframe looking like:
+     // 101   102
+     // 102   103
+     //
     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -189,7 +186,7 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
 
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
         for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
-            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
             col->resize(RHS_NUM_ROWS);
@@ -216,13 +213,11 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    /*
-     * Output Dataframe should be looking like:
-     * 1 2 101 102
-     * 1 2 102 103
-     * 2 3 101 102
-     * 2 3 102 103
-     */
+     // Output Dataframe should be looking like:
+     // 1 2 101 102
+     // 1 2 102 103
+     // 2 3 101 102
+     // 2 3 102 103
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -265,14 +260,12 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
     constexpr size_t RHS_NUM_ROWS = 4;
     constexpr size_t RHS_NUM_COLS = 3;
 
-    /*
-     * Generate Dataframe looking like:
-     * 101 106
-     * 102 107
-     * 103 108
-     * 104 109
-     * 105 110
-     */
+     // Generate Dataframe looking like:
+     // 101 106
+     // 102 107
+     // 103 108
+     // 104 109
+     // 105 110
      const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -293,13 +286,11 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
         isFinished = true;
     };
 
-    /*
-    * Generate Dataframe looking like:
-    * 1  5  9
-    * 2  6  10
-    * 3  7  11
-    * 4  8  12
-    */
+    // Generate Dataframe looking like:
+    // 1  5  9
+    // 2  6  10
+    // 3  7  11
+    // 4  8  12
     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -337,33 +328,31 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    /*
-     * Output should be:
-     * 101 106 1  5  9
-     * 101 106 2  6  10
-     * 101 106 3  7  11
-     * 101 106 4  8  12
-     *
-     * 102 107 1  5  9
-     * 102 107 2  6  10
-     * 102 107 3  7  11
-     * 102 107 4  8  12
-     *
-     * 103 108 1  5  9
-     * 103 108 2  6  10
-     * 103 108 3  7  11
-     * 103 108 4  8  12
-     *
-     * 104 109 1  5  9
-     * 104 109 2  6  10
-     * 104 109 3  7  11
-     * 104 109 4  8  12
-     *
-     * 105 110 1  5  9
-     * 105 110 2  6  10
-     * 105 110 3  7  11
-     * 105 110 4  8  12
-     */
+     //  Output should be:
+     //  101 106 1  5  9
+     //  101 106 2  6  10
+     //  101 106 3  7  11
+     //  101 106 4  8  12
+     // 
+     //  102 107 1  5  9
+     //  102 107 2  6  10
+     //  102 107 3  7  11
+     //  102 107 4  8  12
+     // 
+     //  103 108 1  5  9
+     //  103 108 2  6  10
+     //  103 108 3  7  11
+     //  103 108 4  8  12
+     // 
+     //  104 109 1  5  9
+     //  104 109 2  6  10
+     //  104 109 3  7  11
+     //  104 109 4  8  12
+     // 
+     //  105 110 1  5  9
+     //  105 110 2  6  10
+     //  105 110 3  7  11
+     //  105 110 4  8  12
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -453,12 +442,10 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
     constexpr std::array<size_t, EXP_NUM_CHUNKS> EXPECTED_CHUNK_SIZES = {
         CHUNK_SIZE, CHUNK_SIZE, (LHS_NUM_ROWS * RHS_NUM_ROWS) - 2 * CHUNK_SIZE};
 
-    /*
-     * Generate Dataframe looking like:
-     * a
-     * b
-     * c
-     */
+     // Generate Dataframe looking like:
+     // a
+     // b
+     // c
     const auto genLDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -477,14 +464,13 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
         isFinished = true;
     };
 
-    /*
-     * Generate Dataframe looking like:
-     * v
-     * w
-     * x
-     * y
-     * z
-     */
+     //  Generate Dataframe looking like:
+     //  v
+     //  w
+     //  x
+     //  y
+     //  z
+     // 
     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -584,12 +570,10 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
     [[maybe_unused]] constexpr std::array<size_t, EXP_NUM_CHUNKS> EXPECTED_CHUNK_SIZES = {
         CHUNK_SIZE, CHUNK_SIZE, (LHS_NUM_ROWS * RHS_NUM_ROWS) - 2 * CHUNK_SIZE};
 
-    /*
-     * Generate Dataframe looking like:
-     * a x p
-     * b y q
-     * c z r
-     */
+     // Generate Dataframe looking like:
+     // a x p
+     // b y q
+     // c z r
     const auto genLDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -624,13 +608,11 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
         isFinished = true;
     };
 
-    /*
-     * Generate Dataframe looking like:
-     * 1 5
-     * 2 6
-     * 3 7
-     * 4 8
-     */
+     // Generate Dataframe looking like:
+     // 1 5
+     // 2 6
+     // 3 7
+     // 4 8
     const auto genRDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -676,22 +658,116 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
+    size_t numChunks = 0;
+    std::vector<size_t> chunkSizes;
+    const StringCol expectedFstCol {
+        "a", "a", "a", "a", "b", "b", "b", "b","c", "c", "c", "c",
+    };
+    const StringCol expectedSndCol {
+        "x", "x", "x", "x", "y", "y", "y", "y", "z", "z", "z", "z",
+    };
+    const StringCol expectedThdCol {
+        "p", "p", "p", "p", "q", "q", "q", "q", "r", "r", "r", "r",
+    };
+    const ColumnNodeIDs expectedFrtCol {
+        1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
+    };
+    const ColumnNodeIDs expectedFthCol {
+        5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8,
+    };
+
+    auto expFstColIt = begin(expectedFstCol);
+    auto expSndColIt = begin(expectedSndCol);
+    auto expThdColIt = begin(expectedThdCol);
+    auto expFrtColIt = std::begin(expectedFrtCol);
+    auto expFthColIt = std::begin(expectedFthCol);
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump(std::cout);
+        df->dump();
+
+        numChunks++;
+        chunkSizes.push_back(df->getRowCount());
+
+        {
+            auto* fstCol = dynamic_cast<StringCol*>(df->cols().at(0)->getColumn());
+            for (const std::string& actual : *fstCol) {
+                EXPECT_EQ(*expFstColIt, actual);
+                expFstColIt++;
+            }
+        }
+        {
+            auto* sndCol = dynamic_cast<StringCol*>(df->cols().at(1)->getColumn());
+            for (const std::string& actual : *sndCol) {
+                EXPECT_EQ(*expSndColIt, actual);
+                expSndColIt++;
+            }
+        }
+        {
+            auto* thdCol = dynamic_cast<StringCol*>(df->cols().at(2)->getColumn());
+            for (const std::string& actual : *thdCol) {
+                EXPECT_EQ(*expThdColIt, actual);
+                expThdColIt++;
+            }
+        }
+        {
+            auto* frtCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
+            for (const NodeID actual : *frtCol) {
+                EXPECT_EQ(expFrtColIt->getValue(), actual.getValue());
+                expFrtColIt++;
+            }
+        }
+        {
+            auto* fthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
+            for (const NodeID actual : *fthCol) {
+                EXPECT_EQ(expFthColIt->getValue(), actual.getValue());
+                expFthColIt++;
+            }
+        }
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
     {
         EXECUTE(view, CHUNK_SIZE);
-        // EXPECT_EQ(EXP_NUM_CHUNKS, numChunks);
-        // for (const auto [expected, actual] : rv::zip(EXPECTED_CHUNK_SIZES, chunkSizes)) {
-            // EXPECT_EQ(expected, actual);
-        // }
+        EXPECT_EQ(EXP_NUM_CHUNKS, numChunks);
+        for (const auto [expected, actual] : rv::zip(EXPECTED_CHUNK_SIZES, chunkSizes)) {
+            EXPECT_EQ(expected, actual);
+        }
     }
 }
+
+/*
+TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t CHUNK_SIZE = 3;
+    // [[mayubconstexpr size_t OUTPUT_NUM_ROWS = 169;
+    // constexpr size_t NUM_NODES_IN_SCAN = 13;
+
+    auto& scanNodes2 = _builder->addScanNodes();
+    [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
+
+    // scanNodes1 as implicit LHS
+    const auto& cartProd = _builder->addCartesianProduct(&scanNodes2);
+
+    ASSERT_EQ(cartProd.getDataframe()->cols().size(), 2);
+
+    [[maybe_unused]] const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
+    [[maybe_unused]] const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
+
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+
+        df->dump(std::cout);
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, CHUNK_SIZE);
+}
+*/
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {

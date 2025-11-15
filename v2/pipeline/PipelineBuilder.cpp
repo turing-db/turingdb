@@ -117,13 +117,9 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     _pendingOutput.setInterface(&output);
 
     // Initialise the processor's "memory" stores for left and right ports
-    auto* leftMemory = new Dataframe;
-    duplicateDataframeShape(_mem, _dfMan, leftDf, leftMemory);
-    cartProd->setLeftMemory(std::unique_ptr<Dataframe>(leftMemory));
+    duplicateDataframeShape(_mem, _dfMan, leftDf, &cartProd->leftMemory());
 
-    auto* rightMemory = new Dataframe;
-    duplicateDataframeShape(_mem, _dfMan, rightDf, rightMemory);
-    cartProd->setRightMemory(std::unique_ptr<Dataframe>(rightMemory));
+    duplicateDataframeShape(_mem, _dfMan, rightDf, &cartProd->rightMemory());
 
     return output;
 }

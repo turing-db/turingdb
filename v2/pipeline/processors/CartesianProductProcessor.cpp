@@ -1,5 +1,7 @@
 #include "CartesianProductProcessor.h"
 
+#include <memory>
+
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
@@ -36,6 +38,11 @@ CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipelin
         processor->addOutput(output);
     }
 
+    {
+        processor->_leftMemory = std::make_unique<Dataframe>();
+        processor->_rightMemory = std::make_unique<Dataframe>();
+    }
+
     processor->postCreate(pipeline);
     return processor;
 }
@@ -46,10 +53,6 @@ void CartesianProductProcessor::prepare(ExecutionContext* ctxt) {
     _lhsPtr = 0;
     _rhsPtr = 0;
 
-    // Should be initialised in @ref PipelineBuilder
-    bioassert(_leftMemory);
-    bioassert(_rightMemory);
-
     markAsPrepared();
 }
 
@@ -59,39 +62,28 @@ void CartesianProductProcessor::reset() {
 }
 
 void CartesianProductProcessor::nextState() {
+    _rowsWrittenThisState = 0;
+    _finishedThisState = false;
+    _lhsPtr = 0;
+    _rhsPtr = 0;
+
     switch (_currentState) {
-        case State::IDLE : {
-            bioassert(_lhsPtr == 0);
-            bioassert(_rhsPtr == 0);
+        case State::INIT: {
             _currentState = State::IMMEDIATE;
-            executeFromImmediate();
         }
         break;
-
         case State::IMMEDIATE: {
-            // TODO: Assert preconditions
             _currentState = State::RIGHT_MEMORY;
-            // TODO: Reset counters if needed
-            executeFromRightMem();
         }
         break;
 
         case State::RIGHT_MEMORY: {
-            // TODO: Assert preconditions
             _currentState = State::LEFT_MEMORY;
-            // TODO: Reset counters if needed
-            executeFromLeftMem();
         }
         break;
 
         case State::LEFT_MEMORY : {
-            // TODO: Assert preconditions
-            _currentState = State::RESET;
-            // TODO: Reset counters if needed
-        }
-        [[fallthrough]];
-        case State::RESET: {
-            resetState();
+            _currentState = State::INIT;
         }
         break;
         case State::STATE_SPACE_SIZE: {
@@ -99,16 +91,6 @@ void CartesianProductProcessor::nextState() {
         }
         break;
     }
-}
-
-void CartesianProductProcessor::resetState() {
-    _lhsPtr = 0;
-    _rhsPtr = 0;
-
-    _rowsWrittenSinceLastFinished += _rowsWrittenThisCycle;
-    _rowsWrittenThisCycle = 0;
-
-    _currentState = State::IDLE;
 }
 
 // Assumes that the entire column is writable
@@ -383,40 +365,20 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     return rowsShouldWrite;
 }
 
-void CartesianProductProcessor::executeFromIdle() {
-    bioassert(_currentState == State::IDLE);
-    // We should not be in the middle of reading/writing anything if in IDLE bioassert(_lhsPtr == 0);
-    bioassert(_rhsPtr == 0);
-    bioassert(_rowsWrittenThisCycle == 0);
-
-    const size_t n = _lhs.getDataframe()->getRowCount();
-    const size_t m = _rhs.getDataframe()->getRowCount();
-
-    // LHS x RHS
-    const size_t numRowsFromInputProd = n * m;
-    // LHS x port-memory(R)
-    const size_t numRowsFromRightMem = n * _rightMemory->getRowCount();
-    // port-memory(L) x RHS
-    const size_t numRowsFromLeftMem = _leftMemory->getRowCount() * m;
-
-    _rowsToWriteBeforeFinished =
-        numRowsFromInputProd + numRowsFromRightMem + numRowsFromLeftMem;
-
-    nextState(); // Sets state to @ref IMMEDIATE
-}
-
 void CartesianProductProcessor::executeFromImmediate() {
-    bioassert(_currentState == State::IMMEDIATE);
+    // If either port is empty, then skip this stage
+    if (!_lhs.getPort()->hasData() || !_rhs.getPort()->hasData()) {
+        nextState();
+        return;
+    }
 
     bioassert(_rowsWrittenThisCycle <= _ctxt->getChunkSize());
 
-    {
-        const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
+    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
 
-        if (remainingSpace == 0) {
-            // No space, have not written what we need: stay in same state
-            return;
-        }
+    if (remainingSpace == 0) {
+        // No space, have not written what we need: stay in same state
+        return;
     }
 
     Dataframe* lDF = _lhs.getDataframe();
@@ -436,71 +398,114 @@ void CartesianProductProcessor::executeFromImmediate() {
 }
 
 void CartesianProductProcessor::executeFromRightMem() {
-    if (_rightMemory->getRowCount() == 0) {
-        // No right memory: nothing to do
+    // No left port => nothing to do
+    if (!_lhs.getPort()->hasData()) {
         nextState();
         return;
     }
-    
-    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
-    if (remainingSpace == 0 ) {
-        // No space, have not written what we need: stay in same state
+
+    // Nothing in memory => nothing to do
+    if (_rightMemory->getRowCount() == 0) {
+        nextState();
         return;
     }
 
-    // fillOutput(left input, right memory)
-    // TODO: Check if we wrote all we need
+
+    Dataframe* lDf = _lhs.getDataframe();
+    Dataframe* rDf = _rightMemory.get();
+
+    const size_t rowsNeedToWrite = lDf->getRowCount() * rDf->getRowCount();
+    
+    // Emit port(L) x port-memory(R)
+    const size_t rowsWritten = fillOutput(lDf, rDf);
+
+    _rowsWrittenSinceLastFinished += rowsWritten;
+    _rowsWrittenThisState += rowsWritten;
+
+    if (_rowsWrittenThisState != rowsNeedToWrite) {
+        // No space, have not written what we need: stay in same state
+        return;
+    }
 
     nextState(); // Set state to @ref LEFT_MEMORY
 }
 
 void CartesianProductProcessor::executeFromLeftMem() {
-    if (_leftMemory->getRowCount() == 0) {
+    // No right port => nothing to do
+    if (!_rhs.getPort()->hasData()) {
         // No right memory: nothing to do
         nextState();
         return;
     }
 
-    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
-    if (remainingSpace == 0) {
+    // Nothing in memory => nothing to do
+    if (_leftMemory->getRowCount() == 0) {
+        nextState();
+        return;
+    }
+
+    Dataframe* lDf = _leftMemory.get();
+    Dataframe* rDf = _rhs.getDataframe();
+
+    const size_t rowsNeedToWrite = lDf->getRowCount() * rDf->getRowCount();
+
+    // Emit port-memory(L) x port(R)
+    const size_t rowsWritten = fillOutput(lDf, rDf);
+
+    _rowsWrittenSinceLastFinished += rowsWritten;
+    _rowsWrittenThisState += rowsWritten;
+
+    if (_rowsWrittenThisState != rowsNeedToWrite) {
         // No space, have not written what we need: stay in same state
         return;
     }
 
-    // fillOutput(left memory, right input)
-    // TODO: Check if we wrote all we need
-     
     nextState(); // Set state to @ref RESET
+}
+
+void CartesianProductProcessor::init() {
+    bioassert(_rhsPtr == 0);
+    bioassert(_lhsPtr == 0);
+    bioassert(_rowsWrittenThisCycle == 0);
+
+    // Add to memory
+    // _leftMemory->append(_lhs.getDataframe());
+    // _rightMemory->append(_rhs.getDataframe());
+
+    const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getRowCount() : 0;
+    const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getRowCount() : 0;
+
+    // LHS x RHS
+    const size_t numRowsFromInputProd = n * m;
+    // LHS x port-memory(R)
+    const size_t numRowsFromRightMem = n * _rightMemory->getRowCount();
+    // port-memory(L) x RHS
+    const size_t numRowsFromLeftMem = _leftMemory->getRowCount() * m;
+
+    _rowsToWriteBeforeFinished =
+        numRowsFromInputProd + numRowsFromRightMem + numRowsFromLeftMem;
+
+    nextState(); // Sets state to @ref IMMEDIATE
 }
 
 void CartesianProductProcessor::execute() {
     // We start with our output port being empty, and not having written any rows
     _rowsWrittenThisCycle = 0;
 
-    switch (_currentState) {
-        case State::IDLE: {
-            executeFromIdle();
-        }
-        break;
-        case State::IMMEDIATE: {
-            executeFromImmediate();
-        }
-        break;
-        case State::RIGHT_MEMORY: {
-            executeFromRightMem();
-        }
-        break;
-        case State::LEFT_MEMORY: {
-            executeFromLeftMem();
-        }
-        break;
-        case State::RESET: {
-            resetState();
-        }
-        break;
-        case State::STATE_SPACE_SIZE: {
-            throw FatalException("Unknown state of CartesianProductProcessor");
-        } break;
+    if (_currentState == State::INIT) {
+        init();
+    }
+
+    if (_currentState == State::IMMEDIATE) {
+        executeFromImmediate();
+    }
+
+    if (_currentState == State::RIGHT_MEMORY) {
+        executeFromRightMem();
+    }
+
+    if (_currentState == State::LEFT_MEMORY) {
+        executeFromLeftMem();
     }
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
