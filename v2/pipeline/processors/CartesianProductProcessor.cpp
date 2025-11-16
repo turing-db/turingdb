@@ -385,6 +385,14 @@ void CartesianProductProcessor::executeFromImmediate() {
         return;
     }
 
+    Dataframe* lDF = _lhs.getDataframe();
+    Dataframe* rDF = _rhs.getDataframe();
+
+    if (lDF->getRowCount() == 0 || rDF->getRowCount() == 0) {
+        nextState();
+        return;
+    }
+
     bioassert(_rowsWrittenThisCycle <= _ctxt->getChunkSize());
 
     const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
@@ -393,9 +401,6 @@ void CartesianProductProcessor::executeFromImmediate() {
         // No space, have not written what we need: stay in same state
         return;
     }
-
-    Dataframe* lDF = _lhs.getDataframe();
-    Dataframe* rDF = _rhs.getDataframe();
 
     const size_t rowsWritten = fillOutput(lDF, rDF); // Fill from immediate ports
     _rowsWrittenSinceLastFinished += rowsWritten;
@@ -406,6 +411,8 @@ void CartesianProductProcessor::executeFromImmediate() {
         // We could not write all we needed -> return, remaining in same state
         return;
     }
+    // XXX: THERE IS A BUG HERE WHERE WE EXIT TOO EARLY, I THINK ROWS WRITTEN SINCE LAST FINISHED IS NOT RESET
+    spdlog::info("We wrote {} and needed {}", _rowsWrittenSinceLastFinished, rowsNeededToWrite);
 
     nextState(); // Sets state to @ref RIGHT_MEMORY
 }
@@ -532,13 +539,13 @@ void CartesianProductProcessor::execute() {
         _rowsWrittenSinceLastFinished = 0;
     }
 
-    // spdlog::info("AFTER THIS CYCLE:");
-    // spdlog::info("In state {}", (int)_currentState);
-    // spdlog::info("Emitting:");
-    // _out.getDataframe()->dump();
+    spdlog::info("AFTER THIS CYCLE:");
+    spdlog::info("In state {}", (int)_currentState);
+    spdlog::info("LHSPTR = {}, RHSPTR = {}", _lhsPtr, _rhsPtr);
+    spdlog::info("Emitting:");
+    _out.getDataframe()->dump();
     // spdlog::info("Left memory:");
     // _leftMemory->dump();
     // spdlog::info("Right memory:");
     // _rightMemory->dump();
-    // spdlog::info("LHSPTR = {}, RHSPTR = {}", _lhsPtr, _rhsPtr);
 }
