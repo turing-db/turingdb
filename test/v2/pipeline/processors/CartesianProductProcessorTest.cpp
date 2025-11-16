@@ -759,7 +759,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
             return;
         }
 
-        df->dump(std::cout);
+        // df->dump(std::cout);
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
