@@ -535,11 +535,15 @@ TEST_F(PipelineTest, multiChunkCount) {
     builder.addCount();
     
     // Lambda
+    size_t returnedCount = 0;
+    size_t lambdaSinkExecutions = 0;
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
         const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->cols().front()->getColumn());
         ASSERT_TRUE(count != nullptr);
-        EXPECT_EQ(count->getRaw(), chunkCount * chunkSize);
+        returnedCount = count->getRaw();
+
+        lambdaSinkExecutions += 1;
     };
 
     builder.addLambda(callback);
@@ -550,29 +554,125 @@ TEST_F(PipelineTest, multiChunkCount) {
     ExecutionContext execCtxt(view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
+    
+    // Check value of returned count
+    EXPECT_EQ(returnedCount, chunkCount * chunkSize);
+    EXPECT_EQ(lambdaSinkExecutions, 1);
 }
 
-/*
 TEST_F(PipelineTest, abcOverwrite) {
     LocalMemory mem;
     PipelineV2 pipeline;
     PipelineBuilder builder(&mem, &pipeline);
 
+    const auto sourceATag = pipeline.getDataframeManager()->allocTag();
+    const auto transBOutTag = pipeline.getDataframeManager()->allocTag();
+    const auto transCOutTag = pipeline.getDataframeManager()->allocTag();
+
+    NamedColumn* sourceAOut = nullptr;
+    NamedColumn* transBOut = nullptr;
+    NamedColumn* transCOut = nullptr;
+
+    const size_t maxChunkA = 2;
+    size_t chunkCountA = 0;
     auto sourceA = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if(operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ColumnConst<size_t>* value = df->getColumn<ColumnConst<size_t>>(sourceATag);
+        value->set(10+chunkCountA);
+
+        if (chunkCountA == maxChunkA) {
+            isFinished = true;
+        }
+
+        chunkCountA++;
     };
 
+    size_t invocationCountB = 0;
     auto transformB = [&](const Dataframe* src, Dataframe* dest, bool& isFinished, auto operation) -> void {
+        if(operation != LambdaTransformProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        isFinished = true;
+
+        ColumnConst<size_t>* value = dest->getColumn<ColumnConst<size_t>>(transBOutTag);
+        ASSERT_TRUE(value != nullptr);
+        value->set(20+invocationCountB);
+        invocationCountB++;
     };
 
+    const size_t maxChunkC = 1;
+    size_t chunkCountC = 0;
     auto transformC = [&](const Dataframe* src, Dataframe* dest, bool& isFinished, auto operation) -> void {
+        if (operation == LambdaTransformProcessor::Operation::RESET) {
+            chunkCountC = 0;
+        }
+
+        if(operation != LambdaTransformProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ColumnConst<size_t>* value = dest->getColumn<ColumnConst<size_t>>(transCOutTag);
+        ASSERT_TRUE(value != nullptr);
+        value->set(30+chunkCountC);
+
+        if (chunkCountC == maxChunkC) {
+            isFinished = true;
+        }
+
+        chunkCountC++;
     };
 
-    auto sink = [](const Dataframe* df, auto operation) -> void {
+    std::vector<std::tuple<size_t, size_t, size_t>> returnedLines;
+    bool sinkExecuted = false;
+    auto sink = [&](const Dataframe* df, auto operation) -> void {
+        if (operation != LambdaProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        sinkExecuted = true;
+
+        const ColumnConst<size_t>* a = sourceAOut->as<ColumnConst<size_t>>();
+        const ColumnConst<size_t>* b = transBOut->as<ColumnConst<size_t>>();
+        const ColumnConst<size_t>* c = transCOut->as<ColumnConst<size_t>>();
+        ASSERT_TRUE(a != nullptr);
+        ASSERT_TRUE(b != nullptr);
+        ASSERT_TRUE(c != nullptr);
+
+        returnedLines.emplace_back(a->getRaw(), b->getRaw(), c->getRaw());
     };
 
     builder.addLambdaSource(sourceA);
+    sourceAOut = builder.addColumnToOutput<ColumnConst<size_t>>(sourceATag);
+
     builder.addLambdaTransform(transformB);
+    transBOut = builder.addColumnToOutput<ColumnConst<size_t>>(transBOutTag);
+
     builder.addLambdaTransform(transformC);
+    transCOut = builder.addColumnToOutput<ColumnConst<size_t>>(transCOutTag);
+
     builder.addLambda(sink);
+
+    // Execute pipeline
+    const auto transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+    ExecutionContext execCtxt(view);
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    executor.execute();
+
+    ASSERT_TRUE(sinkExecuted);
+
+    std::vector<std::tuple<size_t, size_t, size_t>> expectedLines = {
+        {10, 20, 30},
+        {10, 20, 31},
+        {11, 21, 30},
+        {11, 21, 31},
+        {12, 22, 30},
+        {12, 22, 31} 
+    };
+
+    ASSERT_EQ(returnedLines, expectedLines);
 }
-*/

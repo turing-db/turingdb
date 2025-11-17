@@ -7,6 +7,7 @@ namespace db::v2 {
 class PipelineV2;
 class Processor;
 class PipelineBuffer;
+class PipelineInputPort;
 class PipelineOutputPort;
 
 class PipelinePort {
@@ -14,10 +15,7 @@ public:
     friend PipelineV2;
 
     Processor* getProcessor() const { return _processor; }
-    PipelinePort* getConnectedPort() const { return _connectedPort; }
     PipelineBuffer* getBuffer() const { return _buffer; }
-
-    bool isConnected() const { return _connectedPort != nullptr; }
 
     bool isOpen() const { return _open; }
     bool isClosed() const { return !_open; }
@@ -45,18 +43,6 @@ public:
         }
     }
 
-    void consume() {
-        if (_connectedPort) {
-            _buffer->consume();
-        }
-    }
-
-    void writeData() {
-        if (_connectedPort) {
-            _buffer->writeData();
-        }
-    }
-
 protected:
     Processor* _processor {nullptr};
     PipelinePort* _connectedPort {nullptr};
@@ -77,7 +63,19 @@ class PipelineInputPort : public PipelinePort {
 public:
     friend PipelineOutputPort;
 
+    PipelineOutputPort* getConnectedPort() const { return (PipelineOutputPort*)_connectedPort; }
+
     void connectTo(PipelineOutputPort* other);
+
+    void consume() {
+        if (_connectedPort) {
+            _buffer->consume();
+        }
+    }
+
+    bool hasData() const {
+        return _connectedPort ? _buffer->hasData() : false;
+    }
 
     static PipelineInputPort* create(PipelineV2* pipeline, Processor* processor);
 
@@ -93,7 +91,19 @@ class PipelineOutputPort : public PipelinePort {
 public:
     friend PipelineInputPort;
 
+    PipelineInputPort* getConnectedPort() const { return (PipelineInputPort*)_connectedPort; }
+
     void connectTo(PipelineInputPort* other);
+
+    void writeData() {
+        if (_connectedPort) {
+            _buffer->writeData();
+        }
+    }
+
+    bool canWriteData() const {
+        return _connectedPort ? !_buffer->hasData() : true;
+    }
 
     static PipelineOutputPort* create(PipelineV2* pipeline, Processor* processor);
 
