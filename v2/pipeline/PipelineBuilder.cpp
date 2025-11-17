@@ -203,6 +203,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ColumnTag
     Dataframe* inDf = input.getDataframe();
     Dataframe* outDf = output.getDataframe();
 
+    // Forward only the projected columns to the next processor
     for (const ColumnTag& tag : tags) {
         outDf->addColumn(inDf->getColumn(tag));
     }
