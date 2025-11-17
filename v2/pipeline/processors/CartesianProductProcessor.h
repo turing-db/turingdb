@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "Processor.h"
 
 #include "PipelineInterface.h"
@@ -35,15 +33,15 @@ public:
 private:
     enum class State {
         INIT,
-        IMMEDIATE,
+        IMMEDIATE_PORTS,
         RIGHT_MEMORY,
         LEFT_MEMORY,
 
         STATE_SPACE_SIZE
     };
 
-    CartesianProductProcessor();
-    ~CartesianProductProcessor() final;
+    CartesianProductProcessor() = default;
+    ~CartesianProductProcessor() final = default;
 
     PipelineBlockInputInterface _lhs;
     PipelineBlockInputInterface _rhs;
@@ -68,20 +66,50 @@ private:
 
     State _currentState {State::INIT};
 
-    void executeFromIdle();
-    void executeFromImmediate();
-    void executeFromLeftMem();
-    void executeFromRightMem();
+    void emitFromPorts();
+    void emitFromLeftMemory();
+    void emitFromRightMemory();
 
     void nextState();
 
     void init();
 
+    /**
+     * @brief Emits as many rows of the Cartesian Product of the dataframes @param left
+     * and @param right into the dataframe in the @ref _out interface.
+     * @detail Emits starting from, and including, the row indexed by @ref _lhsPtr in
+     * @param left, and emits starting from, and including, the row indexed by @ref
+     * _rhsPtr in @param right.
+     * @returns The number of rows successfully written.
+     */
     size_t fillOutput(Dataframe* left, Dataframe* right);
-    void setFromLeftColumn(Dataframe* left, Dataframe* right, size_t colIdx,
-                           size_t fromRow, size_t spaceAvailable);
-    void copyFromRightColumn(Dataframe* left, Dataframe* right, size_t colIdx,
-                             size_t fromRow, size_t spaceAvailable);
+
+    /**
+     * @brief Sets subspans of rows in @ref _out->getDataframe(), starting with index
+     * @param fromRow, to be elements of column @ref colIdx of @param left, starting with
+     * the element of @ref _lhsPtr.
+     * @detail The number of rows set for the first element is dependent on the space
+     * remaining in the output column, the number of rows in @param right, and - for the
+     * first element to be set only - the position of @param _rhsPtr.
+     * @warn Does not perform bound checking on @param spaceAvailable
+     */
+    void setFromLeftColumn(Dataframe* left,
+                           Dataframe* right,
+                           size_t colIdx,
+                           size_t fromRow,
+                           size_t spaceAvailable);
+
+    /**
+     * @brief Copies (possibly subspans) of columns from @param right into @ref
+     * _out.getDataframe() until @param spaceAvailable rows are written.
+     * @detail Starts with row @ref _rhsPtr in @param right.
+     * @warn Does not perform bound checking on @param spaceAvailable
+     */
+    void copyFromRightColumn(Dataframe* left,
+                             Dataframe* right,
+                             size_t colIdx,
+                             size_t fromRow,
+                             size_t spaceAvailable);
 };
 
 }

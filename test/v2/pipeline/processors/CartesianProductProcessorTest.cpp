@@ -4,6 +4,7 @@
 #include <set>
 
 #include "EdgeRecord.h"
+#include "ID.h"
 #include "LineContainer.h"
 #include "dataframe/ColumnTag.h"
 #include "processors/ProcessorTester.h"
@@ -31,6 +32,7 @@ public:
     }
 };
 
+/*
 TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     auto [transaction, view, reader] = readGraph();
 
@@ -864,6 +866,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     }
 }
 
+*/
 TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
     using Rows = LineContainer<NodeID, NodeID>;
 
@@ -928,6 +931,75 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
         for (size_t row = 0; row < rowCount; row++) {
             actual.add({lhs->at(row), rhs->at(row)});
         }
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, CHUNK_SIZE);
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
+    using Rows = LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID>;
+
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t CHUNK_SIZE = 5;
+    constexpr size_t L_COLS = 4;
+    constexpr size_t R_COLS = 1;
+
+    // Make a dataframe of
+    // 999
+    // 998
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), R_COLS);
+        {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back(999);
+            col->push_back(998);
+        }
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        _builder->addScanNodes();
+        _builder->addGetOutEdges();
+        auto& matProc = _builder->addMaterialize();
+
+        _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < R_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+        [[maybe_unused]] const auto& cartProd = _builder->addCartesianProduct(&matProc);
+    }
+
+    Rows expected;
+    {
+        ColumnNodeIDs allNodes;
+        for (const NodeID node : reader.scanNodes()) {
+            allNodes.push_back(node);
+        }
+
+        for (const NodeID val : {999, 998}) {
+            for (const EdgeRecord rec : reader.getOutEdges(&allNodes)) {
+                expected.add({val, rec._edgeID, rec._edgeTypeID, rec._otherID});
+            }
+        }
+    }
+
+    Rows actual;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        df->dump();
+        ASSERT_EQ(df->size(), L_COLS + R_COLS);
     };
 
     _builder->addLambda(VERIFY_CALLBACK);

@@ -11,10 +11,6 @@
 
 using namespace db::v2;
 
-CartesianProductProcessor::CartesianProductProcessor() = default;
-
-CartesianProductProcessor::~CartesianProductProcessor() = default;
-
 CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipeline) {
     auto* processor = new CartesianProductProcessor();
 
@@ -63,10 +59,10 @@ void CartesianProductProcessor::nextState() {
 
     switch (_currentState) {
         case State::INIT: {
-            _currentState = State::IMMEDIATE;
+            _currentState = State::IMMEDIATE_PORTS;
         }
         break;
-        case State::IMMEDIATE: {
+        case State::IMMEDIATE_PORTS: {
             _currentState = State::RIGHT_MEMORY;
         }
         break;
@@ -86,9 +82,11 @@ void CartesianProductProcessor::nextState() {
 }
 
 // Assumes that the entire column is writable
-void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* right,
-                                              size_t colIdx, size_t fromRow,
-                                              size_t spaceAvailable) {
+void CartesianProductProcessor::setFromLeftColumn(Dataframe* left,
+                                                  Dataframe* right,
+                                                  size_t colIdx,
+                                                  size_t fromRow,
+                                                  size_t spaceAvailable) {
     size_t remainingSpace = spaceAvailable;
     size_t ourRowPtr = fromRow;
 
@@ -180,9 +178,11 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
     });
 }
 
-void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* right,
-                                                size_t colIdx, size_t fromRow,
-                                                size_t spaceAvailable) {
+void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
+                                                    Dataframe* right,
+                                                    size_t colIdx,
+                                                    size_t fromRow,
+                                                    size_t spaceAvailable) {
     size_t remainingSpace = spaceAvailable;
     size_t ourRowPtr = fromRow;
 
@@ -280,10 +280,6 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left, Dataframe* 
     });
 }
 
-/**
- * @brief Computes the @param k rows of the Cartesian product of @param left and @param
- * right, and stores them in @ref _out's Dataframe.
- */
 size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     // Left DF is n x p dimensional
     const size_t n = left->getRowCount();
@@ -303,9 +299,9 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     // same, even though the data is safe to overwrite because the reader has marked the
     // port with @ref consume
 
-    // const size_t existingSize = oDF->getRowCount(); // XXX This just checks the first column
-
+    // Absolute max space we can use
     const size_t rowsCanWrite = chunkSize - _rowsWrittenThisCycle;
+    // Number of rows we need to write based on how far we have progressed so far
     const size_t rowsNeedWrite = (m - _rhsPtr) + (n - _lhsPtr - 1) * (m);
     const size_t rowsShouldWrite = std::min(rowsCanWrite, rowsNeedWrite);
     bioassert(rowsCanWrite > 0);
@@ -330,41 +326,49 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     }
 
     // Below computes the next _lhsPtr and _rhsPtrs
+    // Account for the space used filling the remainder of the row currently half-worked
+    // by a non-zero @ref _rhsPtr
     size_t remainingSpaceOnEntry = rowsShouldWrite;
     const size_t rowsNeededforEntryLhsPtr = m - _rhsPtr;
     const size_t rowsUsedForEntryLhsPtr =
         std::min(remainingSpaceOnEntry, rowsNeededforEntryLhsPtr);
 
+    // If we completed finished writing the leftovers, we move to the next LHS row and
+    // reset our RHS
     if (rowsUsedForEntryLhsPtr == rowsNeededforEntryLhsPtr) {
         _lhsPtr++;
         _rhsPtr = 0;
-    } else {
+    } else { // Else we are still on the same LHS row, but progressed with RHS
         _rhsPtr += rowsUsedForEntryLhsPtr;
     }
+    // Check if we wrote any more than this
     remainingSpaceOnEntry -= rowsUsedForEntryLhsPtr;
     if (remainingSpaceOnEntry == 0) {
         _out.getPort()->writeData();
         return rowsShouldWrite;
     }
 
+    // See for how many rows on the LHS could we write all m required tuples
     const size_t remainingCompleteLhsRows = (remainingSpaceOnEntry / m);
     _lhsPtr += remainingCompleteLhsRows;
 
+    // Check if we wrote any more than this
     remainingSpaceOnEntry -= remainingCompleteLhsRows * m;
     if (remainingSpaceOnEntry == 0) {
         _out.getPort()->writeData();
         return rowsShouldWrite;
     }
 
+    // Check if we had any more space to partially complete a row from LHS
     const size_t partialRhsRowsWritten = remainingSpaceOnEntry;
-    _rhsPtr+= partialRhsRowsWritten;
+    _rhsPtr += partialRhsRowsWritten;
 
     _out.getPort()->writeData();
 
     return rowsShouldWrite;
 }
 
-void CartesianProductProcessor::executeFromImmediate() {
+void CartesianProductProcessor::emitFromPorts() {
     // If either port is empty, then skip this stage
     if (!_lhs.getPort()->hasData() || !_rhs.getPort()->hasData()) {
         nextState();
@@ -402,7 +406,7 @@ void CartesianProductProcessor::executeFromImmediate() {
     nextState(); // Sets state to @ref RIGHT_MEMORY
 }
 
-void CartesianProductProcessor::executeFromRightMem() {
+void CartesianProductProcessor::emitFromRightMemory() {
     // No left port => nothing to do
     if (!_lhs.getPort()->hasData()) {
         nextState();
@@ -441,7 +445,7 @@ void CartesianProductProcessor::executeFromRightMem() {
     nextState(); // Set state to @ref LEFT_MEMORY
 }
 
-void CartesianProductProcessor::executeFromLeftMem() {
+void CartesianProductProcessor::emitFromLeftMemory() {
     // No right port => nothing to do
     if (!_rhs.getPort()->hasData()) {
         // No right memory: nothing to do
@@ -513,18 +517,18 @@ void CartesianProductProcessor::execute() {
     }
 
     // Emit L x R
-    if (_currentState == State::IMMEDIATE) {
-        executeFromImmediate();
+    if (_currentState == State::IMMEDIATE_PORTS) {
+        emitFromPorts();
     }
 
     // Emit L x MEM(R)
     if (_currentState == State::RIGHT_MEMORY) {
-        executeFromRightMem();
+        emitFromRightMemory();
     }
 
     // Emit MEM(L) x R
     if (_currentState == State::LEFT_MEMORY) {
-        executeFromLeftMem();
+        emitFromLeftMemory();
     }
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
@@ -538,6 +542,7 @@ void CartesianProductProcessor::execute() {
             _rightMemory.append(_rhs.getDataframe());
             _rhs.getPort()->consume();
         }
+
         finish();
         _rowsWrittenSinceLastFinished = 0;
     }
