@@ -2,13 +2,12 @@
 
 #include "Column.h"
 #include "ColumnVector.h"
-#include "ColumnOptVector.h"
 #include "ColumnConst.h"
+#include "ColumnOptVector.h"
+#include "ColumnKind.h"
+#include "metadata/PropertyType.h"
 
 #include "FatalException.h"
-#include "columns/ColumnKind.h"
-#include "metadata/PropertyType.h"
-#include <concepts>
 
 namespace db {
 
@@ -172,12 +171,13 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
         default: {                                                                       \
             throw FatalException(fmt::format(                                            \
                 "Can not check result for column of kind {}", (col)->getKind()));        \
-        }
+        }                                                                                \
     }
 
+
+
 template <typename F>
-inline decltype(auto) dispatchColumnVector(db::Column* col, F&& f) {
-    using namespace db;
+inline decltype(auto) dispatchColumnVector(Column* col, F&& f) {
     COLUMN_VECTOR_SWITCH(col);
 }
 
