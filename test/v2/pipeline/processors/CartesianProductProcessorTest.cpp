@@ -864,9 +864,8 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     }
 }
 
-TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3x2) {
-    ASSERT_TRUE(false) << "Implement needsData to prevent infinite loop";
-    // using NodeIDTuple = std::pair<NodeID, NodeID>;
+TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
+    using Rows = LineContainer<NodeID, NodeID>;
 
     auto [transaction, view, reader] = readGraph();
 
@@ -907,15 +906,34 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3x2) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), L_COLS + R_COLS);
     }
 
+    Rows expected;
+    {
+        for (const NodeID id : reader.scanNodes()) {
+            expected.add({id, 999});
+            expected.add({id, 998});
+        }
+    }
+
+    Rows actual;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
         df->dump();
+
+        ASSERT_EQ(df->size(), 2);
+        const auto* lhs = df->cols().front()->as<ColumnNodeIDs>();
+        const auto* rhs = df->cols().back()->as<ColumnNodeIDs>();
+        const size_t rowCount = df->getRowCount();
+
+        for (size_t row = 0; row < rowCount; row++) {
+            actual.add({lhs->at(row), rhs->at(row)});
+        }
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, CHUNK_SIZE);
+    EXPECT_TRUE(expected.equals(actual));
 }
 
 int main(int argc, char** argv) {

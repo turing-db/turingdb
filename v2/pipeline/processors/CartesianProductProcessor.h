@@ -29,8 +29,8 @@ public:
     PipelineBlockInputInterface& rightHandSide() { return _rhs; }
     PipelineBlockOutputInterface& output() { return _out; }
 
-    Dataframe& leftMemory() { return *_leftMemory; }
-    Dataframe& rightMemory() { return *_rightMemory; }
+    Dataframe& leftMemory() { return _leftMemory; }
+    Dataframe& rightMemory() { return _rightMemory; }
 
 private:
     enum class State {
@@ -49,20 +49,22 @@ private:
     PipelineBlockInputInterface _rhs;
     PipelineBlockOutputInterface _out;
 
-    // Depending on state, keeps track of how far in the input chunk/memory we have
-    // processed
+    // In statate
+    // - IMMEDIATE : tracks the index of the rows in left and right input ports that we next
+    //               need to emit tuples from
+    // - RIGHT(LEFT)_MEMORY : tracks the index of the rows in left (right) input ports and
+    //                        right (left) memory that we next need to emit tuples from
     size_t _lhsPtr {0};
     size_t _rhsPtr {0};
 
+    // A "cycle" is defined by a single call to @ref execute
     size_t _rowsWrittenThisCycle {0};
     size_t _rowsWrittenSinceLastFinished {0};
     size_t _rowsToWriteBeforeFinished {0};
     size_t _rowsWrittenThisState {0};
 
-    bool _finishedThisState {false};
-
-    std::unique_ptr<Dataframe> _leftMemory;
-    std::unique_ptr<Dataframe> _rightMemory;
+    Dataframe _leftMemory;
+    Dataframe _rightMemory;
 
     State _currentState {State::INIT};
 

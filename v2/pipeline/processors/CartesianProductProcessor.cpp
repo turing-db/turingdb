@@ -1,13 +1,8 @@
 #include "CartesianProductProcessor.h"
 
-#include <cstdlib>
-#include <iterator>
-#include <memory>
-
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
-#include "columns/ColumnIDs.h"
 #include "dataframe/Dataframe.h"
 
 #include "BioAssert.h"
@@ -27,23 +22,20 @@ CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipelin
         PipelineInputPort* lhsInput = PipelineInputPort::create(pipeline, processor);
         processor->_lhs.setPort(lhsInput);
         processor->addInput(lhsInput);
+        lhsInput->setNeedsData(false);
     }
 
     {
         PipelineInputPort* rhsInput = PipelineInputPort::create(pipeline, processor);
         processor->_rhs.setPort(rhsInput);
         processor->addInput(rhsInput);
+        rhsInput->setNeedsData(false);
     }
 
     {
         PipelineOutputPort* output = PipelineOutputPort::create(pipeline, processor);
         processor->_out.setPort(output);
         processor->addOutput(output);
-    }
-
-    {
-        processor->_leftMemory = std::make_unique<Dataframe>();
-        processor->_rightMemory = std::make_unique<Dataframe>();
     }
 
     processor->postCreate(pipeline);
@@ -66,7 +58,6 @@ void CartesianProductProcessor::reset() {
 
 void CartesianProductProcessor::nextState() {
     _rowsWrittenThisState = 0;
-    _finishedThisState = false;
     _lhsPtr = 0;
     _rhsPtr = 0;
 
@@ -79,12 +70,10 @@ void CartesianProductProcessor::nextState() {
             _currentState = State::RIGHT_MEMORY;
         }
         break;
-
         case State::RIGHT_MEMORY: {
             _currentState = State::LEFT_MEMORY;
         }
         break;
-
         case State::LEFT_MEMORY : {
             _currentState = State::INIT;
         }
@@ -421,7 +410,7 @@ void CartesianProductProcessor::executeFromRightMem() {
     }
 
     // Nothing in memory => nothing to do
-    if (_rightMemory->getRowCount() == 0) {
+    if (_rightMemory.getRowCount() == 0) {
         nextState();
         return;
     }
@@ -433,7 +422,7 @@ void CartesianProductProcessor::executeFromRightMem() {
     }
 
     Dataframe* lDf = _lhs.getDataframe();
-    Dataframe* rDf = _rightMemory.get();
+    Dataframe* rDf = &_rightMemory;
 
     const size_t rowsNeedToWrite = lDf->getRowCount() * rDf->getRowCount();
     
@@ -461,7 +450,7 @@ void CartesianProductProcessor::executeFromLeftMem() {
     }
 
     // Nothing in memory => nothing to do
-    if (_leftMemory->getRowCount() == 0) {
+    if (_leftMemory.getRowCount() == 0) {
         nextState();
         return;
     }
@@ -472,7 +461,7 @@ void CartesianProductProcessor::executeFromLeftMem() {
         return;
     }
 
-    Dataframe* lDf = _leftMemory.get();
+    Dataframe* lDf = &_leftMemory;
     Dataframe* rDf = _rhs.getDataframe();
 
     const size_t rowsNeedToWrite = lDf->getRowCount() * rDf->getRowCount();
@@ -496,8 +485,8 @@ void CartesianProductProcessor::init() {
     bioassert(_rhsPtr == 0);
     bioassert(_lhsPtr == 0);
     bioassert(_rowsWrittenThisCycle == 0);
-    bioassert(_leftMemory);
-    bioassert(_rightMemory);
+    bioassert(&_leftMemory);
+    bioassert(&_rightMemory);
 
     const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getRowCount() : 0;
     const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getRowCount() : 0;
@@ -505,9 +494,9 @@ void CartesianProductProcessor::init() {
     // LHS x RHS
     const size_t numRowsFromInputProd = n * m;
     // LHS x port-memory(R)
-    const size_t numRowsFromRightMem = n * _rightMemory->getRowCount();
+    const size_t numRowsFromRightMem = n * _rightMemory.getRowCount();
     // port-memory(L) x RHS
-    const size_t numRowsFromLeftMem = _leftMemory->getRowCount() * m;
+    const size_t numRowsFromLeftMem = _leftMemory.getRowCount() * m;
 
     _rowsToWriteBeforeFinished =
         numRowsFromInputProd + numRowsFromRightMem + numRowsFromLeftMem;
@@ -540,8 +529,8 @@ void CartesianProductProcessor::execute() {
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
         // Memorise the new chunks
-        _leftMemory->append(_lhs.getDataframe());
-        _rightMemory->append(_rhs.getDataframe());
+        _leftMemory.append(_lhs.getDataframe());
+        _rightMemory.append(_rhs.getDataframe());
         _lhs.getPort()->consume();
         _rhs.getPort()->consume();
         finish();
