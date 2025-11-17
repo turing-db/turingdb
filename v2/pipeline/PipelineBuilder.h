@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "EntityType.h"
 #include "PipelineV2.h"
 #include "PipelineInterface.h"
 #include "PendingOutputView.h"
@@ -49,8 +50,31 @@ public:
     void projectEdgesOnOtherIDs() { _pendingOutput.projectEdgesOnOtherIDs(); }
 
     // Properties
+    template <EntityType Entity, SupportedType T>
+    PipelineValuesOutputInterface& addGetProperties(PropertyType propertyType);
+
     template <SupportedType T>
-    PipelineValuesOutputInterface& addGetNodeProperties(PropertyType propertyType);
+    PipelineValuesOutputInterface& addGetNodeProperties(PropertyType propertyType) {
+        return addGetProperties<EntityType::Node, T>(propertyType);
+    }
+
+    template <SupportedType T>
+    PipelineValuesOutputInterface& addGetEdgeProperties(PropertyType propertyType) {
+        return addGetProperties<EntityType::Edge, T>(propertyType);
+    }
+
+    template <EntityType Entity, SupportedType T>
+    PipelineValuesOutputInterface& addGetPropertiesWithNull(PropertyType propertyType);
+
+    template <SupportedType T>
+    PipelineValuesOutputInterface& addGetNodePropertiesWithNull(PropertyType propertyType) {
+        return addGetPropertiesWithNull<EntityType::Node, T>(propertyType);
+    }
+
+    template <SupportedType T>
+    PipelineValuesOutputInterface& addGetEdgePropertiesWithNull(PropertyType propertyType) {
+        return addGetPropertiesWithNull<EntityType::Edge, T>(propertyType);
+    }
 
     // Joins/Products
     // LHS is implict in @ref _pendingOutput
@@ -89,6 +113,7 @@ private:
     DataframeManager* _dfMan {nullptr};
     PendingOutputView _pendingOutput;
     MaterializeProcessor* _matProc {nullptr};
+    bool _isMaterializeOpen {false};
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {

@@ -22,6 +22,10 @@ public:
     explicit MaterializeData(LocalMemory* mem,
                              DataframeManager* dfMan);
 
+    void initFromPrev(LocalMemory* mem,
+                      DataframeManager* dfMan,
+                      const MaterializeData& prevData);
+
     ~MaterializeData();
 
     MaterializeData(const MaterializeData& other) = delete;
@@ -35,6 +39,7 @@ public:
 
     const Indices& getIndices() const { return _indices; }
     const ColumnsPerStep& getColumnsPerStep() const { return _columnsPerStep; }
+    ColumnsPerStep& getColumnsPerStep() { return _columnsPerStep; }
     size_t getColumnCount() const { return _colCount; }
 
     // Call this before adding columns to the step

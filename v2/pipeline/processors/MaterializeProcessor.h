@@ -17,6 +17,9 @@ namespace db::v2 {
 class MaterializeProcessor : public Processor {
 public:
     static MaterializeProcessor* create(PipelineV2* pipeline, LocalMemory* mem);
+    static MaterializeProcessor* createFromPrev(PipelineV2* pipeline,
+                                                LocalMemory* mem,
+                                                const MaterializeProcessor& prev);
 
     MaterializeData& getMaterializeData() { return _matData; }
 

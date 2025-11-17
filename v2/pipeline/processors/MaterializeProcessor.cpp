@@ -105,6 +105,27 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
     return materialize;
 }
 
+MaterializeProcessor* MaterializeProcessor::createFromPrev(PipelineV2* pipeline,
+                                                           LocalMemory* mem,
+                                                           const MaterializeProcessor& prev) {
+    MaterializeProcessor* newMat = new MaterializeProcessor(mem, pipeline->getDataframeManager());
+    PipelineInputPort* input = PipelineInputPort::create(pipeline, newMat);
+    newMat->_input.setPort(input);
+    newMat->addInput(input);
+
+    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, newMat);
+    newMat->_output.setPort(output);
+    newMat->addOutput(output);
+
+    newMat->_matData.setOutput(output->getBuffer()->getDataframe());
+
+    newMat->postCreate(pipeline);
+
+    newMat->_matData.initFromPrev(mem, pipeline->getDataframeManager(), prev._matData);
+
+    return newMat;
+}
+
 void MaterializeProcessor::prepare(ExecutionContext* ctxt) {
     markAsPrepared();
 }

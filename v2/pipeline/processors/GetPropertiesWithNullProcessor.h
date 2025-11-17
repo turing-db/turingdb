@@ -21,11 +21,11 @@ namespace db::v2 {
 class PipelineV2;
 
 template <EntityType Entity, SupportedType T>
-class GetPropertiesProcessor : public Processor {
+class GetPropertiesWithNullProcessor : public Processor {
 public:
     using ChunkWriter = std::conditional_t<Entity == EntityType::Node,
-          GetNodePropertiesChunkWriter<T>,
-          GetEdgePropertiesChunkWriter<T>>;
+          GetNodePropertiesWithNullChunkWriter<T>,
+          GetEdgePropertiesWithNullChunkWriter<T>>;
 
     using InputInterface = std::conditional_t<Entity == EntityType::Node,
           PipelineNodeInputInterface,
@@ -37,8 +37,8 @@ public:
     InputInterface& inIDs() { return _inIDs; }
     PipelineValuesOutputInterface& outValues() { return _outValues; }
 
-    static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType) {
-        auto* getProps = new GetPropertiesProcessor(propType);
+    static GetPropertiesWithNullProcessor* create(PipelineV2* pipeline, PropertyType propType) {
+        auto* getProps = new GetPropertiesWithNullProcessor(propType);
 
         PipelineInputPort* inIDs = PipelineInputPort::create(pipeline, getProps);
         PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
@@ -66,9 +66,6 @@ public:
 
         _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-        ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_outValues.getIndices()->getColumn());
-        _propWriter->setIndices(indices);
-
         ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
         _propWriter->setOutput(values);
         markAsPrepared();
@@ -95,12 +92,12 @@ protected:
     InputInterface _inIDs;
     PipelineValuesOutputInterface _outValues;
 
-    GetPropertiesProcessor(PropertyType propType)
+    GetPropertiesWithNullProcessor(PropertyType propType)
         : _propType(propType)
     {
     }
 
-    ~GetPropertiesProcessor() = default;
+    ~GetPropertiesWithNullProcessor() = default;
 };
 
 }

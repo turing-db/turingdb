@@ -133,6 +133,7 @@ template <IteratedID ID, SupportedType T>
 class GetPropertiesWithNullChunkWriter : public GetPropertiesIteratorWithNull<ID, T> {
 public:
     using ColumnIDs = ColumnVector<ID>;
+    using ColumnValues = ColumnOptVector<typename T::Primitive>;
 
     GetPropertiesWithNullChunkWriter(const GraphView& view,
                                      PropertyTypeID propTypeID,
@@ -140,10 +141,10 @@ public:
 
     void fill(size_t maxCount);
 
-    void setOutput(ColumnOptVector<typename T::Primitive>* output) { _output = output; }
+    void setOutput(ColumnValues* output) { _output = output; }
 
 private:
-    ColumnOptVector<typename T::Primitive>* _output {nullptr};
+    ColumnValues* _output {nullptr};
 };
 
 template <SupportedType T>

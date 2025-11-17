@@ -90,6 +90,10 @@ public:
         return _columnAllocators.get(col->getKind())->alloc();
     }
 
+    Column* allocSame(const Column* col) {
+        return _columnAllocators.get(col->getKind())->alloc();
+    }
+
     void clear() {
         _pools.transform<ClearTransform>();
     }

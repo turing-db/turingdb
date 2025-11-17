@@ -3,7 +3,6 @@
 #include "dataframe/DataframeManager.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-#include "columns/ColumnVector.h"
 
 #include "LocalMemory.h"
 
@@ -14,9 +13,23 @@ using namespace db;
 
 MaterializeData::MaterializeData(LocalMemory* mem, DataframeManager* dfMan)
     : _mem(mem),
-    _dfMan(dfMan),
-    _columnsPerStep(1)
+      _dfMan(dfMan),
+      _columnsPerStep(1)
 {
+}
+
+void MaterializeData::initFromPrev(LocalMemory* mem,
+                                   DataframeManager* dfMan,
+                                   const MaterializeData& prevData) {
+    _colCount = prevData._colCount;
+
+    for (const auto& col : prevData._output->cols()) {
+        Column* newCol = mem->allocSame(col->getColumn());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
+
+        _columnsPerStep[0].push_back(col->getColumn());
+        _output->addColumn(newNamedCol);
+    }
 }
 
 MaterializeData::~MaterializeData() {
@@ -41,7 +54,6 @@ void MaterializeData::addToStep(const NamedColumn* col) {
     ColumnType* outCol = _mem->alloc<ColumnType>();
     NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getTag());
     _output->addColumn(outNamedCol);
-
 }
 
 #define INSTANTIATE(Type) \
@@ -55,3 +67,8 @@ INSTANTIATE(ColumnVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnVector<types::Double::Primitive>);
 INSTANTIATE(ColumnVector<types::String::Primitive>);
 INSTANTIATE(ColumnVector<types::Bool::Primitive>);
+INSTANTIATE(ColumnOptVector<types::UInt64::Primitive>);
+INSTANTIATE(ColumnOptVector<types::Int64::Primitive>);
+INSTANTIATE(ColumnOptVector<types::Double::Primitive>);
+INSTANTIATE(ColumnOptVector<types::String::Primitive>);
+INSTANTIATE(ColumnOptVector<types::Bool::Primitive>);

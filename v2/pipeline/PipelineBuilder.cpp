@@ -10,6 +10,7 @@
 #include "processors/ProjectionProcessor.h"
 #include "processors/LambdaProcessor.h"
 #include "processors/GetPropertiesProcessor.h"
+#include "processors/GetPropertiesWithNullProcessor.h"
 #include "processors/SkipProcessor.h"
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
@@ -69,6 +70,12 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     // Create get out edges processor
+    if (!_isMaterializeOpen) {
+        bioassert(_matProc != nullptr);
+        _matProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *_matProc);
+        _isMaterializeOpen = true;
+    }
+
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
     _pendingOutput.connectTo(getOutEdges->inNodeIDs());
 
@@ -132,7 +139,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
 
     NamedColumn* indices = allocColumn<ColumnIndices>(df);
     inEdges.setIndices(indices);
-    
+
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
 
@@ -158,7 +165,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
 
     NamedColumn* indices = allocColumn<ColumnIndices>(df);
     inEdges.setIndices(indices);
-    
+
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
 
@@ -177,10 +184,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
 
 void PipelineBuilder::openMaterialize() {
     _matProc = MaterializeProcessor::create(_pipeline, _mem);
-}
-
-void PipelineBuilder::closeMaterialize() {
-    _matProc = nullptr;
+    _isMaterializeOpen = true;
 }
 
 bool PipelineBuilder::isSingleMaterializeStep() const {
@@ -189,11 +193,11 @@ bool PipelineBuilder::isSingleMaterializeStep() const {
 
 PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
     _pendingOutput.connectTo(_matProc->input());
-    _pendingOutput.setInterface(&_matProc->output());
+    _isMaterializeOpen = false;
 
     auto& output = _matProc->output();
 
-    closeMaterialize();
+    _pendingOutput.setInterface(&output);
 
     return output;
 }
@@ -209,7 +213,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     _pendingOutput.connectTo(skip->input());
 
     duplicateDataframeShape(_mem, _dfMan, skip->input().getDataframe(), skip->output().getDataframe());
-    
+
     _pendingOutput.setInterface(&skip->output());
 
     return skip->output();
@@ -239,7 +243,7 @@ PipelineValueOutputInterface& PipelineBuilder::addCount() {
 
 PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ColumnTag> tags) {
     ProjectionProcessor* projection = ProjectionProcessor::create(_pipeline);
-    
+
     PipelineBlockInputInterface& input = projection->input();
     PipelineBlockOutputInterface& output = projection->output();
 
@@ -276,12 +280,44 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
     return output;
 }
 
-template <db::SupportedType T>
-PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
-    using ColumnValues = ColumnVector<typename T::Primitive>;
+template <EntityType Entity, db::SupportedType T>
+PipelineValuesOutputInterface& PipelineBuilder::addGetProperties(PropertyType propertyType) {
+    using GetPropsProc = GetPropertiesProcessor<Entity, T>;
+    using ColumnValues = typename GetPropsProc::ColumnValues;
 
     // Create get node properties processor
-    auto* getProps = GetNodePropertiesProcessor<T>::create(_pipeline, propertyType);
+    auto* getProps = GetPropsProc::create(_pipeline, propertyType);
+
+    _pendingOutput.connectTo(getProps->inIDs());
+
+    PipelineValuesOutputInterface& outValues = getProps->outValues();
+    Dataframe* outDf = outValues.getDataframe();
+
+    // Allocate indices column
+    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+    outValues.setIndices(indices);
+
+    // Allocate output values column
+    NamedColumn* values = allocColumn<ColumnValues>(outDf);
+    outValues.setValues(values);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+    matData.addToStep<ColumnValues>(values);
+
+    _pendingOutput.setInterface(&outValues);
+
+    return getProps->outValues();
+}
+
+template <EntityType Entity, db::SupportedType T>
+PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(PropertyType propertyType) {
+    using GetPropsProc = GetPropertiesWithNullProcessor<Entity, T>;
+    using ColumnValues = typename GetPropsProc::ColumnValues;
+
+    // Create get node properties processor
+    auto* getProps = GetPropsProc::create(_pipeline, propertyType);
+
     _pendingOutput.connectTo(getProps->inIDs());
 
     PipelineValuesOutputInterface& outValues = getProps->outValues();
@@ -300,13 +336,27 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyTyp
     matData.createStep(indices);
     matData.addToStep<ColumnValues>(values);
 
-    _pendingOutput.setInterface(&getProps->outValues());
-    
     return getProps->outValues();
 }
 
-template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Int64>(PropertyType propertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::UInt64>(PropertyType propertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Double>(PropertyType propertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::String>(PropertyType propertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties<db::types::Bool>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Int64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::UInt64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Double>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::String>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Bool>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Int64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::UInt64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Double>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::String>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Bool>(PropertyType propertyType);
+
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Int64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::UInt64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Double>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::String>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Bool>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Int64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::UInt64>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Double>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::String>(PropertyType propertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(PropertyType propertyType);
