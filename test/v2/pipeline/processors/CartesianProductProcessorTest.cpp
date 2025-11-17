@@ -134,14 +134,14 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
         {
             NodeID actualID = 0; // All should be Remy
             for (size_t i = 0; i < LHS_SIZE * RHS_SIZE; i++) {
-                EXPECT_EQ(actualID, outputLHS->at(i));
+                EXPECT_EQ(actualID.getValue(), outputLHS->at(i).getValue());
             }
         }
 
         // RHS should be scan nodes (0-12)
         for (size_t i = 0; i < LHS_SIZE * RHS_SIZE;) {
             for (auto actualID : std::views::iota(0UL, RHS_SIZE)) {
-                EXPECT_EQ(actualID, outputRHS->at(i));
+                EXPECT_EQ(actualID, outputRHS->at(i).getValue());
                 i++;
             }
         }
