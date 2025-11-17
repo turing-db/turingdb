@@ -6,7 +6,7 @@
 #include "Processor.h"
 
 #include "interfaces/PipelineNodeInputInterface.h"
-#include "interfaces/PipelineEdgeOutputInterface.h"
+#include "interfaces/PipelineEdgeInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 
 #include "ExecutionContext.h"
