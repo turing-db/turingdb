@@ -13,6 +13,8 @@ namespace db::v2 {
 
 class PipelineValuesOutputInterface : public PipelineOutputInterface {
 public:
+    PipelineValuesOutputInterface() = default;
+
     constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUES; }
 
     void setIndices(NamedColumn* indices) { _indices = indices; }
@@ -23,8 +25,14 @@ public:
 
     void rename(const std::string_view& name) override;
     void connectTo(PipelineBlockInputInterface& input) override;
+    void connectTo(PipelineNodeInputInterface& input) override;
+    void connectTo(PipelineEdgeInputInterface& input) override;
+
+    const EntityOutputStream& getStream() const { return _stream; }
 
 private:
+    EntityOutputStream _stream;
+
     NamedColumn* _indices {nullptr};
     NamedColumn* _values {nullptr};
 };

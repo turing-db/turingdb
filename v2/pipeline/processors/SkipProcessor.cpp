@@ -10,8 +10,7 @@
 using namespace db::v2;
 
 SkipProcessor::SkipProcessor(size_t skipCount)
-    : _output(_input),
-    _skipCount(skipCount)
+    : _skipCount(skipCount)
 {
 }
 

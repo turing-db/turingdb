@@ -83,10 +83,11 @@ void PipelineEdgeOutputInterface::connectTo(PipelineBlockInputInterface& input) 
 // Block output
 void PipelineBlockOutputInterface::connectTo(PipelineBlockInputInterface& input) {
     _port->connectTo(input.getPort());
+    input.setStream(input.getStream());
 }
 
 void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) {
-    const ColumnTag nodeIDsTag = _stream->getNodeIDsTag();
+    const ColumnTag nodeIDsTag = _stream.getNodeIDsTag();
     const Dataframe* df = _port->getBuffer()->getDataframe();
 
     if (!nodeIDsTag.isValid()) {
@@ -97,9 +98,9 @@ void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) 
 }
 
 void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    const ColumnTag edgeIDsTag = _stream->getEdgeIDsTag();
-    const ColumnTag otherNodesTag = _stream->getOtherIDsTag();
-    const ColumnTag edgeTypesTag = _stream->getEdgeTypesTag();
+    const ColumnTag edgeIDsTag = _stream.getEdgeIDsTag();
+    const ColumnTag otherNodesTag = _stream.getOtherIDsTag();
+    const ColumnTag edgeTypesTag = _stream.getEdgeTypesTag();
 
     const Dataframe* df = _port->getBuffer()->getDataframe();
 
@@ -127,6 +128,42 @@ void PipelineValueOutputInterface::connectTo(PipelineBlockInputInterface& input)
 
 // Values output
 void PipelineValuesOutputInterface::connectTo(PipelineBlockInputInterface& input) {
+    input.setStream(input.getStream());
     _port->connectTo(input.getPort());
+}
+
+void PipelineValuesOutputInterface::connectTo(PipelineNodeInputInterface& input) {
+    const ColumnTag nodeIDsTag = _stream.getNodeIDsTag();
+    const Dataframe* df = _port->getBuffer()->getDataframe();
+
+    if (!nodeIDsTag.isValid()) {
+        throw PipelineException("PipelineValuesOutputInterface: indices column is not defined");
+    }
+
+    input.setNodeIDs(df->getColumn(nodeIDsTag));
+}
+
+void PipelineValuesOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
+    const ColumnTag edgeIDsTag = _stream.getEdgeIDsTag();
+    const ColumnTag otherNodesTag = _stream.getOtherIDsTag();
+    const ColumnTag edgeTypesTag = _stream.getEdgeTypesTag();
+
+    const Dataframe* df = _port->getBuffer()->getDataframe();
+
+    if (!edgeIDsTag.isValid()) {
+        throw PipelineException("PipelineValuesOutputInterface: edgeIDs column is not defined");
+    }
+
+    if (!otherNodesTag.isValid()) {
+        throw PipelineException("PipelineValuesOutputInterface: otherNodes column is not defined");
+    }
+
+    if (!edgeTypesTag.isValid()) {
+        throw PipelineException("PipelineValuesOutputInterface: edgeTypes column is not defined");
+    }
+
+    input.setEdges(df->getColumn(edgeIDsTag),
+                   df->getColumn(otherNodesTag),
+                   df->getColumn(edgeTypesTag));
 }
 
