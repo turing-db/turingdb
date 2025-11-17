@@ -29,8 +29,6 @@
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
 
-#include "PipelineException.h"
-
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -504,13 +502,12 @@ TEST_F(PipelineTest, scanNodesCount) {
 TEST_F(PipelineTest, multiChunkCount) {
     LocalMemory mem;
     PipelineV2 pipeline;
-
     PipelineBuilder builder(&mem, &pipeline);
 
     // Create a source of 100 chunks
-    size_t currentChunk = 0;
+    size_t currentChunk = 1;
     constexpr size_t chunkCount = 1000;
-    constexpr size_t chunkSize = ChunkConfig::CHUNK_SIZE;
+    constexpr size_t chunkSize = 100;
     auto sourceCallback = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
         if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
             return;
@@ -524,10 +521,11 @@ TEST_F(PipelineTest, multiChunkCount) {
         nodeIDs->resize(chunkSize);
         std::iota(nodeIDs->begin(), nodeIDs->end(), 0);
 
-        currentChunk++;
         if (currentChunk == chunkCount) {
             isFinished = true;
         }
+
+        currentChunk++;
     };
 
     builder.addLambdaSource(sourceCallback);
@@ -553,3 +551,28 @@ TEST_F(PipelineTest, multiChunkCount) {
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 }
+
+/*
+TEST_F(PipelineTest, abcOverwrite) {
+    LocalMemory mem;
+    PipelineV2 pipeline;
+    PipelineBuilder builder(&mem, &pipeline);
+
+    auto sourceA = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+    };
+
+    auto transformB = [&](const Dataframe* src, Dataframe* dest, bool& isFinished, auto operation) -> void {
+    };
+
+    auto transformC = [&](const Dataframe* src, Dataframe* dest, bool& isFinished, auto operation) -> void {
+    };
+
+    auto sink = [](const Dataframe* df, auto operation) -> void {
+    };
+
+    builder.addLambdaSource(sourceA);
+    builder.addLambdaTransform(transformB);
+    builder.addLambdaTransform(transformC);
+    builder.addLambda(sink);
+}
+*/

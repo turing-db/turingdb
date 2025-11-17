@@ -10,6 +10,10 @@ LambdaSourceProcessor::LambdaSourceProcessor(Callback callback)
 LambdaSourceProcessor::~LambdaSourceProcessor() {
 }
 
+std::string_view LambdaSourceProcessor::describe() const {
+    return "LambdaSourceProcessor";
+}
+
 void LambdaSourceProcessor::prepare(ExecutionContext* ctxt) {
     bool isFinished = false;
     _callback(_output.getDataframe(), isFinished, Operation::PREPARE);
@@ -25,6 +29,7 @@ void LambdaSourceProcessor::reset() {
 void LambdaSourceProcessor::execute() {
     bool isFinished = false;
     _callback(_output.getDataframe(), isFinished, Operation::EXECUTE);
+    _output.getPort()->writeData();
 
     if (isFinished) {
         finish();

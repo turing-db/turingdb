@@ -16,6 +16,10 @@ ScanNodesProcessor::ScanNodesProcessor()
 ScanNodesProcessor::~ScanNodesProcessor() {
 }
 
+std::string_view ScanNodesProcessor::describe() const {
+    return "ScanNodesProcessor";
+}
+
 ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {
     ScanNodesProcessor* scanNodes = new ScanNodesProcessor();
 

@@ -15,6 +15,11 @@ CountProcessor::CountProcessor()
 CountProcessor::~CountProcessor() {
 }
 
+
+std::string_view CountProcessor::describe() const {
+    return "CountProcessor";
+}
+
 CountProcessor* CountProcessor::create(PipelineV2* pipeline) {
     CountProcessor* count = new CountProcessor();
 
@@ -42,7 +47,6 @@ void CountProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void CountProcessor::reset() {
-    _countRunning = 0;
     markAsReset();
 }
 

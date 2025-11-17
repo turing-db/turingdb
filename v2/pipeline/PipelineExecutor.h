@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue>
+#include <stack>
 
 namespace db::v2 {
 
@@ -23,7 +24,7 @@ public:
 private:
     PipelineV2* _pipeline {nullptr};
     ExecutionContext* _ctxt {nullptr};
-    std::queue<Processor*> _activeQueue;
+    std::stack<Processor*> _activeStack;
     std::queue<Processor*> _updateQueue;
 };
 

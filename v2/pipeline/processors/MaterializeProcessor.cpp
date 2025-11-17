@@ -84,6 +84,10 @@ MaterializeProcessor::MaterializeProcessor(LocalMemory* mem, DataframeManager* d
 MaterializeProcessor::~MaterializeProcessor() {
 }
 
+std::string_view MaterializeProcessor::describe() const {
+    return "MaterializeProcessor";
+}
+
 MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMemory* mem) {
     MaterializeProcessor* materialize = new MaterializeProcessor(mem, pipeline->getDataframeManager());
 
