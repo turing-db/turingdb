@@ -939,7 +939,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
 }
 
 TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
-    using Rows = LineContainer<NodeID, EdgeID, EdgeTypeID, NodeID>;
+    using Rows = LineContainer<NodeID, NodeID, EdgeID, EdgeTypeID, NodeID>;
 
     auto [transaction, view, reader] = readGraph();
 
@@ -988,7 +988,7 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
 
         for (const NodeID val : {999, 998}) {
             for (const EdgeRecord rec : reader.getOutEdges(&allNodes)) {
-                expected.add({val, rec._edgeID, rec._edgeTypeID, rec._otherID});
+                expected.add({val, rec._nodeID, rec._edgeID, rec._edgeTypeID, rec._otherID});
             }
         }
     }
@@ -998,8 +998,24 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump();
         ASSERT_EQ(df->size(), L_COLS + R_COLS);
+
+        const size_t rowCount = df->getRowCount();
+        const auto* lhs = df->cols().at(0)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(lhs);
+        const auto* rhsSrc = df->cols().at(1)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(rhsSrc);
+        const auto* rhsEdge = df->cols().at(2)->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(rhsEdge);
+        const auto* rhsType = df->cols().at(3)->as<ColumnEdgeTypes>();
+        ASSERT_TRUE(rhsType);
+        const auto* rhsTgt = df->cols().at(4)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(rhsTgt);
+        for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+            actual.add({lhs->at(rowPtr), rhsSrc->at(rowPtr), rhsEdge->at(rowPtr),
+                            rhsType->at(rowPtr), rhsTgt->at(rowPtr)});
+        }
+
     };
 
     _builder->addLambda(VERIFY_CALLBACK);

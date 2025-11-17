@@ -23,6 +23,10 @@ public:
     void reset() final;
     void execute() final;
 
+    std::string_view describe() const final {
+        return "CartesianProductProcessor";
+    }
+
     PipelineBlockInputInterface& leftHandSide() { return _lhs; }
     PipelineBlockInputInterface& rightHandSide() { return _rhs; }
     PipelineBlockOutputInterface& output() { return _out; }

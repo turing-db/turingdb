@@ -1,9 +1,11 @@
 #pragma once
 
 #include <ostream>
+#include <iostream>
 #include <tuple>
 #include <unordered_map>
 #include <spdlog/fmt/bundled/format.h>
+#include <spdlog/spdlog.h>
 
 template <typename... ValueTypes>
 class LineContainer {
@@ -52,16 +54,25 @@ public:
 
     bool equals(const LineContainer<ValueTypes...>& other) const {
         if (_lineMap.size() != other._lineMap.size()) {
+            spdlog::error("<this> has size {}, whilst <other> has size {}.",
+                          _lineMap.size(), other._lineMap.size());
             return false;
         }
 
         for (const auto& [line, count] : _lineMap) {
             const auto it = other._lineMap.find(line);
             if (it == other._lineMap.end()) {
+                spdlog::error("<this> contains, whilst <other> does not:");
+                std::cout << "\t\t";
+                printTuple(std::cout, line._values);
                 return false;
             }
 
             if (it->second != count) {
+                spdlog::error("Tuple appears {} times in <this> but {} times in <other>",
+                              count, it->second);
+                std::cout << "\t\t";
+                printTuple(std::cout, line._values);
                 return false;
             }
         }
@@ -72,7 +83,7 @@ public:
     size_t size() const { return _lineMap.size(); }
     size_t lineSize() const { return sizeof...(ValueTypes); }
 
-    void print(std::ostream& os) const {
+    void print(std::ostream& os = std::cout) const {
         for (const auto& [line, count] : _lineMap) {
             os << "[";
             printTuple(os, line._values);
