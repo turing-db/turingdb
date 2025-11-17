@@ -529,10 +529,15 @@ void CartesianProductProcessor::execute() {
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
         // Memorise the new chunks
-        _leftMemory.append(_lhs.getDataframe());
-        _rightMemory.append(_rhs.getDataframe());
-        _lhs.getPort()->consume();
-        _rhs.getPort()->consume();
+        if (_lhs.getPort()->hasData()) {
+            _leftMemory.append(_lhs.getDataframe());
+            _lhs.getPort()->consume();
+        }
+
+        if (_rhs.getPort()->hasData()) {
+            _rightMemory.append(_rhs.getDataframe());
+            _rhs.getPort()->consume();
+        }
         finish();
         _rowsWrittenSinceLastFinished = 0;
     }
