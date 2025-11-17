@@ -801,6 +801,59 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     }
 }
 
+TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3x2) {
+    // using NodeIDTuple = std::pair<NodeID, NodeID>;
+
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t CHUNK_SIZE = 3;
+    constexpr size_t L_COLS = 1;
+    constexpr size_t R_COLS = 1;
+    // constexpr size_t L_ROWS = 13;
+    // constexpr size_t R_ROWS = 2;
+
+    // Make a dataframe of
+    // 999
+    // 998
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), R_COLS);
+        {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->push_back(999);
+            col->push_back(998);
+        }
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < R_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), L_COLS + R_COLS);
+    }
+
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        df->dump();
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, CHUNK_SIZE);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 1;
