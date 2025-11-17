@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <range/v3/view/zip.hpp>
+#include <set>
 
 #include "processors/ProcessorTester.h"
 
@@ -737,11 +738,15 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
 }
 
 TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
+    using NodeIDTuple = std::pair<NodeID, NodeID>;
+
     auto [transaction, view, reader] = readGraph();
 
     constexpr size_t CHUNK_SIZE = 3;
-    // [[mayubconstexpr size_t OUTPUT_NUM_ROWS = 169;
-    // constexpr size_t NUM_NODES_IN_SCAN = 13;
+    constexpr size_t L_COLS = 1;
+    constexpr size_t R_COLS = 1;
+    constexpr size_t L_ROWS = 13;
+    constexpr size_t R_ROWS = 13;
 
     auto& scanNodes2 = _builder->addScanNodes();
     [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
@@ -754,16 +759,46 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     [[maybe_unused]] const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
     [[maybe_unused]] const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
+    // We should have n x n for all nodes n
+    std::set<NodeIDTuple> expectedTuples;
+    {
+        for (const NodeID l : reader.scanNodes()) {
+            for (const NodeID r : reader.scanNodes()) {
+                expectedTuples.emplace(l, r);
+            }
+        }
+    }
+
+    size_t numChunks {0};
+    std::set<NodeIDTuple> actualTuples;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        ASSERT_EQ(df->size(), L_COLS + R_COLS);
+        const auto* lCol = df->cols().front()->as<ColumnNodeIDs>();
+        const auto* rCol = df->cols().back()->as<ColumnNodeIDs>();
 
-        // df->dump(std::cout);
+        const size_t rowCount = df->getRowCount();
+        for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+            const NodeID left = lCol->at(rowPtr);
+            const NodeID right = rCol->at(rowPtr);
+            actualTuples.emplace(left, right);
+        }
+        numChunks++;
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, CHUNK_SIZE);
+    {
+        size_t expectedChunks = std::ceil((L_ROWS * R_ROWS) / (float) CHUNK_SIZE);
+        EXPECT_EQ(expectedChunks, numChunks);
+
+        EXPECT_EQ(expectedTuples.size(), actualTuples.size());
+        for (const auto& expected : expectedTuples) {
+            EXPECT_TRUE(actualTuples.contains(expected));
+        }
+    }
 }
 
 int main(int argc, char** argv) {

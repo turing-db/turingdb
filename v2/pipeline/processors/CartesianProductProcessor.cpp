@@ -1,6 +1,7 @@
 #include "CartesianProductProcessor.h"
 
 #include <cstdlib>
+#include <iterator>
 #include <memory>
 
 #include "PipelineV2.h"
@@ -12,7 +13,6 @@
 #include "BioAssert.h"
 #include "FatalException.h"
 #include "columns/ColumnSwitch.h"
-#include "spdlog/spdlog.h"
 
 using namespace db::v2;
 
@@ -145,12 +145,10 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left, Dataframe* ri
         }
 
         if (ourLhsPtr == n + 1) { // We have written all rows from LHS
-            spdlog::info("Exiting early becuse ptr = n+ 1 ({} == {}", ourLhsPtr, n + 1);
             return;
         }
 
         if (remainingSpace == 0) { // We have ran out of space
-            spdlog::info("Exiting early because no space (in set lhs col)");
             return;
         }
 
@@ -323,7 +321,7 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     const size_t rowsShouldWrite = std::min(rowsCanWrite, rowsNeedWrite);
     bioassert(rowsCanWrite > 0);
 
-    const size_t newSize = std::min(chunkSize, rowsShouldWrite);
+    const size_t newSize = std::min(chunkSize, _rowsWrittenThisCycle + rowsShouldWrite);
 
     // Resize all columns in the output to be the correct size, then we can just copy in
     for (NamedColumn* col : oDF->cols()) {
@@ -353,7 +351,6 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
         _rhsPtr = 0;
     } else {
         _rhsPtr += rowsUsedForEntryLhsPtr;
-        spdlog::info("used != needed ({} != {}) ==> rhs = {}", rowsUsedForEntryLhsPtr, rowsNeededforEntryLhsPtr, _rhsPtr);
     }
     remainingSpaceOnEntry -= rowsUsedForEntryLhsPtr;
     if (remainingSpaceOnEntry == 0) {
@@ -404,6 +401,7 @@ void CartesianProductProcessor::executeFromImmediate() {
 
     const size_t rowsWritten = fillOutput(lDF, rDF); // Fill from immediate ports
     _rowsWrittenSinceLastFinished += rowsWritten;
+    _rowsWrittenThisCycle += rowsWritten;
     // n * m - rows we already wrote
     const size_t rowsNeededToWrite = lDF->getRowCount() * rDF->getRowCount();
 
@@ -411,8 +409,6 @@ void CartesianProductProcessor::executeFromImmediate() {
         // We could not write all we needed -> return, remaining in same state
         return;
     }
-    // XXX: THERE IS A BUG HERE WHERE WE EXIT TOO EARLY, I THINK ROWS WRITTEN SINCE LAST FINISHED IS NOT RESET
-    spdlog::info("We wrote {} and needed {}", _rowsWrittenSinceLastFinished, rowsNeededToWrite);
 
     nextState(); // Sets state to @ref RIGHT_MEMORY
 }
@@ -430,6 +426,11 @@ void CartesianProductProcessor::executeFromRightMem() {
         return;
     }
 
+    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
+    if (remainingSpace == 0) {
+        // No space, have not written what we need: stay in same state
+        return;
+    }
 
     Dataframe* lDf = _lhs.getDataframe();
     Dataframe* rDf = _rightMemory.get();
@@ -441,6 +442,7 @@ void CartesianProductProcessor::executeFromRightMem() {
 
     _rowsWrittenSinceLastFinished += rowsWritten;
     _rowsWrittenThisState += rowsWritten;
+    _rowsWrittenThisCycle += rowsWritten;
 
     if (_rowsWrittenThisState != rowsNeedToWrite) {
         // No space, have not written what we need: stay in same state
@@ -464,6 +466,12 @@ void CartesianProductProcessor::executeFromLeftMem() {
         return;
     }
 
+    const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
+    if (remainingSpace == 0) {
+        // No space, have not written what we need: stay in same state
+        return;
+    }
+
     Dataframe* lDf = _leftMemory.get();
     Dataframe* rDf = _rhs.getDataframe();
 
@@ -474,6 +482,7 @@ void CartesianProductProcessor::executeFromLeftMem() {
 
     _rowsWrittenSinceLastFinished += rowsWritten;
     _rowsWrittenThisState += rowsWritten;
+    _rowsWrittenThisCycle += rowsWritten;
 
     if (_rowsWrittenThisState != rowsNeedToWrite) {
         // No space, have not written what we need: stay in same state
@@ -538,14 +547,4 @@ void CartesianProductProcessor::execute() {
         finish();
         _rowsWrittenSinceLastFinished = 0;
     }
-
-    spdlog::info("AFTER THIS CYCLE:");
-    spdlog::info("In state {}", (int)_currentState);
-    spdlog::info("LHSPTR = {}, RHSPTR = {}", _lhsPtr, _rhsPtr);
-    spdlog::info("Emitting:");
-    _out.getDataframe()->dump();
-    // spdlog::info("Left memory:");
-    // _leftMemory->dump();
-    // spdlog::info("Right memory:");
-    // _rightMemory->dump();
 }
