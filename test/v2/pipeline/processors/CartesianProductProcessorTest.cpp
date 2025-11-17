@@ -32,7 +32,6 @@ public:
     }
 };
 
-/*
 TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     auto [transaction, view, reader] = readGraph();
 
@@ -866,7 +865,6 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     }
 }
 
-*/
 TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
     using Rows = LineContainer<NodeID, NodeID>;
 

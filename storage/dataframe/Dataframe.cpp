@@ -4,8 +4,9 @@
 
 #include "NamedColumn.h"
 #include "columns/Column.h"
+#include "columns/ColumnDispatcher.h"
 
-#include "columns/ColumnSwitch.h"
+#include "BioAssert.h"
 
 using namespace db;
 

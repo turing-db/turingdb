@@ -7,7 +7,8 @@
 
 #include "BioAssert.h"
 #include "FatalException.h"
-#include "columns/ColumnSwitch.h"
+#include "columns/ColumnDispatcher.h"
+#include "dataframe/NamedColumn.h"
 
 using namespace db::v2;
 
@@ -48,7 +49,6 @@ void CartesianProductProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void CartesianProductProcessor::reset() {
-    // TODO: Clear memory, reset ptrs, state
     markAsReset();
 }
 

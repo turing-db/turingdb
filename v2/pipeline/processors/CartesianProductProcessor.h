@@ -34,6 +34,11 @@ public:
     Dataframe& leftMemory() { return _leftMemory; }
     Dataframe& rightMemory() { return _rightMemory; }
 
+    CartesianProductProcessor(CartesianProductProcessor&) = delete;
+    CartesianProductProcessor& operator=(CartesianProductProcessor&) = delete;
+    CartesianProductProcessor(CartesianProductProcessor&&) = delete;
+    CartesianProductProcessor& operator=(CartesianProductProcessor&&) = delete;
+
 private:
     enum class State {
         INIT,
@@ -51,7 +56,7 @@ private:
     PipelineBlockInputInterface _rhs;
     PipelineBlockOutputInterface _out;
 
-    // In statate
+    // In state:
     // - IMMEDIATE : tracks the index of the rows in left and right input ports that we next
     //               need to emit tuples from
     // - RIGHT(LEFT)_MEMORY : tracks the index of the rows in left (right) input ports and
