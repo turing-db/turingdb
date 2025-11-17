@@ -49,11 +49,13 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
     const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
+    bool executed {false};
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
                               LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
 
         const auto* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
         const auto* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
@@ -76,6 +78,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, NUM_NODES_IN_SCAN * NUM_NODES_IN_SCAN);
+    ASSERT_TRUE(executed);
 }
 
 TEST_F(CartesianProductProcessorTest, remyProdRest) {
@@ -120,10 +123,12 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
     const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
     const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
-    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    bool executed {false};
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
 
         const auto* outputLHS = df->getColumn<ColumnNodeIDs>(lhsNodes);
         const auto* outputRHS = df->getColumn<ColumnNodeIDs>(rhsNodes);
@@ -147,8 +152,9 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
         }
     };
 
-    _builder->addLambda(callback);
+    _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, LHS_SIZE * RHS_SIZE);
+    ASSERT_TRUE(executed);
 }
 
 TEST_F(CartesianProductProcessorTest, twoByTwo) {
@@ -218,15 +224,17 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
+    bool executed {false};
      // Output Dataframe should be looking like:
      // 1 2 101 102
      // 1 2 102 103
      // 2 3 101 102
      // 2 3 102 103
-    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
 
         ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
 
@@ -252,8 +260,9 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         }
     };
 
-    _builder->addLambda(callback);
+    _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
+    ASSERT_TRUE(executed);
 }
 
 TEST_F(CartesianProductProcessorTest, nonSymmetric) {
@@ -279,7 +288,7 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
         NodeID nextID = 101;
         for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
-            ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
             col->resize(LHS_NUM_ROWS);
@@ -333,35 +342,38 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-     //  Output should be:
-     //  101 106 1  5  9
-     //  101 106 2  6  10
-     //  101 106 3  7  11
-     //  101 106 4  8  12
-     // 
-     //  102 107 1  5  9
-     //  102 107 2  6  10
-     //  102 107 3  7  11
-     //  102 107 4  8  12
-     // 
-     //  103 108 1  5  9
-     //  103 108 2  6  10
-     //  103 108 3  7  11
-     //  103 108 4  8  12
-     // 
-     //  104 109 1  5  9
-     //  104 109 2  6  10
-     //  104 109 3  7  11
-     //  104 109 4  8  12
-     // 
-     //  105 110 1  5  9
-     //  105 110 2  6  10
-     //  105 110 3  7  11
-     //  105 110 4  8  12
-    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    //  Output should be:
+    //  101 106 1  5  9
+    //  101 106 2  6  10
+    //  101 106 3  7  11
+    //  101 106 4  8  12
+    //
+    //  102 107 1  5  9
+    //  102 107 2  6  10
+    //  102 107 3  7  11
+    //  102 107 4  8  12
+    //
+    //  103 108 1  5  9
+    //  103 108 2  6  10
+    //  103 108 3  7  11
+    //  103 108 4  8  12
+    //
+    //  104 109 1  5  9
+    //  104 109 2  6  10
+    //  104 109 3  7  11
+    //  104 109 4  8  12
+    //
+    //  105 110 1  5  9
+    //  105 110 2  6  10
+    //  105 110 3  7  11
+    //  105 110 4  8  12
+    bool executed {false};
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
 
         ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
 
@@ -427,6 +439,7 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
+    ASSERT_TRUE(executed);
 }
 
 TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
@@ -523,11 +536,12 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
     };
     auto expFstColIt = begin(expectedFstCol);
     auto expSndColIt = begin(expectedSndCol);
+    bool executed {false};
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump();
+        executed = true;
 
         numChunks++;
         chunkSizes.push_back(df->getRowCount());
@@ -550,6 +564,7 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
     _builder->addLambda(VERIFY_CALLBACK);
     {
         EXECUTE(view, CHUNK_SIZE);
+        ASSERT_TRUE(executed);
         EXPECT_EQ(EXP_NUM_CHUNKS, numChunks);
         for (const auto [expected, actual] : rv::zip(EXPECTED_CHUNK_SIZES, chunkSizes)) {
             EXPECT_EQ(expected, actual);
@@ -686,10 +701,12 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
     auto expThdColIt = begin(expectedThdCol);
     auto expFrtColIt = std::begin(expectedFrtCol);
     auto expFthColIt = std::begin(expectedFthCol);
+    bool executed {false};
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
 
         numChunks++;
         chunkSizes.push_back(df->getRowCount());
@@ -734,6 +751,7 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
     _builder->addLambda(VERIFY_CALLBACK);
     {
         EXECUTE(view, CHUNK_SIZE);
+        ASSERT_TRUE(executed);
         EXPECT_EQ(EXP_NUM_CHUNKS, numChunks);
         for (const auto [expected, actual] : rv::zip(EXPECTED_CHUNK_SIZES, chunkSizes)) {
             EXPECT_EQ(expected, actual);
@@ -773,12 +791,14 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
         }
     }
 
+    bool executed {false};
     size_t numChunks {0};
     std::set<NodeIDTuple> actualTuples;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
         ASSERT_EQ(df->size(), L_COLS + R_COLS);
         const auto* lCol = df->cols().front()->as<ColumnNodeIDs>();
         const auto* rCol = df->cols().back()->as<ColumnNodeIDs>();
@@ -795,9 +815,9 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, CHUNK_SIZE);
     {
+        ASSERT_TRUE(executed);
         size_t expectedChunks = std::ceil((L_ROWS * R_ROWS) / (float) CHUNK_SIZE);
         EXPECT_EQ(expectedChunks, numChunks);
-
         EXPECT_EQ(expectedTuples.size(), actualTuples.size());
         for (const auto& expected : expectedTuples) {
             EXPECT_TRUE(actualTuples.contains(expected));
@@ -832,11 +852,12 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     }
 
     Rows actualRows;
+    bool executed {false};
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump();
+        executed = true;
 
         ASSERT_EQ(df->size(), expectedRows.lineSize());
         size_t rowCount = df->getRowCount();
@@ -860,6 +881,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, 1000); // Some large chunk size that means we can fit all in one chunk
     {
+        ASSERT_TRUE(executed);
         EXPECT_EQ(expectedRows.size(), actualRows.size());
         EXPECT_TRUE(actualRows.equals(expectedRows));
     }
@@ -916,10 +938,12 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
     }
 
     Rows actual;
+    bool executed {false};
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
 
         ASSERT_EQ(df->size(), 2);
         const auto* lhs = df->cols().front()->as<ColumnNodeIDs>();
@@ -933,6 +957,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, CHUNK_SIZE);
+    ASSERT_TRUE(executed);
     EXPECT_TRUE(expected.equals(actual));
 }
 
@@ -992,10 +1017,12 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
     }
 
     Rows actual;
+    bool executed {false};
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
+        executed = true;
         ASSERT_EQ(df->size(), L_COLS + R_COLS);
 
         const size_t rowCount = df->getRowCount();
@@ -1018,6 +1045,7 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, CHUNK_SIZE);
+    ASSERT_TRUE(executed);
     EXPECT_TRUE(expected.equals(actual));
 }
 
