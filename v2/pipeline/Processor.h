@@ -39,13 +39,13 @@ public:
     // 1. All inputs have data (the processor has all the data it needs)
     // 2. All outputs are free (the processor can write its output)
     bool canExecute() const {
-        for (const PipelinePort* input : _inputs) {
+        for (const PipelineInputPort* input : _inputs) {
             if (!input->hasData() && input->needsData()) {
                 return false;
             }
         }
 
-        for (const PipelinePort* output : _outputs) {
+        for (const PipelineOutputPort* output : _outputs) {
             if (!output->canWriteData()) {
                 return false;
             }

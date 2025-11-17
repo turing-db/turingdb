@@ -46,6 +46,9 @@ public:
     PipelineEdgeOutputInterface& addGetEdges();
     void projectEdgesOnOtherIDs() { _pendingOutput.projectEdgesOnOtherIDs(); }
 
+    // Lambda transform
+    PipelineBlockOutputInterface& addLambdaTransform(const LambdaTransformProcessor::Callback& cb);
+
     // Properties
     template <SupportedType T>
     PipelineValuesOutputInterface& addGetNodeProperties(PropertyType propertyType);
