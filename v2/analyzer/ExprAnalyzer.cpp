@@ -17,8 +17,9 @@ using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-      _graphView(graphView),
-      _graphMetadata(_graphView.metadata()) {
+    _graphView(graphView),
+    _graphMetadata(_graphView.metadata())
+{
 }
 
 ExprAnalyzer::~ExprAnalyzer() {
