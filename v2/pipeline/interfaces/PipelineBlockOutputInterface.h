@@ -11,10 +11,7 @@ namespace db::v2 {
 
 class PipelineBlockOutputInterface : public PipelineOutputInterface {
 public:
-    explicit PipelineBlockOutputInterface(const PipelineBlockInputInterface& input)
-        : _stream(&input.getStream())
-    {
-    }
+    PipelineBlockOutputInterface() = default;
 
     static PipelineBlockOutputInterface createOutputOnly() {
         return {};
@@ -26,14 +23,10 @@ public:
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineEdgeInputInterface& input) override;
 
-    const EntityOutputStream* getStream() const {
-        return _stream;
-    }
+    const EntityOutputStream& getStream() const { return _stream; }
 
 private:
-    const EntityOutputStream* _stream {nullptr};
-
-    PipelineBlockOutputInterface() = default;
+    EntityOutputStream _stream;
 };
 
 }
