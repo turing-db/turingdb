@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ostream>
+#include <tuple>
 #include <unordered_map>
 #include <spdlog/fmt/bundled/format.h>
 
@@ -67,6 +68,9 @@ public:
 
         return true;
     }
+
+    size_t size() const { return _lineMap.size(); }
+    size_t lineSize() const { return sizeof...(ValueTypes); }
 
     void print(std::ostream& os) const {
         for (const auto& [line, count] : _lineMap) {

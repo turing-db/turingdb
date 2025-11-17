@@ -3,6 +3,9 @@
 #include <range/v3/view/zip.hpp>
 #include <set>
 
+#include "EdgeRecord.h"
+#include "LineContainer.h"
+#include "dataframe/ColumnTag.h"
 #include "processors/ProcessorTester.h"
 
 #include "processors/CartesianProductProcessor.h"
@@ -801,7 +804,68 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     }
 }
 
+TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
+    using Rows = LineContainer<NodeID, NodeID, EdgeID, EdgeTypeID, NodeID>;
+    auto [transaction, view, reader] = readGraph();
+
+    _builder->addScanNodes();
+    _builder->addGetOutEdges();
+    auto& matProc = _builder->addMaterialize();
+
+    _builder->addScanNodes();
+
+    // scanNodes as implicit LHS
+    [[maybe_unused]] const auto& cartProd = _builder->addCartesianProduct(&matProc);
+
+    Rows expectedRows;
+    {
+        for (const NodeID lhs: reader.scanNodes()) {
+            for (const NodeID rhsSrc : reader.scanNodes()) {
+                ColumnNodeIDs src = {rhsSrc};
+                for (const EdgeRecord rhs : reader.getOutEdges(&src)) {
+                    expectedRows.add(
+                        {lhs, rhs._nodeID, rhs._edgeID, rhs._edgeTypeID, rhs._otherID});
+                }
+            }
+        }
+    }
+
+    Rows actualRows;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        df->dump();
+
+        ASSERT_EQ(df->size(), expectedRows.lineSize());
+        size_t rowCount = df->getRowCount();
+
+        const auto* lhs = df->cols().at(0)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(lhs);
+        const auto* rhsSrc = df->cols().at(1)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(rhsSrc);
+        const auto* rhsEdge = df->cols().at(2)->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(rhsEdge);
+        const auto* rhsType = df->cols().at(3)->as<ColumnEdgeTypes>();
+        ASSERT_TRUE(rhsType);
+        const auto* rhsTgt = df->cols().at(4)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(rhsTgt);
+
+        for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+            actualRows.add({lhs->at(rowPtr), rhsSrc->at(rowPtr), rhsEdge->at(rowPtr),
+                            rhsType->at(rowPtr), rhsTgt->at(rowPtr)});
+        }
+    };
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, 1000); // Some large chunk size that means we can fit all in one chunk
+    {
+        EXPECT_EQ(expectedRows.size(), actualRows.size());
+        EXPECT_TRUE(actualRows.equals(expectedRows));
+    }
+}
+
 TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3x2) {
+    ASSERT_TRUE(false) << "Implement needsData to prevent infinite loop";
     // using NodeIDTuple = std::pair<NodeID, NodeID>;
 
     auto [transaction, view, reader] = readGraph();
