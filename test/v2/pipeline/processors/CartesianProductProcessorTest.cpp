@@ -919,7 +919,6 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
-        df->dump();
 
         ASSERT_EQ(df->size(), 2);
         const auto* lhs = df->cols().front()->as<ColumnNodeIDs>();
