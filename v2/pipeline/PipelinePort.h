@@ -26,6 +26,14 @@ public:
         return _connectedPort ? _buffer->hasData() : false;
     }
 
+    void setNeedsData(bool needsData) {
+        _needsData = needsData;
+    }
+
+    bool needsData() const {
+        return _connectedPort ? _needsData : false;
+    }
+
     bool canWriteData() const {
         return _connectedPort ? !_buffer->hasData() : true;
     }
@@ -54,8 +62,9 @@ protected:
     PipelinePort* _connectedPort {nullptr};
     PipelineBuffer* _buffer {nullptr};
     bool _open {true};
+    bool _needsData {true};
 
-    PipelinePort(Processor* processor)
+    explicit PipelinePort(Processor* processor)
         : _processor(processor)
     {}
 

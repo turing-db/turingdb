@@ -37,7 +37,7 @@ public:
     // 2. All outputs are free (the processor can write its output)
     bool canExecute() const {
         for (const PipelinePort* input : _inputs) {
-            if (!input->hasData()) {
+            if (!input->hasData() && input->needsData()) {
                 return false;
             }
         }
