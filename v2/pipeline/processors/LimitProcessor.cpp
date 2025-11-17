@@ -3,7 +3,6 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "dataframe/Dataframe.h"
-#include "spdlog/fmt/bundled/base.h"
 
 using namespace db::v2;
 
@@ -60,7 +59,7 @@ void LimitProcessor::execute() {
         const size_t rowsToWrite = std::min(blockRowCount, remainingCapacity);
         if (rowsToWrite == 0) {
             _reachedLimit = true;
-            _input.getPort()->close();
+            setTerminated();
             return;
         }
         
@@ -68,7 +67,7 @@ void LimitProcessor::execute() {
 
         if (blockRowCount >= remainingCapacity) {
             _reachedLimit = true;
-            _input.getPort()->close();
+            setTerminated();
         }
 
         _currentRowCount += rowsToWrite;

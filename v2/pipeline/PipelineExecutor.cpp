@@ -9,7 +9,7 @@ using namespace db::v2;
 PipelineExecutor::PipelineExecutor(PipelineV2* pipeline,
                                    ExecutionContext* ctxt)
     : _pipeline(pipeline),
-      _ctxt(ctxt)
+    _ctxt(ctxt)
 {
 }
 
