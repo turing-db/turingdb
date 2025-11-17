@@ -148,9 +148,12 @@ bool PipelineBuilder::isSingleMaterializeStep() const {
 PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
     _pendingOutput.connectTo(_matProc->input());
     _pendingOutput.setInterface(&_matProc->output());
+
+    auto& output = _matProc->output();
+
     closeMaterialize();
 
-    return _matProc->output();
+    return output;
 }
 
 void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {

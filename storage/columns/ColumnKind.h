@@ -61,6 +61,8 @@ public:
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, LabelSet>) {
             return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, EdgeTypeID>) {
+            return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, std::string>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, ColumnVector<EntityID>>) {
