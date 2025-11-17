@@ -25,6 +25,8 @@ public:
     using Values = typename PropertyChunkWriter::Values;
     using ColumnValues = typename PropertyChunkWriter::ColumnValues;
 
+    std::string_view describe() const override { return "GetPropertiesProcessor"; }
+
     PipelineNodeInputInterface& inIDs() { return _inIDs; }
     PipelineValuesOutputInterface& outValues() { return _outValues; }
 

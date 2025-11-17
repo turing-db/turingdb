@@ -17,34 +17,34 @@ PipelineExecutor::~PipelineExecutor() {
 }
 
 void PipelineExecutor::init() {
-    // Add all sources to the active queue
-    auto& activeQueue = _activeQueue;
-	for (Processor* source : _pipeline->sources()) {
-		activeQueue.push(source);
-	}
+    // Add all sources to the active stack
+    auto& activeStack = _activeStack;
+    for (Processor* source : _pipeline->sources()) {
+        activeStack.push(source);
+    }
 }
 
 void PipelineExecutor::execute() {
     init();
-    while (!_activeQueue.empty()) {
+    while (!_activeStack.empty()) {
         executeCycle();
     }
 }
 
 void PipelineExecutor::executeCycle() {
-    auto& activeQueue = _activeQueue;
+    auto& activeStack = _activeStack;
     auto& updateQueue = _updateQueue;
 
-    // Search for active processors that are ready to execute
-    const size_t activeCount = activeQueue.size();
-    for (size_t i = 0; i < activeCount; i++) {
-        Processor* processor = activeQueue.front();
-        activeQueue.pop();
+    // Search for an active processor in the active stack
+    {
+        while (!_activeStack.empty()) {
+            Processor* proc = _activeStack.top();
+            _activeStack.pop();
 
-        if (processor->canExecute()) {
-            updateQueue.push(processor);
-        } else {
-            activeQueue.push(processor);
+            if (proc->canExecute()) {
+                _updateQueue.push(proc);
+                break;
+            }
         }
     }
 
@@ -65,7 +65,7 @@ void PipelineExecutor::executeCycle() {
 
         // If the processor is not finished in one step, add to the active queue
         if (!currentProc->isFinished()) {
-            activeQueue.push(currentProc);
+            activeStack.push(currentProc);
         }
 
         currentProc->setScheduled(false);

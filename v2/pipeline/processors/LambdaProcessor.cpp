@@ -10,6 +10,10 @@ LambdaProcessor::LambdaProcessor(const Callback& callback)
 LambdaProcessor::~LambdaProcessor() {
 }
 
+std::string_view LambdaProcessor::describe() const {
+    return "LambdaProcessor";
+}
+
 void LambdaProcessor::prepare(ExecutionContext* ctxt) {
     markAsPrepared();
 }
