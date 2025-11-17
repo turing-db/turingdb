@@ -29,6 +29,6 @@ def run(client : TuringDB) -> None:
   try:
     submit_current_change(client)
   except Exception as e:
-    assert str(e) == "EXEC_ERROR: Unexpected exception: This change attempted to create an edge with source Node 3 (which is now Node 3 on main) which has been modified on main."
+    assert str(e) == "EXEC_ERROR: This change attempted to create an edge with source Node 3 (which is now Node 3 on main) which has been modified on main."
   else:
     assert False # If an exception wasn't  raised: bug

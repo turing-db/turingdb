@@ -28,7 +28,7 @@ def run(client : TuringDB) -> None:
   try:
     submit_current_change(client)
   except Exception as e:
-    assert str(e) == "EXEC_ERROR: Unexpected exception: This change attempted to delete Node 9 (which is now Node 9 on main) which has been modified on main."
+    assert str(e) == "EXEC_ERROR: This change attempted to delete Node 9 (which is now Node 9 on main) which has been modified on main."
   else:
     assert False # If no exception: bug
 
@@ -40,7 +40,7 @@ def run(client : TuringDB) -> None:
   try:
     submit_current_change(client)
   except Exception as e:
-    assert str(e) == "EXEC_ERROR: Unexpected exception: This change attempted to delete Edge 1 (which is now Edge 1 on main) which has been modified on main."
+    assert str(e) == "EXEC_ERROR: This change attempted to delete Edge 1 (which is now Edge 1 on main) which has been modified on main."
   else:
     assert False # If no exception: bug
 

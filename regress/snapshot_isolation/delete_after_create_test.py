@@ -30,7 +30,7 @@ def run(client: TuringDB) -> None:
   try:
     submit_current_change(client)
   except Exception as e:
-    assert str(e) == "EXEC_ERROR: Unexpected exception: Submit rejected: Commits on main have created an edge incident to a node this Change attempts to delete."
+    assert str(e) == "EXEC_ERROR: Submit rejected: Commits on main have created an edge (ID: 2) incident to Node 2, which this Change attempts to delete."
   else:
     assert False # If an exception wasn't raised: bug
 
