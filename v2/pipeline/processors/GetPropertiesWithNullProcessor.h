@@ -5,14 +5,15 @@
 #include "EntityType.h"
 #include "Processor.h"
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineNodeInputInterface.h"
+#include "interfaces/PipelineEdgeInputInterface.h"
+#include "interfaces/PipelineValuesOutputInterface.h"
 
 #include "ExecutionContext.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnIndices.h"
 #include "iterators/GetPropertiesIterator.h"
 #include "dataframe/NamedColumn.h"
 
