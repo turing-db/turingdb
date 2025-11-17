@@ -4,7 +4,7 @@
 
 #include "Processor.h"
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineNodeOutputInterface.h"
 
 namespace db {
 class ScanNodesChunkWriter;

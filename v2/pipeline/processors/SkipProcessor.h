@@ -2,7 +2,8 @@
 
 #include "Processor.h"
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineBlockInputInterface.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 
 namespace db::v2 {
 

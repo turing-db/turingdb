@@ -5,7 +5,9 @@
 #include "EntityType.h"
 #include "Processor.h"
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineNodeInputInterface.h"
+#include "interfaces/PipelineEdgeOutputInterface.h"
+#include "interfaces/PipelineValuesOutputInterface.h"
 
 #include "ExecutionContext.h"
 

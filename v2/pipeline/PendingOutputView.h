@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineEdgeOutputInterface.h"
 
 namespace db {
 class Dataframe;

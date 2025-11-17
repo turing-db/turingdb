@@ -2,7 +2,6 @@
 
 #include <math.h>
 
-#include "PipelineInterface.h"
 #include "SystemManager.h"
 #include "Graph.h"
 #include "TuringDB.h"

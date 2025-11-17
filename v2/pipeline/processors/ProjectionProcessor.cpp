@@ -5,6 +5,7 @@
 using namespace db::v2;
 
 ProjectionProcessor::ProjectionProcessor()
+    : _output(_input)
 {
 }
 

@@ -77,7 +77,8 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
 }
 
 MaterializeProcessor::MaterializeProcessor(LocalMemory* mem, DataframeManager* dfMan)
-    : _matData(mem, dfMan)
+    : _output(_input),
+    _matData(mem, dfMan)
 {
 }
 

@@ -4,7 +4,7 @@
 
 #include "Processor.h"
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 
 namespace db {
 class Dataframe;

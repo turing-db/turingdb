@@ -7,7 +7,8 @@
 using namespace db::v2;
 
 LimitProcessor::LimitProcessor(size_t limit)
-    : _limit(limit)
+    : _output(_input),
+    _limit(limit)
 {
 }
 

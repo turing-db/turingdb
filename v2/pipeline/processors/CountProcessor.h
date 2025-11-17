@@ -4,7 +4,8 @@
 
 #include "columns/ColumnConst.h"
 
-#include "PipelineInterface.h"
+#include "interfaces/PipelineBlockInputInterface.h"
+#include "interfaces/PipelineValueOutputInterface.h"
 
 namespace db::v2 {
 

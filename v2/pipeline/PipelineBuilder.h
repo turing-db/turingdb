@@ -4,12 +4,15 @@
 
 #include "EntityType.h"
 #include "PipelineV2.h"
-#include "PipelineInterface.h"
 #include "PendingOutputView.h"
 
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
+
+#include "interfaces/PipelineNodeOutputInterface.h"
+#include "interfaces/PipelineValuesOutputInterface.h"
+#include "interfaces/PipelineValueOutputInterface.h"
 
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
