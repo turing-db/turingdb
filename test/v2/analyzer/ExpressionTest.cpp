@@ -6,6 +6,7 @@
 #include "CypherAST.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
+#include "decl/DeclContext.h"
 #include "expr/All.h"
 #include "versioning/Transaction.h"
 
@@ -21,12 +22,15 @@ public:
         auto tx = _graph->openTransaction();
         auto view = tx.viewGraph();
 
+        _declContext = DeclContext::create(&_ast, nullptr);
         _analyzer = std::make_unique<ExprAnalyzer>(&_ast, view);
+        _analyzer->setDeclContext(_declContext);
     }
 
 protected:
     std::unique_ptr<Graph> _graph;
     std::unique_ptr<ExprAnalyzer> _analyzer;
+    DeclContext* _declContext {nullptr};
 
     CypherAST _ast {""};
 };
@@ -57,7 +61,7 @@ TEST_F(ExpressionTest, LiteralExpressionTest) {
     EXPECT_EQ(charLiteral->getType(), EvaluatedType::Char);
 }
 
-#define EXPECT_BINARY_ISVALID(a, op, b, eval)                       \
+#define EXPECT_BINARY_VALID(a, op, b, eval)                         \
     {                                                               \
         LiteralExpr* lhs = LiteralExpr::create(&_ast, a);           \
         LiteralExpr* rhs = LiteralExpr::create(&_ast, b);           \
@@ -93,10 +97,10 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     /// Valid
     BoolLiteral* trueLiteral = BoolLiteral::create(&_ast, true);
     BoolLiteral* falseLiteral = BoolLiteral::create(&_ast, false);
-    EXPECT_BINARY_ISVALID(trueLiteral, BinaryOperator::Or, trueLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(falseLiteral, BinaryOperator::Or, trueLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(trueLiteral, BinaryOperator::Xor, falseLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(falseLiteral, BinaryOperator::And, falseLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::Or, trueLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(falseLiteral, BinaryOperator::Or, trueLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::Xor, falseLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(falseLiteral, BinaryOperator::And, falseLiteral, EvaluatedType::Bool);
     /// Invalid
     IntegerLiteral* fiveLiteral = IntegerLiteral::create(&_ast, 5);
     EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::Or, fiveLiteral);
@@ -114,16 +118,16 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     db::v2::StringLiteral* stringLiteral = db::v2::StringLiteral::create(&_ast, "string");
     db::v2::StringLiteral* xLiteral = db::v2::StringLiteral::create(&_ast, "x");
     CharLiteral* aLiteral = db::v2::CharLiteral::create(&_ast, 'a');
-    EXPECT_BINARY_ISVALID(trueLiteral, BinaryOperator::NotEqual, trueLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(falseLiteral, BinaryOperator::Equal, trueLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::NotEqual, tenLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fourtyTwoLiteral, BinaryOperator::Equal, fourtyTwoLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(db::v2::StringLiteral::create(&_ast, "test"), BinaryOperator::NotEqual, helloLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(sameLiteral, BinaryOperator::Equal, sameLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(stringLiteral, BinaryOperator::NotEqual, aLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(xLiteral, BinaryOperator::Equal, xLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(aLiteral, BinaryOperator::NotEqual, aLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(CharLiteral::create(&_ast, 'z'), BinaryOperator::Equal, CharLiteral::create(&_ast, 'z'), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::NotEqual, trueLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(falseLiteral, BinaryOperator::Equal, trueLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::NotEqual, tenLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fourtyTwoLiteral, BinaryOperator::Equal, fourtyTwoLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(db::v2::StringLiteral::create(&_ast, "test"), BinaryOperator::NotEqual, helloLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(sameLiteral, BinaryOperator::Equal, sameLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(stringLiteral, BinaryOperator::NotEqual, aLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(xLiteral, BinaryOperator::Equal, xLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(aLiteral, BinaryOperator::NotEqual, aLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'z'), BinaryOperator::Equal, CharLiteral::create(&_ast, 'z'), EvaluatedType::Bool);
     /// Invalid
     EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::NotEqual, fiveLiteral);
     EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::Equal, trueLiteral);
@@ -139,18 +143,18 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     IntegerLiteral* fifteenLiteral = IntegerLiteral::create(&_ast, 15);
     IntegerLiteral* threeLiteral = IntegerLiteral::create(&_ast, 3);
     IntegerLiteral* sevenLiteral = IntegerLiteral::create(&_ast, 7);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::LessThan, tenLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fifteenLiteral, BinaryOperator::GreaterThan, threeLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::LessThanOrEqual, fiveLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(sevenLiteral, BinaryOperator::GreaterThanOrEqual, sevenLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::LessThan, DoubleLiteral::create(&_ast, 10.2), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 15.7), BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 5.0), BinaryOperator::LessThanOrEqual, DoubleLiteral::create(&_ast, 5.0), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 7.1), BinaryOperator::GreaterThanOrEqual, DoubleLiteral::create(&_ast, 7.1), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::LessThan, DoubleLiteral::create(&_ast, 10.5), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fifteenLiteral, BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::LessThanOrEqual, DoubleLiteral::create(&_ast, 5.0), EvaluatedType::Bool);
-    EXPECT_BINARY_ISVALID(sevenLiteral, BinaryOperator::GreaterThanOrEqual, DoubleLiteral::create(&_ast, 6.9), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::LessThan, tenLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fifteenLiteral, BinaryOperator::GreaterThan, threeLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::LessThanOrEqual, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(sevenLiteral, BinaryOperator::GreaterThanOrEqual, sevenLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::LessThan, DoubleLiteral::create(&_ast, 10.2), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 15.7), BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 5.0), BinaryOperator::LessThanOrEqual, DoubleLiteral::create(&_ast, 5.0), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 7.1), BinaryOperator::GreaterThanOrEqual, DoubleLiteral::create(&_ast, 7.1), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::LessThan, DoubleLiteral::create(&_ast, 10.5), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fifteenLiteral, BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::LessThanOrEqual, DoubleLiteral::create(&_ast, 5.0), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(sevenLiteral, BinaryOperator::GreaterThanOrEqual, DoubleLiteral::create(&_ast, 6.9), EvaluatedType::Bool);
     /// Invalid
     EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::LessThan, fiveLiteral);
     EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::GreaterThan, trueLiteral);
@@ -167,27 +171,27 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     IntegerLiteral* seventeenLiteral = IntegerLiteral::create(&_ast, 17);
     IntegerLiteral* twoLiteral = IntegerLiteral::create(&_ast, 2);
     IntegerLiteral* eightLiteral = IntegerLiteral::create(&_ast, 8);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::Add, tenLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_ISVALID(fifteenLiteral, BinaryOperator::Sub, threeLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_ISVALID(fourLiteral, BinaryOperator::Mult, sevenLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_ISVALID(twentyLiteral, BinaryOperator::Div, fourLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_ISVALID(seventeenLiteral, BinaryOperator::Mod, fiveLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_ISVALID(twoLiteral, BinaryOperator::Pow, eightLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_ISVALID(fiveLiteral, BinaryOperator::Add, DoubleLiteral::create(&_ast, 10.2), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(fifteenLiteral, BinaryOperator::Sub, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(fourLiteral, BinaryOperator::Mult, DoubleLiteral::create(&_ast, 7.5), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(twentyLiteral, BinaryOperator::Div, DoubleLiteral::create(&_ast, 4.1), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 15.7), BinaryOperator::Sub, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 4.0), BinaryOperator::Mult, DoubleLiteral::create(&_ast, 7.5), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 20.4), BinaryOperator::Div, DoubleLiteral::create(&_ast, 4.1), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 17.8), BinaryOperator::Mod, DoubleLiteral::create(&_ast, 5.2), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 2.5), BinaryOperator::Pow, DoubleLiteral::create(&_ast, 3.0), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::Add, tenLiteral, EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 15.7), BinaryOperator::Sub, IntegerLiteral::create(&_ast, 3), EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 4.0), BinaryOperator::Mult, sevenLiteral, EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 20.4), BinaryOperator::Div, fourLiteral, EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 17.8), BinaryOperator::Mod, fiveLiteral, EvaluatedType::Double);
-    EXPECT_BINARY_ISVALID(DoubleLiteral::create(&_ast, 2.5), BinaryOperator::Pow, threeLiteral, EvaluatedType::Double);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::Add, tenLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(fifteenLiteral, BinaryOperator::Sub, threeLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(fourLiteral, BinaryOperator::Mult, sevenLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(twentyLiteral, BinaryOperator::Div, fourLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(seventeenLiteral, BinaryOperator::Mod, fiveLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(twoLiteral, BinaryOperator::Pow, eightLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::Add, DoubleLiteral::create(&_ast, 10.2), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(fifteenLiteral, BinaryOperator::Sub, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(fourLiteral, BinaryOperator::Mult, DoubleLiteral::create(&_ast, 7.5), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(twentyLiteral, BinaryOperator::Div, DoubleLiteral::create(&_ast, 4.1), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 15.7), BinaryOperator::Sub, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 4.0), BinaryOperator::Mult, DoubleLiteral::create(&_ast, 7.5), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 20.4), BinaryOperator::Div, DoubleLiteral::create(&_ast, 4.1), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 17.8), BinaryOperator::Mod, DoubleLiteral::create(&_ast, 5.2), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 2.5), BinaryOperator::Pow, DoubleLiteral::create(&_ast, 3.0), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::Add, tenLiteral, EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 15.7), BinaryOperator::Sub, IntegerLiteral::create(&_ast, 3), EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 4.0), BinaryOperator::Mult, sevenLiteral, EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 20.4), BinaryOperator::Div, fourLiteral, EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 17.8), BinaryOperator::Mod, fiveLiteral, EvaluatedType::Double);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 2.5), BinaryOperator::Pow, threeLiteral, EvaluatedType::Double);
     /// Invalid
     EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::Add, fiveLiteral);
     EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::Sub, trueLiteral);
@@ -202,11 +206,11 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
 
     // In operator (membership testing)
     /// Valid - assuming you have list and map literals
-    // EXPECT_BINARY_ISVALID(Literal {5}, BinaryOperator::In, ListLiteral {/* some list */});
-    // EXPECT_BINARY_ISVALID(Literal {"key"}, BinaryOperator::In, MapLiteral {/* some map */});
-    // EXPECT_BINARY_ISVALID(Literal {true}, BinaryOperator::In, ListLiteral {/* some list */});
-    // EXPECT_BINARY_ISVALID(Literal {'c'}, BinaryOperator::In, ListLiteral {/* some list */});
-    // EXPECT_BINARY_ISVALID(Literal {5.5}, BinaryOperator::In, MapLiteral {/* some map */});
+    // EXPECT_BINARY_VALID(Literal {5}, BinaryOperator::In, ListLiteral {/* some list */});
+    // EXPECT_BINARY_VALID(Literal {"key"}, BinaryOperator::In, MapLiteral {/* some map */});
+    // EXPECT_BINARY_VALID(Literal {true}, BinaryOperator::In, ListLiteral {/* some list */});
+    // EXPECT_BINARY_VALID(Literal {'c'}, BinaryOperator::In, ListLiteral {/* some list */});
+    // EXPECT_BINARY_VALID(Literal {5.5}, BinaryOperator::In, MapLiteral {/* some map */});
     /// Invalid
     EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::In, tenLiteral);
     EXPECT_BINARY_INVALID(db::v2::StringLiteral::create(&_ast, "key"), BinaryOperator::In, db::v2::StringLiteral::create(&_ast, "string"));
