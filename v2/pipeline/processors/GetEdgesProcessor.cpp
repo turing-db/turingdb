@@ -22,10 +22,6 @@ GetEdgesProcessor::GetEdgesProcessor()
 GetEdgesProcessor::~GetEdgesProcessor() {
 }
 
-std::string_view GetEdgesProcessor::describe() const {
-    return "GetEdgesProcessor";
-}
-
 GetEdgesProcessor* GetEdgesProcessor::create(PipelineV2* pipeline) {
     GetEdgesProcessor* getInEdges = new GetEdgesProcessor();
 

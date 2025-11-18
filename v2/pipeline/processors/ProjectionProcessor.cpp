@@ -9,10 +9,6 @@ ProjectionProcessor::ProjectionProcessor()
 ProjectionProcessor::~ProjectionProcessor() {
 }
 
-std::string_view ProjectionProcessor::describe() const {
-    return "ProjectionProcessor";
-}
-
 ProjectionProcessor* ProjectionProcessor::create(PipelineV2* pipeline) {
     ProjectionProcessor* proj = new ProjectionProcessor();
 

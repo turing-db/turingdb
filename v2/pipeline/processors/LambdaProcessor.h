@@ -21,8 +21,6 @@ public:
 
     using Callback = std::function<void(const Dataframe*, Operation)>;
 
-    std::string_view describe() const override;
-
     static LambdaProcessor* create(PipelineV2* pipeline, const Callback& callback);
 
     void prepare(ExecutionContext* ctxt) override;
