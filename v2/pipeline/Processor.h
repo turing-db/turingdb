@@ -54,12 +54,6 @@ public:
         return true;
     }
 
-    bool isTerminated() const { 
-        return _terminated;
-    }
-
-    void setTerminated() { _terminated = true; }
-
 protected:
     Processor();
     virtual ~Processor();
@@ -78,7 +72,6 @@ private:
     bool _scheduled {false};
     bool _finished {false};
     bool _prepared {false};
-    bool _terminated {false};
 
     bool checkInputsClosed() const;
     void closeOutputs();
