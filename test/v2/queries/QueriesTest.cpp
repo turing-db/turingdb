@@ -213,14 +213,14 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
 }
 
 TEST_F(QueriesTest, scanExpand1) {
-    const std::string query = "MATCH (n)-->(m) RETURN n";
+    const std::string query = "MATCH (n)-->(m) RETURN n, m";
 
     std::vector<NodeID> returnedTargets;
     std::vector<NodeID> returnedSources;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 4);
-        ASSERT_EQ(df->size(), 4);
+        ASSERT_EQ(df->cols().size(), 2);
+        ASSERT_EQ(df->size(), 2);
 
         const ColumnNodeIDs* targetIDs = nullptr;
         const ColumnNodeIDs* sourceIDs = nullptr;
@@ -264,15 +264,15 @@ TEST_F(QueriesTest, scanExpand1) {
 }
 
 TEST_F(QueriesTest, scanExpand2) {
-    const std::string query = "MATCH (n)-->(m)-->(t) RETURN n";
+    const std::string query = "MATCH (n)-->(m)-->(t) RETURN n, m, t";
 
     std::vector<NodeID> returnedTargets1;
     std::vector<NodeID> returnedTargets2;
     std::vector<NodeID> returnedSources;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 7);
-        ASSERT_EQ(df->size(), 7);
+        ASSERT_EQ(df->cols().size(), 3);
+        ASSERT_EQ(df->size(), 3);
 
         const ColumnNodeIDs* targetIDs1 = nullptr;
         const ColumnNodeIDs* targetIDs2 = nullptr;
@@ -329,14 +329,14 @@ TEST_F(QueriesTest, scanExpand2) {
 }
 
 TEST_F(QueriesTest, scanExpandIn) {
-    const std::string query = "MATCH (n)<--(m) RETURN n";
+    const std::string query = "MATCH (n)<--(m) RETURN n, m";
 
     LineContainer<NodeID,NodeID> returned;
     LineContainer<NodeID,NodeID> expected;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 4);
-        ASSERT_EQ(df->size(), 4);
+        ASSERT_EQ(df->cols().size(), 2);
+        ASSERT_EQ(df->size(), 2);
 
         const ColumnNodeIDs* targetIDs = nullptr;
         const ColumnNodeIDs* sourceIDs = nullptr;
@@ -377,14 +377,14 @@ TEST_F(QueriesTest, scanExpandIn) {
 }
 
 TEST_F(QueriesTest, scanExpandIn2) {
-    const std::string query = "MATCH (n)<-[e1]-(m)<-[e2]-(t) RETURN n";
+    const std::string query = "MATCH (n)<-[e1]-(m)<-[e2]-(t) RETURN n, e1, m, e2, t";
 
     LineContainer<NodeID, EdgeID, NodeID, EdgeID, NodeID> returnedLines;
     LineContainer<NodeID, EdgeID, NodeID, EdgeID, NodeID> expectedLines;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 7);
-        ASSERT_EQ(df->size(), 7);
+        ASSERT_EQ(df->cols().size(), 5);
+        ASSERT_EQ(df->size(), 5);
 
         const ColumnNodeIDs* sourceIDs = nullptr;
         const ColumnEdgeIDs* edgeIDs1 = nullptr;
@@ -448,14 +448,14 @@ TEST_F(QueriesTest, scanExpandIn2) {
 }
 
 TEST_F(QueriesTest, scanEdges) {
-    const std::string query = "MATCH (n)-[e]-(m) RETURN n";
+    const std::string query = "MATCH (n)-[e]-(m) RETURN n, e, m";
 
     LineContainer<NodeID, EdgeID, NodeID> returnedLines;
     LineContainer<NodeID, EdgeID, NodeID> expectedLines;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 4);
-        ASSERT_EQ(df->size(), 4);
+        ASSERT_EQ(df->cols().size(), 3);
+        ASSERT_EQ(df->size(), 3);
 
         const ColumnNodeIDs* sourceIDs = nullptr;
         const ColumnEdgeIDs* edgeIDs = nullptr;
