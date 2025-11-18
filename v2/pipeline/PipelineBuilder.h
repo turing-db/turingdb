@@ -78,6 +78,8 @@ public:
         return allocColumn<ColumnType>(_pendingOutput.getDataframe(), tag);
     }
 
+    PendingOutputView& pendingOutput() { return _pendingOutput; }
+
 private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};

@@ -73,6 +73,8 @@ public:
 
     bool isRoot() const { return _inputs.empty(); }
 
+    bool isBinary() const { return _inputs.size() == 2; }
+
     void connectOut(PlanGraphNode* succ) {
         _outputs.emplace_back(succ);
         succ->_inputs.emplace_back(this);

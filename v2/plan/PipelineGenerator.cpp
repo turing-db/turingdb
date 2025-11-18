@@ -4,10 +4,15 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "PendingOutputView.h"
+#include "PipelineException.h"
+#include "PipelineInterface.h"
 #include "PlanGraph.h"
 #include "PlanGraphStream.h"
 
 #include "Projection.h"
+#include "nodes/CartesianProductNode.h"
+#include "nodes/PlanGraphNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -57,7 +62,32 @@ void PipelineGenerator::generate() {
         translateNode(node, stream);
 
         for (PlanGraphNode* nextNode : node->outputs()) {
-            nodeStack.emplace(nextNode, stream);
+            if (!nextNode->isBinary()) {
+                nodeStack.emplace(nextNode, stream);
+                continue;
+            }
+
+            // Binary node case
+            // Cartesian Product and Join require their inputs to be materialised
+            if (_builder.isMaterializeOpen()) {
+                throw PipelineException("Attempted to add input to binary node "
+                                        "whilst Materialize is open.");
+            }
+
+            const bool visited = _binaryVisitedMap.contains(nextNode);
+            if (visited) {
+                translateNode(node, stream);
+                continue;
+            }
+
+            const PendingOutputView& pendingOutput = _builder.pendingOutput();
+
+            const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
+            const bool isLhs = node == binaryNodeInputs.front();
+            bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
+            const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
+
+            _binaryVisitedMap.emplace(nextNode, info);
         }
     }
 }
@@ -126,7 +156,7 @@ void PipelineGenerator::translateNode(PlanGraphNode* node, PlanGraphStream& stre
     }
 }
 
-void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream) {
+void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream&) {
     const std::string_view varName = node->getVarDecl()->getName();
     if (varName.empty()) {
         throw PlannerException("VarNode with empty name");
@@ -151,11 +181,11 @@ void PipelineGenerator::translateVarNode(VarNode* node, PlanGraphStream& stream)
     }
 }
 
-void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream) {
+void PipelineGenerator::translateScanNodesNode(ScanNodesNode*, PlanGraphStream&) {
     _builder.addScanNodes();
 }
 
-void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream) {
+void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode*, PlanGraphStream& ) {
     _builder.addGetOutEdges();
 }
 
@@ -265,4 +295,22 @@ void PipelineGenerator::translateLimitNode(LimitNode* node, PlanGraphStream& str
     }
 
     _builder.addLimit(static_cast<size_t>(integerLiteral->getValue()));
+}
+
+void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node, PlanGraphStream&) {
+    if (_binaryVisitedMap.contains(node)) {
+        throw PipelineException("Attempted to translate CartesianProductNode which was "
+                                "not already encountered.");
+    }
+
+    PipelineOutputInterface* inputA = _builder.pendingOutput().getInterface();
+    auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
+
+    PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
+    [[maybe_unused]] PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
+
+    // LHS is implicit in @ref _pendingOutput
+    _builder.pendingOutput().setInterface(lhs);
+
+    // _builder.addCartesianProduct();
 }
