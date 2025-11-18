@@ -192,10 +192,12 @@ bool PipelineBuilder::isSingleMaterializeStep() const {
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
-    _pendingOutput.connectTo(_matProc->input());
-    _isMaterializeOpen = false;
-
+    auto& input = _matProc->input();
     auto& output = _matProc->output();
+
+    _pendingOutput.connectTo(input);
+    output.setStream(input.getStream());
+    _isMaterializeOpen = false;
 
     _pendingOutput.setInterface(&output);
 
@@ -210,22 +212,30 @@ void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
 
 PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     SkipProcessor* skip = SkipProcessor::create(_pipeline, count);
-    _pendingOutput.connectTo(skip->input());
 
-    duplicateDataframeShape(_mem, _dfMan, skip->input().getDataframe(), skip->output().getDataframe());
+    auto& input = skip->input();
+    auto& output = skip->output();
 
-    _pendingOutput.setInterface(&skip->output());
+    _pendingOutput.connectTo(input);
+    output.setStream(input.getStream());
+    duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
+
+    _pendingOutput.setInterface(&output);
 
     return skip->output();
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     LimitProcessor* limit = LimitProcessor::create(_pipeline, count);
-    _pendingOutput.connectTo(limit->input());
 
-    duplicateDataframeShape(_mem, _dfMan, limit->input().getDataframe(), limit->output().getDataframe());
+    auto& input = limit->input();
+    auto& output = limit->output();
 
-    _pendingOutput.setInterface(&limit->output());
+    _pendingOutput.connectTo(input);
+    output.setStream(input.getStream());
+    duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
+
+    _pendingOutput.setInterface(&output);
 
     return limit->output();
 }
@@ -288,9 +298,19 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetProperties(PropertyType pr
     // Create get node properties processor
     auto* getProps = GetPropsProc::create(_pipeline, propertyType);
 
-    _pendingOutput.connectTo(getProps->inIDs());
-
+    auto& input = getProps->inIDs();
     PipelineValuesOutputInterface& outValues = getProps->outValues();
+
+    _pendingOutput.connectTo(input);
+
+    if constexpr (Entity == EntityType::Node) {
+        outValues.setStream(EntityOutputStream::createNodeStream(input.getNodeIDs()->getTag()));
+    } else {
+        outValues.setStream(EntityOutputStream::createEdgeStream(input.getEdgeIDs()->getTag(),
+                                                                 input.getOtherNodes()->getTag(),
+                                                                 input.getEdgeTypes()->getTag()));
+    }
+
     Dataframe* outDf = outValues.getDataframe();
 
     // Allocate indices column

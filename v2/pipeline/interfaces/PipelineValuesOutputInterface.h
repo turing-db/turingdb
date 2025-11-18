@@ -28,6 +28,8 @@ public:
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineEdgeInputInterface& input) override;
 
+    void setStream(const EntityOutputStream& stream) { _stream = stream; }
+
     const EntityOutputStream& getStream() const { return _stream; }
 
 private:

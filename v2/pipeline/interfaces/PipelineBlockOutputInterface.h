@@ -13,15 +13,13 @@ class PipelineBlockOutputInterface : public PipelineOutputInterface {
 public:
     PipelineBlockOutputInterface() = default;
 
-    static PipelineBlockOutputInterface createOutputOnly() {
-        return {};
-    }
-
     constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::BLOCK; }
 
     void connectTo(PipelineBlockInputInterface& input) override;
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineEdgeInputInterface& input) override;
+
+    void setStream(const EntityOutputStream& stream) { _stream = stream; }
 
     const EntityOutputStream& getStream() const { return _stream; }
 

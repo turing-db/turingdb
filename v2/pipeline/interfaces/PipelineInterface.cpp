@@ -83,7 +83,7 @@ void PipelineEdgeOutputInterface::connectTo(PipelineBlockInputInterface& input) 
 // Block output
 void PipelineBlockOutputInterface::connectTo(PipelineBlockInputInterface& input) {
     _port->connectTo(input.getPort());
-    input.setStream(input.getStream());
+    input.setStream(_stream);
 }
 
 void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) {
@@ -95,6 +95,7 @@ void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) 
     }
 
     input.setNodeIDs(df->getColumn(nodeIDsTag));
+    _port->connectTo(input.getPort());
 }
 
 void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
@@ -119,6 +120,7 @@ void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) 
     input.setEdges(df->getColumn(edgeIDsTag),
                    df->getColumn(otherNodesTag),
                    df->getColumn(edgeTypesTag));
+    _port->connectTo(input.getPort());
 }
 
 // Value output
@@ -128,7 +130,7 @@ void PipelineValueOutputInterface::connectTo(PipelineBlockInputInterface& input)
 
 // Values output
 void PipelineValuesOutputInterface::connectTo(PipelineBlockInputInterface& input) {
-    input.setStream(input.getStream());
+    input.setStream(_stream);
     _port->connectTo(input.getPort());
 }
 
@@ -141,6 +143,7 @@ void PipelineValuesOutputInterface::connectTo(PipelineNodeInputInterface& input)
     }
 
     input.setNodeIDs(df->getColumn(nodeIDsTag));
+    _port->connectTo(input.getPort());
 }
 
 void PipelineValuesOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
@@ -165,5 +168,6 @@ void PipelineValuesOutputInterface::connectTo(PipelineEdgeInputInterface& input)
     input.setEdges(df->getColumn(edgeIDsTag),
                    df->getColumn(otherNodesTag),
                    df->getColumn(edgeTypesTag));
+    _port->connectTo(input.getPort());
 }
 
