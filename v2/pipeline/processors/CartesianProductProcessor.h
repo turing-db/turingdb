@@ -23,7 +23,7 @@ public:
     void reset() final;
     void execute() final;
 
-    std::string_view describe() const final {
+    std::string describe() const final {
         return "CartesianProductProcessor";
     }
 
