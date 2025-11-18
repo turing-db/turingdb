@@ -10,8 +10,12 @@ class Column;
 
 namespace db::v2 {
 
-class EvalProgram {
+class PipelineV2;
+
+class ExprProgram {
 public:
+    friend PipelineV2;
+
     struct Instruction {
         ColumnOperator _op;
         Column* _res {nullptr};
@@ -21,8 +25,7 @@ public:
 
     using Instructions = std::vector<Instruction>;
 
-    EvalProgram();
-    ~EvalProgram();
+    static ExprProgram* create(PipelineV2* pipeline);
 
     const Instructions& instrs() const { return _instrs; }
 
@@ -35,6 +38,8 @@ public:
 private:
     Instructions _instrs;
 
+    ExprProgram();
+    ~ExprProgram();
     void evalInstr(const Instruction& instr);
 };
 

@@ -10,16 +10,19 @@ namespace db::v2 {
 class Processor;
 class PipelinePort;
 class PipelineBuffer;
+class ExprProgram;
 
 class PipelineV2 {
 public:
     friend Processor;
     friend PipelinePort;
     friend PipelineBuffer;
+    friend ExprProgram;
     using Processors = std::vector<Processor*>;
     using SourcesSet = std::unordered_set<Processor*>;
     using Buffers = std::vector<PipelineBuffer*>;
     using Ports = std::vector<PipelinePort*>;
+    using ExprPrograms = std::vector<ExprProgram*>;
 
     PipelineV2();
     ~PipelineV2();
@@ -37,11 +40,13 @@ private:
     Buffers _buffers;
     Ports _ports;
     SourcesSet _sources;
+    ExprPrograms _exprProgs;
     DataframeManager _dfMan;
 
     void addProcessor(Processor* processor);
     void addPort(PipelinePort* port);
     void addBuffer(PipelineBuffer* buffer);
+    void addExprProgram(ExprProgram* prog);
 };
 
 }

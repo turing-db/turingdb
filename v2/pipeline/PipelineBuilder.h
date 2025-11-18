@@ -35,6 +35,7 @@ namespace db::v2 {
 class PipelineV2;
 class PipelineOutputInterface;
 class MaterializeProcessor;
+class ExprProgram;
 
 
 class PipelineBuilder {
@@ -105,7 +106,10 @@ public:
         return addGetPropertiesWithNull<EntityType::Edge, T>(entityTag, propertyType);
     }
 
-    // Joins/Products
+    // Expression evaluation
+    PipelineValuesOutputInterface& addComputeExpr(ExprProgram* exprProg);
+
+    // Joins and Products
     // LHS is implict in @ref _pendingOutput
     PipelineBlockOutputInterface& addCartesianProduct(PipelineOutputInterface* rhs);
     PipelineBlockOutputInterface& addHashJoin(PipelineOutputInterface* rhs,

@@ -1,10 +1,12 @@
-#include "EvalProgram.h"
+#include "ExprProgram.h"
 
 #include <spdlog/fmt/fmt.h>
 
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnKind.h"
 #include "metadata/LabelSet.h"
+
+#include "PipelineV2.h"
 
 #include "PipelineException.h"
 
@@ -97,20 +99,27 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op,
     }
 
 
-EvalProgram::EvalProgram()
+ExprProgram::ExprProgram()
 {
 }
 
-EvalProgram::~EvalProgram() {
+ExprProgram::~ExprProgram() {
 }
 
-void EvalProgram::execute() {
+ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
+    ExprProgram* prog = new ExprProgram();
+    pipeline->addExprProgram(prog);
+
+    return prog;
+}
+
+void ExprProgram::execute() {
     for (const Instruction& instr : _instrs) {
         evalInstr(instr);
     }
 }
 
-void EvalProgram::evalInstr(const Instruction& instr) {
+void ExprProgram::evalInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
     const Column* lhs = instr._lhs;
     const Column* rhs = instr._rhs;
