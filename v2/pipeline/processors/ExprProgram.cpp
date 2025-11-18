@@ -13,6 +13,8 @@
 
 #include "PipelineV2.h"
 
+#include "PipelineV2.h"
+
 #include "PipelineException.h"
 #include "FatalException.h"
 
@@ -146,6 +148,32 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
     }
 
 
+<<<<<<< HEAD
+ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
+    ExprProgram* prog = new ExprProgram();
+    pipeline->addExprProgram(prog);
+
+    return prog;
+||||||| parent of e9241edcf (First working skeleton of ExprProgramGenerator)
+EvalProgram::EvalProgram()
+{
+=======
+ExprProgram::ExprProgram()
+{
+>>>>>>> e9241edcf (First working skeleton of ExprProgramGenerator)
+}
+
+<<<<<<< HEAD
+void ExprProgram::evaluateInstructions() {
+||||||| parent of e9241edcf (First working skeleton of ExprProgramGenerator)
+EvalProgram::~EvalProgram() {
+}
+
+void EvalProgram::execute() {
+=======
+ExprProgram::~ExprProgram() {
+}
+
 ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
     ExprProgram* prog = new ExprProgram();
     pipeline->addExprProgram(prog);
@@ -153,12 +181,14 @@ ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
     return prog;
 }
 
-void ExprProgram::evaluateInstructions() {
+void ExprProgram::execute() {
+>>>>>>> e9241edcf (First working skeleton of ExprProgramGenerator)
     for (const Instruction& instr : _instrs) {
         evalInstr(instr);
     }
 }
 
+<<<<<<< HEAD
 void ExprProgram::evalInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
 
@@ -178,6 +208,11 @@ void ExprProgram::evalInstr(const Instruction& instr) {
 }
 
 void ExprProgram::evalBinaryInstr(const Instruction& instr) {
+||||||| parent of e9241edcf (First working skeleton of ExprProgramGenerator)
+void EvalProgram::evalInstr(const Instruction& instr) {
+=======
+void ExprProgram::evalInstr(const Instruction& instr) {
+>>>>>>> e9241edcf (First working skeleton of ExprProgramGenerator)
     const ColumnOperator op = instr._op;
     const Column* lhs = instr._lhs;
     const Column* rhs = instr._rhs;

@@ -38,6 +38,7 @@
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "processors/ComputeExprProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -442,6 +443,20 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
     PipelineBlockOutputInterface& output = transf->output();
 
     _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addComputeExpr(ExprProgram* exprProg) {
+    ComputeExprProcessor* compExpr = ComputeExprProcessor::create(_pipeline, exprProg);
+
+    PipelineBlockInputInterface& input = compExpr->input();
+    PipelineValuesOutputInterface& output = compExpr->output();
+
+    _pendingOutput.connectTo(compExpr->input());
     input.propagateColumns(output);
 
     _pendingOutput.updateInterface(&output);
