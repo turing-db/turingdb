@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <ostream>
 #include <iostream>
 #include <tuple>
@@ -94,9 +95,23 @@ public:
 private:
     std::unordered_map<Line, std::size_t, typename Line::Hash, typename Line::Predicate> _lineMap;
 
+    template <typename T>
+    static auto getFormat(const T& value) {
+        return fmt::format("{:>5}", value);
+    }
+
+    template <typename T>
+    static auto getFormat(const std::optional<T>& value) {
+        if (!value.has_value()) {
+            return fmt::format("{:>5}", "null");
+        }
+
+        return fmt::format("{:>5}", *value);
+    }
+
     template <typename Tuple, std::size_t... Is>
     static void printTupleImpl(std::ostream& os, const Tuple& tup, std::index_sequence<Is...>) {
-        (fmt::print(os, Is == 0 ? "{:>3}" : ", {:>3}", std::get<Is>(tup)), ...);
+        (fmt::print(os, Is == 0 ? "{}" : ", {}", getFormat(std::get<Is>(tup))), ...);
     }
 
     template <typename... Ts>
