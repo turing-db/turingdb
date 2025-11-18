@@ -222,6 +222,18 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
     return source->output();
 }
 
+PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTransformProcessor::Callback& cb) {
+    LambdaTransformProcessor* transf = LambdaTransformProcessor::create(_pipeline, cb);
+
+    PipelineBlockInputInterface& input = transf->input();
+    PipelineBlockOutputInterface& output = transf->output();
+
+    _pendingOutput.connectTo(input);
+    _pendingOutput.setInterface(&output);
+
+    return output;
+}
+
 template <db::SupportedType T>
 PipelineValuesOutputInterface& PipelineBuilder::addGetNodeProperties(PropertyType propertyType) {
     using ColumnValues = ColumnVector<typename T::Primitive>;

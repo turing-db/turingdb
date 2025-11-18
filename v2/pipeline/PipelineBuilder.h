@@ -12,6 +12,7 @@
 
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
+#include "processors/LambdaTransformProcessor.h"
 
 #include "metadata/SupportedType.h"
 
@@ -55,6 +56,9 @@ public:
     PipelineValueOutputInterface& addCount();
     PipelineBlockOutputInterface& addProjection(std::span<ColumnTag> tags);
 
+    // Lambda transform
+    PipelineBlockOutputInterface& addLambdaTransform(const LambdaTransformProcessor::Callback& callback);
+
     // Lambda sink
     void addLambda(const LambdaProcessor::Callback& callback);
 
@@ -63,7 +67,6 @@ public:
     bool isMaterializeOpen() const { return _matProc != nullptr; }
     bool isSingleMaterializeStep() const;
     void closeMaterialize();
-
 
     // Rename output
     void rename(std::string_view name) { _pendingOutput.rename(name); }
