@@ -596,6 +596,40 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
     ASSERT_TRUE(returnedLines.equals(expectedLines));
 }
 
+TEST_F(QueriesTest, scanNodesCartProd) {
+    constexpr std::string_view query = "MATCH (n), (m) RETURN n, m";
+    LineContainer<NodeID, NodeID> returnedLines;
+    LineContainer<NodeID, NodeID> expectedLines;
+
+    { // Generate ground-truth expected values
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        for (const NodeID n : reader.scanNodes()) {
+            for (const NodeID m : reader.scanNodes()) {
+                expectedLines.add({n, m});
+            }
+        }
+    }
+
+    {
+        _db->queryV2(query, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         ASSERT_TRUE(df != nullptr);
+                         ASSERT_EQ(df->size(), 2);
+                         ASSERT_EQ(df->getRowCount(), 13 * 13);
+                         const auto& nCols = df->cols();
+                         const auto* n = nCols.front()->as<ColumnNodeIDs>();
+                         const auto* m = nCols.back()->as<ColumnNodeIDs>();
+
+                         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                             returnedLines.add({n->at(rowPtr), m->at(rowPtr)});
+                         }
+                     });
+    }
+
+    ASSERT_TRUE(expectedLines.equals(returnedLines));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
