@@ -41,11 +41,11 @@ TEST_F(SkipLimitProcessorTest, scanNodesSkip) {
     
     const size_t extra = 10;
     const size_t maxSkip = allNodeIDs.size()+extra;
-    const size_t maxChunkSize = 1 /* allNodeIDs.size()+extra */;
+    const size_t maxChunkSize = allNodeIDs.size()+extra;
     
     for (size_t chunkSize = 1; chunkSize <= maxChunkSize; chunkSize++) {
         for (size_t skipCount = 0; skipCount < maxSkip; skipCount++) {
-            std::cout << "Chunk size=" << chunkSize << " skipCount=" << skipCount << '\n';
+            spdlog::info("Skip {} chunkSize={}", skipCount, chunkSize);
             PipelineV2 pipeline;
 
             PipelineBuilder builder(&mem, &pipeline);
@@ -81,7 +81,7 @@ TEST_F(SkipLimitProcessorTest, scanNodesSkip) {
             }
 
             ASSERT_TRUE(resultNodeIDs.size() <= allNodeIDs.size());
-            ASSERT_EQ(resultNodeIDs.size(), allNodeIDs.size()-skipCount);
+            ASSERT_EQ(resultNodeIDs.size(), skipCount > allNodeIDs.size() ? 0 : allNodeIDs.size()-skipCount);
 
             const size_t skipCompare = std::min(skipCount, allNodeIDs.size());
             assertSpanEqual(std::span<const NodeID>(resultNodeIDs),
