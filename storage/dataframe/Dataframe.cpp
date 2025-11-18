@@ -104,7 +104,7 @@ void Dataframe::append(const Dataframe* other) {
 
         // Resize destination to fit new data
         dispatchColumnVector(dst, [&](auto* dstColumnVector) {
-            auto* srcColumnVector = dynamic_cast<decltype(dstColumnVector)>(src);
+            const auto* srcColumnVector = dynamic_cast<decltype(dstColumnVector)>(src);
             if (!srcColumnVector) {
                 throw FatalException(
                     fmt::format("Attempted to append to a Dataframe whose column at "
@@ -113,7 +113,7 @@ void Dataframe::append(const Dataframe* other) {
             }
 
             dstColumnVector->resize(newRows);
-            auto& srcRaw = srcColumnVector->getRaw();
+            const auto& srcRaw = srcColumnVector->getRaw();
             auto& dstRaw = dstColumnVector->getRaw();
 
             std::copy(begin(srcRaw),end(srcRaw),begin(dstRaw) + oldRows);
