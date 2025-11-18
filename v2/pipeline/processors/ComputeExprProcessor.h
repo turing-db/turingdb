@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "Processor.h"
 
 #include "PipelineInterface.h"
@@ -9,11 +7,12 @@
 namespace db::v2 {
 
 class ExecutionContext;
-class EvalProgram;
+class ExprProgram;
 
-class EvalExprProcessor : public Processor {
+class ComputeExprProcessor : public Processor {
 public:
-    static EvalExprProcessor* create(PipelineV2* pipeline);
+    static ComputeExprProcessor* create(PipelineV2* pipeline,
+                                        ExprProgram* exprProg);
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
@@ -25,10 +24,10 @@ public:
 private:
     PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;
-    std::unique_ptr<EvalProgram> _prog;
+    ExprProgram* _exprProg {nullptr};
 
-    EvalExprProcessor();
-    ~EvalExprProcessor();
+    ComputeExprProcessor(ExprProgram* exprProg);
+    ~ComputeExprProcessor();
     void evalProgram();
 };
 

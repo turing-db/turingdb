@@ -548,6 +548,14 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
         _builder.addMaterialize();
     }
 
+    EvalProgram* evalProg = EvalProgram::create(_pipeline);
+    EvalProgramGenerator evalGen(evalProg);
+    for (const Predicate* pred : node->getPredicates()) {
+        evalGen.generate(pred);
+    }
+    
+    _builder.addEvalExpr(evalProg);
+
     return _builder.getPendingOutputInterface();
 }
 
