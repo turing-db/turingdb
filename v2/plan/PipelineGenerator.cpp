@@ -87,16 +87,17 @@ void PipelineGenerator::generate() {
         translateNode(node);
 
         for (PlanGraphNode* nextNode : node->outputs()) {
+            // Unary node case
             if (!nextNode->isBinary()) {
                 nodeStack.push(nextNode);
                 continue;
             }
-
             // Binary node case
-            // Cartesian Product and Join require their inputs to be materialised
-            if (_builder.isMaterializeOpen()) {
-                throw PipelineException("Attempted to add input to binary node "
-                                        "whilst Materialize is open.");
+
+            // TODO: Add a `needsMaterialised` check based on PlanNode - some binary nodes
+            // may not need their inputs materialised perhaps?
+            if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+                _builder.addMaterialize();
             }
 
             const bool visited = _binaryVisitedMap.contains(nextNode);
@@ -164,15 +165,18 @@ void PipelineGenerator::translateNode(PlanGraphNode* node) {
             translateGetEdgesNode(static_cast<GetEdgesNode*>(node));
         break;
 
+        case PlanGraphOpcode::CARTESIAN_PRODUCT:
+            translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
+        break;
+
+        case PlanGraphOpcode::GET_PROPERTY:
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
             translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
         break;
-        case PlanGraphOpcode::GET_PROPERTY:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
-        case PlanGraphOpcode::CARTESIAN_PRODUCT:
         case PlanGraphOpcode::WRITE:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::AGGREGATE_EVAL:
@@ -393,10 +397,10 @@ void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node
     auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
 
     PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
-    [[maybe_unused]] PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
+    PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
 
     // LHS is implicit in @ref _pendingOutput
     _builder.getPendingOutput().setInterface(lhs);
 
-    throw FatalException("CartesianProduct not yet implemented");
+    _builder.addCartesianProduct(rhs);
 }
