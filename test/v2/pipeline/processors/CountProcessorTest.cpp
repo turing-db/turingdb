@@ -39,14 +39,12 @@ protected:
 
 TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
     // Get all expected node IDs
-    std::vector<NodeID> allNodeIDs;
     std::vector<std::tuple<NodeID, NodeID>> allSourceTargetIDs;
     {
         auto transaction = _graph->openTransaction();
         auto reader = transaction.readGraph();
         auto nodes = reader.scanNodes();
         for (NodeID node : nodes) {
-            allNodeIDs.push_back(node);
             const auto edgeView = reader.getNodeView(node).edges();
             for (const EdgeRecord& outEdge : edgeView.outEdges()) {
                 allSourceTargetIDs.emplace_back(node, outEdge._otherID);
@@ -54,10 +52,10 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         }
     }
 
-    ASSERT_FALSE(allNodeIDs.empty());
+    ASSERT_TRUE(!allSourceTargetIDs.empty());
 
     const size_t extra = 10;
-    const size_t maxChunkSize = allNodeIDs.size()+extra;
+    const size_t maxChunkSize = allSourceTargetIDs.size()+extra;
 
     for (size_t chunkSize = 1; chunkSize < maxChunkSize; chunkSize++) {
         LocalMemory mem;
@@ -95,5 +93,144 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
 
         ASSERT_TRUE(sinkExecuted);
         ASSERT_EQ(rowCount, allSourceTargetIDs.size());
+    }
+}
+
+TEST_F(CountProcessorTest, expand3) {
+    // Get all expected node IDs
+    std::vector<std::tuple<NodeID, NodeID, NodeID, NodeID>> allSourceTargetIDs;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (NodeID node : nodes) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (const EdgeRecord& outEdge1 : edgeView.outEdges()) {
+                const auto edgeView = reader.getNodeView(outEdge1._otherID).edges();
+                for (const EdgeRecord& outEdge2 : edgeView.outEdges()) {
+                    const auto edgeView = reader.getNodeView(outEdge2._otherID).edges();
+                    for (const EdgeRecord& outEdge3 : edgeView.outEdges()) {
+                        allSourceTargetIDs.emplace_back(node, outEdge1._otherID, outEdge2._otherID, outEdge3._otherID);
+                    }
+                }
+            }
+        }
+    }
+
+    ASSERT_TRUE(!allSourceTargetIDs.empty());
+
+    const size_t extra = 10;
+    const size_t dataSize = allSourceTargetIDs.size();
+    const size_t maxChunkSize = dataSize+extra;
+
+    for (size_t chunkSize = 1; chunkSize < maxChunkSize; chunkSize++) {
+        LocalMemory mem;
+        PipelineV2 pipeline;
+        PipelineBuilder builder(&mem, &pipeline);
+
+        builder.addScanNodes();
+        builder.addGetOutEdges();
+        builder.addGetOutEdges();
+        builder.addGetOutEdges();
+        builder.addMaterialize();
+        builder.addCount();
+
+        bool sinkExecuted = false;
+        size_t rowCount = 0;
+        auto lambda = [&](const Dataframe* df, auto operation) -> void {
+            if (operation != LambdaProcessor::Operation::EXECUTE) {
+                return;
+            }
+
+            sinkExecuted = true;
+
+            const ColumnConst<size_t>* countValue = df->cols().front()->as<ColumnConst<size_t>>();
+            rowCount = countValue->getRaw();
+        };
+
+        builder.addLambda(lambda);
+
+        // Execute pipeline
+        const auto transaction = _graph->openTransaction();
+        const GraphView view = transaction.viewGraph();
+
+        ExecutionContext execCtxt(view);
+        execCtxt.setChunkSize(chunkSize);
+        PipelineExecutor executor(&pipeline, &execCtxt);
+        executor.execute();
+
+        ASSERT_TRUE(sinkExecuted);
+        ASSERT_EQ(rowCount, allSourceTargetIDs.size());
+    }
+}
+
+TEST_F(CountProcessorTest, countSkipLimit) {
+    // Get all expected node IDs
+    std::vector<std::tuple<NodeID, NodeID>> allSourceTargetIDs;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto nodes = reader.scanNodes();
+        for (NodeID node : nodes) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (const EdgeRecord& outEdge : edgeView.outEdges()) {
+                allSourceTargetIDs.emplace_back(node, outEdge._otherID);
+            }
+        }
+    }
+
+    ASSERT_TRUE(!allSourceTargetIDs.empty());
+
+    const size_t extra = 10;
+    const size_t dataSize = allSourceTargetIDs.size();
+    const size_t maxChunkSize = dataSize+extra;
+    const size_t maxSkipCount = dataSize+extra;
+    const size_t maxLimitCount = dataSize+extra;
+
+    for (size_t chunkSize = 1; chunkSize < maxChunkSize; chunkSize++) {
+        for (size_t skipCount = 0; skipCount < maxSkipCount; skipCount++) {
+            for (size_t limitCount = 0; limitCount < maxLimitCount; limitCount++) {
+                spdlog::info("chunkSize={} skipCount={} limitCount={}", chunkSize, skipCount, limitCount);
+
+                LocalMemory mem;
+                PipelineV2 pipeline;
+                PipelineBuilder builder(&mem, &pipeline);
+
+                builder.addScanNodes();
+                builder.addGetOutEdges();
+                builder.addMaterialize();
+                builder.addSkip(skipCount);
+                builder.addLimit(limitCount);
+                builder.addCount();
+
+                bool sinkExecuted = false;
+                size_t rowCount = 0;
+                auto lambda = [&](const Dataframe* df, auto operation) -> void {
+                    if (operation != LambdaProcessor::Operation::EXECUTE) {
+                        return;
+                    }
+
+                    sinkExecuted = true;
+
+                    const ColumnConst<size_t>* countValue = df->cols().front()->as<ColumnConst<size_t>>();
+                    rowCount = countValue->getRaw();
+                };
+
+                builder.addLambda(lambda);
+
+                // Execute pipeline
+                const auto transaction = _graph->openTransaction();
+                const GraphView view = transaction.viewGraph();
+
+                ExecutionContext execCtxt(view);
+                execCtxt.setChunkSize(chunkSize);
+                PipelineExecutor executor(&pipeline, &execCtxt);
+                executor.execute();
+
+                const size_t expectedCount = std::min(dataSize-skipCount, limitCount);
+                ASSERT_TRUE(expectedCount > 0 ? sinkExecuted : true);
+                ASSERT_EQ(rowCount, expectedCount);
+            }
+        }
     }
 }
