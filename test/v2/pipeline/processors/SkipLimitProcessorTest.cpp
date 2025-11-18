@@ -1,7 +1,5 @@
 #include "processors/ProcessorTester.h"
 
-#include <iostream>
-
 #include "SystemManager.h"
 #include "SimpleGraph.h"
 
@@ -45,7 +43,6 @@ TEST_F(SkipLimitProcessorTest, scanNodesSkip) {
     
     for (size_t chunkSize = 1; chunkSize <= maxChunkSize; chunkSize++) {
         for (size_t skipCount = 0; skipCount < maxSkip; skipCount++) {
-            spdlog::info("Skip {} chunkSize={}", skipCount, chunkSize);
             PipelineV2 pipeline;
 
             PipelineBuilder builder(&mem, &pipeline);
