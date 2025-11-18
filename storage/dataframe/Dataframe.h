@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <vector>
 #include <ostream>
 
@@ -54,7 +53,7 @@ public:
 
     void append(const Dataframe* other);
 
-    void dump(std::ostream& out = std::cout) const;
+    void dump(std::ostream& out) const;
 
 private:
     NamedColumns _cols;
