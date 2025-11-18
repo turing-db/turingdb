@@ -16,7 +16,7 @@ public:
     }
 };
 
-TEST_F(ScanNodesProcessorTest, scanNodesOneChunk) {
+TEST_F(ScanNodesProcessorTest, scanNodesVarChunk) {
     LocalMemory mem;
 
     // Get all node IDs
