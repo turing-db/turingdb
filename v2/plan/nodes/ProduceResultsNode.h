@@ -14,15 +14,15 @@ public:
     }
 
     const Projection* getProjection() const {
-        return m_proj;
+        return _proj;
     }
 
     void setProjection(const Projection* proj) {
-        m_proj = proj;
+        _proj = proj;
     }
 
 private:
-    const Projection* m_proj {nullptr};
+    const Projection* _proj {nullptr};
 };
 
 }
