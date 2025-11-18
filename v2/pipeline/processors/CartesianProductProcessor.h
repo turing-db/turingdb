@@ -34,11 +34,6 @@ public:
     Dataframe& leftMemory() { return _leftMemory; }
     Dataframe& rightMemory() { return _rightMemory; }
 
-    CartesianProductProcessor(CartesianProductProcessor&) = delete;
-    CartesianProductProcessor& operator=(CartesianProductProcessor&) = delete;
-    CartesianProductProcessor(CartesianProductProcessor&&) = delete;
-    CartesianProductProcessor& operator=(CartesianProductProcessor&&) = delete;
-
 private:
     enum class State {
         INIT,
