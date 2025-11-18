@@ -22,8 +22,9 @@ class PipelineV2;
 template <typename PropertyChunkWriter>
 class GetPropertiesProcessor : public Processor {
 public:
-    using Values = typename PropertyChunkWriter::Values;
     using ColumnValues = typename PropertyChunkWriter::ColumnValues;
+
+    std::string describe() const override;
 
     PipelineNodeInputInterface& inIDs() { return _inIDs; }
     PipelineValuesOutputInterface& outValues() { return _outValues; }

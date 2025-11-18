@@ -1,5 +1,7 @@
 #include "LimitProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "dataframe/Dataframe.h"
 
 using namespace db::v2;
@@ -10,6 +12,10 @@ LimitProcessor::LimitProcessor(size_t limit)
 }
 
 LimitProcessor::~LimitProcessor() {
+}
+
+std::string LimitProcessor::describe() const {
+    return fmt::format("LimitProcessor @={}", fmt::ptr(this));
 }
 
 LimitProcessor* LimitProcessor::create(PipelineV2* pipeline, size_t limit) {

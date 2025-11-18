@@ -1,5 +1,7 @@
 #include "CountProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "dataframe/Dataframe.h"
 #include "columns/ColumnConst.h"
 #include "dataframe/NamedColumn.h"
@@ -13,6 +15,10 @@ CountProcessor::CountProcessor()
 }
 
 CountProcessor::~CountProcessor() {
+}
+
+std::string CountProcessor::describe() const {
+    return fmt::format("CountProcessor @={}", fmt::ptr(this));
 }
 
 CountProcessor* CountProcessor::create(PipelineV2* pipeline) {

@@ -10,6 +10,8 @@ class ProjectionProcessor : public Processor {
 public:
     static ProjectionProcessor* create(PipelineV2* pipeline);
 
+    std::string describe() const override;
+
     PipelineBlockInputInterface& input() { return _input; }
     PipelineBlockOutputInterface& output() { return _output; }
 

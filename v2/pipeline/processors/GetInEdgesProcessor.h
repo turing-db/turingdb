@@ -16,6 +16,8 @@ class GetInEdgesProcessor : public Processor {
 public:
     static GetInEdgesProcessor* create(PipelineV2* pipeline);
 
+    std::string describe() const override;
+
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;

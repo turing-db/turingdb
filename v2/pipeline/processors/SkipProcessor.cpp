@@ -1,5 +1,7 @@
 #include "SkipProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "dataframe/Dataframe.h"
 
 #include "PipelineV2.h"
@@ -13,6 +15,10 @@ SkipProcessor::SkipProcessor(size_t skipCount)
 }
 
 SkipProcessor::~SkipProcessor() {
+}
+
+std::string SkipProcessor::describe() const {
+    return fmt::format("SkipProcessor @={}", fmt::ptr(this));
 }
 
 SkipProcessor* SkipProcessor::create(PipelineV2* pipeline, size_t skipCount) {

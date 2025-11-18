@@ -22,6 +22,10 @@ GetInEdgesProcessor::GetInEdgesProcessor()
 GetInEdgesProcessor::~GetInEdgesProcessor() {
 }
 
+std::string GetInEdgesProcessor::describe() const {
+    return fmt::format("GetInEdgesProcessor @={}", fmt::ptr(this));
+}
+
 GetInEdgesProcessor* GetInEdgesProcessor::create(PipelineV2* pipeline) {
     GetInEdgesProcessor* getInEdges = new GetInEdgesProcessor();
 

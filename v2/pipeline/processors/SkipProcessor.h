@@ -10,6 +10,8 @@ class SkipProcessor : public Processor {
 public:
     static SkipProcessor* create(PipelineV2* pipeline, size_t skipCount);
 
+    std::string describe() const override;
+
     PipelineBlockInputInterface& input() { return _input; }
     PipelineBlockOutputInterface& output() { return _output; }
 

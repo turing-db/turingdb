@@ -1,5 +1,7 @@
 #include "ProjectionProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 using namespace db::v2;
 
 ProjectionProcessor::ProjectionProcessor()
@@ -7,6 +9,10 @@ ProjectionProcessor::ProjectionProcessor()
 }
 
 ProjectionProcessor::~ProjectionProcessor() {
+}
+
+std::string ProjectionProcessor::describe() const {
+    return fmt::format("ProjectionProcessor @={}", fmt::ptr(this));
 }
 
 ProjectionProcessor* ProjectionProcessor::create(PipelineV2* pipeline) {

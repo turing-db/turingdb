@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 #include "PipelinePort.h"
 
@@ -15,6 +16,8 @@ public:
     friend PipelineV2;
     using InputPorts = std::vector<PipelineInputPort*>;
     using OutputPorts = std::vector<PipelineOutputPort*>;
+
+    virtual std::string describe() const = 0;
 
     const InputPorts& inputs() const { return _inputs; }
     const OutputPorts& outputs() const { return _outputs; }

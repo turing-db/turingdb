@@ -1,5 +1,7 @@
 #include "LambdaSourceProcessor.h"
 
+#include <spdlog/spdlog.h>
+
 using namespace db::v2;
 
 LambdaSourceProcessor::LambdaSourceProcessor(Callback callback)
@@ -8,6 +10,10 @@ LambdaSourceProcessor::LambdaSourceProcessor(Callback callback)
 }
 
 LambdaSourceProcessor::~LambdaSourceProcessor() {
+}
+
+std::string LambdaSourceProcessor::describe() const {
+    return fmt::format("LambdaSourceProcessor @={}", fmt::ptr(this));
 }
 
 void LambdaSourceProcessor::prepare(ExecutionContext* ctxt) {

@@ -1,5 +1,7 @@
 #include "LambdaTransformProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 using namespace db::v2;
 
 LambdaTransformProcessor::LambdaTransformProcessor(Callback callback)
@@ -8,6 +10,10 @@ LambdaTransformProcessor::LambdaTransformProcessor(Callback callback)
 }
 
 LambdaTransformProcessor::~LambdaTransformProcessor() {
+}
+
+std::string LambdaTransformProcessor::describe() const {
+    return fmt::format("LambdaTransformProcessor @={}", fmt::ptr(this));
 }
 
 void LambdaTransformProcessor::prepare(ExecutionContext* ctxt) {

@@ -12,6 +12,8 @@ class CountProcessor : public Processor {
 public:
     static CountProcessor* create(PipelineV2* pipeline);
 
+    std::string describe() const override;
+
     PipelineBlockInputInterface& input() { return _input; }
     PipelineValueOutputInterface& output() { return _output; }
 

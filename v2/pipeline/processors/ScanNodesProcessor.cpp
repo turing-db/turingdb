@@ -1,5 +1,7 @@
 #include "ScanNodesProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "PipelineV2.h"
 #include "iterators/ScanNodesIterator.h"
 #include "columns/ColumnIDs.h"
@@ -14,6 +16,10 @@ ScanNodesProcessor::ScanNodesProcessor()
 }
 
 ScanNodesProcessor::~ScanNodesProcessor() {
+}
+
+std::string ScanNodesProcessor::describe() const {
+    return fmt::format("ScanNodesProcessor @={}", fmt::ptr(this));
 }
 
 ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {

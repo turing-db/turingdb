@@ -20,6 +20,8 @@ public:
 
     MaterializeData& getMaterializeData() { return _matData; }
 
+    std::string describe() const override;
+
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;
