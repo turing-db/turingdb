@@ -65,6 +65,9 @@
 #include "Literal.h"
 
 #include "Overloaded.h"
+#include "processors/ExprProgram.h"
+#include "ExprProgramGenerator.h"
+
 #include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
@@ -548,10 +551,10 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
         _builder.addMaterialize();
     }
 
-    EvalProgram* evalProg = EvalProgram::create(_pipeline);
-    EvalProgramGenerator evalGen(evalProg);
+    ExprProgram* exprProg = ExprProgram::create(_pipeline);
+    ExprProgramGenerator exprGen(_mem, exprProg);
     for (const Predicate* pred : node->getPredicates()) {
-        evalGen.generate(pred);
+        exprGen.generatePredicate(pred);
     }
     
     _builder.addEvalExpr(evalProg);
@@ -560,11 +563,11 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 }
 
 PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
-        _builder.addMaterialize();
+    if (node->isEmpty()) {
+        return _builder.getPendingOutputInterface();
     }
 
-    return _builder.getPendingOutputInterface();
+    throw PlannerException("EdgeFilterNode not supported");
 }
 
 PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {

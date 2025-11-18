@@ -3,6 +3,7 @@
 #include "Processor.h"
 #include "PipelinePort.h"
 #include "PipelineBuffer.h"
+#include "processors/ExprProgram.h"
 
 using namespace db::v2;
 
@@ -20,6 +21,9 @@ PipelineV2::~PipelineV2() {
     for (PipelinePort* port : _ports) {
         delete port;
     }
+    for (ExprProgram* prog : _exprProgs) {
+        delete prog;
+    }
 }
 
 void PipelineV2::addProcessor(Processor* processor) {
@@ -35,6 +39,10 @@ void PipelineV2::addBuffer(PipelineBuffer* buffer) {
 
 void PipelineV2::addPort(PipelinePort* port) {
     _ports.push_back(port);
+}
+
+void PipelineV2::addExprProgram(ExprProgram* prog) {
+    _exprProgs.push_back(prog);
 }
 
 void PipelineV2::clear() {

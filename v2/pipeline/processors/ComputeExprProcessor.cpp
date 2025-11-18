@@ -1,5 +1,7 @@
 #include "ComputeExprProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "PipelineV2.h"
 #include "ExprProgram.h"
 
@@ -12,10 +14,25 @@ ComputeExprProcessor::ComputeExprProcessor(ExprProgram* exprProg)
 ComputeExprProcessor::~ComputeExprProcessor() {
 }
 
-ComputeExprProcessor* ComputeExprProcessor::create(Pipeline* pipeline,
+std::string ComputeExprProcessor::describe() const {
+    return fmt::format("ComputeExprProcessor @={}", fmt::ptr(this));
+}
+
+ComputeExprProcessor* ComputeExprProcessor::create(PipelineV2* pipeline,
                                                    ExprProgram* exprProg) {
     ComputeExprProcessor* computeExpr = new ComputeExprProcessor(exprProg);
-    pipeline->addProcessor(computeExpr);
+
+    PipelineInputPort* input = PipelineInputPort::create(pipeline, computeExpr);
+    computeExpr->_input.setPort(input);
+    computeExpr->addInput(input);
+
+    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, computeExpr);
+    computeExpr->_output.setPort(output);
+    computeExpr->addOutput(output);
+
+    computeExpr->postCreate(pipeline);
+
+    return computeExpr;
 }
 
 void ComputeExprProcessor::prepare(ExecutionContext* ctxt) {
@@ -29,7 +46,7 @@ void ComputeExprProcessor::execute() {
     _input.getPort()->consume();
     _output.getPort()->writeData();
 
-    _prog->execute();
+    _exprProg->execute();
 
     finish();
 }

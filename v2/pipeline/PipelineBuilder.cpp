@@ -31,6 +31,7 @@
 #include "processors/S3ConnectProcessor.h"
 #include "processors/S3PullProcessor.h"
 #include "processors/S3PushProcessor.h"
+#include "processors/ComputeExprProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -438,6 +439,21 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addComputeExpr(ExprProgram* exprProg) {
+    ComputeExprProcessor* compExpr = ComputeExprProcessor::create(_pipeline, exprProg);
+
+    PipelineBlockInputInterface& input = compExpr->input();
+    PipelineValuesOutputInterface& output = compExpr->output();
+
+    _pendingOutput.connectTo(compExpr->input());
+    input.propagateColumns(output);
+
     _pendingOutput.updateInterface(&output);
 
     return output;

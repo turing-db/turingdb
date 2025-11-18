@@ -14,16 +14,18 @@ public:
     static ComputeExprProcessor* create(PipelineV2* pipeline,
                                         ExprProgram* exprProg);
 
+    std::string describe() const override;
+
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;
 
     PipelineBlockInputInterface& input() { return _input; }
-    PipelineBlockOutputInterface& output() { return _output; }
+    PipelineValuesOutputInterface& output() { return _output; }
 
 private:
     PipelineBlockInputInterface _input;
-    PipelineBlockOutputInterface _output;
+    PipelineValuesOutputInterface _output;
     ExprProgram* _exprProg {nullptr};
 
     ComputeExprProcessor(ExprProgram* exprProg);
