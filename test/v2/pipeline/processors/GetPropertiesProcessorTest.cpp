@@ -30,16 +30,16 @@ TEST_F(GetPropertiesProcessorTest, test) {
     for (const NodeID originID : reader.scanNodes()) {
         ColumnVector<NodeID> srcNodeIDs = {originID};
 
-        auto nameIt = reader.getNodeProperties<types::Int64>(ageType._id, &srcNodeIDs).begin();
-        for (; nameIt.isValid(); nameIt.next()) {
-            ColumnVector<NodeID> filteredNodeIDs = {nameIt.getCurrentEntityID().getValue()};
+        auto ageIt = reader.getNodeProperties<types::Int64>(ageType._id, &srcNodeIDs).begin();
+        for (; ageIt.isValid(); ageIt.next()) {
+            ColumnVector<NodeID> filteredNodeIDs = {ageIt.getCurrentEntityID().getValue()};
 
             for (const EdgeRecord& edge : reader.getOutEdges(&filteredNodeIDs)) {
                 if (tombstones.contains(edge._edgeID)) {
                     continue;
                 }
 
-                expLines.add({edge._nodeID, nameIt.get(), edge._edgeID, edge._otherID, edge._edgeTypeID});
+                expLines.add({edge._nodeID, ageIt.get(), edge._edgeID, edge._otherID, edge._edgeTypeID});
             }
         }
     }

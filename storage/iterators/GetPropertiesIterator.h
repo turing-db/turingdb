@@ -80,8 +80,12 @@ public:
 
     void next() override;
 
-    const T::Primitive* get() const {
-        return _prop;
+    std::optional<typename T::Primitive> get() const {
+        if (_prop != nullptr) {
+            return *_prop;
+        }
+
+        return std::nullopt;
     }
 
     ID getCurrentID() const {
@@ -93,7 +97,7 @@ public:
         return *this;
     }
 
-    const T::Primitive* operator*() const {
+    std::optional<typename T::Primitive> operator*() const {
         return get();
     }
 
@@ -104,6 +108,18 @@ protected:
     ColumnIDs::ConstIterator _entityIt;
 
     void init();
+};
+
+template <IteratedID ID, SupportedType T>
+struct GetPropertiesWithNullRange {
+    using ColumnIDs = ColumnVector<ID>;
+
+    GraphView _view;
+    PropertyTypeID _propTypeID {0};
+    const ColumnIDs* _inputIDs {nullptr};
+
+    GetPropertiesIteratorWithNull<ID, T> begin() const { return {_view, _propTypeID, _inputIDs}; }
+    DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }
 };
 
 template <IteratedID ID, SupportedType T>
@@ -154,6 +170,8 @@ using GetNodePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<NodeID, 
 template <SupportedType T>
 using GetNodePropertiesRange = GetPropertiesRange<NodeID, T>;
 template <SupportedType T>
+using GetNodePropertiesWithNullRange = GetPropertiesWithNullRange<NodeID, T>;
+template <SupportedType T>
 using GetNodePropertiesChunkWriter = GetPropertiesChunkWriter<NodeID, T>;
 template <SupportedType T>
 using GetNodePropertiesWithNullChunkWriter = GetPropertiesWithNullChunkWriter<NodeID, T>;
@@ -164,6 +182,8 @@ template <SupportedType T>
 using GetEdgePropertiesIteratorWithNull = GetPropertiesIteratorWithNull<EdgeID, T>;
 template <SupportedType T>
 using GetEdgePropertiesRange = GetPropertiesRange<EdgeID, T>;
+template <SupportedType T>
+using GetEdgePropertiesWithNullRange = GetPropertiesWithNullRange<EdgeID, T>;
 template <SupportedType T>
 using GetEdgePropertiesChunkWriter = GetPropertiesChunkWriter<EdgeID, T>;
 template <SupportedType T>

@@ -117,6 +117,24 @@ public:
         return GetNodePropertiesRange<T>(_view, ptID, inputNodeIDs);
     }
 
+    template <SupportedType T>
+    [[nodiscard]] GetNodePropertiesWithNullRange<T> getNodePropertiesWithNull(PropertyTypeID ptID,
+                                                                              const ColumnNodeIDs* inputNodeIDs) const {
+        return GetNodePropertiesWithNullRange<T>(_view, ptID, inputNodeIDs);
+    }
+
+    template <SupportedType T>
+    [[nodiscard]] GetEdgePropertiesRange<T> getEdgeProperties(PropertyTypeID ptID,
+                                                              const ColumnEdgeIDs* inputEdgeIDs) const {
+        return GetEdgePropertiesRange<T>(_view, ptID, inputEdgeIDs);
+    }
+
+    template <SupportedType T>
+    [[nodiscard]] GetEdgePropertiesWithNullRange<T> getEdgePropertiesWithNull(PropertyTypeID ptID,
+                                                                              const ColumnEdgeIDs* inputEdgeIDs) const {
+        return GetEdgePropertiesWithNullRange<T>(_view, ptID, inputEdgeIDs);
+    }
+
 private:
     GraphView _view;
 };

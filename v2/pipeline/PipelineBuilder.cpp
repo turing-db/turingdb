@@ -338,23 +338,29 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(Propert
     // Create get node properties processor
     auto* getProps = GetPropsProc::create(_pipeline, propertyType);
 
-    _pendingOutput.connectTo(getProps->inIDs());
-
+    auto& input = getProps->inIDs();
     PipelineValuesOutputInterface& outValues = getProps->outValues();
-    Dataframe* outDf = outValues.getDataframe();
 
-    // Allocate indices column
-    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
-    outValues.setIndices(indices);
+    _pendingOutput.connectTo(input);
+
+    if constexpr (Entity == EntityType::Node) {
+        outValues.setStream(EntityOutputStream::createNodeStream(input.getNodeIDs()->getTag()));
+    } else {
+        outValues.setStream(EntityOutputStream::createEdgeStream(input.getEdgeIDs()->getTag(),
+                                                                 input.getOtherNodes()->getTag(),
+                                                                 input.getEdgeTypes()->getTag()));
+    }
+
+    Dataframe* outDf = outValues.getDataframe();
 
     // Allocate output values column
     NamedColumn* values = allocColumn<ColumnValues>(outDf);
     outValues.setValues(values);
 
-    // Register output in materialize data
     MaterializeData& matData = _matProc->getMaterializeData();
-    matData.createStep(indices);
     matData.addToStep<ColumnValues>(values);
+
+    _pendingOutput.setInterface(&outValues);
 
     return getProps->outValues();
 }

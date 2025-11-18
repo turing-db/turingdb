@@ -2,6 +2,7 @@
 
 #include "MaterializeData.h"
 
+#include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperators.h"
@@ -37,6 +38,11 @@ inline void copyChunk(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnVector<types::Double::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<types::String::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<types::Bool::Primitive>)
+        COPY_CHUNK_CASE(ColumnOptVector<types::UInt64::Primitive>)
+        COPY_CHUNK_CASE(ColumnOptVector<types::Int64::Primitive>)
+        COPY_CHUNK_CASE(ColumnOptVector<types::Double::Primitive>)
+        COPY_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
+        COPY_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
 
         default: {
             panic("copyChunk operator not handled between columns of kind {} and {}",
@@ -67,6 +73,11 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Double::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Bool::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::UInt64::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Int64::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Double::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
         default: {
             panic("copyTransformedChunk operator not handled between columns of kind {} and {}",
                   srcPtr->getKind(), dstPtr->getKind());

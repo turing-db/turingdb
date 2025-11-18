@@ -256,12 +256,7 @@ void GetPropertiesWithNullChunkWriter<ID, T>::fill(size_t maxCount) {
 
     output.resize(rangeSize);
     for (size_t i = 0; i < rangeSize; i++) {
-        const auto* currentProp = this->get();
-        if (currentProp) {
-            output[i] = *currentProp;
-        } else {
-            output[i] = {};
-        }
+        output[i] = this->get();
 
         this->next();
     }
