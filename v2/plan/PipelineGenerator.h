@@ -50,11 +50,13 @@ public:
 
     struct BinaryNodeVisitInformation {
         // The OUTPUT of the INPUT to the binary node which is being tracked
-        PipelineOutputInterface* visitedInput;
+        PipelineOutputInterface* visitedInput {nullptr};
         // Whether @ref visitedInput is the LEFT or RIGHT input to the binary node
-        bool isLhs;
+        bool isLhs {true};
     };
+
     using BinaryNodeVisitedMap = std::unordered_map<PlanGraphNode*, BinaryNodeVisitInformation>;
+
 private:
     const PlanGraph* _graph {nullptr};
     PipelineV2* _pipeline {nullptr};
@@ -81,7 +83,6 @@ private:
     void translateSkipNode(SkipNode* node, PlanGraphStream& stream);
     void translateLimitNode(LimitNode* node, PlanGraphStream& stream);
     void translateCartesianProductNode(CartesianProductNode* node, PlanGraphStream& stream);
-
 };
 
 }

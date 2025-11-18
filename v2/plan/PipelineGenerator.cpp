@@ -5,7 +5,6 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PendingOutputView.h"
-#include "PipelineException.h"
 #include "PipelineInterface.h"
 #include "PlanGraph.h"
 #include "PlanGraphStream.h"
@@ -28,7 +27,9 @@
 #include "expr/LiteralExpr.h"
 #include "Literal.h"
 
+#include "PipelineException.h"
 #include "PlannerException.h"
+#include "FatalException.h"
 
 using namespace db::v2;
 
@@ -80,10 +81,10 @@ void PipelineGenerator::generate() {
                 continue;
             }
 
-            const PendingOutputView& pendingOutput = _builder.pendingOutput();
+            const PendingOutputView& pendingOutput = _builder.getPendingOutput();
 
             const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
-            const bool isLhs = node == binaryNodeInputs.front();
+            const bool isLhs = (node == binaryNodeInputs.front());
             bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
             const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
 
@@ -303,14 +304,14 @@ void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node
                                 "not already encountered.");
     }
 
-    PipelineOutputInterface* inputA = _builder.pendingOutput().getInterface();
+    PipelineOutputInterface* inputA = _builder.getPendingOutputInterface();
     auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
 
     PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
     [[maybe_unused]] PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
 
     // LHS is implicit in @ref _pendingOutput
-    _builder.pendingOutput().setInterface(lhs);
+    _builder.getPendingOutput().setInterface(lhs);
 
-    // _builder.addCartesianProduct(rhs);
+    throw FatalException("CartesianProduct not yet implemented");
 }

@@ -35,7 +35,8 @@ public:
     }
 
     const PendingOutputView& getOutputView() const { return _pendingOutput; }
-    PipelineOutputInterface* getOutput() const { return _pendingOutput.getInterface(); }
+    PendingOutputView& getPendingOutput() { return _pendingOutput; }
+    PipelineOutputInterface* getPendingOutputInterface() const { return _pendingOutput.getInterface(); }
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
@@ -77,8 +78,6 @@ public:
     NamedColumn* addColumnToOutput(ColumnTag tag) {
         return allocColumn<ColumnType>(_pendingOutput.getDataframe(), tag);
     }
-
-    PendingOutputView& pendingOutput() { return _pendingOutput; }
 
 private:
     LocalMemory* _mem {nullptr};
