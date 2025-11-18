@@ -34,7 +34,7 @@ public:
     {
     }
 
-    const PendingOutputView& getOutputView() const { return _pendingOutput; }
+    const PendingOutputView& getPendingOutput() const { return _pendingOutput; }
     PendingOutputView& getPendingOutput() { return _pendingOutput; }
     PipelineOutputInterface* getPendingOutputInterface() const { return _pendingOutput.getInterface(); }
 

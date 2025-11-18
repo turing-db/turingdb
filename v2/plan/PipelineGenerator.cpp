@@ -160,12 +160,12 @@ void PipelineGenerator::translateVarNode(VarNode* node) {
 
     _builder.rename(varName);
 
-    const PipelineOutputInterface* output = _builder.getOutput();
+    const PipelineOutputInterface* output = _builder.getPendingOutputInterface();
 
     if (const auto* out = dynamic_cast<const PipelineNodeOutputInterface*>(output)) {
         _declToColumn[node->getVarDecl()] = out->getNodeIDs()->getTag();
     } else if (const auto* out = dynamic_cast<const PipelineEdgeOutputInterface*>(output)) {
-        const PendingOutputView& outView = _builder.getOutputView();
+        const PendingOutputView& outView = _builder.getPendingOutput();
 
         if (outView.isEdgesProjectedOnOtherIDs()) {
             _declToColumn[node->getVarDecl()] = out->getOtherNodes()->getTag();
@@ -203,7 +203,7 @@ void PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
 void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
 }
 
-void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream) {
+void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -243,7 +243,7 @@ void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node, Pl
 void PipelineGenerator::translateJoinNode(JoinNode* node) {
 }
 
-void PipelineGenerator::translateSkipNode(SkipNode* node, PlanGraphStream& stream) {
+void PipelineGenerator::translateSkipNode(SkipNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -268,7 +268,7 @@ void PipelineGenerator::translateSkipNode(SkipNode* node, PlanGraphStream& strea
     _builder.addSkip(static_cast<size_t>(integerLiteral->getValue()));
 }
 
-void PipelineGenerator::translateLimitNode(LimitNode* node, PlanGraphStream& stream) {
+void PipelineGenerator::translateLimitNode(LimitNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
