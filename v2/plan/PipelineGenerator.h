@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PipelineInterface.h"
 #include "QueryCallback.h"
 
 #include "PipelineBuilder.h"
@@ -27,6 +28,7 @@ class ProduceResultsNode;
 class JoinNode;
 class SkipNode;
 class LimitNode;
+class CartesianProductNode;
 
 class PipelineGenerator {
 public:
@@ -46,6 +48,13 @@ public:
 
     void generate();
 
+    struct BinaryNodeVisitInformation {
+        // The OUTPUT of the INPUT to the binary node which is being tracked
+        PipelineOutputInterface* visitedInput;
+        // Whether @ref visitedInput is the LEFT or RIGHT input to the binary node
+        bool isLhs;
+    };
+    using BinaryNodeVisitedMap = std::unordered_map<PlanGraphNode*, BinaryNodeVisitInformation>;
 private:
     const PlanGraph* _graph {nullptr};
     PipelineV2* _pipeline {nullptr};
@@ -54,6 +63,9 @@ private:
     PipelineBuilder _builder;
 
     std::unordered_map<const VarDecl*, ColumnTag> _declToColumn;
+
+    // [BinaryNode -> Visited input] map
+    BinaryNodeVisitedMap _binaryVisitedMap;
 
     void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
     void translateVarNode(VarNode* node, PlanGraphStream& stream);
@@ -68,6 +80,8 @@ private:
     void translateJoinNode(JoinNode* node, PlanGraphStream& stream);
     void translateSkipNode(SkipNode* node, PlanGraphStream& stream);
     void translateLimitNode(LimitNode* node, PlanGraphStream& stream);
+    void translateCartesianProductNode(CartesianProductNode* node, PlanGraphStream& stream);
+
 };
 
 }
