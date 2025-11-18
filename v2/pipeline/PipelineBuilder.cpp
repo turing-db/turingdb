@@ -15,6 +15,7 @@
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
 
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
 
 using namespace db::v2;

@@ -13,10 +13,7 @@
 
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
-#include "columns/ColumnIDs.h"
-#include "columns/ColumnIndices.h"
 #include "iterators/GetPropertiesIterator.h"
-#include "dataframe/NamedColumn.h"
 
 namespace db::v2 {
 
@@ -26,70 +23,26 @@ template <EntityType Entity, SupportedType T>
 class GetPropertiesProcessor : public Processor {
 public:
     using ChunkWriter = std::conditional_t<Entity == EntityType::Node,
-          GetNodePropertiesChunkWriter<T>,
-          GetEdgePropertiesChunkWriter<T>>;
+                                           GetNodePropertiesChunkWriter<T>,
+                                           GetEdgePropertiesChunkWriter<T>>;
 
     using InputInterface = std::conditional_t<Entity == EntityType::Node,
-          PipelineNodeInputInterface,
-          PipelineEdgeInputInterface>;
+                                              PipelineNodeInputInterface,
+                                              PipelineEdgeInputInterface>;
 
     using ColumnValues = typename ChunkWriter::ColumnValues;
     using ColumnIDs = typename ChunkWriter::ColumnIDs;
 
+    static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType);
+
+    std::string describe() const override;
+
+    void prepare(ExecutionContext* ctxt) override;
+    void reset() override;
+    void execute() override;
+
     InputInterface& inIDs() { return _inIDs; }
     PipelineValuesOutputInterface& outValues() { return _outValues; }
-
-    static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType) {
-        auto* getProps = new GetPropertiesProcessor(propType);
-
-        PipelineInputPort* inIDs = PipelineInputPort::create(pipeline, getProps);
-        PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
-
-        getProps->_inIDs.setPort(inIDs);
-        getProps->_outValues.setPort(outValues);
-
-        getProps->addInput(inIDs);
-        getProps->addOutput(outValues);
-
-        getProps->postCreate(pipeline);
-        return getProps;
-    }
-
-    void prepare(ExecutionContext* ctxt) override {
-        _ctxt = ctxt;
-
-        const ColumnIDs* ids = nullptr;
-
-        if constexpr (Entity == EntityType::Node) {
-            ids = dynamic_cast<const ColumnNodeIDs*>(_inIDs.getNodeIDs()->getColumn());
-        } else {
-            ids = dynamic_cast<const ColumnEdgeIDs*>(_inIDs.getEdgeIDs()->getColumn());
-        }
-
-        _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
-
-        ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_outValues.getIndices()->getColumn());
-        _propWriter->setIndices(indices);
-
-        ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
-        _propWriter->setOutput(values);
-        markAsPrepared();
-    }
-
-    void reset() override {
-        _propWriter->reset();
-        markAsReset();
-    }
-
-    void execute() override {
-        _propWriter->fill(_ctxt->getChunkSize());
-
-        // The GetPropertiesProcessor always finishes in one step
-        _inIDs.getPort()->consume();
-        _outValues.getPort()->writeData();
-
-        finish();
-    }
 
 protected:
     PropertyType _propType;
@@ -97,11 +50,7 @@ protected:
     InputInterface _inIDs;
     PipelineValuesOutputInterface _outValues;
 
-    GetPropertiesProcessor(PropertyType propType)
-        : _propType(propType)
-    {
-    }
-
+    explicit GetPropertiesProcessor(PropertyType propType);
     ~GetPropertiesProcessor() = default;
 };
 

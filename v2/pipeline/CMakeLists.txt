@@ -14,6 +14,7 @@ set(processors_sources
     processors/GetEdgesProcessor.cpp
     processors/GetOutEdgesProcessor.cpp
     processors/GetPropertiesProcessor.cpp
+    processors/GetPropertiesWithNullProcessor.cpp
     processors/MaterializeProcessor.cpp
     processors/MaterializeData.cpp
     processors/LambdaProcessor.cpp

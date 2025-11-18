@@ -1,7 +1,6 @@
-#include "GetPropertiesProcessor.h"
+#include "GetPropertiesWithNullProcessor.h"
 
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnIndices.h"
 #include "dataframe/NamedColumn.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -9,15 +8,15 @@
 namespace db::v2 {
 
 template <EntityType Entity, SupportedType T>
-std::string GetPropertiesProcessor<Entity, T>::describe() const {
-    return fmt::format("GetPropertiesProcessor<{}, {}>",
+std::string GetPropertiesWithNullProcessor<Entity, T>::describe() const {
+    return fmt::format("GetPropertiesWithNullProcessor<{}, {}>",
                        Entity == EntityType::Node ? "Node" : "Edge",
                        ValueTypeName::value(T::_valueType));
 }
 
 template <EntityType Entity, SupportedType T>
-GetPropertiesProcessor<Entity, T>* GetPropertiesProcessor<Entity, T>::create(PipelineV2* pipeline, PropertyType propType) {
-    auto* getProps = new GetPropertiesProcessor(propType);
+GetPropertiesWithNullProcessor<Entity, T>* GetPropertiesWithNullProcessor<Entity, T>::create(PipelineV2* pipeline, PropertyType propType) {
+    auto* getProps = new GetPropertiesWithNullProcessor(propType);
 
     PipelineInputPort* inIDs = PipelineInputPort::create(pipeline, getProps);
     PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
@@ -33,7 +32,7 @@ GetPropertiesProcessor<Entity, T>* GetPropertiesProcessor<Entity, T>::create(Pip
 }
 
 template <EntityType Entity, SupportedType T>
-void GetPropertiesProcessor<Entity, T>::prepare(ExecutionContext* ctxt) {
+void GetPropertiesWithNullProcessor<Entity, T>::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
     const ColumnIDs* ids = nullptr;
@@ -46,25 +45,22 @@ void GetPropertiesProcessor<Entity, T>::prepare(ExecutionContext* ctxt) {
 
     _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-    ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_outValues.getIndices()->getColumn());
-    _propWriter->setIndices(indices);
-
     ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
     _propWriter->setOutput(values);
     markAsPrepared();
 }
 
 template <EntityType Entity, SupportedType T>
-void GetPropertiesProcessor<Entity, T>::reset() {
+void GetPropertiesWithNullProcessor<Entity, T>::reset() {
     _propWriter->reset();
     markAsReset();
 }
 
 template <EntityType Entity, SupportedType T>
-void GetPropertiesProcessor<Entity, T>::execute() {
+void GetPropertiesWithNullProcessor<Entity, T>::execute() {
     _propWriter->fill(_ctxt->getChunkSize());
 
-    // The GetPropertiesProcessor always finishes in one step
+    // The GetPropertiesWithNullProcessor always finishes in one step
     _inIDs.getPort()->consume();
     _outValues.getPort()->writeData();
 
@@ -72,21 +68,21 @@ void GetPropertiesProcessor<Entity, T>::execute() {
 }
 
 template <EntityType Entity, SupportedType T>
-GetPropertiesProcessor<Entity, T>::GetPropertiesProcessor(PropertyType propType)
+GetPropertiesWithNullProcessor<Entity, T>::GetPropertiesWithNullProcessor(PropertyType propType)
     : _propType(propType)
 {
 }
 
-template class GetPropertiesProcessor<EntityType::Node, types::Int64>;
-template class GetPropertiesProcessor<EntityType::Node, types::UInt64>;
-template class GetPropertiesProcessor<EntityType::Node, types::Double>;
-template class GetPropertiesProcessor<EntityType::Node, types::String>;
-template class GetPropertiesProcessor<EntityType::Node, types::Bool>;
+template class GetPropertiesWithNullProcessor<EntityType::Node, types::Int64>;
+template class GetPropertiesWithNullProcessor<EntityType::Node, types::UInt64>;
+template class GetPropertiesWithNullProcessor<EntityType::Node, types::Double>;
+template class GetPropertiesWithNullProcessor<EntityType::Node, types::String>;
+template class GetPropertiesWithNullProcessor<EntityType::Node, types::Bool>;
 
-template class GetPropertiesProcessor<EntityType::Edge, types::Int64>;
-template class GetPropertiesProcessor<EntityType::Edge, types::UInt64>;
-template class GetPropertiesProcessor<EntityType::Edge, types::Double>;
-template class GetPropertiesProcessor<EntityType::Edge, types::String>;
-template class GetPropertiesProcessor<EntityType::Edge, types::Bool>;
+template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Int64>;
+template class GetPropertiesWithNullProcessor<EntityType::Edge, types::UInt64>;
+template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Double>;
+template class GetPropertiesWithNullProcessor<EntityType::Edge, types::String>;
+template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Bool>;
 
 }
