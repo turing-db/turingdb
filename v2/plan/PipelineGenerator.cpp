@@ -76,7 +76,7 @@ void PipelineGenerator::generate() {
 
             const bool visited = _binaryVisitedMap.contains(nextNode);
             if (visited) {
-                translateNode(node, stream);
+                nodeStack.emplace(nextNode, stream);
                 continue;
             }
 
@@ -312,5 +312,5 @@ void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node
     // LHS is implicit in @ref _pendingOutput
     _builder.pendingOutput().setInterface(lhs);
 
-    // _builder.addCartesianProduct();
+    // _builder.addCartesianProduct(rhs);
 }
