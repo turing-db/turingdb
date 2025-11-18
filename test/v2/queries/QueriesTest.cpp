@@ -503,3 +503,9 @@ TEST_F(QueriesTest, scanEdges) {
 
     ASSERT_TRUE(returnedLines.equals(expectedLines));
 }
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 3;
+    });
+}

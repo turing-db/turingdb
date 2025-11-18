@@ -65,17 +65,12 @@ void GetOutEdgesProcessor::reset() {
 }
 
 void GetOutEdgesProcessor::execute() {
-    if (_it->isValid()) {
-        _it->fill(_ctxt->getChunkSize());
-        _outEdges.getPort()->writeData();
+    _it->fill(_ctxt->getChunkSize());
 
-        return;
-    }
-
-    // Iterator is invalid, just check if the output was consumed
-    // if so, we can finish the processor and consume the input
-    if (!_outEdges.getPort()->hasData()) {
+    if (!_it->isValid()) {
         _inNodeIDs.getPort()->consume();
         finish();
     }
+
+    _outEdges.getPort()->writeData();
 }

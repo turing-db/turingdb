@@ -48,16 +48,11 @@ void ScanNodesProcessor::reset() {
 }
 
 void ScanNodesProcessor::execute() {
-    if (_it->isValid()) {
-        _it->fill(_ctxt->getChunkSize());
-        _outNodeIDs.getPort()->writeData();
+    _it->fill(_ctxt->getChunkSize());
 
-        return;
-    }
-
-    // Iterator is invalid, just check if the output was consumed
-    // if so, we can finish the processor
-    if (!_outNodeIDs.getPort()->hasData()) {
+    if (!_it->isValid()) {
         finish();
     }
+
+    _outNodeIDs.getPort()->writeData();
 }
