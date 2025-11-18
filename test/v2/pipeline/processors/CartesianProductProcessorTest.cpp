@@ -1049,8 +1049,98 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
+TEST_F(CartesianProductProcessorTest, bothOneRow) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 1;
+    constexpr size_t LHS_NUM_COLS = 5;
+
+    constexpr size_t RHS_NUM_ROWS = 1;
+    constexpr size_t RHS_NUM_COLS = 6;
+
+     // Generate Dataframe looking like:
+     //  1  2  3  4  5
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < LHS_NUM_COLS; colPtr++) {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->resize(LHS_NUM_ROWS);
+            col->front() = colPtr + 1;
+        }
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        isFinished = true;
+    };
+
+     // Generate Dataframe looking like:
+     // 101 102 103 104 105 106
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < RHS_NUM_COLS; colPtr++) {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_TRUE(col->empty());
+            col->resize(RHS_NUM_ROWS);
+            col->front() = 100 + colPtr + 1;
+        }
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < RHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < LHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
+    }
+
+    bool executed {false};
+    // Output Dataframe should be looking like:
+    std::vector<NodeID> expectedRow = {1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106};
+    std::vector<NodeID> actualRow;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        executed = true;
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < df->size(); colPtr++) {
+            const auto* col = df->cols().at(colPtr)->as<ColumnNodeIDs>();
+            actualRow.push_back(col->front());
+        };
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
+    ASSERT_TRUE(executed);
+    for (const auto& [exp, act] : rv::zip(expectedRow, actualRow)) {
+        EXPECT_EQ(exp.getValue(),act.getValue());
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 1;
+        testing::GTEST_FLAG(repeat) = 20;
     });
 }
