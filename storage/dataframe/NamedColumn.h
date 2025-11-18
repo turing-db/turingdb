@@ -28,8 +28,8 @@ public:
 
     template <typename T>
     requires std::is_base_of_v<Column, T>
-    const T* as() const {
-        return dynamic_cast<const T*>(_column);
+    T* as() const {
+        return dynamic_cast<T*>(_column);
     }
 
 private:

@@ -39,13 +39,13 @@ public:
 
     template <typename T>
     requires std::is_base_of_v<Column, T>
-    const T* getColumn(ColumnTag tag) const {
-        const auto* col = getColumn(tag);
+    T* getColumn(ColumnTag tag) const {
+        auto* col = getColumn(tag);
         if (!col) {
             return nullptr;
         }
 
-        return dynamic_cast<const T*>(col->getColumn());
+        return dynamic_cast<T*>(col->getColumn());
     }
 
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
