@@ -59,7 +59,7 @@ private:
 
 class PipelineValuesInputInterface : public PipelineInputInterface {
 public:
-    constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUES; }
+    consteval PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::VALUES; }
 
     NamedColumn* getValues() const { return _values; }
 
