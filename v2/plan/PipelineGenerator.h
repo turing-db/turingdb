@@ -14,7 +14,6 @@ namespace db::v2 {
 class PlanGraph;
 class PipelineV2;
 class PlanGraphNode;
-class PlanGraphStream;
 class VarNode;
 class VarDecl;
 class ScanNodesNode;
@@ -69,20 +68,20 @@ private:
     // [BinaryNode -> Visited input] map
     BinaryNodeVisitedMap _binaryVisitedMap;
 
-    void translateNode(PlanGraphNode* node, PlanGraphStream& stream);
-    void translateVarNode(VarNode* node, PlanGraphStream& stream);
-    void translateScanNodesNode(ScanNodesNode* node, PlanGraphStream& stream);
-    void translateGetOutEdgesNode(GetOutEdgesNode* node, PlanGraphStream& stream);
-    void translateGetInEdgesNode(GetInEdgesNode* node, PlanGraphStream& stream);
-    void translateGetEdgesNode(GetEdgesNode* node, PlanGraphStream& stream);
-    void translateGetEdgeTargetNode(GetEdgeTargetNode* node, PlanGraphStream& stream);
-    void translateNodeFilterNode(NodeFilterNode* node, PlanGraphStream& stream);
-    void translateEdgeFilterNode(EdgeFilterNode* node, PlanGraphStream& stream);
-    void translateProduceResultsNode(ProduceResultsNode* node, PlanGraphStream& stream);
-    void translateJoinNode(JoinNode* node, PlanGraphStream& stream);
-    void translateSkipNode(SkipNode* node, PlanGraphStream& stream);
-    void translateLimitNode(LimitNode* node, PlanGraphStream& stream);
-    void translateCartesianProductNode(CartesianProductNode* node, PlanGraphStream& stream);
+    void translateNode(PlanGraphNode* node);
+    void translateVarNode(VarNode* node);
+    void translateScanNodesNode(ScanNodesNode* node);
+    void translateGetOutEdgesNode(GetOutEdgesNode* node);
+    void translateGetInEdgesNode(GetInEdgesNode* node);
+    void translateGetEdgesNode(GetEdgesNode* node);
+    void translateGetEdgeTargetNode(GetEdgeTargetNode* node);
+    void translateNodeFilterNode(NodeFilterNode* node);
+    void translateEdgeFilterNode(EdgeFilterNode* node);
+    void translateProduceResultsNode(ProduceResultsNode* node);
+    void translateJoinNode(JoinNode* node);
+    void translateSkipNode(SkipNode* node);
+    void translateLimitNode(LimitNode* node);
+    void translateCartesianProductNode(CartesianProductNode* node);
 };
 
 }
