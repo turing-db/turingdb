@@ -4,6 +4,7 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
+#include "columns/ColumnIDs.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
@@ -628,6 +629,53 @@ TEST_F(QueriesTest, scanNodesCartProd) {
     }
 
     ASSERT_TRUE(expectedLines.equals(returnedLines));
+}
+
+TEST_F(QueriesTest, scanNodesGetOutCartProd) {
+    constexpr std::string_view query = "MATCH (n)-->(a), (m)-->(b) RETURN n, b";
+    using Rows = LineContainer<NodeID, NodeID>;
+
+    Rows expectedRows;
+    {
+        ColumnNodeIDs ns;
+        constexpr std::string_view nQuery = "match (n)-->(a) return n";
+        _db->queryV2(nQuery, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         ns = *df->cols().front()->as<ColumnNodeIDs>();
+                     });
+
+        ColumnNodeIDs bs;
+        constexpr std::string_view bQuery = "match (m)-->(b) return b";
+        _db->queryV2(bQuery, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         bs = *df->cols().front()->as<ColumnNodeIDs>();
+                     });
+
+        for (const NodeID n : ns) {
+            for (const NodeID b : bs) {
+                expectedRows.add({n, b});
+            }
+        }
+    }
+
+    Rows actualRows;
+    {
+        _db->queryV2(query, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         ASSERT_TRUE(df != nullptr);
+                         ASSERT_EQ(df->size(), 2);
+                         ASSERT_EQ(df->getRowCount(), 13 * 13);
+                         const auto& nCols = df->cols();
+                         const auto* n = nCols.front()->as<ColumnNodeIDs>();
+                         const auto* m = nCols.back()->as<ColumnNodeIDs>();
+
+                         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                             actualRows.add({n->at(rowPtr), m->at(rowPtr)});
+                         }
+                     });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
 }
 
 int main(int argc, char** argv) {

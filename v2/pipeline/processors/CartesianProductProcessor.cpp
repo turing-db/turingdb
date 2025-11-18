@@ -81,7 +81,6 @@ void CartesianProductProcessor::nextState() {
     }
 }
 
-// Assumes that the entire column is writable
 void CartesianProductProcessor::setFromLeftColumn(Dataframe* left,
                                                   Dataframe* right,
                                                   size_t colIdx,
@@ -162,7 +161,7 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left,
             remainingSpace -= m;
         }
 
-        if (canWriteAll || !canWriteLeftovers) { // We wrote everything we need
+        if (canWriteAll || !canWriteLeftovers) {
             return;
         }
 
@@ -395,7 +394,7 @@ void CartesianProductProcessor::emitFromPorts() {
     const size_t rowsWritten = fillOutput(lDF, rDF); // Fill from immediate ports
     _rowsWrittenSinceLastFinished += rowsWritten;
     _rowsWrittenThisCycle += rowsWritten;
-    // n * m - rows we already wrote
+
     const size_t rowsNeededToWrite = lDF->getRowCount() * rDF->getRowCount();
 
     if (_rowsWrittenSinceLastFinished != rowsNeededToWrite) {
