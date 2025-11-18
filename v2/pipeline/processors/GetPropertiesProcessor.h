@@ -82,13 +82,13 @@ public:
     }
 
     void execute() override {
-        _inIDs.getPort()->consume();
         _propWriter->fill(_ctxt->getChunkSize());
+
+        // The GetPropertiesProcessor always finishes in one step
+        _inIDs.getPort()->consume();
         _outValues.getPort()->writeData();
 
-        if (!_propWriter->isValid()) {
-            finish();
-        }
+        finish();
     }
 
 protected:

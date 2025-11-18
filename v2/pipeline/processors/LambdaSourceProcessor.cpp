@@ -5,8 +5,7 @@
 using namespace db::v2;
 
 LambdaSourceProcessor::LambdaSourceProcessor(Callback callback)
-    : _callback(callback),
-    _output(PipelineBlockOutputInterface::createOutputOnly())
+    : _callback(callback)
 {
 }
 
