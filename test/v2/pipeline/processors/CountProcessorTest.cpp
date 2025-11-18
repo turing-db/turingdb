@@ -45,10 +45,10 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         auto transaction = _graph->openTransaction();
         auto reader = transaction.readGraph();
         auto nodes = reader.scanNodes();
-        for (auto node : nodes) {
+        for (NodeID node : nodes) {
             allNodeIDs.push_back(node);
-            const auto outEdges = reader.getNodeView(node).edges().outEdges();
-            for (auto outEdge : outEdges) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (const EdgeRecord& outEdge : edgeView.outEdges()) {
                 allSourceTargetIDs.emplace_back(node, outEdge._otherID);
             }
         }
@@ -59,7 +59,7 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
     const size_t extra = 10;
     const size_t maxChunkSize = allNodeIDs.size()+extra;
 
-    for (size_t chunkSize = 0; chunkSize < maxChunkSize; chunkSize++) {
+    for (size_t chunkSize = 1; chunkSize < maxChunkSize; chunkSize++) {
         LocalMemory mem;
         PipelineV2 pipeline;
         PipelineBuilder builder(&mem, &pipeline);
@@ -69,15 +69,17 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         builder.addMaterialize();
         builder.addCount();
 
-        size_t rowCount = 0;
         bool sinkExecuted = false;
+        size_t rowCount = 0;
         auto lambda = [&](const Dataframe* df, auto operation) -> void {
             if (operation != LambdaProcessor::Operation::EXECUTE) {
                 return;
             }
 
             sinkExecuted = true;
-            rowCount += df->getRowCount();
+
+            const ColumnConst<size_t>* countValue = df->cols().front()->as<ColumnConst<size_t>>();
+            rowCount = countValue->getRaw();
         };
 
         builder.addLambda(lambda);
@@ -87,6 +89,7 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         const GraphView view = transaction.viewGraph();
 
         ExecutionContext execCtxt(view);
+        execCtxt.setChunkSize(chunkSize);
         PipelineExecutor executor(&pipeline, &execCtxt);
         executor.execute();
 
