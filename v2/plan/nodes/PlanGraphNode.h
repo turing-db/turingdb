@@ -58,7 +58,6 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::LIMIT, "LIMIT">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">>;
 
-
 class PlanGraphNode {
 public:
     using Nodes = std::vector<PlanGraphNode*>;
