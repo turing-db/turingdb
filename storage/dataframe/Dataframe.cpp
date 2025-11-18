@@ -6,17 +6,13 @@
 #include "columns/Column.h"
 #include "columns/ColumnDispatcher.h"
 
-#include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
-Dataframe::Dataframe()
-{
-}
+Dataframe::Dataframe() = default;
 
-Dataframe::~Dataframe()
-{
-}
+Dataframe::~Dataframe() = default;
 
 void Dataframe::addColumn(NamedColumn* column) {
     _cols.push_back(column);
@@ -87,7 +83,11 @@ void Dataframe::copyFromLine(const Dataframe* other, size_t startRow, size_t row
 }
 
 void Dataframe::append(const Dataframe* other) {
-    bioassert(this->size() == other->size());
+    if (this->size() != other->size()) {
+        throw FatalException(fmt::format(
+            "Attempted to append a Dataframe of size {} to a Dataframe of size {}.",
+            other->size(), this->size()));
+    }
 
     const size_t oldRows = this->getRowCount();
     const size_t addRows = other->getRowCount();
@@ -104,8 +104,13 @@ void Dataframe::append(const Dataframe* other) {
 
         // Resize destination to fit new data
         dispatchColumnVector(dst, [&](auto* dstColumnVector) {
-            auto* srcColumnVector = static_cast<decltype(dstColumnVector)>(src);
-            bioassert(srcColumnVector);
+            auto* srcColumnVector = dynamic_cast<decltype(dstColumnVector)>(src);
+            if (!srcColumnVector) {
+                throw FatalException(
+                    fmt::format("Attempted to append to a Dataframe whose column at "
+                                "index {} is not a ColumnVector<T>.",
+                                i));
+            }
 
             dstColumnVector->resize(newRows);
             auto& srcRaw = srcColumnVector->getRaw();
