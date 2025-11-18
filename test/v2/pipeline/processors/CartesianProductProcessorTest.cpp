@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 
 #include <range/v3/view/zip.hpp>
-#include <set>
 
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "LineContainer.h"
 #include "dataframe/ColumnTag.h"
+#include "iterators/ChunkConfig.h"
 #include "processors/ProcessorTester.h"
 
 #include "processors/CartesianProductProcessor.h"
@@ -1137,6 +1137,89 @@ TEST_F(CartesianProductProcessorTest, bothOneRow) {
     for (const auto& [exp, act] : rv::zip(expectedRow, actualRow)) {
         EXPECT_EQ(exp.getValue(),act.getValue());
     }
+}
+
+TEST_F(CartesianProductProcessorTest, tenThousandRowDataframes) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t CHUNK_SIZE = ChunkConfig::CHUNK_SIZE;
+
+    // Anything greater than this becomes too expensive
+    constexpr size_t LHS_ROWS = 10'000;
+    constexpr size_t LHS_COLS = 1;
+    constexpr size_t RHS_ROWS = LHS_ROWS;
+    constexpr size_t RHS_COLS = LHS_COLS;
+
+    size_t EXPECTED_NUM_CHUNKS = std::ceil((LHS_ROWS * RHS_ROWS) / (float)CHUNK_SIZE);
+
+    const auto genDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        ASSERT_EQ(df->size(), LHS_COLS);
+        auto* col = df->cols().front()->as<ColumnNodeIDs>();
+        col->resize(LHS_ROWS);
+        std::iota(col->begin(), col->end(), 0);
+
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genDF);
+        for (size_t i = 0; i < RHS_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genDF);
+        for (size_t i = 0; i < LHS_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_COLS + RHS_COLS);
+    }
+
+    // It is too expensive to compare for equality
+    /*
+    Rows expectedRows;
+    {
+        for (size_t i = 0; i < LHS_ROWS; i++) {
+            for (size_t j = 0; j < RHS_ROWS; j++) {
+                expectedRows.emplace(i, j);
+            }
+        }
+    }
+    */
+
+    bool executed {false};
+    size_t numChunks {0};
+    size_t numRows {0};
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        ASSERT_EQ(df->size(), LHS_COLS + RHS_COLS);
+
+        executed = true;
+        numChunks++;
+        numRows += df->getRowCount();
+
+        /*
+        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+            auto* lhs = df->cols().front()->as<ColumnNodeIDs>();
+            auto* rhs = df->cols().back()->as<ColumnNodeIDs>();
+            EXPECT_TRUE(expectedRows.contains({lhs->at(rowPtr), rhs->at(rowPtr)}));
+        }
+        */
+    };
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, CHUNK_SIZE);
+    ASSERT_TRUE(executed);
+    EXPECT_EQ(EXPECTED_NUM_CHUNKS, numChunks);
+    EXPECT_EQ(LHS_ROWS * RHS_ROWS, numRows);
 }
 
 int main(int argc, char** argv) {
