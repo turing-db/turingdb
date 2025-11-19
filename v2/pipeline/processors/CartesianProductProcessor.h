@@ -7,12 +7,6 @@
 
 #include "dataframe/Dataframe.h"
 
-namespace db {
-
-class Dataframe;
-
-}
-
 namespace db::v2 {
 
 class PipelineV2;
@@ -61,7 +55,7 @@ private:
     size_t _lhsPtr {0};
     size_t _rhsPtr {0};
 
-    // A "cycle" is defined by a single call to @ref execute
+    // A "cycle" is defined as a single call to @ref execute
     size_t _rowsWrittenThisCycle {0};
     size_t _rowsWrittenSinceLastFinished {0};
     size_t _rowsToWriteBeforeFinished {0};
