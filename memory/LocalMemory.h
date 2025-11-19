@@ -86,10 +86,6 @@ public:
         return _pools.get<ObjT>().alloc(args...);
     }
 
-    Column* allocSame(Column* col) {
-        return _columnAllocators.get(col->getKind())->alloc();
-    }
-
     Column* allocSame(const Column* col) {
         return _columnAllocators.get(col->getKind())->alloc();
     }

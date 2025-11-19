@@ -13,8 +13,8 @@ using namespace db;
 
 MaterializeData::MaterializeData(LocalMemory* mem, DataframeManager* dfMan)
     : _mem(mem),
-      _dfMan(dfMan),
-      _columnsPerStep(1)
+    _dfMan(dfMan),
+    _columnsPerStep(1)
 {
 }
 

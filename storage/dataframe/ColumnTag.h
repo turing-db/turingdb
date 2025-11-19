@@ -31,16 +31,8 @@ public:
     bool operator==(const ColumnTag& other) const { return _value == other._value; }
     bool operator!=(const ColumnTag& other) const { return _value != other._value; }
 
-    ColumnTag& operator++() {
-        _value++;
-        return *this;
-    }
-
-    ColumnTag operator++(int) {
-        ColumnTag old = *this;
-        _value++;
-        return old;
-    }
+    ColumnTag& operator++() { _value++; return *this; }
+    ColumnTag operator++(int) { ColumnTag old = *this; _value++; return old; }
 
     bool isValid() const { return _value != std::numeric_limits<ValueType>::max(); }
 
