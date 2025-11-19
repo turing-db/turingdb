@@ -27,7 +27,7 @@ public:
 
     NamedColumn* getNodeIDs() const { return _nodeIDs; }
 
-    void rename(const std::string_view& name) override;
+    void rename(std::string_view name) override;
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineBlockInputInterface& input) override;
 

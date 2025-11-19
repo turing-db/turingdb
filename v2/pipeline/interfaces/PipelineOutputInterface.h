@@ -27,7 +27,7 @@ public:
     virtual void connectTo(PipelineEdgeInputInterface& input);
     virtual void connectTo(PipelineValuesInputInterface& input);
 
-    virtual void rename(const std::string_view& name);
+    virtual void rename(std::string_view name);
 
     void setStream(const EntityOutputStream& stream) { _stream = stream; }
 

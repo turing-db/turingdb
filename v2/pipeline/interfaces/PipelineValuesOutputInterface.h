@@ -23,7 +23,7 @@ public:
     NamedColumn* getIndices() const { return _indices; }
     NamedColumn* getValues() const { return _values; }
 
-    void rename(const std::string_view& name) override;
+    void rename(std::string_view name) override;
     void connectTo(PipelineBlockInputInterface& input) override;
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineEdgeInputInterface& input) override;
