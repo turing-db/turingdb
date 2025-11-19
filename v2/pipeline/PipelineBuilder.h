@@ -112,6 +112,9 @@ public:
     // Filter
     PipelineBlockOutputInterface& addFilter(ExprProgram* exprProg);
 
+    // Filter
+    PipelineBlockOutputInterface& addFilter(PipelineOutputInterface* toFilter);
+
     // Joins and Products
     // LHS is implict in @ref _pendingOutput
     PipelineBlockOutputInterface& addCartesianProduct(PipelineOutputInterface* rhs);

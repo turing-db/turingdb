@@ -39,6 +39,7 @@
 #include "interfaces/PipelineEdgeInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "processors/ComputeExprProcessor.h"
+#include "processors/FilterProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
