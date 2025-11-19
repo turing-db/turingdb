@@ -7,7 +7,9 @@
 
 #include "expr/Expr.h"
 #include "expr/BinaryExpr.h"
+#include "expr/LiteralExpr.h"
 #include "decl/VarDecl.h"
+#include "Literal.h"
 #include "metadata/PropertyType.h"
 
 #include "columns/ColumnOperator.h"
@@ -46,8 +48,7 @@ using ColumnValues = ColumnVector<typename T::Primitive>;
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
-    const Expr* expr = pred->getExpr();
-    _rootColumn = generateExpr(expr);
+    _rootColumn = generateExpr(pred->getExpr());
 }
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
@@ -58,6 +59,10 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
 
         case Expr::Kind::PROPERTY:
             return generatePropertyExpr(static_cast<const PropertyExpr*>(expr));
+        break;
+
+        case Expr::Kind::LITERAL:
+            return generateLiteralExpr(static_cast<const LiteralExpr*>(expr));
         break;
 
         default:
@@ -84,6 +89,7 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     // Search exprVarDecl in column map
     const auto foundIt = _propColumnMap.find(exprVarDecl);
     if (foundIt == _propColumnMap.end()) {
+        return allocResultColumn(propExpr);
         throw PlannerException(fmt::format("ExprProgramGenerator: can not find column for property expression {}.{}",
             propExpr->getDecl()->getName(),
             propExpr->getPropName()));
@@ -92,8 +98,39 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     return foundIt->second;
 }
 
+Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr) {
+    Literal* literal = literalExpr->getLiteral();
+    
+    switch (literal->getKind()) {
+        case Literal::Kind::BOOL: {
+            ColumnConst<types::Bool::Primitive>* value = _mem->alloc<ColumnConst<types::Bool::Primitive>>();
+            value->set(static_cast<const BoolLiteral*>(literal)->getValue());
+            return value;
+        }
+        break;
+
+        case Literal::Kind::INTEGER:{
+            ColumnConst<types::Bool::Primitive>* value = _mem->alloc<ColumnConst<types::Bool::Primitive>>();
+            value->set(static_cast<const BoolLiteral*>(literal)->getValue());
+            return value;
+        }
+        break;
+
+        case Literal::Kind::DOUBLE:
+        case Literal::Kind::STRING:
+        case Literal::Kind::CHAR:
+
+        default:
+            throw PlannerException(
+                fmt::format("ExprProgramGenerator: unsupported literal of type {}",
+                (size_t)literal->getKind()));
+        break;
+    }
+}
+
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
+
     switch (exprType) {
         case EvaluatedType::Integer:
             return _mem->alloc<ColumnValues<types::Int64>>();

@@ -15,6 +15,7 @@ class Expr;
 class VarDecl;
 class BinaryExpr;
 class PropertyExpr;
+class LiteralExpr;
 
 class ExprProgramGenerator {
 public:
@@ -36,6 +37,7 @@ private:
     Column* generateBinaryExpr(const BinaryExpr* expr);
     Column* allocResultColumn(const Expr* expr);
     Column* generatePropertyExpr(const PropertyExpr* propExpr);
+    Column* generateLiteralExpr(const LiteralExpr* literalExpr);
 };
 
 }
