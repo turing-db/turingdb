@@ -376,6 +376,8 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
 }
 
 void ReadStmtGenerator::placeJoinsOnVars() {
+    // TODO: Check if this is still needed now that there is no MaterializeNode anymore.
+    //       Right now it only checks if the join is valid, else it's a bug
     const auto createJoin = [this](PlanGraphNode* lhs, PlanGraphNode* rhs) -> PlanGraphNode* {
         const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(lhs, rhs);
 
@@ -598,8 +600,8 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
 
         case PlanGraphTopology::PathToDependency::NoPath: {
             // If nodes are on two different islands
-            // ValueHashJoin
-            JoinNode* join = _tree->insertBefore<JoinNode>(filter);
+            // Cartesian product. This can be optimized in the future into a ValueHashJoin
+            CartesianProductNode* join = _tree->insertBefore<CartesianProductNode>(filter);
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
             return;
