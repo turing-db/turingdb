@@ -26,8 +26,19 @@ public:
     }
 
     const SourceLocation* getLocation(uintptr_t obj) const;
-    std::string_view getStringRepr(uintptr_t obj) const;
     std::string_view getQueryString() const { return _queryString; }
+
+    /** @brief Get the substring of the query that generates the passed AST object
+     *
+     * @details This function returns the substring of the query that maps to AST object
+     * e.g., if the query is `MATCH (a) RETURN a.age > 20`, and we pass the `Expr*` that
+     * represents `a.age > 20` to this function, it returns the string `"a.age > 20"`
+     *
+     * @param obj The AST object
+     *
+     * @return The substring of the query that maps to the given AST object
+     */
+    std::string_view getStringRepr(uintptr_t obj) const;
 
 private:
     std::string_view _queryString;
