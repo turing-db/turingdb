@@ -203,4 +203,45 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(suhas, "hasPhD", false);
 
     writer.submit();
+
+    const auto cyrus = writer.addNode({"Person", "SoftwareEngineering"});
+    writer.addNodeProperty<types::String>(cyrus, "name", "Cyrus");
+    writer.addNodeProperty<types::Bool>(cyrus, "isFrench", false);
+    writer.addNodeProperty<types::Bool>(cyrus, "hasPhD", false);
+
+    const auto gym = writer.addNode({"Interest"});
+    writer.addNodeProperty<types::String>(gym, "name", "Gym");
+    writer.addNodeProperty<types::Bool>(gym, "isReal", true);
+
+    const auto travel = writer.addNode({"Interest"});
+    writer.addNodeProperty<types::String>(travel, "name", "Travel");
+    writer.addNodeProperty<types::Bool>(travel, "isReal", true);
+
+    const auto cyrusGym = writer.addEdge("INTERESTED_IN", cyrus, gym);
+    writer.addEdgeProperty<types::String>(cyrusGym, "name", "Cyrus -> Gym");
+
+    const auto cyrusTravel = writer.addEdge("INTERESTED_IN", cyrus, travel);
+    writer.addEdgeProperty<types::String>(cyrusTravel, "name", "Cyrus -> Travel");
+
+    writer.submit();
+
+    const auto doruk = writer.addNode({"Person", "Sales"});
+    writer.addNodeProperty<types::String>(doruk, "name", "Doruk");
+    writer.addNodeProperty<types::Bool>(doruk, "isFrench", false);
+    writer.addNodeProperty<types::Bool>(doruk, "hasPhD", false);
+
+    const auto dorukGym = writer.addEdge("INTERESTED_IN", doruk, findNodeIDInWriter("Gym"));
+    writer.addEdgeProperty<types::String>(dorukGym, "name", "Doruk -> Gym");
+
+    const auto suhasGym = writer.addEdge("INTERESTED_IN", findNodeIDInWriter("Suhas"), findNodeIDInWriter("Gym"));
+    writer.addEdgeProperty<types::String>(suhasGym, "name", "Suhas -> Gym");
+
+    const auto jiujitsu = writer.addNode({"Interest"});
+    writer.addNodeProperty<types::String>(jiujitsu, "name", "JiuJitsu");
+    writer.addNodeProperty<types::Bool>(jiujitsu, "isReal", true);
+
+    const auto jiujitsuSuhas = writer.addEdge("INTERESTED_IN", findNodeIDInWriter("Suhas"), jiujitsu);
+    writer.addEdgeProperty<types::String>(jiujitsuSuhas, "name", "Suhas -> Jiutjitsu");
+
+    writer.submit();
 }
