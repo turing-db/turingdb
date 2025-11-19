@@ -1388,6 +1388,83 @@ TEST_F(CartesianProductProcessorTest, rhsEmpty) {
     ASSERT_TRUE(actualRow.empty());
 }
 
+TEST_F(CartesianProductProcessorTest, bothEmpty) {
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 0;
+    constexpr size_t LHS_NUM_COLS = 2;
+
+    constexpr size_t RHS_NUM_ROWS = 0;
+    constexpr size_t RHS_NUM_COLS = 2;
+
+     // Generate empty Dataframe
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        // Empty DF
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        ASSERT_EQ(df->getRowCount(), RHS_NUM_ROWS);
+        isFinished = true;
+    };
+
+     // Generate Dataframe looking like:
+     // 101 102 103 104 105 106
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        // Empty DF
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        ASSERT_EQ(df->getRowCount(), LHS_NUM_ROWS);
+        isFinished = true;
+    };
+
+    { // Wire up the cartesian product to the two inputs
+        auto& rhsIF = _builder->addLambdaSource(genLDF);
+        for (size_t i = 0; i < RHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genRDF);
+        for (size_t i = 0; i < LHS_NUM_COLS; i++) {
+            _builder->addColumnToOutput<ColumnNodeIDs>(
+                _pipeline.getDataframeManager()->allocTag());
+        }
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
+    }
+
+    bool executed {false};
+    // Output Dataframe should be looking like:
+    std::vector<NodeID> actualRow;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        executed = true;
+
+        ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
+        // Push back any rows we see, but we shouldn't have any
+        for (size_t colPtr = 0; colPtr < df->size(); colPtr++) {
+            for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                const auto* col = df->cols().at(colPtr)->as<ColumnNodeIDs>();
+                actualRow.push_back(col->at(rowPtr));
+            }
+        };
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, ChunkConfig::CHUNK_SIZE);
+    ASSERT_TRUE(executed);
+    ASSERT_TRUE(actualRow.empty());
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 20;

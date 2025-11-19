@@ -3,6 +3,7 @@
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
+#include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 
 #include "BioAssert.h"
@@ -11,6 +12,40 @@
 #include "dataframe/NamedColumn.h"
 
 using namespace db::v2;
+
+namespace {
+
+using namespace db;
+
+void clearDataframe(Dataframe* df) {
+    for (NamedColumn* nCol : df->cols()) {
+        Column* col = nCol->getColumn();
+        dispatchColumnVector(col, [](auto* colVec) { colVec->clear(); });
+    }
+}
+
+constexpr ColumnKind::ColumnKindCode getBaseFromKind(ColumnKind::ColumnKindCode kind) {
+    return kind / ColumnKind::getInternalTypeKindCount();
+}
+
+void verifyAllColumnVectors(Dataframe* df) {
+    constexpr ColumnKind::ColumnKindCode columnVectorBaseKind =
+        ColumnVector<size_t>::BaseKind;
+
+    for (NamedColumn* nCol : df->cols()) {
+        Column* col = nCol->getColumn();
+
+        const ColumnKind::ColumnKindCode kind = col->getKind();
+        const ColumnKind::ColumnKindCode baseKind = getBaseFromKind(kind);
+
+        if (baseKind != columnVectorBaseKind) {
+            throw FatalException("Attempt to calulate the CartesianProduct of a "
+                                 "Dataframe whose column is not a ColumnVector.");
+        }
+    }
+}
+
+}
 
 CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipeline) {
     auto* processor = new CartesianProductProcessor();
@@ -491,6 +526,10 @@ void CartesianProductProcessor::init() {
     bioassert(&_leftMemory);
     bioassert(&_rightMemory);
 
+    verifyAllColumnVectors(_lhs.getDataframe());
+    verifyAllColumnVectors(_rhs.getDataframe());
+    verifyAllColumnVectors(_out.getDataframe());
+
     const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getRowCount() : 0;
     const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getRowCount() : 0;
 
@@ -540,6 +579,18 @@ void CartesianProductProcessor::execute() {
         if (_rhs.getPort()->hasData()) {
             _rightMemory.append(_rhs.getDataframe());
             _rhs.getPort()->consume();
+        }
+
+        // Edge case: if we didn't need to write any rows, @ref fillOutput would not have
+        // been called, and neither would @ref writeData. Call it explicitly here, but
+        // only in the case where we are not to recieve any more inputs (i.e. both ports
+        // closed), so that the following processor evaluates @ref hasData() to true, and
+        // can therefore execute.
+        if (_rowsToWriteBeforeFinished == 0) {
+            if (_lhs.getPort()->isClosed() && _rhs.getPort()->isClosed()) {
+                clearDataframe(_out.getDataframe());
+                _out.getPort()->writeData();
+            }
         }
 
         finish();
