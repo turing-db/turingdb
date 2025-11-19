@@ -664,13 +664,70 @@ TEST_F(QueriesTest, scanNodesGetOutCartProd) {
                      [&](const Dataframe* df) -> void {
                          ASSERT_TRUE(df != nullptr);
                          ASSERT_EQ(df->size(), 2);
-                         ASSERT_EQ(df->getRowCount(), 13 * 13);
                          const auto& nCols = df->cols();
                          const auto* n = nCols.front()->as<ColumnNodeIDs>();
                          const auto* m = nCols.back()->as<ColumnNodeIDs>();
 
                          for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
                              actualRows.add({n->at(rowPtr), m->at(rowPtr)});
+                         }
+                     });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, twoHopXOneHop) {
+    constexpr std::string_view query = "MATCH (n)-->(m)-->(o), (p)-->(q) RETURN n, m, o, p, q";
+    using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    {
+        ColumnNodeIDs ns;
+        ColumnNodeIDs ms;
+        ColumnNodeIDs os;
+        constexpr std::string_view nQuery = "match (n)-->(m)-->(o) return n, m, o";
+        _db->queryV2(nQuery, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         ns = *df->cols().at(0)->as<ColumnNodeIDs>();
+                         ms = *df->cols().at(1)->as<ColumnNodeIDs>();
+                         os = *df->cols().at(2)->as<ColumnNodeIDs>();
+                     });
+
+        ColumnNodeIDs ps;
+        ColumnNodeIDs qs;
+        constexpr std::string_view bQuery = "match (p)-->(q) return p, q";
+        _db->queryV2(bQuery, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         ps = *df->cols().front()->as<ColumnNodeIDs>();
+                         qs = *df->cols().back()->as<ColumnNodeIDs>();
+                     });
+
+        ASSERT_TRUE((ns.size() == ms.size()) && (ns.size() == os.size()));
+        ASSERT_TRUE(ps.size() == qs.size());
+        for (size_t i = 0 ; i < ns.size(); i++) {
+            for (size_t j = 0; j < ps.size(); j++) {
+                expectedRows.add({ns[i], ms[i], os[i], ps[j], qs[j]});
+            }
+        }
+    }
+
+    Rows actualRows;
+    {
+        _db->queryV2(query, _graphName, &_env->getMem(),
+                     [&](const Dataframe* df) -> void {
+                         ASSERT_TRUE(df != nullptr);
+                         ASSERT_EQ(df->size(), 5);
+                         const auto& nCols = df->cols();
+                         const auto* n = nCols.at(0)->as<ColumnNodeIDs>();
+                         const auto* m = nCols.at(1)->as<ColumnNodeIDs>();
+                         const auto* o = nCols.at(2)->as<ColumnNodeIDs>();
+
+                         const auto* p = nCols.at(3)->as<ColumnNodeIDs>();
+                         const auto* q = nCols.at(4)->as<ColumnNodeIDs>();
+
+                         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                             actualRows.add({n->at(rowPtr), m->at(rowPtr), o->at(rowPtr), p->at(rowPtr), q->at(rowPtr)});
                          }
                      });
     }

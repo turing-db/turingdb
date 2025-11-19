@@ -30,7 +30,6 @@
 
 #include "PipelineException.h"
 #include "PlannerException.h"
-#include "FatalException.h"
 
 using namespace db::v2;
 
@@ -293,9 +292,15 @@ void PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode
 }
 
 void PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
+    if (!node->isEmpty()) {
+        throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
+    }
 }
 
 void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
+    if (!node->isEmpty()) {
+        throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
+    }
 }
 
 void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
