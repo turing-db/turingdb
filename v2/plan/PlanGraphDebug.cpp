@@ -248,21 +248,21 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::GET_PROPERTY: {
                 const auto* n = dynamic_cast<GetPropertyNode*>(node.get());
-                bioassert(n->getEntityDecl());
-                output << "        __var__ " << n->getEntityDecl()->getName() << "\n";
+                bioassert(n->getEntityVarDecl());
+                output << "        __var__ " << n->getEntityVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
             } break;
 
             case PlanGraphOpcode::GET_PROPERTY_WITH_NULL: {
                 const auto* n = dynamic_cast<GetPropertyWithNullNode*>(node.get());
-                bioassert(n->getVarDecl());
-                output << "        __var__ " << n->getVarDecl()->getName() << "\n";
+                bioassert(n->getEntityVarDecl());
+                output << "        __var__ " << n->getEntityVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
             } break;
 
             case PlanGraphOpcode::GET_ENTITY_TYPE: {
                 const auto* n = dynamic_cast<GetEntityTypeNode*>(node.get());
-                const VarDecl* decl = n->getEntityDecl();
+                const VarDecl* decl = n->getEntityVarDecl();
                 bioassert(decl);
                 output << "        __type__ " << ((decl->getType() == EvaluatedType::NodePattern) ? "node" : "edge") << "\n";
                 output << "        __var__ " << decl->getName() << "\n";

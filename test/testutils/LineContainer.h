@@ -100,13 +100,17 @@ private:
         return fmt::format("{:>5}", value);
     }
 
+    static auto getFormat(const std::string_view& value) {
+        return fmt::format("{:>5}", std::string(value));
+    }
+
     template <typename T>
     static auto getFormat(const std::optional<T>& value) {
         if (!value.has_value()) {
             return fmt::format("{:>5}", "null");
         }
 
-        return fmt::format("{:>5}", *value);
+        return fmt::format("{:>5}", getFormat(*value));
     }
 
     template <typename Tuple, std::size_t... Is>

@@ -560,11 +560,11 @@ void CypherASTDumper::dump(std::ostream& out, const EntityTypeExpr* expr) {
 
     out << "    }\n";
 
-    if (!expr->getDecl()) {
+    if (!expr->getEntityVarDecl()) {
         return;
     }
 
-    out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getDecl() << " : \"\"\n";
+    out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getEntityVarDecl() << " : \"\"\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const StringExpr* expr) {
@@ -611,11 +611,11 @@ void CypherASTDumper::dump(std::ostream& out, const PropertyExpr* expr) {
 
     out << "\n    }\n";
 
-    if (!expr->getDecl()) {
+    if (!expr->getEntityVarDecl()) {
         return;
     }
 
-    out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getDecl() << " : \"\"\n";
+    out << "    _" << std::hex << expr << " ||--o{ VAR_" << expr->getEntityVarDecl() << " : \"\"\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const FunctionInvocationExpr* expr) {

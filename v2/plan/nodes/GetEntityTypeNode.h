@@ -4,27 +4,31 @@
 
 namespace db::v2 {
 
+class Expr;
 class VarDecl;
 class SymbolChain;
 
 class GetEntityTypeNode : public PlanGraphNode {
 public:
-    explicit GetEntityTypeNode(const VarDecl* decl)
-        : PlanGraphNode(PlanGraphOpcode::GET_ENTITY_TYPE),
-        _entityDecl(decl)
+    explicit GetEntityTypeNode()
+        : PlanGraphNode(PlanGraphOpcode::GET_ENTITY_TYPE)
     {
     }
 
-    const VarDecl* getEntityDecl() const { return _entityDecl; }
-    const VarDecl* getEntityTypeDecl() const { return _entityTypeDecl; }
-
-    void setEntityTypeDecl(const VarDecl* entityTypeDecl) {
-        _entityTypeDecl = entityTypeDecl;
+    void setEntityVarDecl(const VarDecl* entityDecl) {
+        _entityDecl = entityDecl;
     }
+
+    void setExpr(const Expr* expr) {
+        _expr = expr;
+    }
+
+    const VarDecl* getEntityVarDecl() const { return _entityDecl; }
+    const Expr* getExpr() const { return _expr; }
 
 private:
     const VarDecl* _entityDecl {nullptr};
-    const VarDecl* _entityTypeDecl {nullptr};
+    const Expr* _expr {nullptr};
 };
 
 }

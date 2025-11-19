@@ -504,6 +504,98 @@ TEST_F(QueriesTest, scanEdges) {
     ASSERT_TRUE(returnedLines.equals(expectedLines));
 }
 
+TEST_F(QueriesTest, scanPropertiesWithNull) {
+    const std::string query = "MATCH (n)-[e]->(m) RETURN n.age, e.name, m.age";
+    using Lines = LineContainer<
+        std::optional<int64_t>,
+        std::optional<std::optional<std::string_view>>,
+        std::optional<int64_t>>;
+
+    auto transaction = _graph->openTransaction();
+    auto reader = transaction.readGraph();
+
+    Lines returnedLines;
+    Lines expectedLines;
+
+    const auto agePropType = reader.getMetadata().propTypes().get("age");
+    const auto namePropType = reader.getMetadata().propTypes().get("name");
+
+    ASSERT_TRUE(agePropType.has_value());
+    ASSERT_TRUE(namePropType.has_value());
+
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 3);
+        ASSERT_EQ(df->size(), 3);
+
+        using AgeContainer = ColumnOptVector<types::Int64::Primitive>;
+        using NameContainer = ColumnOptVector<types::String::Primitive>;
+
+        const AgeContainer* srcAges = nullptr;
+        const NameContainer*  edgeNames = nullptr;
+        const AgeContainer* tgtAges = nullptr;
+
+        for (auto* col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "n.age") {
+                srcAges = col->as<AgeContainer>();
+            } else if (name == "e.name") {
+                edgeNames = col->as<NameContainer>();
+            } else if (name == "m.age") {
+                tgtAges = col->as<AgeContainer>();
+            }
+        }
+
+        ASSERT_TRUE(srcAges != nullptr);
+        ASSERT_FALSE(srcAges->empty());
+        ASSERT_TRUE(edgeNames != nullptr);
+        ASSERT_FALSE(edgeNames->empty());
+        ASSERT_TRUE(tgtAges != nullptr);
+        ASSERT_FALSE(tgtAges->empty());
+
+        const size_t lineCount = tgtAges->size();
+        for (size_t i = 0; i < lineCount; i++) {
+            returnedLines.add({srcAges->at(i), edgeNames->at(i), tgtAges->at(i)});
+        }
+    });
+
+    // Get all expected node IDs
+    {
+        for (const auto& edge: reader.scanOutEdges()) {
+            ColumnNodeIDs srcID = {edge._nodeID};
+            ColumnEdgeIDs edgeID = {edge._edgeID};
+            ColumnNodeIDs tgtID = {edge._otherID};
+
+            std::optional<int64_t> srcAge;
+            std::optional<std::optional<std::string_view>> edgeName;
+            std::optional<int64_t> tgtAge;
+
+            for (const auto prop : reader.getNodePropertiesWithNull<types::Int64>(agePropType->_id, &srcID)) {
+                srcAge = prop;
+                break;
+            }
+
+            for (const auto prop : reader.getEdgePropertiesWithNull<types::String>(namePropType->_id, &edgeID)) {
+                edgeName = prop;
+                break;
+            }
+
+            for (const auto prop : reader.getNodePropertiesWithNull<types::Int64>(agePropType->_id, &tgtID)) {
+                tgtAge = prop;
+                break;
+            }
+
+            expectedLines.add({srcAge, edgeName, tgtAge});
+        }
+    }
+    fmt::println("- Expected:");
+    expectedLines.print(std::cout);
+    fmt::println("- Returned:");
+    returnedLines.print(std::cout);
+
+    ASSERT_TRUE(returnedLines.equals(expectedLines));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;

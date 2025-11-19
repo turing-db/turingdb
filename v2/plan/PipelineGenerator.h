@@ -1,9 +1,9 @@
 #pragma once
 
-#include "PipelineInterface.h"
 #include "QueryCallback.h"
 
 #include "PipelineBuilder.h"
+#include "views/GraphView.h"
 
 namespace db {
 class LocalMemory;
@@ -11,6 +11,7 @@ class LocalMemory;
 
 namespace db::v2 {
 
+class SourceManager;
 class PlanGraph;
 class PipelineV2;
 class PlanGraphNode;
@@ -21,6 +22,8 @@ class GetOutEdgesNode;
 class GetInEdgesNode;
 class GetEdgesNode;
 class GetEdgeTargetNode;
+class GetPropertyNode;
+class GetPropertyWithNullNode;
 class NodeFilterNode;
 class EdgeFilterNode;
 class ProduceResultsNode;
@@ -32,12 +35,16 @@ class CartesianProductNode;
 class PipelineGenerator {
 public:
     PipelineGenerator(const PlanGraph* graph,
+                      const GraphView& view,
                       PipelineV2* pipeline,
                       LocalMemory* mem,
+                      SourceManager* sourceManager,
                       const QueryCallbackV2& callback)
         : _graph(graph),
+        _view(view),
         _pipeline(pipeline),
         _mem(mem),
+        _sourceManager(sourceManager),
         _callback(callback),
         _builder(mem, pipeline)
     {
@@ -58,8 +65,10 @@ public:
 
 private:
     const PlanGraph* _graph {nullptr};
+    GraphView _view;
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
+    SourceManager* _sourceManager {nullptr};
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
 
@@ -75,6 +84,7 @@ private:
     void translateGetInEdgesNode(GetInEdgesNode* node);
     void translateGetEdgesNode(GetEdgesNode* node);
     void translateGetEdgeTargetNode(GetEdgeTargetNode* node);
+    void translateGetPropertyWithNullNode(GetPropertyWithNullNode* node);
     void translateNodeFilterNode(NodeFilterNode* node);
     void translateEdgeFilterNode(EdgeFilterNode* node);
     void translateProduceResultsNode(ProduceResultsNode* node);

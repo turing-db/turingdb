@@ -61,12 +61,12 @@ public:
 
             case Expr::Kind::ENTITY_TYPES: {
                 const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
-                _varDeps.emplace_back(variables.getVarNode(entityType->getDecl()), expr);
+                _varDeps.emplace_back(variables.getVarNode(entityType->getEntityVarDecl()), expr);
             } break;
 
             case Expr::Kind::PROPERTY: {
                 const PropertyExpr* prop = static_cast<const PropertyExpr*>(expr);
-                _varDeps.emplace_back(variables.getVarNode(prop->getDecl()), expr);
+                _varDeps.emplace_back(variables.getVarNode(prop->getEntityVarDecl()), expr);
             } break;
 
             case Expr::Kind::FUNCTION_INVOCATION: {

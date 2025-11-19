@@ -49,7 +49,7 @@ TEST_F(GetPropertiesWithNullProcessorTest, test) {
     // Pipeline definition
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
-    const auto& propInterface = _builder->addGetPropertiesWithNull<EntityType::Node, types::Int64>(ageType);
+    const auto& propInterface = _builder->addGetPropertiesWithNull<EntityType::Node, types::Int64>(originIDsTag, ageType);
     const ColumnTag& agesTag = propInterface.getValues()->getTag();
 
     _builder->addMaterialize();

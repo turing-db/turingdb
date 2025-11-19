@@ -25,18 +25,13 @@ public:
         setLocation((uintptr_t)obj, loc);
     }
 
-    void setDebugLocations(bool debugLocations) {
-        _debugLocations = debugLocations;
-    }
-
     const SourceLocation* getLocation(uintptr_t obj) const;
+    std::string_view getStringRepr(uintptr_t obj) const;
     std::string_view getQueryString() const { return _queryString; }
 
 private:
     std::string_view _queryString;
     std::unordered_map<uintptr_t, SourceLocation> _locations;
-
-    bool _debugLocations {true};
 };
 
 }

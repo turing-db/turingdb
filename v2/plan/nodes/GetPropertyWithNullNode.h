@@ -4,22 +4,32 @@
 
 namespace db::v2 {
 
+class Expr;
 class VarDecl;
 
 class GetPropertyWithNullNode : public PlanGraphNode {
 public:
-    GetPropertyWithNullNode(const VarDecl* decl, std::string_view propName)
+    GetPropertyWithNullNode(std::string_view propName)
         : PlanGraphNode(PlanGraphOpcode::GET_PROPERTY_WITH_NULL),
-        _decl(decl),
         _propName(propName)
     {
     }
 
-    const VarDecl* getVarDecl() const { return _decl; }
+    void setEntityVarDecl(const VarDecl* entityDecl) {
+        _entityDecl = entityDecl;
+    }
+
+    void setExpr(const Expr* expr) {
+        _expr = expr;
+    }
+
+    const VarDecl* getEntityVarDecl() const { return _entityDecl; }
+    const Expr* getExpr() const { return _expr; }
     const std::string_view& getPropName() const { return _propName; }
 
 private:
-    const VarDecl* _decl {nullptr};
+    const VarDecl* _entityDecl {nullptr};
+    const Expr* _expr {nullptr};
     std::string_view _propName;
 };
 

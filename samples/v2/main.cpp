@@ -5,7 +5,6 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "Graph.h"
-#include "SourceManager.h"
 #include "TuringTime.h"
 #include "FileReader.h"
 #include "SimpleGraph.h"
@@ -58,7 +57,6 @@ int main(int argc, char** argv) {
     }
 
     CypherAST ast(queryStr);
-    ast.getSourceManager()->setDebugLocations(true);
 
     {
         CypherParser parser(&ast);
@@ -113,7 +111,7 @@ int main(int argc, char** argv) {
         {
             auto callback = [](const Dataframe* dataframe) {};
 
-            PipelineGenerator pipelineGen(&planGraph, &pipeline, &mem, callback);
+            PipelineGenerator pipelineGen(&planGraph, view, &pipeline, &mem, ast.getSourceManager(), callback);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

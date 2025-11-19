@@ -11,11 +11,7 @@
 #include "SimpleGraph.h"
 #include "LocalMemory.h"
 
-#include "iterators/ChunkConfig.h"
-
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnVector.h"
-#include "columns/ColumnIndices.h"
 
 #include "dataframe/Dataframe.h"
 #include "dataframe/ColumnTagManager.h"
@@ -34,40 +30,6 @@
 using namespace db;
 using namespace db::v2;
 using namespace turing::test;
-
-namespace {
-
-void getProperties(Graph* graph,
-                   PropertyType propType,
-                   ColumnNodeIDs* nodes,
-                   ColumnVector<types::String::Primitive>* properties,
-                   ColumnIndices* indices) {
-    GetNodePropertiesChunkWriter<types::String> writer(graph->openTransaction().viewGraph(), propType._id, nodes);
-    writer.setOutput(properties);
-    writer.setIndices(indices);
-    writer.fill(ChunkConfig::CHUNK_SIZE);
-    ASSERT_FALSE(writer.isValid());
-}
-
-void getAllNodes(Graph* graph, ColumnNodeIDs* nodes) {
-    ScanNodesChunkWriter writer(graph->openTransaction().viewGraph());
-    writer.setNodeIDs(nodes);
-    writer.fill(ChunkConfig::CHUNK_SIZE);
-    ASSERT_FALSE(writer.isValid());
-}
-
-void generateGetOutEdges(Graph* graph,
-                         ColumnNodeIDs* nodes,
-                         ColumnNodeIDs* targets,
-                         ColumnIndices* indices) {
-    GetOutEdgesChunkWriter writer(graph->openTransaction().viewGraph(), nodes);
-    writer.setTgtIDs(targets);
-    writer.setIndices(indices);
-    writer.fill(ChunkConfig::CHUNK_SIZE);
-    ASSERT_FALSE(writer.isValid());
-}
-
-}
 
 class PipelineTest : public TuringTest {
 public:
@@ -196,72 +158,6 @@ TEST_F(PipelineTest, scanNodesExpand1) {
 
         EXPECT_EQ(nodeIDs->getRaw(), expectedNodeIDs);
         EXPECT_EQ(targetNodes->getRaw(), expectedTargets);
-    };
-
-    builder.addLambda(callback);
-
-    // Execute pipeline
-    const auto transaction = _graph->openTransaction();
-    const GraphView view = transaction.viewGraph();
-
-    ExecutionContext execCtxt(view);
-    PipelineExecutor executor(&pipeline, &execCtxt);
-    executor.execute();
-}
-
-TEST_F(PipelineTest, scanNodesExpandGetProperties) {
-    LocalMemory mem;
-    PipelineV2 pipeline;
-
-    PipelineBuilder builder(&mem, &pipeline);
-    
-    PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
-    const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
-
-    builder.addGetOutEdges();
-
-    // Get properties
-    const PropertyType namePropType = _graph->openTransaction().readGraph().getMetadata().propTypes().get("name").value();
-
-    PipelineValuesOutputInterface& getNodePropertiesOut = builder.addGetNodeProperties<types::String>(namePropType);
-    const ColumnTag getNodePropertiesOutValuesTag = getNodePropertiesOut.getValues()->getTag();
-
-    builder.addMaterialize();
-
-    // Lambda
-
-    // Get all expected node IDs
-    std::vector<NodeID> allNodeIDs;
-    {
-        auto transaction = _graph->openTransaction();
-        auto reader = transaction.readGraph();
-        auto nodes = reader.scanNodes();
-        for (auto node : nodes) {
-            allNodeIDs.push_back(node);
-        }
-    }
-
-    auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
-        EXPECT_EQ(df->size(), 5);
-
-        const ColumnNodeIDs* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(df->getColumn(scanOutNodeIDsTag)->getColumn());
-        ASSERT_TRUE(nodeIDs != nullptr);
-        ASSERT_TRUE(!nodeIDs->empty());
-
-        const ColumnVector<types::String::Primitive>* properties = dynamic_cast<const ColumnVector<types::String::Primitive>*>(df->getColumn(getNodePropertiesOutValuesTag)->getColumn());
-        ASSERT_TRUE(properties != nullptr);
-        ASSERT_TRUE(!properties->empty());
-        
-        ColumnNodeIDs expectedNodeIDs;
-        ColumnIndices expectedEdgesIndices;
-        ColumnNodeIDs expectedTargets;
-        ColumnIndices expectedPropertiesIndices;
-        ColumnVector<types::String::Primitive> expectedProperties;
-        getAllNodes(_graph, &expectedNodeIDs);
-        generateGetOutEdges(_graph, &expectedNodeIDs, &expectedTargets, &expectedEdgesIndices);
-        getProperties(_graph, namePropType, &expectedTargets, &expectedProperties, &expectedPropertiesIndices);
-
-        EXPECT_EQ(properties->getRaw(), expectedProperties.getRaw());
     };
 
     builder.addLambda(callback);

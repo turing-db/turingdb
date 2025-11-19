@@ -148,6 +148,8 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
             }
         }
     }
+
+    _prop = nullptr;
 }
 
 template <IteratedID ID, SupportedType T>

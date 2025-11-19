@@ -1,9 +1,11 @@
 #include "GetPropertiesWithNullProcessor.h"
 
-#include "columns/ColumnIDs.h"
-#include "dataframe/NamedColumn.h"
-
 #include <spdlog/fmt/fmt.h>
+
+#include "PipelineException.h"
+#include "columns/ColumnIDs.h"
+#include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
 
 namespace db::v2 {
 
@@ -15,14 +17,16 @@ std::string GetPropertiesWithNullProcessor<Entity, T>::describe() const {
 }
 
 template <EntityType Entity, SupportedType T>
-GetPropertiesWithNullProcessor<Entity, T>* GetPropertiesWithNullProcessor<Entity, T>::create(PipelineV2* pipeline, PropertyType propType) {
-    auto* getProps = new GetPropertiesWithNullProcessor(propType);
+GetPropertiesWithNullProcessor<Entity, T>* GetPropertiesWithNullProcessor<Entity, T>::create(PipelineV2* pipeline,
+                                                                                             ColumnTag entityTag,
+                                                                                             PropertyType propType) {
+    auto* getProps = new GetPropertiesWithNullProcessor(entityTag, propType);
 
     PipelineInputPort* inIDs = PipelineInputPort::create(pipeline, getProps);
     PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
 
-    getProps->_inIDs.setPort(inIDs);
-    getProps->_outValues.setPort(outValues);
+    getProps->_input.setPort(inIDs);
+    getProps->_output.setPort(outValues);
 
     getProps->addInput(inIDs);
     getProps->addOutput(outValues);
@@ -38,14 +42,24 @@ void GetPropertiesWithNullProcessor<Entity, T>::prepare(ExecutionContext* ctxt) 
     const ColumnIDs* ids = nullptr;
 
     if constexpr (Entity == EntityType::Node) {
-        ids = dynamic_cast<const ColumnNodeIDs*>(_inIDs.getNodeIDs()->getColumn());
+        if (!_entityTag.isValid()) {
+            throw PipelineException("GetPropertiesWithNullProcessor: nodeIDs column is not defined");
+        }
+
+        const Column* idsCol = _input.getDataframe()->getColumn(_entityTag)->getColumn();
+        ids = dynamic_cast<const ColumnNodeIDs*>(idsCol);
     } else {
-        ids = dynamic_cast<const ColumnEdgeIDs*>(_inIDs.getEdgeIDs()->getColumn());
+        if (!_entityTag.isValid()) {
+            throw PipelineException("GetPropertiesWithNullProcessor: edgeIDs column is not defined");
+        }
+
+        const Column* idsCol = _input.getDataframe()->getColumn(_entityTag)->getColumn();
+        ids = dynamic_cast<const ColumnEdgeIDs*>(idsCol);
     }
 
     _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-    ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
+    ColumnValues* values = dynamic_cast<ColumnValues*>(_output.getValues()->getColumn());
     _propWriter->setOutput(values);
     markAsPrepared();
 }
@@ -61,15 +75,17 @@ void GetPropertiesWithNullProcessor<Entity, T>::execute() {
     _propWriter->fill(_ctxt->getChunkSize());
 
     // The GetPropertiesWithNullProcessor always finishes in one step
-    _inIDs.getPort()->consume();
-    _outValues.getPort()->writeData();
+    _input.getPort()->consume();
+    _output.getPort()->writeData();
 
     finish();
 }
 
 template <EntityType Entity, SupportedType T>
-GetPropertiesWithNullProcessor<Entity, T>::GetPropertiesWithNullProcessor(PropertyType propType)
-    : _propType(propType)
+GetPropertiesWithNullProcessor<Entity, T>::GetPropertiesWithNullProcessor(ColumnTag entityTag,
+                                                                          PropertyType propType)
+    : _propType(propType),
+    _entityTag(entityTag)
 {
 }
 

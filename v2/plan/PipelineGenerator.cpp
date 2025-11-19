@@ -5,12 +5,13 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PendingOutputView.h"
-#include "PipelineInterface.h"
 #include "PlanGraph.h"
+#include "reader/GraphReader.h"
+#include "SourceManager.h"
 
-#include "Projection.h"
 #include "nodes/CartesianProductNode.h"
 #include "nodes/PlanGraphNode.h"
+#include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -22,6 +23,7 @@
 #include "nodes/GetEdgesNode.h"
 #include "nodes/GetInEdgesNode.h"
 
+#include "Projection.h"
 #include "decl/VarDecl.h"
 #include "expr/LiteralExpr.h"
 #include "Literal.h"
@@ -35,6 +37,34 @@ using namespace db::v2;
 namespace {
 
 using TranslateTokenStack = std::stack<PlanGraphNode*>;
+
+struct PropertyTypeDispatcher {
+    db::ValueType _valueType;
+
+    void execute(const auto& executor) const {
+        switch (_valueType) {
+            case db::ValueType::Int64:
+                executor.template operator()<db::types::Int64>();
+                break;
+            case db::ValueType::UInt64:
+                executor.template operator()<db::types::UInt64>();
+                break;
+            case db::ValueType::Double:
+                executor.template operator()<db::types::Double>();
+                break;
+            case db::ValueType::String:
+                executor.template operator()<db::types::String>();
+                break;
+            case db::ValueType::Bool:
+                executor.template operator()<db::types::Bool>();
+                break;
+            case db::ValueType::_SIZE:
+            case db::ValueType::Invalid: {
+                throw PlannerException("Unsupported property type");
+            }
+        }
+    }
+};
 
 }
 
@@ -136,6 +166,8 @@ void PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::GET_PROPERTY:
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
+            translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
+        break;
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
@@ -197,6 +229,65 @@ void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node) {
     _builder.projectEdgesOnOtherIDs();
 }
 
+void PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const VarDecl* entityDecl = node->getEntityVarDecl();
+    if (!entityDecl) {
+        throw PlannerException("GetPropertyWithNullNode does not have an entity variable declaration");
+    }
+
+    ColumnTag entityTag = _declToColumn.at(entityDecl);
+
+    const std::string propName {node->getPropName()};
+
+    PipelineValuesOutputInterface* output = nullptr;
+
+    const std::optional<PropertyType> foundProp = _view.read().getMetadata().propTypes().get(propName);
+    if (!foundProp) {
+        throw PlannerException(fmt::format("Property type {} does not exist", propName));
+    }
+
+    if (entityDecl->getType() == EvaluatedType::NodePattern) {
+        const auto process = [&]<SupportedType Type> {
+            output = &_builder.addGetPropertiesWithNull<EntityType::Node, Type>(entityTag, *foundProp);
+        };
+
+        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+    } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
+        const auto process = [&]<SupportedType Type> {
+            output = &_builder.addGetPropertiesWithNull<EntityType::Edge, Type>(entityTag, *foundProp);
+        };
+
+        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+    } else {
+        throw PlannerException(fmt::format(
+            "GetPropertyWithNull must act on a Node/EdgePattern. Instead acting on {}",
+            EvaluatedTypeName::value(entityDecl->getType())));
+    }
+
+    const Expr* expr = node->getExpr();
+    if (!expr) {
+        throw PlannerException("GetPropertyWithNullNode does not have an expression");
+    }
+
+    const VarDecl* exprDecl = expr->getExprVarDecl();
+    if (!exprDecl) {
+        throw PlannerException("GetPropertyWithNullNode does not have an expression variable declaration");
+    }
+
+    const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)expr);
+    if (exprStrRep.empty()) {
+        throw PlannerException("Unknown error. Could not get string representation of expression");
+    }
+
+    output->rename(exprStrRep);
+
+    _declToColumn[exprDecl] = output->getValues()->getTag();
+}
+
 void PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
 }
 
@@ -210,7 +301,6 @@ void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
         _builder.addMaterialize();
     }
 
-    _builder.closeMaterialize();
     const Projection* projNode = node->getProjection();
 
     std::vector<ColumnTag> tags;

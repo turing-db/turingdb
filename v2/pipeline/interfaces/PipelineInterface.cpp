@@ -13,6 +13,7 @@
 
 #include "PipelineException.h"
 
+using namespace db;
 using namespace db::v2;
 
 void PipelineOutputInterface::connectTo(PipelineNodeInputInterface& input) {
@@ -29,6 +30,19 @@ void PipelineOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
 
 void PipelineOutputInterface::rename(const std::string_view& name) {
     throw PipelineException(fmt::format("{}: cannot rename", PipelineInterfaceKindName::value(getKind())));
+}
+
+void PipelineInputInterface::propagateColumns(PipelineOutputInterface& output) const {
+    const Dataframe* inDf = getDataframe();
+    Dataframe* outDf = output.getDataframe();
+
+    for (const auto& col : inDf->cols()) {
+        if (outDf->getColumn(col->getTag())) {
+            continue;
+        }
+
+        outDf->addColumn(col);
+    }
 }
 
 void PipelineEdgeOutputInterface::rename(const std::string_view& name) {

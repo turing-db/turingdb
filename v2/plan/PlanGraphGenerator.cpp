@@ -126,17 +126,29 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
 
         for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
-                if (!_tree.cacheGetProperty(expr->getDecl(), expr->getPropName())) {
+                const VarDecl* entityDecl = expr->getEntityVarDecl();
+
+                if (!_tree.cacheGetProperty(entityDecl, expr->getPropName())) {
                     continue;
                 }
 
-                prevNode = _tree.newOut<GetPropertyWithNullNode>(prevNode, expr->getDecl(), expr->getPropName());
+                GetPropertyWithNullNode* n = _tree.newOut<GetPropertyWithNullNode>(prevNode, expr->getPropName());
+                n->setExpr(expr);
+                n->setEntityVarDecl(entityDecl);
+                prevNode = n;
+
             } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
-                if (!_tree.cacheGetEntityType(expr->getDecl())) {
+                const VarDecl* entityDecl = expr->getEntityVarDecl();
+
+                if (!_tree.cacheGetEntityType(entityDecl)) {
                     continue;
                 }
 
-                _tree.newOut<GetEntityTypeNode>(prevNode, expr->getDecl());
+                GetEntityTypeNode* n = _tree.newOut<GetEntityTypeNode>(prevNode);
+                n->setExpr(expr);
+                n->setEntityVarDecl(entityDecl);
+                prevNode = n;
+
             } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
                 // Symbol value should already be in a column in a block, no need to change anything
             } else {

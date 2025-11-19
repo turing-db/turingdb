@@ -1,10 +1,13 @@
 #include "GetPropertiesProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
+#include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 
-#include <spdlog/fmt/fmt.h>
+#include "PipelineException.h"
 
 namespace db::v2 {
 
@@ -22,8 +25,8 @@ GetPropertiesProcessor<Entity, T>* GetPropertiesProcessor<Entity, T>::create(Pip
     PipelineInputPort* inIDs = PipelineInputPort::create(pipeline, getProps);
     PipelineOutputPort* outValues = PipelineOutputPort::create(pipeline, getProps);
 
-    getProps->_inIDs.setPort(inIDs);
-    getProps->_outValues.setPort(outValues);
+    getProps->_input.setPort(inIDs);
+    getProps->_output.setPort(outValues);
 
     getProps->addInput(inIDs);
     getProps->addOutput(outValues);
@@ -37,19 +40,32 @@ void GetPropertiesProcessor<Entity, T>::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
     const ColumnIDs* ids = nullptr;
+    const auto& stream = _input.getStream();
+
+    const Dataframe* inDf = _input.getDataframe();
 
     if constexpr (Entity == EntityType::Node) {
-        ids = dynamic_cast<const ColumnNodeIDs*>(_inIDs.getNodeIDs()->getColumn());
+        const ColumnTag idsTag = stream.getNodeIDsTag();
+        if (!idsTag.isValid()) {
+            throw PipelineException(fmt::format("GetPropertiesProcessor<Node, {}> must act on a Node stream",
+                                                ValueTypeName::value(T::_valueType)));
+        }
+        ids = dynamic_cast<const ColumnNodeIDs*>(inDf->getColumn(idsTag)->getColumn());
     } else {
-        ids = dynamic_cast<const ColumnEdgeIDs*>(_inIDs.getEdgeIDs()->getColumn());
+        const ColumnTag idsTag = stream.getEdgeIDsTag();
+        if (!idsTag.isValid()) {
+            throw PipelineException(fmt::format("GetPropertiesProcessor<Edge, {}> must act on an Edge stream",
+                                                ValueTypeName::value(T::_valueType)));
+        }
+        ids = dynamic_cast<const ColumnEdgeIDs*>(inDf->getColumn(idsTag)->getColumn());
     }
 
     _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-    ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_outValues.getIndices()->getColumn());
+    ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_output.getIndices()->getColumn());
     _propWriter->setIndices(indices);
 
-    ColumnValues* values = dynamic_cast<ColumnValues*>(_outValues.getValues()->getColumn());
+    ColumnValues* values = dynamic_cast<ColumnValues*>(_output.getValues()->getColumn());
     _propWriter->setOutput(values);
     markAsPrepared();
 }
@@ -65,16 +81,15 @@ void GetPropertiesProcessor<Entity, T>::execute() {
     _propWriter->fill(_ctxt->getChunkSize());
 
     // The GetPropertiesProcessor always finishes in one step
-    _inIDs.getPort()->consume();
-    _outValues.getPort()->writeData();
+    _input.getPort()->consume();
+    _output.getPort()->writeData();
 
     finish();
 }
 
 template <EntityType Entity, SupportedType T>
 GetPropertiesProcessor<Entity, T>::GetPropertiesProcessor(PropertyType propType)
-    : _propType(propType)
-{
+    : _propType(propType) {
 }
 
 template class GetPropertiesProcessor<EntityType::Node, types::Int64>;

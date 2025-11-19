@@ -2,7 +2,10 @@
 
 #include <string_view>
 
+#include "interfaces/PipelineBlockInputInterface.h"
+#include "interfaces/PipelineEdgeInputInterface.h"
 #include "interfaces/PipelineEdgeOutputInterface.h"
+#include "interfaces/PipelineNodeInputInterface.h"
 
 namespace db {
 class Dataframe;

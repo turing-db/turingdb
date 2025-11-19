@@ -14,6 +14,7 @@ class PipelineOutputPort;
 class PipelineNodeInputInterface;
 class PipelineBlockInputInterface;
 class PipelineEdgeInputInterface;
+class PipelineOutputInterface;
 
 enum class PipelineInterfaceKind {
     NODE,
@@ -40,6 +41,8 @@ public:
     Dataframe* getDataframe() const { return _port->getBuffer()->getDataframe(); }
 
     void setPort(PipelineInputPort* port) { _port = port; }
+
+    void propagateColumns(PipelineOutputInterface& output) const;
 
 protected:
     PipelineInputPort* _port {nullptr};

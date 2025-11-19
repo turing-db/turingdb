@@ -18,14 +18,14 @@ public:
                                  Symbol* symbol,
                                  SymbolChain* types);
 
-    VarDecl* getDecl() const { return _decl; }
+    void setEntityDecl(VarDecl* decl) { _entityDecl = decl; }
 
-    void setDecl(VarDecl* decl) { _decl = decl; }
+    VarDecl* getEntityVarDecl() const { return _entityDecl; }
 
 private:
     Symbol* _symbol {nullptr};
     SymbolChain* _types;
-    VarDecl* _decl {nullptr};
+    VarDecl* _entityDecl {nullptr};
 
     EntityTypeExpr(Symbol* symbol, SymbolChain* types);
     ~EntityTypeExpr() override;

@@ -357,9 +357,13 @@ db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueT
         } break;
     }
 
-    expr->setDecl(varDecl);
+    expr->setEntityVarDecl(varDecl);
     expr->setType(type);
     expr->setDynamic();
+
+    // Create a variable declaration for the property expression 
+    // so that it can be retrieved later (for projection or in an expression / filter)
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 
     return vt;
 }
@@ -389,6 +393,10 @@ void ExprAnalyzer::analyze(StringExpr* expr) {
     if (lhs->isAggregate() || rhs->isAggregate()) {
         expr->setAggregate();
     }
+
+    // Create a variable declaration for the entity type expression
+    // so that it can be retrieved later (for projection or in an expression / filter)
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
@@ -400,18 +408,17 @@ void ExprAnalyzer::analyze(EntityTypeExpr* expr) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
 
-    expr->setDecl(decl);
-    expr->setDynamic();
+    if (decl->getType() != EvaluatedType::NodePattern
+        && decl->getType() != EvaluatedType::EdgePattern) {
+        const std::string error = fmt::format("Variable '{}' is '{}'. Must be NodePattern or EdgePattern",
+                                              decl->getName(), EvaluatedTypeName::value(decl->getType()));
 
-    if (decl->getType() == EvaluatedType::NodePattern
-        || decl->getType() == EvaluatedType::EdgePattern) {
-        return;
+        throwError(error, expr);
     }
 
-    const std::string error = fmt::format("Variable '{}' is '{}'. Must be NodePattern or EdgePattern",
-                                          decl->getName(), EvaluatedTypeName::value(decl->getType()));
-
-    throwError(error, expr);
+    expr->setEntityDecl(decl);
+    expr->setDynamic();
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 void ExprAnalyzer::analyze(PathExpr* expr) {

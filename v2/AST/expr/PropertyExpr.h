@@ -14,17 +14,17 @@ public:
 
     static PropertyExpr* create(CypherAST* ast, QualifiedName* name);
 
-    VarDecl* getDecl() const { return _decl; }
+    VarDecl* getEntityVarDecl() const { return _entityDecl; }
 
     std::string_view getPropName() const { return _propName; }
 
-    void setDecl(VarDecl* decl) { _decl = decl; }
+    void setEntityVarDecl(VarDecl* entityDecl) { _entityDecl = entityDecl; }
 
     void setPropertyName(std::string_view propName) { _propName = propName; }
 
 private:
     QualifiedName* _fullName {nullptr};
-    VarDecl* _decl {nullptr};
+    VarDecl* _entityDecl {nullptr};
     std::string_view _propName;
 
     PropertyExpr(QualifiedName* name)

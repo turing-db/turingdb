@@ -301,7 +301,7 @@ void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
         // Entity type expressions can be pushed down to the var (node or edge)
 
         const EntityTypeExpr* entityTypeExpr = static_cast<const EntityTypeExpr*>(expr);
-        const VarDecl* decl = entityTypeExpr->getDecl();
+        const VarDecl* decl = entityTypeExpr->getEntityVarDecl();
         const VarNode* varNode = _variables->getVarNode(decl);
         FilterNode* filter = _variables->getNodeFilter(varNode);
 
@@ -444,17 +444,27 @@ void ReadStmtGenerator::placePredicateJoins() {
             FilterNode* filter = _variables->getNodeFilter(dep._var);
 
             if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
-                if (!_tree->cacheGetProperty(expr->getDecl(), expr->getPropName())) {
+                const VarDecl* entityDecl = expr->getEntityVarDecl();
+
+                if (!_tree->cacheGetProperty(entityDecl, expr->getPropName())) {
                     continue;
                 }
 
-                _tree->insertBefore<GetPropertyNode>(filter, expr->getDecl(), expr->getPropName());
+                GetPropertyNode* n = _tree->insertBefore<GetPropertyNode>(filter, expr->getPropName());
+                n->setEntityVarDecl(entityDecl);
+                n->setExpr(expr);
+
             } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
-                if (!_tree->cacheGetEntityType(expr->getDecl())) {
+                const VarDecl* entityDecl = expr->getEntityVarDecl();
+
+                if (!_tree->cacheGetEntityType(entityDecl)) {
                     continue;
                 }
 
-                _tree->insertBefore<GetEntityTypeNode>(filter, expr->getDecl());
+                GetEntityTypeNode* n = _tree->insertBefore<GetEntityTypeNode>(filter);
+                n->setExpr(expr);
+                n->setEntityVarDecl(entityDecl);
+
             } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
                 // Symbol value should already be in a column in a block, no need to change anything
             } else {

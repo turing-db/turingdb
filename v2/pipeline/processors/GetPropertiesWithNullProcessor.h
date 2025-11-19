@@ -5,8 +5,7 @@
 #include "EntityType.h"
 #include "Processor.h"
 
-#include "interfaces/PipelineNodeInputInterface.h"
-#include "interfaces/PipelineEdgeInputInterface.h"
+#include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 
 #include "ExecutionContext.h"
@@ -25,15 +24,12 @@ public:
     using ChunkWriter = std::conditional_t<Entity == EntityType::Node,
           GetNodePropertiesWithNullChunkWriter<T>,
           GetEdgePropertiesWithNullChunkWriter<T>>;
-
-    using InputInterface = std::conditional_t<Entity == EntityType::Node,
-          PipelineNodeInputInterface,
-          PipelineEdgeInputInterface>;
-
     using ColumnValues = typename ChunkWriter::ColumnValues;
     using ColumnIDs = typename ChunkWriter::ColumnIDs;
 
-    static GetPropertiesWithNullProcessor* create(PipelineV2* pipeline, PropertyType propType);
+    static GetPropertiesWithNullProcessor* create(PipelineV2* pipeline,
+                                                  ColumnTag entityTag,
+                                                  PropertyType propType);
 
     std::string describe() const override;
 
@@ -41,16 +37,18 @@ public:
     void reset() override;
     void execute() override;
 
-    InputInterface& inIDs() { return _inIDs; }
-    PipelineValuesOutputInterface& outValues() { return _outValues; }
+    PipelineBlockInputInterface& input() { return _input; }
+    PipelineValuesOutputInterface& output() { return _output; }
 
 protected:
     PropertyType _propType;
+    ColumnTag _entityTag;
     std::unique_ptr<ChunkWriter> _propWriter;
-    InputInterface _inIDs;
-    PipelineValuesOutputInterface _outValues;
+    PipelineBlockInputInterface _input;
+    PipelineValuesOutputInterface _output;
 
-    explicit GetPropertiesWithNullProcessor(PropertyType propType);
+    explicit GetPropertiesWithNullProcessor(ColumnTag entityTag,
+                                            PropertyType propType);
     ~GetPropertiesWithNullProcessor() = default;
 };
 
