@@ -37,7 +37,7 @@ flowchart TD
         __prop__ name
     `"]
     8["`
-        __JOIN__
+        __CARTESIAN_PRODUCT__
     `"]
     9["`
         __PRODUCE_RESULTS__
