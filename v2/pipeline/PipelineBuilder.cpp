@@ -1,6 +1,5 @@
 #include "PipelineBuilder.h"
 
-#include "PipelineInterface.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
