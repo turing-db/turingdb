@@ -32,6 +32,7 @@
 #include "processors/S3PullProcessor.h"
 #include "processors/S3PushProcessor.h"
 #include "processors/ComputeExprProcessor.h"
+#include "processors/FilterProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -557,6 +558,19 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadNeo4j(std::string_view gra
     NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
     graphNameValue->rename("graphName");
     output.setValue(graphNameValue);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addFilter(PipelineOutputInterface* toFilter) {
+    FilterProcessor* filterProc = FilterProcessor::create(_pipeline);
+
+    PipelineBlockOutputInterface& output = filterProc->output();
+
+    _pendingOutput.connectTo(filterProc->maskInput());
+    toFilter->connectTo(filterProc->toFilterInput());
 
     _pendingOutput.setInterface(&output);
 
