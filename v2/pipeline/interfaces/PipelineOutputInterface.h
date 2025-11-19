@@ -2,7 +2,6 @@
 
 #include <string_view>
 
-#include "EntityOutputStream.h"
 #include "PipelineInputInterface.h"
 #include "PipelinePort.h"
 
@@ -24,6 +23,7 @@ public:
     virtual void connectTo(PipelineNodeInputInterface& input);
     virtual void connectTo(PipelineBlockInputInterface& input);
     virtual void connectTo(PipelineEdgeInputInterface& input);
+    virtual void connectTo(PipelineValuesInputInterface& input);
 
     virtual void rename(const std::string_view& name);
 

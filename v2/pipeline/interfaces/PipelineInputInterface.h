@@ -14,6 +14,7 @@ class PipelineOutputPort;
 class PipelineNodeInputInterface;
 class PipelineBlockInputInterface;
 class PipelineEdgeInputInterface;
+class PipelineValuesInputInterface;
 class PipelineOutputInterface;
 
 enum class PipelineInterfaceKind {

@@ -6,6 +6,7 @@
 #include "PipelineNodeOutputInterface.h"
 #include "PipelineEdgeOutputInterface.h"
 #include "PipelineBlockOutputInterface.h"
+#include "PipelineValuesInputInterface.h"
 #include "PipelineValuesOutputInterface.h"
 #include "PipelineValueOutputInterface.h"
 #include "dataframe/Dataframe.h"
@@ -26,6 +27,10 @@ void PipelineOutputInterface::connectTo(PipelineBlockInputInterface& input) {
 
 void PipelineOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
     throw PipelineException(fmt::format("{}: cannot connect to edge input", PipelineInterfaceKindName::value(getKind())));
+}
+
+void PipelineOutputInterface::connectTo(PipelineValuesInputInterface& input) {
+    throw PipelineException(fmt::format("{}: cannot connect to values input", PipelineInterfaceKindName::value(getKind())));
 }
 
 void PipelineOutputInterface::rename(const std::string_view& name) {
@@ -157,6 +162,11 @@ void PipelineValuesOutputInterface::connectTo(PipelineNodeInputInterface& input)
     }
 
     input.setNodeIDs(df->getColumn(nodeIDsTag));
+    _port->connectTo(input.getPort());
+}
+
+void PipelineValuesOutputInterface::connectTo(PipelineValuesInputInterface& input) {
+    input.setStream(_stream);
     _port->connectTo(input.getPort());
 }
 
