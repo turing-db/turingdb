@@ -551,10 +551,26 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
         _builder.addMaterialize();
     }
 
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(_mem, exprProg);
-    for (const Predicate* pred : node->getPredicates()) {
-        exprGen.generatePredicate(pred);
+    const auto& predicates = node->getPredicates();
+    if (!predicates.empty()) {
+        PipelineOutputInterface* prevIface = _builder.getPendingOutputInterface();
+
+        // Compile predicate expression into an expression program
+        ExprProgram* exprProg = ExprProgram::create(_pipeline);
+        ExprProgramGenerator exprGen(_mem, exprProg);
+        for (const Predicate* pred : predicates) {
+            exprGen.generatePredicate(pred);
+        }
+ 
+        _builder.addComputeExpr(exprProg);
+
+        // Add filter node
+        _builder.addFilter(prevIface);
+    }
+
+    const auto& labelConstrs = node->getLabelConstraints();
+    if (!labelConstrs.empty()) {
+        throw PlannerException("PipelineGenerator: label constraints in filter nodes are not supported");
     }
     
     _builder.addEvalExpr(evalProg);
