@@ -109,6 +109,9 @@ public:
     // Expression evaluation
     PipelineValuesOutputInterface& addComputeExpr(ExprProgram* exprProg);
 
+    // Filter
+    PipelineBlockOutputInterface& addFilter(PipelineOutputInterface* toFilter);
+
     // Joins and Products
     // LHS is implict in @ref _pendingOutput
     PipelineBlockOutputInterface& addCartesianProduct(PipelineOutputInterface* rhs);
