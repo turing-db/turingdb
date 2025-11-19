@@ -98,27 +98,23 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     return foundIt->second;
 }
 
+#define GEN_LITERAL_CASE(MyKind, Type, LiteralType) \
+    case Literal::Kind::MyKind: {                                                                        \
+        ColumnConst<types::Type::Primitive>* value = _mem->alloc<ColumnConst<types::Type::Primitive>>(); \
+        value->set(static_cast<const LiteralType*>(literal)->getValue());                                \
+        return value;                                                                                    \
+    }                                                                                                    \
+    break;
+
+
 Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr) {
     Literal* literal = literalExpr->getLiteral();
     
     switch (literal->getKind()) {
-        case Literal::Kind::BOOL: {
-            ColumnConst<types::Bool::Primitive>* value = _mem->alloc<ColumnConst<types::Bool::Primitive>>();
-            value->set(static_cast<const BoolLiteral*>(literal)->getValue());
-            return value;
-        }
-        break;
-
-        case Literal::Kind::INTEGER:{
-            ColumnConst<types::Bool::Primitive>* value = _mem->alloc<ColumnConst<types::Bool::Primitive>>();
-            value->set(static_cast<const BoolLiteral*>(literal)->getValue());
-            return value;
-        }
-        break;
-
-        case Literal::Kind::DOUBLE:
-        case Literal::Kind::STRING:
-        case Literal::Kind::CHAR:
+        GEN_LITERAL_CASE(BOOL, Bool, BoolLiteral)
+        GEN_LITERAL_CASE(INTEGER, Int64, IntegerLiteral)
+        GEN_LITERAL_CASE(STRING, String, StringLiteral)
+        GEN_LITERAL_CASE(DOUBLE, Double, DoubleLiteral)
 
         default:
             throw PlannerException(
@@ -128,18 +124,23 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     }
 }
 
+#define ALLOC_EVALTYPE_COL(EvalType, Type) \
+    case EvaluatedType::EvalType:                           \
+        return _mem->alloc<ColumnValues<types::Type>>();    \
+    break;                                                  \
+
+
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
 
     switch (exprType) {
-        case EvaluatedType::Integer:
-            return _mem->alloc<ColumnValues<types::Int64>>();
+        case EvaluatedType::Invalid:
+            throw PlannerException("ExprProgramGenerator: encountered expression of invalid type");
+        break;
 
-        case EvaluatedType::String:
-            return _mem->alloc<ColumnValues<types::String>>();
-
-        case EvaluatedType::Bool:
-            return _mem->alloc<ColumnValues<types::Bool>>();
+        ALLOC_EVALTYPE_COL(Integer, Int64)
+        ALLOC_EVALTYPE_COL(String, String)
+        ALLOC_EVALTYPE_COL(Bool, Bool)
 
         default:
             throw PlannerException(fmt::format(
