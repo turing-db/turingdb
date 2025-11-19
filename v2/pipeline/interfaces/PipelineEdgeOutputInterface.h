@@ -44,8 +44,8 @@ public:
     void connectTo(PipelineEdgeInputInterface& input) override;
     void connectTo(PipelineNodeInputInterface& input) override;
     void connectTo(PipelineBlockInputInterface& input) override;
-    void rename(const std::string_view& name) override;
-    void renameOtherIDs(const std::string_view& name);
+    void rename(std::string_view name) override;
+    void renameOtherIDs(std::string_view name);
 
 private:
     NamedColumn* _indices {nullptr};

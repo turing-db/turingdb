@@ -33,7 +33,7 @@ void PipelineOutputInterface::connectTo(PipelineValuesInputInterface& input) {
     throw PipelineException(fmt::format("{}: cannot connect to values input", PipelineInterfaceKindName::value(getKind())));
 }
 
-void PipelineOutputInterface::rename(const std::string_view& name) {
+void PipelineOutputInterface::rename(std::string_view name) {
     throw PipelineException(fmt::format("{}: cannot rename", PipelineInterfaceKindName::value(getKind())));
 }
 
@@ -50,24 +50,24 @@ void PipelineInputInterface::propagateColumns(PipelineOutputInterface& output) c
     }
 }
 
-void PipelineEdgeOutputInterface::rename(const std::string_view& name) {
+void PipelineEdgeOutputInterface::rename(std::string_view name) {
     _edgeIDs->rename(name);
 }
 
-void PipelineEdgeOutputInterface::renameOtherIDs(const std::string_view& name) {
+void PipelineEdgeOutputInterface::renameOtherIDs(std::string_view name) {
     _otherNodes->rename(name);
 }
 
-void PipelineValuesOutputInterface::rename(const std::string_view& name) {
+void PipelineValuesOutputInterface::rename(std::string_view name) {
     _values->rename(name);
 }
 
-void PipelineValueOutputInterface::rename(const std::string_view& name) {
+void PipelineValueOutputInterface::rename(std::string_view name) {
     _value->rename(name);
 }
 
 // Node Output
-void PipelineNodeOutputInterface::rename(const std::string_view& name) {
+void PipelineNodeOutputInterface::rename(std::string_view name) {
     _nodeIDs->rename(name);
 }
 
@@ -150,6 +150,30 @@ void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) 
                    df->getColumn(otherNodesTag),
                    df->getColumn(edgeTypesTag));
     _port->connectTo(input.getPort());
+}
+
+void PipelineBlockOutputInterface::rename(std::string_view name) {
+    const ColumnTag nodeIDsTag = _stream.getNodeIDsTag();
+    const ColumnTag edgeIDsTag = _stream.getEdgeIDsTag();
+    const Dataframe* df = _port->getBuffer()->getDataframe();
+
+    ColumnTag srcColTag;
+    if (nodeIDsTag.isValid()) {
+        srcColTag = nodeIDsTag;
+    } else if (edgeIDsTag.isValid()) {
+        srcColTag = edgeIDsTag;
+    } else {
+        throw PipelineException("PipelineBlockOutputInterface: rename on a block is only possible if on a node stream or edge stream");
+    }
+
+    NamedColumn* col = df->getColumn(srcColTag);
+    if (!col) {
+        throw PipelineException(
+                fmt::format("PipelineBlockOutputInterface: can not find column tag {} in dataframe",
+                srcColTag.getValue()));
+    }
+
+    col->rename(name);
 }
 
 // Value output
