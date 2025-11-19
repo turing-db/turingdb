@@ -91,7 +91,7 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     if (foundIt == _propColumnMap.end()) {
         return allocResultColumn(propExpr);
         throw PlannerException(fmt::format("ExprProgramGenerator: can not find column for property expression {}.{}",
-            propExpr->getDecl()->getName(),
+            propExpr->getEntityVarDecl()->getName(),
             propExpr->getPropName()));
     }
 

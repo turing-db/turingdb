@@ -31,11 +31,15 @@ public:
         _iface->connectTo(input);
     }
 
+    void connectTo(PipelineEdgeInputInterface& input) {
+        _iface->connectTo(input);
+    }
+
     void connectTo(PipelineBlockInputInterface& input) {
         _iface->connectTo(input);
     }
 
-    void connectTo(PipelineEdgeInputInterface& input) {
+    void connectTo(PipelineValuesInputInterface& input) {
         _iface->connectTo(input);
     }
 
