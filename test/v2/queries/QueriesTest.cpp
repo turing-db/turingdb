@@ -636,42 +636,47 @@ TEST_F(QueriesTest, scanNodesGetOutCartProd) {
     using Rows = LineContainer<NodeID, NodeID>;
 
     Rows expectedRows;
+
+    ColumnNodeIDs ns;
+    constexpr std::string_view nQuery = "match (n)-->(a) return n";
     {
-        ColumnNodeIDs ns;
-        constexpr std::string_view nQuery = "match (n)-->(a) return n";
-        _db->queryV2(nQuery, _graphName, &_env->getMem(),
-                     [&](const Dataframe* df) -> void {
-                         ns = *df->cols().front()->as<ColumnNodeIDs>();
-                     });
-
-        ColumnNodeIDs bs;
-        constexpr std::string_view bQuery = "match (m)-->(b) return b";
-        _db->queryV2(bQuery, _graphName, &_env->getMem(),
-                     [&](const Dataframe* df) -> void {
-                         bs = *df->cols().front()->as<ColumnNodeIDs>();
-                     });
-
-        for (const NodeID n : ns) {
-            for (const NodeID b : bs) {
-                expectedRows.add({n, b});
-            }
+        auto res = _db->queryV2(nQuery, _graphName, &_env->getMem(),
+                                [&](const Dataframe* df) -> void {
+                                    ns = *df->cols().front()->as<ColumnNodeIDs>();
+                                });
+        ASSERT_TRUE(res);
+    }
+    ColumnNodeIDs bs;
+    constexpr std::string_view bQuery = "match (m)-->(b) return b";
+    {
+        auto res = _db->queryV2(bQuery, _graphName, &_env->getMem(),
+                                [&](const Dataframe* df) -> void {
+                                    bs = *df->cols().front()->as<ColumnNodeIDs>();
+                                });
+        ASSERT_TRUE(res);
+    }
+    for (const NodeID n : ns) {
+        for (const NodeID b : bs) {
+            expectedRows.add({n, b});
         }
     }
 
+
     Rows actualRows;
     {
-        _db->queryV2(query, _graphName, &_env->getMem(),
-                     [&](const Dataframe* df) -> void {
-                         ASSERT_TRUE(df != nullptr);
-                         ASSERT_EQ(df->size(), 2);
-                         const auto& nCols = df->cols();
-                         const auto* n = nCols.front()->as<ColumnNodeIDs>();
-                         const auto* m = nCols.back()->as<ColumnNodeIDs>();
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 2);
+                const auto& nCols = df->cols();
+                const auto* n = nCols.front()->as<ColumnNodeIDs>();
+                const auto* m = nCols.back()->as<ColumnNodeIDs>();
 
-                         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
-                             actualRows.add({n->at(rowPtr), m->at(rowPtr)});
-                         }
-                     });
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({n->at(rowPtr), m->at(rowPtr)});
+                }
+            });
+        ASSERT_TRUE(res);
     }
 
     EXPECT_TRUE(expectedRows.equals(actualRows));
@@ -714,26 +719,86 @@ TEST_F(QueriesTest, twoHopXOneHop) {
 
     Rows actualRows;
     {
-        _db->queryV2(query, _graphName, &_env->getMem(),
-                     [&](const Dataframe* df) -> void {
-                         ASSERT_TRUE(df != nullptr);
-                         ASSERT_EQ(df->size(), 5);
-                         const auto& nCols = df->cols();
-                         const auto* n = nCols.at(0)->as<ColumnNodeIDs>();
-                         const auto* m = nCols.at(1)->as<ColumnNodeIDs>();
-                         const auto* o = nCols.at(2)->as<ColumnNodeIDs>();
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 5);
+                const auto& nCols = df->cols();
+                const auto* n = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* m = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* o = nCols.at(2)->as<ColumnNodeIDs>();
 
-                         const auto* p = nCols.at(3)->as<ColumnNodeIDs>();
-                         const auto* q = nCols.at(4)->as<ColumnNodeIDs>();
+                const auto* p = nCols.at(3)->as<ColumnNodeIDs>();
+                const auto* q = nCols.at(4)->as<ColumnNodeIDs>();
 
-                         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
-                             actualRows.add({n->at(rowPtr), m->at(rowPtr), o->at(rowPtr), p->at(rowPtr), q->at(rowPtr)});
-                         }
-                     });
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({n->at(rowPtr), m->at(rowPtr), o->at(rowPtr),
+                                    p->at(rowPtr), q->at(rowPtr)});
+                }
+            });
+        ASSERT_TRUE(res);
     }
 
     EXPECT_TRUE(expectedRows.equals(actualRows));
 }
+
+TEST_F(QueriesTest, threeCascadingScanNodesCartProd) {
+    using Rows = LineContainer<NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs ss;
+    ColumnNodeIDs ts;
+    ColumnNodeIDs vs;
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (n) RETURN n";
+        for (auto column : {ss, ts, vs}) {
+            auto res = _db->queryV2(scanNodesQuery, _graphName, &_env->getMem(),
+                                    [&](const Dataframe* df) -> void {
+                                        ASSERT_EQ(df->size(), 1);
+                                        column = *df->cols().front()->as<ColumnNodeIDs>();
+                                    });
+            ASSERT_TRUE(res);
+        }
+    }
+    for (const NodeID s : ss) {
+        for (const NodeID t : ts) {
+            for (const NodeID v : vs) {
+                expectedRows.add({s, t, v});
+            }
+        }
+    }
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query = "MATCH (s), (t), (v), RETURN s,t,v";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 3);
+                const auto& nCols = df->cols();
+                const auto* s = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* t = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* v = nCols.at(2)->as<ColumnNodeIDs>();
+
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({s->at(rowPtr), t->at(rowPtr), v->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, blockedBinaryQuery) {
+    constexpr std::string_view query = "MATCH (n)-[e]->(m), (n)<-[f]-(m) return n, e, m, f";
+    QueryStatus res = _db->queryV2(query, _graphName, &_env->getMem(),
+                                   [&]([[maybe_unused]] const Dataframe* df) -> void {});
+    ASSERT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+    EXPECT_EQ(res.getError(), std::string("PipelineGenerator does not support PlanGraphNode: JOIN"));
+}
+
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
