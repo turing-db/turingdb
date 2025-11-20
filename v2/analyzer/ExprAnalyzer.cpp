@@ -276,6 +276,9 @@ void ExprAnalyzer::analyze(LiteralExpr* expr) {
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
         } break;
+        case Literal::Kind::WILDCARD: {
+            expr->setType(EvaluatedType::Wildcard);
+        } break;
     }
 }
 
@@ -547,6 +550,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::Bool;
         case EvaluatedType::List:
         case EvaluatedType::Map:
+        case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:
         case EvaluatedType::_SIZE:
             return false;

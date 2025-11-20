@@ -706,7 +706,7 @@ nodePattern
         $$->setLabels($3);
         $$->setProperties($4);
         LOC($$, @$);
-    }
+      }
     ;
 
 opt_symbol
@@ -755,7 +755,7 @@ edgeDetail
         $$->setTypes($2);
         $$->setProperties($4);
         LOC($$, @$); 
-    }
+      }
     ;
 
 edgeTypes
@@ -800,7 +800,7 @@ pathExpr
         nodePattern->setSymbol($2);
         $5->addRootEntity(nodePattern);
         LOC($$, @$);
-    }
+      }
     | OPAREN symbol nodeLabels properties CPAREN pathExprElem { 
         $$ = PathExpr::create(ast, $6);
         NodePattern* nodePattern = NodePattern::create(ast);
@@ -809,7 +809,7 @@ pathExpr
         nodePattern->setSymbol($2);
         $6->addRootEntity(nodePattern);
         LOC($$, @$);
-    }
+      }
     | OPAREN nodeLabels CPAREN pathExprElem {
         $$ = PathExpr::create(ast, $4);
         NodePattern* node = NodePattern::create(ast);
@@ -842,22 +842,31 @@ pathExpr
     // Instead, they are handled by the rule below
 
     | OPAREN expr CPAREN pathExprElem {
-          $$ = PathExpr::create(ast, $4);
+        $$ = PathExpr::create(ast, $4);
 
-          if (NodePattern* nodePattern = NodePattern::fromExpr(ast, $2)) {
-              $4->addRootEntity(nodePattern);
-          } else {
-              error(@1, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
-          }
+        if (NodePattern* nodePattern = NodePattern::fromExpr(ast, $2)) {
+            $4->addRootEntity(nodePattern);
+        } else {
+            error(@1, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
+        }
 
-          LOC($$, @$);
+        LOC($$, @$);
       }
     ;
 
 pathExprElem
-: patternElemChain { $$ = PatternElement::create(ast); $$->addRootEntity($1.second); $$->addRootEntity($1.first); LOC($$, @$); }
-| pathExprElem patternElemChain { $$ = $1; $$->addRootEntity($2.second); $$->addRootEntity($2.first); }
-;
+    : patternElemChain {
+        $$ = PatternElement::create(ast);
+        $$->addRootEntity($1.second);
+        $$->addRootEntity($1.first);
+        LOC($$, @$);
+      }
+    | pathExprElem patternElemChain {
+        $$ = $1;
+        $$->addRootEntity($2.second);
+        $$->addRootEntity($2.first);
+      }
+    ;
 
 parenthesizedExpr
     : OPAREN expr CPAREN { $$ = $2; }
@@ -897,17 +906,26 @@ filterExpr
     ;
 
 countFunc
-    : COUNT OPAREN MULT CPAREN { scanner.notImplemented(@$, "count(*)"); }
+    : COUNT OPAREN MULT CPAREN {
+        Symbol* symbol = Symbol::create(ast, "count");
+        QualifiedName* name = QualifiedName::create(ast);
+        name->addName(symbol);
+        $$ = FunctionInvocation::create(ast, name);
+        ExprChain* arguments = ExprChain::create(ast);
+        arguments->add(LiteralExpr::create(ast, WildcardLiteral::create(ast)));
+        $$->setArguments(arguments);
+        LOC($$, @$);
+      }
     | COUNT OPAREN CPAREN { scanner.notImplemented(@$, "count()"); }
     | COUNT OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "count(DISTINCT)"); }
     | COUNT OPAREN exprChain CPAREN {
-          Symbol* symbol = Symbol::create(ast, "count");
-          QualifiedName* name = QualifiedName::create(ast);
-          name->addName(symbol);
-          $$ = FunctionInvocation::create(ast, name);
-          $$->setArguments($3);
-          LOC($$, @$);
-    }
+        Symbol* symbol = Symbol::create(ast, "count");
+        QualifiedName* name = QualifiedName::create(ast);
+        name->addName(symbol);
+        $$ = FunctionInvocation::create(ast, name);
+        $$->setArguments($3);
+        LOC($$, @$);
+      }
     | COUNT OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "count(DISTINCT)"); }
     | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "count(pattern WHERE)"); }
 

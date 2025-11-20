@@ -460,14 +460,19 @@ void PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
         if (signature->_fullName == "count") {
             PipelineValueOutputInterface* output = nullptr;
             if (args->empty()) {
-                // e.g. count(*)
+                // e.g. count() Not supported yet
                 output = &_builder.addCount();
 
             } else if (args->size() == 1) {
                 // e.g. count(expr)
                 const Expr* arg = args->front();
                 const VarDecl* argDecl = arg->getExprVarDecl();
-                output = &_builder.addCount(_declToColumn.at(argDecl));
+                if (arg->getType() == EvaluatedType::Wildcard) {
+                    output = &_builder.addCount();
+                } else {
+                    // count(*)
+                    output = &_builder.addCount(_declToColumn.at(argDecl));
+                }
 
             } else [[unlikely]] {
                 // Already checked in the planner

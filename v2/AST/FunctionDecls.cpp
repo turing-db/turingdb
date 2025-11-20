@@ -63,6 +63,10 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
         .setArguments({EvaluatedType::Bool})
         .setReturnType(EvaluatedType::Integer)
         .setIsAggregate(true);
+    decls->create("count")
+        .setArguments({EvaluatedType::Wildcard})
+        .setReturnType(EvaluatedType::Integer)
+        .setIsAggregate(true);
 
     decls->create("min")
         .setArguments({EvaluatedType::Integer})

@@ -21,6 +21,7 @@ class DoubleLiteral;
 class StringLiteral;
 class CharLiteral;
 class MapLiteral;
+class WildcardLiteral;
 class Expr;
 class ExprChain;
 class BinaryExpr;
@@ -77,6 +78,7 @@ public:
     friend StringLiteral;
     friend CharLiteral;
     friend MapLiteral;
+    friend WildcardLiteral;
     friend ExprChain;
     friend BinaryExpr;
     friend LiteralExpr;

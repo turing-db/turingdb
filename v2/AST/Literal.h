@@ -23,7 +23,8 @@ public:
         DOUBLE,
         STRING,
         CHAR,
-        MAP
+        MAP,
+        WILDCARD,
     };
 
     virtual Kind getKind() const = 0;
@@ -177,6 +178,19 @@ private:
 
     MapLiteral();
     ~MapLiteral() override;
+};
+
+class WildcardLiteral : public Literal {
+public:
+    static WildcardLiteral* create(CypherAST* ast);
+
+    constexpr Kind getKind() const override { return Kind::WILDCARD; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Wildcard; }
+
+private:
+    WildcardLiteral();
+    ~WildcardLiteral() override;
 };
 
 }

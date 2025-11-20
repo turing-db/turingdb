@@ -56,3 +56,15 @@ MapLiteral* MapLiteral::create(CypherAST* ast) {
 void MapLiteral::set(Symbol* key, Expr* value) {
     _map[key] = value;
 }
+
+WildcardLiteral::WildcardLiteral() {
+}
+
+WildcardLiteral::~WildcardLiteral() {
+}
+
+WildcardLiteral* WildcardLiteral::create(CypherAST* ast) {
+    WildcardLiteral* literal = new WildcardLiteral();
+    ast->addLiteral(literal);
+    return literal;
+}
