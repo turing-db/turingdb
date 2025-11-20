@@ -5,19 +5,19 @@
 namespace db::v2 {
 
 class Expr;
-class FunctionSignature;
+class FunctionInvocationExpr;
 
 class FuncEvalNode : public PlanGraphNode {
 public:
-    using Funcs = std::vector<const FunctionSignature*>;
+    using Funcs = std::vector<const FunctionInvocationExpr*>;
 
     explicit FuncEvalNode()
         : PlanGraphNode(PlanGraphOpcode::FUNC_EVAL)
     {
     }
 
-    void addFunc(const FunctionSignature* signature) {
-        _funcs.emplace_back(signature);
+    void addFunc(const FunctionInvocationExpr* expr) {
+        _funcs.emplace_back(expr);
     }
 
     const Funcs& getFuncs() const {

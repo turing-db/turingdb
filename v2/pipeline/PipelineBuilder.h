@@ -89,7 +89,7 @@ public:
     // Aggregations
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);
-    PipelineValueOutputInterface& addCount();
+    PipelineValueOutputInterface& addCount(ColumnTag colTag = ColumnTag {});
     PipelineBlockOutputInterface& addProjection(std::span<ColumnTag> tags);
 
     // Lambda transform

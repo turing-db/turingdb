@@ -139,7 +139,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::AGGREGATE_EVAL: {
                 const auto* n = dynamic_cast<AggregateEvalNode*>(node.get());
                 for (const auto& func : n->getFuncs()) {
-                    output << "        __aggregate_func__: " << func->_fullName << "\n";
+                    const FunctionSignature* signature = func->getFunctionInvocation()->getSignature();
+                    output << "        __aggregate_func__: " << signature->_fullName << "\n";
                 }
                 if (!n->getGroupByKeys().empty()) {
                     output << "        __has grouping keys__: " << n->getGroupByKeys().size() << "\n";
@@ -149,7 +150,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::FUNC_EVAL: {
                 const auto* n = dynamic_cast<FuncEvalNode*>(node.get());
                 for (const auto& func : n->getFuncs()) {
-                    output << "        __func__: " << func->_fullName << "\n";
+                    const FunctionSignature* signature = func->getFunctionInvocation()->getSignature();
+                    output << "        __func__: " << signature->_fullName << "\n";
                 }
             } break;
 

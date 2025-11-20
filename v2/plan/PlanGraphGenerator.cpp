@@ -161,9 +161,9 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
             const FunctionSignature* signature = func->getSignature();
 
             if (signature->_isAggregate) {
-                aggregateEval->addFunc(signature);
+                aggregateEval->addFunc(dep._expr);
             } else {
-                funcEval->addFunc(signature);
+                funcEval->addFunc(dep._expr);
             }
         }
 

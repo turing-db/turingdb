@@ -147,9 +147,17 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
 #define CASE_COMPONENT(col, Type)                                                        \
     return f(static_cast<ColumnTypeFromKind<Type::staticKind()>::type*>(col));
 
+#define CONST_CASE_COMPONENT(col, Type)                                                  \
+    return f(static_cast<const ColumnTypeFromKind<Type::staticKind()>::type*>(col));
+
 #define COL_CASE(ColumnType)                                                             \
     case ColumnType::staticKind(): {                                                     \
         CASE_COMPONENT(col, ColumnType)                                                  \
+    } break;
+
+#define CONST_COL_CASE(ColumnType)                                                       \
+    case ColumnType::staticKind(): {                                                     \
+        CONST_CASE_COMPONENT(col, ColumnType)                                            \
     } break;
 
 #define COLUMN_VECTOR_SWITCH(col)                                                        \
@@ -164,6 +172,11 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
         COL_CASE(ColumnVector<types::Double::Primitive>)                                 \
         COL_CASE(ColumnVector<types::String::Primitive>)                                 \
         COL_CASE(ColumnVector<types::Bool::Primitive>)                                   \
+        COL_CASE(ColumnOptVector<types::UInt64::Primitive>)                              \
+        COL_CASE(ColumnOptVector<types::Int64::Primitive>)                               \
+        COL_CASE(ColumnOptVector<types::Double::Primitive>)                              \
+        COL_CASE(ColumnOptVector<types::String::Primitive>)                              \
+        COL_CASE(ColumnOptVector<types::Bool::Primitive>)                                \
         COL_CASE(ColumnVector<std::string>)                                              \
         COL_CASE(ColumnVector<const CommitBuilder*>)                                     \
         COL_CASE(ColumnVector<const Change*>)                                            \
@@ -174,9 +187,41 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
         }                                                                                \
     }
 
+#define CONST_COLUMN_VECTOR_SWITCH(col)                                                  \
+    switch ((col)->getKind()) {                                                          \
+        CONST_COL_CASE(ColumnVector<NodeID>)                                             \
+        CONST_COL_CASE(ColumnVector<EdgeID>)                                             \
+        CONST_COL_CASE(ColumnVector<EntityID>)                                           \
+        CONST_COL_CASE(ColumnVector<PropertyTypeID>)                                     \
+        CONST_COL_CASE(ColumnVector<LabelSetID>)                                         \
+        CONST_COL_CASE(ColumnVector<types::UInt64::Primitive>)                           \
+        CONST_COL_CASE(ColumnVector<types::Int64::Primitive>)                            \
+        CONST_COL_CASE(ColumnVector<types::Double::Primitive>)                           \
+        CONST_COL_CASE(ColumnVector<types::String::Primitive>)                           \
+        CONST_COL_CASE(ColumnVector<types::Bool::Primitive>)                             \
+        CONST_COL_CASE(ColumnOptVector<types::UInt64::Primitive>)                        \
+        CONST_COL_CASE(ColumnOptVector<types::Int64::Primitive>)                         \
+        CONST_COL_CASE(ColumnOptVector<types::Double::Primitive>)                        \
+        CONST_COL_CASE(ColumnOptVector<types::String::Primitive>)                        \
+        CONST_COL_CASE(ColumnOptVector<types::Bool::Primitive>)                          \
+        CONST_COL_CASE(ColumnVector<std::string>)                                        \
+        CONST_COL_CASE(ColumnVector<const CommitBuilder*>)                               \
+        CONST_COL_CASE(ColumnVector<const Change*>)                                      \
+                                                                                         \
+        default: {                                                                       \
+            throw FatalException(fmt::format(                                            \
+                "Can not check result for column of kind {}", (col)->getKind()));        \
+        }                                                                                \
+    }
+
 template <typename F>
-inline decltype(auto) dispatchColumnVector(Column* col, F&& f) {
+inline decltype(auto) dispatchColumnVector(Column* col, const F& f) {
     COLUMN_VECTOR_SWITCH(col);
+}
+
+template <typename F>
+inline decltype(auto) dispatchColumnVector(const Column* col, const F& f) {
+    CONST_COLUMN_VECTOR_SWITCH(col);
 }
 
 }

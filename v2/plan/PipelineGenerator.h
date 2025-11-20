@@ -31,6 +31,7 @@ class JoinNode;
 class SkipNode;
 class LimitNode;
 class CartesianProductNode;
+class AggregateEvalNode;
 
 class PipelineGenerator {
 public:
@@ -92,6 +93,7 @@ private:
     void translateSkipNode(SkipNode* node);
     void translateLimitNode(LimitNode* node);
     void translateCartesianProductNode(CartesianProductNode* node);
+    void translateAggregateEvalNode(AggregateEvalNode* node);
 };
 
 }
