@@ -18,6 +18,9 @@ public:
     void add(Expr* expr) { _exprs.push_back(expr); }
 
     const ExprVector& getExprs() const { return _exprs; }
+    bool empty() const { return _exprs.empty(); }
+    size_t size() const { return _exprs.size(); }
+    Expr* front() const { return _exprs.front(); }
 
     ExprVector::const_iterator begin() const { return _exprs.begin(); }
     ExprVector::const_iterator end() const { return _exprs.end(); }

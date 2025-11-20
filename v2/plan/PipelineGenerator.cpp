@@ -4,8 +4,12 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "FunctionInvocation.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
+#include "expr/ExprChain.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "nodes/AggregateEvalNode.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -179,6 +183,8 @@ void PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::WRITE:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::AGGREGATE_EVAL:
+            translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
+        break;
         case PlanGraphOpcode::ORDER_BY:
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
@@ -277,12 +283,12 @@ void PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode
     }
 
     const VarDecl* exprDecl = expr->getExprVarDecl();
-    if (!exprDecl) {
+    if (!exprDecl) [[unlikely]] {
         throw PlannerException("GetPropertyWithNullNode does not have an expression variable declaration");
     }
 
     const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)expr);
-    if (exprStrRep.empty()) {
+    if (exprStrRep.empty()) [[unlikely]] {
         throw PlannerException("Unknown error. Could not get string representation of expression");
     }
 
@@ -408,4 +414,81 @@ void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node
     _builder.getPendingOutput().setInterface(lhs);
 
     _builder.addCartesianProduct(rhs);
+}
+
+void PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const auto& groupByKeys = node->getGroupByKeys();
+    if (!groupByKeys.empty()) {
+        throw PlannerException("Group by keys are not supported yet");
+    }
+
+    const auto& funcs = node->getFuncs();
+
+    if (funcs.empty()) [[unlikely]] {
+        throw PlannerException("AggregateEvalNode does not have any functions");
+    }
+
+    if (funcs.size() != 1) [[unlikely]] {
+        throw PlannerException("Evaluation of multiple aggregate functions is not supported yet");
+    }
+
+    for (const FunctionInvocationExpr* func : funcs) {
+        const FunctionInvocation* invocation = func->getFunctionInvocation();
+        const ExprChain* args = invocation->getArguments();
+        const FunctionSignature* signature = invocation->getSignature();
+
+        if (!invocation) [[unlikely]] {
+            throw PlannerException("FunctionInvocationExpr does not have a FunctionInvocation");
+        }
+
+        if (!args) [[unlikely]] {
+            throw PlannerException("FunctionInvocation does not have arguments");
+        }
+
+        if (!signature) [[unlikely]] {
+            throw PlannerException("FunctionInvocation does not have a FunctionSignature");
+        }
+
+        if (!signature->_isAggregate) [[unlikely]] {
+            throw PlannerException("FunctionInvocation is not an aggregate function");
+        }
+
+        if (signature->_fullName == "count") {
+            PipelineValueOutputInterface* output = nullptr;
+            if (args->empty()) {
+                // e.g. count(*)
+                output = &_builder.addCount();
+
+            } else if (args->size() == 1) {
+                // e.g. count(expr)
+                const Expr* arg = args->front();
+                const VarDecl* argDecl = arg->getExprVarDecl();
+                output = &_builder.addCount(_declToColumn.at(argDecl));
+
+            } else [[unlikely]] {
+                // Already checked in the planner
+                throw PlannerException("Invalid arguments for count()");
+            }
+
+            const VarDecl* exprDecl = func->getExprVarDecl();
+
+            if (!exprDecl) [[unlikely]] {
+                throw PlannerException("Count() expression does not have an expression variable declaration");
+            }
+
+            const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)func);
+            if (exprStrRep.empty()) [[unlikely]] {
+                throw PlannerException("Unknown error. Could not get string representation of expression");
+            }
+
+            output->rename(exprStrRep);
+            _declToColumn[exprDecl] = output->getValue()->getTag();
+        } else {
+            throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->_fullName));
+        }
+    }
 }

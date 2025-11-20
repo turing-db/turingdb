@@ -252,8 +252,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     return limit->output();
 }
 
-PipelineValueOutputInterface& PipelineBuilder::addCount() {
-    CountProcessor* count = CountProcessor::create(_pipeline);
+PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
+    CountProcessor* count = CountProcessor::create(_pipeline, colTag);
     _pendingOutput.connectTo(count->input());
 
     NamedColumn* countColumn = allocColumn<ColumnConst<size_t>>(count->output().getDataframe());

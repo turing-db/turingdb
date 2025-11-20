@@ -5,20 +5,20 @@
 namespace db::v2 {
 
 class Expr;
-class FunctionSignature;
+class FunctionInvocationExpr;
 
 class AggregateEvalNode : public PlanGraphNode {
 public:
     using GroupByKeys = std::vector<Expr*>;
-    using Funcs = std::vector<const FunctionSignature*>;
+    using Funcs = std::vector<const FunctionInvocationExpr*>;
 
     explicit AggregateEvalNode()
         : PlanGraphNode(PlanGraphOpcode::AGGREGATE_EVAL)
     {
     }
 
-    void addFunc(const FunctionSignature* signature) {
-        _funcs.emplace_back(signature);
+    void addFunc(const FunctionInvocationExpr* expr) {
+        _funcs.emplace_back(expr);
     }
 
     void addGroupByKey(Expr* expr) {
