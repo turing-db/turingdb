@@ -203,15 +203,17 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
             return translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
         break;
+
+        case PlanGraphOpcode::AGGREGATE_EVAL:
+            translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::WRITE:
         case PlanGraphOpcode::FUNC_EVAL:
-        case PlanGraphOpcode::AGGREGATE_EVAL:
-            translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
-        break;
         case PlanGraphOpcode::ORDER_BY:
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
@@ -460,7 +462,7 @@ PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(Cartes
     return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
@@ -540,4 +542,5 @@ void PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
             throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->_fullName));
         }
     }
+    return _builder.getPendingOutputInterface();
 }

@@ -93,7 +93,7 @@ private:
     PipelineOutputInterface* translateSkipNode(SkipNode* node);
     PipelineOutputInterface* translateLimitNode(LimitNode* node);
     PipelineOutputInterface* translateCartesianProductNode(CartesianProductNode* node);
-    void translateAggregateEvalNode(AggregateEvalNode* node);
+    PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
 };
 
 }
