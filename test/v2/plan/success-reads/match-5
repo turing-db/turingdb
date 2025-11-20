@@ -16,7 +16,7 @@ flowchart TD
         __FILTER_NODE__
         __label__: Person
         __has predicate__
-        __dep__ _n_._name_
+        __dep__ _n_._name_ (String)
     `"]
     3["`
         __GET_OUT_EDGES__
@@ -29,7 +29,7 @@ flowchart TD
         __FILTER_EDGE__
         __edge_type__: KNOWS_WELL
         __has predicate__
-        __dep__ _e_._name_
+        __dep__ _e_._name_ (String)
     `"]
     6["`
         __GET_EDGE_TARGET__
@@ -77,7 +77,7 @@ flowchart TD
     `"]
     19["`
         __VAR__
-        __name__: v2
+        __name__: v6
     `"]
     20["`
         __FILTER_EDGE__
@@ -97,7 +97,7 @@ flowchart TD
     `"]
     25["`
         __VAR__
-        __name__: v3
+        __name__: v7
     `"]
     26["`
         __FILTER_EDGE__

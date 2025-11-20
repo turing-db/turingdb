@@ -10,7 +10,8 @@
 using namespace db::v2;
 
 DeclContext::DeclContext(DeclContext* parent)
-    : _parent(parent) {
+    : _parent(parent)
+{
 }
 
 DeclContext::~DeclContext() {

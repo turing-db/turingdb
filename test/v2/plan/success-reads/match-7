@@ -13,8 +13,8 @@ flowchart TD
     2["`
         __FILTER_NODE__
         __has predicate__
-        __dep__ _n_._duration_
-        __dep__ _m_._duration_
+        __dep__ _n_._duration_ (Integer)
+        __dep__ _m_._duration_ (Integer)
     `"]
     3["`
         __SCAN_NODES__

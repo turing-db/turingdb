@@ -33,11 +33,11 @@ flowchart TD
     8["`
         __FILTER_NODE__
         __has predicate__
-        __dep__ _b_._name_
-        __dep__ _a_._name_
+        __dep__ _b_._name_ (String)
+        __dep__ _a_._name_ (String)
         __has predicate__
-        __dep__ _c_._name_
-        __dep__ _b_._name_
+        __dep__ _c_._name_ (String)
+        __dep__ _b_._name_ (String)
     `"]
     9["`
         __SCAN_NODES__
@@ -54,7 +54,7 @@ flowchart TD
     `"]
     13["`
         __VAR__
-        __name__: v2
+        __name__: v5
     `"]
     14["`
         __FILTER_EDGE__
@@ -77,7 +77,7 @@ flowchart TD
     `"]
     20["`
         __VAR__
-        __name__: v4
+        __name__: v10
     `"]
     21["`
         __FILTER_EDGE__

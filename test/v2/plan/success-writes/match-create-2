@@ -17,7 +17,7 @@ flowchart TD
         __FILTER_NODE__
         __label__: Person
         __has predicate__
-        __dep__ _n_._name_
+        __dep__ _n_._name_ (String)
     `"]
     3["`
         __SCAN_NODES__
@@ -30,7 +30,7 @@ flowchart TD
         __FILTER_NODE__
         __label__: Person
         __has predicate__
-        __dep__ _m_._name_
+        __dep__ _m_._name_ (String)
     `"]
     6["`
         __GET_PROPERTY__

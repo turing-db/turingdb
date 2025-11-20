@@ -13,6 +13,7 @@
 
 #include "expr/All.h"
 
+using namespace db;
 using namespace db::v2;
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
@@ -278,7 +279,7 @@ void ExprAnalyzer::analyze(LiteralExpr* expr) {
     }
 }
 
-db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
+ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
     if (qualifiedName->size() != 2) {
@@ -361,7 +362,7 @@ db::ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueT
     expr->setType(type);
     expr->setDynamic();
 
-    // Create a variable declaration for the property expression 
+    // Create a variable declaration for the property expression
     // so that it can be retrieved later (for projection or in an expression / filter)
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 

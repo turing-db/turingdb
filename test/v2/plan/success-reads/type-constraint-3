@@ -23,7 +23,7 @@ flowchart TD
     5["`
         __FILTER_NODE__
         __has predicate__
-        __dep__ _m_._isFrench_
+        __dep__ _m_._isFrench_ (Bool)
         __dep__ _n_:_Person_
     `"]
     6["`

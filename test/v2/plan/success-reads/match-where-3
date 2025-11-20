@@ -33,12 +33,12 @@ flowchart TD
     8["`
         __FILTER_NODE__
         __has predicate__
-        __dep__ _a_._name_
-        __dep__ _b_._name_
-        __dep__ _b_._name_
-        __dep__ _c_._name_
-        __dep__ _b_._name_
-        __dep__ _x_._name_
+        __dep__ _a_._name_ (String)
+        __dep__ _b_._name_ (String)
+        __dep__ _b_._name_ (String)
+        __dep__ _c_._name_ (String)
+        __dep__ _b_._name_ (String)
+        __dep__ _x_._name_ (String)
     `"]
     9["`
         __SCAN_NODES__

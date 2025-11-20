@@ -218,10 +218,8 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
             fullName->addName(propName);
 
             PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
-            propExpr->setEntityVarDecl(decl);
-            propExpr->setPropertyName(propName->getName());
-
             BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
+            _exprAnalyzer->analyzeRootExpr(predExpr);
 
             data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
         }
@@ -287,10 +285,8 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             fullName->addName(propName);
 
             PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
-            propExpr->setEntityVarDecl(decl);
-            propExpr->setPropertyName(propName->getName());
-
             BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
+            _exprAnalyzer->analyzeRootExpr(predExpr);
 
             data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
         }

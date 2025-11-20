@@ -42,7 +42,9 @@ void outputDependency(std::ostream& output, const ExprDependencies::VarDependenc
             output << ":_" << type->getName() << "_\n";
         }
     } else if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
-        output << "._" << expr->getPropName() << "_\n";
+        fmt::println(output, "._{}_ ({})",
+                     expr->getPropName(),
+                     EvaluatedTypeName::value(expr->getType()));
     }
 }
 
