@@ -95,8 +95,20 @@ void PipelineGenerator::generate() {
         auto [node, prevIf] = nodeStack.top();
         nodeStack.pop();
 
-        _builder.getPendingOutput().setInterface(prevIf);
-        // If we have no previous interface to take inputs from when we should, error
+        // Binary nodes that are encountered for the second time should not reset @ref
+        // _builder::_pendingOutput with the first-encounter-parent (that stored in @ref
+        // prevIf), because that is already stored in @ref _binaryVisitedMap. Instead, on
+        // the second visit to binary nodes, keep the current pending output: do not
+        // overwrite it.
+        const bool binaryAndVisited =
+            node->isBinary() && _binaryVisitedMap.contains(node);
+        if (!binaryAndVisited) {
+            if (_builder.getPendingOutput().getInterface() != prevIf) {
+                _builder.getPendingOutput().setInterface(prevIf);
+            }
+        }
+
+        // If we have no previous interface to take inputs from when we should: error
         if (_builder.getPendingOutputInterface() == nullptr && !node->inputs().empty()) {
             throw FatalException(
                 fmt::format("Non-root node {} has nullptr previous interface.",
