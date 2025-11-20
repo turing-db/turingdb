@@ -10,6 +10,8 @@
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "nodes/AggregateEvalNode.h"
+#include "interfaces/PipelineNodeOutputInterface.h"
+#include "interfaces/PipelineOutputInterface.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -34,10 +36,16 @@
 
 #include "PipelineException.h"
 #include "PlannerException.h"
+#include "FatalException.h"
 
 using namespace db::v2;
 
 namespace {
+
+struct TranslateNodeToken {
+    PlanGraphNode* node;
+    PipelineNodeOutputInterface* previousInterface;
+};
 
 using TranslateTokenStack = std::stack<PlanGraphNode*>;
 
@@ -121,60 +129,59 @@ void PipelineGenerator::generate() {
     }
 }
 
-void PipelineGenerator::translateNode(PlanGraphNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
     switch (node->getOpcode()) {
         case PlanGraphOpcode::VAR:
-            translateVarNode(static_cast<VarNode*>(node));
+            return translateVarNode(static_cast<VarNode*>(node));
         break;
 
         case PlanGraphOpcode::SCAN_NODES:
-            translateScanNodesNode(static_cast<ScanNodesNode*>(node));
+            return translateScanNodesNode(static_cast<ScanNodesNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_OUT_EDGES:
-
-            translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
+            return translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
         break;
 
         case PlanGraphOpcode::PRODUCE_RESULTS:
-            translateProduceResultsNode(static_cast<ProduceResultsNode*>(node));
+            return translateProduceResultsNode(static_cast<ProduceResultsNode*>(node));
         break;
 
         case PlanGraphOpcode::FILTER_NODE:
-            translateNodeFilterNode(static_cast<NodeFilterNode*>(node));
+            return translateNodeFilterNode(static_cast<NodeFilterNode*>(node));
         break;
 
         case PlanGraphOpcode::FILTER_EDGE:
-            translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node));
+            return translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node));
         break;
 
         case PlanGraphOpcode::SKIP:
-            translateSkipNode(static_cast<SkipNode*>(node));
+            return translateSkipNode(static_cast<SkipNode*>(node));
         break;
 
         case PlanGraphOpcode::LIMIT:
-            translateLimitNode(static_cast<LimitNode*>(node));
+            return translateLimitNode(static_cast<LimitNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_EDGE_TARGET:
-            translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node));
+            return translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_IN_EDGES:
-            translateGetInEdgesNode(static_cast<GetInEdgesNode*>(node));
+            return translateGetInEdgesNode(static_cast<GetInEdgesNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_EDGES:
-            translateGetEdgesNode(static_cast<GetEdgesNode*>(node));
+            return translateGetEdgesNode(static_cast<GetEdgesNode*>(node));
         break;
 
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
-            translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
+            return translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_PROPERTY:
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
-            translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
+            return translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
         break;
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
@@ -191,9 +198,10 @@ void PipelineGenerator::translateNode(PlanGraphNode* node) {
             throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
                 PlanGraphOpcodeDescription::value(node->getOpcode())));
     }
+    throw FatalException("Failed to match against PlanGraphOpcode");
 }
 
-void PipelineGenerator::translateVarNode(VarNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
     const std::string_view varName = node->getVarDecl()->getName();
     if (varName.empty()) {
         throw PlannerException("VarNode with empty name");
@@ -216,29 +224,31 @@ void PipelineGenerator::translateVarNode(VarNode* node) {
     } else {
         throw PlannerException("VarNode output is not a node or edge");
     }
+
+    return output;
 }
 
-void PipelineGenerator::translateScanNodesNode(ScanNodesNode* node) {
-    _builder.addScanNodes();
+const PipelineOutputInterface* PipelineGenerator::translateScanNodesNode(ScanNodesNode* node) {
+    return &_builder.addScanNodes();
 }
 
-void PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node) {
-    _builder.addGetOutEdges();
+const PipelineOutputInterface* PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node) {
+    return &_builder.addGetOutEdges();
 }
 
-void PipelineGenerator::translateGetInEdgesNode(GetInEdgesNode* node) {
-    _builder.addGetInEdges();
+const PipelineOutputInterface* PipelineGenerator::translateGetInEdgesNode(GetInEdgesNode* node) {
+    return &_builder.addGetInEdges();
 }
 
-void PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node) {
-    _builder.addGetEdges();
+const PipelineOutputInterface* PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node) {
+    return &_builder.addGetEdges();
 }
 
-void PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node) {
-    _builder.projectEdgesOnOtherIDs();
+const PipelineOutputInterface* PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node) {
+    return &_builder.projectEdgesOnOtherIDs();
 }
 
-void PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
@@ -295,21 +305,25 @@ void PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode
     output->rename(exprStrRep);
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
+
+    return output;
 }
 
-void PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
     if (!node->isEmpty()) {
         throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
     }
+    return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
     if (!node->isEmpty()) {
         throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
     }
+    return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -343,12 +357,14 @@ void PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
     };
 
     _builder.addLambda(lambdaCallback);
+    return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateJoinNode(JoinNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
+    throw FatalException("Join Processor not implemented");
 }
 
-void PipelineGenerator::translateSkipNode(SkipNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -371,9 +387,10 @@ void PipelineGenerator::translateSkipNode(SkipNode* node) {
     }
 
     _builder.addSkip(static_cast<size_t>(integerLiteral->getValue()));
+    return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateLimitNode(LimitNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateLimitNode(LimitNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -396,9 +413,10 @@ void PipelineGenerator::translateLimitNode(LimitNode* node) {
     }
 
     _builder.addLimit(static_cast<size_t>(integerLiteral->getValue()));
+    return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node) {
+const PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node) {
     if (!_binaryVisitedMap.contains(node)) {
         throw PipelineException("Attempted to translate CartesianProductNode which was "
                                 "not already encountered.");
@@ -414,6 +432,7 @@ void PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node
     _builder.getPendingOutput().setInterface(lhs);
 
     _builder.addCartesianProduct(rhs);
+    return _builder.getPendingOutputInterface();
 }
 
 void PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
