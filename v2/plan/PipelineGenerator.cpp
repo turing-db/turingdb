@@ -44,10 +44,10 @@ namespace {
 
 struct TranslateNodeToken {
     PlanGraphNode* node;
-    PipelineNodeOutputInterface* previousInterface;
+    PipelineOutputInterface* previousInterface;
 };
 
-using TranslateTokenStack = std::stack<PlanGraphNode*>;
+using TranslateTokenStack = std::stack<TranslateNodeToken>;
 
 struct PropertyTypeDispatcher {
     db::ValueType _valueType;
@@ -87,20 +87,28 @@ void PipelineGenerator::generate() {
     _graph->getRoots(rootNodes);
 
     for (const auto& node : rootNodes) {
-        nodeStack.push(node);
+        nodeStack.push({node, nullptr});
     }
 
     // Translate nodes in a DFS manner
     while (!nodeStack.empty()) {
-        PlanGraphNode* node = nodeStack.top();
+        auto [node, prevIf] = nodeStack.top();
         nodeStack.pop();
 
-        translateNode(node);
+        _builder.getPendingOutput().setInterface(prevIf);
+        // If we have no previous interface to take inputs from when we should, error
+        if (_builder.getPendingOutputInterface() == nullptr && !node->inputs().empty()) {
+            throw FatalException(
+                fmt::format("Non-root node {} has nullptr previous interface.",
+                            PlanGraphOpcodeDescription::value(node->getOpcode())));
+        }
+
+        PipelineOutputInterface* outputIf = translateNode(node);
 
         for (PlanGraphNode* nextNode : node->outputs()) {
             // Unary node case
             if (!nextNode->isBinary()) {
-                nodeStack.push(nextNode);
+                nodeStack.push({nextNode, outputIf});
                 continue;
             }
             // Binary node case
@@ -113,7 +121,7 @@ void PipelineGenerator::generate() {
 
             const bool visited = _binaryVisitedMap.contains(nextNode);
             if (visited) {
-                nodeStack.push(nextNode);
+                nodeStack.push({nextNode, outputIf});
                 continue;
             }
 
@@ -129,7 +137,7 @@ void PipelineGenerator::generate() {
     }
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
     switch (node->getOpcode()) {
         case PlanGraphOpcode::VAR:
             return translateVarNode(static_cast<VarNode*>(node));
@@ -201,7 +209,7 @@ const PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* n
     throw FatalException("Failed to match against PlanGraphOpcode");
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
     const std::string_view varName = node->getVarDecl()->getName();
     if (varName.empty()) {
         throw PlannerException("VarNode with empty name");
@@ -225,30 +233,35 @@ const PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node
         throw PlannerException("VarNode output is not a node or edge");
     }
 
-    return output;
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateScanNodesNode(ScanNodesNode* node) {
-    return &_builder.addScanNodes();
+PipelineOutputInterface* PipelineGenerator::translateScanNodesNode(ScanNodesNode* node) {
+    _builder.addScanNodes();
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node) {
-    return &_builder.addGetOutEdges();
+PipelineOutputInterface* PipelineGenerator::translateGetOutEdgesNode(GetOutEdgesNode* node) {
+    _builder.addGetOutEdges();
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateGetInEdgesNode(GetInEdgesNode* node) {
-    return &_builder.addGetInEdges();
+PipelineOutputInterface* PipelineGenerator::translateGetInEdgesNode(GetInEdgesNode* node) {
+    _builder.addGetInEdges();
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node) {
-    return &_builder.addGetEdges();
+PipelineOutputInterface* PipelineGenerator::translateGetEdgesNode(GetEdgesNode* node) {
+    _builder.addGetEdges();
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node) {
-    return &_builder.projectEdgesOnOtherIDs();
+PipelineOutputInterface* PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node) {
+    _builder.projectEdgesOnOtherIDs();
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
@@ -306,24 +319,24 @@ const PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNo
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
-    return output;
+    return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
     if (!node->isEmpty()) {
         throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
     }
     return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
     if (!node->isEmpty()) {
         throw PlannerException("PipelineGenerator does not support non-empty NodeFilterNode.");
     }
     return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -360,11 +373,11 @@ const PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(Pr
     return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
     throw FatalException("Join Processor not implemented");
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -390,7 +403,7 @@ const PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* no
     return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateLimitNode(LimitNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateLimitNode(LimitNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
@@ -416,7 +429,7 @@ const PipelineOutputInterface* PipelineGenerator::translateLimitNode(LimitNode* 
     return _builder.getPendingOutputInterface();
 }
 
-const PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(CartesianProductNode* node) {
     if (!_binaryVisitedMap.contains(node)) {
         throw PipelineException("Attempted to translate CartesianProductNode which was "
                                 "not already encountered.");

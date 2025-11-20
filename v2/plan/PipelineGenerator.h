@@ -78,22 +78,22 @@ private:
     // [BinaryNode -> Visited input] map
     BinaryNodeVisitedMap _binaryVisitedMap;
 
+    PipelineOutputInterface* translateNode(PlanGraphNode* node);
+    PipelineOutputInterface* translateVarNode(VarNode* node);
+    PipelineOutputInterface* translateScanNodesNode(ScanNodesNode* node);
+    PipelineOutputInterface* translateGetOutEdgesNode(GetOutEdgesNode* node);
+    PipelineOutputInterface* translateGetInEdgesNode(GetInEdgesNode* node);
+    PipelineOutputInterface* translateGetEdgesNode(GetEdgesNode* node);
+    PipelineOutputInterface* translateGetEdgeTargetNode(GetEdgeTargetNode* node);
+    PipelineOutputInterface* translateGetPropertyWithNullNode(GetPropertyWithNullNode* node);
+    PipelineOutputInterface* translateNodeFilterNode(NodeFilterNode* node);
+    PipelineOutputInterface* translateEdgeFilterNode(EdgeFilterNode* node);
+    PipelineOutputInterface* translateProduceResultsNode(ProduceResultsNode* node);
+    PipelineOutputInterface* translateJoinNode(JoinNode* node);
+    PipelineOutputInterface* translateSkipNode(SkipNode* node);
+    PipelineOutputInterface* translateLimitNode(LimitNode* node);
+    PipelineOutputInterface* translateCartesianProductNode(CartesianProductNode* node);
     void translateAggregateEvalNode(AggregateEvalNode* node);
-    const PipelineOutputInterface* translateNode(PlanGraphNode* node);
-    const PipelineOutputInterface* translateVarNode(VarNode* node);
-    const PipelineOutputInterface* translateScanNodesNode(ScanNodesNode* node);
-    const PipelineOutputInterface* translateGetOutEdgesNode(GetOutEdgesNode* node);
-    const PipelineOutputInterface* translateGetInEdgesNode(GetInEdgesNode* node);
-    const PipelineOutputInterface* translateGetEdgesNode(GetEdgesNode* node);
-    const PipelineOutputInterface* translateGetEdgeTargetNode(GetEdgeTargetNode* node);
-    const PipelineOutputInterface* translateGetPropertyWithNullNode(GetPropertyWithNullNode* node);
-    const PipelineOutputInterface* translateNodeFilterNode(NodeFilterNode* node);
-    const PipelineOutputInterface* translateEdgeFilterNode(EdgeFilterNode* node);
-    const PipelineOutputInterface* translateProduceResultsNode(ProduceResultsNode* node);
-    const PipelineOutputInterface* translateJoinNode(JoinNode* node);
-    const PipelineOutputInterface* translateSkipNode(SkipNode* node);
-    const PipelineOutputInterface* translateLimitNode(LimitNode* node);
-    const PipelineOutputInterface* translateCartesianProductNode(CartesianProductNode* node);
 };
 
 }
