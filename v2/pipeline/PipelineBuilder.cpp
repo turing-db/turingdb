@@ -568,11 +568,14 @@ PipelineBlockOutputInterface& PipelineBuilder::addFilter(PipelineOutputInterface
     FilterProcessor* filterProc = FilterProcessor::create(_pipeline);
 
     PipelineBlockOutputInterface& output = filterProc->output();
+    PipelineBlockInputInterface& toFilterInput = filterProc->toFilterInput();
 
     _pendingOutput.connectTo(filterProc->maskInput());
-    toFilter->connectTo(filterProc->toFilterInput());
+    toFilter->connectTo(toFilterInput);
 
     _pendingOutput.setInterface(&output);
+    duplicateDataframeShape(_mem, _dfMan, toFilterInput.getDataframe(), output.getDataframe());
+    output.setStream(toFilterInput.getStream());
 
     return output;
 }
