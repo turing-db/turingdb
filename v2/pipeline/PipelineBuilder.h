@@ -50,7 +50,10 @@ public:
     PipelineEdgeOutputInterface& addGetOutEdges();
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
-    void projectEdgesOnOtherIDs() { _pendingOutput.projectEdgesOnOtherIDs(); }
+    PipelineOutputInterface& projectEdgesOnOtherIDs() {
+        _pendingOutput.projectEdgesOnOtherIDs();
+        return *_pendingOutput.getInterface();
+    }
 
     // Properties
     template <EntityType Entity, SupportedType T>
