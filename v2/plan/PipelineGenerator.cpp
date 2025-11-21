@@ -717,6 +717,10 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
 }
 
 void PipelineGenerator::translateWriteNode(WriteNode* node) {
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
     WriteProcessor::DeletedNodes delNodes;
     { // Add the columns containing deleted node variables
         for (const VarDecl* deletedVar : node->toDeleteNodes()) {

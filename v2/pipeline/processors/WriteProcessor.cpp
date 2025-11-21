@@ -12,7 +12,6 @@
 #include "FatalException.h"
 #include "PipelineException.h"
 
-
 using namespace db::v2;
 
 namespace {
