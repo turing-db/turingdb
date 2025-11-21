@@ -12,6 +12,7 @@
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
 
+#include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "interfaces/PipelineValueOutputInterface.h"
@@ -19,6 +20,7 @@
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
 #include "processors/LambdaTransformProcessor.h"
+#include "processors/WriteProcessor.h"
 
 #include "metadata/SupportedType.h"
 
@@ -125,6 +127,10 @@ public:
 
     // Rename output
     void rename(std::string_view name) { _pendingOutput.rename(name); }
+
+    // Write/Updates
+    PipelineBlockOutputInterface& addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
+                                           const WriteProcessor::DeletedEdges& edgeColumnsToDelete);
 
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
