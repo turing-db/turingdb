@@ -256,7 +256,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::WRITE:
-            translateWriteNode(static_cast<WriteNode*>(node));
+            return translateWriteNode(static_cast<WriteNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -271,8 +271,9 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
                                                PlanGraphOpcodeDescription::value(node->getOpcode())));
         break;
     }
-
-    throw FatalException("Failed to match against PlanGraphOpcode");
+    throw FatalException(
+        fmt::format("Failed to match {} against PlanGraphOpcode",
+                    PlanGraphOpcodeDescription::value(node->getOpcode())));
 }
 
 PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
@@ -716,7 +717,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     return _builder.getPendingOutputInterface();
 }
 
-void PipelineGenerator::translateWriteNode(WriteNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) {
     if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
@@ -752,4 +753,5 @@ void PipelineGenerator::translateWriteNode(WriteNode* node) {
     }
 
     _builder.addWrite(delNodes, delEdges);
+    return _builder.getPendingOutputInterface();
 }

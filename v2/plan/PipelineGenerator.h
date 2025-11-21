@@ -102,6 +102,6 @@ private:
     PipelineOutputInterface* translateCartesianProductNode(CartesianProductNode* node);
     PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
     PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
-    void translateWriteNode(WriteNode* node);
+    PipelineOutputInterface* translateWriteNode(WriteNode* node);
 };
 }
