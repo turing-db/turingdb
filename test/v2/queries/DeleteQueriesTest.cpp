@@ -194,8 +194,6 @@ TEST_F(DeleteQueriesTest, deleteEdges) {
         EXPECT_TRUE(expectedEdgeRows.equals(actualEdgeRows));
     }
 }
-||||||| parent of 3d6feb02f (Add CPP file (!write-processor))
-=======
 #include <gtest/gtest.h>
 
 #include "Graph.h"
@@ -255,11 +253,11 @@ protected:
     }
 };
 
-TEST_F(DeleteQueriesTest, matchNDeleteN) {
-    using Rows = LineContainer<NodeID>;
-    
-    constexpr std::string_view deleteQuery = "MATCH (n) DELETE n";
-    constexpr std::string_view matchQuery = "MATCH (n) RETURN n";
+TEST_F(DeleteQueriesTest, deleteEdges) {
+    using NodeRows = LineContainer<NodeID>;
+    using EdgeRows = LineContainer<EdgeID>;
+
+    constexpr std::string_view deleteQuery = "MATCH (n)-[e]->(m) DELETE e";
 
     {
         newChange();
@@ -268,66 +266,50 @@ TEST_F(DeleteQueriesTest, matchNDeleteN) {
         submitCurrentChange();
     }
 
-    Rows expectedRows; // Empty: all should be deleted
-
-    Rows actualRows;
-    actualRows.add({0}); // Add a dummy row and then clear it in the callback
-    {
-        auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
-            actualRows.clear();
-            ASSERT_TRUE(df);
-            ASSERT_EQ(df->size(), 1);
-            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
-            ASSERT_TRUE(ns);
-            for (NodeID n : *ns) {
-                actualRows.add({n});
-            }
-        });
-        ASSERT_TRUE(res);
-    }
-
-    EXPECT_TRUE(expectedRows.equals(actualRows));
-}
-
-TEST_F(DeleteQueriesTest, deleteIncidentNodesMatchN) {
-    using Rows = LineContainer<NodeID>;
-    
-    constexpr std::string_view deleteQuery = "MATCH (n)-->(m) DELETE n";
-    constexpr std::string_view matchQuery = "MATCH (n) RETURN n";
-
-    {
-        newChange();
-        auto res = queryV2(deleteQuery, [&](const Dataframe* df) -> void {});
-        ASSERT_TRUE(res);
-        submitCurrentChange();
-    }
-
-    Rows expectedRows;
+    NodeRows expectedNodeRows;
+    EdgeRows expectedEdgeRows; // No edges: all deleted
     {
         GraphReader reader = read();
         // We expect only nodes with no out edges to remain
         for (NodeID n : reader.scanNodes()) {
-            NodeView nv = reader.getNodeView(n);
-            if (nv.edges().getOutEdgeCount() == 0) {
-                expectedRows.add({n});
-            }
+            expectedNodeRows.add({n});
         }
     }
 
-    Rows actualRows;
     {
+        NodeRows actualNodeRows;
+        constexpr std::string_view matchQuery = "MATCH (n) RETURN n";
+
         auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
-            actualRows.clear();
+            actualNodeRows.clear();
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 1);
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             ASSERT_TRUE(ns);
             for (NodeID n : *ns) {
-                actualRows.add({n});
+                actualNodeRows.add({n});
             }
         });
         ASSERT_TRUE(res);
+        EXPECT_TRUE(expectedNodeRows.equals(actualNodeRows));
     }
 
-    EXPECT_TRUE(expectedRows.equals(actualRows));
+    {
+        EdgeRows actualEdgeRows;
+        actualEdgeRows.add({0}); // Add a dummy row then clear it before callback
+        constexpr std::string_view matchQuery = "MATCH (n)-[e]-(m) RETURN e";
+
+        auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
+            actualEdgeRows.clear();
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 1);
+            auto* es = df->cols().front()->as<ColumnEdgeIDs>();
+            ASSERT_TRUE(es);
+            for (EdgeID e : *es) {
+                actualEdgeRows.add({e});
+            }
+        });
+        ASSERT_TRUE(res);
+        EXPECT_TRUE(expectedEdgeRows.equals(actualEdgeRows));
+    }
 }
