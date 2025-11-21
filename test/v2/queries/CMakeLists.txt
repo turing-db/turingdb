@@ -8,3 +8,4 @@ function(add_v2_queries_gtest exe_name cpp_file)
 endfunction()
 
 add_v2_queries_gtest(test_v2_queries QueriesTest.cpp)
+add_v2_queries_gtest(test_v2_delete_queries DeleteQueriesTest.cpp)

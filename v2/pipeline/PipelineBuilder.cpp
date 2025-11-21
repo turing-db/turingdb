@@ -16,6 +16,7 @@
 #include "processors/SkipProcessor.h"
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
+#include "processors/WriteProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
@@ -379,8 +380,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const Proced
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTransformProcessor::Callback& cb) {
-    LambdaTransformProcessor* transf = LambdaTransformProcessor::create(_pipeline, cb);
+PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTransformProcessor::Callback& callback) {
+    LambdaTransformProcessor* transf = LambdaTransformProcessor::create(_pipeline, callback);
 
     PipelineBlockInputInterface& input = transf->input();
     PipelineBlockOutputInterface& output = transf->output();
@@ -453,6 +454,24 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
 
     _pendingOutput.updateInterface(&output);
 
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
+                                                        const WriteProcessor::DeletedEdges& edgeColumnsToDelete) {
+    auto* processor = WriteProcessor::create(_pipeline);
+
+    processor->setDeletedNodes(nodeColumnsToDelete);
+    processor->setDeletedEdges(edgeColumnsToDelete);
+
+    PipelineBlockInputInterface& input = processor->input();
+    PipelineBlockOutputInterface& output = processor->output();
+
+    _pendingOutput.connectTo(input);
+
+    // TODO: Allocate columns
+
+    _pendingOutput.setInterface(&output);
     return output;
 }
 

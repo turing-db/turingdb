@@ -37,6 +37,7 @@
 #include "nodes/GetInEdgesNode.h"
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/ProcedureEvalNode.h"
+#include "nodes/WriteNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -254,11 +255,14 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateProcedureEvalNode(static_cast<ProcedureEvalNode*>(node));
         break;
 
+        case PlanGraphOpcode::WRITE:
+            translateWriteNode(static_cast<WriteNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
-        case PlanGraphOpcode::WRITE:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::ORDER_BY:
         case PlanGraphOpcode::UNKNOWN:
@@ -710,4 +714,38 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     }
 
     return _builder.getPendingOutputInterface();
+}
+
+void PipelineGenerator::translateWriteNode(WriteNode* node) {
+    WriteProcessor::DeletedNodes delNodes;
+    { // Add the columns containing deleted node variables
+        for (const VarDecl* deletedVar : node->toDeleteNodes()) {
+            auto it = _declToColumn.find(deletedVar);
+
+            if (it == end(_declToColumn)) {
+                throw PlannerException(fmt::format(
+                    "Attempted to delete variable {} which has no associated column.",
+                    deletedVar->getName()));
+            }
+
+            delNodes.push_back(it->second);
+        }
+    }
+
+    WriteProcessor::DeletedEdges delEdges;
+    { // Add the columns containing deleted edge variables
+        for (const VarDecl* deletedVar : node->toDeleteEdges()) {
+            auto it = _declToColumn.find(deletedVar);
+
+            if (it == end(_declToColumn)) {
+                throw PlannerException(fmt::format(
+                    "Attempted to delete variable {} which has no associated column.",
+                    deletedVar->getName()));
+            }
+
+            delEdges.push_back(it->second);
+        }
+    }
+
+    _builder.addWrite(delNodes, delEdges);
 }
