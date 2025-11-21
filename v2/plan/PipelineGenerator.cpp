@@ -103,9 +103,7 @@ void PipelineGenerator::generate() {
         const bool binaryAndVisited =
             node->isBinary() && _binaryVisitedMap.contains(node);
         if (!binaryAndVisited) {
-            if (_builder.getPendingOutput().getInterface() != prevIf) {
-                _builder.getPendingOutput().setInterface(prevIf);
-            }
+            _builder.getPendingOutput().setInterface(prevIf);
         }
 
         // If we have no previous interface to take inputs from when we should: error
@@ -456,7 +454,7 @@ PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(Cartes
     PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
 
     // LHS is implicit in @ref _pendingOutput
-    _builder.getPendingOutput().setInterface(lhs);
+    _builder.getPendingOutput().updateInterface(lhs);
 
     _builder.addCartesianProduct(rhs);
     return _builder.getPendingOutputInterface();

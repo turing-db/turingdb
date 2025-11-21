@@ -18,7 +18,11 @@ public:
     PipelineOutputInterface* getInterface() const { return _iface; }
     Dataframe* getDataframe() const { return _iface->getDataframe(); }
 
-    void setInterface(PipelineOutputInterface* iface) { 
+    void setInterface(PipelineOutputInterface* iface) {
+        _iface = iface;
+    }
+
+    void updateInterface(PipelineOutputInterface* iface) {
         _iface = iface;
         _edgesProjectedOnOtherIDs = false;
     }

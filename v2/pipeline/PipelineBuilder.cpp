@@ -63,7 +63,7 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
     // Register output in materialize data
     _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(nodeIDs);
 
-    _pendingOutput.setInterface(&outNodeIDs);
+    _pendingOutput.updateInterface(&outNodeIDs);
 
     return outNodeIDs;
 }
@@ -103,7 +103,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
@@ -125,7 +125,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     duplicateDataframeShape(_mem, _dfMan, leftDf, outDf);
     concatDataframeShape(_mem, _dfMan, rightDf, outDf);
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     // Initialise the processor's "memory" stores for left and right ports
     duplicateDataframeShape(_mem, _dfMan, leftDf, &cartProd->leftMemory());
@@ -159,7 +159,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(sourceNodes);
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
@@ -189,7 +189,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(otherNodes);
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
@@ -211,7 +211,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
     output.setStream(input.getStream());
     _isMaterializeOpen = false;
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
@@ -219,7 +219,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
 void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
     _pendingOutput.connectTo(lambda->input());
-    _pendingOutput.setInterface(nullptr);
+    _pendingOutput.updateInterface(nullptr);
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
@@ -232,7 +232,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     output.setStream(input.getStream());
     duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return skip->output();
 }
@@ -247,7 +247,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     output.setStream(input.getStream());
     duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return limit->output();
 }
@@ -259,7 +259,7 @@ PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     NamedColumn* countColumn = allocColumn<ColumnConst<size_t>>(count->output().getDataframe());
     count->output().setValue(countColumn);
 
-    _pendingOutput.setInterface(&count->output());
+    _pendingOutput.updateInterface(&count->output());
     return count->output();
 }
 
@@ -279,14 +279,14 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ColumnTag
         outDf->addColumn(inDf->getColumn(tag));
     }
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
     LambdaSourceProcessor* source = LambdaSourceProcessor::create(_pipeline, callback);
-    _pendingOutput.setInterface(&source->output());
+    _pendingOutput.updateInterface(&source->output());
     return source->output();
 }
 
@@ -298,7 +298,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
@@ -332,7 +332,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetProperties(PropertyType pr
     matData.createStep(indices);
     matData.addToStep<ColumnValues>(values);
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }
@@ -362,7 +362,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.addToStep<ColumnValues>(values);
 
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }

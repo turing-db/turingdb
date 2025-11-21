@@ -28,17 +28,16 @@ constexpr ColumnKind::ColumnKindCode getBaseFromKind(ColumnKind::ColumnKindCode 
     return kind / ColumnKind::getInternalTypeKindCount();
 }
 
-void verifyAllColumnVectors(Dataframe* df) {
-    constexpr ColumnKind::ColumnKindCode columnVectorBaseKind =
-        ColumnVector<size_t>::BaseKind;
+constexpr ColumnKind::ColumnKindCode COL_VEC_BASE_KIND = ColumnVector<size_t>::BaseKind;
 
-    for (NamedColumn* nCol : df->cols()) {
-        Column* col = nCol->getColumn();
+void verifyAllColumnVectors(Dataframe* df) {
+    for (const NamedColumn* nCol : df->cols()) {
+        const Column* col = nCol->getColumn();
 
         const ColumnKind::ColumnKindCode kind = col->getKind();
         const ColumnKind::ColumnKindCode baseKind = getBaseFromKind(kind);
 
-        if (baseKind != columnVectorBaseKind) {
+        if (baseKind != COL_VEC_BASE_KIND) {
             throw FatalException("Attempt to calulate the CartesianProduct of a "
                                  "Dataframe whose column is not a ColumnVector.");
         }
