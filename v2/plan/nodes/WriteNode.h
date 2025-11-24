@@ -30,11 +30,13 @@ public:
     /// @brief Describes a pending node.
     struct PendingNode {
         /// @brief The node data, contains the label and property constraints
+        const VarDecl* _name {nullptr};
         const NodePatternData* _data {nullptr};
     };
 
     /// @brief Describes a pending edge.
     struct PendingEdge {
+        const VarDecl* _name {nullptr};
         const VarDecl* _src {nullptr};
         const VarDecl* _tgt {nullptr};
 
@@ -49,7 +51,7 @@ public:
 
     size_t addNode(const VarDecl* decl, const NodePatternData* data) {
         const size_t offset = _newNodes.size();
-        _newNodes.emplace_back(data);
+        _newNodes.emplace_back(decl, data);
         _newNodeDeclMapping[decl] = offset;
 
         return offset;
@@ -60,7 +62,7 @@ public:
                    const VarDecl* src,
                    const VarDecl* tgt) {
         const size_t offset = _newEdges.size();
-        _newEdges.emplace_back(src, tgt, data);
+        _newEdges.emplace_back(decl, src, tgt, data);
         _newEdgeDeclMapping[decl] = offset;
 
         return offset;
