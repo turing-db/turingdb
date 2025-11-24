@@ -79,3 +79,19 @@ LabelID LabelMap::getOrCreate(const std::string& name) {
 
     return nextID;
 }
+
+LabelID LabelMap::getOrCreate(std::string_view name) {
+    auto it = _nameMap.find(name);
+
+    if (it != _nameMap.end()) {
+        return _container[it->second]._id;
+    }
+
+    const size_t offset = _nameMap.size();
+    const LabelID nextID {static_cast<LabelID::Type>(offset)};
+    auto& pair = _container.emplace_back(nextID, std::make_unique<std::string>(name));
+    _nameMap.emplace(std::string_view {*pair._name}, offset);
+    _idMap.emplace(nextID, offset);
+
+    return nextID;
+}

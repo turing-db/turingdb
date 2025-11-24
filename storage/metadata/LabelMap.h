@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <string>
 
@@ -35,6 +36,7 @@ public:
     [[nodiscard]] Container::const_iterator end() const { return _container.end(); }
 
     LabelID getOrCreate(const std::string& labelName);
+    LabelID getOrCreate(std::string_view labelName);
 
 private:
     Container _container;
