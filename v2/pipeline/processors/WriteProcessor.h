@@ -1,11 +1,14 @@
 #pragma once
 
+#include <string_view>
+
 #include "Processor.h"
 #include "WriteProcessorTypes.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "dataframe/ColumnTag.h"
+#include "metadata/LabelSet.h"
 
 namespace db {
 
@@ -58,6 +61,8 @@ private:
     void performDeletions();
     void performCreations();
     void performUpdates();
+
+    LabelSet getLabelSet(std::span<const std::string_view> labels);
 
     WriteProcessor() = default;
     ~WriteProcessor() final = default;

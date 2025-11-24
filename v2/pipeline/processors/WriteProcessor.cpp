@@ -1,22 +1,40 @@
 #include "WriteProcessor.h"
 
-#include "ExecutionContext.h"
-#include "reader/GraphReader.h"
-#include "versioning/CommitBuilder.h"
-#include "versioning/Transaction.h"
-#include "ID.h"
+#include <string_view>
+
 #include "PipelineV2.h"
 #include "PipelinePort.h"
+
+#include "ExecutionContext.h"
+#include "reader/GraphReader.h"
+#include "ID.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/CommitWriteBuffer.h"
+#include "versioning/Transaction.h"
 #include "dataframe/Dataframe.h"
+#include "WriteProcessorTypes.h"
+#include "views/PropertyView.h"
+#include "writers/MetadataBuilder.h"
 
 #include "FatalException.h"
 #include "PipelineException.h"
 
+using namespace db;
 using namespace db::v2;
 
 namespace {
 
-using namespace db;
+using PropertyConstraintsSpan = std::span<const WriteProcessorTypes::PropertyConstraint>;
+
+void addUntypedProperties(CommitWriteBuffer::UntypedProperties dest,
+                          const PropertyConstraintsSpan& props,
+                          MetadataBuilder& mdBuilder) {
+    for (const WriteProcessorTypes::PropertyConstraint prop : props) {
+        const ValueType type = prop._type;
+        // HOW: Do I know what the value of the property to set is? It will be in a column
+        // (for which I have a tag) but I do not know which row.
+    }
+}
 
 template <TypedInternalID IDT>
 void validateDeletions(const GraphReader reader, ColumnVector<IDT>* col) {
@@ -129,11 +147,32 @@ void WriteProcessor::performDeletions() {
     }
 }
 
+
+LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
+    LabelSet labelset;
+    for (const std::string_view label : labels) {
+        const LabelID id = _metadataBuilder->getOrCreateLabel(label);
+        labelset.set(id);
+    }
+    return labelset;
+}
+
 void WriteProcessor::performCreations() {
     for (const auto& pendingNode : _pendingNodes) {
         // TODO: Throw an exception, or make an implict assumption that we have valid
         // labels
         bioassert(pendingNode._labels.size() > 1);
 
+        CommitWriteBuffer::PendingNode& wbNode = _writeBuffer->newPendingNode();
+
+        {
+            const LabelSet labelset = getLabelSet(pendingNode._labels);
+            const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(labelset);
+            wbNode.labelsetHandle = hdl;
+        }
+
+        {
+            const WriteProcessorTypes::PropertyConstraints& p = pendingNode._properties;
+        }
     }
 }

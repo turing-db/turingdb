@@ -17,6 +17,7 @@ class MetadataBuilder {
 public:
     // Labels
     LabelID getOrCreateLabel(const std::string& labelName);
+    LabelID getOrCreateLabel(std::string_view labelName);
 
     // Labelsets
     LabelSetHandle getOrCreateLabelSet(const LabelSet& labelset);

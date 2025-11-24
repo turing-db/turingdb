@@ -11,9 +11,12 @@ namespace db::v2 {
 
 class WriteProcessorTypes {
 public:
+    struct PropertyConstraint;
+
     using PendingNodeOffset = size_t;
     // TODO: Check this is what it should be
     using IncidentNode = std::variant<PendingNodeOffset, ColumnTag>;
+    using PropertyConstraints = std::vector<PropertyConstraint>;
 
     struct PropertyConstraint {
         std::string_view _propName;
