@@ -405,10 +405,10 @@ void ReadStmtGenerator::unwrapWhereExpr(Expr* expr) {
 }
 
 void ReadStmtGenerator::placeJoinsOnVars() {
-    // TODO: Check if this is still needed now that there is no MaterializeNode anymore.
-    //       Right now it only checks if the join is valid, else it's a bug
-    const auto createJoin = [this](PlanGraphNode* lhs, PlanGraphNode* rhs) -> PlanGraphNode* {
-        const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(lhs, rhs);
+    const auto createJoin = [this](VarNode* node,
+                                   PlanGraphNode* lhs,
+                                   PlanGraphNode* rhs) -> PlanGraphNode* {
+        const auto [path, _] = _topology->getShortestPath(lhs, rhs);
 
         switch (path) {
             case PlanGraphTopology::PathToDependency::SameVar: {
@@ -418,12 +418,16 @@ void ReadStmtGenerator::placeJoinsOnVars() {
                 // Should not happen
                 throwError("Unknown error. Cannot join if the lhs and rhs are on the same islands");
             }
-
-            case PlanGraphTopology::PathToDependency::UndirectedPath:
             case PlanGraphTopology::PathToDependency::NoPath: {
-                return _tree->create<JoinNode>();
+                return _tree->create<JoinNode>(node->getVarDecl(),
+                                               node->getVarDecl(),
+                                               JoinType::COMMON_SUCCESSOR);
             }
-        }
+            case PlanGraphTopology::PathToDependency::UndirectedPath:
+                return _tree->create<JoinNode>(node->getVarDecl(),
+                                               node->getVarDecl(),
+                                               JoinType::DIAMOND);
+            }
 
         throwError("Unexpected erorr. Cannot place join on variables");
     };
@@ -445,7 +449,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
             lhsNode->clearOutputs();
             rhsNode->clearOutputs();
 
-            PlanGraphNode* join = createJoin(lhsNode, rhsNode);
+            PlanGraphNode* join = createJoin(var, lhsNode, rhsNode);
             lhsNode->connectOut(join);
             rhsNode->connectOut(join);
             join->connectOut(filter);
@@ -596,7 +600,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     for (size_t i = 1; i < ends.size(); i++) {
         PlanGraphNode* lhsNode = ends[i];
 
-        const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(rhsNode, lhsNode);
+        const auto [path, ancestorNode] = _topology->getShortestPath(rhsNode, lhsNode);
 
         switch (path) {
             case PlanGraphTopology::PathToDependency::SameVar:
@@ -607,7 +611,10 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {
                 // Join
-                JoinNode* join = _tree->create<JoinNode>();
+                const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
+                JoinNode* join = _tree->create<JoinNode>(varDecl,
+                                                         varDecl,
+                                                         JoinType::COMMON_ANCESTOR);
                 rhsNode->connectOut(join);
                 lhsNode->connectOut(join);
 
@@ -631,7 +638,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
 
 void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
     FilterNode* filter = _variables->getNodeFilter(node);
-    const PlanGraphTopology::PathToDependency path = _topology->getShortestPath(node, dependency);
+    const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
 
     switch (path) {
         case PlanGraphTopology::PathToDependency::SameVar:
@@ -640,9 +647,10 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
         }
 
         case PlanGraphTopology::PathToDependency::UndirectedPath: {
-            // If had to walk both backward and forward
-            // Join
-            JoinNode* join = _tree->insertBefore<JoinNode>(filter);
+            const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
+            JoinNode* join = _tree->create<JoinNode>(varDecl,
+                                                     varDecl,
+                                                     JoinType::COMMON_ANCESTOR);
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
             return;

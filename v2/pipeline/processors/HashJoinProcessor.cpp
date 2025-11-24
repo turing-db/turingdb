@@ -45,7 +45,7 @@ std::string HashJoinProcessor::describe() const {
 
 HashJoinProcessor::HashJoinProcessor(const ColumnTag leftJoinKey,
                                      const ColumnTag rightJoinKey)
-    :_leftJoinKey(leftJoinKey),
+    : _leftJoinKey(leftJoinKey),
     _rightJoinKey(rightJoinKey)
 {
 }

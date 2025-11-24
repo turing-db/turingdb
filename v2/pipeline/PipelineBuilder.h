@@ -98,6 +98,9 @@ public:
     // Joins/Products
     // LHS is implict in @ref _pendingOutput
     PipelineBlockOutputInterface& addCartesianProduct(PipelineOutputInterface* rhs);
+    PipelineBlockOutputInterface& addHashJoin(PipelineOutputInterface* rhs,
+                                              ColumnTag leftJoinKey,
+                                              ColumnTag rightJoinKey);
 
     // Aggregations
     PipelineBlockOutputInterface& addSkip(size_t count);
@@ -119,11 +122,6 @@ public:
     void setMaterializeProc(MaterializeProcessor* matProc) { _matProc = matProc; }
     MaterializeProcessor* getMaterializeProc() { return _matProc; }
     bool isSingleMaterializeStep() const;
-
-    // Join
-    PipelineBlockOutputInterface& addHashJoin(PipelineBlockOutputInterface* rhs,
-                                              ColumnTag leftJoinKey,
-                                              ColumnTag rightJoinKey);
 
     // Rename output
     void rename(std::string_view name) { _pendingOutput.rename(name); }

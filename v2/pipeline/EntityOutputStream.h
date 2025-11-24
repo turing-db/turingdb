@@ -78,21 +78,23 @@ public:
     struct StreamVisitor {
         T _visitor;
 
-        void operator()(const std::monostate&) const {
+        using ReturnType = decltype(_visitor(std::declval<const NodeStream&>()));
+
+        [[noreturn]] ReturnType operator()(const std::monostate& stream) const {
             throw std::runtime_error("Called StreamVisitor::operator() on empty stream");
         }
 
-        void operator()(const NodeStream& stream) const {
-            _visitor(stream);
+        ReturnType operator()(const NodeStream& stream) const {
+            return _visitor(stream);
         }
 
-        void operator()(const EdgeStream& stream) const {
-            _visitor(stream);
+        ReturnType operator()(const EdgeStream& stream) const {
+            return _visitor(stream);
         }
     };
 
-    void visit(const auto& visitor) const {
-        std::visit(StreamVisitor<decltype(visitor)> {visitor}, _stream);
+    auto visit(const auto& visitor) const {
+        return std::visit(StreamVisitor<decltype(visitor)> {visitor}, _stream);
     }
 
 private:

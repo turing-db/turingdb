@@ -3,6 +3,7 @@
 #include <queue>
 #include <unordered_set>
 
+#include "decl/VarDecl.h"
 #include "nodes/VarNode.h"
 
 using namespace db::v2;
@@ -11,30 +12,30 @@ PlanGraphTopology::PlanGraphTopology() = default;
 
 PlanGraphTopology::~PlanGraphTopology() = default;
 
-PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraphNode* origin,
-                                                                       PlanGraphNode* target) {
+PlanGraphTopology::PathInfo PlanGraphTopology::getShortestPath(PlanGraphNode* origin,
+                                                               PlanGraphNode* target) {
     // Finds the shortest path type between two nodes
     if (origin == target) {
-        return PathToDependency::SameVar;
+        return {PathToDependency::SameVar, nullptr};
     }
-    
+
     // Step 1. Setup algorithm containers
-    std::queue<std::pair<PlanGraphNode*, PathToDependency>> q;
+    std::queue<std::tuple<PlanGraphNode*, PathToDependency, PlanGraphNode*>> q;
     _visited.clear();
 
     // Step 2. Add the origin to the queue
-    q.emplace(origin, PathToDependency::BackwardPath);
+    q.emplace(origin, PathToDependency::BackwardPath, nullptr);
     _visited.insert(origin);
 
     // Step 3. Phase 1 of the algorithm
     //    - Explore the graph breadth-first from the origin node, going upward
     //    - If target is found: BackwardPath
     while (!q.empty()) {
-        auto [node, path] = q.front();
+        auto [node, path, commonAncestor] = q.front();
         q.pop();
 
         if (node == target) {
-            return path;
+            return {path, commonAncestor};
         }
 
         for (const auto& in : node->inputs()) {
@@ -42,7 +43,7 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraph
                 continue; // Already visited
             }
 
-            q.emplace(in, path);
+            q.emplace(in, path, commonAncestor);
         }
 
         for (const auto& out : node->outputs()) {
@@ -50,12 +51,19 @@ PlanGraphTopology::PathToDependency PlanGraphTopology::getShortestPath(PlanGraph
                 continue; // Already visited
             }
 
-            q.emplace(out, PathToDependency::UndirectedPath);
+            // If the commonAncestor is not null that means we are already exploring
+            // an undirected path and pass continue to pass the same
+            // common ancestor node
+            if (commonAncestor != nullptr) {
+                q.emplace(out, PathToDependency::UndirectedPath, commonAncestor);
+            } else {
+                q.emplace(out, PathToDependency::UndirectedPath, node);
+            }
         }
     }
 
     // If we reach here, we did not find a path
-    return PathToDependency::NoPath;
+    return {PathToDependency::NoPath, nullptr};
 }
 
 PlanGraphNode* PlanGraphTopology::getBranchTip(PlanGraphNode* origin) {

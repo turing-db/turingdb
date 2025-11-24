@@ -57,8 +57,8 @@ void concatDataframeShape(LocalMemory* mem,
 
 void createHashJoinDataFrameShape(LocalMemory* mem,
                                   DataframeManager* dfMan,
-                                  Dataframe* leftSrc,
-                                  Dataframe* rightSrc,
+                                  const Dataframe* leftSrc,
+                                  const Dataframe* rightSrc,
                                   Dataframe* dest,
                                   ColumnTag leftJoinKeyTag,
                                   ColumnTag rightJoinKeyTag) {
@@ -92,7 +92,6 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
     auto* newNamedCol = NamedColumn::create(dfMan, newCol, joinColTag);
     dest->addColumn(newNamedCol);
 }
-
 }
 
 PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
@@ -337,7 +336,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineBlockOutputInterface* rhs,
+PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterface* rhs,
                                                            ColumnTag leftJoinKey,
                                                            ColumnTag rightJoinKey) {
     HashJoinProcessor* join = HashJoinProcessor::create(_pipeline,
@@ -347,8 +346,9 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineBlockOutputIn
     _pendingOutput.connectTo(join->leftInput());
     rhs->connectTo(join->rightInput());
 
-    Dataframe* leftDf = join->leftInput().getDataframe();
-    Dataframe* rightDf = join->rightInput().getDataframe();
+    const Dataframe* leftDf = join->leftInput().getDataframe();
+    const Dataframe* rightDf = join->rightInput().getDataframe();
+
 
     PipelineBlockOutputInterface& outInterface = join->output();
     Dataframe* outDf = outInterface.getDataframe();
@@ -362,7 +362,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineBlockOutputIn
                                  leftJoinKey,
                                  rightJoinKey);
 
+    auto joinTag = outDf->cols().back()->getTag();
+
+    outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
     _pendingOutput.setInterface(&outInterface);
+
     return outInterface;
 }
 

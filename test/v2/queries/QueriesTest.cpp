@@ -787,13 +787,367 @@ TEST_F(QueriesTest, threeCascadingScanNodesCartProd) {
     EXPECT_TRUE(expectedRows.equals(actualRows));
 }
 
+TEST_F(QueriesTest, simpleAncestorJoinTest) {
+    using Rows = LineContainer<NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs people;
+    ColumnNodeIDs interests;
+    std::unordered_map<NodeID, std::vector<NodeID>> personToInterestMap;
+
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
+                              [&](const Block& block) -> void {
+                                  ASSERT_EQ(block.size(), 2);
+                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
+                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < people.size(); ++i) {
+        personToInterestMap[people[i]].emplace_back(interests[i]);
+    }
+
+    for (auto& entry : personToInterestMap) {
+        for (auto& it : entry.second) {
+            for (auto& it2 : entry.second) {
+                expectedRows.add({entry.first, it, it2});
+            }
+        }
+    }
+
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query = "MATCH (a)-->(c),(a)-->(b) RETURN a,b,c";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 3);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, doubleAncestorJoinTest) {
+    using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs people;
+    ColumnNodeIDs interests;
+    std::unordered_map<NodeID, std::vector<NodeID>> personToInterestMap;
+
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
+                              [&](const Block& block) -> void {
+                                  ASSERT_EQ(block.size(), 2);
+                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
+                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < people.size(); ++i) {
+        personToInterestMap[people[i]].emplace_back(interests[i]);
+    }
+
+    for (auto& entry : personToInterestMap) {
+        for (auto& it : entry.second) {
+            for (auto& it2 : entry.second) {
+                for (auto& it3 : entry.second) {
+                    expectedRows.add({entry.first, it, it2, it3});
+                }
+            }
+        }
+    }
+
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query = "MATCH (a)-->(c),(a)-->(b), (a)-->(d) RETURN a,b,c,d";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 4);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
+                const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr), d->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, simpleSucessorJoinTest) {
+    using Rows = LineContainer<NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs people;
+    ColumnNodeIDs interests;
+    std::unordered_map<NodeID, std::vector<NodeID>> interestToPersonMap;
+
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
+                              [&](const Block& block) -> void {
+                                  ASSERT_EQ(block.size(), 2);
+                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
+                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < people.size(); ++i) {
+        interestToPersonMap[interests[i]].emplace_back(people[i]);
+    }
+
+    for (auto& entry : interestToPersonMap) {
+        for (auto& it : entry.second) {
+            for (auto& it2 : entry.second) {
+                expectedRows.add({it, it2, entry.first});
+            }
+        }
+    }
+
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query = "MATCH (a)-->(c),(b)-->(c) RETURN a,b,c";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 3);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, doubleSucessorJoinTest) {
+    using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs people;
+    ColumnNodeIDs interests;
+    std::unordered_map<NodeID, std::vector<NodeID>> interestToPersonMap;
+
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
+                              [&](const Block& block) -> void {
+                                  ASSERT_EQ(block.size(), 2);
+                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
+                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < people.size(); ++i) {
+        interestToPersonMap[interests[i]].emplace_back(people[i]);
+    }
+
+    for (auto& entry : interestToPersonMap) {
+        for (auto& it : entry.second) {
+            for (auto& it2 : entry.second) {
+                for (auto& it3 : entry.second) {
+                    expectedRows.add({it, it2, it3, entry.first});
+                }
+            }
+        }
+    }
+
+    Rows actualRows;
+    {
+        // The insertion order of the join column in the return must match the insertion
+        // order of the join column in the expectedRow line container
+        constexpr std::string_view query = "MATCH (a)-->(c),(d)-->(c),(b)-->(c) RETURN a,b,d,c";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 4);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
+                const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr), d->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, sucessorJoinToExpandEdgeTest) {
+    using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs col1;
+    ColumnNodeIDs col2;
+    std::unordered_map<NodeID, std::vector<NodeID>> col1ToCol2Map;
+    std::unordered_map<NodeID, std::vector<NodeID>> col2ToCol1Map;
+
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
+                              [&](const Block& block) -> void {
+                                  ASSERT_EQ(block.size(), 2);
+                                  col1 = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
+                                  col2 = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < col2.size(); ++i) {
+        col2ToCol1Map[col2[i]].emplace_back(col1[i]);
+        col1ToCol2Map[col1[i]].emplace_back(col2[i]);
+    }
+
+    for (auto& entry : col2ToCol1Map) {
+        for (auto& it : entry.second) {
+            for (auto& it2 : entry.second) {
+                for (auto& it3 : col1ToCol2Map[entry.first]) {
+                    expectedRows.add({it, it2, entry.first, it3});
+                }
+            }
+        }
+    }
+
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query = "MATCH (a)-->(c),(b)-->(c)-->(d) RETURN a,b,c,d";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 4);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
+                const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr), d->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+TEST_F(QueriesTest, xShapedJoinTest) {
+    // We only hash on the 3rd column ( the join column)
+    struct TupleHash {
+        size_t operator()(const std::tuple<NodeID, NodeID, NodeID>& tup) const {
+            return std::hash<uint64_t> {}(std::get<2>(tup).getValue());
+        }
+    };
+    using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs* col1;
+    ColumnNodeIDs* col2;
+    ColumnNodeIDs* col3;
+    ColumnNodeIDs* col4;
+
+    // std::unordered_map<std::tuple<NodeID,NodeID,NodeID>,std::vector<NodeID>,TupleHash> tupleToColMap;
+    std::unordered_map<NodeID, std::vector<std::tuple<NodeID, NodeID, NodeID>>> colToTupleMap;
+
+    {
+        constexpr std::string_view scanNodesQuery = "MATCH (l)-->(m), (n)-->(m)-->(p) RETURN l,n,m,p";
+        auto res = _db->queryV2(scanNodesQuery, _graphName, &_env->getMem(),
+                                [&](const Dataframe* df) -> void {
+                                    ASSERT_TRUE(df != nullptr);
+                                    ASSERT_EQ(df->size(), 4);
+                                    const auto& nCols = df->cols();
+                                    col1 = nCols.at(0)->as<ColumnNodeIDs>();
+                                    col2 = nCols.at(1)->as<ColumnNodeIDs>();
+                                    col3 = nCols.at(2)->as<ColumnNodeIDs>();
+                                    col4 = nCols.at(3)->as<ColumnNodeIDs>();
+                                });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < col1->size(); ++i) {
+        colToTupleMap[(*col3)[i]].emplace_back(std::make_tuple((*col1)[i], (*col2)[i], (*col4)[i]));
+    }
+
+    for (const auto& entry : colToTupleMap) {
+        for (auto& it : entry.second) {
+            for (auto& it2 : entry.second) {
+                auto [col1, col2, joinVal1] = it;
+                auto [unused1, unused2, joinVal2] = it2;
+                const auto t = std::make_tuple(col1, col2, entry.first, joinVal1, joinVal2);
+                expectedRows.add(t);
+            }
+        }
+    }
+
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query = "MATCH (a)-->(c)-->(d), (b)-->(c)-->(e) RETURN a,b,c,d,e";
+        QueryStatus res = _db->queryV2(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 5);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
+                const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
+                const auto* e = nCols.at(4)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr),
+                                    b->at(rowPtr),
+                                    c->at(rowPtr),
+                                    d->at(rowPtr),
+                                    e->at(rowPtr)});
+                }
+            });
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
+// The type of join for this test has not been implemented yet - so it is disabled for now
 TEST_F(QueriesTest, blockedBinaryQuery) {
     constexpr std::string_view query = "MATCH (n)-[e]->(m), (n)<-[f]-(m) return n, e, m, f";
     QueryStatus res = _db->queryV2(query, _graphName, &_env->getMem(),
                                    [&]([[maybe_unused]] const Dataframe* df) -> void {});
     ASSERT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
-    EXPECT_EQ(res.getError(), std::string("PipelineGenerator does not support PlanGraphNode: JOIN"));
+    EXPECT_EQ(res.getError(), std::string("Undirected Join Path On Common Successor Not Supported"));
 }
 
 TEST_F(QueriesTest, db_labels) {

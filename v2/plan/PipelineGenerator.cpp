@@ -31,6 +31,7 @@
 #include "processors/MaterializeProcessor.h"
 
 #include "nodes/CartesianProductNode.h"
+#include "nodes/JoinNode.h"
 #include "nodes/PlanGraphNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/VarNode.h"
@@ -266,7 +267,9 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
             return translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
         break;
-
+        case PlanGraphOpcode::JOIN:
+            return translateJoinNode(static_cast<JoinNode*>(node));
+        break;
         case PlanGraphOpcode::GET_PROPERTY:
             return translateGetPropertyNode(static_cast<GetPropertyNode*>(node));
         break;
@@ -288,7 +291,6 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
-        case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::FUNC_EVAL:
@@ -536,7 +538,57 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 }
 
 PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
-    throw FatalException("Join Processor not implemented");
+    if (!_binaryVisitedMap.contains(node)) {
+        throw PipelineException("Attempted to translate JoinNode which was "
+                                "not already encountered.");
+    }
+
+    PipelineOutputInterface* inputA = _builder.getPendingOutputInterface();
+    auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
+
+    PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
+    PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
+
+    // LHS is implicit in @ref _pendingOutput
+    _builder.getPendingOutput().updateInterface(lhs);
+
+    const auto visitor = Overloaded {
+        [](const EntityOutputStream::NodeStream& stream) -> ColumnTag {
+            return stream._nodeIDsTag;
+        },
+        [](const EntityOutputStream::EdgeStream& stream) -> ColumnTag {
+            return stream._otherIDsTag;
+        },
+    };
+
+    ColumnTag leftJoinTag;
+    ColumnTag rightJoinTag;
+
+    switch (node->getJoinType()) {
+        case JoinType::COMMON_ANCESTOR: {
+            leftJoinTag = _declToColumn.find(node->getLeftVarDecl())->second;
+            rightJoinTag = _declToColumn.find(node->getRightVarDecl())->second;
+            break;
+        }
+        case JoinType::COMMON_SUCCESSOR: {
+            leftJoinTag = lhs->getStream().visit(visitor);
+            rightJoinTag = rhs->getStream().visit(visitor);
+            break;
+        }
+        case JoinType::DIAMOND: {
+            throw PlannerException("Undirected Join Path On Common Successor Not Supported");
+        }
+        case JoinType::PREDICATE: {
+            throw PlannerException("Join On Predicates Not Been Supported");
+        }
+    }
+
+    const auto& outputIf = _builder.addHashJoin(rhs, leftJoinTag, rightJoinTag);
+    _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
+                                                                   _mem,
+                                                                   outputIf.getDataframe()));
+
+    return _builder.getPendingOutputInterface();
 }
 
 PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* node) {

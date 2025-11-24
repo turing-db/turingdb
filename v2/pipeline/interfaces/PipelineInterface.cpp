@@ -11,7 +11,6 @@
 #include "PipelineValueOutputInterface.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-#include "Processor.h"
 
 #include "PipelineException.h"
 
