@@ -3,6 +3,7 @@
 #include <stack>
 
 #include <spdlog/fmt/fmt.h>
+#include <string_view>
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
@@ -10,6 +11,7 @@
 #include "Symbol.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
+#include "decl/PatternData.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/SymbolExpr.h"
@@ -17,6 +19,7 @@
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/GetPropertyNode.h"
 #include "procedures/ProcedureBlueprintMap.h"
+#include "processors/WriteProcessorTypes.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -752,6 +755,61 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         }
     }
 
-    _builder.addWrite(delNodes, delEdges);
+    WriteProcessor::PendingNodes penNodes;
+    {
+        for (const WriteNode::PendingNode& pendingPlanNode : node->pendingNodes()) {
+            WriteProcessorTypes::PendingNode pendingNode;
+            const NodePatternData* const data = pendingPlanNode._data;
+
+            // XXX: Does the plan graph ensure a valid node? e.g. at least one label, etc?
+            { // Labels
+                const std::span labels = data->labelConstraints();
+                // Copy labels from PlanGraph pending node struct to WriteProcessor struct
+                pendingNode._labels.insert(cbegin(pendingNode._labels),
+                                           begin(labels),
+                                           end(labels));
+            }
+
+            // Properties
+            for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
+                const auto& [name, type, expr] = propConstr;
+
+                // TODO: Verify this var has a column
+                const ColumnTag propCol = _declToColumn[expr->getExprVarDecl()];
+
+                pendingNode._properties.emplace_back(name, type, propCol);
+            }
+
+            penNodes.push_back(pendingNode);
+        }
+    }
+
+    WriteProcessor::PendingEdges penEdges;
+    {
+        for (const WriteNode::PendingEdge& pendingPlanEdge : node->pendingEdges()) {
+            WriteProcessorTypes::PendingEdge pendingEdge;
+            const EdgePatternData* const data = pendingPlanEdge._data;
+
+            { // EdgeType
+                const std::span edgeTypes = data->edgeTypeConstraints();
+                bioassert(edgeTypes.size() == 1);
+                std::string_view edgeType = edgeTypes.front();
+
+                pendingEdge._edgeType = edgeType;
+            }
+
+            // Properties
+            for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
+                const auto& [name, type, expr] = propConstr;
+
+                // TODO: Verify this var has a column
+                const ColumnTag propCol = _declToColumn[expr->getExprVarDecl()];
+
+                pendingEdge._properties.emplace_back(name, type, propCol);
+            }
+        }
+    }
+
+    _builder.addWrite(delNodes, delEdges, penNodes);
     return _builder.getPendingOutputInterface();
 }

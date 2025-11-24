@@ -89,6 +89,10 @@ void WriteProcessor::execute() {
     if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
         performDeletions();
     }
+
+    if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
+        performCreations();
+    }
     finish();
 }
 
@@ -122,5 +126,14 @@ void WriteProcessor::performDeletions() {
 
         validateDeletions(reader, edgeColumn);
         _writeBuffer->addDeletedEdges(edgeColumn->getRaw());
+    }
+}
+
+void WriteProcessor::performCreations() {
+    for (const auto& pendingNode : _pendingNodes) {
+        // TODO: Throw an exception, or make an implict assumption that we have valid
+        // labels
+        bioassert(pendingNode._labels.size() > 1);
+
     }
 }

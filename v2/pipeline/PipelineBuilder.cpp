@@ -458,7 +458,8 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
-                                                        const WriteProcessor::DeletedEdges& edgeColumnsToDelete) {
+                                                        const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
+                                                        const WriteProcessor::PendingNodes& pendingNodes) {
     auto* processor = WriteProcessor::create(_pipeline);
 
     processor->setDeletedNodes(nodeColumnsToDelete);
