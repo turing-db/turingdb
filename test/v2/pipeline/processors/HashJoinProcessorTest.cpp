@@ -308,10 +308,10 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerJoinKey) {
 
     auto [transaction, view, reader] = readGraph();
 
-    constexpr size_t LHS_NUM_ROWS = 10;
+    constexpr size_t RHS_NUM_ROWS = 10;
     constexpr size_t LHS_NUM_COLS = 3;
 
-    constexpr size_t RHS_NUM_ROWS = 5;
+    constexpr size_t LHS_NUM_ROWS = 5;
     constexpr size_t RHS_NUM_COLS = 3;
 
     /*
@@ -333,23 +333,23 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerJoinKey) {
             return;
         }
 
-        ASSERT_EQ(df->size(), LHS_NUM_COLS);
-        for (size_t colPtr = 0; colPtr < LHS_NUM_COLS - 1; colPtr++) {
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < RHS_NUM_COLS - 1; colPtr++) {
             ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
-            col->resize(LHS_NUM_ROWS);
+            col->resize(RHS_NUM_ROWS);
             std::iota(col->begin(), col->end(), (colPtr + 1) * 10 + 1);
         }
 
         // Alloc Join Column
-        ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[LHS_NUM_COLS - 1]->getColumn());
+        ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[RHS_NUM_COLS - 1]->getColumn());
         ASSERT_TRUE(col != nullptr);
         ASSERT_TRUE(col->empty());
-        col->resize(LHS_NUM_ROWS);
+        col->resize(RHS_NUM_ROWS);
         std::generate(col->begin(), col->end(), [n = 2]() mutable { return n++ / 2; });
 
-        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        ASSERT_EQ(df->size(), RHS_NUM_COLS);
         isFinished = true;
     };
 
@@ -367,24 +367,24 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerJoinKey) {
             return;
         }
 
-        ASSERT_EQ(df->size(), RHS_NUM_COLS);
-        for (size_t colPtr = 0; colPtr < RHS_NUM_COLS - 1; colPtr++) {
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
+        for (size_t colPtr = 0; colPtr < LHS_NUM_COLS - 1; colPtr++) {
             ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
-            col->resize(RHS_NUM_ROWS);
+            col->resize(LHS_NUM_ROWS);
 
-            std::iota(col->begin(), col->end(), (colPtr + LHS_NUM_COLS) * (10) + 1);
+            std::iota(col->begin(), col->end(), (colPtr + RHS_NUM_COLS) * (10) + 1);
         }
 
         // Allocate The Join Column
-        ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[RHS_NUM_COLS - 1]->getColumn());
+        ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[LHS_NUM_COLS - 1]->getColumn());
         ASSERT_TRUE(col != nullptr);
         ASSERT_TRUE(col->empty());
-        col->resize(RHS_NUM_ROWS);
+        col->resize(LHS_NUM_ROWS);
         std::iota(col->begin(), col->end(), 1);
 
-        ASSERT_EQ(df->size(), RHS_NUM_COLS);
+        ASSERT_EQ(df->size(), LHS_NUM_COLS);
         isFinished = true;
     };
     ColumnTag joinKey {0};
@@ -1348,26 +1348,27 @@ TEST_F(HashJoinProcessorTest, finishPausedStreamAndContinueToProcessTest) {
 // The below test helps test the code path of right joins
 // but this doesn't work right now because of how we execute
 // the pipeline so it is disabled for now
-TEST_F(HashJoinProcessorTest, DISABLED_DISABLED_multipleValuesPerKeyWithChunkedInputs) {
+TEST_F(HashJoinProcessorTest, multipleValuesPerKeyWithChunkedInputs) {
     using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID, NodeID>;
     const size_t chunkSize = 100;
     auto [transaction, view, reader] = readGraph();
 
-    constexpr size_t LHS_NUM_ROWS = 1000;
+    constexpr size_t LHS_NUM_ROWS = 200;
     constexpr size_t LHS_NUM_COLS = 3;
 
-    constexpr size_t RHS_NUM_ROWS = 200;
+    constexpr size_t RHS_NUM_ROWS = 1000;
     constexpr size_t RHS_NUM_COLS = 3;
 
     /*
      * Generate Dataframe looking like:
      * 1001   2001   1
-     * 1002   2002   2
-     * 1003   2003   3
-     * 1004   2004   4
-     * 1005   2005   5
+     * 1002   2002   1
+     * 1003   2003   1
+     * 1004   2004   1
+     * 1005   2005   1
+     * 1006   2006   2
      * ....   ....  ...
-     * 2000   3000 1000
+     * 2000   3000  200
      */
 
     size_t totalRightOutput = 0;
@@ -1382,14 +1383,14 @@ TEST_F(HashJoinProcessorTest, DISABLED_DISABLED_multipleValuesPerKeyWithChunkedI
             ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             col->resize(outPutSize);
-            std::iota(col->begin(), col->end(), (colPtr + 1) * 1000 + totalRightOutput);
+            std::iota(col->begin(), col->end(), (colPtr + 1) * 1000 + totalRightOutput + 1);
         }
 
         // Alloc Join Column
         ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[RHS_NUM_COLS - 1]->getColumn());
         ASSERT_TRUE(col != nullptr);
         col->resize(outPutSize);
-        std::iota(col->begin(), col->end(), totalRightOutput);
+        std::generate(col->begin(), col->end(), [n = totalRightOutput + 5]() mutable { return n++ / 5; });
 
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
 
@@ -1406,8 +1407,9 @@ TEST_F(HashJoinProcessorTest, DISABLED_DISABLED_multipleValuesPerKeyWithChunkedI
      * 3003   4003   3
      * 3004   4004   4
      * 3005   4005   5
+     * 3006   4006   6
      * ....   ....  ...
-     * 4000   5000 1000
+     * 3200   4200  200
      */
 
     size_t totalLeftOutput = 0;
@@ -1422,15 +1424,14 @@ TEST_F(HashJoinProcessorTest, DISABLED_DISABLED_multipleValuesPerKeyWithChunkedI
             ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             col->resize(outPutSize);
-
-            std::iota(col->begin(), col->end(), (colPtr + LHS_NUM_COLS) * (1000) + totalLeftOutput);
+            std::iota(col->begin(), col->end(), (colPtr + LHS_NUM_COLS) * (1000) + totalLeftOutput + 1);
         }
 
         // Allocate The Join Column
         ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[LHS_NUM_COLS - 1]->getColumn());
         ASSERT_TRUE(col != nullptr);
         col->resize(outPutSize);
-        std::generate(col->begin(), col->end(), [n = totalLeftOutput]() mutable { return n++ / 5; });
+        std::iota(col->begin(), col->end(), totalLeftOutput + 1);
 
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
         totalLeftOutput += outPutSize;
@@ -1459,7 +1460,6 @@ TEST_F(HashJoinProcessorTest, DISABLED_DISABLED_multipleValuesPerKeyWithChunkedI
         ASSERT_EQ(hashJoin.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS - 1);
     }
 
-    // constexpr size_t NUM_MATCHES = 1000000;
     /*
      * Output Dataframe should be looking like:
      * 101 201 301 401 1
@@ -1469,20 +1469,20 @@ TEST_F(HashJoinProcessorTest, DISABLED_DISABLED_multipleValuesPerKeyWithChunkedI
      * 105 205 305 405 5
      */
 
-    const auto& expectedThirdCol = std::views::iota(1000, 2000);
-    const auto& expectedFourthCol = std::views::iota(2000, 300);
+    const auto& expectedThirdCol = std::views::iota(1001, 2001);
+    const auto& expectedFourthCol = std::views::iota(2001, 3001);
 
-    const auto& expectedFirstCol = std::views::iota(0, (200*5)) | 
+    const auto& expectedFirstCol = std::views::iota(5, 1001) | 
                                    std::views::transform([](int i) {
                                         return 3000 + (i/5);
                                    });
-    const auto& expectedSecondCol = std::views::iota(0, (200*5)) | 
+    const auto& expectedSecondCol = std::views::iota(5, 1001) | 
                                    std::views::transform([](int i) {
                                         return 4000 + (i/5);
                                    });
 
 
-    const auto expectedJoinCol = std::views::iota(0, 1000) | 
+    const auto expectedJoinCol = std::views::iota(5, 1001) | 
                              std::views::transform([](int i) {
                                  return (i / 5);
                              });
