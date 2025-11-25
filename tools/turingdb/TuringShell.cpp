@@ -460,27 +460,36 @@ void TuringShell::processLine(std::string& line) {
 
     // Execute query
     tabulate::Table table;
+    size_t rowCount = 0;
 
     QueryStatus res;
     if (line.starts_with("#v2")) {
         const std::string_view query = std::string_view(line).substr(3);
         size_t execCount = 0;
 
-        auto queryCallback = [&table, &execCount](const Dataframe* df) -> void {
+        auto queryCallback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
+            rowCount += df->getRowCount();
+
+            if (_quiet) {
+                return;
+            }
+
             queryCallbackV2(execCount++, df, table);
         };
 
-        res = _quiet 
-            ? _turingDB.queryV2(query, _graphName, _mem, [](const Dataframe*) {}, _hash, _changeID)
-            : _turingDB.queryV2(query, _graphName, _mem, queryCallback, _hash, _changeID);
+        res = _turingDB.queryV2(query, _graphName, _mem, queryCallback, _hash, _changeID);
     } else {
-        auto queryCallback = [&table](const Block& block) -> void {
+        auto queryCallback = [&table, &rowCount, this](const Block& block) -> void {
+            rowCount += block.getRowCount();
+
+            if (_quiet) {
+                return;
+            }
+
             queryCallbackV1(block, table);
         };
     
-        res = _quiet 
-            ? _turingDB.query(line, _graphName, _mem, [](const Block&) {}, _hash, _changeID)
-            : _turingDB.query(line, _graphName, _mem, queryCallback, _hash, _changeID);
+        res = _turingDB.query(line, _graphName, _mem, queryCallback, _hash, _changeID);
     }
 
     checkShellContext();
@@ -501,8 +510,6 @@ void TuringShell::processLine(std::string& line) {
         std::cout << table << "\n";
     }
 
-    std::cout << "Query executed in " << res.getTotalTime().count() << " ms.\n";
-
     {
         std::string profilerOutput;
         Profiler::dumpAndClear(profilerOutput);
@@ -510,6 +517,9 @@ void TuringShell::processLine(std::string& line) {
             fmt::print("{}\n", profilerOutput);
         }
     }
+
+    std::cout << "Query returned " << rowCount << " rows.\n";
+    std::cout << "Query executed in " << res.getTotalTime().count() << " ms.\n";
 }
 
 bool TuringShell::setGraphName(const std::string& graphName) {
