@@ -12,6 +12,7 @@
 #include "nodes/AggregateEvalNode.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
+#include "nodes/GetPropertyNode.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -205,6 +206,9 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::GET_PROPERTY:
+            return translateGetPropertyNode(static_cast<GetPropertyNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
             return translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
         break;
@@ -277,6 +281,66 @@ PipelineOutputInterface* PipelineGenerator::translateGetEdgesNode(GetEdgesNode* 
 
 PipelineOutputInterface* PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTargetNode* node) {
     _builder.projectEdgesOnOtherIDs();
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetPropertyNode* node) {
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const VarDecl* entityDecl = node->getEntityVarDecl();
+    if (!entityDecl) {
+        throw PlannerException("GetPropertyNode does not have an entity variable declaration");
+    }
+
+
+    const std::string propName {node->getPropName()};
+
+    PipelineValuesOutputInterface* output = nullptr;
+
+    const std::optional<PropertyType> foundProp = _view.read().getMetadata().propTypes().get(propName);
+    if (!foundProp) {
+        throw PlannerException(fmt::format("Property type {} does not exist", propName));
+    }
+
+    if (entityDecl->getType() == EvaluatedType::NodePattern) {
+        const auto process = [&]<SupportedType Type> {
+            output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
+        };
+
+        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+    } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
+        const auto process = [&]<SupportedType Type> {
+            output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
+        };
+
+        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+    } else {
+        throw PlannerException(fmt::format(
+            "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
+            EvaluatedTypeName::value(entityDecl->getType())));
+    }
+
+    const Expr* expr = node->getExpr();
+    if (!expr) {
+        throw PlannerException("GetPropertyNode does not have an expression");
+    }
+
+    const VarDecl* exprDecl = expr->getExprVarDecl();
+    if (!exprDecl) [[unlikely]] {
+        throw PlannerException("GetPropertyNode does not have an expression variable declaration");
+    }
+
+    const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)expr);
+    if (exprStrRep.empty()) [[unlikely]] {
+        throw PlannerException("Unknown error. Could not get string representation of expression");
+    }
+
+    output->rename(exprStrRep);
+
+    _declToColumn[exprDecl] = output->getValues()->getTag();
+
     return _builder.getPendingOutputInterface();
 }
 
