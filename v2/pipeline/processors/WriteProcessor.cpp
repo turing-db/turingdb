@@ -166,18 +166,33 @@ void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input
     const size_t numIters = _input.getDataframe()->getRowCount();
 
-    // 1. Node creations
-    for (size_t i = 0 ; i < numIters; i++) {
-        for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
-            const std::span labels = node._labels;
-            // TODO: Is this checked in planner?
-            bioassert(labels.size() > 0);
-            const LabelSet lblset = getLabelSet(labels);
 
+    // 1. Node creations
+    NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
+
+    for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
+        const std::span labels = node._labels;
+        // TODO: Is this checked in planner?
+        bioassert(labels.size() > 0);
+        const LabelSet lblset = getLabelSet(labels);
+
+        // Add each node that we need to the CommitWriteBuffer
+        for (size_t i = 0; i < numIters; i++) {
             CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
             newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(lblset);
         }
-    }
 
+        // Fill the output column with "fake IDs"
+        auto* col =
+            _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
+        bioassert(col);
+        bioassert(col->size() == 0);
+
+        std::vector<NodeID>& raw = col->getRaw();
+        raw.resize(raw.size() + numIters);
+
+        std::iota(col->begin(), col->end(), nextNodeID);
+        nextNodeID += numIters;
+    }
     // 2. Link up edges
 }
