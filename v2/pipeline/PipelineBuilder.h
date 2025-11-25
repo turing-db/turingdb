@@ -46,6 +46,7 @@ public:
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
+    PipelineBlockOutputInterface& addScanLabelsProcedure(bool writeIDs = true, bool writeNames = true);
 
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
@@ -116,12 +117,15 @@ public:
         return allocColumn<ColumnType>(_pendingOutput.getDataframe(), tag);
     }
 
+    const Processor* getLastProcessor() const { return _lastProc; }
+
 private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};
     DataframeManager* _dfMan {nullptr};
     PendingOutputView _pendingOutput;
     MaterializeProcessor* _matProc {nullptr};
+    Processor* _lastProc {nullptr};
     bool _isMaterializeOpen {false};
 
     template <typename ColumnType>

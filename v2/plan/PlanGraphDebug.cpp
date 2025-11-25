@@ -1,6 +1,5 @@
 #include "PlanGraphDebug.h"
 
-#include "FunctionSignature.h"
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/FuncEvalNode.h"
@@ -15,12 +14,13 @@
 
 #include "stmt/OrderByItem.h"
 #include "views/GraphView.h"
-
+#include "FunctionSignature.h"
+#include "YieldClause.h"
+#include "YieldItems.h"
 #include "PlanGraph.h"
 #include "Predicate.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
-
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 
@@ -281,6 +281,16 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                           && n->getFuncExpr()->getFunctionInvocation()->getSignature());
                 const auto* signature = n->getFuncExpr()->getFunctionInvocation()->getSignature();
                 output << "        __func__ " << signature->_fullName << "\n";
+
+                const auto* yield = n->getYield();
+                if (!yield) {
+                    continue;
+                }
+
+                output << "        __yield__\n";
+                for (const auto* item : *yield->getItems()) {
+                    output << "        __yield_item__: " << item->getSymbol()->getName() << "\n";
+                }
             } break;
 
             default: {

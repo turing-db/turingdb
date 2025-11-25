@@ -113,9 +113,9 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
     bioassert(callStmt->getFunc() && "Function invocation expression is null");
 
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
-    ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr);
-
     YieldClause* yield = callStmt->getYield();
+
+    ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
 
     if (!yield) {
         bioassert(callStmt->isStandaloneCall() && "Procedure call without YIELD must be a standalone CALL");

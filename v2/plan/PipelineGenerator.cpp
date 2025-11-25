@@ -7,12 +7,16 @@
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
+#include "Symbol.h"
+#include "YieldClause.h"
+#include "YieldItems.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
-#include "nodes/AggregateEvalNode.h"
+#include "expr/SymbolExpr.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/GetPropertyNode.h"
+#include "processors/ScanLabelsProcessor.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -29,6 +33,8 @@
 #include "nodes/GetEdgeTargetNode.h"
 #include "nodes/GetEdgesNode.h"
 #include "nodes/GetInEdgesNode.h"
+#include "nodes/AggregateEvalNode.h"
+#include "nodes/ProcedureEvalNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -160,51 +166,39 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
     switch (node->getOpcode()) {
         case PlanGraphOpcode::VAR:
             return translateVarNode(static_cast<VarNode*>(node));
-        break;
 
         case PlanGraphOpcode::SCAN_NODES:
             return translateScanNodesNode(static_cast<ScanNodesNode*>(node));
-        break;
 
         case PlanGraphOpcode::GET_OUT_EDGES:
             return translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
-        break;
 
         case PlanGraphOpcode::PRODUCE_RESULTS:
             return translateProduceResultsNode(static_cast<ProduceResultsNode*>(node));
-        break;
 
         case PlanGraphOpcode::FILTER_NODE:
             return translateNodeFilterNode(static_cast<NodeFilterNode*>(node));
-        break;
 
         case PlanGraphOpcode::FILTER_EDGE:
             return translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node));
-        break;
 
         case PlanGraphOpcode::SKIP:
             return translateSkipNode(static_cast<SkipNode*>(node));
-        break;
 
         case PlanGraphOpcode::LIMIT:
             return translateLimitNode(static_cast<LimitNode*>(node));
-        break;
 
         case PlanGraphOpcode::GET_EDGE_TARGET:
             return translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node));
-        break;
 
         case PlanGraphOpcode::GET_IN_EDGES:
             return translateGetInEdgesNode(static_cast<GetInEdgesNode*>(node));
-        break;
 
         case PlanGraphOpcode::GET_EDGES:
             return translateGetEdgesNode(static_cast<GetEdgesNode*>(node));
-        break;
 
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
             return translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
-        break;
 
         case PlanGraphOpcode::GET_PROPERTY:
             return translateGetPropertyNode(static_cast<GetPropertyNode*>(node));
@@ -212,13 +206,14 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
             return translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
-        break;
 
         case PlanGraphOpcode::AGGREGATE_EVAL:
             return translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
         break;
 
         case PlanGraphOpcode::PROCEDURE_EVAL:
+            return translateProcedureEvalNode(static_cast<ProcedureEvalNode*>(node));
+
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
@@ -229,8 +224,9 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
             throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
-                PlanGraphOpcodeDescription::value(node->getOpcode())));
+                                               PlanGraphOpcodeDescription::value(node->getOpcode())));
     }
+
     throw FatalException("Failed to match against PlanGraphOpcode");
 }
 
@@ -427,22 +423,27 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     const Projection* projNode = node->getProjection();
 
-    std::vector<ProjectionItem> items;
+    if (projNode) {
+        std::vector<ProjectionItem> items;
+        // No projection can happen in the case of a Standalone call
+        // in which case, we can simply output the whole dataframe
 
-    for (const Expr* item : projNode->items()) {
-        const VarDecl* decl = item->getExprVarDecl();
+        for (const Expr* item : projNode->items()) {
+            const VarDecl* decl = item->getExprVarDecl();
 
-        if (!decl) {
-            throw PlannerException("Projection item does not have a variable declaration");
+            if (!decl) {
+                throw PlannerException("Projection item does not have a variable declaration");
+            }
+
+            const ColumnTag tag = _declToColumn.at(decl);
+
+            const std::string_view repr = _sourceManager->getStringRepr((std::uintptr_t)item);
+
+            items.push_back({tag, repr});
         }
 
-        const ColumnTag tag = _declToColumn.at(decl);
-        const std::string_view repr = _sourceManager->getStringRepr((std::uintptr_t)item);
-
-        items.push_back({tag, repr});
+        _builder.addProjection(items);
     }
-
-    _builder.addProjection(items);
 
     auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -605,5 +606,95 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
             throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->_fullName));
         }
     }
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(ProcedureEvalNode* node) {
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const FunctionInvocationExpr* funcExpr = node->getFuncExpr();
+    const YieldClause* yield = node->getYield();
+
+    const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+    const ExprChain* args = invocation->getArguments();
+    const FunctionSignature* signature = invocation->getSignature();
+
+    if (!invocation) [[unlikely]] {
+        throw PlannerException("FunctionInvocationExpr does not have a FunctionInvocation");
+    }
+
+    if (!args) [[unlikely]] {
+        throw PlannerException("FunctionInvocation does not have arguments");
+    }
+
+    if (!signature) [[unlikely]] {
+        throw PlannerException("FunctionInvocation does not have a FunctionSignature");
+    }
+
+    struct WriteInfo {
+        bool _write {false};
+        std::string_view _colName;
+        const VarDecl* _exprDecl {nullptr};
+    };
+
+    if (signature->_fullName == "db.labels") {
+        WriteInfo writeIDs;
+        WriteInfo writeNames;
+
+        if (!yield) {
+            // No YIELD, means write all columns
+            writeIDs._write = true;
+            writeIDs._colName = "id";
+            writeNames._write = true;
+            writeNames._colName = "label";
+        } else {
+            for (const auto* item : *yield->getItems()) {
+                const Symbol* symbol = item->getSymbol();
+                // TODO: handle the AS keyword there
+                if (symbol->getName() == "id") {
+                    writeIDs._write = true;
+                    writeIDs._colName = symbol->getName();
+                    writeIDs._exprDecl = item->getExprVarDecl();
+                } else if (symbol->getName() == "label") {
+                    writeNames._write = true;
+                    writeNames._colName = symbol->getName();
+                    writeNames._exprDecl = item->getExprVarDecl();
+                } else {
+                    throw PlannerException(fmt::format("Invalid yield item '{}'", symbol->getName()));
+                }
+            }
+        }
+
+        auto& output = _builder.addScanLabelsProcedure(writeIDs._write, writeNames._write);
+
+        const auto* proc = static_cast<const ScanLabelsProcessor*>(_builder.getLastProcessor());
+
+        Dataframe* outDf = output.getDataframe();
+
+        if (writeIDs._write) {
+            ColumnTag idsTag = proc->getIDsTag();
+            NamedColumn* idsCol = outDf->getColumn(idsTag);
+            idsCol->rename(writeIDs._colName);
+
+            if (writeIDs._exprDecl) {
+                _declToColumn[writeIDs._exprDecl] = idsTag;
+            }
+        }
+
+        if (writeNames._write) {
+            ColumnTag namesTag = proc->getNamesTag();
+            NamedColumn* namesCol = outDf->getColumn(namesTag);
+            namesCol->rename(writeNames._colName);
+
+            if (writeNames._exprDecl) {
+                _declToColumn[writeNames._exprDecl] = namesTag;
+            }
+        }
+    } else {
+        throw PlannerException(fmt::format("Database procedure '{}' is not implemented yet", signature->_fullName));
+    }
+
     return _builder.getPendingOutputInterface();
 }

@@ -32,6 +32,7 @@ class SkipNode;
 class LimitNode;
 class CartesianProductNode;
 class AggregateEvalNode;
+class ProcedureEvalNode;
 
 class PipelineGenerator {
 public:
@@ -95,6 +96,7 @@ private:
     PipelineOutputInterface* translateLimitNode(LimitNode* node);
     PipelineOutputInterface* translateCartesianProductNode(CartesianProductNode* node);
     PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
+    PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
 };
 
 }
