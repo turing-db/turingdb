@@ -16,21 +16,21 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
     decls->create("db.labels")
         .setIsDatabaseProcedure(true)
         .setReturnTypes({
-            FunctionReturnType {EvaluatedType::String,  "name"},
+            FunctionReturnType {EvaluatedType::String,  "label"},
             FunctionReturnType {EvaluatedType::Integer, "id"  },
     });
 
     decls->create("db.propertyTypes")
         .setIsDatabaseProcedure(true)
         .setReturnTypes({
-            FunctionReturnType {EvaluatedType::String,  "name"},
+            FunctionReturnType {EvaluatedType::String,  "propertyType"},
             FunctionReturnType {EvaluatedType::Integer, "id"  },
     });
 
     decls->create("db.edgeTypes")
         .setIsDatabaseProcedure(true)
         .setReturnTypes({
-            FunctionReturnType {EvaluatedType::String,  "name"},
+            FunctionReturnType {EvaluatedType::String,  "edgeType"},
             FunctionReturnType {EvaluatedType::Integer, "id"  },
     });
 

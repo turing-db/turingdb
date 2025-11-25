@@ -60,6 +60,8 @@ public:
 
     void insertDataFlowNode(VarNode* node, VarNode* dependency);
 
+    void setIsStandaloneCall(bool hasReturn) { _isStandaloneCall = hasReturn; }
+
 private:
     const CypherAST* _ast {nullptr};
     GraphView _graphView;
@@ -67,6 +69,7 @@ private:
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
     std::unique_ptr<PlanGraphTopology> _topology;
+    bool _isStandaloneCall {false};
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

@@ -379,6 +379,14 @@ orderBySSt
 
 singlePartQuery
     : returnSt { $$ = SinglePartQuery::create(ast); $$->setReturnStmt($1); LOC($$, @$); }
+    | callSt {
+        $$ = SinglePartQuery::create(ast);
+        auto* stmts = StmtContainer::create(ast);
+        $1->setStandaloneCall(true);
+        stmts->add($1);
+        $$->setReadStmts(stmts);
+        LOC($$, @$);
+      }
     | updatingStatements { $$ = SinglePartQuery::create(ast); $$->setUpdateStmts($1); LOC($$, @$); }
     | updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setUpdateStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
     | readingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setReturnStmt($2); LOC($$, @$); }

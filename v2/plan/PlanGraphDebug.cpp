@@ -8,6 +8,7 @@
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/OrderByNode.h"
+#include "nodes/ProcedureEvalNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/WriteNode.h"
@@ -270,6 +271,16 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 bioassert(decl);
                 output << "        __type__ " << ((decl->getType() == EvaluatedType::NodePattern) ? "node" : "edge") << "\n";
                 output << "        __var__ " << decl->getName() << "\n";
+            } break;
+
+            case PlanGraphOpcode::PROCEDURE_EVAL: {
+                const auto* n = dynamic_cast<ProcedureEvalNode*>(node.get());
+                bioassert(n
+                          && n->getFuncExpr()
+                          && n->getFuncExpr()->getFunctionInvocation()
+                          && n->getFuncExpr()->getFunctionInvocation()->getSignature());
+                const auto* signature = n->getFuncExpr()->getFunctionInvocation()->getSignature();
+                output << "        __func__ " << signature->_fullName << "\n";
             } break;
 
             default: {

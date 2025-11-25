@@ -18,6 +18,7 @@
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/Skip.h"
+#include "stmt/CallStmt.h"
 #include "stmt/Limit.h"
 
 using namespace db::v2;
@@ -58,9 +59,16 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
     const StmtContainer* updateStmts = query->getUpdateStmts();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
+    bool returnMandatory = updateStmts == nullptr;
+
     // Generate read statements (optional)
     if (readStmts) {
         for (const Stmt* stmt : readStmts->stmts()) {
+            if (stmt->getKind() == Stmt::Kind::CALL) {
+                if (static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
+                    returnMandatory = false;
+                }
+            }
             _readAnalyzer->analyze(stmt);
         }
     }
@@ -70,11 +78,11 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
         for (const Stmt* stmt : updateStmts->stmts()) {
             _writeAnalyzer->analyze(stmt);
         }
-    } else {
-        if (!returnStmt) {
-            // Return statement is mandatory if there are no update statements
-            throwError("Return statement is missing", query);
-        }
+    }
+
+    if (!returnStmt && returnMandatory) {
+        // Return statement is mandatory if there are no update statements
+        throwError("Return statement is missing", query);
     }
 
     // Generate return statement
