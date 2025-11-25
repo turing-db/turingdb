@@ -43,8 +43,8 @@ using namespace db::v2;
 namespace {
 
 struct TranslateNodeToken {
-    PlanGraphNode* node;
-    PipelineOutputInterface* previousInterface;
+    PlanGraphNode* _node {nullptr};
+    PipelineOutputInterface* _previousInterface {nullptr};
 };
 
 using TranslateTokenStack = std::stack<TranslateNodeToken>;
@@ -116,33 +116,40 @@ void PipelineGenerator::generate() {
         PipelineOutputInterface* outputIf = translateNode(node);
 
         for (PlanGraphNode* nextNode : node->outputs()) {
-            // Unary node case
             if (!nextNode->isBinary()) {
+                // Unary node case
+                // Push unto stack and continue
                 nodeStack.push({nextNode, outputIf});
-                continue;
+            } else {
+                // === Binary node case == 
+
+                // If the next node is a binary node we materialize for now
+                // TODO: Add a `needsMaterialised` check based on PlanNode - some binary nodes
+                // may not need their inputs materialised perhaps?
+                if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+                    _builder.addMaterialize();
+                }
+
+                const bool visited = _binaryVisitedMap.contains(nextNode);
+                if (visited) {
+                    // The binary node has been visited already, it is our second encounter
+                    // So the other input has been translated already, we can proceed through
+                    nodeStack.push({nextNode, outputIf});
+                } else {
+                    // The binary node has not been visited yet
+                    // Register info into _binaryVisitedMap
+
+                    // Record our pending interface and if we are coming from the left side
+                    const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
+                    const bool isLhs = (node == binaryNodeInputs.front());
+                    bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
+
+                    const PendingOutputView& pendingOutput = _builder.getPendingOutput();
+                    const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
+
+                    _binaryVisitedMap.emplace(nextNode, info);
+                }
             }
-            // Binary node case
-
-            // TODO: Add a `needsMaterialised` check based on PlanNode - some binary nodes
-            // may not need their inputs materialised perhaps?
-            if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
-                _builder.addMaterialize();
-            }
-
-            const bool visited = _binaryVisitedMap.contains(nextNode);
-            if (visited) {
-                nodeStack.push({nextNode, outputIf});
-                continue;
-            }
-
-            const PendingOutputView& pendingOutput = _builder.getPendingOutput();
-
-            const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
-            const bool isLhs = (node == binaryNodeInputs.front());
-            bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
-            const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
-
-            _binaryVisitedMap.emplace(nextNode, info);
         }
     }
 }
