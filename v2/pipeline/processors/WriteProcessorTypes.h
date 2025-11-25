@@ -13,9 +13,9 @@ class WriteProcessorTypes {
 public:
     struct PropertyConstraint;
 
-    using PendingNodeOffset = size_t;
+    using PendingNodeIndex = size_t;
     // TODO: Check this is what it should be
-    using IncidentNode = std::variant<PendingNodeOffset, ColumnTag>;
+    using IncidentNode = std::variant<PendingNodeIndex, ColumnTag>;
     using PropertyConstraints = std::vector<PropertyConstraint>;
 
     struct PropertyConstraint {
@@ -27,13 +27,17 @@ public:
     struct PendingNode {
         std::vector<std::string_view> _labels;
         std::vector<PropertyConstraint> _properties;
+        std::string_view _name;
+        ColumnTag _tag;
     };
 
     struct PendingEdge {
         std::vector<PropertyConstraint> _properties;
         std::string_view _edgeType;
+        std::string_view _name;
         IncidentNode _srcTag;
         IncidentNode _tgtTag;
+        ColumnTag _tag;
     };
 
     struct NodeUpdate {

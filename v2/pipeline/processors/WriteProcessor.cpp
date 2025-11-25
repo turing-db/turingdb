@@ -26,11 +26,11 @@ namespace {
 
 using PropertyConstraintsSpan = std::span<const WriteProcessorTypes::PropertyConstraint>;
 
-void addUntypedProperties(CommitWriteBuffer::UntypedProperties dest,
+[[maybe_unused]] void addUntypedProperties(CommitWriteBuffer::UntypedProperties dest,
                           const PropertyConstraintsSpan& props,
                           MetadataBuilder& mdBuilder) {
     for (const WriteProcessorTypes::PropertyConstraint prop : props) {
-        const ValueType type = prop._type;
+        [[maybe_unused]] const ValueType type = prop._type;
         // HOW: Do I know what the value of the property to set is? It will be in a column
         // (for which I have a tag) but I do not know which row.
     }
@@ -158,7 +158,7 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
 }
 
 void WriteProcessor::performCreations() {
-    for (const auto& pendingNode : _pendingNodes) {
+    for (const WriteProcessorTypes::PendingNode& pendingNode : _pendingNodes) {
         // TODO: Throw an exception, or make an implict assumption that we have valid
         // labels
         bioassert(pendingNode._labels.size() > 1);
@@ -172,7 +172,7 @@ void WriteProcessor::performCreations() {
         }
 
         {
-            const WriteProcessorTypes::PropertyConstraints& p = pendingNode._properties;
+            // const WriteProcessorTypes::PropertyConstraints& p = pendingNode._properties;
         }
     }
 }

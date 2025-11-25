@@ -11,12 +11,6 @@
 
 using namespace db;
 
-LabelID MetadataBuilder::getOrCreateLabel(const std::string& labelName) {
-    std::unique_lock lock {_spinLock};
-
-    return _metadata->_labelMap.getOrCreate(labelName);
-}
-
 LabelID MetadataBuilder::getOrCreateLabel(std::string_view labelName) {
     std::unique_lock lock {_spinLock};
 

@@ -1,5 +1,8 @@
 #include "PipelineBuilder.h"
 
+#include <iostream>
+
+
 #include "processors/CartesianProductProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
@@ -17,9 +20,15 @@
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
 #include "processors/WriteProcessor.h"
+#include "processors/WriteProcessorTypes.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
+#include "dataframe/ColumnTag.h"
+#include "dataframe/NamedColumn.h"
+
+#include "FatalException.h"
 
 using namespace db::v2;
 using namespace db;
@@ -459,18 +468,72 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
 
 PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                                         const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
-                                                        const WriteProcessor::PendingNodes& pendingNodes) {
+                                                        WriteProcessor::PendingNodes& pendingNodes,
+                                                        WriteProcessor::PendingEdges& pendingEdges) {
     auto* processor = WriteProcessor::create(_pipeline);
+
+    if (!_pendingOutput.getInterface()) {
+        throw FatalException("WriteProcessor has no input");
+    }
+
+    _pendingOutput.connectTo(processor->input());
+
+    PipelineBlockInputInterface& input = processor->input();
+    PipelineBlockOutputInterface& output = processor->output();
+    Dataframe* inDf = input.getDataframe();
+    Dataframe* outDf = output.getDataframe();
+
+    bioassert(outDf->size() == 0);
+
+    // 1. Register columns for deleted nodes and edges
+    for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
+        NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
+        // TODO: Make exception?
+        bioassert(inputColumnToDelete);
+        outDf->addColumn(inputColumnToDelete);
+    }
+    for (const ColumnTag deletedEdgeCol : edgeColumnsToDelete) {
+        NamedColumn* inputColumnToDelete = inDf->getColumn(deletedEdgeCol);
+        // TODO: Make exception?
+        bioassert(inputColumnToDelete);
+        outDf->addColumn(inputColumnToDelete);
+    }
 
     processor->setDeletedNodes(nodeColumnsToDelete);
     processor->setDeletedEdges(edgeColumnsToDelete);
 
-    PipelineBlockInputInterface& input = processor->input();
-    PipelineBlockOutputInterface& output = processor->output();
+    for (WriteProcessorTypes::PendingNode& node : pendingNodes) {
+        Column* newCol = _mem->alloc<ColumnNodeIDs>();
+        const ColumnTag newTag = _dfMan->allocTag();
+        auto* newNamedCol = NamedColumn::create(_dfMan, newCol, newTag);
+        newNamedCol->rename(node._name);
 
-    _pendingOutput.connectTo(input);
+        node._tag = newTag;
 
-    // TODO: Allocate columns
+        // XXX: Assumption that each "pendingNode" can expand to multiple nodes to be
+        // created, and that there is not one "pendingNode" for each node that will
+        // actually end up being created.
+        outDf->addColumn(newNamedCol);
+    }
+
+    for (WriteProcessorTypes::PendingEdge& edge : pendingEdges) {
+        Column* newCol = _mem->alloc<ColumnEdgeIDs>();
+        const ColumnTag newTag = _dfMan->allocTag();
+        auto* newNamedCol = NamedColumn::create(_dfMan, newCol, newTag);
+        newNamedCol->rename(edge._name);
+
+        edge._tag = newTag;
+
+        // XXX: Assumption that each "pendingNode" can expand to multiple nodes to be
+        // created, and that there is not one "pendingNode" for each node that will
+        // actually end up being created.
+        outDf->addColumn(newNamedCol);
+    }
+
+    // This function already handles duplicates, so call it after adding all our columns
+    input.propagateColumns(output);
+
+    outDf->dump(std::cout);
 
     _pendingOutput.setInterface(&output);
     return output;

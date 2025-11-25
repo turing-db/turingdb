@@ -11,6 +11,8 @@
 #include "Symbol.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
+#include "dataframe/ColumnTag.h"
+#include "dataframe/NamedColumn.h"
 #include "decl/PatternData.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
@@ -728,7 +730,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     WriteProcessor::DeletedNodes delNodes;
     { // Add the columns containing deleted node variables
         for (const VarDecl* deletedVar : node->toDeleteNodes()) {
-            auto it = _declToColumn.find(deletedVar);
+            const auto it = _declToColumn.find(deletedVar);
 
             if (it == end(_declToColumn)) {
                 throw PlannerException(fmt::format(
@@ -736,14 +738,15 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
                     deletedVar->getName()));
             }
 
-            delNodes.push_back(it->second);
+            const ColumnTag tag = it->second;
+            delNodes.push_back(tag);
         }
     }
 
     WriteProcessor::DeletedEdges delEdges;
     { // Add the columns containing deleted edge variables
         for (const VarDecl* deletedVar : node->toDeleteEdges()) {
-            auto it = _declToColumn.find(deletedVar);
+            const auto it = _declToColumn.find(deletedVar);
 
             if (it == end(_declToColumn)) {
                 throw PlannerException(fmt::format(
@@ -751,17 +754,19 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
                     deletedVar->getName()));
             }
 
-            delEdges.push_back(it->second);
+            const ColumnTag tag = it->second;
+            delEdges.push_back(tag);
         }
     }
 
     WriteProcessor::PendingNodes penNodes;
     {
         for (const WriteNode::PendingNode& pendingPlanNode : node->pendingNodes()) {
-            WriteProcessorTypes::PendingNode pendingNode;
             const NodePatternData* const data = pendingPlanNode._data;
 
             // XXX: Does the plan graph ensure a valid node? e.g. at least one label, etc?
+            WriteProcessorTypes::PendingNode pendingNode;
+            pendingNode._name = pendingPlanNode._name->getName();
             { // Labels
                 const std::span labels = data->labelConstraints();
                 // Copy labels from PlanGraph pending node struct to WriteProcessor struct
@@ -787,8 +792,10 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     WriteProcessor::PendingEdges penEdges;
     {
         for (const WriteNode::PendingEdge& pendingPlanEdge : node->pendingEdges()) {
-            WriteProcessorTypes::PendingEdge pendingEdge;
             const EdgePatternData* const data = pendingPlanEdge._data;
+
+            WriteProcessorTypes::PendingEdge pendingEdge;
+            pendingEdge._name = pendingPlanEdge._name->getName();
 
             { // EdgeType
                 const std::span edgeTypes = data->edgeTypeConstraints();
@@ -807,9 +814,15 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
                 pendingEdge._properties.emplace_back(name, type, propCol);
             }
+
+            penEdges.push_back(pendingEdge);
         }
     }
 
-    _builder.addWrite(delNodes, delEdges, penNodes);
+    // TODO:
+    // 1. Copy deleted columns over verbatim
+    // 2. Allocate new columns for newly created node/edge variables
+
+    _builder.addWrite(delNodes, delEdges, penNodes, penEdges);
     return _builder.getPendingOutputInterface();
 }

@@ -131,7 +131,8 @@ public:
     // Write/Updates
     PipelineBlockOutputInterface& addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                            const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
-                                           const WriteProcessor::PendingNodes& pendingNodes);
+                                           WriteProcessor::PendingNodes& pendingNodes,
+                                           WriteProcessor::PendingEdges& pendingEdges);
 
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>

@@ -54,7 +54,8 @@ void Dataframe::dump(std::ostream& out) const {
     }
 
     for (const NamedColumn* col : _cols) {
-        out << "Column $" << col->getTag().getValue() << "\t";
+        out << "Column $" << col->getTag().getValue() << '[' << col->getName() << ']'
+            << "\t";
     }
     out << '\n';
 
