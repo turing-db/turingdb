@@ -2,6 +2,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "BioAssert.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "Pattern.h"
@@ -12,9 +13,13 @@
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
 #include "PlanGraphTopology.h"
-
 #include "Predicate.h"
+#include "YieldClause.h"
+#include "YieldItems.h"
 #include "decl/VarDecl.h"
+#include "decl/PatternData.h"
+#include "metadata/LabelSet.h"
+
 #include "nodes/CartesianProductNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/GetEdgeTargetNode.h"
@@ -24,15 +29,14 @@
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/JoinNode.h"
+#include "nodes/ProcedureEvalNode.h"
+#include "nodes/ProduceResultsNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
 
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
-
-#include "decl/PatternData.h"
-#include "metadata/LabelSet.h"
 
 using namespace db::v2;
 
@@ -102,7 +106,22 @@ void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
 }
 
 void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
+    if (callStmt->isOptional()) {
+        throwError("OPTIONAL CALL not supported", callStmt);
+    }
 
+    bioassert(callStmt->getFunc() && "Function invocation expression is null");
+
+    const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
+    ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr);
+
+    YieldClause* yield = callStmt->getYield();
+
+    if (!yield) {
+        bioassert(callStmt->isStandaloneCall() && "Procedure call without YIELD must be a standalone CALL");
+        _tree->newOut<ProduceResultsNode>(procNode);
+        return;
+    }
 }
 
 void ReadStmtGenerator::generateWhereClause(const WhereClause* where) {

@@ -218,6 +218,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
         break;
 
+        case PlanGraphOpcode::PROCEDURE_EVAL:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
         case PlanGraphOpcode::CREATE_GRAPH:
