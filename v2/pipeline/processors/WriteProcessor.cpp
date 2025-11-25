@@ -68,11 +68,14 @@ WriteProcessor* WriteProcessor::create(PipelineV2* pipeline) {
     {
         auto* inputPort = PipelineInputPort::create(pipeline, processor);
         processor->_input.setPort(inputPort);
+        processor->addInput(inputPort);
+        inputPort->setNeedsData(true);
     }
 
     {
         auto* outputPort = PipelineOutputPort::create(pipeline, processor);
         processor->_output.setPort(outputPort);
+        processor->addOutput(outputPort);
     }
 
     processor->postCreate(pipeline);
@@ -111,6 +114,8 @@ void WriteProcessor::execute() {
     if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
         performCreations();
     }
+    _input.getPort()->consume();
+    _output.getPort()->writeData();
     finish();
 }
 
@@ -158,21 +163,21 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
 }
 
 void WriteProcessor::performCreations() {
-    for (const WriteProcessorTypes::PendingNode& pendingNode : _pendingNodes) {
-        // TODO: Throw an exception, or make an implict assumption that we have valid
-        // labels
-        bioassert(pendingNode._labels.size() > 1);
+    // We apply the CREATE command for each row in the input
+    const size_t numIters = _input.getDataframe()->getRowCount();
 
-        CommitWriteBuffer::PendingNode& wbNode = _writeBuffer->newPendingNode();
+    // 1. Node creations
+    for (size_t i = 0 ; i < numIters; i++) {
+        for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
+            const std::span labels = node._labels;
+            // TODO: Is this checked in planner?
+            bioassert(labels.size() > 0);
+            const LabelSet lblset = getLabelSet(labels);
 
-        {
-            const LabelSet labelset = getLabelSet(pendingNode._labels);
-            const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(labelset);
-            wbNode.labelsetHandle = hdl;
-        }
-
-        {
-            // const WriteProcessorTypes::PropertyConstraints& p = pendingNode._properties;
+            CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
+            newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(lblset);
         }
     }
+
+    // 2. Link up edges
 }

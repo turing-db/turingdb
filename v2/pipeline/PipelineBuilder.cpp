@@ -1,8 +1,5 @@
 #include "PipelineBuilder.h"
 
-#include <iostream>
-
-
 #include "processors/CartesianProductProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
@@ -476,6 +473,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         throw FatalException("WriteProcessor has no input");
     }
 
+    // NOTE: CREATE (n:P) DELETE n has no affect but seems to run on Neo4j
     _pendingOutput.connectTo(processor->input());
 
     PipelineBlockInputInterface& input = processor->input();
@@ -490,16 +488,26 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
         // TODO: Make exception?
         bioassert(inputColumnToDelete);
+
+        // Skip if the column already exists for cases like MATCH (n) DELETE n,n
+        if (outDf->getColumn(inputColumnToDelete->getTag())) {
+            continue;
+        }
         outDf->addColumn(inputColumnToDelete);
     }
+    processor->setDeletedNodes(nodeColumnsToDelete);
+
     for (const ColumnTag deletedEdgeCol : edgeColumnsToDelete) {
         NamedColumn* inputColumnToDelete = inDf->getColumn(deletedEdgeCol);
         // TODO: Make exception?
         bioassert(inputColumnToDelete);
+
+        // Skip if the column already exists for cases like MATCH (n) DELETE n,n
+        if (outDf->getColumn(inputColumnToDelete->getTag())) {
+            continue;
+        }
         outDf->addColumn(inputColumnToDelete);
     }
-
-    processor->setDeletedNodes(nodeColumnsToDelete);
     processor->setDeletedEdges(edgeColumnsToDelete);
 
     for (WriteProcessorTypes::PendingNode& node : pendingNodes) {
@@ -515,6 +523,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         // actually end up being created.
         outDf->addColumn(newNamedCol);
     }
+    processor->setPendingNodes(pendingNodes);
 
     for (WriteProcessorTypes::PendingEdge& edge : pendingEdges) {
         Column* newCol = _mem->alloc<ColumnEdgeIDs>();
@@ -529,13 +538,12 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         // actually end up being created.
         outDf->addColumn(newNamedCol);
     }
+    processor->setPendingEdges(pendingEdges);
 
     // This function already handles duplicates, so call it after adding all our columns
     input.propagateColumns(output);
 
-    outDf->dump(std::cout);
-
-    _pendingOutput.setInterface(&output);
+    _pendingOutput.updateInterface(&output);
     return output;
 }
 

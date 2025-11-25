@@ -35,6 +35,9 @@ public:
     void reset() final;
     void execute() final;
 
+    void setPendingNodes(const PendingNodes& nodes) { _pendingNodes = nodes; }
+    void setPendingEdges(const PendingEdges& edges) { _pendingEdges = edges; }
+
     void setDeletedNodes(const DeletedNodes& nodes) { _deletedNodes = nodes; }
     void setDeletedEdges(const DeletedEdges& edges) { _deletedEdges = edges; }
 
