@@ -257,9 +257,9 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             const EvaluatedType rhsType = v.propValueExpr->getType();
 
             // Analyzing lhs
-            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyze(v.propTypeExpr,
-                                                                    true,
-                                                                    evaluatedToValueType(rhsType));
+            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(v.propTypeExpr,
+                                                                                true,
+                                                                                evaluatedToValueType(rhsType));
             _exprAnalyzer->analyzeRootExpr(v.propValueExpr);
 
             // Checking property compatibility

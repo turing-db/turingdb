@@ -32,7 +32,7 @@ public:
             return *this;
         }
 
-        FunctionSignatureBuilder& setReturnTypes(std::initializer_list<EvaluatedType> types) {
+        FunctionSignatureBuilder& setReturnTypes(std::initializer_list<FunctionReturnType> types) {
             _signature->_returnTypes = types;
             return *this;
         }

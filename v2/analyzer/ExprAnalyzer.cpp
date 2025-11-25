@@ -496,7 +496,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
 
         // Found a valid signature
         if (signature._returnTypes.size() == 1) {
-            expr->setType(signature._returnTypes[0]);
+            expr->setType(signature._returnTypes[0]._type);
         } else {
             expr->setType(EvaluatedType::Tuple);
         }

@@ -110,7 +110,7 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     const FunctionSignature* signature = func->getSignature();
 
     if (!signature->_isDatabaseProcedure) {
-        throwError(fmt::format("No such database procedure '{}'", signature->_fullName), callStmt);
+        throwError(fmt::format("Function '{} is not a database procedure'", signature->_fullName), callStmt);
     }
 
     // Step 3. Analyze YIELD clause
@@ -119,30 +119,41 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
 }
 
 void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {
-    // Step 1. Check if there is a YIELD clause
-    if (!yield) {
+    // Step 1. Check if `YIELD *` (in this case, yield == nullptr)
+    if (yield == nullptr) {
         return;
     }
 
+    bioassert(func.getSignature() && "Analyzed a yield function that has no signature");
+    bioassert(yield->getItems() && "Analyzed a yield function that has no yield items");
+
+    FunctionSignature* signature = func.getSignature();
     YieldItems* yieldItems = yield->getItems();
 
-    // Step 2. Check if `YIELD *` (in this case, yield == nullptr)
-    if (yield != nullptr) {
-        // For now, it fallbacks to the default behavior, which is to return all columns
-        // In Neo4j, it returns the default columns + deprecated ones.
-        return;
-    }
+    // Step 2. Create the decls for the yield items
+    for (SymbolExpr* yieldItemExpr : *yieldItems) {
+        Symbol* yieldItem = yieldItemExpr->getSymbol();
 
-
-    // Step 3. Create the decls for the yield items
-    for (Symbol* item : *yieldItems) {
-        const VarDecl* decl = _ctxt->getDecl(item->getName());
-
-        if (decl) {
-            throwError(fmt::format("Variable '{}' already declared", item->getName()), item);
+        if (_ctxt->hasDecl(yieldItem->getName())) {
+            throwError(fmt::format("Variable '{}' already declared", yieldItem->getName()), yieldItemExpr);
         }
 
-        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Invalid, item->getName());
+        VarDecl* decl = nullptr;
+
+        // Step 3. Find the item in the return values of the function
+        for (const FunctionReturnType& returnItem : signature->_returnTypes) {
+            if (returnItem._name == yieldItem->getName()) {
+                bioassert(!returnItem._name.empty() && "Procedure return item has empty name");
+                decl = _ctxt->getOrCreateNamedVariable(_ast, returnItem._type, yieldItem->getName());
+                break;
+            }
+        }
+
+        if (decl == nullptr) {
+            throwError(fmt::format("Procedure '{}' does not return item '{}'", signature->_fullName, yieldItem->getName()), yieldItemExpr);
+        }
+
+        yieldItemExpr->setExprVarDecl(decl);
     }
 }
 

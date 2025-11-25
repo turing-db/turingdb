@@ -15,90 +15,107 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
     // Metadata
     decls->create("db.labels")
         .setIsDatabaseProcedure(true)
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({
+            FunctionReturnType {EvaluatedType::String,  "name"},
+            FunctionReturnType {EvaluatedType::Integer, "id"  },
+    });
+
     decls->create("db.propertyTypes")
         .setIsDatabaseProcedure(true)
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({
+            FunctionReturnType {EvaluatedType::String,  "name"},
+            FunctionReturnType {EvaluatedType::Integer, "id"  },
+    });
+
     decls->create("db.edgeTypes")
         .setIsDatabaseProcedure(true)
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({
+            FunctionReturnType {EvaluatedType::String,  "name"},
+            FunctionReturnType {EvaluatedType::Integer, "id"  },
+    });
+
     decls->create("db.history")
         .setIsDatabaseProcedure(true)
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({
+            FunctionReturnType {EvaluatedType::String,  "commit_hash"},
+            FunctionReturnType {EvaluatedType::Integer, "part_count" },
+            FunctionReturnType {EvaluatedType::Integer, "node_count" },
+            FunctionReturnType {EvaluatedType::Integer, "edge_count" },
+    });
 
     // Entity patterns
     decls->create("edgeTypes")
         .setArguments({EvaluatedType::EdgePattern})
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({{EvaluatedType::String}});
     decls->create("labels")
         .setArguments({EvaluatedType::NodePattern})
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({{EvaluatedType::String}});
     decls->create("keys")
         .setArguments({EvaluatedType::NodePattern})
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({{EvaluatedType::String}});
     decls->create("keys")
         .setArguments({EvaluatedType::EdgePattern})
-        .setReturnTypes({EvaluatedType::String});
+        .setReturnTypes({{EvaluatedType::String}});
 
     // Aggregate functions
     decls->create("count")
         .setArguments({EvaluatedType::NodePattern})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::EdgePattern})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Double})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::String})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Char})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Bool})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("count")
         .setArguments({EvaluatedType::Wildcard})
-        .setReturnType(EvaluatedType::Integer)
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
 
     decls->create("min")
         .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("min")
         .setArguments({EvaluatedType::Double})
-        .setReturnTypes({EvaluatedType::Double})
+        .setReturnTypes({{EvaluatedType::Double}})
         .setIsAggregate(true);
 
     decls->create("max")
         .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({EvaluatedType::Integer})
+        .setReturnTypes({{EvaluatedType::Integer}})
         .setIsAggregate(true);
     decls->create("max")
         .setArguments({EvaluatedType::Double})
-        .setReturnTypes({EvaluatedType::Double})
+        .setReturnTypes({{EvaluatedType::Double}})
         .setIsAggregate(true);
 
     decls->create("avg")
         .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({EvaluatedType::Double})
+        .setReturnTypes({{EvaluatedType::Double}})
         .setIsAggregate(true);
     decls->create("avg")
         .setArguments({EvaluatedType::Double})
-        .setReturnTypes({EvaluatedType::Double})
+        .setReturnTypes({{EvaluatedType::Double}})
         .setIsAggregate(true);
 
     return decls;

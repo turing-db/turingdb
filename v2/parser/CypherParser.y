@@ -247,7 +247,7 @@
 %type<db::v2::YieldClause*> yieldClause
 %type<db::v2::YieldItems*> yieldItemChain
 %type<db::v2::YieldItems*> yieldItems
-%type<db::v2::Symbol*> yieldItem
+%type<db::v2::SymbolExpr*> yieldItem
 
 
 %type<db::v2::SinglePartQuery*> singlePartQuery
@@ -538,7 +538,7 @@ yieldItemChain
     ;
 
 yieldItem
-    : symbol { $$ = $1; }
+    : symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
     | symbol AS symbol { scanner.notImplemented(@$, "AS"); }
     ;
 

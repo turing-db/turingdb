@@ -19,6 +19,7 @@ public:
 
     DeclContext* getParent() const { return _parent; }
 
+    bool hasDecl(std::string_view name) const;
     VarDecl* getDecl(std::string_view name) const;
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
     VarDecl* createUnnamedVariable(CypherAST* ast, EvaluatedType type);

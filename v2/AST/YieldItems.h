@@ -5,18 +5,18 @@
 namespace db::v2 {
 
 class CypherAST;
-class Symbol;
+class SymbolExpr;
 class WhereClause;
 
 class YieldItems {
 public:
-    using ItemVector = std::vector<Symbol*>;
+    using ItemVector = std::vector<SymbolExpr*>;
 
     ~YieldItems();
 
     static YieldItems* create(CypherAST* ast);
 
-    void add(Symbol* symbol) { _items.push_back(symbol); }
+    void add(SymbolExpr* symbol) { _items.push_back(symbol); }
     void setWhere(WhereClause* whereClause) { _whereClause = whereClause; }
 
     const ItemVector& getItems() const { return _items; }

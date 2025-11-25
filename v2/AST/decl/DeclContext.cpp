@@ -23,6 +23,10 @@ DeclContext* DeclContext::create(CypherAST* ast, DeclContext* parent) {
     return ctxt;
 }
 
+bool DeclContext::hasDecl(std::string_view name) const {
+    return _declMap.contains(name);
+}
+
 VarDecl* DeclContext::getDecl(std::string_view name) const {
     const auto it = _declMap.find(name);
     if (it == _declMap.end()) {
