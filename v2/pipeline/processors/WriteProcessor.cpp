@@ -152,7 +152,6 @@ void WriteProcessor::performDeletions() {
     }
 }
 
-
 LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
     LabelSet labelset;
     for (const std::string_view label : labels) {
@@ -166,9 +165,9 @@ void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input
     const size_t numIters = _input.getDataframe()->getRowCount();
 
-
     // 1. Node creations
-    NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
+    const NodeID numNodesBeforeCreates = _ctxt->getGraphView().read().getTotalNodesAllocated();
+    NodeID nextNodeID = numNodesBeforeCreates;
 
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         const std::span labels = node._labels;
@@ -182,7 +181,6 @@ void WriteProcessor::performCreations() {
             newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(lblset);
         }
 
-        // Fill the output column with "fake IDs"
         auto* col =
             _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
         bioassert(col);
@@ -191,6 +189,7 @@ void WriteProcessor::performCreations() {
         std::vector<NodeID>& raw = col->getRaw();
         raw.resize(raw.size() + numIters);
 
+        // Fill the output column with "fake IDs"
         std::iota(col->begin(), col->end(), nextNodeID);
         nextNodeID += numIters;
     }
