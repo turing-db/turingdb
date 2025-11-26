@@ -75,7 +75,6 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
 
         for (PlanGraphNode* nextNode : node->outputs()) {
             // Check if the next node has been visited
-            // only if it is a binary node because others can not be revisited
             if (nextNode->isBinary()) {
                 const auto binaryNodeIt = visitedBinaryNodes.find(nextNode);
                 if (binaryNodeIt != visitedBinaryNodes.end()) {
