@@ -630,7 +630,7 @@ TEST_F(QueriesTest, scanNodesCartProd) {
     ASSERT_TRUE(expectedLines.equals(returnedLines));
 }
 
-TEST_F(QueriesTest, scanNodesGetOutCartProd) {
+TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
     constexpr std::string_view query = "MATCH (n)-->(a), (m)-->(b) RETURN n, b";
     using Rows = LineContainer<NodeID, NodeID>;
 
@@ -660,7 +660,6 @@ TEST_F(QueriesTest, scanNodesGetOutCartProd) {
         }
     }
 
-
     Rows actualRows;
     {
         QueryStatus res = _db->queryV2(
@@ -669,10 +668,10 @@ TEST_F(QueriesTest, scanNodesGetOutCartProd) {
                 ASSERT_EQ(df->size(), 2);
                 const auto& nCols = df->cols();
                 const auto* n = nCols.front()->as<ColumnNodeIDs>();
-                const auto* m = nCols.back()->as<ColumnNodeIDs>();
+                const auto* b = nCols.back()->as<ColumnNodeIDs>();
 
                 for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
-                    actualRows.add({n->at(rowPtr), m->at(rowPtr)});
+                    actualRows.add({n->at(rowPtr), b->at(rowPtr)});
                 }
             });
         ASSERT_TRUE(res);
