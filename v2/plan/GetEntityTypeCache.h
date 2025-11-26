@@ -39,7 +39,7 @@ public:
     // @return nullptr if the dependency was inserted, the cached dependency otherwise.
     const Dependency* cacheOrRetrieve(const VarDecl* entityDecl, const VarDecl* exprDecl) {
         auto pair = _dependencies.insert({entityDecl, exprDecl});
-        if (!pair.second) {
+        if (pair.second) {
             return nullptr;
         }
 
