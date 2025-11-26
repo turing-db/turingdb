@@ -13,6 +13,7 @@ namespace db::v2 {
 
 class SourceManager;
 class PlanGraph;
+class PlanBranch;
 class PipelineV2;
 class PlanGraphNode;
 class VarNode;
@@ -33,27 +34,18 @@ class LimitNode;
 class CartesianProductNode;
 class AggregateEvalNode;
 
-class PipelineGenerator {
+class BranchGenerator {
 public:
-    PipelineGenerator(LocalMemory* mem,
-                      SourceManager* srcMan,
-                      const PlanGraph* graph,
-                      const GraphView& view,
-                      PipelineV2* pipeline,
-                      const QueryCallbackV2& callback)
-        : _mem(mem),
-        _sourceManager(srcMan),
-        _graph(graph),
-        _view(view),
-        _pipeline(pipeline),
-        _callback(callback),
-        _builder(mem, pipeline)
-    {
-    }
+    BranchGenerator(LocalMemory* mem,
+                    SourceManager* srcMan,
+                    const PlanGraph* graph,
+                    const GraphView& view,
+                    PipelineV2* pipeline,
+                    const QueryCallbackV2& callback);
 
-    ~PipelineGenerator();
+    ~BranchGenerator();
 
-    void generate();
+    void translateBranch(const PlanBranch* branch);
 
 private:
     LocalMemory* _mem {nullptr};
@@ -64,7 +56,16 @@ private:
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
 
+    // Map of VarDecl to ColumnTag
     std::unordered_map<const VarDecl*, ColumnTag> _declToColumn;
+
+    // Map of binary nodes inputs
+    struct BinaryNodeInfo {
+        PipelineOutputInterface* _input {nullptr};
+        bool _isLHS {false};
+    };
+
+    std::unordered_map<const PlanGraphNode*, BinaryNodeInfo> _binaryNodeMap;
 
     PipelineOutputInterface* translateNode(PlanGraphNode* node);
     PipelineOutputInterface* translateVarNode(VarNode* node);

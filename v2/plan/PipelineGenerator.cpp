@@ -2,6 +2,8 @@
 
 #include "PlanBranches.h"
 
+#include "BranchGenerator.h"
+
 using namespace db::v2;
 
 PipelineGenerator::PipelineGenerator(LocalMemory* mem,
@@ -15,8 +17,7 @@ PipelineGenerator::PipelineGenerator(LocalMemory* mem,
     _graph(graph),
     _view(view),
     _pipeline(pipeline),
-    _callback(callback),
-    _builder(mem, pipeline)
+    _callback(callback)
 {
 }
 
@@ -28,7 +29,17 @@ void PipelineGenerator::generate() {
     PlanBranches planBranches;
     planBranches.generate(_graph);
 
-    // Topological sort the branches
+    // Topological sort of the branches
     std::vector<PlanBranch*> sortedBranches;
     planBranches.topologicalSort(sortedBranches);
+
+    BranchGenerator branchGen(_mem,
+                              _sourceManager,
+                              _graph,
+                              _view,
+                              _pipeline,
+                              _callback);
+    for (const PlanBranch* planBranch : sortedBranches) {
+        branchGen.translateBranch(planBranch);
+    }
 }

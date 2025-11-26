@@ -2,17 +2,15 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "FunctionInvocation.h"
-#include "PendingOutputView.h"
 #include "PlanGraph.h"
-#include "expr/ExprChain.h"
-#include "expr/FunctionInvocationExpr.h"
-#include "nodes/AggregateEvalNode.h"
+#include "PlanBranch.h"
+#include "PendingOutputView.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
+#include "nodes/AggregateEvalNode.h"
 #include "nodes/CartesianProductNode.h"
 #include "nodes/PlanGraphNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
@@ -31,12 +29,16 @@
 #include "decl/VarDecl.h"
 #include "expr/LiteralExpr.h"
 #include "Literal.h"
+#include "FunctionInvocation.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "expr/ExprChain.h"
 
 #include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
 
 using namespace db::v2;
+using namespace db;
 
 namespace {
 
@@ -70,7 +72,29 @@ struct PropertyTypeDispatcher {
 
 }
 
-void BranchGenerator::generate() {
+BranchGenerator::BranchGenerator(LocalMemory* mem,
+                                 SourceManager* srcMan,
+                                 const PlanGraph* graph,
+                                 const GraphView& view,
+                                 PipelineV2* pipeline,
+                                 const QueryCallbackV2& callback)
+    : _mem(mem),
+    _sourceManager(srcMan),
+    _graph(graph),
+    _view(view),
+    _pipeline(pipeline),
+    _callback(callback),
+    _builder(mem, pipeline)
+{
+}
+
+BranchGenerator::~BranchGenerator() {
+}
+
+void BranchGenerator::translateBranch(const PlanBranch* branch) {
+    for (PlanGraphNode* node : branch->nodes()) {
+        translateNode(node);
+    }
 }
 
 PipelineOutputInterface* BranchGenerator::translateNode(PlanGraphNode* node) {
@@ -147,6 +171,7 @@ PipelineOutputInterface* BranchGenerator::translateNode(PlanGraphNode* node) {
             throw PlannerException(fmt::format("BranchGenerator does not support PlanGraphNode: {}",
                 PlanGraphOpcodeDescription::value(node->getOpcode())));
     }
+
     throw FatalException("Failed to match against PlanGraphOpcode");
 }
 
@@ -429,13 +454,14 @@ PipelineOutputInterface* BranchGenerator::translateLimitNode(LimitNode* node) {
 }
 
 PipelineOutputInterface* BranchGenerator::translateCartesianProductNode(CartesianProductNode* node) {
-    if (!_binaryVisitedMap.contains(node)) {
+    const auto binaryNodeIt = _binaryNodeMap.find(node);
+    if (binaryNodeIt == _binaryNodeMap.end()) {
         throw PipelineException("Attempted to translate CartesianProductNode which was "
                                 "not already encountered.");
     }
 
     PipelineOutputInterface* inputA = _builder.getPendingOutputInterface();
-    auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
+    auto& [inputB, isBLhs] = binaryNodeIt->second;
 
     PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
     PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
@@ -444,6 +470,7 @@ PipelineOutputInterface* BranchGenerator::translateCartesianProductNode(Cartesia
     _builder.getPendingOutput().updateInterface(lhs);
 
     _builder.addCartesianProduct(rhs);
+
     return _builder.getPendingOutputInterface();
 }
 

@@ -132,21 +132,41 @@ void PlanBranches::topologicalSort(std::vector<PlanBranch*>& sort) {
     }
 }
 
-void PlanBranches::dump(std::ostream& out) {
-    for (const PlanBranch* branch : _branches) {
-        out << fmt::format("Branch @={}", fmt::ptr(branch)) << '\n';
+void PlanBranches::dumpMermaid(std::ostream& out) {
+    out << R"(
+%%{ init: {"theme": "default",
+           "themeVariables": { "wrap": "false" },
+           "flowchart": { "curve": "linear",
+                          "markdownAutoWrap":"false",
+                          "wrappingWidth": "1000" }
+           }
+}%%
+)";
+
+    out << "flowchart TD\n";
+
+    std::unordered_map<const PlanBranch*, size_t> nodeIndex;
+
+    for (size_t i = 0; i < _branches.size(); i++) {
+        const PlanBranch* branch = _branches[i];
+        nodeIndex[branch] = i;
+
+        out << fmt::format("    {}[\"`\n", i);
+
         for (const PlanGraphNode* node : branch->nodes()) {
-            out << fmt::format("    {} @={}",
-                               PlanGraphOpcodeDescription::value(node->getOpcode()),
-                               fmt::ptr(node))
+            out << fmt::format("        __{}__",
+                               PlanGraphOpcodeDescription::value(node->getOpcode()))
                 << '\n';
         }
 
-        out << '\n';
-        for (const PlanBranch* next : branch->next()) {
-            out << fmt::format("    Next @={}", fmt::ptr(next)) << '\n';
-        }
+        out << "    `\"]\n";
+    }
 
-        out << '\n';
+    for (const PlanBranch* branch : _branches) {
+        const size_t src = nodeIndex.at(branch);
+        for (const PlanBranch* next : branch->next()) {
+            const size_t target = nodeIndex.at(next);
+            out << fmt::format("    {}-->{}\n", src, target);
+        }
     }
 }

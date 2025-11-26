@@ -24,7 +24,7 @@ public:
 
     void topologicalSort(std::vector<PlanBranch*>& sort);
 
-    void dump(std::ostream& out);
+    void dumpMermaid(std::ostream& out);
 
 private:
     Branches _branches;

@@ -2,7 +2,6 @@
 
 #include "QueryCallback.h"
 
-#include "PipelineBuilder.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -37,7 +36,6 @@ private:
     GraphView _view;
     PipelineV2* _pipeline {nullptr};
     QueryCallbackV2 _callback;
-    PipelineBuilder _builder;
 };
 
 }

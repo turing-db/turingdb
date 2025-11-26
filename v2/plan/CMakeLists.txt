@@ -7,7 +7,9 @@ set(plan_sources
     PlanGraphTopology.cpp
     ReadStmtGenerator.cpp
     WriteStmtGenerator.cpp
+
     PipelineGenerator.cpp
+    BranchGenerator.cpp
 
     PlanBranch.cpp
     PlanBranches.cpp)

@@ -114,13 +114,13 @@ int main(int argc, char** argv) {
         planBranches.generate(&planGraph);
 
         std::cout << '\n';
-        planBranches.dump(std::cout);
+        planBranches.dumpMermaid(std::cout);
 
         // Topological sort the branches
         std::vector<PlanBranch*> sortedBranches;
         planBranches.topologicalSort(sortedBranches);
 
-        std::cout << "Sort:\n";
+        std::cout << "\nSort:\n";
         for (const PlanBranch* branch : sortedBranches) {
             std::cout << fmt::format("Branch {}", fmt::ptr(branch)) << '\n';
         }
