@@ -113,13 +113,7 @@ int main(int argc, char** argv) {
         {
             auto callback = [](const Dataframe* dataframe) {};
 
-            PipelineGenerator pipelineGen(&planGraph,
-                                          view,
-                                          &pipeline,
-                                          &mem,
-                                          ast.getSourceManager(),
-                                          *procedures,
-                                          callback);
+            PipelineGenerator pipelineGen(&mem, ast.getSourceManager(), &planGraph, view, &pipeline, callback);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();
@@ -129,9 +123,6 @@ int main(int argc, char** argv) {
                 fmt::print("{}\n", e.what());
                 return EXIT_FAILURE;
             }
-            const PlanGraph& planGraph = planGen.getPlanGraph();
-
-            PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
         }
 
         {

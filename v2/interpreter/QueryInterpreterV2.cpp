@@ -101,12 +101,11 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     // Generate pipeline
     LocalMemory* mem = ctxt.getLocalMemory();
     PipelineV2 pipeline;
-    PipelineGenerator pipelineGen(&planGraph,
+    PipelineGenerator pipelineGen(mem, 
+                                  ast.getSourceManager(), 
+                                  &planGraph,
                                   view,
-                                  &pipeline,
-                                  mem,
-                                  ast.getSourceManager(),
-                                  *ctxt.getProcedures(),
+                                  &pipeline, 
                                   ctxt.getQueryCallback());
     try {
         pipelineGen.generate();
