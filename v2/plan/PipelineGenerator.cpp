@@ -27,4 +27,8 @@ void PipelineGenerator::generate() {
     // Get branches of the plan graph
     PlanBranches planBranches;
     planBranches.generate(_graph);
+
+    // Topological sort the branches
+    std::vector<PlanBranch*> sortedBranches;
+    planBranches.topologicalSort(sortedBranches);
 }

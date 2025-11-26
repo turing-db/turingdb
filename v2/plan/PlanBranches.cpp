@@ -41,6 +41,7 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
     for (const auto& node : planGraph->nodes()) {
         if (node->isRoot()) {
             PlanBranch* branch = PlanBranch::create(this);
+            _roots.push_back(branch);
             stack.push({node.get(), branch});
         }
     }
@@ -74,8 +75,7 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
 
         for (PlanGraphNode* nextNode : node->outputs()) {
             // Check if the next node has been visited
-            // only if it is a binary node because others can not 
-            // be revisited
+            // only if it is a binary node because others can not be revisited
             if (nextNode->isBinary()) {
                 const auto binaryNodeIt = visitedBinaryNodes.find(nextNode);
                 if (binaryNodeIt != visitedBinaryNodes.end()) {
@@ -95,6 +95,40 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
 
             stack.push({nextNode, nextBranch});
         }
+    }
+}
+
+namespace {
+
+void topologicalSortExp(PlanBranch* branch,
+                        std::vector<PlanBranch*>& sort,
+                        size_t* visitedPos) {
+    for (PlanBranch* next : branch->next()) {
+        if (!next->isSortDiscovered()) {
+            next->setSortDiscovered(true);
+            topologicalSortExp(next, sort, visitedPos);
+        }
+    }
+
+    const size_t currentIndex = *visitedPos;
+    sort[currentIndex] = branch;
+    *visitedPos = currentIndex-1;
+}
+
+}
+
+void PlanBranches::topologicalSort(std::vector<PlanBranch*>& sort) {
+    sort.clear();
+
+    if (_branches.empty()) {
+        return;
+    }
+
+    sort.resize(_branches.size());
+    
+    size_t visitedPos = _branches.size()-1;
+    for (PlanBranch* root : _roots) {
+        topologicalSortExp(root, sort, &visitedPos); 
     }
 }
 

@@ -27,9 +27,13 @@ public:
         _next.push_back(nextBranch);
     }
 
+    bool isSortDiscovered() const { return _sortDiscovered; }
+    void setSortDiscovered(bool discovered) { _sortDiscovered = discovered; }
+
 private:
     Nodes _nodes;
     Branches _next;
+    bool _sortDiscovered {false};
 
     PlanBranch();
     ~PlanBranch();
