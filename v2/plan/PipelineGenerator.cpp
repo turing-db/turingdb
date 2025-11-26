@@ -784,7 +784,13 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
                 const auto& [name, type, expr] = propConstr;
 
-                // TODO: Verify this var has a column
+                const auto it = _declToColumn.find(expr->getExprVarDecl());
+                if (it == end(_declToColumn)) {
+                    throw FatalException(
+                        fmt::format("Node property constraint {} had no a associated column",
+                                    expr->getExprVarDecl()->getName()));
+                }
+
                 const ColumnTag propCol = _declToColumn[expr->getExprVarDecl()];
 
                 pendingNode._properties.emplace_back(name, type, propCol);
@@ -814,7 +820,12 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
                 const auto& [name, type, expr] = propConstr;
 
-                // TODO: Verify this var has a column
+                const auto it = _declToColumn.find(expr->getExprVarDecl());
+                if (it == end(_declToColumn)) {
+                    throw FatalException(
+                        fmt::format("Edge property constraint {} had no a associated column",
+                                    expr->getExprVarDecl()->getName()));
+                }
                 const ColumnTag propCol = _declToColumn[expr->getExprVarDecl()];
 
                 pendingEdge._properties.emplace_back(name, type, propCol);

@@ -65,6 +65,9 @@ private:
     void performCreations();
     void performUpdates();
 
+    void createNodes(size_t numIters);
+    void postProcessFakeIDs();
+
     LabelSet getLabelSet(std::span<const std::string_view> labels);
 
     WriteProcessor() = default;

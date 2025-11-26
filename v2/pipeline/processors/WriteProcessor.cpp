@@ -1,5 +1,6 @@
 #include "WriteProcessor.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include "PipelineV2.h"
@@ -161,30 +162,31 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
     return labelset;
 }
 
-void WriteProcessor::performCreations() {
-    // We apply the CREATE command for each row in the input
-    const size_t numIters = _input.getDataframe()->getRowCount();
-
-    // 1. Node creations
-    const NodeID numNodesBeforeCreates = _ctxt->getGraphView().read().getTotalNodesAllocated();
-    NodeID nextNodeID = numNodesBeforeCreates;
-
+void WriteProcessor::createNodes(size_t numIters) {
+    NodeID nextNodeID = _writeBuffer->numPendingNodes();
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
+        // Get the column in the output DF which will contain this node's IDs
+        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
+        if (!col) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingNode with tag {}.",
+                            node._tag.getValue()));
+        }
+        bioassert(col->size() == 0);
+
         const std::span labels = node._labels;
         // TODO: Is this checked in planner?
         bioassert(labels.size() > 0);
         const LabelSet lblset = getLabelSet(labels);
 
         // Add each node that we need to the CommitWriteBuffer
+        // Add labels first as they are locally contiguous in vector, keep cache hot
         for (size_t i = 0; i < numIters; i++) {
             CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
             newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(lblset);
         }
-
-        auto* col =
-            _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
-        bioassert(col);
-        bioassert(col->size() == 0);
+        // TODO: Properties
 
         std::vector<NodeID>& raw = col->getRaw();
         raw.resize(raw.size() + numIters);
@@ -193,5 +195,48 @@ void WriteProcessor::performCreations() {
         std::iota(col->begin(), col->end(), nextNodeID);
         nextNodeID += numIters;
     }
+}
+
+void WriteProcessor::postProcessFakeIDs() {
+    const NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
+    for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
+        // Get the column in the output DF which will contain this node's IDs
+        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
+        if (!col) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingNode with tag {}.",
+                            node._tag.getValue()));
+        }
+
+        std::vector<NodeID>& raw = col->getRaw();
+        std::ranges::for_each(raw, [nextNodeID](NodeID& fakeID) { fakeID += nextNodeID; });
+    }
+
+    const EdgeID nextEdgeID = _ctxt->getGraphView().read().getTotalEdgesAllocated();
+    for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
+        // Get the column in the output DF which will contain this node's IDs
+        auto* col = _output.getDataframe()->getColumn(edge._tag)->as<ColumnEdgeIDs>();
+        if (!col) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingEdge with tag {}.",
+                            edge._tag.getValue()));
+        }
+
+        std::vector<EdgeID>& raw = col->getRaw();
+        std::ranges::for_each(raw, [nextEdgeID](EdgeID& fakeID) { fakeID += nextEdgeID; });
+    }
+}
+
+void WriteProcessor::performCreations() {
+    // We apply the CREATE command for each row in the input
+    const size_t numIters = _input.getDataframe()->getRowCount();
+
+    // 1. Node creations
+    createNodes(numIters);
+
     // 2. Link up edges
+
+    postProcessFakeIDs();
 }
