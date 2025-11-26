@@ -117,10 +117,11 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
 
     ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
 
-    if (!yield) {
-        bioassert(callStmt->isStandaloneCall() && "Procedure call without YIELD must be a standalone CALL");
+    if (callStmt->isStandaloneCall()) {
         _tree->newOut<ProduceResultsNode>(procNode);
         return;
+    } else {
+        bioassert(yield && "Procedure call without YIELD must be a standalone CALL");
     }
 }
 
