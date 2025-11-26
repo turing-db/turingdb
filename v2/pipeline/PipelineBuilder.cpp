@@ -470,7 +470,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
     auto* processor = WriteProcessor::create(_pipeline);
 
     if (!_pendingOutput.getInterface()) {
-        throw FatalException("WriteProcessor has no input");
+        throw FatalException("WriteProcessor has no input.");
     }
 
     // NOTE: CREATE (n:P) DELETE n has no affect but seems to run on Neo4j
@@ -511,32 +511,30 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
     processor->setDeletedEdges(edgeColumnsToDelete);
 
     for (WriteProcessorTypes::PendingNode& node : pendingNodes) {
-        Column* newCol = _mem->alloc<ColumnNodeIDs>();
-        const ColumnTag newTag = _dfMan->allocTag();
-        auto* newNamedCol = NamedColumn::create(_dfMan, newCol, newTag);
-        newNamedCol->rename(node._name);
-
-        node._tag = newTag;
+        // New column for each new node to create
+        NamedColumn* newCol = allocColumn<ColumnNodeIDs>(outDf);
+        // Rename our column with the variable name of the created node
+        newCol->rename(node._name);
+        // Set the tag so the WriteProcessor knows which column to write into
+        node._tag = newCol->getTag();
 
         // XXX: Assumption that each "pendingNode" can expand to multiple nodes to be
         // created, and that there is not one "pendingNode" for each node that will
         // actually end up being created.
-        outDf->addColumn(newNamedCol);
     }
     processor->setPendingNodes(pendingNodes);
 
     for (WriteProcessorTypes::PendingEdge& edge : pendingEdges) {
-        Column* newCol = _mem->alloc<ColumnEdgeIDs>();
-        const ColumnTag newTag = _dfMan->allocTag();
-        auto* newNamedCol = NamedColumn::create(_dfMan, newCol, newTag);
-        newNamedCol->rename(edge._name);
-
-        edge._tag = newTag;
+        // New column for each new edge to create
+        NamedColumn* newCol = allocColumn<ColumnEdgeIDs>(outDf);
+        // Rename our column with the variable name of the created edge
+        newCol->rename(edge._name);
+        // Set the tag so the WriteProcessor knows which column to write into
+        edge._tag = newCol->getTag();
 
         // XXX: Assumption that each "pendingNode" can expand to multiple nodes to be
         // created, and that there is not one "pendingNode" for each node that will
         // actually end up being created.
-        outDf->addColumn(newNamedCol);
     }
     processor->setPendingEdges(pendingEdges);
 

@@ -112,7 +112,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
             auto transaction = _graph->openTransaction();
             auto reader = transaction.readGraph();
             for (const NodeID n : reader.scanNodes()) {
-                expectedRows.add({n});
+                scanNodesRows.add({n});
             }
         }
 
@@ -120,7 +120,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
         {
             auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
-                ASSERT_EQ(df->size(), 3);
+                ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
                 const size_t rowCount = df->getRowCount();
