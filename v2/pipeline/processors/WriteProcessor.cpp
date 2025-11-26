@@ -197,6 +197,26 @@ void WriteProcessor::createNodes(size_t numIters) {
     }
 }
 
+// @warn assumes all pending nodes have already been created
+void WriteProcessor::createEdges(size_t numIters) {
+    // EdgeID nextEdgeID = _writeBuffer->numPendingEdges();
+    for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
+        auto* col = _output.getDataframe()->getColumn(edge._tag)->as<ColumnEdgeIDs>();
+        if (!col) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingEdge with tag {}.",
+                            edge._tag.getValue()));
+        }
+        bioassert(col->size() == 0);
+
+        for (size_t i = 0; i < numIters; i++) {
+            // if (edge._srcTag)
+            // auto& newEdge = _writeBuffer->new
+        }
+    }
+}
+
 void WriteProcessor::postProcessFakeIDs() {
     const NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {

@@ -81,6 +81,8 @@ private:
 
     std::unordered_map<const VarDecl*, ColumnTag> _declToColumn;
 
+    ColumnTag getCol(const VarDecl* var);
+
     // [BinaryNode -> Visited input] map
     BinaryNodeVisitedMap _binaryVisitedMap;
 

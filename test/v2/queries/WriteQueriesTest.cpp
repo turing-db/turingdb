@@ -216,3 +216,12 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
         ASSERT_TRUE(expectedRows.equals(queryRows));
     }
 }
+
+TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
+    constexpr std::string_view CREATE_QUERY = "MATCH (n) CREATE (m:NEWNODE), (m)-[e:NEWEDGE]->(o:NEWNODE) RETURN n,m,e,o";
+    auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+            });
+            ASSERT_TRUE(res);
+}
+

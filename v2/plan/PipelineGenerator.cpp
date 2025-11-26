@@ -102,6 +102,19 @@ struct PropertyTypeDispatcher {
 
 }
 
+db::ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
+    if (!var) {
+        throw FatalException("Attempted to get column for null variable");
+    }
+
+    const auto it = _declToColumn.find(var);
+    if (it == end(_declToColumn)) {
+        throw PlannerException(fmt::format("Failed to find column for variable {}.", var->getName()));
+    }
+    ColumnTag tag = it->second;
+    return tag;
+}
+
 void PipelineGenerator::generate() {
     TranslateTokenStack nodeStack;
 
@@ -765,73 +778,65 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     }
 
     WriteProcessor::PendingNodes penNodes;
+    penNodes.reserve(node->pendingNodes().size());
     {
         for (const WriteNode::PendingNode& pendingPlanNode : node->pendingNodes()) {
             const NodePatternData* const data = pendingPlanNode._data;
 
+            const std::string_view nodeVarName = pendingPlanNode._name->getName();
             // XXX: Does the plan graph ensure a valid node? e.g. at least one label, etc?
-            WriteProcessorTypes::PendingNode pendingNode;
-            pendingNode._name = pendingPlanNode._name->getName();
-            { // Labels
-                const std::span labels = data->labelConstraints();
-                // Copy labels from PlanGraph pending node struct to WriteProcessor struct
-                pendingNode._labels.insert(cbegin(pendingNode._labels),
-                                           begin(labels),
-                                           end(labels));
-            }
+
+            const std::span planLabels = data->labelConstraints();
+            std::vector<std::string_view> labels;
+            labels.assign(begin(planLabels), end(planLabels));
 
             // Properties
+            WriteProcessorTypes::PropertyConstraints props;
+            props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
                 const auto& [name, type, expr] = propConstr;
+                const ColumnTag propCol = getCol(expr->getExprVarDecl());
 
-                const auto it = _declToColumn.find(expr->getExprVarDecl());
-                if (it == end(_declToColumn)) {
-                    throw FatalException(
-                        fmt::format("Node property constraint {} had no a associated column",
-                                    expr->getExprVarDecl()->getName()));
-                }
-
-                const ColumnTag propCol = _declToColumn[expr->getExprVarDecl()];
-
-                pendingNode._properties.emplace_back(name, type, propCol);
+                props.emplace_back(name, type, propCol);
             }
 
-            penNodes.push_back(pendingNode);
+            // Initialise with invalid column tag, then later update after @ref addWrite
+            // allocs the column
+            penNodes.emplace_back(std::move(labels), std::move(props), nodeVarName, ColumnTag {});
         }
     }
 
     WriteProcessor::PendingEdges penEdges;
+    penNodes.reserve(node->pendingEdges().size());
     {
         for (const WriteNode::PendingEdge& pendingPlanEdge : node->pendingEdges()) {
             const EdgePatternData* const data = pendingPlanEdge._data;
 
-            WriteProcessorTypes::PendingEdge pendingEdge;
-            pendingEdge._name = pendingPlanEdge._name->getName();
+            [[maybe_unused]] const VarDecl* srcVar = pendingPlanEdge._src;
+            // const ColumnTag srcTag = getCol(srcVar);
 
-            { // EdgeType
-                const std::span edgeTypes = data->edgeTypeConstraints();
-                bioassert(edgeTypes.size() == 1);
-                std::string_view edgeType = edgeTypes.front();
+            [[maybe_unused]] const VarDecl* tgtVar = pendingPlanEdge._tgt;
+            // const ColumnTag tgtTag = getCol(tgtVar);
 
-                pendingEdge._edgeType = edgeType;
-            }
+            const std::string_view edgeVarName = pendingPlanEdge._name->getName();
+
+            const std::span edgeTypes = data->edgeTypeConstraints();
+            bioassert(edgeTypes.size() == 1);
+            const std::string_view edgeType = edgeTypes.front();
 
             // Properties
+            WriteProcessorTypes::PropertyConstraints props;
+            props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
                 const auto& [name, type, expr] = propConstr;
-
-                const auto it = _declToColumn.find(expr->getExprVarDecl());
-                if (it == end(_declToColumn)) {
-                    throw FatalException(
-                        fmt::format("Edge property constraint {} had no a associated column",
-                                    expr->getExprVarDecl()->getName()));
-                }
-                const ColumnTag propCol = _declToColumn[expr->getExprVarDecl()];
-
-                pendingEdge._properties.emplace_back(name, type, propCol);
+                const ColumnTag propCol = getCol(expr->getExprVarDecl());
+                props.emplace_back(name, type, propCol);
             }
 
-            penEdges.push_back(pendingEdge);
+            // Initialise with invalid column tags, then later update after @ref addWrite
+            // allocs the column
+            penEdges.emplace_back(std::move(props), edgeType, edgeVarName, ColumnTag {},
+                                  ColumnTag {}, ColumnTag {});
         }
     }
 
@@ -845,11 +850,12 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
          rv::zip(node->pendingNodes(), penNodes)) {
              _declToColumn[planPendingNode._name] = procPendingNode._tag;
     }
+    // All edge srcs/tgts are either already registered, or registered in the node loop
+    // above
     for (const auto& [planPendingEdge, procPendingEdge] :
-         rv::zip(node->pendingNodes(), penNodes)) {
+         rv::zip(node->pendingEdges(), penEdges)) {
              _declToColumn[planPendingEdge._name] = procPendingEdge._tag;
     }
-
 
     return _builder.getPendingOutputInterface();
 }
