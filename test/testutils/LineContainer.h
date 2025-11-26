@@ -75,6 +75,7 @@ public:
                               count, it->second);
                 std::cout << "\t\t";
                 printTuple(std::cout, line._values);
+                std::cout << '\n';
                 return false;
             }
         }

@@ -4,6 +4,8 @@
 
 #include <spdlog/fmt/fmt.h>
 #include <string_view>
+#include <range/v3/view/zip.hpp>
+
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
@@ -55,6 +57,9 @@
 #include "FatalException.h"
 
 using namespace db::v2;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 namespace {
 
@@ -819,10 +824,21 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         }
     }
 
-    // TODO:
-    // 1. Copy deleted columns over verbatim
-    // 2. Allocate new columns for newly created node/edge variables
-
     _builder.addWrite(delNodes, delEdges, penNodes, penEdges);
+
+    // Above call to @ref addWrite alloc'd columns for the new nodes/edges, storing the
+    // tag in the elements of @ref penNodes @ref penEdges. We may need to reference these
+    // columns, so update the mapping from VarDecl (stored in the PlanGraph WriteNodes) to
+    // the ColumnTag (stored in the WriteProcessor PendingNodes/Edges).
+    for (const auto& [planPendingNode, procPendingNode] :
+         rv::zip(node->pendingNodes(), penNodes)) {
+             _declToColumn[planPendingNode._name] = procPendingNode._tag;
+    }
+    for (const auto& [planPendingEdge, procPendingEdge] :
+         rv::zip(node->pendingNodes(), penNodes)) {
+             _declToColumn[planPendingEdge._name] = procPendingEdge._tag;
+    }
+
+
     return _builder.getPendingOutputInterface();
 }
