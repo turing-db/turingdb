@@ -72,6 +72,7 @@ void PipelineNodeOutputInterface::rename(const std::string_view& name) {
 }
 
 void PipelineNodeOutputInterface::connectTo(PipelineNodeInputInterface& input) {
+    input.setStream(EntityOutputStream::createNodeStream(_nodeIDs->getTag()));
     input.setNodeIDs(_nodeIDs);
     _port->connectTo(input.getPort());
 }
@@ -83,11 +84,15 @@ void PipelineNodeOutputInterface::connectTo(PipelineBlockInputInterface& input) 
 
 // Edge Output
 void PipelineEdgeOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
+    input.setStream(EntityOutputStream::createEdgeStream(_edgeIDs->getTag(),
+                                                         _otherNodes->getTag(),
+                                                         _edgeTypes->getTag()));
     input.setEdges(_edgeIDs, _otherNodes, _edgeTypes);
     _port->connectTo(input.getPort());
 }
 
 void PipelineEdgeOutputInterface::connectTo(PipelineNodeInputInterface& input) {
+    input.setStream(EntityOutputStream::createNodeStream(_otherNodes->getTag()));
     input.setNodeIDs(_otherNodes);
     _port->connectTo(input.getPort());
 }
@@ -101,12 +106,14 @@ void PipelineEdgeOutputInterface::connectTo(PipelineBlockInputInterface& input) 
 
 // Block output
 void PipelineBlockOutputInterface::connectTo(PipelineBlockInputInterface& input) {
-    _port->connectTo(input.getPort());
     input.setStream(_stream);
+    _port->connectTo(input.getPort());
 }
 
 void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) {
-    const ColumnTag nodeIDsTag = _stream.getNodeIDsTag();
+    input.setStream(_stream);
+
+    const ColumnTag nodeIDsTag = _stream.asNodeStream()._nodeIDsTag;
     const Dataframe* df = _port->getBuffer()->getDataframe();
 
     if (!nodeIDsTag.isValid()) {
@@ -118,9 +125,12 @@ void PipelineBlockOutputInterface::connectTo(PipelineNodeInputInterface& input) 
 }
 
 void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    const ColumnTag edgeIDsTag = _stream.getEdgeIDsTag();
-    const ColumnTag otherNodesTag = _stream.getOtherIDsTag();
-    const ColumnTag edgeTypesTag = _stream.getEdgeTypesTag();
+    input.setStream(_stream);
+
+    const auto& stream = _stream.asEdgeStream();
+    const ColumnTag edgeIDsTag = stream._edgeIDsTag;
+    const ColumnTag otherNodesTag = stream._otherIDsTag;
+    const ColumnTag edgeTypesTag = stream._edgeTypesTag;
 
     const Dataframe* df = _port->getBuffer()->getDataframe();
 
@@ -144,6 +154,7 @@ void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) 
 
 // Value output
 void PipelineValueOutputInterface::connectTo(PipelineBlockInputInterface& input) {
+    input.setStream(_stream);
     _port->connectTo(input.getPort());
 }
 
@@ -154,7 +165,9 @@ void PipelineValuesOutputInterface::connectTo(PipelineBlockInputInterface& input
 }
 
 void PipelineValuesOutputInterface::connectTo(PipelineNodeInputInterface& input) {
-    const ColumnTag nodeIDsTag = _stream.getNodeIDsTag();
+    input.setStream(_stream);
+    const auto& stream = _stream.asNodeStream();
+    const ColumnTag nodeIDsTag = stream._nodeIDsTag;
     const Dataframe* df = _port->getBuffer()->getDataframe();
 
     if (!nodeIDsTag.isValid()) {
@@ -171,9 +184,11 @@ void PipelineValuesOutputInterface::connectTo(PipelineValuesInputInterface& inpu
 }
 
 void PipelineValuesOutputInterface::connectTo(PipelineEdgeInputInterface& input) {
-    const ColumnTag edgeIDsTag = _stream.getEdgeIDsTag();
-    const ColumnTag otherNodesTag = _stream.getOtherIDsTag();
-    const ColumnTag edgeTypesTag = _stream.getEdgeTypesTag();
+    input.setStream(_stream);
+    const auto& stream = _stream.asEdgeStream();
+    const ColumnTag edgeIDsTag = stream._edgeIDsTag;
+    const ColumnTag otherNodesTag = stream._otherIDsTag;
+    const ColumnTag edgeTypesTag = stream._edgeTypesTag;
 
     const Dataframe* df = _port->getBuffer()->getDataframe();
 

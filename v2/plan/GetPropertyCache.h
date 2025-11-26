@@ -14,32 +14,39 @@ class VarDecl;
 class GetPropertyCache {
 public:
     struct Dependency {
-        const VarDecl* _var {nullptr};
+        const VarDecl* _entityDecl {nullptr};
+        const VarDecl* _exprDecl {nullptr};
         std::string_view _property;
 
         struct Hash {
             std::size_t operator()(const Dependency& d) const {
-                return std::hash<const VarDecl*> {}(d._var)
+                return std::hash<const VarDecl*> {}(d._entityDecl)
                      ^ std::hash<std::string_view> {}(d._property);
             }
         };
 
         struct Equal {
             bool operator()(const Dependency& a, const Dependency& b) const {
-                return a._var == b._var && a._property == b._property;
+                return a._entityDecl == b._entityDecl && a._property == b._property;
             }
         };
     };
 
-    /// @brief Inserts a dependency into the cache.
+    /// @brief Adds a dependency into the cache. Returns nullptr if the dependency was
+    ///        added. Otherwise, returns the cached dependency.
     //
     // @details Unique way to interact with the cache. If an attempt to insert
-    //          a dependency fails, it means that the dependency was already
-    //          handled.
+    //          a dependency returns a non-null pointer, it means that the dependency was
+    //          already present in the cache.
     //
-    // @return true if the dependency was inserted, false if it was already present.
-    bool insert(const VarDecl* var, std::string_view property) {
-        return _dependencies.insert({var, property}).second;
+    // @return nullptr if the dependency was inserted, the cached dependency otherwise.
+    const Dependency* cacheOrRetrieve(const VarDecl* entityDecl, const VarDecl* exprDecl, std::string_view property) {
+        auto pair = _dependencies.insert({entityDecl, exprDecl, property});
+        if (pair.second) {
+            return nullptr;
+        }
+
+        return &*pair.first;
     }
 
 private:

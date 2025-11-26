@@ -45,14 +45,14 @@ void GetPropertiesProcessor<Entity, T>::prepare(ExecutionContext* ctxt) {
     const Dataframe* inDf = _input.getDataframe();
 
     if constexpr (Entity == EntityType::Node) {
-        const ColumnTag idsTag = stream.getNodeIDsTag();
+        const ColumnTag idsTag = stream.asNodeStream()._nodeIDsTag;
         if (!idsTag.isValid()) {
             throw PipelineException(fmt::format("GetPropertiesProcessor<Node, {}> must act on a Node stream",
                                                 ValueTypeName::value(T::_valueType)));
         }
         ids = dynamic_cast<const ColumnNodeIDs*>(inDf->getColumn(idsTag)->getColumn());
     } else {
-        const ColumnTag idsTag = stream.getEdgeIDsTag();
+        const ColumnTag idsTag = stream.asEdgeStream()._edgeIDsTag;
         if (!idsTag.isValid()) {
             throw PipelineException(fmt::format("GetPropertiesProcessor<Edge, {}> must act on an Edge stream",
                                                 ValueTypeName::value(T::_valueType)));

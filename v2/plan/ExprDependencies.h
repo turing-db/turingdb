@@ -22,7 +22,7 @@ class ExprDependencies {
 public:
     struct VarDependency {
         VarNode* _var {nullptr};
-        const Expr* _expr {nullptr};
+        Expr* _expr {nullptr};
     };
 
     struct FuncDependency {
@@ -36,44 +36,48 @@ public:
         return _varDeps;
     }
 
+    VarDepVector& getVarDeps() {
+        return _varDeps;
+    }
+
     const FuncDepVector& getFuncDeps() const {
         return _funcDeps;
     }
 
-    void genExprDependencies(const PlanGraphVariables& variables, const Expr* expr) {
+    void genExprDependencies(const PlanGraphVariables& variables, Expr* expr) {
         switch (expr->getKind()) {
             case Expr::Kind::BINARY: {
-                const BinaryExpr* binary = static_cast<const BinaryExpr*>(expr);
+                const BinaryExpr* binary = static_cast<BinaryExpr*>(expr);
                 genExprDependencies(variables, binary->getLHS());
                 genExprDependencies(variables, binary->getRHS());
             } break;
 
             case Expr::Kind::UNARY: {
-                const UnaryExpr* unary = static_cast<const UnaryExpr*>(expr);
+                const UnaryExpr* unary = static_cast<UnaryExpr*>(expr);
                 genExprDependencies(variables, unary->getSubExpr());
             } break;
 
             case Expr::Kind::STRING: {
-                const StringExpr* string = static_cast<const StringExpr*>(expr);
+                const StringExpr* string = static_cast<StringExpr*>(expr);
                 genExprDependencies(variables, string->getLHS());
                 genExprDependencies(variables, string->getRHS());
             } break;
 
             case Expr::Kind::ENTITY_TYPES: {
-                const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+                const EntityTypeExpr* entityType = static_cast<EntityTypeExpr*>(expr);
                 _varDeps.emplace_back(variables.getVarNode(entityType->getEntityVarDecl()), expr);
             } break;
 
             case Expr::Kind::PROPERTY: {
-                const PropertyExpr* prop = static_cast<const PropertyExpr*>(expr);
+                const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
                 _varDeps.emplace_back(variables.getVarNode(prop->getEntityVarDecl()), expr);
             } break;
 
             case Expr::Kind::FUNCTION_INVOCATION: {
-                const FunctionInvocationExpr* func = static_cast<const FunctionInvocationExpr*>(expr);
+                const FunctionInvocationExpr* func = static_cast<FunctionInvocationExpr*>(expr);
                 const ExprChain* arguments = func->getFunctionInvocation()->getArguments();
 
-                for (const Expr* arg : *arguments) {
+                for (Expr* arg : *arguments) {
                     genExprDependencies(variables, arg);
                 }
 
@@ -81,7 +85,7 @@ public:
             } break;
 
             case Expr::Kind::SYMBOL: {
-                const SymbolExpr* symbol = static_cast<const SymbolExpr*>(expr);
+                const SymbolExpr* symbol = static_cast<SymbolExpr*>(expr);
                 _varDeps.emplace_back(variables.getVarNode(symbol->getDecl()), expr);
             } break;
 

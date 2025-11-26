@@ -55,16 +55,20 @@ public:
         return _nodes;
     }
 
-    Predicate* createPredicate(const Expr* expr);
+    Predicate* createPredicate(Expr* expr);
 
     std::span<const std::unique_ptr<Predicate>> getPredicates() const {
         return _predicates;
     }
 
+    std::span<std::unique_ptr<Predicate>> getPredicates() {
+        return _predicates;
+    }
+
     void removeIsolatedNodes();
 
-    bool cacheGetProperty(const VarDecl* var, std::string_view propName);
-    bool cacheGetEntityType(const VarDecl* var);
+    GetPropertyCache& getGetPropertyCache() { return _getPropertyCache; }
+    GetEntityTypeCache& getGetEntityTypeCache() { return _getEntityTypeCache; }
 
 private:
     friend class PlanGraphDebug;

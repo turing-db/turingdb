@@ -4,7 +4,6 @@
 
 #include "PipelineInputInterface.h"
 #include "PipelineOutputInterface.h"
-#include "EntityOutputStream.h"
 
 namespace db {
 class NamedColumn;
@@ -30,13 +29,7 @@ public:
     void connectTo(PipelineEdgeInputInterface& input) override;
     void connectTo(PipelineValuesInputInterface& input) override;
 
-    void setStream(const EntityOutputStream& stream) { _stream = stream; }
-
-    const EntityOutputStream& getStream() const { return _stream; }
-
 private:
-    EntityOutputStream _stream;
-
     NamedColumn* _indices {nullptr};
     NamedColumn* _values {nullptr};
 };

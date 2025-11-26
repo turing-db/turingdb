@@ -8,23 +8,46 @@ class VarDecl;
 
 /// @brief A cache of entity type dependencies.
 //
-// @details Its sole purpose is to know if an entity type  dependency has already been
-//          handled, in which case, it is already present in the cache
+// @details Allows to retrieve cache/retrieve the expression that generates the entity type
+//          in the plan graph.
 class GetEntityTypeCache {
 public:
-    /// @brief Inserts a dependency into the cache.
+    struct Dependency {
+        const VarDecl* _entityDecl {nullptr};
+        const VarDecl* _exprDecl {nullptr};
+
+        struct Hash {
+            std::size_t operator()(const Dependency& d) const {
+                return std::hash<const VarDecl*> {}(d._entityDecl);
+            }
+        };
+
+        struct Equal {
+            bool operator()(const Dependency& a, const Dependency& b) const {
+                return a._entityDecl == b._entityDecl;
+            }
+        };
+    };
+
+    /// @brief Adds a dependency into the cache. Returns nullptr if the dependency was
+    ///        added. Otherwise, returns the cached dependency.
     //
     // @details Unique way to interact with the cache. If an attempt to insert
-    //          a dependency fails, it means that the dependency was already
-    //          handled.
+    //          a dependency returns a non-null pointer, it means that the dependency was
+    //          already present in the cache.
     //
-    // @return true if the dependency was inserted, false if it was already present.
-    bool insert(const VarDecl* var) {
-        return _dependencies.insert(var).second;
+    // @return nullptr if the dependency was inserted, the cached dependency otherwise.
+    const Dependency* cacheOrRetrieve(const VarDecl* entityDecl, const VarDecl* exprDecl) {
+        auto pair = _dependencies.insert({entityDecl, exprDecl});
+        if (!pair.second) {
+            return nullptr;
+        }
+
+        return &*pair.first;
     }
 
 private:
-    std::unordered_set<const VarDecl*> _dependencies;
+    std::unordered_set<Dependency, Dependency::Hash, Dependency::Equal> _dependencies;
 };
 
 }

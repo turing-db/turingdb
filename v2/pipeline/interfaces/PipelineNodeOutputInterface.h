@@ -4,6 +4,7 @@
 
 #include "PipelineInputInterface.h"
 #include "PipelineOutputInterface.h"
+#include "dataframe/NamedColumn.h"
 
 namespace db {
 class NamedColumn;
@@ -15,7 +16,11 @@ class PipelineNodeOutputInterface : public PipelineOutputInterface {
 public:
     constexpr PipelineInterfaceKind getKind() const override { return PipelineInterfaceKind::NODE; }
 
-    void setNodeIDs(NamedColumn* nodeIDs) { _nodeIDs = nodeIDs; }
+    void setNodeIDs(NamedColumn* nodeIDs) {
+        _nodeIDs = nodeIDs;
+        _stream = EntityOutputStream::createNodeStream(_nodeIDs->getTag());
+    }
+
     void setIndices(NamedColumn* indices) { _indices = indices; }
 
     NamedColumn* getIndices() const { return _indices; }

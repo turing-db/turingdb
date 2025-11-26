@@ -12,7 +12,7 @@ class PlanGraphNode;
 
 class Predicate {
 public:
-    explicit Predicate(const Expr* expr)
+    explicit Predicate(Expr* expr)
         : _expr(expr)
     {
     }
@@ -25,6 +25,10 @@ public:
     Predicate& operator=(Predicate&&) noexcept = default;
 
     const ExprDependencies& getDependencies() const {
+        return _dependencies;
+    }
+
+    ExprDependencies& getDependencies() {
         return _dependencies;
     }
 
@@ -45,7 +49,7 @@ public:
     }
 
 private:
-    const Expr* _expr {nullptr};
+    Expr* _expr {nullptr};
     FilterNode* _filterNode {nullptr};
     ExprDependencies _dependencies;
 };

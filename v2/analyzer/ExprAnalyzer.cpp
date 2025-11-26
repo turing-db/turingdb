@@ -365,8 +365,6 @@ ValueType ExprAnalyzer::analyze(PropertyExpr* expr, bool allowCreate, ValueType 
     expr->setType(type);
     expr->setDynamic();
 
-    // Create a variable declaration for the property expression
-    // so that it can be retrieved later (for projection or in an expression / filter)
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 
     return vt;

@@ -97,7 +97,7 @@ void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
 }
 
 void ReadStmtGenerator::generateWhereClause(const WhereClause* where) {
-    const Expr* expr = where->getExpr();
+    Expr* expr = where->getExpr();
 
     unwrapWhereExpr(expr);
 }
@@ -296,7 +296,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     return var;
 }
 
-void ReadStmtGenerator::unwrapWhereExpr(const Expr* expr) {
+void ReadStmtGenerator::unwrapWhereExpr(Expr* expr) {
     if (expr->getKind() == Expr::Kind::ENTITY_TYPES) {
         // Entity type expressions can be pushed down to the var (node or edge)
 
@@ -427,8 +427,8 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 }
 
 void ReadStmtGenerator::placePredicateJoins() {
-    for (const auto& pred : _tree->getPredicates()) {
-        const ExprDependencies& deps = pred->getDependencies();
+    for (auto& pred : _tree->getPredicates()) {
+        ExprDependencies& deps = pred->getDependencies();
 
         if (deps.getVarDeps().empty()) {
             throwError("Predicates without dependencies are not supported yet", pred->getExpr());
@@ -441,14 +441,26 @@ void ReadStmtGenerator::placePredicateJoins() {
             throwError("Unknown error. Could not place predicate");
         }
 
+        GetPropertyCache& getPropertyCache = _tree->getGetPropertyCache();
+        GetEntityTypeCache& getEntityTypeCache = _tree->getGetEntityTypeCache();
+
         // Step 2: Place joins
-        for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+        for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             FilterNode* filter = _variables->getNodeFilter(dep._var);
 
-            if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+            if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
+                const VarDecl* exprDecl = expr->getExprVarDecl();
 
-                if (!_tree->cacheGetProperty(entityDecl, expr->getPropName())) {
+                const auto* cached = getPropertyCache.cacheOrRetrieve(entityDecl, exprDecl, expr->getPropName());
+
+                if (cached) {
+                    // GetProperty is already present in the cache. Map the existing expr to the current one
+                    if (!cached->_exprDecl) [[unlikely]] {
+                        throwError("GetProperty expression does not have an expression variable declaration", expr);
+                    }
+
+                    expr->setExprVarDecl(cached->_exprDecl);
                     continue;
                 }
 
@@ -456,10 +468,19 @@ void ReadStmtGenerator::placePredicateJoins() {
                 n->setEntityVarDecl(entityDecl);
                 n->setExpr(expr);
 
-            } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
+            } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
+                const VarDecl* exprDecl = expr->getExprVarDecl();
 
-                if (!_tree->cacheGetEntityType(entityDecl)) {
+                const auto* cached = getEntityTypeCache.cacheOrRetrieve(entityDecl, exprDecl);
+
+                if (cached) {
+                    // GetEntityType is already present in the cache. Map the existing expr to the current one
+                    if (!cached->_exprDecl) [[unlikely]] {
+                        throwError("GetEntityType expression does not have an expression variable declaration", expr);
+                    }
+
+                    expr->setExprVarDecl(cached->_exprDecl);
                     continue;
                 }
 

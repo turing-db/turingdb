@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EntityOutputStream.h"
 #include "EnumToString.h"
 #include "PipelinePort.h"
 
@@ -45,8 +46,17 @@ public:
 
     void propagateColumns(PipelineOutputInterface& output) const;
 
+    void setStream(const EntityOutputStream& stream) {
+        _stream = stream;
+    }
+
+    const EntityOutputStream& getStream() const {
+        return _stream;
+    }
+
 protected:
     PipelineInputPort* _port {nullptr};
+    EntityOutputStream _stream;
 
     PipelineInputInterface() = default;
     virtual ~PipelineInputInterface() = default;

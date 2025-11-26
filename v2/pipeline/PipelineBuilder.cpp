@@ -94,6 +94,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     NamedColumn* edgeIDs = allocColumn<ColumnEdgeIDs>(outDf);
     NamedColumn* edgeTypes = allocColumn<ColumnEdgeTypes>(outDf);
     NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
+
     output.setEdges(edgeIDs, edgeTypes, targetNodes);
 
     // Register output in materialize data

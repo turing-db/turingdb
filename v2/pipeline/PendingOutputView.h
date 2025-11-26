@@ -41,6 +41,7 @@ public:
 
     void projectEdgesOnOtherIDs() {
         _edgesProjectedOnOtherIDs = true;
+        _iface->getStream().projectEdgeTarget();
     }
 
     bool isEdgesProjectedOnOtherIDs() const {

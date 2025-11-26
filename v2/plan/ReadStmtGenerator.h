@@ -50,7 +50,7 @@ public:
     VarNode* generatePatternElementEdge(VarNode* prevNode, const EdgePattern* edge);
     VarNode* generatePatternElementTarget(VarNode* prevNode, const NodePattern* target);
 
-    void unwrapWhereExpr(const Expr*);
+    void unwrapWhereExpr(Expr*);
 
     void placeJoinsOnVars();
     void placePredicateJoins();

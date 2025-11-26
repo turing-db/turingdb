@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "EntityOutputStream.h"
 #include "PipelineInputInterface.h"
 #include "PipelinePort.h"
 
@@ -27,8 +28,14 @@ public:
 
     virtual void rename(const std::string_view& name);
 
+    void setStream(const EntityOutputStream& stream) { _stream = stream; }
+
+    const EntityOutputStream& getStream() const { return _stream; }
+    EntityOutputStream& getStream() { return _stream; }
+
 protected:
     PipelineOutputPort* _port {nullptr};
+    EntityOutputStream _stream;
 
     PipelineOutputInterface() = default;
     virtual ~PipelineOutputInterface() = default;

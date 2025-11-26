@@ -4,6 +4,7 @@
 
 #include "PipelineInputInterface.h"
 #include "PipelineOutputInterface.h"
+#include "dataframe/NamedColumn.h"
 
 namespace db {
 class NamedColumn;
@@ -27,6 +28,9 @@ public:
         _edgeIDs = edgeIDs;
         _edgeTypes = edgeTypes;
         _otherNodes = otherNodes;
+        _stream = EntityOutputStream::createEdgeStream(_edgeIDs->getTag(),
+                                                        _otherNodes->getTag(),
+                                                        _edgeTypes->getTag());
     }
 
     void setIndices(NamedColumn* indices) { _indices = indices; }

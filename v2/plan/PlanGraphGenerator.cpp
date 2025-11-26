@@ -120,15 +120,35 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
     FuncEvalNode* funcEval = _tree.create<FuncEvalNode>();
     AggregateEvalNode* aggregateEval = _tree.create<AggregateEvalNode>();
 
+    GetPropertyCache& getPropertyCache = _tree.getGetPropertyCache();
+    GetEntityTypeCache& getEntityTypeCache = _tree.getGetEntityTypeCache();
+
     for (Expr* item : proj->items()) {
         ExprDependencies deps;
         deps.genExprDependencies(*_variables, item);
 
-        for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-            if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+        for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+            if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
+                const VarDecl* exprDecl = expr->getExprVarDecl();
 
-                if (!_tree.cacheGetProperty(entityDecl, expr->getPropName())) {
+                if (!exprDecl) [[unlikely]] {
+                    throwError("Property expression does not have an expression variable declaration", expr);
+                }
+
+                if (!entityDecl) [[unlikely]] {
+                    throwError("Property expression does not have an entity variable declaration", expr);
+                }
+
+                const auto* cached = getPropertyCache.cacheOrRetrieve(entityDecl, exprDecl, expr->getPropName());
+
+                if (cached) {
+                    // GetProperty is already present in the cache. Map the existing expr to the current one
+                    if (!cached->_exprDecl) [[unlikely]] {
+                        throwError("GetProperty expression does not have an expression variable declaration", expr);
+                    }
+
+                    expr->setExprVarDecl(cached->_exprDecl);
                     continue;
                 }
 
@@ -137,10 +157,28 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
                 n->setEntityVarDecl(entityDecl);
                 prevNode = n;
 
-            } else if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
+            } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
+                const VarDecl* exprDecl = expr->getExprVarDecl();
 
-                if (!_tree.cacheGetEntityType(entityDecl)) {
+                if (!exprDecl) [[unlikely]] {
+                    throwError("Entity type expression does not have an expression variable declaration", expr);
+                }
+
+                if (!entityDecl) [[unlikely]] {
+                    throwError("Entity type expression does not have an entity variable declaration", expr);
+                }
+
+                const auto* cached = getEntityTypeCache.cacheOrRetrieve(entityDecl, exprDecl);
+
+                if (cached) {
+                    // GetEntityType is already present in the cache. Map the existing expr to the current one
+
+                    if (!cached->_exprDecl) [[unlikely]] {
+                        throwError("GetEntityType expression does not have an expression variable declaration", expr);
+                    }
+
+                    expr->setExprVarDecl(cached->_exprDecl);
                     continue;
                 }
 

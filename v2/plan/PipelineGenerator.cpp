@@ -35,6 +35,7 @@
 #include "expr/LiteralExpr.h"
 #include "Literal.h"
 
+#include "Overloaded.h"
 #include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
@@ -214,7 +215,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::AGGREGATE_EVAL:
-            translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
+            return translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -238,23 +239,30 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
         throw PlannerException("VarNode with empty name");
     }
 
-    _builder.rename(varName);
-
     const PipelineOutputInterface* output = _builder.getPendingOutputInterface();
+    const EntityOutputStream& stream = output->getStream();
 
-    if (const auto* out = dynamic_cast<const PipelineNodeOutputInterface*>(output)) {
-        _declToColumn[node->getVarDecl()] = out->getNodeIDs()->getTag();
-    } else if (const auto* out = dynamic_cast<const PipelineEdgeOutputInterface*>(output)) {
-        const PendingOutputView& outView = _builder.getPendingOutput();
+    Dataframe* outDf = output->getDataframe();
 
-        if (outView.isEdgesProjectedOnOtherIDs()) {
-            _declToColumn[node->getVarDecl()] = out->getOtherNodes()->getTag();
-        } else {
-            _declToColumn[node->getVarDecl()] = out->getEdgeIDs()->getTag();
-        }
-    } else {
-        throw PlannerException("VarNode output is not a node or edge");
-    }
+    const auto visitor = Overloaded {
+        [&](const EntityOutputStream::NodeStream& stream) {
+            bioassert(stream._nodeIDsTag.isValid() && "NodeStream does not have a nodeIDsTag");
+            bioassert(outDf->getColumn(stream._nodeIDsTag) && "NodeStream does not have a nodeIDs column");
+
+            _declToColumn[node->getVarDecl()] = stream._nodeIDsTag;
+            outDf->getColumn(stream._nodeIDsTag)->rename(varName);
+        },
+        [&](const EntityOutputStream::EdgeStream& stream) {
+            bioassert(stream._edgeIDsTag.isValid() && "EdgeStream does not have a edgeIDsTag");
+            bioassert(outDf->getColumn(stream._edgeIDsTag) && "EdgeStream does not have a edgeIDs column");
+
+            _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
+            outDf->getColumn(stream._edgeIDsTag)->rename(varName);
+        },
+    };
+
+    stream.visit(visitor);
+
 
     return _builder.getPendingOutputInterface();
 }
@@ -285,10 +293,6 @@ PipelineOutputInterface* PipelineGenerator::translateGetEdgeTargetNode(GetEdgeTa
 }
 
 PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetPropertyNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
-        _builder.addMaterialize();
-    }
-
     const VarDecl* entityDecl = node->getEntityVarDecl();
     if (!entityDecl) {
         throw PlannerException("GetPropertyNode does not have an entity variable declaration");
@@ -333,13 +337,13 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
     }
 
     const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)expr);
-    if (exprStrRep.empty()) [[unlikely]] {
-        throw PlannerException("Unknown error. Could not get string representation of expression");
+    if (!exprStrRep.empty()) {
+        output->rename(exprStrRep);
     }
 
-    output->rename(exprStrRep);
-
     _declToColumn[exprDecl] = output->getValues()->getTag();
+
+    _builder.addMaterialize();
 
     return _builder.getPendingOutputInterface();
 }

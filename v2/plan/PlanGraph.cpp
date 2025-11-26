@@ -19,7 +19,7 @@ void PlanGraph::getRoots(std::vector<PlanGraphNode*>& roots) const {
     }
 }
 
-Predicate* PlanGraph::createPredicate(const Expr* expr) {
+Predicate* PlanGraph::createPredicate(Expr* expr) {
     auto pred = std::make_unique<Predicate>(expr);
     auto* predPtr = pred.get();
 
@@ -42,12 +42,4 @@ void PlanGraph::removeIsolatedNodes() {
     }
 
     _nodes = std::move(newNodes);
-}
-
-bool PlanGraph::cacheGetProperty(const VarDecl* var, std::string_view propName) {
-    return _getPropertyCache.insert(var, propName);
-}
-
-bool PlanGraph::cacheGetEntityType(const VarDecl* var) {
-    return _getEntityTypeCache.insert(var);
 }
