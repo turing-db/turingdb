@@ -1,4 +1,4 @@
-#include "PlanBranches.h"
+#include "PipelineBranches.h"
 
 #include <stack>
 #include <unordered_map>
@@ -8,58 +8,58 @@
 #include "PlanGraph.h"
 #include "nodes/PlanGraphNode.h"
 
-#include "PlanBranch.h"
+#include "PipelineBranch.h"
 
 using namespace db::v2;
 
 namespace {
 
-struct PlanBranchFrame {
+struct PipelineBranchFrame {
     PlanGraphNode* _node {nullptr};
-    PlanBranch* _branch {nullptr};
+    PipelineBranch* _branch {nullptr};
 };
 
 }
 
-PlanBranches::PlanBranches()
+PipelineBranches::PipelineBranches()
 {
 }
 
-PlanBranches::~PlanBranches() {
-    for (PlanBranch* branch : _branches) {
+PipelineBranches::~PipelineBranches() {
+    for (PipelineBranch* branch : _branches) {
         delete branch;
     }
 }
 
-void PlanBranches::addBranch(PlanBranch* branch) {
+void PipelineBranches::addBranch(PipelineBranch* branch) {
     _branches.push_back(branch);
 }
 
-void PlanBranches::generate(const PlanGraph* planGraph) {
-    std::stack<PlanBranchFrame> stack;
+void PipelineBranches::generate(const PlanGraph* planGraph) {
+    std::stack<PipelineBranchFrame> stack;
 
     for (const auto& node : planGraph->nodes()) {
         if (node->isRoot()) {
-            PlanBranch* branch = PlanBranch::create(this);
+            PipelineBranch* branch = PipelineBranch::create(this);
             _roots.push_back(branch);
             stack.push({node.get(), branch});
         }
     }
 
-    std::unordered_map<PlanGraphNode*, PlanBranch*> visitedBinaryNodes;
+    std::unordered_map<PlanGraphNode*, PipelineBranch*> visitedBinaryNodes;
 
     while (!stack.empty()) {
         auto [node, branch] = stack.top();
         stack.pop();
 
-        PlanBranch* currentBranch = branch;
+        PipelineBranch* currentBranch = branch;
         
         bool endOfBranch = false;
 
         // If the current node is a binary node,
         // put it in its own branch
         if (node->isBinary()) {
-            PlanBranch* binaryNodeBranch = PlanBranch::create(this);
+            PipelineBranch* binaryNodeBranch = PipelineBranch::create(this);
             currentBranch->connectTo(binaryNodeBranch);
             visitedBinaryNodes.emplace(node, binaryNodeBranch);
 
@@ -78,7 +78,7 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
             if (nextNode->isBinary()) {
                 const auto binaryNodeIt = visitedBinaryNodes.find(nextNode);
                 if (binaryNodeIt != visitedBinaryNodes.end()) {
-                    PlanBranch* binaryNodeBranch = binaryNodeIt->second;
+                    PipelineBranch* binaryNodeBranch = binaryNodeIt->second;
                     currentBranch->connectTo(binaryNodeBranch);
                     continue;
                 }
@@ -86,9 +86,9 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
 
             // Put the next node under the current branch
             // or in a new branch if the current node is end of branch
-            PlanBranch* nextBranch = currentBranch;
+            PipelineBranch* nextBranch = currentBranch;
             if (endOfBranch) {
-                nextBranch = PlanBranch::create(this);
+                nextBranch = PipelineBranch::create(this);
                 currentBranch->connectTo(nextBranch);
             }
 
@@ -99,10 +99,10 @@ void PlanBranches::generate(const PlanGraph* planGraph) {
 
 namespace {
 
-void topologicalSortExp(PlanBranch* branch,
-                        std::vector<PlanBranch*>& sort,
+void topologicalSortExp(PipelineBranch* branch,
+                        std::vector<PipelineBranch*>& sort,
                         size_t* visitedPos) {
-    for (PlanBranch* next : branch->next()) {
+    for (PipelineBranch* next : branch->next()) {
         if (!next->isSortDiscovered()) {
             next->setSortDiscovered(true);
             topologicalSortExp(next, sort, visitedPos);
@@ -116,7 +116,7 @@ void topologicalSortExp(PlanBranch* branch,
 
 }
 
-void PlanBranches::topologicalSort(std::vector<PlanBranch*>& sort) {
+void PipelineBranches::topologicalSort(std::vector<PipelineBranch*>& sort) {
     sort.clear();
 
     if (_branches.empty()) {
@@ -126,12 +126,12 @@ void PlanBranches::topologicalSort(std::vector<PlanBranch*>& sort) {
     sort.resize(_branches.size());
     
     size_t visitedPos = _branches.size()-1;
-    for (PlanBranch* root : _roots) {
+    for (PipelineBranch* root : _roots) {
         topologicalSortExp(root, sort, &visitedPos); 
     }
 }
 
-void PlanBranches::dumpMermaid(std::ostream& out) {
+void PipelineBranches::dumpMermaid(std::ostream& out) {
     out << R"(
 %%{ init: {"theme": "default",
            "themeVariables": { "wrap": "false" },
@@ -144,10 +144,10 @@ void PlanBranches::dumpMermaid(std::ostream& out) {
 
     out << "flowchart TD\n";
 
-    std::unordered_map<const PlanBranch*, size_t> nodeIndex;
+    std::unordered_map<const PipelineBranch*, size_t> nodeIndex;
 
     for (size_t i = 0; i < _branches.size(); i++) {
-        const PlanBranch* branch = _branches[i];
+        const PipelineBranch* branch = _branches[i];
         nodeIndex[branch] = i;
 
         out << fmt::format("    {}[\"`\n", i);
@@ -161,9 +161,9 @@ void PlanBranches::dumpMermaid(std::ostream& out) {
         out << "    `\"]\n";
     }
 
-    for (const PlanBranch* branch : _branches) {
+    for (const PipelineBranch* branch : _branches) {
         const size_t src = nodeIndex.at(branch);
-        for (const PlanBranch* next : branch->next()) {
+        for (const PipelineBranch* next : branch->next()) {
             const size_t target = nodeIndex.at(next);
             out << fmt::format("    {}-->{}\n", src, target);
         }

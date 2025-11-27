@@ -1,6 +1,6 @@
 #include "PipelineGenerator.h"
 
-#include "PlanBranches.h"
+#include "PipelineBranches.h"
 
 #include "BranchGenerator.h"
 
@@ -25,13 +25,13 @@ PipelineGenerator::~PipelineGenerator() {
 }
 
 void PipelineGenerator::generate() {
-    // Get branches of the plan graph
-    PlanBranches planBranches;
-    planBranches.generate(_graph);
+    // Get branches 
+    PipelineBranches pipelineBranches;
+    pipelineBranches.generate(_graph);
 
     // Topological sort of the branches
-    std::vector<PlanBranch*> sortedBranches;
-    planBranches.topologicalSort(sortedBranches);
+    std::vector<PipelineBranch*> sortedBranches;
+    pipelineBranches.topologicalSort(sortedBranches);
 
     BranchGenerator branchGen(_mem,
                               _sourceManager,
@@ -39,7 +39,7 @@ void PipelineGenerator::generate() {
                               _view,
                               _pipeline,
                               _callback);
-    for (const PlanBranch* planBranch : sortedBranches) {
-        branchGen.translateBranch(planBranch);
+    for (const PipelineBranch* branch : sortedBranches) {
+        branchGen.translateBranch(branch);
     }
 }

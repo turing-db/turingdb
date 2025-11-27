@@ -5,25 +5,25 @@
 namespace db::v2 {
 
 class PlanGraphNode;
-class PlanBranches;
+class PipelineBranches;
 
-class PlanBranch {
+class PipelineBranch {
 public:
-    friend PlanBranches;
+    friend PipelineBranches;
     using Nodes = std::vector<PlanGraphNode*>;
-    using Branches = std::vector<PlanBranch*>;
+    using Branches = std::vector<PipelineBranch*>;
 
     const Nodes& nodes() const { return _nodes; }
 
     const Branches& next() const { return _next; }
 
-    static PlanBranch* create(PlanBranches* branches);
+    static PipelineBranch* create(PipelineBranches* branches);
 
     void addNode(PlanGraphNode* node) {
         _nodes.push_back(node);
     }
 
-    void connectTo(PlanBranch* nextBranch) {
+    void connectTo(PipelineBranch* nextBranch) {
         _next.push_back(nextBranch);
     }
 
@@ -35,8 +35,8 @@ private:
     Branches _next;
     bool _sortDiscovered {false};
 
-    PlanBranch();
-    ~PlanBranch();
+    PipelineBranch();
+    ~PipelineBranch();
 };
 
 }

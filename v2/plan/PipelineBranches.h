@@ -5,24 +5,24 @@
 
 namespace db::v2 {
 
-class PlanBranch;
+class PipelineBranch;
 class PlanGraph;
 class PlanGraphNode;
 
-class PlanBranches {
+class PipelineBranches {
 public:
-    friend PlanBranch;
-    using Branches = std::vector<PlanBranch*>;
+    friend PipelineBranch;
+    using Branches = std::vector<PipelineBranch*>;
 
-    PlanBranches();
-    ~PlanBranches();
+    PipelineBranches();
+    ~PipelineBranches();
 
     const Branches& branches() const { return _branches; }
     const Branches& rootBranches() const { return _roots; }
 
     void generate(const PlanGraph* planGraph);
 
-    void topologicalSort(std::vector<PlanBranch*>& sort);
+    void topologicalSort(std::vector<PipelineBranch*>& sort);
 
     void dumpMermaid(std::ostream& out);
 
@@ -30,7 +30,7 @@ private:
     Branches _branches;
     Branches _roots;
 
-    void addBranch(PlanBranch* branch);
+    void addBranch(PipelineBranch* branch);
 };
 
 }

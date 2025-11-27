@@ -13,7 +13,7 @@ namespace db::v2 {
 
 class SourceManager;
 class PlanGraph;
-class PlanBranch;
+class PipelineBranch;
 class PipelineV2;
 class PlanGraphNode;
 class VarNode;
@@ -45,7 +45,7 @@ public:
 
     ~BranchGenerator();
 
-    void translateBranch(const PlanBranch* branch);
+    void translateBranch(const PipelineBranch* branch);
 
 private:
     LocalMemory* _mem {nullptr};

@@ -3,7 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PlanGraph.h"
-#include "PlanBranch.h"
+#include "PipelineBranch.h"
 #include "PendingOutputView.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
@@ -91,7 +91,7 @@ BranchGenerator::BranchGenerator(LocalMemory* mem,
 BranchGenerator::~BranchGenerator() {
 }
 
-void BranchGenerator::translateBranch(const PlanBranch* branch) {
+void BranchGenerator::translateBranch(const PipelineBranch* branch) {
     for (PlanGraphNode* node : branch->nodes()) {
         translateNode(node);
     }

@@ -11,8 +11,8 @@ set(plan_sources
     PipelineGenerator.cpp
     BranchGenerator.cpp
 
-    PlanBranch.cpp
-    PlanBranches.cpp)
+    PipelineBranch.cpp
+    PipelineBranches.cpp)
 
 add_library(turing_db_v2_plan_s STATIC ${plan_sources})
 
