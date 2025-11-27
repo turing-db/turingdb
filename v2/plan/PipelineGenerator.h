@@ -102,5 +102,4 @@ private:
     PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
     PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
 };
-
 }

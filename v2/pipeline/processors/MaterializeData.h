@@ -26,6 +26,14 @@ public:
                       DataframeManager* dfMan,
                       const MaterializeData& prevData);
 
+    void initFromDf(LocalMemory* mem,
+                    DataframeManager* dfMan,
+                    const Dataframe* df);
+
+    void cloneFromPrev(LocalMemory* mem,
+                       DataframeManager* dfMan,
+                       const MaterializeData& prevData);
+
     ~MaterializeData();
 
     MaterializeData(const MaterializeData& other) = delete;

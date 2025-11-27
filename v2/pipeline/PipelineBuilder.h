@@ -54,6 +54,7 @@ public:
     PipelineEdgeOutputInterface& addGetOutEdges();
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
+
     PipelineOutputInterface& projectEdgesOnOtherIDs() {
         _pendingOutput.projectEdgesOnOtherIDs();
         return *_pendingOutput.getInterface();
@@ -105,9 +106,12 @@ public:
     // Lambda sink
     void addLambda(const LambdaProcessor::Callback& callback);
 
+    // Fork
+    std::vector<PipelineBlockOutputInterface>& addFork(size_t count);
     // Materialize
     PipelineBlockOutputInterface& addMaterialize();
-    bool isMaterializeOpen() const { return _isMaterializeOpen; }
+    void setMaterializeProc(MaterializeProcessor* matProc) { _matProc = matProc; }
+    MaterializeProcessor* getMaterializeProc() { return _matProc; }
     bool isSingleMaterializeStep() const;
 
     // Join
@@ -137,7 +141,6 @@ private:
     DataframeManager* _dfMan {nullptr};
     PendingOutputView _pendingOutput;
     MaterializeProcessor* _matProc {nullptr};
-    bool _isMaterializeOpen {false};
 
     template <typename ColumnType>
     NamedColumn* allocColumn(Dataframe* df, ColumnTag tag) {
@@ -151,8 +154,6 @@ private:
     NamedColumn* allocColumn(Dataframe* df) {
         return allocColumn<ColumnType>(df, _dfMan->allocTag());
     }
-
-    void openMaterialize();
 };
 
 }

@@ -17,6 +17,7 @@ set(processors_sources
     processors/GetPropertiesProcessor.cpp
     processors/GetPropertiesWithNullProcessor.cpp
     processors/MaterializeProcessor.cpp
+    processors/ForkProcessor.cpp
     processors/MaterializeData.cpp
     processors/LambdaProcessor.cpp
     processors/SkipProcessor.cpp

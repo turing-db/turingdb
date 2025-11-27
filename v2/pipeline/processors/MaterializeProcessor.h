@@ -18,6 +18,13 @@ namespace db::v2 {
 class MaterializeProcessor : public Processor {
 public:
     static MaterializeProcessor* create(PipelineV2* pipeline, LocalMemory* mem);
+
+    static MaterializeProcessor* clone(PipelineV2* pipeline,
+                                       LocalMemory* mem,
+                                       const MaterializeProcessor& prev);
+    static MaterializeProcessor* createFromDf(PipelineV2* pipeline,
+                                              LocalMemory* mem,
+                                              Dataframe* df);
     static MaterializeProcessor* createFromPrev(PipelineV2* pipeline,
                                                 LocalMemory* mem,
                                                 const MaterializeProcessor& prev);
@@ -25,6 +32,9 @@ public:
     MaterializeData& getMaterializeData() { return _matData; }
 
     std::string describe() const override;
+
+    bool isConnected() const { return _input.getPort()->getConnectedPort() != nullptr;};
+    void setConnected() { _connected = true; };
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
@@ -38,9 +48,9 @@ private:
     PipelineBlockOutputInterface _output;
     MaterializeData _matData;
     ColumnVector<size_t> _transform;
+    bool _connected {false};
 
     MaterializeProcessor(LocalMemory* mem, DataframeManager* dfMan);
     ~MaterializeProcessor();
 };
-
 }

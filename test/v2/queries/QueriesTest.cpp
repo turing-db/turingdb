@@ -4,6 +4,7 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
+#include "columns/Block.h"
 #include "columns/ColumnIDs.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
