@@ -2,9 +2,10 @@
 
 #include <string_view>
 
-#include "EntityOutputStream.h"
 #include "PipelineInputInterface.h"
 #include "PipelinePort.h"
+
+#include "EntityOutputStream.h"
 
 namespace db {
 class NamedColumn;

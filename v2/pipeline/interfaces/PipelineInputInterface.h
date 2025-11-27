@@ -1,8 +1,9 @@
 #pragma once
 
-#include "EntityOutputStream.h"
 #include "EnumToString.h"
 #include "PipelinePort.h"
+
+#include "EntityOutputStream.h"
 
 namespace db {
 class NamedColumn;

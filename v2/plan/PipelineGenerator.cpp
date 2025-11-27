@@ -246,15 +246,15 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
 
     const auto visitor = Overloaded {
         [&](const EntityOutputStream::NodeStream& stream) {
-            bioassert(stream._nodeIDsTag.isValid() && "NodeStream does not have a nodeIDsTag");
-            bioassert(outDf->getColumn(stream._nodeIDsTag) && "NodeStream does not have a nodeIDs column");
+            msgbioassert(stream._nodeIDsTag.isValid(), "NodeStream does not have a nodeIDsTag");
+            msgbioassert(outDf->getColumn(stream._nodeIDsTag), "NodeStream does not have a nodeIDs column");
 
             _declToColumn[node->getVarDecl()] = stream._nodeIDsTag;
             outDf->getColumn(stream._nodeIDsTag)->rename(varName);
         },
         [&](const EntityOutputStream::EdgeStream& stream) {
-            bioassert(stream._edgeIDsTag.isValid() && "EdgeStream does not have a edgeIDsTag");
-            bioassert(outDf->getColumn(stream._edgeIDsTag) && "EdgeStream does not have a edgeIDs column");
+            msgbioassert(stream._edgeIDsTag.isValid(), "EdgeStream does not have a edgeIDsTag");
+            msgbioassert(outDf->getColumn(stream._edgeIDsTag), "EdgeStream does not have a edgeIDs column");
 
             _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
             outDf->getColumn(stream._edgeIDsTag)->rename(varName);
@@ -298,34 +298,39 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
         throw PlannerException("GetPropertyNode does not have an entity variable declaration");
     }
 
-
     const std::string propName {node->getPropName()};
 
     PipelineValuesOutputInterface* output = nullptr;
 
+    // Retrieving the property type from the graph metadata
     const std::optional<PropertyType> foundProp = _view.read().getMetadata().propTypes().get(propName);
     if (!foundProp) {
         throw PlannerException(fmt::format("Property type {} does not exist", propName));
     }
 
-    if (entityDecl->getType() == EvaluatedType::NodePattern) {
-        const auto process = [&]<SupportedType Type> {
-            output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
-        };
+    // Adding the GetProperty processor to the pipeline
+    switch (entityDecl->getType()) {
+        case EvaluatedType::NodePattern: {
+            const auto process = [&]<SupportedType Type> {
+                output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
+            };
+            PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+        }
+        case EvaluatedType::EdgePattern: {
+            const auto process = [&]<SupportedType Type> {
+                output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
+            };
 
-        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
-    } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
-        const auto process = [&]<SupportedType Type> {
-            output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
-        };
-
-        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
-    } else {
-        throw PlannerException(fmt::format(
-            "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
-            EvaluatedTypeName::value(entityDecl->getType())));
+            PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+        }
+        default: {
+            throw PlannerException(fmt::format(
+                "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
+                EvaluatedTypeName::value(entityDecl->getType())));
+        }
     }
 
+    // Mapping the expr decl to the column tag
     const Expr* expr = node->getExpr();
     if (!expr) {
         throw PlannerException("GetPropertyNode does not have an expression");
@@ -338,6 +343,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
+    // Adding the materialize step
     _builder.addMaterialize();
 
     return _builder.getPendingOutputInterface();
