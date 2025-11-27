@@ -4,6 +4,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ExecutionContext.h"
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
@@ -16,6 +17,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/GetPropertyNode.h"
+#include "iterators/ScanLabelsIterator.h"
 #include "processors/ScanLabelsProcessor.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
@@ -633,63 +635,83 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         throw PlannerException("FunctionInvocation does not have a FunctionSignature");
     }
 
-    struct WriteInfo {
-        bool _write {false};
-        std::string_view _colName;
-        const VarDecl* _exprDecl {nullptr};
-    };
+    ColumnVector<LabelID>* idsCol = nullptr;
+    ColumnVector<std::string_view>* namesCol = nullptr;
+    const VarDecl* idsDecl = nullptr;
+    const VarDecl* namesDecl = nullptr;
+    std::string_view idsColName;
+    std::string_view namesColName;
 
     if (signature->_fullName == "db.labels") {
-        WriteInfo writeIDs;
-        WriteInfo writeNames;
-
         if (!yield) {
             // No YIELD, means write all columns
-            writeIDs._write = true;
-            writeIDs._colName = "id";
-            writeNames._write = true;
-            writeNames._colName = "label";
+            idsCol = _mem->alloc<ColumnVector<LabelID>>();
+            namesCol = _mem->alloc<ColumnVector<std::string_view>>();
+            idsColName = "id";
+            namesColName = "label";
         } else {
             for (const auto* item : *yield->getItems()) {
                 const Symbol* symbol = item->getSymbol();
                 // TODO: handle the AS keyword there
                 if (symbol->getName() == "id") {
-                    writeIDs._write = true;
-                    writeIDs._colName = symbol->getName();
-                    writeIDs._exprDecl = item->getExprVarDecl();
+                    idsCol = _mem->alloc<ColumnVector<LabelID>>();
+                    idsDecl = item->getExprVarDecl();
+                    idsColName = symbol->getName();
                 } else if (symbol->getName() == "label") {
-                    writeNames._write = true;
-                    writeNames._colName = symbol->getName();
-                    writeNames._exprDecl = item->getExprVarDecl();
+                    namesCol = _mem->alloc<ColumnVector<std::string_view>>();
+                    namesDecl = item->getExprVarDecl();
+                    namesColName = symbol->getName();
                 } else {
                     throw PlannerException(fmt::format("Invalid yield item '{}'", symbol->getName()));
                 }
             }
         }
 
-        auto& output = _builder.addScanLabelsProcedure(writeIDs._write, writeNames._write);
+        _builder.addProcedure(
+            [&, idsCol, namesCol, it = std::shared_ptr<ScanLabelsChunkWriter> {}](Procedure& proc) mutable -> bool {
+                switch (proc.step()) {
+                    case Procedure::Step::PREPARE: {
+                        it = std::make_shared<ScanLabelsChunkWriter>(_view.metadata().labels());
+                        it->setLabels(idsCol);
+                        it->setNames(namesCol);
+                        return false;
+                    }
 
-        const auto* proc = static_cast<const ScanLabelsProcessor*>(_builder.getLastProcessor());
+                    case Procedure::Step::RESET: {
+                        it->reset();
+                        return false;
+                    }
 
-        Dataframe* outDf = output.getDataframe();
+                    case Procedure::Step::EXECUTE: {
+                        it->fill(proc.ctxt()->getChunkSize());
 
-        if (writeIDs._write) {
-            ColumnTag idsTag = proc->getIDsTag();
-            NamedColumn* idsCol = outDf->getColumn(idsTag);
-            idsCol->rename(writeIDs._colName);
+                        if (!it->isValid()) {
+                            proc.finish();
+                        }
 
-            if (writeIDs._exprDecl) {
-                _declToColumn[writeIDs._exprDecl] = idsTag;
+                        proc.writeOutputData();
+                        return true;
+                    }
+                }
+
+                throw PlannerException("Unknown procedure step");
+            });
+
+        if (idsCol) {
+            NamedColumn* c = _builder.addColumnToOutput(idsCol);
+            c->rename(idsColName);
+
+            if (idsDecl) {
+                _declToColumn[idsDecl] = c->getTag();
             }
         }
 
-        if (writeNames._write) {
-            ColumnTag namesTag = proc->getNamesTag();
-            NamedColumn* namesCol = outDf->getColumn(namesTag);
-            namesCol->rename(writeNames._colName);
+        if (namesCol) {
+            NamedColumn* c = _builder.addColumnToOutput(namesCol);
+            c->rename(namesColName);
 
-            if (writeNames._exprDecl) {
-                _declToColumn[writeNames._exprDecl] = namesTag;
+            if (namesDecl) {
+                _declToColumn[namesDecl] = c->getTag();
             }
         }
     } else {
