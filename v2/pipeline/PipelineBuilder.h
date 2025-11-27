@@ -18,6 +18,7 @@
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
 #include "processors/LambdaTransformProcessor.h"
+#include "processors/ProcedureProcessor.h"
 
 #include "metadata/SupportedType.h"
 
@@ -46,7 +47,7 @@ public:
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
-    PipelineBlockOutputInterface& addScanLabelsProcedure(bool writeIDs = true, bool writeNames = true);
+    PipelineBlockOutputInterface& addProcedure(const ProcedureProcessor::Callback& callback);
 
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
@@ -117,7 +118,12 @@ public:
         return allocColumn<ColumnType>(_pendingOutput.getDataframe(), tag);
     }
 
-    const Processor* getLastProcessor() const { return _lastProc; }
+    // Helper to add an existing column to the current output dataframe
+    NamedColumn* addColumnToOutput(Column* col) {
+        NamedColumn* namedCol = NamedColumn::create(_dfMan, col, _dfMan->allocTag());
+        _pendingOutput.getDataframe()->addColumn(namedCol);
+        return namedCol;
+    }
 
 private:
     LocalMemory* _mem {nullptr};
@@ -125,7 +131,6 @@ private:
     DataframeManager* _dfMan {nullptr};
     PendingOutputView _pendingOutput;
     MaterializeProcessor* _matProc {nullptr};
-    Processor* _lastProc {nullptr};
     bool _isMaterializeOpen {false};
 
     template <typename ColumnType>

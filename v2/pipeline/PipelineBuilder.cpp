@@ -65,7 +65,6 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
     _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(nodeIDs);
 
     _pendingOutput.updateInterface(&outNodeIDs);
-    _lastProc = proc;
 
     return outNodeIDs;
 }
@@ -107,7 +106,6 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     matData.addToStep<ColumnNodeIDs>(targetNodes);
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = getOutEdges;
 
     return output;
 }
@@ -134,7 +132,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     // Initialise the processor's "memory" stores for left and right ports
     duplicateDataframeShape(_mem, _dfMan, leftDf, &cartProd->leftMemory());
     duplicateDataframeShape(_mem, _dfMan, rightDf, &cartProd->rightMemory());
-    _lastProc = cartProd;
 
     return output;
 }
@@ -171,7 +168,6 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
     matData.addToStep<ColumnNodeIDs>(sourceNodes);
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = getInEdges;
 
     return output;
 }
@@ -208,7 +204,6 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     matData.addToStep<ColumnNodeIDs>(otherNodes);
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = getEdges;
 
     return output;
 }
@@ -231,7 +226,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
     _isMaterializeOpen = false;
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = _matProc;
 
     return output;
 }
@@ -240,7 +234,6 @@ void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
     _pendingOutput.connectTo(lambda->input());
     _pendingOutput.updateInterface(nullptr);
-    _lastProc = lambda;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
@@ -254,7 +247,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
     duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = skip;
 
     return skip->output();
 }
@@ -270,7 +262,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
     duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = limit;
 
     return limit->output();
 }
@@ -283,7 +274,6 @@ PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     count->output().setValue(countColumn);
 
     _pendingOutput.updateInterface(&count->output());
-    _lastProc = count;
     return count->output();
 }
 
@@ -309,7 +299,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     }
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = projection;
 
     return output;
 }
@@ -317,34 +306,16 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
     LambdaSourceProcessor* source = LambdaSourceProcessor::create(_pipeline, callback);
     _pendingOutput.updateInterface(&source->output());
-    _lastProc = source;
     return source->output();
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addScanLabelsProcedure(bool writeIDs, bool writeNames) {
+PipelineBlockOutputInterface& PipelineBuilder::addProcedure(const ProcedureProcessor::Callback& callback) {
     openMaterialize();
 
-    ScanLabelsProcessor* proc = ScanLabelsProcessor::create(_pipeline);
-    PipelineBlockOutputInterface& output = proc->output();
+    ProcedureProcessor* proc = ProcedureProcessor::create(_pipeline, callback);
+    _pendingOutput.updateInterface(&proc->output());
 
-    Dataframe* outDf = output.getDataframe();
-
-    if (writeIDs) {
-        auto* idsCol = allocColumn<ColumnVector<LabelID>>(outDf);
-        proc->setIDsTag(idsCol->getTag());
-        _matProc->getMaterializeData().addToStep<ColumnVector<LabelID>>(idsCol);
-    }
-
-    if (writeNames) {
-        auto* namesCol = allocColumn<ColumnVector<std::string_view>>(outDf);
-        proc->setNamesTag(namesCol->getTag());
-        _matProc->getMaterializeData().addToStep<ColumnVector<std::string_view>>(namesCol);
-    }
-
-    _pendingOutput.updateInterface(&output);
-    _lastProc = proc;
-
-    return output;
+    return proc->output();
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTransformProcessor::Callback& cb) {
@@ -356,7 +327,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
     _pendingOutput.updateInterface(&output);
-    _lastProc = transf;
 
     return output;
 }
@@ -391,7 +361,6 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetProperties(PropertyType pr
     matData.addToStep<ColumnValues>(values);
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = getProps;
 
     return output;
 }
@@ -422,7 +391,6 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
     matData.addToStep<ColumnValues>(values);
 
     _pendingOutput.updateInterface(&output);
-    _lastProc = getProps;
 
     return output;
 }
