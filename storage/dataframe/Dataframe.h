@@ -37,6 +37,10 @@ public:
         return _tagToColumnMap.lookup(tag.getValue());
     }
 
+    bool hasColumn(ColumnTag tag) const {
+        return !(getColumn(tag) == nullptr);
+    }
+
     template <typename T>
     requires std::is_base_of_v<Column, T>
     T* getColumn(ColumnTag tag) const {

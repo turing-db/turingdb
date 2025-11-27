@@ -23,6 +23,7 @@
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/GetPropertyNode.h"
 #include "procedures/ProcedureBlueprintMap.h"
+#include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
@@ -748,15 +749,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     WriteProcessor::DeletedNodes delNodes;
     { // Add the columns containing deleted node variables
         for (const VarDecl* deletedVar : node->toDeleteNodes()) {
-            const auto it = _declToColumn.find(deletedVar);
-
-            if (it == end(_declToColumn)) {
-                throw PlannerException(fmt::format(
-                    "Attempted to delete variable {} which has no associated column.",
-                    deletedVar->getName()));
-            }
-
-            const ColumnTag tag = it->second;
+            const ColumnTag tag = getCol(deletedVar);
             delNodes.push_back(tag);
         }
     }
@@ -764,15 +757,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     WriteProcessor::DeletedEdges delEdges;
     { // Add the columns containing deleted edge variables
         for (const VarDecl* deletedVar : node->toDeleteEdges()) {
-            const auto it = _declToColumn.find(deletedVar);
-
-            if (it == end(_declToColumn)) {
-                throw PlannerException(fmt::format(
-                    "Attempted to delete variable {} which has no associated column.",
-                    deletedVar->getName()));
-            }
-
-            const ColumnTag tag = it->second;
+            const ColumnTag tag = getCol(deletedVar);
             delEdges.push_back(tag);
         }
     }
@@ -812,11 +797,27 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         for (const WriteNode::PendingEdge& pendingPlanEdge : node->pendingEdges()) {
             const EdgePatternData* const data = pendingPlanEdge._data;
 
-            [[maybe_unused]] const VarDecl* srcVar = pendingPlanEdge._src;
-            // const ColumnTag srcTag = getCol(srcVar);
+            // Source and target nodes could be existing nodes (passed to WriteProcesor as
+            // input), or pending nodes (produced by WriteProcessor as output). If they
+            // are input, they will already have a registered column from a previous
+            // processor => present in @ref _declToColumn => set the tag here. Otherwise,
+            // call to @ref PipelineBuilder::addWrite will alloc column for the pending
+            // node, and we pass an invalid (default initialised) ColumnTag for such nodes
+            // to the @ref WriteProcessorTypes::PendingEdge to be later updated in the
+            // builder call.
+            const VarDecl* srcVar = pendingPlanEdge._src;
+            ColumnTag srcTag {};
+            const std::string_view srcName = srcVar->getName();
+            if (const auto it = _declToColumn.find(srcVar); it != end(_declToColumn)) {
+                srcTag = it->second;
+            }
 
-            [[maybe_unused]] const VarDecl* tgtVar = pendingPlanEdge._tgt;
-            // const ColumnTag tgtTag = getCol(tgtVar);
+            const VarDecl* tgtVar = pendingPlanEdge._tgt;
+            ColumnTag tgtTag {};
+            const std::string_view tgtName = tgtVar->getName();
+            if (const auto it = _declToColumn.find(tgtVar); it != end(_declToColumn)) {
+                tgtTag = it->second;
+            }
 
             const std::string_view edgeVarName = pendingPlanEdge._name->getName();
 
@@ -833,13 +834,16 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
                 props.emplace_back(name, type, propCol);
             }
 
-            // Initialise with invalid column tags, then later update after @ref addWrite
+            // Initialise with invalid column tag, then later update after @ref addWrite
             // allocs the column
-            penEdges.emplace_back(std::move(props), edgeType, edgeVarName, ColumnTag {},
-                                  ColumnTag {}, ColumnTag {});
+            const ColumnTag edgeTag {};
+            penEdges.emplace_back(std::move(props), edgeType, edgeVarName, srcName,
+                                  tgtName, edgeTag, srcTag, tgtTag);
         }
     }
 
+    // Has the side effect of allocing columns, and modifying the @ref _tag field of
+    // elements of @ref penNodes and @ref penEdges in-place
     _builder.addWrite(delNodes, delEdges, penNodes, penEdges);
 
     // Above call to @ref addWrite alloc'd columns for the new nodes/edges, storing the
@@ -848,13 +852,13 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     // the ColumnTag (stored in the WriteProcessor PendingNodes/Edges).
     for (const auto& [planPendingNode, procPendingNode] :
          rv::zip(node->pendingNodes(), penNodes)) {
-             _declToColumn[planPendingNode._name] = procPendingNode._tag;
+        _declToColumn[planPendingNode._name] = procPendingNode._tag;
     }
     // All edge srcs/tgts are either already registered, or registered in the node loop
     // above
     for (const auto& [planPendingEdge, procPendingEdge] :
          rv::zip(node->pendingEdges(), penEdges)) {
-             _declToColumn[planPendingEdge._name] = procPendingEdge._tag;
+        _declToColumn[planPendingEdge._name] = procPendingEdge._tag;
     }
 
     return _builder.getPendingOutputInterface();

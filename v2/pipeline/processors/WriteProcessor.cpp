@@ -7,6 +7,8 @@
 #include "PipelinePort.h"
 
 #include "ExecutionContext.h"
+#include "columns/ColumnIDs.h"
+#include "dataframe/NamedColumn.h"
 #include "reader/GraphReader.h"
 #include "ID.h"
 #include "versioning/CommitBuilder.h"
@@ -164,15 +166,16 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
 
 void WriteProcessor::createNodes(size_t numIters) {
     NodeID nextNodeID = _writeBuffer->numPendingNodes();
+    Dataframe* outDf = _output.getDataframe();
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // Get the column in the output DF which will contain this node's IDs
-        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
-        if (!col) {
+        if (!outDf->hasColumn(node._tag)) {
             throw FatalException(
                 fmt::format("Could not get column in WriteProcessor "
                             "output dataframe for PendingNode with tag {}.",
                             node._tag.getValue()));
         }
+        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
         bioassert(col->size() == 0);
 
         const std::span labels = node._labels;
@@ -199,26 +202,72 @@ void WriteProcessor::createNodes(size_t numIters) {
 
 // @warn assumes all pending nodes have already been created
 void WriteProcessor::createEdges(size_t numIters) {
-    // EdgeID nextEdgeID = _writeBuffer->numPendingEdges();
+    EdgeID nextEdgeID = _writeBuffer->numPendingEdges();
+
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
-        auto* col = _output.getDataframe()->getColumn(edge._tag)->as<ColumnEdgeIDs>();
-        if (!col) {
+        Dataframe* outDf = _output.getDataframe();
+
+        if (!outDf->hasColumn(edge._tag)) {
             throw FatalException(
                 fmt::format("Could not get column in WriteProcessor "
                             "output dataframe for PendingEdge with tag {}.",
                             edge._tag.getValue()));
         }
+        auto* col = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
         bioassert(col->size() == 0);
 
-        for (size_t i = 0; i < numIters; i++) {
-            // if (edge._srcTag)
-            // auto& newEdge = _writeBuffer->new
+        ColumnNodeIDs* srcCol {nullptr};
+        const ColumnTag srcTag = edge._srcTag;
+        // If the tag exists in the input, it must be an already existing NodeID
+        // column - e.g. something returned by a MATCH query - otherwise it is a
+        // pending node which was created in this CREATE query
+        const bool srcIsPending = _input.getDataframe()->getColumn(srcTag) == nullptr;
+        // However, all input columns are also propagated to the output, so we can
+        // always retrieve the column from the output dataframe, regardless of whether
+        // the source node was the result of a CREATE or a MATCH
+        if (!outDf->hasColumn(srcTag)) {
+            throw FatalException(fmt::format("Attempted to create edge {} with "
+                                             "source node with no such column: {}",
+                                             edge._name, edge._srcTag.getValue()));
         }
+        srcCol = _output.getDataframe()->getColumn(srcTag)->as<ColumnNodeIDs>();
+
+        ColumnNodeIDs* tgtCol {nullptr};
+        const ColumnTag tgtTag = edge._tgtTag;
+        const bool tgtIsPending = _input.getDataframe()->getColumn(tgtTag) == nullptr;
+        if (!outDf->hasColumn(tgtTag)) {
+            throw FatalException(fmt::format("Attempted to create edge {} with "
+                                             "target node with no such column: {}",
+                                             edge._name, edge._tgtTag.getValue()));
+        }
+        tgtCol = _output.getDataframe()->getColumn(tgtTag)->as<ColumnNodeIDs>();
+
+        bioassert(tgtCol->size() == srcCol->size());
+        bioassert(tgtCol->size() == numIters);
+
+        for (size_t rowPtr = 0; rowPtr < numIters; rowPtr++) {
+            CommitWriteBuffer::ExistingOrPendingNode source =
+                srcIsPending ? srcCol->at(rowPtr) // Exists => NodeID
+                             : size_t {srcCol->at(rowPtr).getValue()}; // Pending => size_t offset in CWB
+
+            CommitWriteBuffer::ExistingOrPendingNode target =
+                tgtIsPending ? tgtCol->at(rowPtr)// Exists => NodeID
+                             : size_t {tgtCol->at(rowPtr).getValue()}; // Pending => size_t offset in CWB
+
+            _writeBuffer->newPendingEdge(source, target);
+        }
+
+        std::vector<EdgeID>& raw = col->getRaw();
+        raw.resize(raw.size() + numIters);
+
+        std::iota(col->begin(), col->end(), nextEdgeID);
+        nextEdgeID += numIters;
     }
 }
 
 void WriteProcessor::postProcessFakeIDs() {
     const NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
+
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // Get the column in the output DF which will contain this node's IDs
         auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
@@ -230,7 +279,7 @@ void WriteProcessor::postProcessFakeIDs() {
         }
 
         std::vector<NodeID>& raw = col->getRaw();
-        std::ranges::for_each(raw, [nextNodeID](NodeID& fakeID) { fakeID += nextNodeID; });
+        std::ranges::for_each(raw, [nextNodeID] (NodeID& fakeID) { fakeID += nextNodeID; });
     }
 
     const EdgeID nextEdgeID = _ctxt->getGraphView().read().getTotalEdgesAllocated();
@@ -255,6 +304,7 @@ void WriteProcessor::performCreations() {
 
     // 1. Node creations
     createNodes(numIters);
+    createEdges(numIters);
 
     // 2. Link up edges
 

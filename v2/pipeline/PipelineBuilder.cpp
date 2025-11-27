@@ -469,6 +469,10 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
                                                         WriteProcessor::PendingEdges& pendingEdges) {
     auto* processor = WriteProcessor::create(_pipeline);
 
+    // Track node vars -> columns allocd to register edge src/tgt cols
+    std::unordered_map<std::string_view, ColumnTag> varToCol;
+    varToCol.reserve(pendingNodes.size());
+
     if (!_pendingOutput.getInterface()) {
         throw FatalException("WriteProcessor has no input.");
     }
@@ -517,10 +521,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         newCol->rename(node._name);
         // Set the tag so the WriteProcessor knows which column to write into
         node._tag = newCol->getTag();
-
-        // XXX: Assumption that each "pendingNode" can expand to multiple nodes to be
-        // created, and that there is not one "pendingNode" for each node that will
-        // actually end up being created.
+        varToCol[node._name] = node._tag;
     }
     processor->setPendingNodes(pendingNodes);
 
@@ -531,10 +532,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         newCol->rename(edge._name);
         // Set the tag so the WriteProcessor knows which column to write into
         edge._tag = newCol->getTag();
-
-        // XXX: Assumption that each "pendingNode" can expand to multiple nodes to be
-        // created, and that there is not one "pendingNode" for each node that will
-        // actually end up being created.
+        edge._srcTag = edge._srcTag.isValid() ? edge._srcTag : varToCol[edge._srcName];
+        edge._tgtTag = edge._tgtTag.isValid() ? edge._tgtTag : varToCol[edge._tgtName];
     }
     processor->setPendingEdges(pendingEdges);
 
