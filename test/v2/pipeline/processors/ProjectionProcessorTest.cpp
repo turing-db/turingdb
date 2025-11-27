@@ -63,9 +63,12 @@ TEST_F(ProjectionProcessorTest, test) {
         }
     };
 
-    std::vector<ColumnTag> tags = {originIDsTag};
+    std::vector<ProjectionItem> items= {
+        {originIDsTag, "originIDs"},
+    };
+
     _builder->addMaterialize();
-    _builder->addProjection(tags);
+    _builder->addProjection(items);
     _builder->addLambda(callback);
 
     fmt::println("\n- Executing pipeline with chunk size 100...");

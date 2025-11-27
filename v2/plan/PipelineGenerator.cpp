@@ -336,11 +336,6 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
         throw PlannerException("GetPropertyNode does not have an expression variable declaration");
     }
 
-    const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)expr);
-    if (!exprStrRep.empty()) {
-        output->rename(exprStrRep);
-    }
-
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
     _builder.addMaterialize();
@@ -397,13 +392,6 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
         throw PlannerException("GetPropertyWithNullNode does not have an expression variable declaration");
     }
 
-    const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)expr);
-    if (exprStrRep.empty()) [[unlikely]] {
-        throw PlannerException("Unknown error. Could not get string representation of expression");
-    }
-
-    output->rename(exprStrRep);
-
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
     return _builder.getPendingOutputInterface();
@@ -432,7 +420,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     const Projection* projNode = node->getProjection();
 
-    std::vector<ColumnTag> tags;
+    std::vector<ProjectionItem> items;
 
     for (const Expr* item : projNode->items()) {
         const VarDecl* decl = item->getExprVarDecl();
@@ -442,11 +430,12 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
         }
 
         const ColumnTag tag = _declToColumn.at(decl);
+        const std::string_view repr = _sourceManager->getStringRepr((std::uintptr_t)item);
 
-        tags.push_back(tag);
+        items.push_back({tag, repr});
     }
 
-    _builder.addProjection(tags);
+    _builder.addProjection(items);
 
     auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -604,12 +593,6 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
                 throw PlannerException("Count() expression does not have an expression variable declaration");
             }
 
-            const std::string_view exprStrRep = _sourceManager->getStringRepr((std::uintptr_t)func);
-            if (exprStrRep.empty()) [[unlikely]] {
-                throw PlannerException("Unknown error. Could not get string representation of expression");
-            }
-
-            output->rename(exprStrRep);
             _declToColumn[exprDecl] = output->getValue()->getTag();
         } else {
             throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->_fullName));
