@@ -747,6 +747,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     }
 
     WriteProcessor::DeletedNodes delNodes;
+    delNodes.reserve(node->toDeleteNodes().size());
     { // Add the columns containing deleted node variables
         for (const VarDecl* deletedVar : node->toDeleteNodes()) {
             const ColumnTag tag = getCol(deletedVar);
@@ -755,6 +756,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     }
 
     WriteProcessor::DeletedEdges delEdges;
+    delEdges.reserve(node->toDeleteEdges().size());
     { // Add the columns containing deleted edge variables
         for (const VarDecl* deletedVar : node->toDeleteEdges()) {
             const ColumnTag tag = getCol(deletedVar);
@@ -779,6 +781,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             WriteProcessorTypes::PropertyConstraints props;
             props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
+                throw PipelineException("Unsupported: Creating nodes with properties");
                 const auto& [name, type, expr] = propConstr;
                 const ColumnTag propCol = getCol(expr->getExprVarDecl());
 
@@ -829,6 +832,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             WriteProcessorTypes::PropertyConstraints props;
             props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
+                throw PipelineException("Unsupported: Creating edges with properties");
                 const auto& [name, type, expr] = propConstr;
                 const ColumnTag propCol = getCol(expr->getExprVarDecl());
                 props.emplace_back(name, type, propCol);
