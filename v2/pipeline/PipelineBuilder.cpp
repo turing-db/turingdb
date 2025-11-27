@@ -2,6 +2,7 @@
 
 #include "processors/CartesianProductProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
+#include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
@@ -90,8 +91,6 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
 }
 
 PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
-    openMaterialize();
-
     // Create scan nodes processor
     ScanNodesProcessor* proc = ScanNodesProcessor::create(_pipeline);
     PipelineNodeOutputInterface& outNodeIDs = proc->outNodeIDs();
@@ -109,13 +108,6 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
-    // Create get out edges processor
-    if (!_isMaterializeOpen) {
-        bioassert(_matProc != nullptr);
-        _matProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *_matProc);
-        _isMaterializeOpen = true;
-    }
-
     GetOutEdgesProcessor* getOutEdges = GetOutEdgesProcessor::create(_pipeline);
 
     PipelineNodeInputInterface& input = getOutEdges->inNodeIDs();
@@ -176,12 +168,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
-    if (!_isMaterializeOpen) {
-        bioassert(_matProc != nullptr);
-        _matProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *_matProc);
-        _isMaterializeOpen = true;
-    }
-
     GetInEdgesProcessor* getInEdges = GetInEdgesProcessor::create(_pipeline);
 
     PipelineNodeInputInterface& input = getInEdges->inNodeIDs();
@@ -212,12 +198,6 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
-    if (!_isMaterializeOpen) {
-        bioassert(_matProc != nullptr);
-        _matProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *_matProc);
-        _isMaterializeOpen = true;
-    }
-
     GetEdgesProcessor* getEdges = GetEdgesProcessor::create(_pipeline);
 
     PipelineNodeInputInterface& input = getEdges->inNodeIDs();
@@ -247,13 +227,24 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     return output;
 }
 
-void PipelineBuilder::openMaterialize() {
-    _matProc = MaterializeProcessor::create(_pipeline, _mem);
-    _isMaterializeOpen = true;
-}
-
 bool PipelineBuilder::isSingleMaterializeStep() const {
     return _matProc->getMaterializeData().isSingleStep();
+}
+
+ForkOutputs PipelineBuilder::addFork(size_t count) {
+    ForkProcessor* fork = ForkProcessor::create(_pipeline, count);
+
+    PipelineBlockInputInterface& input = fork->input();
+    std::vector<PipelineBlockOutputInterface>& outputs = fork->outputs();
+
+    _pendingOutput.connectTo(input);
+
+    for (auto& output : outputs) {
+        duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
+        output.setStream(input.getStream());
+    }
+
+    return outputs;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
@@ -262,7 +253,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addMaterialize() {
 
     _pendingOutput.connectTo(input);
     output.setStream(input.getStream());
-    _isMaterializeOpen = false;
 
     _pendingOutput.updateInterface(&output);
 
@@ -379,8 +369,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
 
 PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const ProcedureBlueprint& blueprint,
                                                                     std::span<ProcedureBlueprint::YieldItem> yield) {
-    openMaterialize();
-
     DatabaseProcedureProcessor* proc = DatabaseProcedureProcessor::create(_pipeline, blueprint);
     auto& output = proc->output();
 

@@ -1,5 +1,7 @@
 #include "processors/ProcessorTester.h"
 
+#include "processors/MaterializeProcessor.h"
+
 #include "SystemManager.h"
 #include "SimpleGraph.h"
 #include "LineContainer.h"
@@ -40,6 +42,7 @@ TEST_F(ProjectionProcessorTest, test) {
     expLines.print(std::cout);
 
     // Pipeline definition
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
     _builder->addGetOutEdges();

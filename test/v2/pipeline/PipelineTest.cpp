@@ -23,6 +23,7 @@
 #include "PipelineBuilder.h"
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
+#include "processors/MaterializeProcessor.h"
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -66,7 +67,8 @@ TEST_F(PipelineTest, scanNodes) {
     PipelineV2 pipeline;
 
     PipelineBuilder builder(&mem, &pipeline);
-    
+
+    builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
 
@@ -108,7 +110,8 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     PipelineV2 pipeline;
 
     PipelineBuilder builder(&mem, &pipeline);
-    
+
+    builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
 
@@ -177,9 +180,10 @@ TEST_F(PipelineTest, scanNodesExpand2) {
 
     PipelineBuilder builder(&mem, &pipeline);
 
+    builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     PipelineNodeOutputInterface& scanNodesOut = builder.addScanNodes();
     const ColumnTag scanOutNodeIDsTag = scanNodesOut.getNodeIDs()->getTag();
-    
+
     PipelineEdgeOutputInterface& getOutEdges1Out = builder.addGetOutEdges();
     const ColumnTag getOutEdges1OutTargetNodesTag = getOutEdges1Out.getOtherNodes()->getTag();
     
@@ -260,6 +264,7 @@ TEST_F(PipelineTest, scanNodesLimit) {
 
     PipelineBuilder builder(&mem, &pipeline);
 
+    builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     builder.addScanNodes();
     builder.addMaterialize();
 
@@ -311,6 +316,7 @@ TEST_F(PipelineTest, scanNodesSkip) {
     PipelineV2 pipeline;
 
     PipelineBuilder builder(&mem, &pipeline);
+    builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     builder.addScanNodes();
     builder.addMaterialize();
 
@@ -361,6 +367,7 @@ TEST_F(PipelineTest, scanNodesCount) {
     PipelineV2 pipeline;
 
     PipelineBuilder builder(&mem, &pipeline);
+    builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     builder.addScanNodes();
     builder.addMaterialize();
     builder.addCount();

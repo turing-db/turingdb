@@ -16,6 +16,7 @@
 #include "PipelineBuilder.h"
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
+#include "processors/MaterializeProcessor.h"
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -62,6 +63,7 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         PipelineV2 pipeline;
         PipelineBuilder builder(&mem, &pipeline);
 
+        builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
         builder.addScanNodes();
         builder.addGetOutEdges();
         builder.addMaterialize();
@@ -128,6 +130,7 @@ TEST_F(CountProcessorTest, expand3) {
         PipelineV2 pipeline;
         PipelineBuilder builder(&mem, &pipeline);
 
+        builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
         builder.addScanNodes();
         builder.addGetOutEdges();
         builder.addGetOutEdges();

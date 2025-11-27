@@ -2,6 +2,7 @@
 
 #include "SystemManager.h"
 #include "SimpleGraph.h"
+#include "processors/MaterializeProcessor.h"
 
 using namespace db;
 using namespace db::v2;
@@ -40,6 +41,7 @@ TEST_F(ScanNodesProcessorTest, scanNodesVarChunk) {
         // Pipeline definition
         PipelineV2 pipeline;
         PipelineBuilder builder(&mem, &pipeline);
+        builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
         const ColumnTag scanNodeIDsTag = builder.addScanNodes().getNodeIDs()->getTag();
 
         resultNodeIDs.clear();

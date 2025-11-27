@@ -124,22 +124,28 @@ MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMe
     return materialize;
 }
 
+MaterializeProcessor* MaterializeProcessor::clone(PipelineV2* pipeline,
+                                                  LocalMemory* mem,
+                                                  const MaterializeProcessor& prev) {
+    MaterializeProcessor* newMat = MaterializeProcessor::create(pipeline, mem);
+    newMat->_matData.cloneFromPrev(mem, pipeline->getDataframeManager(), prev._matData);
+
+    return newMat;
+}
+
+MaterializeProcessor* MaterializeProcessor::createFromDf(PipelineV2* pipeline,
+                                                         LocalMemory* mem,
+                                                         Dataframe* df) {
+    MaterializeProcessor* newMat = MaterializeProcessor::create(pipeline, mem);
+    newMat->_matData.initFromDf(mem, pipeline->getDataframeManager(), df);
+
+    return newMat;
+}
+
 MaterializeProcessor* MaterializeProcessor::createFromPrev(PipelineV2* pipeline,
                                                            LocalMemory* mem,
                                                            const MaterializeProcessor& prev) {
-    MaterializeProcessor* newMat = new MaterializeProcessor(mem, pipeline->getDataframeManager());
-    PipelineInputPort* input = PipelineInputPort::create(pipeline, newMat);
-    newMat->_input.setPort(input);
-    newMat->addInput(input);
-
-    PipelineOutputPort* output = PipelineOutputPort::create(pipeline, newMat);
-    newMat->_output.setPort(output);
-    newMat->addOutput(output);
-
-    newMat->_matData.setOutput(output->getBuffer()->getDataframe());
-
-    newMat->postCreate(pipeline);
-
+    MaterializeProcessor* newMat = MaterializeProcessor::create(pipeline, mem);
     newMat->_matData.initFromPrev(mem, pipeline->getDataframeManager(), prev._matData);
 
     return newMat;

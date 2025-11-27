@@ -1,5 +1,7 @@
 #include "processors/ProcessorTester.h"
 
+#include "processors/MaterializeProcessor.h"
+
 #include "SystemManager.h"
 #include "SimpleGraph.h"
 #include "LineContainer.h"
@@ -48,6 +50,7 @@ TEST_F(GetPropertiesProcessorTest, test) {
     expLines.print(std::cout);
 
     // Pipeline definition
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
     const auto& propInterface = _builder->addGetProperties<EntityType::Node, types::Int64>(ageType);
@@ -55,6 +58,9 @@ TEST_F(GetPropertiesProcessorTest, test) {
 
     _builder->addMaterialize();
 
+    _builder->setMaterializeProc(MaterializeProcessor::createFromPrev(&_pipeline,
+                                                                      &_env->getMem(),
+                                                                      *_builder->getMaterializeProc()));
     const auto& edgeInterface = _builder->addGetOutEdges();
 
     const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();

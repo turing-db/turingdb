@@ -1,5 +1,7 @@
 #include "processors/ProcessorTester.h"
 
+#include "processors/MaterializeProcessor.h"
+
 #include "SystemManager.h"
 #include "SimpleGraph.h"
 
@@ -46,6 +48,7 @@ TEST_F(SkipLimitProcessorTest, scanNodesSkip) {
             PipelineV2 pipeline;
 
             PipelineBuilder builder(&mem, &pipeline);
+            builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
             builder.addScanNodes();
             builder.addMaterialize();
             builder.addSkip(skipCount);

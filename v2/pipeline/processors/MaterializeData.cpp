@@ -3,7 +3,6 @@
 #include "dataframe/DataframeManager.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-
 #include "LocalMemory.h"
 
 #include "PipelineException.h"
@@ -30,6 +29,37 @@ void MaterializeData::initFromPrev(LocalMemory* mem,
         _columnsPerStep[0].push_back(col->getColumn());
         _output->addColumn(newNamedCol);
     }
+}
+
+void MaterializeData::initFromDf(LocalMemory* mem,
+                                 DataframeManager* dfMan,
+                                 const Dataframe* df) {
+    _colCount = df->size();
+    for (const auto* col : df->cols()) {
+        _columnsPerStep[0].push_back(col->getColumn());
+
+        Column* outCol = _mem->allocSame(col->getColumn());
+        NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getTag());
+
+        _output->addColumn(outNamedCol);
+    }
+}
+
+void MaterializeData::cloneFromPrev(LocalMemory* mem,
+                                    DataframeManager* dfMan,
+                                    const MaterializeData& prevData) {
+    _colCount = prevData._colCount;
+
+    for (const auto& col : prevData._output->cols()) {
+        Column* newCol = mem->allocSame(col->getColumn());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
+
+        _output->addColumn(newNamedCol);
+    }
+    _step = prevData._step;
+    _indices = prevData._indices;
+    _columnsPerStep = prevData._columnsPerStep;
+    _colCount = prevData._colCount;
 }
 
 MaterializeData::~MaterializeData() {

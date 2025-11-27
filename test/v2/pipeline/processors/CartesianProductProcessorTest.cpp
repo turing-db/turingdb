@@ -13,6 +13,7 @@
 #include "dataframe/Dataframe.h"
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
+#include "processors/MaterializeProcessor.h"
 #include "columns/ColumnIDs.h"
 #include "SystemManager.h"
 #include "SimpleGraph.h"
@@ -38,7 +39,9 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     constexpr size_t OUTPUT_NUM_ROWS = 169;
     constexpr size_t NUM_NODES_IN_SCAN = 13;
 
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     auto& scanNodes2 = _builder->addScanNodes();
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
 
     // scanNodes1 as implicit LHS
@@ -770,6 +773,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     constexpr size_t L_ROWS = 13;
     constexpr size_t R_ROWS = 13;
 
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     auto& scanNodes2 = _builder->addScanNodes();
     [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
 
@@ -829,10 +833,12 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     using Rows = LineContainer<NodeID, NodeID, EdgeID, EdgeTypeID, NodeID>;
     auto [transaction, view, reader] = readGraph();
 
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     _builder->addScanNodes();
     _builder->addGetOutEdges();
     auto& matProc = _builder->addMaterialize();
 
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     _builder->addScanNodes();
 
     // scanNodes as implicit LHS
@@ -924,6 +930,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
                 _pipeline.getDataframeManager()->allocTag());
         }
 
+        _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
         [[maybe_unused]] auto& scanNodes1 = _builder->addScanNodes();
         const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), L_COLS + R_COLS);
@@ -990,6 +997,7 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
     };
 
     { // Wire up the cartesian product to the two inputs
+        _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
         _builder->addScanNodes();
         _builder->addGetOutEdges();
         auto& matProc = _builder->addMaterialize();

@@ -3,7 +3,6 @@
 #include <stack>
 
 #include <spdlog/fmt/fmt.h>
-
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
@@ -20,6 +19,8 @@
 #include "procedures/ProcedureBlueprintMap.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
+
+#include "processors/MaterializeProcessor.h"
 
 #include "nodes/CartesianProductNode.h"
 #include "nodes/PlanGraphNode.h"
@@ -52,8 +53,9 @@ using namespace db::v2;
 namespace {
 
 struct TranslateNodeToken {
-    PlanGraphNode* _node {nullptr};
-    PipelineOutputInterface* _previousInterface {nullptr};
+    PlanGraphNode* node {nullptr};
+    PipelineOutputInterface* previousInterface {nullptr};
+    MaterializeProcessor* matProc {nullptr};
 };
 
 using TranslateTokenStack = std::stack<TranslateNodeToken>;
@@ -86,6 +88,7 @@ struct PropertyTypeDispatcher {
     }
 };
 
+
 }
 
 void PipelineGenerator::generate() {
@@ -96,69 +99,91 @@ void PipelineGenerator::generate() {
     _graph->getRoots(rootNodes);
 
     for (const auto& node : rootNodes) {
-        nodeStack.push({node, nullptr});
+        // create a new materialize processor for every branch
+        nodeStack.emplace(node, nullptr, MaterializeProcessor::create(_pipeline, _mem));
     }
+
 
     // Translate nodes in a DFS manner
     while (!nodeStack.empty()) {
-        auto [node, prevIf] = nodeStack.top();
+        auto [node, prevIf, matProc] = nodeStack.top();
         nodeStack.pop();
 
-        // Binary nodes that are encountered for the second time should not reset @ref
-        // _builder::_pendingOutput with the first-encounter-parent (that stored in @ref
-        // prevIf), because that is already stored in @ref _binaryVisitedMap. Instead, on
-        // the second visit to binary nodes, keep the current pending output: do not
-        // overwrite it.
-        const bool binaryAndVisited =
-            node->isBinary() && _binaryVisitedMap.contains(node);
-        if (!binaryAndVisited) {
-            _builder.getPendingOutput().setInterface(prevIf);
-        }
+        // Always set pending output from the previous Output Interface of the node
+        // that inserted the current node into the stack
+        _builder.getPendingOutput().setInterface(prevIf);
 
-        // If we have no previous interface to take inputs from when we should: error
-        if (_builder.getPendingOutputInterface() == nullptr && !node->inputs().empty()) {
-            throw FatalException(
-                fmt::format("Non-root node {} has nullptr previous interface.",
-                            PlanGraphOpcodeDescription::value(node->getOpcode())));
-        }
-
+        // We also set the materialize processor from the previous materialize processor
+        // of the node that inserted the current node into the stack
+        _builder.setMaterializeProc(matProc);
         PipelineOutputInterface* outputIf = translateNode(node);
 
-        for (PlanGraphNode* nextNode : node->outputs()) {
-            if (!nextNode->isBinary()) {
-                // Unary node case
-                // Push unto stack and continue
-                nodeStack.push({nextNode, outputIf});
-            } else {
-                // === Binary node case == 
+        // If a new mat proc could be created during the node transalation
+        //(In the case of join/cartesian product) we need to retreive
+        // it from _builder - otherwise this will hold the same pinter as
+        // matProc
+        auto* newMatProc = _builder.getMaterializeProc();
 
-                // If the next node is a binary node we materialize for now
-                // TODO: Add a `needsMaterialised` check based on PlanNode - some binary nodes
-                // may not need their inputs materialised perhaps?
-                if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
-                    _builder.addMaterialize();
+        if (newMatProc->isConnected()) {
+            // If we have materialized during the transalate we have to make a new matProc
+            newMatProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *newMatProc);
+        }
+        auto processNextNode = [&](PlanGraphNode* nextNode) {
+            // Unary node case
+            if (!nextNode->isBinary()) {
+                nodeStack.emplace(nextNode, outputIf, newMatProc);
+            } else {
+                // Binary node case
+                // We need to materialize the inputs of a binary node (for now)
+                _builder.setMaterializeProc(newMatProc);
+                // Check if we only have a single step in the current mat proc, if
+                // so there is no need to materialize
+                if (!_builder.isSingleMaterializeStep()) {
+                    outputIf = &_builder.addMaterialize();
+                    // reinitialise the materialise processor to pass on the descendant nodes
+                    // newMatProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, newMatProc);
                 }
 
                 const bool visited = _binaryVisitedMap.contains(nextNode);
                 if (visited) {
-                    // The binary node has been visited already, it is our second encounter
-                    // So the other input has been translated already, we can proceed through
-                    nodeStack.push({nextNode, outputIf});
-                } else {
-                    // The binary node has not been visited yet
-                    // Register info into _binaryVisitedMap
-
-                    // Record our pending interface and if we are coming from the left side
-                    const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
-                    const bool isLhs = (node == binaryNodeInputs.front());
-                    bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
-
-                    const PendingOutputView& pendingOutput = _builder.getPendingOutput();
-                    const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
-
-                    _binaryVisitedMap.emplace(nextNode, info);
+                    // Binary Nodes have a null MatProc pointer initially
+                    // There is no need to materialize before we add the node
+                    // to the builder as we have materialized the inputs.
+                    // All Binary Nodes must create a new MaterializeProcessor!
+                    nodeStack.emplace(nextNode, outputIf, nullptr);
+                    return;
                 }
+
+                const PendingOutputView& pendingOutput = _builder.getPendingOutput();
+                const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
+                const bool isLhs = (node == binaryNodeInputs.front());
+                bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
+
+                const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
+                _binaryVisitedMap.emplace(nextNode, info);
             }
+        };
+
+        const auto& outputs = node->outputs();
+        if (outputs.size() > 1) {
+            auto& forkOutputs = _builder.addFork(outputs.size());
+            for (size_t i = 0; i < outputs.size(); ++i) {
+                auto* const nextNode = outputs[i];
+                // set outputIf to each of the forks output ports, so each descendant
+                // branch will have copy of the pipelineInterface to work with
+                outputIf = &(forkOutputs[i]);
+
+                // Copy MatProc from 2nd branch to the last branch (we can reuse the MatProc
+                // for the first branch)
+                if (i > 0) {
+                    // clone the mat proc for each of the forks output ports, so each descendant
+                    // branch will have copy of the marProc to work with
+                    newMatProc = MaterializeProcessor::clone(_pipeline, _mem, *newMatProc);
+                }
+                processNextNode(nextNode);
+            }
+        } else if (outputs.size() == 1) {
+            processNextNode(outputs.front());
         }
     }
 }
@@ -363,7 +388,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
 }
 
 PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -431,9 +456,7 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
 }
 
 PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
-    // If MaterializeNode has not been seen at that point,
-    // we materialize if we have data in flight
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -484,9 +507,7 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
 }
 
 PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* node) {
-    // If MaterializeNode has not been seen at that point,
-    // we materialize if we have data in flight
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -510,9 +531,7 @@ PipelineOutputInterface* PipelineGenerator::translateSkipNode(SkipNode* node) {
 }
 
 PipelineOutputInterface* PipelineGenerator::translateLimitNode(LimitNode* node) {
-    // If MaterializeNode has not been seen at that point,
-    // we materialize if we have data in flight
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -550,12 +569,15 @@ PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(Cartes
     // LHS is implicit in @ref _pendingOutput
     _builder.getPendingOutput().updateInterface(lhs);
 
-    _builder.addCartesianProduct(rhs);
+    const auto& outputIf = _builder.addCartesianProduct(rhs);
+    _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
+                                                                   _mem,
+                                                                   outputIf.getDataframe()));
     return _builder.getPendingOutputInterface();
 }
 
 PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -632,7 +654,7 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
 }
 
 PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(ProcedureEvalNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
