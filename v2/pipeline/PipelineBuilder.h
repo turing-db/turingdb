@@ -6,6 +6,7 @@
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
 
+#include "ProjectionItem.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
@@ -93,7 +94,7 @@ public:
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);
     PipelineValueOutputInterface& addCount(ColumnTag colTag = ColumnTag {});
-    PipelineBlockOutputInterface& addProjection(std::span<ColumnTag> tags);
+    PipelineBlockOutputInterface& addProjection(std::span<ProjectionItem> items);
 
     // Lambda transform
     PipelineBlockOutputInterface& addLambdaTransform(const LambdaTransformProcessor::Callback& callback);

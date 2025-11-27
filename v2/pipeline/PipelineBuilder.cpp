@@ -136,6 +136,12 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
+    if (!_isMaterializeOpen) {
+        bioassert(_matProc != nullptr);
+        _matProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *_matProc);
+        _isMaterializeOpen = true;
+    }
+
     GetInEdgesProcessor* getInEdges = GetInEdgesProcessor::create(_pipeline);
 
     PipelineNodeInputInterface& input = getInEdges->inNodeIDs();
@@ -166,10 +172,16 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
 }
 
 PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
-    GetEdgesProcessor* getInEdges = GetEdgesProcessor::create(_pipeline);
+    if (!_isMaterializeOpen) {
+        bioassert(_matProc != nullptr);
+        _matProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *_matProc);
+        _isMaterializeOpen = true;
+    }
 
-    PipelineNodeInputInterface& input = getInEdges->inNodeIDs();
-    PipelineEdgeOutputInterface& output = getInEdges->outEdges();
+    GetEdgesProcessor* getEdges = GetEdgesProcessor::create(_pipeline);
+
+    PipelineNodeInputInterface& input = getEdges->inNodeIDs();
+    PipelineEdgeOutputInterface& output = getEdges->outEdges();
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
@@ -264,7 +276,7 @@ PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     return count->output();
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ColumnTag> tags) {
+PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ProjectionItem> items) {
     ProjectionProcessor* projection = ProjectionProcessor::create(_pipeline);
 
     PipelineBlockInputInterface& input = projection->input();
@@ -276,8 +288,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ColumnTag
     Dataframe* outDf = output.getDataframe();
 
     // Forward only the projected columns to the next processor
-    for (const ColumnTag& tag : tags) {
-        outDf->addColumn(inDf->getColumn(tag));
+    for (const auto& item : items) {
+        NamedColumn* col = inDf->getColumn(item._tag);
+        outDf->addColumn(col);
+
+        if (!item._name.empty()) {
+            col->rename(item._name);
+        }
     }
 
     _pendingOutput.updateInterface(&output);
