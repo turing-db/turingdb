@@ -65,14 +65,16 @@ template void validateDeletions<EdgeID>(const GraphReader reader, ColumnVector<E
 
 }
 
-WriteProcessor* WriteProcessor::create(PipelineV2* pipeline) {
+WriteProcessor* WriteProcessor::create(PipelineV2* pipeline, bool hasInput) {
     auto* processor = new WriteProcessor();
 
-    {
+    if (hasInput) {
         auto* inputPort = PipelineInputPort::create(pipeline, processor);
-        processor->_input.setPort(inputPort);
+        processor->_input->setPort(inputPort);
         processor->addInput(inputPort);
         inputPort->setNeedsData(true);
+    } else {
+        processor->_input = std::nullopt;
     }
 
     {
@@ -110,21 +112,28 @@ void WriteProcessor::reset() {
 }
 
 void WriteProcessor::execute() {
-    if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
+    // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
+    // meaning if we are deleting, we require an input. This may change.
+    if (_input && (!_deletedNodes.empty() || !_deletedEdges.empty())) {
         performDeletions();
     }
 
     if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
         performCreations();
     }
-    _input.getPort()->consume();
+
+    if (_input) {
+        _input->getPort()->consume();
+    }
     _output.getPort()->writeData();
     finish();
 }
 
 void WriteProcessor::performDeletions() {
+    bioassert(_input);
+
     const GraphReader reader = _ctxt->getGraphView().read();
-    const Dataframe* inDf =_input.getDataframe();
+    const Dataframe* inDf = _input->getDataframe();
 
     for (const ColumnTag deletedTag : _deletedNodes) {
         auto* nodeColumn = inDf->getColumn(deletedTag)->as<ColumnNodeIDs>();
@@ -167,6 +176,7 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
 void WriteProcessor::createNodes(size_t numIters) {
     NodeID nextNodeID = _writeBuffer->numPendingNodes();
     Dataframe* outDf = _output.getDataframe();
+
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // Get the column in the output DF which will contain this node's IDs
         if (!outDf->hasColumn(node._tag)) {
@@ -221,7 +231,8 @@ void WriteProcessor::createEdges(size_t numIters) {
         // If the tag exists in the input, it must be an already existing NodeID
         // column - e.g. something returned by a MATCH query - otherwise it is a
         // pending node which was created in this CREATE query
-        const bool srcIsPending = _input.getDataframe()->getColumn(srcTag) == nullptr;
+        const bool srcIsPending =
+            _input && _input->getDataframe()->getColumn(srcTag) == nullptr;
         // However, all input columns are also propagated to the output, so we can
         // always retrieve the column from the output dataframe, regardless of whether
         // the source node was the result of a CREATE or a MATCH
@@ -234,7 +245,8 @@ void WriteProcessor::createEdges(size_t numIters) {
 
         ColumnNodeIDs* tgtCol {nullptr};
         const ColumnTag tgtTag = edge._tgtTag;
-        const bool tgtIsPending = _input.getDataframe()->getColumn(tgtTag) == nullptr;
+        const bool tgtIsPending =
+            _input && _input->getDataframe()->getColumn(tgtTag) == nullptr;
         if (!outDf->hasColumn(tgtTag)) {
             throw FatalException(fmt::format("Attempted to create edge {} with "
                                              "target node with no such column: {}",
@@ -300,7 +312,7 @@ void WriteProcessor::postProcessFakeIDs() {
 
 void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input
-    const size_t numIters = _input.getDataframe()->getRowCount();
+    const size_t numIters = _input ? _input->getDataframe()->getRowCount() : 1;
 
     // 1. Node creations
     createNodes(numIters);

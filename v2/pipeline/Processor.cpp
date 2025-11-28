@@ -15,12 +15,12 @@ void Processor::postCreate(PipelineV2* pipeline) {
     pipeline->addProcessor(this);
 }
 
-void Processor::addInput(PipelineInputPort* buffer) {
-    _inputs.push_back(buffer);
+void Processor::addInput(PipelineInputPort* port) {
+    _inputs.push_back(port);
 }
 
-void Processor::addOutput(PipelineOutputPort* buffer) {
-    _outputs.push_back(buffer);
+void Processor::addOutput(PipelineOutputPort* port) {
+    _outputs.push_back(port);
 }
 
 void Processor::finish() {

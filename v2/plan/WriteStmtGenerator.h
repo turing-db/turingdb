@@ -53,6 +53,8 @@ private:
     void prepareWriteNode(PlanGraphNode* prevNode);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
+
+    static constexpr bool DELETE_PENDING_SUPPORTED {false};
 };
 
 }

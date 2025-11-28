@@ -129,14 +129,14 @@ void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNod
         const EvaluatedType type = symbol->getType();
 
         if (type == EvaluatedType::NodePattern) {
-            if (_currentNode->hasPendingNode(decl)) {
+            if (_currentNode->hasPendingNode(decl) && !DELETE_PENDING_SUPPORTED) {
                 // TODO: Check if we should support this, Neo4j does
                 throwError("Cannot delete pending node", symbol);
             }
 
             _currentNode->deleteNode(decl);
         } else if (type == EvaluatedType::EdgePattern) {
-            if (_currentNode->hasPendingEdge(decl)) {
+            if (_currentNode->hasPendingEdge(decl) && !DELETE_PENDING_SUPPORTED) {
                 // TODO: Check if we should support this, Neo4j does
                 throwError("Cannot delete pending edge", symbol);
             }

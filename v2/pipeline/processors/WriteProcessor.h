@@ -1,13 +1,17 @@
 #pragma once
 
+#include <cmath>
+#include <optional>
 #include <string_view>
 
+#include "FatalException.h"
 #include "Processor.h"
 #include "WriteProcessorTypes.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "dataframe/ColumnTag.h"
+#include "interfaces/PipelineInputInterface.h"
 #include "metadata/LabelSet.h"
 
 namespace db {
@@ -28,8 +32,9 @@ public:
     using DeletedEdges = std::vector<ColumnTag>;
     using PendingNodes = std::vector<WriteProcessorTypes::PendingNode>;
     using PendingEdges = std::vector<WriteProcessorTypes::PendingEdge>;
+    using MaybeInput = std::optional<PipelineBlockInputInterface>;
 
-    static WriteProcessor* create(PipelineV2* pipeline);
+    static WriteProcessor* create(PipelineV2* pipeline, bool hasInput = false);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
@@ -41,7 +46,13 @@ public:
     void setDeletedNodes(const DeletedNodes& nodes) { _deletedNodes = nodes; }
     void setDeletedEdges(const DeletedEdges& edges) { _deletedEdges = edges; }
 
-    PipelineBlockInputInterface& input() { return _input; }
+    PipelineBlockInputInterface& input() {
+        if (!_input) {
+            throw FatalException("Attempted to get null input of WriteProcessor");
+        }
+        return _input.value();
+    }
+
     PipelineBlockOutputInterface& output() { return _output; }
 
     std::string describe() const final {
@@ -49,7 +60,7 @@ public:
     }
 
 private:
-    PipelineBlockInputInterface _input;
+    MaybeInput _input {PipelineBlockInputInterface {}};
     PipelineBlockOutputInterface _output;
 
     MetadataBuilder* _metadataBuilder {nullptr};

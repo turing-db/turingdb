@@ -87,9 +87,6 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
                     actualRows.add({ns->at(rowPtr), ms->at(rowPtr)});
                 }
             });
-            if (!res) {
-                spdlog::info("{}", res.getError());
-            }
             ASSERT_TRUE(res);
         }
         ASSERT_TRUE(expectedRows.equals(actualRows));
@@ -170,9 +167,6 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
                     actualRows.add({ns->at(rowPtr), ms->at(rowPtr), ps->at(rowPtr)});
                 }
             });
-            if (!res) {
-                spdlog::info("{}", res.getError());
-            }
             ASSERT_TRUE(res);
         }
         ASSERT_TRUE(expectedRows.equals(actualRows));
@@ -443,6 +437,74 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
             });
             ASSERT_TRUE(res);
         }
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, createNodeNoInput) {
+    constexpr std::string_view CREATE_QUERY = "CREATE (m:NEWNODE) RETURN m";
+    constexpr std::string_view MATCH_QUERY = "MATCH (n) RETURN n";
+
+    const size_t totalNodesPrior = read().getTotalNodesAllocated();
+
+    {
+        using Rows = LineContainer<NodeID>;
+
+        Rows expected;
+        expected.add({totalNodesPrior}); // 1 new node, with id = max id + 1
+
+        Rows actual;
+        {
+            newChange();
+            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 1);
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(1, rowCount);
+                actual.add({ns->front()});
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(actual));
+    }
+
+    submitCurrentChange();
+
+    { // Ensure CREATE command created expected nodes
+        using Rows = LineContainer<NodeID>;
+
+        Rows expected;
+        { // We should now have 13 nodes
+            size_t numExpected = totalNodesPrior + 1;
+            for (size_t i = 0; i < numExpected; i++) {
+                expected.add({i});
+            }
+        }
+
+        Rows scanNodes;
+        { // Ensure ScanNodes returns the expected results
+            for (const NodeID n : read().scanNodes()) {
+                scanNodes.add({n});
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 1);
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                const size_t rowCount = df->getRowCount();
+                for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+                    actual.add({ns->at(rowPtr)});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(scanNodes));
         ASSERT_TRUE(expected.equals(actual));
     }
 }

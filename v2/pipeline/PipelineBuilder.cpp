@@ -25,8 +25,6 @@
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
 
-#include "FatalException.h"
-
 using namespace db::v2;
 using namespace db;
 
@@ -467,52 +465,51 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
                                                         const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
                                                         WriteProcessor::PendingNodes& pendingNodes,
                                                         WriteProcessor::PendingEdges& pendingEdges) {
-    auto* processor = WriteProcessor::create(_pipeline);
+    const bool hasInput = _pendingOutput.getInterface();
+    auto* processor = WriteProcessor::create(_pipeline, hasInput);
+    if (hasInput) {
+        _pendingOutput.connectTo(processor->input());
+    }
+
+    PipelineBlockOutputInterface& output = processor->output();
+    Dataframe* outDf = output.getDataframe();
+
+    bioassert(outDf->size() == 0);
 
     // Track node vars -> columns allocd to register edge src/tgt cols
     std::unordered_map<std::string_view, ColumnTag> varToCol;
     varToCol.reserve(pendingNodes.size());
 
-    if (!_pendingOutput.getInterface()) {
-        throw FatalException("WriteProcessor has no input.");
-    }
-
-    // NOTE: CREATE (n:P) DELETE n has no affect but seems to run on Neo4j
-    _pendingOutput.connectTo(processor->input());
-
-    PipelineBlockInputInterface& input = processor->input();
-    PipelineBlockOutputInterface& output = processor->output();
-    Dataframe* inDf = input.getDataframe();
-    Dataframe* outDf = output.getDataframe();
-
-    bioassert(outDf->size() == 0);
-
     // 1. Register columns for deleted nodes and edges
-    for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
-        NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
-        // TODO: Make exception?
-        bioassert(inputColumnToDelete);
+    if (hasInput) {
+        PipelineBlockInputInterface& input = processor->input();
+        Dataframe* inDf = input.getDataframe();
+        for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
+            NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
+            // TODO: Make exception?
+            bioassert(inputColumnToDelete);
 
-        // Skip if the column already exists for cases like MATCH (n) DELETE n,n
-        if (outDf->getColumn(inputColumnToDelete->getTag())) {
-            continue;
+            // Skip if the column already exists for cases like MATCH (n) DELETE n,n
+            if (outDf->getColumn(inputColumnToDelete->getTag())) {
+                continue;
+            }
+            outDf->addColumn(inputColumnToDelete);
         }
-        outDf->addColumn(inputColumnToDelete);
-    }
-    processor->setDeletedNodes(nodeColumnsToDelete);
+        processor->setDeletedNodes(nodeColumnsToDelete);
 
-    for (const ColumnTag deletedEdgeCol : edgeColumnsToDelete) {
-        NamedColumn* inputColumnToDelete = inDf->getColumn(deletedEdgeCol);
-        // TODO: Make exception?
-        bioassert(inputColumnToDelete);
+        for (const ColumnTag deletedEdgeCol : edgeColumnsToDelete) {
+            NamedColumn* inputColumnToDelete = inDf->getColumn(deletedEdgeCol);
+            // TODO: Make exception?
+            bioassert(inputColumnToDelete);
 
-        // Skip if the column already exists for cases like MATCH (n) DELETE n,n
-        if (outDf->getColumn(inputColumnToDelete->getTag())) {
-            continue;
+            // Skip if the column already exists for cases like MATCH (n) DELETE n,n
+            if (outDf->getColumn(inputColumnToDelete->getTag())) {
+                continue;
+            }
+            outDf->addColumn(inputColumnToDelete);
         }
-        outDf->addColumn(inputColumnToDelete);
+        processor->setDeletedEdges(edgeColumnsToDelete);
     }
-    processor->setDeletedEdges(edgeColumnsToDelete);
 
     for (WriteProcessorTypes::PendingNode& node : pendingNodes) {
         // New column for each new node to create
@@ -537,8 +534,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
     }
     processor->setPendingEdges(pendingEdges);
 
-    // This function already handles duplicates, so call it after adding all our columns
-    input.propagateColumns(output);
+    if (hasInput) {
+        PipelineBlockInputInterface& input = processor->input();
+        // This function already handles duplicates, so call it after adding all our columns
+        input.propagateColumns(output);
+    }
 
     _pendingOutput.updateInterface(&output);
     return output;
