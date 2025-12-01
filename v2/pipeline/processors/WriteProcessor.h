@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    MaybeInput _input {PipelineBlockInputInterface {}};
+    MaybeInput _input {std::in_place};
     PipelineBlockOutputInterface _output;
 
     MetadataBuilder* _metadataBuilder {nullptr};
