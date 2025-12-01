@@ -1,6 +1,7 @@
 #include "WriteProcessor.h"
 
 #include <algorithm>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -61,12 +62,12 @@ WriteProcessor* WriteProcessor::create(PipelineV2* pipeline, bool hasInput) {
     auto* processor = new WriteProcessor();
 
     if (hasInput) {
+        processor->_input = std::make_optional<PipelineBlockInputInterface>();
+
         auto* inputPort = PipelineInputPort::create(pipeline, processor);
         processor->_input->setPort(inputPort);
         processor->addInput(inputPort);
         inputPort->setNeedsData(true);
-    } else {
-        processor->_input = std::nullopt;
     }
 
     {
@@ -167,7 +168,7 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
 
 void WriteProcessor::createNodes(size_t numIters) {
     NodeID nextNodeID = _writeBuffer->numPendingNodes();
-    Dataframe* outDf = _output.getDataframe();
+    const Dataframe* outDf = _output.getDataframe();
 
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // Get the column in the output DF which will contain this node's IDs
@@ -186,12 +187,12 @@ void WriteProcessor::createNodes(size_t numIters) {
         const LabelSet lblset = getLabelSet(labels);
 
         // Add each node that we need to the CommitWriteBuffer
-        // Add labels first as they are locally contiguous in vector, keep cache hot
+        // Add labels first as they are locally contiguous in vector
         for (size_t i = 0; i < numIters; i++) {
             CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
             newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(lblset);
         }
-        // TODO: Properties
+        // TODO: Properties; once their collumn is alloc'd
 
         std::vector<NodeID>& raw = col->getRaw();
 
@@ -207,16 +208,16 @@ void WriteProcessor::createNodes(size_t numIters) {
 // @warn assumes all pending nodes have already been created
 void WriteProcessor::createEdges(size_t numIters) {
     EdgeID nextEdgeID = _writeBuffer->numPendingEdges();
+    const Dataframe* outDf = _output.getDataframe();
 
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
-        Dataframe* outDf = _output.getDataframe();
-
         if (!outDf->hasColumn(edge._tag)) {
             throw FatalException(
                 fmt::format("Could not get column in WriteProcessor "
                             "output dataframe for PendingEdge with tag {}.",
                             edge._tag.getValue()));
         }
+
         auto* col = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
         bioassert(col->size() == 0);
 
@@ -254,10 +255,6 @@ void WriteProcessor::createEdges(size_t numIters) {
         bioassert(tgtCol->size() == numIters);
 
         for (size_t rowPtr = 0; rowPtr < numIters; rowPtr++) {
-            // Unfortunately we need to use ugly in_place_type because NodeID is
-            // constructible from size_t so the variant matches against NodeID first, even
-            // when passing a size_t explicitly
-
             // If src/tgt is a pending (to be created; result of CREATE clause),
             // then set it to be the corresponding index in its column. Otherwise,
             // src/tgt is already committed node (result of a previous MATCH clause), so
@@ -294,7 +291,7 @@ void WriteProcessor::createEdges(size_t numIters) {
     }
 }
 
-void WriteProcessor::postProcessFakeIDs() {
+void WriteProcessor::postProcessTempIDs() {
     const NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
 
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
@@ -329,11 +326,12 @@ void WriteProcessor::postProcessFakeIDs() {
 }
 
 void WriteProcessor::performCreations() {
-    // We apply the CREATE command for each row in the input
+    // We apply the CREATE command for each row in the input, or just a single row if we
+    // have no inputs
     const size_t numIters = _input ? _input->getDataframe()->getRowCount() : 1;
 
     createNodes(numIters);
     createEdges(numIters);
 
-    postProcessFakeIDs();
+    postProcessTempIDs();
 }
