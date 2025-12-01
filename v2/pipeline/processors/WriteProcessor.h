@@ -32,7 +32,6 @@ public:
     using DeletedEdges = std::vector<ColumnTag>;
     using PendingNodes = std::vector<WriteProcessorTypes::PendingNode>;
     using PendingEdges = std::vector<WriteProcessorTypes::PendingEdge>;
-    using MaybeInput = std::optional<PipelineBlockInputInterface>;
 
     static WriteProcessor* create(PipelineV2* pipeline, bool hasInput = false);
 
@@ -60,7 +59,10 @@ public:
     }
 
 private:
-    MaybeInput _input {std::in_place};
+    // WriteProcessor may have an input, but it does not require one.
+    // @ref WriteProcessor::create may default initialise a block input, otherwise the
+    // default state of the processor is no input (nullopt)
+    std::optional<PipelineBlockInputInterface> _input;
     PipelineBlockOutputInterface _output;
 
     MetadataBuilder* _metadataBuilder {nullptr};
@@ -72,14 +74,50 @@ private:
     PendingNodes _pendingNodes;
     PendingEdges _pendingEdges;
 
+    /**
+     * @brief Adds nodes and edges which are marked to be deleted to the @ref
+     * _writeBuffer.
+     * @warn Currently always deletes any edges which are incident to a deleted node.
+     */
     void performDeletions();
+
+    /**
+     * @brief Adds pending nodes and edges to @ref _writeBuffer, one copy for each input
+     * row. Populates the dataframe of @ref _output with estimated IDs for each node/edge
+     * (where "estimation" is an estimation of what each node/edge ID will be once
+     * committed).
+     */
     void performCreations();
+
+    /**
+     * @warn NOT IMPLEMENTED
+     */
     void performUpdates();
 
+    /**
+     * @brief Adds @param numIters copies of each element of @ref _pendingNodes to @ref
+     * _writeBuffer. Fills @ref _output dataframe with the index in @ref
+     * _writeBuffer::_pendingNodes for which each node can be found.
+     */
     void createNodes(size_t numIters);
+    /**
+     * @brief Adds @param numIters copies of each element of @ref _pendingEdges to
+     * @ref _writeBuffer. Fills @ref _output dataframe with the index in @ref
+     * _writeBuffer::_pendingEdges for which each node can be found.
+     * @warn Requires @ref createNodes to have been called prior
+     */
     void createEdges(size_t numIters);
-    void postProcessFakeIDs();
+    /**
+     * @brief Transforms each column in @ref _output dataframe which has a tag belonging
+     * to an element of @ref _pendingNodes or @ref _pendingEdges into an estimation of the
+     * committed Node/EdgeID for each row in that column.
+     */
+    void postProcessTempIDs();
 
+    /**
+    * @brief Helper function to generate a LabelSet from a collection of node label names.
+    * @warn Calls @ref _metadataBuilder::getOrCreateLabel as a side effect.
+    */
     LabelSet getLabelSet(std::span<const std::string_view> labels);
 
     WriteProcessor() = default;

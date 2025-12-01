@@ -38,7 +38,7 @@ public:
     }
 
     bool hasColumn(ColumnTag tag) const {
-        return !(getColumn(tag) == nullptr);
+        return getColumn(tag) != nullptr;
     }
 
     template <typename T>
