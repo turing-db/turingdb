@@ -2,7 +2,6 @@
 
 #include "processors/CartesianProductProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
-#include "processors/ScanLabelsProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
 #include "processors/GetEdgesProcessor.h"

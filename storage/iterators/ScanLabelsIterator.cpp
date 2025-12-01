@@ -19,7 +19,7 @@ void ScanLabelsIterator::reset() {
 }
 
 void ScanLabelsIterator::next() {
-    bioassert(isValid() && "ScanLabelsIterator::next(): Iterator out of bounds");
+    msgbioassert(isValid(), "ScanLabelsIterator::next(): Iterator out of bounds");
     ++_it;
 }
 
@@ -29,11 +29,11 @@ ScanLabelsChunkWriter::ScanLabelsChunkWriter(const LabelMap& labelMap)
 }
 
 void ScanLabelsChunkWriter::fill(size_t maxCount) {
-    bioassert((_labels || _names) && "ScanLabelsChunkWriter::fill(): Both columns are null");
+    msgbioassert(_ids || _names, "ScanLabelsChunkWriter::fill(): Both columns are null");
 
     for (size_t i = 0; i < maxCount && isValid(); ++i) {
-        if (_labels) {
-            _labels->push_back(_it->_id);
+        if (_ids) {
+            _ids->push_back(_it->_id);
         }
 
         if (_names) {

@@ -25,6 +25,7 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
         .setReturnTypes({
             FunctionReturnType {EvaluatedType::String,  "propertyType"},
             FunctionReturnType {EvaluatedType::Integer, "id"  },
+            FunctionReturnType {EvaluatedType::ValueType, "valueType"  },
     });
 
     decls->create("db.edgeTypes")

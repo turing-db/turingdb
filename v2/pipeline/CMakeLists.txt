@@ -11,7 +11,6 @@ set(pipeline_sources
 set(processors_sources
     processors/DatabaseProcedureProcessor.cpp
     processors/ScanNodesProcessor.cpp
-    processors/ScanLabelsProcessor.cpp
     processors/GetInEdgesProcessor.cpp
     processors/GetEdgesProcessor.cpp
     processors/GetOutEdgesProcessor.cpp
@@ -32,6 +31,7 @@ set(processors_sources
 set(procedures_sources
     procedures/ProcedureBlueprintMap.cpp
     procedures/ScanLabelsProcedure.cpp
+    procedures/ScanPropertyTypesProcedure.cpp
 )
 
 add_library(turing_db_v2_pipeline_s

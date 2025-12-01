@@ -44,13 +44,13 @@ public:
     ScanLabelsChunkWriter() = delete;
     explicit ScanLabelsChunkWriter(const LabelMap& labelMap);
 
-    void setLabels(ColumnVector<LabelID>* labels) { _labels = labels; }
+    void setIDs(ColumnVector<LabelID>* ids) { _ids = ids; }
     void setNames(ColumnVector<std::string_view>* names) { _names = names; }
 
     void fill(size_t maxCount);
 
 private:
-    ColumnVector<LabelID>* _labels {nullptr};
+    ColumnVector<LabelID>* _ids {nullptr};
     ColumnVector<std::string_view>* _names {nullptr};
 };
 

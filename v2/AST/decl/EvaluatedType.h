@@ -22,6 +22,7 @@ enum class EvaluatedType : uint8_t {
     Map,
     Wildcard,
     Tuple,
+    ValueType,
 
     _SIZE,
 };
@@ -61,5 +62,6 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::List, "List">,
     EnumStringPair<EvaluatedType::Map, "Map">,
     EnumStringPair<EvaluatedType::Wildcard, "Wildcard">,
-    EnumStringPair<EvaluatedType::Tuple, "Tuple">>;
+    EnumStringPair<EvaluatedType::Tuple, "Tuple">,
+    EnumStringPair<EvaluatedType::ValueType, "ValueType">>;
 }

@@ -1,0 +1,51 @@
+#include "ScanPropertyTypesIterator.h"
+
+#include "BioAssert.h"
+
+namespace db {
+
+ScanPropertyTypesIterator::ScanPropertyTypesIterator(const PropertyTypeMap& propertyTypeMap)
+    : _it(propertyTypeMap.begin()),
+    _end(propertyTypeMap.end())
+{
+}
+
+ScanPropertyTypesIterator ScanPropertyTypesIterator::end(const PropertyTypeMap& propertyTypeMap) {
+    return ScanPropertyTypesIterator(propertyTypeMap.end(), propertyTypeMap.end());
+}
+
+void ScanPropertyTypesIterator::reset() {
+    throw std::runtime_error("Cannot reset ScanPropertyTypesIterator");
+}
+
+void ScanPropertyTypesIterator::next() {
+    msgbioassert(isValid(), "ScanPropertyTypesIterator::next(): Iterator out of bounds");
+    ++_it;
+}
+
+ScanPropertyTypesChunkWriter::ScanPropertyTypesChunkWriter(const PropertyTypeMap& propertyTypeMap)
+    : ScanPropertyTypesIterator(propertyTypeMap)
+{
+}
+
+void ScanPropertyTypesChunkWriter::fill(size_t maxCount) {
+    msgbioassert(_ids || _names || _valueTypes, "ScanPropertyTypesChunkWriter::fill(): All columns are null");
+
+    for (size_t i = 0; i < maxCount && isValid(); ++i) {
+        if (_ids) {
+            _ids->push_back(_it->_pt._id);
+        }
+
+        if (_valueTypes) {
+            _valueTypes->push_back(_it->_pt._valueType);
+        }
+
+        if (_names) {
+            _names->push_back(*_it->_name);
+        }
+
+        next();
+    }
+}
+
+}
