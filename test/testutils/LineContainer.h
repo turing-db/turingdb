@@ -67,6 +67,7 @@ public:
                 spdlog::error("<this> contains, whilst <other> does not:");
                 std::cout << "\t\t";
                 printTuple(std::cout, line._values);
+                std::cout << '\n';
                 return false;
             }
 

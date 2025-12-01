@@ -215,7 +215,7 @@ void WriteProcessor::createNodes(size_t numIters) {
 
         // Populate the output column for this node with the index in the CWB which it
         // appears. These indexes are later transformed into "fake IDs" (an estimate as to
-        // what the NodeID will be when it is committed) in @ref postProcessFakeIDs.
+        // what the NodeID will be when it is committed) in @ref postProcessTempIDs.
         raw.resize(raw.size() + numIters);
         std::iota(col->begin(), col->end(), nextNodeID);
         nextNodeID += numIters;
@@ -327,10 +327,17 @@ void WriteProcessor::createEdges(size_t numIters) {
 
 void WriteProcessor::postProcessTempIDs() {
     const NodeID nextNodeID = _ctxt->getGraphView().read().getTotalNodesAllocated();
+    Dataframe* out = _output.getDataframe();
 
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // Get the column in the output DF which will contain this node's IDs
-        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
+        if (!out->hasColumn(node._tag)) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingNode with tag {}.",
+                            node._tag.getValue()));
+        }
+        auto* col = out->getColumn(node._tag)->as<ColumnNodeIDs>();
         if (!col) {
             throw FatalException(
                 fmt::format("Could not get column in WriteProcessor "
@@ -345,7 +352,13 @@ void WriteProcessor::postProcessTempIDs() {
     const EdgeID nextEdgeID = _ctxt->getGraphView().read().getTotalEdgesAllocated();
 
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
-        // Get the column in the output DF which will contain this node's IDs
+        // Get the column in the output DF which will contain this edge's IDs
+        if (!out->hasColumn(edge._tag)) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingEdge with tag {}.",
+                            edge._tag.getValue()));
+        }
         auto* col = _output.getDataframe()->getColumn(edge._tag)->as<ColumnEdgeIDs>();
         if (!col) {
             throw FatalException(

@@ -48,9 +48,13 @@ public:
         ColumnTag _srcTag;
         ColumnTag _tgtTag;
 
-        PendingEdge(PropertyConstraints&& props, std::string_view type,
-                    std::string_view name, std::string_view srcName,
-                    std::string_view tgtName, ColumnTag tag, ColumnTag srcTag,
+        PendingEdge(PropertyConstraints&& props,
+                    std::string_view type,
+                    std::string_view name,
+                    std::string_view srcName,
+                    std::string_view tgtName,
+                    ColumnTag tag,
+                    ColumnTag srcTag,
                     ColumnTag tgtTag)
             : _properties(std::move(props)),
               _edgeType(type),
