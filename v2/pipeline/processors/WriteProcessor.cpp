@@ -28,35 +28,26 @@ using namespace db::v2;
 
 namespace {
 
-using PropertyConstraintsSpan = std::span<const WriteProcessorTypes::PropertyConstraint>;
-
-[[maybe_unused]] void addUntypedProperties(const CommitWriteBuffer::UntypedProperties& dest,
-                          const PropertyConstraintsSpan& props,
-                          MetadataBuilder& mdBuilder) {
-    for (const WriteProcessorTypes::PropertyConstraint prop : props) {
-        [[maybe_unused]] const ValueType type = prop._type;
-        // HOW: Do I know what the value of the property to set is? It will be in a column
-        // (for which I have a tag) but I do not know which row.
-    }
-}
-
 template <TypedInternalID IDT>
 void validateDeletions(const GraphReader reader, ColumnVector<IDT>* col) {
-    for (IDT id : *col) {
+    if (!col) {
+        throw FatalException("Attempted to delete null column.");
+    }
+
+    constexpr bool isNode = std::is_same_v<IDT, NodeID>;
+
+    for (const IDT id : *col) {
         bool existsAndNotDeleted {false};
 
-        if constexpr (std::is_same_v<IDT, NodeID>) {
+        if constexpr (isNode) {
             existsAndNotDeleted = reader.graphHasNode(id);
-        } else if constexpr (std::is_same_v<IDT, EdgeID>) {
+        } else {
             existsAndNotDeleted = reader.graphHasEdge(id);
         }
 
         if (!existsAndNotDeleted) [[unlikely]] {
-            std::string err =
-                fmt::format("Graph does not contain {} with ID: {}.",
-                            std::is_same_v<IDT, NodeID> ? "node" : "edge",
-                            id.getValue());
-            throw PipelineException(std::move(err));
+            throw PipelineException(fmt::format("Graph does not contain {} with ID: {}.",
+                                                isNode ? "node" : "edge", id.getValue()));
         }
     }
 }
