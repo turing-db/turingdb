@@ -646,12 +646,102 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
     }
 
 
-    { // Ensure CREATE command created expected nodes
+    { // Ensure CREATE command created expected rows
         using Rows = LineContainer<NodeID, EdgeID, NodeID>;
 
         Rows expected;
         { // Just check the new rows
             expected.add({0, 0, 1});
+        }
+
+        Rows scanEdges;
+        { // Ensure ScanOutEdges returns the expected results
+            for (const EdgeRecord e : read().scanOutEdges()) {
+                scanEdges.add({e._nodeID, e._edgeID, e._otherID});
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 3);
+                auto* us = df->cols().front()->as<ColumnNodeIDs>();
+                auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+                auto* vs = df->cols().back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(us);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(vs);
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(rowCount, totalEdgesPrior + 1);
+                actual.add({us->back(), es->back(), vs->back()});
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(scanEdges));
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, createEdgeTgtInput) {
+    { // Set up a graph with a single node
+        setWorkingGraph("default");
+        ASSERT_TRUE(_graph);
+        constexpr std::string_view CREATE_NODE_QUERY = "CREATE (n:First)";
+
+        ASSERT_EQ(0, read().getTotalNodesAllocated()); // We start with an empty graph
+        {
+            newChange();
+            auto res = queryV2(CREATE_NODE_QUERY, [&](const Dataframe*) -> void {});
+            ASSERT_TRUE(res);
+            submitCurrentChange();
+        }
+        ASSERT_EQ(1, read().getTotalNodesAllocated());
+    }
+
+    constexpr std::string_view CREATE_QUERY = "MATCH (n) CREATE (u:NEWNODE)-[e:NEWEDGE]->(n) RETURN u, e, n";
+    constexpr std::string_view MATCH_QUERY = "MATCH (u)-[e]->(v) RETURN u, e ,v";
+
+    const size_t totalNodesPrior = read().getTotalNodesAllocated();
+    const size_t totalEdgesPrior = read().getTotalEdgesAllocated();
+    ASSERT_EQ(1, totalNodesPrior);
+    ASSERT_EQ(0, totalEdgesPrior);
+
+    {
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        expected.add({1, 0, 0});
+
+        Rows actual;
+        {
+            newChange();
+            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 3);
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+                auto* vs = df->cols().back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(vs);
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(rowCount, totalEdgesPrior + 1);
+                actual.add({ns->back(), es->back(), vs->back()});
+            });
+            ASSERT_TRUE(res);
+            submitCurrentChange();
+        }
+        ASSERT_TRUE(expected.equals(actual));
+    }
+
+
+    { // Ensure CREATE command created expected rows
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        { // Just check the new rows
+            expected.add({1, 0, 0});
         }
 
         Rows scanEdges;
