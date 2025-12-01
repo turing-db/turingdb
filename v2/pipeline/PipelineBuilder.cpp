@@ -480,10 +480,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
     std::unordered_map<std::string_view, ColumnTag> varToCol;
     varToCol.reserve(pendingNodes.size());
 
-    // 1. Register columns for deleted nodes and edges
+    // Register columns for deleted nodes and edges
     if (hasInput) {
         PipelineBlockInputInterface& input = processor->input();
         Dataframe* inDf = input.getDataframe();
+
         for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
             NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
             // TODO: Make exception?
@@ -502,7 +503,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
             // TODO: Make exception?
             bioassert(inputColumnToDelete);
 
-            // Skip if the column already exists for cases like MATCH (n) DELETE n,n
+            // Skip if the column already exists for cases like MATCH (n) DELETE n, n
             if (outDf->getColumn(inputColumnToDelete->getTag())) {
                 continue;
             }
@@ -511,6 +512,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         processor->setDeletedEdges(edgeColumnsToDelete);
     }
 
+    // Register columns for newly created nodes/edges
     for (WriteProcessorTypes::PendingNode& node : pendingNodes) {
         // New column for each new node to create
         NamedColumn* newCol = allocColumn<ColumnNodeIDs>(outDf);

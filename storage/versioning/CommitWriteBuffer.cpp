@@ -30,7 +30,7 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
     auto& pendingEdge = _pendingEdges.emplace_back(); // Create an empty edge
     pendingEdge.src = src; // Assign src and target
     pendingEdge.tgt = tgt;
-    return pendingEdge; 
+    return pendingEdge;
 }
 
 // Called when executing a DELETE NODES query

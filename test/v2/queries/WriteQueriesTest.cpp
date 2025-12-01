@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "EdgeRecord.h"
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
@@ -505,6 +506,83 @@ TEST_F(WriteQueriesTest, createNodeNoInput) {
             ASSERT_TRUE(res);
         }
         ASSERT_TRUE(expected.equals(scanNodes));
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, createEdgeNoInput) {
+    constexpr std::string_view CREATE_QUERY = "CREATE (u:NEWNODE)-[e:NEWEDGE]->(v:NEWNODE) RETURN u, e, v";
+    constexpr std::string_view MATCH_QUERY = "MATCH (u)-[e]->(v) RETURN u, e ,v";
+
+    const size_t totalNodesPrior = read().getTotalNodesAllocated();
+    const size_t totalEdgesPrior = read().getTotalEdgesAllocated();
+
+    {
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        expected.add({totalNodesPrior, totalEdgesPrior, totalNodesPrior + 1});
+
+        Rows actual;
+        {
+            newChange();
+            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 3);
+                auto* us = df->cols().front()->as<ColumnNodeIDs>();
+                auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+                auto* vs = df->cols().back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(us);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(vs);
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(1, rowCount);
+                actual.add({us->front(), es->front(), vs->front()});
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(actual));
+    }
+
+    submitCurrentChange();
+
+    { // Ensure CREATE command created expected nodes
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        { // Just check the new rows
+            expected.add({totalNodesPrior, totalEdgesPrior, totalNodesPrior + 1});
+        }
+
+        Rows scanEdges;
+        { // Ensure ScanOutEdges returns the expected results
+            for (size_t i {0}; const EdgeRecord e : read().scanOutEdges()) {
+                if (i++ < totalEdgesPrior) {
+                    continue;
+                }
+                spdlog::info("adding {}-{}->{}", e._nodeID.getValue(), e._edgeID.getValue(), e._otherID.getValue());
+                scanEdges.add({e._nodeID, e._edgeID, e._otherID});
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 3);
+                auto* us = df->cols().front()->as<ColumnNodeIDs>();
+                auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+                auto* vs = df->cols().back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(us);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(vs);
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(rowCount, totalEdgesPrior + 1);
+                actual.add({us->back(), es->back(), vs->back()});
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(scanEdges));
         ASSERT_TRUE(expected.equals(actual));
     }
 }

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <string_view>
+#include <utility>
+#include <variant>
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
@@ -11,6 +13,7 @@
 #include "dataframe/NamedColumn.h"
 #include "reader/GraphReader.h"
 #include "ID.h"
+#include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
@@ -202,9 +205,11 @@ void WriteProcessor::createNodes(size_t numIters) {
         // TODO: Properties
 
         std::vector<NodeID>& raw = col->getRaw();
-        raw.resize(raw.size() + numIters);
 
-        // Fill the output column with "fake IDs"
+        // Populate the output column for this node with the index in the CWB which it
+        // appears. These indexes are later transformed into "fake IDs" (an estimate as to
+        // what the NodeID will be when it is committed) in @ref postProcessFakeIDs.
+        raw.resize(raw.size() + numIters);
         std::iota(col->begin(), col->end(), nextNodeID);
         nextNodeID += numIters;
     }
@@ -232,7 +237,8 @@ void WriteProcessor::createEdges(size_t numIters) {
         // column - e.g. something returned by a MATCH query - otherwise it is a
         // pending node which was created in this CREATE query
         const bool srcIsPending =
-            _input && _input->getDataframe()->getColumn(srcTag) == nullptr;
+            !_input || _input->getDataframe()->getColumn(srcTag) == nullptr;
+
         // However, all input columns are also propagated to the output, so we can
         // always retrieve the column from the output dataframe, regardless of whether
         // the source node was the result of a CREATE or a MATCH
@@ -246,7 +252,8 @@ void WriteProcessor::createEdges(size_t numIters) {
         ColumnNodeIDs* tgtCol {nullptr};
         const ColumnTag tgtTag = edge._tgtTag;
         const bool tgtIsPending =
-            _input && _input->getDataframe()->getColumn(tgtTag) == nullptr;
+            !_input || _input->getDataframe()->getColumn(tgtTag) == nullptr;
+
         if (!outDf->hasColumn(tgtTag)) {
             throw FatalException(fmt::format("Attempted to create edge {} with "
                                              "target node with no such column: {}",
@@ -258,20 +265,41 @@ void WriteProcessor::createEdges(size_t numIters) {
         bioassert(tgtCol->size() == numIters);
 
         for (size_t rowPtr = 0; rowPtr < numIters; rowPtr++) {
+            // Unfortunately we need to use ugly in_place_type because NodeID is
+            // constructible from size_t so the variant matches against NodeID first, even
+            // when passing a size_t explicitly
+
+            // If src/tgt is a pending (to be created; result of CREATE clause),
+            // then set it to be the corresponding index in its column. Otherwise,
+            // src/tgt is already committed node (result of a previous MATCH clause), so
+            // set it to be that NodeID value in the relevant column
             CommitWriteBuffer::ExistingOrPendingNode source =
-                srcIsPending ? srcCol->at(rowPtr) // Exists => NodeID
-                             : size_t {srcCol->at(rowPtr).getValue()}; // Pending => size_t offset in CWB
+                srcIsPending ? CommitWriteBuffer::ExistingOrPendingNode {
+                                    std::in_place_type<CommitWriteBuffer::PendingNodeOffset>,
+                                    srcCol->at(rowPtr).getValue()
+                               }
+                             : CommitWriteBuffer::ExistingOrPendingNode {
+                                   std::in_place_type<NodeID>, srcCol->at(rowPtr)
+                               };
 
             CommitWriteBuffer::ExistingOrPendingNode target =
-                tgtIsPending ? tgtCol->at(rowPtr)// Exists => NodeID
-                             : size_t {tgtCol->at(rowPtr).getValue()}; // Pending => size_t offset in CWB
+                tgtIsPending ? CommitWriteBuffer::ExistingOrPendingNode {
+                                 std::in_place_type<CommitWriteBuffer::PendingNodeOffset>,
+                                 tgtCol->at(rowPtr).getValue()
+                               }
+                             : CommitWriteBuffer::ExistingOrPendingNode {
+                                 std::in_place_type<NodeID>, tgtCol->at(rowPtr)
+                               };
 
             _writeBuffer->newPendingEdge(source, target);
         }
 
         std::vector<EdgeID>& raw = col->getRaw();
-        raw.resize(raw.size() + numIters);
 
+        // Populate the output column for this edge with the index in the CWB which it
+        // appears. These indexes are later transformed into "fake IDs" (an estimate as to
+        // what the EdgeID will be when it is committed) in @ref postProcessFakeIDs.
+        raw.resize(raw.size() + numIters);
         std::iota(col->begin(), col->end(), nextEdgeID);
         nextEdgeID += numIters;
     }
@@ -295,6 +323,7 @@ void WriteProcessor::postProcessFakeIDs() {
     }
 
     const EdgeID nextEdgeID = _ctxt->getGraphView().read().getTotalEdgesAllocated();
+
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
         // Get the column in the output DF which will contain this node's IDs
         auto* col = _output.getDataframe()->getColumn(edge._tag)->as<ColumnEdgeIDs>();
@@ -314,11 +343,8 @@ void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input
     const size_t numIters = _input ? _input->getDataframe()->getRowCount() : 1;
 
-    // 1. Node creations
     createNodes(numIters);
     createEdges(numIters);
-
-    // 2. Link up edges
 
     postProcessFakeIDs();
 }
