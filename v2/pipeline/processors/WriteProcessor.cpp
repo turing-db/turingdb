@@ -130,14 +130,14 @@ void WriteProcessor::performDeletions() {
 
     for (const ColumnTag deletedTag : _deletedNodes) {
         if (!inDf->hasColumn(deletedTag)) {
-            throw FatalException(
-                fmt::format("Attempted to delete nodes in Column {}, but no such column "
-                            "provided in the input Dataframe.",
-                            deletedTag.getValue()));
+            throw FatalException(fmt::format(
+                "Attempted to delete nodes in Column {}, but found no such column "
+                "in the input Dataframe.",
+                deletedTag.getValue()));
         }
 
         const auto* nodeColumn = inDf->getColumn(deletedTag)->as<ColumnNodeIDs>();
-        if (!inDf->hasColumn(deletedTag)) { // @ref as<> performs dynamic_cast
+        if (!nodeColumn) { // @ref as<> performs dynamic_cast
             throw FatalException(fmt::format("Column {} was marked as a column of"
                                              " deleted nodes, but is not a NodeID"
                                              " column.", deletedTag.getValue()));
@@ -151,16 +151,16 @@ void WriteProcessor::performDeletions() {
 
     for (const ColumnTag deletedTag : _deletedEdges) {
         if (!inDf->hasColumn(deletedTag)) {
-            throw FatalException(
-                fmt::format("Attempted to delete edges in Column {}, but no such column "
-                            "provided in the input Dataframe.",
-                            deletedTag.getValue()));
+            throw FatalException(fmt::format(
+                "Attempted to delete edges in Column {}, but found no such column "
+                "in the input Dataframe.",
+                deletedTag.getValue()));
         }
 
         const auto* edgeColumn = inDf->getColumn(deletedTag)->as<ColumnEdgeIDs>();
         if (!edgeColumn) { // @ref as<> performs dynamic_cast
             throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " deleted nodes, but is not a EdgeID"
+                                             " deleted edges, but is not an EdgeID"
                                              " column.", deletedTag.getValue()));
         }
 
@@ -191,6 +191,11 @@ void WriteProcessor::createNodes(size_t numIters) {
                             node._tag.getValue()));
         }
         auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
+        if (!col) { // @ref as<> performs dynamic_cast
+            throw FatalException(fmt::format("Column {} was marked as a column of"
+                                             " pending nodes, but is not a NodeID"
+                                             " column.", node._tag.getValue()));
+        }
         bioassert(col->size() == 0);
 
         const std::span labels = node._labels;
@@ -231,6 +236,11 @@ void WriteProcessor::createEdges(size_t numIters) {
         }
 
         auto* col = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
+        if (!col) { // @ref as<> performs dynamic_cast
+            throw FatalException(fmt::format("Column {} was marked as a column of"
+                                             " pending edges, but is not an EdgeID"
+                                             " column.", edge._tag.getValue()));
+        }
         bioassert(col->size() == 0);
 
         ColumnNodeIDs* srcCol {nullptr};
@@ -250,6 +260,12 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              edge._name, edge._srcTag.getValue()));
         }
         srcCol = _output.getDataframe()->getColumn(srcTag)->as<ColumnNodeIDs>();
+        if (!srcCol) { // @ref as<> performs dynamic_cast
+            throw FatalException(fmt::format("Column {} was marked as a column of"
+                                             " pending source nodes, but is not a NodeID"
+                                             " column.",
+                                             srcTag.getValue()));
+        }
 
         ColumnNodeIDs* tgtCol {nullptr};
         const ColumnTag tgtTag = edge._tgtTag;
@@ -262,6 +278,12 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              edge._name, edge._tgtTag.getValue()));
         }
         tgtCol = _output.getDataframe()->getColumn(tgtTag)->as<ColumnNodeIDs>();
+        if (!tgtCol) { // @ref as<> performs dynamic_cast
+            throw FatalException(fmt::format("Column {} was marked as a column of"
+                                             " pending target nodes, but is not a NodeID"
+                                             " column.",
+                                             tgtTag.getValue()));
+        }
 
         bioassert(tgtCol->size() == srcCol->size());
         bioassert(tgtCol->size() == numIters);
