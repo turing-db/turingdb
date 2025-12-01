@@ -30,7 +30,7 @@ using namespace db::v2;
 namespace {
 
 template <TypedInternalID IDT>
-void validateDeletions(const GraphReader reader, ColumnVector<IDT>* col) {
+void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
     if (!col) {
         throw FatalException("Attempted to delete null column.");
     }
@@ -53,8 +53,8 @@ void validateDeletions(const GraphReader reader, ColumnVector<IDT>* col) {
     }
 }
 
-template void validateDeletions<NodeID>(const GraphReader reader, ColumnVector<NodeID>* col);
-template void validateDeletions<EdgeID>(const GraphReader reader, ColumnVector<EdgeID>* col);
+template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
+template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
 }
 
@@ -129,9 +129,15 @@ void WriteProcessor::performDeletions() {
     const Dataframe* inDf = _input->getDataframe();
 
     for (const ColumnTag deletedTag : _deletedNodes) {
-        auto* nodeColumn = inDf->getColumn(deletedTag)->as<ColumnNodeIDs>();
+        if (!inDf->hasColumn(deletedTag)) {
+            throw FatalException(
+                fmt::format("Attempted to delete nodes in Column {}, but no such column "
+                            "provided in the input Dataframe.",
+                            deletedTag.getValue()));
+        }
 
-        if (!nodeColumn) { // @ref as performs dynamic_cast
+        const auto* nodeColumn = inDf->getColumn(deletedTag)->as<ColumnNodeIDs>();
+        if (!inDf->hasColumn(deletedTag)) { // @ref as<> performs dynamic_cast
             throw FatalException(fmt::format("Column {} was marked as a column of"
                                              " deleted nodes, but is not a NodeID"
                                              " column.", deletedTag.getValue()));
@@ -144,9 +150,15 @@ void WriteProcessor::performDeletions() {
     }
 
     for (const ColumnTag deletedTag : _deletedEdges) {
-        auto* edgeColumn = inDf->getColumn(deletedTag)->as<ColumnEdgeIDs>();
+        if (!inDf->hasColumn(deletedTag)) {
+            throw FatalException(
+                fmt::format("Attempted to delete edges in Column {}, but no such column "
+                            "provided in the input Dataframe.",
+                            deletedTag.getValue()));
+        }
 
-        if (!edgeColumn) { // @ref as performs dynamic_cast
+        const auto* edgeColumn = inDf->getColumn(deletedTag)->as<ColumnEdgeIDs>();
+        if (!edgeColumn) { // @ref as<> performs dynamic_cast
             throw FatalException(fmt::format("Column {} was marked as a column of"
                                              " deleted nodes, but is not a EdgeID"
                                              " column.", deletedTag.getValue()));
