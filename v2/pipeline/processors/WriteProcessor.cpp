@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <string_view>
 #include <utility>
-#include <variant>
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
@@ -13,7 +12,6 @@
 #include "dataframe/NamedColumn.h"
 #include "reader/GraphReader.h"
 #include "ID.h"
-#include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/Transaction.h"
@@ -32,7 +30,7 @@ namespace {
 
 using PropertyConstraintsSpan = std::span<const WriteProcessorTypes::PropertyConstraint>;
 
-[[maybe_unused]] void addUntypedProperties(CommitWriteBuffer::UntypedProperties dest,
+[[maybe_unused]] void addUntypedProperties(const CommitWriteBuffer::UntypedProperties& dest,
                           const PropertyConstraintsSpan& props,
                           MetadataBuilder& mdBuilder) {
     for (const WriteProcessorTypes::PropertyConstraint prop : props) {
