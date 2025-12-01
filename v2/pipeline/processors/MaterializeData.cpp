@@ -62,6 +62,9 @@ void MaterializeData::addToStep(const NamedColumn* col) {
 INSTANTIATE(ColumnVector<EntityID>);
 INSTANTIATE(ColumnVector<NodeID>);
 INSTANTIATE(ColumnVector<EdgeID>);
+INSTANTIATE(ColumnVector<LabelID>);
+INSTANTIATE(ColumnVector<PropertyTypeID>);
+INSTANTIATE(ColumnVector<EdgeTypeID>);
 INSTANTIATE(ColumnVector<types::UInt64::Primitive>);
 INSTANTIATE(ColumnVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnVector<types::Double::Primitive>);

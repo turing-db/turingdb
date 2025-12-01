@@ -9,9 +9,9 @@ set(pipeline_sources
     interfaces/PipelineInterface.cpp)
 
 set(processors_sources
+    processors/DatabaseProcedureProcessor.cpp
     processors/ScanNodesProcessor.cpp
     processors/ScanLabelsProcessor.cpp
-    processors/ProcedureProcessor.cpp
     processors/GetInEdgesProcessor.cpp
     processors/GetEdgesProcessor.cpp
     processors/GetOutEdgesProcessor.cpp
@@ -29,7 +29,14 @@ set(processors_sources
     processors/CartesianProductProcessor.cpp
 )
 
-add_library(turing_db_v2_pipeline_s STATIC ${pipeline_sources} ${processors_sources})
+set(procedures_sources
+    procedures/ScanLabelsProcedure.cpp
+)
+
+add_library(turing_db_v2_pipeline_s
+    STATIC ${pipeline_sources}
+           ${processors_sources}
+           ${procedures_sources})
 
 target_include_directories(turing_db_v2_pipeline_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

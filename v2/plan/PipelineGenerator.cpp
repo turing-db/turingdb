@@ -18,7 +18,7 @@
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/GetPropertyNode.h"
 #include "iterators/ScanLabelsIterator.h"
-#include "processors/ScanLabelsProcessor.h"
+#include "procedures/ScanLabelsProcedure.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -635,85 +635,43 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         throw PlannerException("FunctionInvocation does not have a FunctionSignature");
     }
 
-    ColumnVector<LabelID>* idsCol = nullptr;
-    ColumnVector<std::string_view>* namesCol = nullptr;
-    const VarDecl* idsDecl = nullptr;
-    const VarDecl* namesDecl = nullptr;
-    std::string_view idsColName;
-    std::string_view namesColName;
+    // Procedure: check the yield
+    // If no yield -> write all columns
+    // else write only the columns specified in the yield
+    // For each column: alloc, map the tag to the var and rename the column
+
+    std::vector<const VarDecl*> yieldDecls;
+    std::vector<ProcedureBlueprint::YieldItem> yieldItems;
 
     if (signature->_fullName == "db.labels") {
+        constexpr auto blueprint = ScanLabelsProcedure::Blueprint;
+        yieldItems.reserve(ProcedureData::RETURN_VALUES_COUNT);
+
         if (!yield) {
-            // No YIELD, means write all columns
-            idsCol = _mem->alloc<ColumnVector<LabelID>>();
-            namesCol = _mem->alloc<ColumnVector<std::string_view>>();
-            idsColName = "id";
-            namesColName = "label";
+            blueprint.returnAll(yieldItems);
         } else {
             for (const auto* item : *yield->getItems()) {
                 const Symbol* symbol = item->getSymbol();
+
                 // TODO: handle the AS keyword there
-                if (symbol->getName() == "id") {
-                    idsCol = _mem->alloc<ColumnVector<LabelID>>();
-                    idsDecl = item->getExprVarDecl();
-                    idsColName = symbol->getName();
-                } else if (symbol->getName() == "label") {
-                    namesCol = _mem->alloc<ColumnVector<std::string_view>>();
-                    namesDecl = item->getExprVarDecl();
-                    namesColName = symbol->getName();
-                } else {
-                    throw PlannerException(fmt::format("Invalid yield item '{}'", symbol->getName()));
-                }
+                yieldItems.emplace_back(symbol->getName(), symbol->getName());
+                yieldDecls.push_back(item->getExprVarDecl());
             }
         }
 
-        _builder.addProcedure(
-            [&, idsCol, namesCol, it = std::shared_ptr<ScanLabelsChunkWriter> {}](Procedure& proc) mutable -> bool {
-                switch (proc.step()) {
-                    case Procedure::Step::PREPARE: {
-                        it = std::make_shared<ScanLabelsChunkWriter>(_view.metadata().labels());
-                        it->setLabels(idsCol);
-                        it->setNames(namesCol);
-                        return false;
-                    }
+        _builder.addDatabaseProcedure(ScanLabelsProcedure::Blueprint, yieldItems);
 
-                    case Procedure::Step::RESET: {
-                        it->reset();
-                        return false;
-                    }
+        for (size_t i = 0; i < yieldItems.size(); i++) {
+            const auto& item = yieldItems[i];
 
-                    case Procedure::Step::EXECUTE: {
-                        it->fill(proc.ctxt()->getChunkSize());
+            NamedColumn* col = item._col;
 
-                        if (!it->isValid()) {
-                            proc.finish();
-                        }
-
-                        proc.writeOutputData();
-                        return true;
-                    }
-                }
-
-                throw PlannerException("Unknown procedure step");
-            });
-
-        if (idsCol) {
-            NamedColumn* c = _builder.addColumnToOutput(idsCol);
-            c->rename(idsColName);
-
-            if (idsDecl) {
-                _declToColumn[idsDecl] = c->getTag();
+            if (col && i < yieldDecls.size()) {
+                const VarDecl* decl = yieldDecls[i];
+                _declToColumn[decl] = col->getTag();
             }
         }
 
-        if (namesCol) {
-            NamedColumn* c = _builder.addColumnToOutput(namesCol);
-            c->rename(namesColName);
-
-            if (namesDecl) {
-                _declToColumn[namesDecl] = c->getTag();
-            }
-        }
     } else {
         throw PlannerException(fmt::format("Database procedure '{}' is not implemented yet", signature->_fullName));
     }

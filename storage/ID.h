@@ -95,14 +95,19 @@ private:
 using EntityID = ID<uint64_t, 0>;
 using NodeID = ID<uint64_t, 1>;
 using EdgeID = ID<uint64_t, 2>;
-using PropertyID = ID<uint64_t>;
-using EdgeTypeID = ID<uint64_t>;
-using PropertyTypeID = ID<uint16_t>;
-using LabelID = ID<uint64_t>;
-using LabelSetID = ID<uint32_t>;
+using EdgeTypeID = ID<uint64_t, 3>;
+using PropertyTypeID = ID<uint16_t, 4>;
+using LabelID = ID<uint64_t, 5>;
+using LabelSetID = ID<uint32_t, 6>;
 
 template <typename T>
 concept TypedInternalID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
+
+template <typename T>
+struct IsID : std::false_type {};
+
+template <IntegralType T, int N>
+struct IsID<ID<T, N>> : std::true_type {};
 
 }
 
