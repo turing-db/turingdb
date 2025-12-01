@@ -17,20 +17,20 @@ public:
     template <typename T>
     inline static void dump(std::ostream& out, T val) {
         if constexpr (fitsInWord<T>) {
-            if constexpr (std::is_same_v<T, EntityID>
-                          || std::is_same_v<T, NodeID>
-                          || std::is_same_v<T, EdgeID>
-                          || std::is_same_v<T, EdgeTypeID>
-                          || std::is_same_v<T, PropertyTypeID>
-                          || std::is_same_v<T, LabelSetID>) {
-                dumpImpl(out, val.getValue());
-            } else if constexpr (requires { T::_value; }) {
+            if constexpr (requires { T::_value; }) {
                 dumpImpl(out, val._value);
             } else if constexpr (std::is_same_v<T, PropertyType>) {
                 dumpImpl(out, val._id.getValue());
             } else {
                 dumpImpl(out, (uint64_t)val);
             }
+        }
+    }
+
+    template <typename T, int I>
+    inline static void dump(std::ostream& out, ID<T, I> val) {
+        if constexpr (fitsInWord<T>) {
+            dumpImpl(out, val.getValue());
         }
     }
 

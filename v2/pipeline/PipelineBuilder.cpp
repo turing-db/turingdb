@@ -1,6 +1,7 @@
 #include "PipelineBuilder.h"
 
 #include "processors/CartesianProductProcessor.h"
+#include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ScanLabelsProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
@@ -309,13 +310,18 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
     return source->output();
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addProcedure(const ProcedureProcessor::Callback& callback) {
+PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const ProcedureBlueprint& blueprint,
+                                                                    std::span<ProcedureBlueprint::YieldItem> yield) {
     openMaterialize();
 
-    ProcedureProcessor* proc = ProcedureProcessor::create(_pipeline, callback);
-    _pendingOutput.updateInterface(&proc->output());
+    DatabaseProcedureProcessor* proc = DatabaseProcedureProcessor::create(_pipeline, blueprint);
+    auto& output = proc->output();
 
-    return proc->output();
+    _pendingOutput.updateInterface(&output);
+
+    proc->allocColumns(*_mem, *_dfMan, yield);
+
+    return output;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTransformProcessor::Callback& cb) {

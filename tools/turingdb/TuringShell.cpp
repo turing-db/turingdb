@@ -383,6 +383,7 @@ void queryCallbackV2(size_t execCount, const Dataframe* df, tabulate::Table& tab
                 TABULATE_COL_CASE(ColumnVector<NodeID>, i)
                 TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
                 TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
+                TABULATE_COL_CASE(ColumnVector<LabelID>, i)
                 TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
                 TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
                 TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)

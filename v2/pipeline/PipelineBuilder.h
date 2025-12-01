@@ -5,6 +5,7 @@
 #include "EntityType.h"
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
+#include "procedures/ProcedureBlueprint.h"
 
 #include "ProjectionItem.h"
 #include "dataframe/Dataframe.h"
@@ -18,7 +19,6 @@
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
 #include "processors/LambdaTransformProcessor.h"
-#include "processors/ProcedureProcessor.h"
 
 #include "metadata/SupportedType.h"
 
@@ -47,7 +47,8 @@ public:
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
-    PipelineBlockOutputInterface& addProcedure(const ProcedureProcessor::Callback& callback);
+    PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
+                                                       std::span<ProcedureBlueprint::YieldItem> yield);
 
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();

@@ -31,12 +31,7 @@ concept JsonPrimitive = std::same_as<uint64_t, T>
                      || std::same_as<double, T>
                      || std::same_as<bool, T>
                      || std::same_as<CustomBool, T>
-                     || std::same_as<EntityID, T>
-                     || std::same_as<NodeID, T>
-                     || std::same_as<EdgeID, T>
-                     || std::same_as<LabelSetID, T>
-                     || std::same_as<PropertyTypeID, T>
-                     || std::same_as<LabelID, T>;
+                     || IsID<T>::value;
 
 template <typename T>
 concept JsonKey = (JsonPrimitive<T>)
