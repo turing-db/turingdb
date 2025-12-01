@@ -30,6 +30,7 @@ set(processors_sources
 )
 
 set(procedures_sources
+    procedures/ProcedureBlueprintMap.cpp
     procedures/ScanLabelsProcedure.cpp
 )
 

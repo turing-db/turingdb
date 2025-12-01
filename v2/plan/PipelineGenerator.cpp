@@ -19,6 +19,7 @@
 #include "nodes/GetPropertyNode.h"
 #include "iterators/ScanLabelsIterator.h"
 #include "procedures/ScanLabelsProcedure.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
 
@@ -635,45 +636,37 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         throw PlannerException("FunctionInvocation does not have a FunctionSignature");
     }
 
-    // Procedure: check the yield
-    // If no yield -> write all columns
-    // else write only the columns specified in the yield
-    // For each column: alloc, map the tag to the var and rename the column
-
     std::vector<const VarDecl*> yieldDecls;
     std::vector<ProcedureBlueprint::YieldItem> yieldItems;
 
-    if (signature->_fullName == "db.labels") {
-        constexpr auto blueprint = ScanLabelsProcedure::Blueprint;
-        yieldItems.reserve(ProcedureData::RETURN_VALUES_COUNT);
+    const ProcedureBlueprint* blueprint = ProcedureBlueprintMap::getBlueprint(signature->_fullName);
+    if (!blueprint) {
+        throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->_fullName));
+    }
 
-        if (!yield) {
-            blueprint.returnAll(yieldItems);
-        } else {
-            for (const auto* item : *yield->getItems()) {
-                const Symbol* symbol = item->getSymbol();
-
-                // TODO: handle the AS keyword there
-                yieldItems.emplace_back(symbol->getName(), symbol->getName());
-                yieldDecls.push_back(item->getExprVarDecl());
-            }
-        }
-
-        _builder.addDatabaseProcedure(ScanLabelsProcedure::Blueprint, yieldItems);
-
-        for (size_t i = 0; i < yieldItems.size(); i++) {
-            const auto& item = yieldItems[i];
-
-            NamedColumn* col = item._col;
-
-            if (col && i < yieldDecls.size()) {
-                const VarDecl* decl = yieldDecls[i];
-                _declToColumn[decl] = col->getTag();
-            }
-        }
-
+    if (!yield) {
+        blueprint->returnAll(yieldItems);
     } else {
-        throw PlannerException(fmt::format("Database procedure '{}' is not implemented yet", signature->_fullName));
+        for (const auto* item : *yield->getItems()) {
+            const Symbol* symbol = item->getSymbol();
+
+            // TODO: handle the AS keyword there
+            yieldItems.emplace_back(symbol->getName(), symbol->getName());
+            yieldDecls.push_back(item->getExprVarDecl());
+        }
+    }
+
+    _builder.addDatabaseProcedure(*blueprint, yieldItems);
+
+    for (size_t i = 0; i < yieldItems.size(); i++) {
+        const auto& item = yieldItems[i];
+
+        NamedColumn* col = item._col;
+
+        if (col && i < yieldDecls.size()) {
+            const VarDecl* decl = yieldDecls[i];
+            _declToColumn[decl] = col->getTag();
+        }
     }
 
     return _builder.getPendingOutputInterface();
