@@ -7,7 +7,6 @@
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
 
-
 namespace db {
 
 class GraphMetadata;

@@ -645,7 +645,6 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
         ASSERT_TRUE(expected.equals(actual));
     }
 
-
     { // Ensure CREATE command created expected rows
         using Rows = LineContainer<NodeID, EdgeID, NodeID>;
 
@@ -734,7 +733,6 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
         }
         ASSERT_TRUE(expected.equals(actual));
     }
-
 
     { // Ensure CREATE command created expected rows
         using Rows = LineContainer<NodeID, EdgeID, NodeID>;

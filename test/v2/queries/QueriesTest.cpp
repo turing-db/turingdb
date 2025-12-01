@@ -778,7 +778,6 @@ TEST_F(QueriesTest, threeCascadingScanNodesCartProd) {
                 const auto* t = nCols.at(1)->as<ColumnNodeIDs>();
                 const auto* v = nCols.at(2)->as<ColumnNodeIDs>();
 
-
                 for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
                     actualRows.add({s->at(rowPtr), t->at(rowPtr), v->at(rowPtr)});
                 }
