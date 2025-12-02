@@ -37,9 +37,17 @@ public:
 
     const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
 
+    [[nodiscard]] const std::string_view& getName() const {
+        return _name;
+    }
+
     void setType(EvaluatedType type) { _type = type; }
 
     void setExprVarDecl(const VarDecl* decl) { _exprVarDecl = decl; }
+
+    void setName(std::string_view name) {
+        _name = name;
+    }
 
     [[nodiscard]] bool isAggregate() const {
         return ((uint8_t)_flags & (uint8_t)Flags::AGGREGATE) != 0;
@@ -75,6 +83,7 @@ private:
     Kind _exprKind;
     EvaluatedType _type {EvaluatedType::Invalid};
     Flags _flags {Flags::NONE};
+    std::string_view _name;
 };
 
 }
