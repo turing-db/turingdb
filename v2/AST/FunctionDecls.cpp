@@ -49,21 +49,13 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
                 case ProcedureReturnType::BOOL:
                     declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
                     break;
+                case ProcedureReturnType::STRING_VIEW:
                 case ProcedureReturnType::STRING:
                     declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
                     break;
             }
         }
     }
-
-    decls->create("db.history")
-        .setIsDatabaseProcedure(true)
-        .setReturnTypes({
-            FunctionReturnType {EvaluatedType::String,  "commit_hash"},
-            FunctionReturnType {EvaluatedType::Integer, "part_count" },
-            FunctionReturnType {EvaluatedType::Integer, "node_count" },
-            FunctionReturnType {EvaluatedType::Integer, "edge_count" },
-    });
 
     // Entity patterns
     decls->create("edgeTypes")

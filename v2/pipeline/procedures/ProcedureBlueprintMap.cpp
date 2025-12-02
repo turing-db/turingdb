@@ -3,15 +3,17 @@
 #include "LabelsProcedure.h"
 #include "EdgeTypesProcedure.h"
 #include "PropertyTypesProcedure.h"
+#include "HistoryProcedure.h"
 
 #include "BioAssert.h"
 
 using namespace db::v2;
 
-const std::array<ProcedureBlueprint, 3> ProcedureBlueprintMap::_blueprints {
+const std::array<ProcedureBlueprint, 4> ProcedureBlueprintMap::_blueprints {
     LabelsProcedure::createBlueprint(),
     PropertyTypesProcedure::createBlueprint(),
     EdgeTypesProcedure::createBlueprint(),
+    HistoryProcedure::createBlueprint()
 };
 
 ProcedureBlueprintMap::ProcedureBlueprintMap() {

@@ -3,28 +3,22 @@
 #include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
 
-namespace db {
-class ScanEdgeTypesChunkWriter;
-}
-
 namespace db::v2 {
 
-struct EdgeTypesProcedure {
-    struct Data : public ProcedureData {
-        std::unique_ptr<ScanEdgeTypesChunkWriter> _it;
-    };
-
+struct HistoryProcedure {
     static std::unique_ptr<ProcedureData> allocData();
     static void execute(Procedure& proc);
 
     static ProcedureBlueprint createBlueprint() noexcept {
         try {
             return {
-                ._name = "db.edgeTypes",
+                ._name = "db.history",
                 ._execCallback = &execute,
                 ._allocCallback = &allocData,
-                ._returnValues = {{"id", ProcedureReturnType::EDGE_TYPE_ID},
-                                  {"edgeType", ProcedureReturnType::STRING_VIEW}},
+                ._returnValues = {{"commit", ProcedureReturnType::STRING},
+                                  {"nodeCount", ProcedureReturnType::UINT_64},
+                                  {"edgeCount", ProcedureReturnType::UINT_64},
+                                  {"partCount", ProcedureReturnType::UINT_64}},
                 ._valid = true,
             };
         } catch (const std::exception& e) {

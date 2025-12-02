@@ -143,8 +143,13 @@ void DatabaseProcedureProcessor::allocColumns(LocalMemory& mem,
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureReturnType::STRING: {
+            case ProcedureReturnType::STRING_VIEW: {
                 col = mem.alloc<ColumnVector<types::String::Primitive>>();
+                data.setReturnColumn(colIndex, col);
+                break;
+            }
+            case ProcedureReturnType::STRING: {
+                col = mem.alloc<ColumnVector<std::string>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
