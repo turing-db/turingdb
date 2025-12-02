@@ -38,6 +38,10 @@ void PipelineDumper::dumpMermaid(std::ostream& out) {
     for (const Processor* proc : processors) {
         const size_t src = procIndex.at(proc);
         for (const PipelineOutputPort* port : proc->outputs()) {
+            if (!port->getConnectedPort()) {
+                fmt::println("Processor with unconnected output port: {}", proc->getName());
+            }
+
             const Processor* next = port->getConnectedPort()->getProcessor();
             const size_t target = procIndex.at(next);
             out << fmt::format("    {}-->{}\n", src, target);

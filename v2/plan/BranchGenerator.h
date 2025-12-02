@@ -59,15 +59,10 @@ private:
     // Map of VarDecl to ColumnTag
     std::unordered_map<const VarDecl*, ColumnTag> _declToColumn;
 
-    // Map of binary nodes inputs
-    struct BinaryNodeInfo {
-        PipelineOutputInterface* _input {nullptr};
-        bool _isLHS {false};
-    };
+    // Current branch
+    PipelineBranch* _currentBranch {nullptr};
 
-    std::unordered_map<const PlanGraphNode*, BinaryNodeInfo> _binaryNodeMap;
-
-    void setupBuilder(PipelineBranch* branch);
+    void setupBranch(PipelineBranch* branch);
 
     PipelineOutputInterface* translateNode(PlanGraphNode* node);
     PipelineOutputInterface* translateVarNode(VarNode* node);

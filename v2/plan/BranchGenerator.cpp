@@ -35,7 +35,6 @@
 #include "expr/ExprChain.h"
 
 #include "Overloaded.h"
-#include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
 
@@ -94,26 +93,34 @@ BranchGenerator::~BranchGenerator() {
 }
 
 void BranchGenerator::translateBranch(PipelineBranch* branch) {
-    setupBuilder(branch);
+    setupBranch(branch);
 
-    PipelineOutputInterface* outIface = nullptr;
     for (PlanGraphNode* node : branch->nodes()) {
-        outIface = translateNode(node);
+        translateNode(node);
     }
 
-    branch->setOutputInterface(outIface);
+    // Add materialize at the end of the branch if necessary
+    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    PipelineOutputInterface* lastOutput = _builder.getPendingOutputInterface();
+    branch->setOutputInterface(lastOutput);
 }
 
-void BranchGenerator::setupBuilder(PipelineBranch* branch) {
+void BranchGenerator::setupBranch(PipelineBranch* branch) {
     // Set the initial pending output interface of the builder
-    // Use the output of the first input branch
     const auto& prevBranches = branch->inputs();
-    if (!prevBranches.empty()) {
-        const PipelineBranch* firstInput = prevBranches.front();
-        _builder.setPendingOutputInterface(firstInput->getOutputInterface());
-    } else {
+    if (prevBranches.empty()) {
         _builder.setPendingOutputInterface(nullptr);
+        return;
     }
+
+    // The first input branch gives the input of the builder
+    const PipelineBranch* firstInput = prevBranches.front();
+    _builder.setPendingOutputInterface(firstInput->getOutputInterface());
+
+    _currentBranch = branch;
 }
 
 PipelineOutputInterface* BranchGenerator::translateNode(PlanGraphNode* node) {
@@ -477,21 +484,19 @@ PipelineOutputInterface* BranchGenerator::translateLimitNode(LimitNode* node) {
 }
 
 PipelineOutputInterface* BranchGenerator::translateCartesianProductNode(CartesianProductNode* node) {
-    const auto binaryNodeIt = _binaryNodeMap.find(node);
-    if (binaryNodeIt == _binaryNodeMap.end()) {
-        throw PipelineException("Attempted to translate CartesianProductNode which was "
-                                "not already encountered.");
+    // Cartesian product is a binary node so it is alone on its own branch.
+    // Thus the current branch must have exactly 2 predecessor branches
+    const auto& branchInputs = _currentBranch->inputs();
+    if (branchInputs.size() != 2) {
+        throw PlannerException("Cartesian product node in a branch not with 2 inputs");
     }
 
-    PipelineOutputInterface* inputA = _builder.getPendingOutputInterface();
-    auto& [inputB, isBLhs] = binaryNodeIt->second;
+    PipelineOutputInterface* lhs = branchInputs[0]->getOutputInterface();
+    PipelineOutputInterface* rhs = branchInputs[1]->getOutputInterface();
+    msgbioassert(lhs, "Left-hand side interface of cartesian product is nullptr");
+    msgbioassert(rhs, "Right-hand side interface of cartesian product is nullptr");
 
-    PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
-    PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
-
-    // LHS is implicit in @ref _pendingOutput
-    _builder.getPendingOutput().updateInterface(lhs);
-
+    _builder.setPendingOutputInterface(lhs);
     _builder.addCartesianProduct(rhs);
 
     return _builder.getPendingOutputInterface();
