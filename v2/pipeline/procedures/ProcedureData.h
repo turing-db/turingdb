@@ -1,9 +1,9 @@
 #pragma once
 
-#include <array>
 #include <stdint.h>
-#include <string_view>
+#include <stddef.h>
 #include <type_traits>
+#include <vector>
 
 namespace db {
 class Column;
@@ -13,30 +13,6 @@ namespace db::v2 {
 
 class ProcedureData {
 public:
-    enum class ReturnType : uint8_t {
-        INVALID = 0,
-        NODE,
-        EDGE,
-        LABEL_ID,
-        EDGE_TYPE_ID,
-        PROPERTY_TYPE_ID,
-        VALUE_TYPE,
-        UINT_64,
-        INT64,
-        DOUBLE,
-        BOOL,
-        STRING,
-    };
-
-    struct ReturnValue {
-        std::string_view _name;
-        ReturnType _type {};
-    };
-
-    static constexpr size_t RETURN_VALUES_COUNT = 4;
-
-    using ReturnValues = std::array<ReturnValue, RETURN_VALUES_COUNT>;
-
     virtual ~ProcedureData() = default;
     ProcedureData() = default;
 
@@ -44,6 +20,10 @@ public:
     ProcedureData(ProcedureData&&) = delete;
     ProcedureData& operator=(const ProcedureData&) = delete;
     ProcedureData& operator=(ProcedureData&&) = delete;
+
+    void resize(size_t size) {
+        _returnColumns.resize(size);
+    }
 
     Column* getReturnColumn(size_t i) {
         return _returnColumns[i];
@@ -54,7 +34,7 @@ public:
     }
 
 private:
-    std::array<Column*, RETURN_VALUES_COUNT> _returnColumns {};
+    std::vector<Column*> _returnColumns;
 };
 
 template <typename T>

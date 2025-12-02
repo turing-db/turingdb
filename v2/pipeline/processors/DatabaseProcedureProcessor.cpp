@@ -22,7 +22,7 @@ DatabaseProcedureProcessor* DatabaseProcedureProcessor::create(PipelineV2* pipel
     processor->addOutput(output);
 
     Procedure& procedure = processor->_procedure;
-    procedure._blueprint = blueprint;
+    procedure._blueprint = &blueprint;
 
     if (blueprint._allocCallback) {
         procedure._data = blueprint._allocCallback();
@@ -39,7 +39,7 @@ std::string DatabaseProcedureProcessor::describe() const {
 void DatabaseProcedureProcessor::prepare(ExecutionContext* ctxt) {
     _procedure._ctxt = ctxt;
     _procedure._step = Procedure::Step::PREPARE;
-    _procedure._blueprint._execCallback(_procedure);
+    _procedure._blueprint->_execCallback(_procedure);
 
     if (_procedure.isFinished()) [[unlikely]] {
         throw PipelineException("Cannot finish a procedure in the prepare phase");
@@ -50,7 +50,7 @@ void DatabaseProcedureProcessor::prepare(ExecutionContext* ctxt) {
 
 void DatabaseProcedureProcessor::reset() {
     _procedure._step = Procedure::Step::RESET;
-    _procedure._blueprint._execCallback(_procedure);
+    _procedure._blueprint->_execCallback(_procedure);
 
     if (_procedure.isFinished()) [[unlikely]] {
         throw PipelineException("Cannot finish a procedure in the reset phase");
@@ -61,7 +61,7 @@ void DatabaseProcedureProcessor::reset() {
 
 void DatabaseProcedureProcessor::execute() {
     _procedure._step = Procedure::Step::EXECUTE;
-    _procedure._blueprint._execCallback(_procedure);
+    _procedure._blueprint->_execCallback(_procedure);
     _output.getPort()->writeData();
 
     if (_procedure.isFinished()) {
@@ -77,71 +77,73 @@ void DatabaseProcedureProcessor::allocColumns(LocalMemory& mem,
     PipelineBlockOutputInterface& output = _output;
     Dataframe* outDf = output.getDataframe();
 
+    data.resize(_procedure._blueprint->_returnValues.size());
+
     for (auto& item : yield) {
         const std::string_view& colName = item._baseName;
         const std::string_view& asName = item._asName;
 
-        const size_t colIndex = _procedure._blueprint.getReturnValueIndex(colName);
-        const ProcedureData::ReturnType colType = _procedure._blueprint.getReturnValueType(colIndex);
+        const size_t colIndex = _procedure._blueprint->getReturnValueIndex(colName);
+        const ProcedureReturnType colType = _procedure._blueprint->getReturnValueType(colIndex);
 
         Column* col = nullptr;
 
         switch (colType) {
-            case ProcedureData::ReturnType::INVALID: {
+            case ProcedureReturnType::INVALID: {
                 continue;
             }
 
-            case ProcedureData::ReturnType::NODE: {
+            case ProcedureReturnType::NODE: {
                 col = mem.alloc<ColumnVector<NodeID>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::EDGE: {
+            case ProcedureReturnType::EDGE: {
                 col = mem.alloc<ColumnVector<EdgeID>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::LABEL_ID: {
+            case ProcedureReturnType::LABEL_ID: {
                 col = mem.alloc<ColumnVector<LabelID>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::EDGE_TYPE_ID: {
+            case ProcedureReturnType::EDGE_TYPE_ID: {
                 col = mem.alloc<ColumnVector<EdgeTypeID>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::PROPERTY_TYPE_ID: {
+            case ProcedureReturnType::PROPERTY_TYPE_ID: {
                 col = mem.alloc<ColumnVector<PropertyTypeID>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::VALUE_TYPE: {
+            case ProcedureReturnType::VALUE_TYPE: {
                 col = mem.alloc<ColumnVector<ValueType>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::UINT_64: {
+            case ProcedureReturnType::UINT_64: {
                 col = mem.alloc<ColumnVector<types::UInt64::Primitive>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::INT64: {
+            case ProcedureReturnType::INT64: {
                 col = mem.alloc<ColumnVector<types::Int64::Primitive>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::DOUBLE: {
+            case ProcedureReturnType::DOUBLE: {
                 col = mem.alloc<ColumnVector<types::Double::Primitive>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::BOOL: {
+            case ProcedureReturnType::BOOL: {
                 col = mem.alloc<ColumnVector<types::Bool::Primitive>>();
                 data.setReturnColumn(colIndex, col);
                 break;
             }
-            case ProcedureData::ReturnType::STRING: {
+            case ProcedureReturnType::STRING: {
                 col = mem.alloc<ColumnVector<types::String::Primitive>>();
                 data.setReturnColumn(colIndex, col);
                 break;

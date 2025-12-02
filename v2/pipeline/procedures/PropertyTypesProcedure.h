@@ -17,15 +17,21 @@ struct PropertyTypesProcedure {
     static std::unique_ptr<ProcedureData> allocData();
     static void execute(Procedure& proc);
 
-    static constexpr ProcedureBlueprint Blueprint {
-        ._name = "db.propertyTypes",
-        ._execCallback = &execute,
-        ._allocCallback = &allocData,
-        ._returnValues = {
-                          ProcedureData::ReturnValue {"id", ProcedureData::ReturnType::PROPERTY_TYPE_ID},
-                          ProcedureData::ReturnValue {"propertyType", ProcedureData::ReturnType::STRING},
-                          ProcedureData::ReturnValue {"valueType", ProcedureData::ReturnType::VALUE_TYPE}},
-    };
+    static ProcedureBlueprint createBlueprint() noexcept {
+        try {
+            return {
+                ._name = "db.propertyTypes",
+                ._execCallback = &execute,
+                ._allocCallback = &allocData,
+                ._returnValues = {{"id", ProcedureReturnType::PROPERTY_TYPE_ID},
+                                  {"propertyType", ProcedureReturnType::STRING},
+                                  {"valueType", ProcedureReturnType::VALUE_TYPE}},
+                ._valid = true,
+            };
+        } catch (const std::exception& e) {
+            return {};
+        }
+    }
 };
 
 }

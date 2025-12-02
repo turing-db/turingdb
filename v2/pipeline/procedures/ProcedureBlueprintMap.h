@@ -3,9 +3,9 @@
 #include <string_view>
 #include <array>
 
-#include "ProcedureBlueprint.h"
-
 namespace db::v2 {
+
+class ProcedureBlueprint;
 
 class ProcedureBlueprintMap {
 public:

@@ -37,7 +37,7 @@ private:
     friend class DatabaseProcedureProcessor;
 
     std::unique_ptr<ProcedureData> _data;
-    ProcedureBlueprint _blueprint {};
+    const ProcedureBlueprint* _blueprint {nullptr};
     const ExecutionContext* _ctxt {nullptr};
     bool _finished {false};
     Step _step {};

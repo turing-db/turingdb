@@ -4,8 +4,10 @@
 #include <vector>
 
 #include "ProcedureData.h"
+#include "procedures/ProcedureReturnValues.h"
 
 #include "PipelineException.h"
+#include "BioAssert.h"
 
 namespace db {
 class NamedColumn;
@@ -36,20 +38,22 @@ public:
         throw PipelineException("Column is not returned by the procedure");
     }
 
-    ProcedureData::ReturnType getReturnValueType(size_t index) const {
+    ProcedureReturnType getReturnValueType(size_t index) const {
         return _returnValues[index]._type;
     }
 
     std::string_view _name;
     ExecuteCallback _execCallback = nullptr;
     AllocCallback _allocCallback = nullptr;
-    ProcedureData::ReturnValues _returnValues {};
+    ProcedureReturnValues _returnValues;
+    bool _valid = false;
 
     void returnAll(std::vector<YieldItem>& yieldItems) const {
         for (const auto& item : _returnValues) {
-            if (item._type != ProcedureData::ReturnType::INVALID) {
-                yieldItems.emplace_back(item._name);
-            }
+            msgbioassert(item._type != ProcedureReturnType::INVALID,
+                         "Invalid procedure return type");
+
+            yieldItems.emplace_back(item._name);
         }
     }
 };

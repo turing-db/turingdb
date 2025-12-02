@@ -17,14 +17,20 @@ struct EdgeTypesProcedure {
     static std::unique_ptr<ProcedureData> allocData();
     static void execute(Procedure& proc);
 
-    static constexpr ProcedureBlueprint Blueprint {
-        ._name = "db.edgeTypes",
-        ._execCallback = &execute,
-        ._allocCallback = &allocData,
-        ._returnValues = {
-                          ProcedureData::ReturnValue {"id", ProcedureData::ReturnType::LABEL_ID},
-                          ProcedureData::ReturnValue {"edgeType", ProcedureData::ReturnType::STRING}},
-    };
+    static ProcedureBlueprint createBlueprint() noexcept {
+        try {
+            return {
+                ._name = "db.edgeTypes",
+                ._execCallback = &execute,
+                ._allocCallback = &allocData,
+                ._returnValues = {{"id", ProcedureReturnType::EDGE_TYPE_ID},
+                                  {"edgeType", ProcedureReturnType::STRING}},
+                ._valid = true,
+            };
+        } catch (const std::exception& e) {
+            return {};
+        }
+    }
 };
 
 }

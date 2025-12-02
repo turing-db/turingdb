@@ -1,6 +1,9 @@
 #include "FunctionDecls.h"
 
+#include "procedures/ProcedureBlueprint.h"
 #include "procedures/ProcedureBlueprintMap.h"
+
+#include "FatalException.h"
 
 using namespace db::v2;
 
@@ -21,32 +24,32 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
 
         for (const auto& returnItem : blueprint._returnValues) {
             switch (returnItem._type) {
-                case ProcedureData::ReturnType::INVALID:
-                    continue;
+                case ProcedureReturnType::INVALID:
+                    throw FatalException("Invalid procedure return type");
 
-                case ProcedureData::ReturnType::NODE:
+                case ProcedureReturnType::NODE:
                     declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);
                     break;
-                case ProcedureData::ReturnType::EDGE:
+                case ProcedureReturnType::EDGE:
                     declBuilder.addReturnType(EvaluatedType::EdgePattern, returnItem._name);
                     break;
-                case ProcedureData::ReturnType::VALUE_TYPE:
+                case ProcedureReturnType::VALUE_TYPE:
                     declBuilder.addReturnType(EvaluatedType::ValueType, returnItem._name);
                     break;
-                case ProcedureData::ReturnType::LABEL_ID:
-                case ProcedureData::ReturnType::EDGE_TYPE_ID:
-                case ProcedureData::ReturnType::PROPERTY_TYPE_ID:
-                case ProcedureData::ReturnType::UINT_64:
-                case ProcedureData::ReturnType::INT64:
+                case ProcedureReturnType::LABEL_ID:
+                case ProcedureReturnType::EDGE_TYPE_ID:
+                case ProcedureReturnType::PROPERTY_TYPE_ID:
+                case ProcedureReturnType::UINT_64:
+                case ProcedureReturnType::INT64:
                     declBuilder.addReturnType(EvaluatedType::Integer, returnItem._name);
                     break;
-                case ProcedureData::ReturnType::DOUBLE:
+                case ProcedureReturnType::DOUBLE:
                     declBuilder.addReturnType(EvaluatedType::Double, returnItem._name);
                     break;
-                case ProcedureData::ReturnType::BOOL:
+                case ProcedureReturnType::BOOL:
                     declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
                     break;
-                case ProcedureData::ReturnType::STRING:
+                case ProcedureReturnType::STRING:
                     declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
                     break;
             }
