@@ -770,3 +770,68 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
         ASSERT_TRUE(expected.equals(actual));
     }
 }
+
+// TODO GetOutEdges target test for materialise testing
+TEST_F(WriteQueriesTest, createFromTarget) {
+    constexpr std::string_view CREATE_QUERY = "MATCH (n)-->(m) CREATE (m)-[e:NEWEDGE]->(p:NEWNODE) RETURN n, m, e, p";
+    constexpr std::string_view MATCH_QUERY = "MATCH (u)-[e]->(v) RETURN u, e, v)";
+
+    const size_t totalNodesPrior = read().getTotalNodesAllocated();
+    const size_t totalEdgesPrior = read().getTotalEdgesAllocated();
+
+    {
+        using Rows = LineContainer<NodeID, NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        {
+            EdgeID nextEdgeID = totalEdgesPrior;
+            NodeID nextNodeID = totalNodesPrior;
+            for (const EdgeRecord& edgeRecord : read().scanOutEdges()) {
+                const NodeID n = edgeRecord._nodeID;
+                const NodeID m = edgeRecord._otherID;
+                const EdgeID e = nextEdgeID++;
+                const NodeID p = nextNodeID++;
+                expected.add({n, m, e, p});
+            }
+        }
+
+        Rows actual;
+        {
+            newChange();
+            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 4);
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
+                auto* es = df->cols().at(2)->as<ColumnEdgeIDs>();
+                auto* ps = df->cols().back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                ASSERT_TRUE(ms);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(ps);
+
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(rowCount, totalEdgesPrior);
+                for (size_t row = 0; row < rowCount; row++) {
+                    actual.add({ns->at(row), ms->at(row), es->at(row), ps->at(row)});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+
+        ASSERT_TRUE(expected.equals(actual));
+    }
+
+    submitCurrentChange();
+
+    {
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        { // Just check the new rows
+            EdgeID nextEdgeID = totalEdgesPrior;
+            NodeID nextNodeID = totalNodesPrior;
+
+        }     
+    }
+}
