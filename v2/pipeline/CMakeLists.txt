@@ -30,9 +30,9 @@ set(processors_sources
 
 set(procedures_sources
     procedures/ProcedureBlueprintMap.cpp
-    procedures/ScanLabelsProcedure.cpp
-    procedures/ScanEdgeTypesProcedure.cpp
-    procedures/ScanPropertyTypesProcedure.cpp
+    procedures/LabelsProcedure.cpp
+    procedures/EdgeTypesProcedure.cpp
+    procedures/PropertyTypesProcedure.cpp
 )
 
 add_library(turing_db_v2_pipeline_s

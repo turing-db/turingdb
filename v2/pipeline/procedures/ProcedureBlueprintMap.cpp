@@ -1,15 +1,15 @@
 #include "ProcedureBlueprintMap.h"
 
-#include "ScanLabelsProcedure.h"
-#include "ScanEdgeTypesProcedure.h"
-#include "ScanPropertyTypesProcedure.h"
+#include "LabelsProcedure.h"
+#include "EdgeTypesProcedure.h"
+#include "PropertyTypesProcedure.h"
 
 using namespace db::v2;
 
 const std::array<ProcedureBlueprint, 3> ProcedureBlueprintMap::_blueprints {
-    ScanLabelsProcedure::Blueprint,
-    ScanPropertyTypesProcedure::Blueprint,
-    ScanEdgeTypesProcedure::Blueprint,
+    LabelsProcedure::Blueprint,
+    PropertyTypesProcedure::Blueprint,
+    EdgeTypesProcedure::Blueprint,
 };
 
 ProcedureBlueprintMap::ProcedureBlueprintMap() {

@@ -9,7 +9,7 @@ class ScanEdgeTypesChunkWriter;
 
 namespace db::v2 {
 
-struct ScanEdgeTypesProcedure {
+struct EdgeTypesProcedure {
     struct Data : public ProcedureData {
         std::unique_ptr<ScanEdgeTypesChunkWriter> _it;
     };

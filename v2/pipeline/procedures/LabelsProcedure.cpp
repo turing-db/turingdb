@@ -1,8 +1,8 @@
-#include "ScanEdgeTypesProcedure.h"
+#include "LabelsProcedure.h"
 
 #include "ExecutionContext.h"
 #include "procedures/Procedure.h"
-#include "iterators/ScanEdgeTypesIterator.h"
+#include "iterators/ScanLabelsIterator.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
 
@@ -10,11 +10,11 @@
 
 using namespace db::v2;
 
-std::unique_ptr<ProcedureData> ScanEdgeTypesProcedure::allocData() {
+std::unique_ptr<ProcedureData> LabelsProcedure::allocData() {
     return std::make_unique<Data>();
 }
 
-void ScanEdgeTypesProcedure::execute(Procedure& proc) {
+void LabelsProcedure::execute(Procedure& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
     const GraphView& _view = ctxt->getGraphView();
@@ -22,12 +22,12 @@ void ScanEdgeTypesProcedure::execute(Procedure& proc) {
     Column* rawIdsCol = data.getReturnColumn(0);
     Column* rawNamesCol = data.getReturnColumn(1);
 
-    auto* idsCol = static_cast<ColumnVector<EdgeTypeID>*>(rawIdsCol);
+    auto* idsCol = static_cast<ColumnVector<LabelID>*>(rawIdsCol);
     auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
 
     switch (proc.step()) {
         case Procedure::Step::PREPARE: {
-            data._it = std::make_unique<ScanEdgeTypesChunkWriter>(_view.metadata().edgeTypes());
+            data._it = std::make_unique<ScanLabelsChunkWriter>(_view.metadata().labels());
             data._it->setIDs(idsCol);
             data._it->setNames(namesCol);
             return;

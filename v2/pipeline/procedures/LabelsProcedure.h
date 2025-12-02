@@ -9,7 +9,7 @@ class ScanLabelsChunkWriter;
 
 namespace db::v2 {
 
-struct ScanLabelsProcedure {
+struct LabelsProcedure {
     struct Data : public ProcedureData {
         std::unique_ptr<ScanLabelsChunkWriter> _it;
     };

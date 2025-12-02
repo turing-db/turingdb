@@ -1,4 +1,4 @@
-#include "ScanPropertyTypesProcedure.h"
+#include "PropertyTypesProcedure.h"
 
 #include "ExecutionContext.h"
 #include "procedures/Procedure.h"
@@ -10,11 +10,11 @@
 
 using namespace db::v2;
 
-std::unique_ptr<ProcedureData> ScanPropertyTypesProcedure::allocData() {
+std::unique_ptr<ProcedureData> PropertyTypesProcedure::allocData() {
     return std::make_unique<Data>();
 }
 
-void ScanPropertyTypesProcedure::execute(Procedure& proc) {
+void PropertyTypesProcedure::execute(Procedure& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
     const GraphView& _view = ctxt->getGraphView();

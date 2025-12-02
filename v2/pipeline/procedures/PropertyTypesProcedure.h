@@ -9,7 +9,7 @@ class ScanPropertyTypesChunkWriter;
 
 namespace db::v2 {
 
-struct ScanPropertyTypesProcedure {
+struct PropertyTypesProcedure {
     struct Data : public ProcedureData {
         std::unique_ptr<ScanPropertyTypesChunkWriter> _it;
     };
