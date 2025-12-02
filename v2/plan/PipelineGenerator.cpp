@@ -444,6 +444,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
             };
             PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
         }
+        break;
         case EvaluatedType::EdgePattern: {
             const auto process = [&]<SupportedType Type> {
                 output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
@@ -451,6 +452,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
 
             PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
         }
+        break;
         default: {
             throw PlannerException(fmt::format(
                 "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
@@ -553,6 +555,7 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 
     const auto& predicates = node->getPredicates();
     if (!predicates.empty()) {
+        // Save the incoming interface
         PipelineOutputInterface* prevIface = _builder.getPendingOutputInterface();
 
         // Compile predicate expression into an expression program
@@ -562,9 +565,10 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
             exprGen.generatePredicate(pred);
         }
  
+        // First add a compute expression processor
         _builder.addComputeExpr(exprProg);
 
-        // Add filter node
+        // Then add a filter processor, taking the expression and node inputs
         _builder.addFilter(prevIface);
     }
 
@@ -572,8 +576,6 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     if (!labelConstrs.empty()) {
         throw PlannerException("PipelineGenerator: label constraints in filter nodes are not supported");
     }
-    
-    _builder.addEvalExpr(evalProg);
 
     return _builder.getPendingOutputInterface();
 }

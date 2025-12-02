@@ -153,15 +153,13 @@ void PipelineBlockOutputInterface::connectTo(PipelineEdgeInputInterface& input) 
 }
 
 void PipelineBlockOutputInterface::rename(std::string_view name) {
-    const ColumnTag nodeIDsTag = _stream.getNodeIDsTag();
-    const ColumnTag edgeIDsTag = _stream.getEdgeIDsTag();
     const Dataframe* df = _port->getBuffer()->getDataframe();
 
     ColumnTag srcColTag;
-    if (nodeIDsTag.isValid()) {
-        srcColTag = nodeIDsTag;
-    } else if (edgeIDsTag.isValid()) {
-        srcColTag = edgeIDsTag;
+    if (_stream.isNodeStream()) {
+        srcColTag = _stream.asNodeStream()._nodeIDsTag;
+    } else if (_stream.isEdgeStream()) {
+        srcColTag = _stream.asEdgeStream()._edgeIDsTag;
     } else {
         throw PipelineException("PipelineBlockOutputInterface: rename on a block is only possible if on a node stream or edge stream");
     }

@@ -1,5 +1,6 @@
 #include "PipelineBuilder.h"
 
+#include "EntityOutputStream.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
@@ -567,17 +568,18 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadNeo4j(std::string_view gra
 PipelineBlockOutputInterface& PipelineBuilder::addFilter(PipelineOutputInterface* toFilter) {
     FilterProcessor* filterProc = FilterProcessor::create(_pipeline);
 
-    PipelineBlockOutputInterface& output = filterProc->output();
-    PipelineBlockInputInterface& toFilterInput = filterProc->toFilterInput();
+    PipelineBlockOutputInterface& filterOutput = filterProc->output();
+    PipelineBlockInputInterface& filterInput = filterProc->toFilterInput();
+    PipelineValuesInputInterface& maskInput = filterProc->maskInput();
 
-    _pendingOutput.connectTo(filterProc->maskInput());
-    toFilter->connectTo(toFilterInput);
+    _pendingOutput.connectTo(maskInput);
+    toFilter->connectTo(filterInput);
 
-    _pendingOutput.setInterface(&output);
-    duplicateDataframeShape(_mem, _dfMan, toFilterInput.getDataframe(), output.getDataframe());
-    output.setStream(toFilterInput.getStream());
+    _pendingOutput.setInterface(&filterOutput);
+    duplicateDataframeShape(_mem, _dfMan, filterInput.getDataframe(), filterOutput.getDataframe());
+    filterOutput.setStream(filterInput.getStream());
 
-    return output;
+    return filterOutput;
 }
 
 template <EntityType Entity, db::SupportedType T>
