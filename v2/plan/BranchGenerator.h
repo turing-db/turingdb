@@ -77,6 +77,7 @@ private:
     PipelineOutputInterface* translateGetEdgesNode(GetEdgesNode* node);
     PipelineOutputInterface* translateGetEdgeTargetNode(GetEdgeTargetNode* node);
     PipelineOutputInterface* translateGetPropertyWithNullNode(GetPropertyWithNullNode* node);
+    PipelineOutputInterface* translateGetPropertyNode(GetPropertyNode* node);
     PipelineOutputInterface* translateNodeFilterNode(NodeFilterNode* node);
     PipelineOutputInterface* translateEdgeFilterNode(EdgeFilterNode* node);
     PipelineOutputInterface* translateProduceResultsNode(ProduceResultsNode* node);

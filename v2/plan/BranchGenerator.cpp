@@ -14,6 +14,7 @@
 #include "nodes/CartesianProductNode.h"
 #include "nodes/PlanGraphNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
+#include "nodes/GetPropertyNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -33,6 +34,7 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/ExprChain.h"
 
+#include "Overloaded.h"
 #include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
