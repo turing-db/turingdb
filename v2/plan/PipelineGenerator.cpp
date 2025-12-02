@@ -426,6 +426,9 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     const Projection* projNode = node->getProjection();
 
+    // No projection can happen in the case of a Standalone call
+    // in which case, we can simply output the whole dataframe
+
     if (projNode) {
         std::vector<ProjectionItem> items;
         // No projection can happen in the case of a Standalone call
@@ -439,8 +442,11 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
             }
 
             const ColumnTag tag = _declToColumn.at(decl);
+            const std::string_view name = item->getName();
 
-            const std::string_view repr = _sourceManager->getStringRepr((std::uintptr_t)item);
+            const std::string_view repr = name.empty()
+                ? _sourceManager->getStringRepr((std::uintptr_t)item)
+                : name;
 
             items.push_back({tag, repr});
         }
@@ -651,7 +657,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
             const Symbol* symbol = item->getSymbol();
 
             // TODO: handle the AS keyword there
-            yieldItems.emplace_back(symbol->getName(), symbol->getName());
+            yieldItems.emplace_back(symbol->getOriginalName(), symbol->getName());
             yieldDecls.push_back(item->getExprVarDecl());
         }
     }

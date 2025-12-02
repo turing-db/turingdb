@@ -360,8 +360,8 @@ projectionItems
     ;
 
 projectionItem
-    : expr
-    | expr AS name { scanner.notImplemented(@$, "AS"); }
+    : expr { $$ = $1; LOC($$, @$); }
+    | expr AS name { $$ = $1; $$->setName($3->getName()); LOC($$, @$); }
     ;
 
 orderByItem
@@ -547,7 +547,11 @@ yieldItemChain
 
 yieldItem
     : symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
-    | symbol AS symbol { scanner.notImplemented(@$, "AS"); }
+    | symbol AS symbol {
+        $1->setAs($3->getName());
+        $$ = SymbolExpr::create(ast, $1);
+        LOC($$, @$);
+      }
     ;
 
 mergeSt

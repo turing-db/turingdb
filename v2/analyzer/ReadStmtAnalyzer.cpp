@@ -149,7 +149,7 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
 
         // Step 3. Find the item in the return values of the function
         for (const FunctionReturnType& returnItem : signature->_returnTypes) {
-            if (returnItem._name == yieldItem->getName()) {
+            if (returnItem._name == yieldItem->getOriginalName()) {
                 bioassert(!returnItem._name.empty() && "Procedure return item has empty name");
                 decl = _ctxt->getOrCreateNamedVariable(_ast, returnItem._type, yieldItem->getName());
                 break;
@@ -157,7 +157,9 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
         }
 
         if (decl == nullptr) {
-            throwError(fmt::format("Procedure '{}' does not return item '{}'", signature->_fullName, yieldItem->getName()), yieldItemExpr);
+            throwError(fmt::format("Procedure '{}' does not return item '{}'",
+                                   signature->_fullName, yieldItem->getOriginalName()),
+                       yieldItemExpr);
         }
 
         yieldItemExpr->setExprVarDecl(decl);
