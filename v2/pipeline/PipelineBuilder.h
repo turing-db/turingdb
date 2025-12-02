@@ -45,7 +45,12 @@ public:
 
     const PendingOutputView& getPendingOutput() const { return _pendingOutput; }
     PendingOutputView& getPendingOutput() { return _pendingOutput; }
+
     PipelineOutputInterface* getPendingOutputInterface() const { return _pendingOutput.getInterface(); }
+
+    void setPendingOutputInterface(PipelineOutputInterface* iface) {
+        _pendingOutput.setInterface(iface);
+    }
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();

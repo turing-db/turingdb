@@ -91,9 +91,26 @@ BranchGenerator::BranchGenerator(LocalMemory* mem,
 BranchGenerator::~BranchGenerator() {
 }
 
-void BranchGenerator::translateBranch(const PipelineBranch* branch) {
+void BranchGenerator::translateBranch(PipelineBranch* branch) {
+    setupBuilder(branch);
+
+    PipelineOutputInterface* outIface = nullptr;
     for (PlanGraphNode* node : branch->nodes()) {
-        translateNode(node);
+        outIface = translateNode(node);
+    }
+
+    branch->setOutputInterface(outIface);
+}
+
+void BranchGenerator::setupBuilder(PipelineBranch* branch) {
+    // Set the initial pending output interface of the builder
+    // Use the output of the first input branch
+    const auto& prevBranches = branch->inputs();
+    if (!prevBranches.empty()) {
+        const PipelineBranch* firstInput = prevBranches.front();
+        _builder.setPendingOutputInterface(firstInput->getOutputInterface());
+    } else {
+        _builder.setPendingOutputInterface(nullptr);
     }
 }
 
@@ -385,12 +402,16 @@ PipelineOutputInterface* BranchGenerator::translateProduceResultsNode(ProduceRes
 
     _builder.addProjection(items);
 
-    auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    // Needs to be copied to be captured by value in the lambda
+    // without capturing "this" which may go out of scope if the pipeline is stored
+    const QueryCallbackV2 callback = _callback;
+    auto lambdaCallback = [callback](const Dataframe* df,
+                                 LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
 
-        _callback(df);
+        callback(df);
     };
 
     _builder.addLambda(lambdaCallback);

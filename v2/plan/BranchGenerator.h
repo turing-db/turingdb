@@ -36,16 +36,16 @@ class AggregateEvalNode;
 
 class BranchGenerator {
 public:
-    BranchGenerator(LocalMemory* mem,
-                    SourceManager* srcMan,
-                    const PlanGraph* graph,
-                    const GraphView& view,
-                    PipelineV2* pipeline,
-                    const QueryCallbackV2& callback);
+    explicit BranchGenerator(LocalMemory* mem,
+                             SourceManager* srcMan,
+                             const PlanGraph* graph,
+                             const GraphView& view,
+                             PipelineV2* pipeline,
+                             const QueryCallbackV2& callback);
 
     ~BranchGenerator();
 
-    void translateBranch(const PipelineBranch* branch);
+    void translateBranch(PipelineBranch* branch);
 
 private:
     LocalMemory* _mem {nullptr};
@@ -66,6 +66,8 @@ private:
     };
 
     std::unordered_map<const PlanGraphNode*, BinaryNodeInfo> _binaryNodeMap;
+
+    void setupBuilder(PipelineBranch* branch);
 
     PipelineOutputInterface* translateNode(PlanGraphNode* node);
     PipelineOutputInterface* translateVarNode(VarNode* node);

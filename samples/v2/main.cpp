@@ -15,8 +15,6 @@
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
-#include "PipelineBranches.h"
-#include "PipelineBranch.h"
 #include "PipelineV2.h"
 #include "LocalMemory.h"
 #include "PipelineGenerator.h"
@@ -109,30 +107,18 @@ int main(int argc, char** argv) {
         PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
     }
 
-    {
-        PipelineBranches planBranches;
-        planBranches.generate(&planGraph);
-
-        std::cout << '\n';
-        planBranches.dumpMermaid(std::cout);
-
-        // Topological sort the branches
-        std::vector<PipelineBranch*> sortedBranches;
-        planBranches.topologicalSort(sortedBranches);
-
-        std::cout << "\nSort:\n";
-        for (const PipelineBranch* branch : sortedBranches) {
-            std::cout << fmt::format("Branch {}", fmt::ptr(branch)) << '\n';
-        }
-    }
-
     if (pipelineGenEnabled) {
         LocalMemory mem;
         PipelineV2 pipeline;
         {
-            auto callback = [](const Dataframe* dataframe) {};
+            auto callback = [](const Dataframe*){};
 
-            PipelineGenerator pipelineGen(&mem, ast.getSourceManager(), &planGraph, view, &pipeline, callback);
+            PipelineGenerator pipelineGen(&mem,
+                                          ast.getSourceManager(),
+                                          &planGraph,
+                                          view,
+                                          &pipeline,
+                                          callback);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

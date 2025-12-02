@@ -39,7 +39,7 @@ void PipelineGenerator::generate() {
                               _view,
                               _pipeline,
                               _callback);
-    for (const PipelineBranch* branch : sortedBranches) {
+    for (PipelineBranch* branch : sortedBranches) {
         branchGen.translateBranch(branch);
     }
 }

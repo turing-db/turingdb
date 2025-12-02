@@ -12,17 +12,8 @@ class PipelineBranch {
 public:
     friend PipelineBranches;
 
-    struct Input {
-        PipelineBranch* _prev {nullptr};
-        PipelineOutputInterface* _prevIface {nullptr};
-    };
-
-    struct Output {
-        PipelineBranch* _next {nullptr};
-    };
-
-    using Inputs = std::vector<Input>;
-    using Outputs = std::vector<Output>;
+    using Inputs = std::vector<PipelineBranch*>;
+    using Outputs = std::vector<PipelineBranch*>;
     using Nodes = std::vector<PlanGraphNode*>;
 
     const Inputs& inputs() const { return _inputs; }
@@ -42,12 +33,16 @@ public:
     bool isSortDiscovered() const { return _sortDiscovered; }
     void setSortDiscovered(bool discovered) { _sortDiscovered = discovered; }
 
+    PipelineOutputInterface* getOutputInterface() const { return _outIface; }
+    void setOutputInterface(PipelineOutputInterface* iface) { _outIface = iface; }
+
     static PipelineBranch* create(PipelineBranches* branches);
 
 private:
     Nodes _nodes;
     Inputs _inputs;
     Outputs _outputs;
+    PipelineOutputInterface* _outIface {nullptr};
     bool _sortDiscovered {false};
 
     PipelineBranch();

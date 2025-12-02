@@ -102,7 +102,7 @@ namespace {
 void topologicalSortExp(PipelineBranch* branch,
                         std::vector<PipelineBranch*>& sort,
                         size_t* visitedPos) {
-    for (const auto [next] : branch->outputs()) {
+    for (PipelineBranch* next : branch->outputs()) {
         if (!next->isSortDiscovered()) {
             next->setSortDiscovered(true);
             topologicalSortExp(next, sort, visitedPos);
@@ -163,7 +163,7 @@ void PipelineBranches::dumpMermaid(std::ostream& out) {
 
     for (const PipelineBranch* branch : _branches) {
         const size_t src = nodeIndex.at(branch);
-        for (auto [next] : branch->outputs()) {
+        for (PipelineBranch* next : branch->outputs()) {
             const size_t target = nodeIndex.at(next);
             out << fmt::format("    {}-->{}\n", src, target);
         }
