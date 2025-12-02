@@ -10,7 +10,7 @@
 namespace db::v2 {
 
 template <EntityType Entity, SupportedType T>
-std::string GetPropertiesWithNullProcessor<Entity, T>::describe() const {
+std::string GetPropertiesWithNullProcessor<Entity, T>::getName() const {
     return fmt::format("GetPropertiesWithNullProcessor<{}, {}>",
                        Entity == EntityType::Node ? "Node" : "Edge",
                        ValueTypeName::value(T::_valueType));

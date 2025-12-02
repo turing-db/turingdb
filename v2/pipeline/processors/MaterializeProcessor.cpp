@@ -103,8 +103,8 @@ MaterializeProcessor::MaterializeProcessor(LocalMemory* mem, DataframeManager* d
 MaterializeProcessor::~MaterializeProcessor() {
 }
 
-std::string MaterializeProcessor::describe() const {
-    return fmt::format("MaterializeProcessor @={}", fmt::ptr(this));
+std::string MaterializeProcessor::getName() const {
+    return "MaterializeProcessor";
 }
 
 MaterializeProcessor* MaterializeProcessor::create(PipelineV2* pipeline, LocalMemory* mem) {

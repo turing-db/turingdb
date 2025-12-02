@@ -22,8 +22,8 @@ GetEdgesProcessor::GetEdgesProcessor()
 GetEdgesProcessor::~GetEdgesProcessor() {
 }
 
-std::string GetEdgesProcessor::describe() const {
-    return fmt::format("GetEdgesProcessor @={}", fmt::ptr(this));
+std::string GetEdgesProcessor::getName() const {
+    return "GetEdgesProcessor";
 }
 
 GetEdgesProcessor* GetEdgesProcessor::create(PipelineV2* pipeline) {

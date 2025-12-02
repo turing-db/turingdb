@@ -12,8 +12,8 @@ LambdaTransformProcessor::LambdaTransformProcessor(Callback callback)
 LambdaTransformProcessor::~LambdaTransformProcessor() {
 }
 
-std::string LambdaTransformProcessor::describe() const {
-    return fmt::format("LambdaTransformProcessor @={}", fmt::ptr(this));
+std::string LambdaTransformProcessor::getName() const {
+    return "LambdaTransformProcessor";
 }
 
 void LambdaTransformProcessor::prepare(ExecutionContext* ctxt) {

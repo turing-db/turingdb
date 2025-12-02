@@ -16,6 +16,7 @@
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
 #include "PipelineV2.h"
+#include "PipelineDumper.h"
 #include "LocalMemory.h"
 #include "PipelineGenerator.h"
 #include "PipelineExecutor.h"
@@ -128,6 +129,11 @@ int main(int argc, char** argv) {
                 fmt::print("{}\n", e.what());
                 return EXIT_FAILURE;
             }
+        }
+
+        {
+            PipelineDumper dumper(&pipeline);
+            dumper.dumpMermaid(std::cout);
         }
 
         {

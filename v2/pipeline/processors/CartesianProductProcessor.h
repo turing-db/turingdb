@@ -25,9 +25,7 @@ public:
     void reset() final;
     void execute() final;
 
-    std::string describe() const final {
-        return "CartesianProductProcessor";
-    }
+    std::string getName() const override;
 
     PipelineBlockInputInterface& leftHandSide() { return _lhs; }
     PipelineBlockInputInterface& rightHandSide() { return _rhs; }

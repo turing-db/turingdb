@@ -23,7 +23,7 @@ public:
 
     static LambdaProcessor* create(PipelineV2* pipeline, const Callback& callback);
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;

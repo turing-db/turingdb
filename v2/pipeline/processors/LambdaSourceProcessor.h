@@ -24,7 +24,7 @@ public:
 
     static LambdaSourceProcessor* create(PipelineV2* pipeline, Callback callback);
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;

@@ -30,7 +30,7 @@ public:
 
     static GetPropertiesProcessor* create(PipelineV2* pipeline, PropertyType propType);
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;

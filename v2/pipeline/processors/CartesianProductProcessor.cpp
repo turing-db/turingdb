@@ -60,6 +60,10 @@ void verifyRectangular(const Dataframe* df) {
 
 }
 
+std::string CartesianProductProcessor::getName() const {
+    return "CartesianProductProcessor";
+}
+
 CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipeline) {
     auto* processor = new CartesianProductProcessor();
 

@@ -12,8 +12,8 @@ LambdaProcessor::LambdaProcessor(const Callback& callback)
 LambdaProcessor::~LambdaProcessor() {
 }
 
-std::string LambdaProcessor::describe() const {
-    return fmt::format("LambdaProcessor @={}", fmt::ptr(this));
+std::string LambdaProcessor::getName() const {
+    return "LambdaProcessor";
 }
 
 void LambdaProcessor::prepare(ExecutionContext* ctxt) {

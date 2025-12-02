@@ -31,7 +31,7 @@ public:
 
     MaterializeData& getMaterializeData() { return _matData; }
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     bool isConnected() const { return _input.getPort()->getConnectedPort() != nullptr; };
 

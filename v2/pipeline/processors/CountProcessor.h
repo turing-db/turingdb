@@ -13,7 +13,7 @@ class CountProcessor : public Processor {
 public:
     static CountProcessor* create(PipelineV2* pipeline, ColumnTag colTag);
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     PipelineBlockInputInterface& input() { return _input; }
     PipelineValueOutputInterface& output() { return _output; }

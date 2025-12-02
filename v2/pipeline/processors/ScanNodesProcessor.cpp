@@ -18,8 +18,8 @@ ScanNodesProcessor::ScanNodesProcessor()
 ScanNodesProcessor::~ScanNodesProcessor() {
 }
 
-std::string ScanNodesProcessor::describe() const {
-    return fmt::format("ScanNodesProcessor @={}", fmt::ptr(this));
+std::string ScanNodesProcessor::getName() const {
+    return "ScanNodesProcessor";
 }
 
 ScanNodesProcessor* ScanNodesProcessor::create(PipelineV2* pipeline) {

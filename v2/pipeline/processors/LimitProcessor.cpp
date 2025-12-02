@@ -15,8 +15,8 @@ LimitProcessor::~LimitProcessor()
 {
 }
 
-std::string LimitProcessor::describe() const {
-    return fmt::format("LimitProcessor @={}", fmt::ptr(this));
+std::string LimitProcessor::getName() const {
+    return "LimitProcessor";
 }
 
 LimitProcessor* LimitProcessor::create(PipelineV2* pipeline, size_t limit) {

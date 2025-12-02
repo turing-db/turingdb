@@ -12,7 +12,7 @@
 namespace db::v2 {
 
 template <EntityType Entity, SupportedType T>
-std::string GetPropertiesProcessor<Entity, T>::describe() const {
+std::string GetPropertiesProcessor<Entity, T>::getName() const {
     return fmt::format("GetPropertiesProcessor<{}, {}>",
                        Entity == EntityType::Node ? "Node" : "Edge",
                        ValueTypeName::value(T::_valueType));

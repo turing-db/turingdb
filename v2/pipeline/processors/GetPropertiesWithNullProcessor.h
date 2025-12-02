@@ -31,7 +31,7 @@ public:
                                                   ColumnTag entityTag,
                                                   PropertyType propType);
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;

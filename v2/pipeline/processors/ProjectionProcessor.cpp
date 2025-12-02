@@ -11,8 +11,8 @@ ProjectionProcessor::ProjectionProcessor()
 ProjectionProcessor::~ProjectionProcessor() {
 }
 
-std::string ProjectionProcessor::describe() const {
-    return fmt::format("ProjectionProcessor @={}", fmt::ptr(this));
+std::string ProjectionProcessor::getName() const {
+    return "ProjectionProcessor";
 }
 
 ProjectionProcessor* ProjectionProcessor::create(PipelineV2* pipeline) {
