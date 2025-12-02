@@ -18,9 +18,10 @@ public:
     ProcedureBlueprintMap& operator=(ProcedureBlueprintMap&&) = delete;
 
     static const ProcedureBlueprint* getBlueprint(const std::string_view& name);
+    static const std::array<ProcedureBlueprint, 3>& getAll() { return _blueprints; }
 
 private:
-    static const std::array<ProcedureBlueprint, 1> _blueprints;
+    static const std::array<ProcedureBlueprint, 3> _blueprints;
 };
 
 }

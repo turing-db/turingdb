@@ -31,6 +31,7 @@ set(storage_sources
         iterators/ScanNodesByLabelIterator.cpp
         iterators/ScanNodesIterator.cpp
         iterators/ScanLabelsIterator.cpp
+        iterators/ScanEdgeTypesIterator.cpp
         iterators/ScanPropertyTypesIterator.cpp
         iterators/ScanOutEdgesByLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp

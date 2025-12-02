@@ -40,6 +40,7 @@ public:
         return _returnValues[index]._type;
     }
 
+    std::string_view _name;
     ExecuteCallback _execCallback = nullptr;
     AllocCallback _allocCallback = nullptr;
     ProcedureData::ReturnValues _returnValues {};

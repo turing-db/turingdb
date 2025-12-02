@@ -18,6 +18,7 @@ struct ScanPropertyTypesProcedure {
     static void execute(Procedure& proc);
 
     static constexpr ProcedureBlueprint Blueprint {
+        ._name = "db.propertyTypes",
         ._execCallback = &execute,
         ._allocCallback = &allocData,
         ._returnValues = {

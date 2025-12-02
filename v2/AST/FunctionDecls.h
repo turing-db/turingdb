@@ -37,6 +37,11 @@ public:
             return *this;
         }
 
+        FunctionSignatureBuilder& addReturnType(EvaluatedType type, std::string_view name) {
+            _signature->_returnTypes.emplace_back(type, name);
+            return *this;
+        }
+
     private:
         FunctionSignature* _signature {nullptr};
     };

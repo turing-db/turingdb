@@ -60,8 +60,8 @@ target_include_directories(turing_db_v2_ast_s
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_db_v2_ast_s
-  PRIVATE
-    turing_common_s
-    range-v3
-  PUBLIC turing_db_storage_s)
+  PRIVATE turing_common_s
+          range-v3
+          turing_db_v2_pipeline_s
+  PUBLIC  turing_db_storage_s)
 
