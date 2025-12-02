@@ -1,5 +1,6 @@
 #pragma once
 
+#include "metadata/PropertyType.h"
 #include <optional>
 #include <ostream>
 #include <iostream>
@@ -98,6 +99,10 @@ private:
     template <typename T>
     static auto getFormat(const T& value) {
         return fmt::format("{:>5}", value);
+    }
+
+    static auto getFormat(db::ValueType value) {
+        return fmt::format("{:>5}", db::ValueTypeName::value(value));
     }
 
     static auto getFormat(const std::string_view& value) {

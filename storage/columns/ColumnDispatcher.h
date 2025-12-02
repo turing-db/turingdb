@@ -30,6 +30,16 @@ struct ColumnTypeFromKind<ColumnVector<EntityID>::staticKind()> {
 };
 
 template <>
+struct ColumnTypeFromKind<ColumnVector<LabelID>::staticKind()> {
+    using type = ColumnVector<LabelID>;
+};
+
+template <>
+struct ColumnTypeFromKind<ColumnVector<EdgeTypeID>::staticKind()> {
+    using type = ColumnVector<EdgeTypeID>;
+};
+
+template <>
 struct ColumnTypeFromKind<ColumnVector<PropertyTypeID>::staticKind()> {
     using type = ColumnVector<PropertyTypeID>;
 };
@@ -37,6 +47,11 @@ struct ColumnTypeFromKind<ColumnVector<PropertyTypeID>::staticKind()> {
 template <>
 struct ColumnTypeFromKind<ColumnVector<LabelSetID>::staticKind()> {
     using type = ColumnVector<LabelSetID>;
+};
+
+template <>
+struct ColumnTypeFromKind<ColumnVector<ValueType>::staticKind()> {
+    using type = ColumnVector<ValueType>;
 };
 
 template <>
@@ -165,8 +180,11 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
         COL_CASE(ColumnVector<NodeID>)                                                   \
         COL_CASE(ColumnVector<EdgeID>)                                                   \
         COL_CASE(ColumnVector<EntityID>)                                                 \
+        COL_CASE(ColumnVector<LabelID>)                                                  \
+        COL_CASE(ColumnVector<EdgeTypeID>)                                               \
         COL_CASE(ColumnVector<PropertyTypeID>)                                           \
         COL_CASE(ColumnVector<LabelSetID>)                                               \
+        COL_CASE(ColumnVector<ValueType>)                                                \
         COL_CASE(ColumnVector<types::UInt64::Primitive>)                                 \
         COL_CASE(ColumnVector<types::Int64::Primitive>)                                  \
         COL_CASE(ColumnVector<types::Double::Primitive>)                                 \
@@ -192,8 +210,11 @@ struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
         CONST_COL_CASE(ColumnVector<NodeID>)                                             \
         CONST_COL_CASE(ColumnVector<EdgeID>)                                             \
         CONST_COL_CASE(ColumnVector<EntityID>)                                           \
+        CONST_COL_CASE(ColumnVector<LabelID>)                                            \
+        CONST_COL_CASE(ColumnVector<EdgeTypeID>)                                         \
         CONST_COL_CASE(ColumnVector<PropertyTypeID>)                                     \
         CONST_COL_CASE(ColumnVector<LabelSetID>)                                         \
+        CONST_COL_CASE(ColumnVector<ValueType>)                                          \
         CONST_COL_CASE(ColumnVector<types::UInt64::Primitive>)                           \
         CONST_COL_CASE(ColumnVector<types::Int64::Primitive>)                            \
         CONST_COL_CASE(ColumnVector<types::Double::Primitive>)                           \
