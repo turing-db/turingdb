@@ -17,8 +17,6 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/GetPropertyNode.h"
-#include "iterators/ScanLabelsIterator.h"
-#include "procedures/ScanLabelsProcedure.h"
 #include "procedures/ProcedureBlueprintMap.h"
 #include "reader/GraphReader.h"
 #include "SourceManager.h"
