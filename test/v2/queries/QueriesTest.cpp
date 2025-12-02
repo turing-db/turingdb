@@ -797,7 +797,7 @@ TEST_F(QueriesTest, blockedBinaryQuery) {
                                    [&]([[maybe_unused]] const Dataframe* df) -> void {});
     ASSERT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
-    EXPECT_EQ(res.getError(), std::string("PipelineGenerator does not support PlanGraphNode: JOIN"));
+    EXPECT_EQ(res.getError(), std::string("BranchGenerator does not support PlanGraphNode: JOIN"));
 }
 
 TEST_F(QueriesTest, db_labels) {
