@@ -24,7 +24,7 @@ struct LabelsProcedure {
                 ._execCallback = &execute,
                 ._allocCallback = &allocData,
                 ._returnValues = {{"id", ProcedureReturnType::LABEL_ID},
-                                  {"label", ProcedureReturnType::STRING}},
+                                  {"label", ProcedureReturnType::STRING_VIEW}},
                 ._valid = true,
             };
         } catch (const std::exception& e) {

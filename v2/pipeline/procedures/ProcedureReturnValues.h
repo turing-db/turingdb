@@ -17,6 +17,7 @@ enum class ProcedureReturnType : uint8_t {
     INT64,
     DOUBLE,
     BOOL,
+    STRING_VIEW,
     STRING,
 };
 

@@ -24,7 +24,7 @@ struct PropertyTypesProcedure {
                 ._execCallback = &execute,
                 ._allocCallback = &allocData,
                 ._returnValues = {{"id", ProcedureReturnType::PROPERTY_TYPE_ID},
-                                  {"propertyType", ProcedureReturnType::STRING},
+                                  {"propertyType", ProcedureReturnType::STRING_VIEW},
                                   {"valueType", ProcedureReturnType::VALUE_TYPE}},
                 ._valid = true,
             };
