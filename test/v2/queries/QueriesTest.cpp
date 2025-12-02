@@ -799,6 +799,229 @@ TEST_F(QueriesTest, blockedBinaryQuery) {
     EXPECT_EQ(res.getError(), std::string("PipelineGenerator does not support PlanGraphNode: JOIN"));
 }
 
+TEST_F(QueriesTest, db_labels) {
+    using Rows = LineContainer<LabelID, std::string_view>;
+    auto transaction = _graph->openTransaction();
+    auto reader = transaction.readGraph();
+
+    Rows expectedRows;
+    Rows actualRows;
+
+    const auto& metadata = reader.getMetadata();
+    const auto& labels = metadata.labels();
+
+    for (const auto& [id, name] : labels) {
+        expectedRows.add({id, *name});
+    }
+
+    _db->queryV2("CALL db.labels()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
+        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        const auto& cols = df->cols();
+        const auto* col1 = cols.at(0)->as<ColumnVector<LabelID>>();
+        const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
+
+        for (size_t i = 0; i < df->getRowCount(); i++) {
+            actualRows.add({col1->at(i), col2->at(i)});
+        }
+    });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+    actualRows.clear();
+
+    _db->queryV2("CALL db.labels() YIELD id, label",
+                 _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                     ASSERT_TRUE(df != nullptr);
+                     ASSERT_EQ(df->cols().size(), 2);
+                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     const auto& cols = df->cols();
+                     const auto* col1 = cols.at(0)->as<ColumnVector<LabelID>>();
+                     const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
+
+                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                         actualRows.add({col1->at(i), col2->at(i)});
+                     }
+                 });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+
+    actualRows.clear();
+}
+
+TEST_F(QueriesTest, db_edgeTypes) {
+    using Rows = LineContainer<EdgeTypeID, std::string_view>;
+    auto transaction = _graph->openTransaction();
+    auto reader = transaction.readGraph();
+
+    Rows expectedRows;
+    Rows actualRows;
+
+    const auto& metadata = reader.getMetadata();
+    const auto& edgeTypes = metadata.edgeTypes();
+
+    for (const auto& [id, name] : edgeTypes) {
+        expectedRows.add({id, *name});
+    }
+
+    _db->queryV2("CALL db.edgeTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
+        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        const auto& cols = df->cols();
+        const auto* col1 = cols.at(0)->as<ColumnVector<EdgeTypeID>>();
+        const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
+
+        for (size_t i = 0; i < df->getRowCount(); i++) {
+            actualRows.add({col1->at(i), col2->at(i)});
+        }
+    });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+    actualRows.clear();
+
+    _db->queryV2("CALL db.edgeTypes() YIELD id, edgeType",
+                 _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                     ASSERT_TRUE(df != nullptr);
+                     ASSERT_EQ(df->cols().size(), 2);
+                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     const auto& cols = df->cols();
+                     const auto* col1 = cols.at(0)->as<ColumnVector<EdgeTypeID>>();
+                     const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
+
+                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                         actualRows.add({col1->at(i), col2->at(i)});
+                     }
+                 });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+
+    actualRows.clear();
+}
+
+TEST_F(QueriesTest, db_propertyTypes) {
+    using Rows = LineContainer<PropertyTypeID, std::string_view, ValueType>;
+    auto transaction = _graph->openTransaction();
+    auto reader = transaction.readGraph();
+
+    Rows expectedRows;
+    Rows actualRows;
+
+    const auto& metadata = reader.getMetadata();
+    const auto& propTypes = metadata.propTypes();
+
+    for (const auto& [pt, name] : propTypes) {
+        expectedRows.add({pt._id, *name, pt._valueType});
+    }
+
+    _db->queryV2("CALL db.propertyTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
+        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        const auto& cols = df->cols();
+        const auto* col1 = cols.at(0)->as<ColumnVector<PropertyTypeID>>();
+        const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
+        const auto* col3 = cols.at(2)->as<ColumnVector<ValueType>>();
+
+        for (size_t i = 0; i < df->getRowCount(); i++) {
+            actualRows.add({col1->at(i), col2->at(i), col3->at(i)});
+        }
+    });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+    actualRows.clear();
+
+    _db->queryV2("CALL db.propertyTypes() YIELD id, propertyType, valueType",
+                 _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                     ASSERT_TRUE(df != nullptr);
+                     ASSERT_EQ(df->cols().size(), 3);
+                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     const auto& cols = df->cols();
+                     const auto* col1 = cols.at(0)->as<ColumnVector<PropertyTypeID>>();
+                     const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
+                     const auto* col3 = cols.at(2)->as<ColumnVector<ValueType>>();
+
+                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                         actualRows.add({col1->at(i), col2->at(i), col3->at(i)});
+                     }
+                 });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+
+    actualRows.clear();
+}
+
+TEST_F(QueriesTest, db_history) {
+    using Rows = LineContainer<std::string, uint64_t, uint64_t, uint64_t>;
+    auto transaction = _graph->openTransaction();
+    auto reader = transaction.readGraph();
+
+    Rows expectedRows;
+    Rows actualRows;
+
+    const std::span commits = reader.commits();
+
+    for (const auto& commit : commits) {
+        const CommitHash& hash = commit.hash();
+        const std::span parts = commit.dataparts();
+        const Tombstones& tombstones = commit.tombstones();
+
+        size_t nodeCount = 0;
+        for (const auto& part : parts) {
+            nodeCount += part->getNodeContainerSize();
+        }
+        nodeCount -= tombstones.numNodes();
+
+        size_t edgeCount = 0;
+        for (const auto& part : parts) {
+            edgeCount += part->getEdgeContainerSize();
+        }
+        edgeCount -= tombstones.numEdges();
+
+        expectedRows.add({fmt::format("{:x}", hash.get()),
+                          nodeCount,
+                          edgeCount,
+                          parts.size()});
+    }
+
+    _db->queryV2("CALL db.history()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
+        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        const auto& cols = df->cols();
+        const auto* col1 = cols.at(0)->as<ColumnVector<std::string>>();
+        const auto* col2 = cols.at(1)->as<ColumnVector<uint64_t>>();
+        const auto* col3 = cols.at(2)->as<ColumnVector<uint64_t>>();
+        const auto* col4 = cols.at(3)->as<ColumnVector<uint64_t>>();
+
+        for (size_t i = 0; i < df->getRowCount(); i++) {
+            actualRows.add({col1->at(i), col2->at(i), col3->at(i), col4->at(i)});
+        }
+    });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+    actualRows.clear();
+
+    _db->queryV2("CALL db.history() YIELD commit, nodeCount, edgeCount, partCount",
+                 _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                     ASSERT_TRUE(df != nullptr);
+                     ASSERT_EQ(df->cols().size(), 4);
+                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     const auto& cols = df->cols();
+                     const auto* col1 = cols.at(0)->as<ColumnVector<std::string>>();
+                     const auto* col2 = cols.at(1)->as<ColumnVector<uint64_t>>();
+                     const auto* col3 = cols.at(2)->as<ColumnVector<uint64_t>>();
+                     const auto* col4 = cols.at(3)->as<ColumnVector<uint64_t>>();
+
+                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                         actualRows.add({col1->at(i), col2->at(i), col3->at(i), col4->at(i)});
+                     }
+                 });
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+
+    actualRows.clear();
+}
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {

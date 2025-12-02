@@ -88,7 +88,7 @@ void HistoryProcedure::execute(Procedure& proc) {
                 ++data._it;
             }
 
-            if (!data._it->isValid()) {
+            if (data._it == _view.commits().end()) {
                 proc.finish();
             }
 
