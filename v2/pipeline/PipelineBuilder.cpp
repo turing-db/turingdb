@@ -1,5 +1,6 @@
 #include "PipelineBuilder.h"
 
+#include "EntityOutputStream.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
