@@ -231,11 +231,11 @@ public:
     };
 
     constexpr std::span<const std::string_view> getColNames() const {
-        return colNameTable[static_cast<size_t>(Type::SIZE)];
+        return colNameTable[static_cast<size_t>(_type)];
     }
 
     constexpr std::span<const ValueType> getColTypes() const {
-        return colTypeTable[static_cast<size_t>(Type::SIZE)];
+        return colTypeTable[static_cast<size_t>(_type)];
     }
 
     static CallCommand* create(ASTContext* ctx, Type);
