@@ -90,7 +90,8 @@ void DatabaseProcedureProcessor::allocColumns(LocalMemory& mem,
 
         switch (colType) {
             case ProcedureReturnType::INVALID: {
-                continue;
+                throw PipelineException("Invalid procedure return type");
+                break;
             }
 
             case ProcedureReturnType::NODE: {

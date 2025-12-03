@@ -26,6 +26,7 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBluep
             switch (returnItem._type) {
                 case ProcedureReturnType::INVALID:
                     throw FatalException("Invalid procedure return type");
+                    break;
 
                 case ProcedureReturnType::NODE:
                     declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);

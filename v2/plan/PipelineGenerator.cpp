@@ -167,39 +167,51 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
     switch (node->getOpcode()) {
         case PlanGraphOpcode::VAR:
             return translateVarNode(static_cast<VarNode*>(node));
+        break;
 
         case PlanGraphOpcode::SCAN_NODES:
             return translateScanNodesNode(static_cast<ScanNodesNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_OUT_EDGES:
             return translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
+        break;
 
         case PlanGraphOpcode::PRODUCE_RESULTS:
             return translateProduceResultsNode(static_cast<ProduceResultsNode*>(node));
+        break;
 
         case PlanGraphOpcode::FILTER_NODE:
             return translateNodeFilterNode(static_cast<NodeFilterNode*>(node));
+        break;
 
         case PlanGraphOpcode::FILTER_EDGE:
             return translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node));
+        break;
 
         case PlanGraphOpcode::SKIP:
             return translateSkipNode(static_cast<SkipNode*>(node));
+        break;
 
         case PlanGraphOpcode::LIMIT:
             return translateLimitNode(static_cast<LimitNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_EDGE_TARGET:
             return translateGetEdgeTargetNode(static_cast<GetEdgeTargetNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_IN_EDGES:
             return translateGetInEdgesNode(static_cast<GetInEdgesNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_EDGES:
             return translateGetEdgesNode(static_cast<GetEdgesNode*>(node));
+        break;
 
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
             return translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_PROPERTY:
             return translateGetPropertyNode(static_cast<GetPropertyNode*>(node));
@@ -207,6 +219,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
             return translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
+        break;
 
         case PlanGraphOpcode::AGGREGATE_EVAL:
             return translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
@@ -214,6 +227,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::PROCEDURE_EVAL:
             return translateProcedureEvalNode(static_cast<ProcedureEvalNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::JOIN:
@@ -226,6 +240,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::_SIZE:
             throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
                                                PlanGraphOpcodeDescription::value(node->getOpcode())));
+        break;
     }
 
     throw FatalException("Failed to match against PlanGraphOpcode");
@@ -654,7 +669,6 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         for (const auto* item : *yield->getItems()) {
             const Symbol* symbol = item->getSymbol();
 
-            // TODO: handle the AS keyword there
             yieldItems.emplace_back(symbol->getOriginalName(), symbol->getName());
             yieldDecls.push_back(item->getExprVarDecl());
         }
