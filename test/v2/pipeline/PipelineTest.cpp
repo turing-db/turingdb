@@ -25,6 +25,7 @@
 #include "ExecutionContext.h"
 #include "processors/MaterializeProcessor.h"
 
+#include "LineContainer.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -123,16 +124,20 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     // Lambda
 
     // Get all expected node IDs
-    std::vector<NodeID> allNodeIDs;
+    LineContainer<NodeID, NodeID> expected;
     {
         auto transaction = _graph->openTransaction();
         auto reader = transaction.readGraph();
         auto nodes = reader.scanNodes();
         for (auto node : nodes) {
-            allNodeIDs.push_back(node);
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (auto edge : edgeView.outEdges()) {
+                expected.add({node, edge._otherID});
+            }
         }
     }
 
+    LineContainer<NodeID, NodeID> returned;
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 4);
 
@@ -144,23 +149,11 @@ TEST_F(PipelineTest, scanNodesExpand1) {
         ASSERT_TRUE(targetNodes != nullptr);
         ASSERT_TRUE(!targetNodes->empty());
 
-        // Compare block against nested loop line-by-line implementation
-        std::vector<NodeID> expectedNodeIDs;
-        std::vector<NodeID> expectedTargets;
-        std::vector<EdgeID> tmpEdgeIDs;
-        std::vector<EdgeTypeID> tmpEdgeTypes;
-        std::vector<NodeID> tmpTargets;
-
-        for (NodeID nodeID : allNodeIDs) {
-            SimpleGraph::findOutEdges(_graph, {nodeID}, tmpEdgeIDs, tmpEdgeTypes, tmpTargets);
-            for (NodeID targetNodeID : tmpTargets) {
-                expectedNodeIDs.push_back(nodeID);
-                expectedTargets.push_back(targetNodeID);
-            }
+        ASSERT_EQ(nodeIDs->size(), targetNodes->size());
+        const size_t size = nodeIDs->size();
+        for (size_t i = 0; i < size; i++) {
+            returned.add({nodeIDs->at(i), targetNodes->at(i)});
         }
-
-        EXPECT_EQ(nodeIDs->getRaw(), expectedNodeIDs);
-        EXPECT_EQ(targetNodes->getRaw(), expectedTargets);
     };
 
     builder.addLambda(callback);
@@ -172,6 +165,8 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     ExecutionContext execCtxt(view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
+
+    ASSERT_TRUE(returned.equals(expected));
 }
 
 TEST_F(PipelineTest, scanNodesExpand2) {

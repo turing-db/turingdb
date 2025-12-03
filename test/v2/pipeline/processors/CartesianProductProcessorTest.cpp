@@ -37,7 +37,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     auto [transaction, view, reader] = readGraph();
 
     constexpr size_t OUTPUT_NUM_ROWS = 169;
-    constexpr size_t NUM_NODES_IN_SCAN = 13;
+    const size_t NUM_NODES_IN_SCAN = reader.getTotalNodesAllocated();
 
     _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     auto& scanNodes2 = _builder->addScanNodes();
@@ -770,8 +770,8 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     constexpr size_t CHUNK_SIZE = 3;
     constexpr size_t L_COLS = 1;
     constexpr size_t R_COLS = 1;
-    constexpr size_t L_ROWS = 13;
-    constexpr size_t R_ROWS = 13;
+    const size_t L_ROWS = reader.getTotalNodesAllocated();
+    const size_t R_ROWS = reader.getTotalNodesAllocated();
 
     _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     auto& scanNodes2 = _builder->addScanNodes();
@@ -820,7 +820,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
     EXECUTE(view, CHUNK_SIZE);
     {
         ASSERT_TRUE(executed);
-        size_t expectedChunks = std::ceil((L_ROWS * R_ROWS) / (float) CHUNK_SIZE);
+        const size_t expectedChunks = std::ceil((L_ROWS * R_ROWS) / (float) CHUNK_SIZE);
         EXPECT_EQ(expectedChunks, numChunks);
         EXPECT_EQ(expectedTuples.size(), actualTuples.size());
         for (const auto& expected : expectedTuples) {
