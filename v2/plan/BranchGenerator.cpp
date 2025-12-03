@@ -95,7 +95,9 @@ BranchGenerator::~BranchGenerator() {
 void BranchGenerator::translateBranch(PipelineBranch* branch) {
     setupBranch(branch);
 
+    fmt::print("Branch\n");
     for (PlanGraphNode* node : branch->nodes()) {
+        fmt::print("Translate node {} {}\n", fmt::ptr(node), PlanGraphOpcodeDescription::value(node->getOpcode()));
         translateNode(node);
     }
 

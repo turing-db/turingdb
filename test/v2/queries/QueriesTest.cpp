@@ -1024,6 +1024,17 @@ TEST_F(QueriesTest, db_history) {
     actualRows.clear();
 }
 
+TEST_F(QueriesTest, twoProds) {
+    constexpr std::string_view query = "match (a)-->(c), (c)-->(d), (c)-->(e), (h)-->(e), (d)-->(f), (e)-->(f) return f";
+
+    QueryStatus res = _db->queryV2(query, _graphName, &_env->getMem(),
+                                   [&](const Dataframe* df) -> void {});
+
+    ASSERT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+    EXPECT_EQ(res.getError(), std::string("BranchGenerator does not support PlanGraphNode: JOIN"));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;

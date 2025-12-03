@@ -1,5 +1,9 @@
 #include "PipelineBuilder.h"
 
+#include <iostream>
+
+#include "PipelineDumper.h"
+
 #include "processors/CartesianProductProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
@@ -113,6 +117,9 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     PipelineNodeInputInterface& input = getOutEdges->inNodeIDs();
     PipelineEdgeOutputInterface& output = getOutEdges->outEdges();
 
+    PipelineDumper dumper(_pipeline);
+    dumper.dumpMermaid(std::cout);
+    fmt::print("Processor @={} @={}", fmt::ptr(_pendingOutput.getInterface()->getPort()->getProcessor()), fmt::ptr(getOutEdges));
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
 

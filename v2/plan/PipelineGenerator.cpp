@@ -1,5 +1,7 @@
 #include "PipelineGenerator.h"
 
+#include <iostream>
+
 #include "PipelineBranches.h"
 
 #include "BranchGenerator.h"
@@ -28,6 +30,8 @@ void PipelineGenerator::generate() {
     // Get branches 
     PipelineBranches pipelineBranches;
     pipelineBranches.generate(_graph);
+
+    pipelineBranches.dumpMermaid(std::cout);
 
     // Topological sort of the branches
     std::vector<PipelineBranch*> sortedBranches;

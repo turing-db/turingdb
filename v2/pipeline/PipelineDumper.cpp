@@ -32,17 +32,19 @@ void PipelineDumper::dumpMermaid(std::ostream& out) {
 
         out << fmt::format("    {}[\"`\n", i);
         out << fmt::format("        __{}__\n", proc->getName());
+        out << fmt::format("@={}", fmt::ptr(proc)) << "\n";
         out << "    `\"]\n";
     }
 
     for (const Processor* proc : processors) {
         const size_t src = procIndex.at(proc);
         for (const PipelineOutputPort* port : proc->outputs()) {
-            if (!port->getConnectedPort()) {
-                fmt::println("Processor with unconnected output port: {}", proc->getName());
+            const auto* connectedPort = port->getConnectedPort();
+            if (!connectedPort) {
+                continue;
             }
 
-            const Processor* next = port->getConnectedPort()->getProcessor();
+            const Processor* next = connectedPort->getProcessor();
             const size_t target = procIndex.at(next);
             out << fmt::format("    {}-->{}\n", src, target);
         }
