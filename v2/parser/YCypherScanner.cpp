@@ -20,10 +20,6 @@ void YCypherScanner::syntaxError(const SourceLocation& loc,
 
 void YCypherScanner::notImplemented(const SourceLocation& loc,
                                     std::string_view rawMsg) {
-    if (_allowNotImplemented) {
-        return;
-    }
-
     std::string msg = fmt::format("Not implemented: {}", rawMsg);
     std::string errorMsg;
 

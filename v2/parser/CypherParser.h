@@ -18,13 +18,10 @@ public:
 
     void parse(std::string_view query);
 
-    void allowNotImplemented(bool allow) { _allowNotImplemented = allow; }
-
     CypherAST* getAST() const { return _ast; }
 
 private:
     CypherAST* _ast {nullptr};
-    bool _allowNotImplemented = false;
 };
 
 }

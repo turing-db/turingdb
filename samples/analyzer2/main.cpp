@@ -45,7 +45,6 @@ int main(int argc, char** argv) {
 
     {
         CypherParser parser(&ast);
-        parser.allowNotImplemented(false);
 
         try {
             auto t0 = Clock::now();
