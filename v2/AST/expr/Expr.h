@@ -37,7 +37,7 @@ public:
 
     const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
 
-    [[nodiscard]] const std::string_view& getName() const {
+    std::string_view getName() const {
         return _name;
     }
 
