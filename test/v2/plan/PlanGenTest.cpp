@@ -4,6 +4,7 @@
 
 #include "Graph.h"
 #include "TuringDB.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "columns/Block.h"
@@ -28,10 +29,13 @@ public:
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
         _graph = _env->getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
+
+        _procedures = ProcedureBlueprintMap::create();
     }
 
 protected:
     std::unique_ptr<TuringTestEnv> _env;
+    std::unique_ptr<ProcedureBlueprintMap> _procedures;
     Graph* _graph {nullptr};
 };
 
@@ -41,7 +45,7 @@ TEST_F(PlanGenTest, matchAllNodes) {
 
     const std::string queryStr = "MATCH (n) RETURN n";
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -69,7 +73,7 @@ TEST_F(PlanGenTest, matchAllEdgesWithVar) {
 
     const std::string queryStr = "MATCH (n)-[e]->(m) RETURN n,e,m";
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -105,7 +109,7 @@ TEST_F(PlanGenTest, matchAllEdges2) {
 
     const std::string queryStr = "MATCH (n)-->(m) RETURN n,m";
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -141,7 +145,7 @@ TEST_F(PlanGenTest, matchSingleByLabel) {
 
     const std::string queryStr = "MATCH (n:Person) RETURN n";
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -172,7 +176,7 @@ TEST_F(PlanGenTest, matchLinear1) {
 
     const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL]->(p:Person) RETURN n,p";
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -207,7 +211,7 @@ TEST_F(PlanGenTest, matchExprConstraint1) {
     const GraphView view = transaction.viewGraph();
 
     const std::string queryStr = "MATCH (n:Person)-[e:KNOWS_WELL {isFrench: true}]->(p:Person) RETURN n,p";
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -243,7 +247,7 @@ TEST_F(PlanGenTest, matchExprConstraint2) {
     const GraphView view = transaction.viewGraph();
 
     const std::string queryStr = "MATCH (n:Person {isFrench: true, hasPhD: true})-[e:KNOWS_WELL]->(p:Person {isFrench: false}) RETURN n,p";
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -284,7 +288,7 @@ TEST_F(PlanGenTest, matchMultiTargetsLinear) {
 
     const std::string queryStr = "MATCH (n:Person)-->(m), (m{isFrench:true})-->(z) RETURN n,z";
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 
@@ -304,7 +308,7 @@ TEST_F(PlanGenTest, matchMultiTargets1) {
 
     const std::string queryStr = "MATCH (a)-->(b)-->(c), (b{isFrench:true})-->(z), (b)-->(y), (z)-->(n)-->(y) RETURN n,z";
     
-    CypherAST ast(queryStr);
+    CypherAST ast(*_procedures, queryStr);
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(queryStr));
 

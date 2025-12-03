@@ -7,6 +7,7 @@
 #include "QueryInterpreter.h"
 #include "QueryInterpreterV2.h"
 #include "InterpreterContext.h"
+#include "procedures/ProcedureBlueprintMap.h"
 
 #include "Panic.h"
 #include "TuringConfig.h"
@@ -17,7 +18,8 @@ using namespace db::v2;
 TuringDB::TuringDB(const TuringConfig* config)
     : _config(config),
     _systemManager(std::make_unique<SystemManager>(config)),
-    _jobSystem(JobSystem::create())
+    _jobSystem(JobSystem::create()),
+    _procedures(v2::ProcedureBlueprintMap::create())
 {
 }
 
@@ -112,6 +114,6 @@ QueryStatus TuringDB::queryV2(std::string_view query,
                               ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
-    InterpreterContext ctxt(mem, callback, commit, change);
+    InterpreterContext ctxt(mem, callback, _procedures.get(), commit, change);
     return interp.execute(ctxt, query, graphName);
 }

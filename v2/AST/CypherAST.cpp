@@ -29,10 +29,11 @@
 
 using namespace db::v2;
 
-CypherAST::CypherAST(std::string_view queryString)
+CypherAST::CypherAST(const ProcedureBlueprintMap& procedures,
+                     std::string_view queryString)
     : _sourceManager(new SourceManager(queryString)),
     _diagnosticsManager(new DiagnosticsManager(_sourceManager)),
-    _functionDecls(FunctionDecls::createDefault())
+    _functionDecls(FunctionDecls::createDefault(procedures))
 {
 }
 

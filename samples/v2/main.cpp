@@ -10,6 +10,7 @@
 #include "SimpleGraph.h"
 #include "CypherAST.h"
 #include "CompilerException.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "versioning/Transaction.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
@@ -28,6 +29,8 @@ int main(int argc, char** argv) {
 
     std::unique_ptr<Graph> graph = Graph::create();
     SimpleGraph::createSimpleGraph(graph.get());
+
+    auto procedures = ProcedureBlueprintMap::create();
 
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
@@ -56,7 +59,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    CypherAST ast(queryStr);
+    CypherAST ast(*procedures, queryStr);
 
     {
         CypherParser parser(&ast);
@@ -110,7 +113,13 @@ int main(int argc, char** argv) {
         {
             auto callback = [](const Dataframe* dataframe) {};
 
-            PipelineGenerator pipelineGen(&planGraph, view, &pipeline, &mem, ast.getSourceManager(), callback);
+            PipelineGenerator pipelineGen(&planGraph,
+                                          view,
+                                          &pipeline,
+                                          &mem,
+                                          ast.getSourceManager(),
+                                          *procedures,
+                                          callback);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

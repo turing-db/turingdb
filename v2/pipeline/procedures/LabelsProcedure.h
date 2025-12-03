@@ -18,18 +18,13 @@ struct LabelsProcedure {
     static void execute(Procedure& proc);
 
     static ProcedureBlueprint createBlueprint() noexcept {
-        try {
-            return {
-                ._name = "db.labels",
-                ._execCallback = &execute,
-                ._allocCallback = &allocData,
-                ._returnValues = {{"id", ProcedureReturnType::LABEL_ID},
-                                  {"label", ProcedureReturnType::STRING_VIEW}},
-                ._valid = true,
-            };
-        } catch (const std::exception& e) {
-            return {};
-        }
+        return {
+            ._name = "db.labels",
+            ._execCallback = &execute,
+            ._allocCallback = &allocData,
+            ._returnValues = {{"id", ProcedureReturnType::LABEL_ID},
+                              {"label", ProcedureReturnType::STRING_VIEW}},
+        };
     }
 };
 

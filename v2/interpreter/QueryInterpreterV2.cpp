@@ -54,7 +54,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     const GraphView view = txRes->viewGraph();
 
     // Parsing query
-    CypherAST ast(query);
+    CypherAST ast(*ctxt.getProcedures(), query);
     CypherParser parser(&ast);
     try {
         parser.parse(query);
@@ -101,7 +101,13 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     // Generate pipeline
     LocalMemory* mem = ctxt.getLocalMemory();
     PipelineV2 pipeline;
-    PipelineGenerator pipelineGen(&planGraph, view, &pipeline, mem, ast.getSourceManager(), ctxt.getQueryCallback());
+    PipelineGenerator pipelineGen(&planGraph,
+                                  view,
+                                  &pipeline,
+                                  mem,
+                                  ast.getSourceManager(),
+                                  *ctxt.getProcedures(),
+                                  ctxt.getQueryCallback());
     try {
         pipelineGen.generate();
     } catch (const CompilerException& e) {

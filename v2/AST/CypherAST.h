@@ -66,6 +66,7 @@ class EdgePatternData;
 class CypherParserState;
 class YCypherParser;
 class FunctionDecls;
+class ProcedureBlueprintMap;
 
 class CypherAST {
 public:
@@ -122,7 +123,8 @@ public:
 
     using QueryCommands = std::vector<QueryCommand*>;
 
-    CypherAST(std::string_view queryString);
+    CypherAST(const ProcedureBlueprintMap& procedures,
+              std::string_view queryString);
     ~CypherAST();
 
     CypherAST(const CypherAST&) = delete;

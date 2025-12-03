@@ -18,19 +18,14 @@ struct PropertyTypesProcedure {
     static void execute(Procedure& proc);
 
     static ProcedureBlueprint createBlueprint() noexcept {
-        try {
-            return {
-                ._name = "db.propertyTypes",
-                ._execCallback = &execute,
-                ._allocCallback = &allocData,
-                ._returnValues = {{"id", ProcedureReturnType::PROPERTY_TYPE_ID},
-                                  {"propertyType", ProcedureReturnType::STRING_VIEW},
-                                  {"valueType", ProcedureReturnType::VALUE_TYPE}},
-                ._valid = true,
-            };
-        } catch (const std::exception& e) {
-            return {};
-        }
+        return {
+            ._name = "db.propertyTypes",
+            ._execCallback = &execute,
+            ._allocCallback = &allocData,
+            ._returnValues = {{"id", ProcedureReturnType::PROPERTY_TYPE_ID},
+                              {"propertyType", ProcedureReturnType::STRING_VIEW},
+                              {"valueType", ProcedureReturnType::VALUE_TYPE}},
+        };
     }
 };
 

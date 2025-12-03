@@ -27,8 +27,8 @@ public:
                             std::string_view graphName);
 
 private:
-    db::SystemManager* _sysMan {nullptr};
-    db::JobSystem* _jobSystem {nullptr};
+    SystemManager* _sysMan {nullptr};
+    JobSystem* _jobSystem {nullptr};
 };
 
 }
