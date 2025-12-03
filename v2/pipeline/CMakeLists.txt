@@ -29,6 +29,7 @@ set(processors_sources
 )
 
 set(procedures_sources
+    procedures/ProcedureBlueprint.cpp
     procedures/ProcedureBlueprintMap.cpp
     procedures/LabelsProcedure.cpp
     procedures/EdgeTypesProcedure.cpp
