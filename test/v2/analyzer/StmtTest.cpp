@@ -7,6 +7,7 @@
 #include "Graph.h"
 #include "Literal.h"
 #include "SimpleGraph.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "expr/All.h"
 #include "versioning/Transaction.h"
 
@@ -18,15 +19,17 @@ public:
     void initialize() override {
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
+        _blueprints = ProcedureBlueprintMap::create();
     }
 
 protected:
     std::unique_ptr<Graph> _graph;
+    std::unique_ptr<ProcedureBlueprintMap> _blueprints;
 };
 
 TEST_F(StmtTest, matchAllNodes) {
     const std::string query = "MATCH (n) RETURN n";
-    CypherAST ast(query);
+    CypherAST ast(*_blueprints, query);
 
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(query));
@@ -38,7 +41,7 @@ TEST_F(StmtTest, matchAllNodes) {
 
 TEST_F(StmtTest, matchAllNodesWithProperties) {
     const std::string query = "MATCH (n{duration: 42}) RETURN n";
-    CypherAST ast(query);
+    CypherAST ast(*_blueprints, query);
 
     CypherParser parser(&ast);
     ASSERT_NO_THROW(parser.parse(query));
@@ -51,7 +54,7 @@ TEST_F(StmtTest, matchAllNodesWithProperties) {
 TEST_F(StmtTest, matchAllNodesWithPropertiesWithExpression) {
     {
         const std::string query = "MATCH (n{duration: 42+y}) RETURN n";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -63,7 +66,7 @@ TEST_F(StmtTest, matchAllNodesWithPropertiesWithExpression) {
 
     {
         const std::string query = "MATCH (n{duration: 42+y.duration}) RETURN n";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -76,7 +79,7 @@ TEST_F(StmtTest, matchAllNodesWithPropertiesWithExpression) {
     // Forward use of a variable in a property expression not allowed
     {
         const std::string query = "MATCH (n{duration: y.duration})--(y) RETURN n";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -89,7 +92,7 @@ TEST_F(StmtTest, matchAllNodesWithPropertiesWithExpression) {
     // Use of a variable in a property expression is allowed
     {
         const std::string query = "MATCH (y)--(n{duration: y.duration}) RETURN n";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -104,7 +107,7 @@ TEST_F(StmtTest, matchEdgesDirection) {
     // Undirected
     {
         const std::string query = "MATCH (n)--(m) RETURN n,m";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -117,7 +120,7 @@ TEST_F(StmtTest, matchEdgesDirection) {
     // Directed backwards
     {
         const std::string query = "MATCH (n)<--(m) RETURN n,m";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -130,7 +133,7 @@ TEST_F(StmtTest, matchEdgesDirection) {
     // Directed backwards alternating
     {
         const std::string query = "MATCH (n)<--(m)--(p)-->(q)<--(r) RETURN n,m,p,q,r";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -143,7 +146,7 @@ TEST_F(StmtTest, matchEdgesDirection) {
     // Directed forwards
     {
         const std::string query = "MATCH (n)-->(m) RETURN n,m";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -157,7 +160,7 @@ TEST_F(StmtTest, matchEdgesDirection) {
 TEST_F(StmtTest, matchWhere1) {
     {
         const std::string query = "MATCH (n) WHERE n.duration = 42 RETURN n";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -169,7 +172,7 @@ TEST_F(StmtTest, matchWhere1) {
 
     {
         const std::string query = "MATCH (n)-->(m) WHERE n.age = m.age RETURN n,m";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -181,7 +184,7 @@ TEST_F(StmtTest, matchWhere1) {
 
     {
         const std::string query = "MATCH (n)-->(m)-->(z), (p)-->(m) WHERE n.age = p.age+10 RETURN n,m,z,p";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -193,7 +196,7 @@ TEST_F(StmtTest, matchWhere1) {
 
     {
         const std::string query = "MATCH (n)-->(m) WHERE n.age = z.age+2 RETURN n,m";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));
@@ -205,7 +208,7 @@ TEST_F(StmtTest, matchWhere1) {
 
     {
         const std::string query = "MATCH (n)-->(m)-->(z), (p)-->(m) WHERE n.age = p.age+10 AND z.age = p.age+2 RETURN n,m,z,p";
-        CypherAST ast(query);
+        CypherAST ast(*_blueprints, query);
 
         CypherParser parser(&ast);
         ASSERT_NO_THROW(parser.parse(query));

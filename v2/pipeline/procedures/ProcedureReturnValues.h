@@ -38,10 +38,10 @@ public:
     {
     }
 
-    ProcedureReturnValues(const ProcedureReturnValues&) = delete;
-    ProcedureReturnValues(ProcedureReturnValues&&) noexcept = delete;
-    ProcedureReturnValues& operator=(const ProcedureReturnValues&) = delete;
-    ProcedureReturnValues& operator=(ProcedureReturnValues&&) noexcept = delete;
+    ProcedureReturnValues(const ProcedureReturnValues&) = default;
+    ProcedureReturnValues(ProcedureReturnValues&&) noexcept = default;
+    ProcedureReturnValues& operator=(const ProcedureReturnValues&) = default;
+    ProcedureReturnValues& operator=(ProcedureReturnValues&&) noexcept = default;
 
     void add(std::string_view name, ProcedureReturnType type) {
         _returnValues.emplace_back(name, type);

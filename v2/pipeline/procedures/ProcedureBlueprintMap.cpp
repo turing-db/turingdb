@@ -5,16 +5,7 @@
 #include "PropertyTypesProcedure.h"
 #include "HistoryProcedure.h"
 
-#include "BioAssert.h"
-
 using namespace db::v2;
-
-const std::array<ProcedureBlueprint, 4> ProcedureBlueprintMap::_blueprints {
-    LabelsProcedure::createBlueprint(),
-    PropertyTypesProcedure::createBlueprint(),
-    EdgeTypesProcedure::createBlueprint(),
-    HistoryProcedure::createBlueprint()
-};
 
 ProcedureBlueprintMap::ProcedureBlueprintMap() {
 }
@@ -22,10 +13,19 @@ ProcedureBlueprintMap::ProcedureBlueprintMap() {
 ProcedureBlueprintMap::~ProcedureBlueprintMap() {
 }
 
-const ProcedureBlueprint* ProcedureBlueprintMap::getBlueprint(const std::string_view& name) {
+std::unique_ptr<ProcedureBlueprintMap> ProcedureBlueprintMap::create() {
+    auto map = std::make_unique<ProcedureBlueprintMap>();
+    map->_blueprints.emplace_back(LabelsProcedure::createBlueprint());
+    map->_blueprints.emplace_back(PropertyTypesProcedure::createBlueprint());
+    map->_blueprints.emplace_back(EdgeTypesProcedure::createBlueprint());
+    map->_blueprints.emplace_back(HistoryProcedure::createBlueprint());
+
+    return map;
+}
+
+const ProcedureBlueprint* ProcedureBlueprintMap::getBlueprint(const std::string_view& name) const {
     for (const auto& blueprint : _blueprints) {
         if (blueprint._name == name) {
-            msgbioassert(blueprint._valid, "Procedure blueprint is not valid");
             return &blueprint;
         }
     }

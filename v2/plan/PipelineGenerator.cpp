@@ -643,7 +643,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     std::vector<const VarDecl*> yieldDecls;
     std::vector<ProcedureBlueprint::YieldItem> yieldItems;
 
-    const ProcedureBlueprint* blueprint = ProcedureBlueprintMap::getBlueprint(signature->_fullName);
+    const ProcedureBlueprint* blueprint = _blueprints->getBlueprint(signature->_fullName);
     if (!blueprint) {
         throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->_fullName));
     }

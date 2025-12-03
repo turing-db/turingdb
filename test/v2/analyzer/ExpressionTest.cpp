@@ -8,6 +8,7 @@
 #include "SimpleGraph.h"
 #include "decl/DeclContext.h"
 #include "expr/All.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -15,6 +16,12 @@ using namespace db::v2;
 
 class ExpressionTest : public turing::test::TuringTest {
 public:
+    ExpressionTest()
+        : _procedures(ProcedureBlueprintMap::create()),
+        _ast(*_procedures, "")
+    {
+    }
+
     void initialize() override {
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
@@ -30,9 +37,10 @@ public:
 protected:
     std::unique_ptr<Graph> _graph;
     std::unique_ptr<ExprAnalyzer> _analyzer;
+    std::unique_ptr<ProcedureBlueprintMap> _procedures;
     DeclContext* _declContext {nullptr};
 
-    CypherAST _ast {""};
+    CypherAST _ast;
 };
 
 TEST_F(ExpressionTest, LiteralExpressionTest) {

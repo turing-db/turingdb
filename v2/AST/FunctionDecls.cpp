@@ -14,11 +14,11 @@ FunctionDecls::FunctionDecls()
 FunctionDecls::~FunctionDecls() {
 }
 
-std::unique_ptr<FunctionDecls> FunctionDecls::createDefault() {
+std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBlueprintMap& procedures) {
     auto decls = std::make_unique<FunctionDecls>();
 
     // Metadata
-    for (const auto& blueprint : ProcedureBlueprintMap::getAll()) {
+    for (const auto& blueprint : procedures.getAll()) {
         auto declBuilder = decls->create(blueprint._name);
         declBuilder.setIsDatabaseProcedure(true);
 

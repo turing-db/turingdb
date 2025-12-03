@@ -8,6 +8,7 @@
 #include "PlanGraphDebug.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "PlanGraphGenerator.h"
@@ -62,11 +63,13 @@ void runPlan2(std::string_view query) {
 
     Graph* graph = db.getSystemManager().createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
+    
+    auto procedures = ProcedureBlueprintMap::create();
 
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    CypherAST ast(query);
+    CypherAST ast(*procedures, query);
     CypherParser parser(&ast);
 
     try {

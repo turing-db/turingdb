@@ -34,10 +34,9 @@ public:
     void returnAll(std::vector<YieldItem>& yieldItems) const;
 
     std::string_view _name;
-    ExecuteCallback _execCallback = nullptr;
-    AllocCallback _allocCallback = nullptr;
+    ExecuteCallback _execCallback {nullptr};
+    AllocCallback _allocCallback {nullptr};
     ProcedureReturnValues _returnValues;
-    bool _valid = false;
 };
 
 }

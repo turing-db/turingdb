@@ -11,6 +11,7 @@
 #include "PlanGraphDebug.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
+#include "procedures/ProcedureBlueprintMap.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "PlanGraphGenerator.h"
@@ -34,8 +35,9 @@ public:
     void generatePlanGraph(std::string_view query, std::ostream& out) {
         const Transaction transaction = _graph->openTransaction();
         const GraphView view = transaction.viewGraph();
+        auto procedures = ProcedureBlueprintMap::create();
 
-        CypherAST ast(query);
+        CypherAST ast(*procedures, query);
         CypherParser parser(&ast);
         CypherAnalyzer analyzer(&ast, view);
         PlanGraphGenerator planGen(ast, view);

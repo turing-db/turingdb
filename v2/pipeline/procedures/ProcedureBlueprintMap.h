@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string_view>
-#include <array>
+#include <vector>
+#include <memory>
 
 namespace db::v2 {
 
@@ -17,11 +18,13 @@ public:
     ProcedureBlueprintMap(ProcedureBlueprintMap&&) = delete;
     ProcedureBlueprintMap& operator=(ProcedureBlueprintMap&&) = delete;
 
-    static const ProcedureBlueprint* getBlueprint(const std::string_view& name);
-    static const std::array<ProcedureBlueprint, 4>& getAll() { return _blueprints; }
+    static std::unique_ptr<ProcedureBlueprintMap> create();
+
+    const ProcedureBlueprint* getBlueprint(const std::string_view& name) const;
+    const std::vector<ProcedureBlueprint>& getAll() const { return _blueprints; }
 
 private:
-    static const std::array<ProcedureBlueprint, 4> _blueprints;
+    std::vector<ProcedureBlueprint> _blueprints;
 };
 
 }
