@@ -324,6 +324,8 @@ void queryCallbackV1(const Block& block, tabulate::Table& table) {
                 TABULATE_COL_CASE(ColumnVector<EntityID>, i)
                 TABULATE_COL_CASE(ColumnVector<NodeID>, i)
                 TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
+                TABULATE_COL_CASE(ColumnVector<EdgeTypeID>, i) {
+                TABULATE_COL_CASE(ColumnVector<LabelID>, i) {
                 TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
                 TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
                 TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
