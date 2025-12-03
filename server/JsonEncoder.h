@@ -168,6 +168,8 @@ public:
             JSON_ENCODE_COL_CASE(ColumnVector<EntityID>)
             JSON_ENCODE_COL_CASE(ColumnVector<NodeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<EdgeID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<LabelID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<EdgeTypeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<PropertyTypeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<LabelSetID>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::UInt64::Primitive>)
@@ -180,6 +182,7 @@ public:
             JSON_ENCODE_COL_CASE(ColumnOptVector<types::Double::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnOptVector<types::String::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnOptVector<types::Bool::Primitive>)
+            JSON_ENCODE_COL_CASE(ColumnVector<ValueType>);
             JSON_ENCODE_COL_CASE(ColumnVector<std::string>)
             JSON_ENCODE_COL_CASE(ColumnVector<const CommitBuilder*>)
             JSON_ENCODE_COL_CASE(ColumnVector<const Change*>)

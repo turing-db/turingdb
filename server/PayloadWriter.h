@@ -150,6 +150,11 @@ public:
         _comma = true;
     }
 
+    void value(ValueType v) {
+        write(ValueTypeName::value(v));
+        _comma = true;
+    }
+
     void value(const CommitBuilder* v) {
         value(v->hash().get());
     }
