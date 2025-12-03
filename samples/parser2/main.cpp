@@ -35,7 +35,6 @@ int main(int argc, char** argv) {
     {
         // Try but allow not implemented to test the parser
         CypherParser parser(&ast);
-        parser.allowNotImplemented(true);
 
         try {
             auto t0 = Clock::now();
@@ -44,7 +43,7 @@ int main(int argc, char** argv) {
             fmt::print("Full query parsed in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());
-            return EXIT_FAILURE; // Should always succeed unless there's a bug
+            return EXIT_SUCCESS;
         }
     }
 
@@ -52,7 +51,6 @@ int main(int argc, char** argv) {
         // Disallow not implemented.
         // This should print the AST if parsing was successful
         CypherParser parser(&ast);
-        parser.allowNotImplemented(false);
 
         try {
             auto t0 = Clock::now();

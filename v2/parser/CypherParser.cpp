@@ -14,7 +14,6 @@ CypherParser::CypherParser(CypherAST* ast)
 
 void CypherParser::parse(std::string_view query) {
     YCypherScanner yscanner;
-    yscanner.allowNotImplemented(_allowNotImplemented);
     yscanner.setQuery(query);
 
     YCypherParser yparser(yscanner, _ast);

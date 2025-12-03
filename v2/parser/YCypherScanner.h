@@ -21,10 +21,6 @@ public:
 
     void setQuery(std::string_view query) { _query = query; }
 
-    void allowNotImplemented(bool allowNotImplemented) {
-        _allowNotImplemented = allowNotImplemented;
-    }
-
     void advanceLocation(SourceLocation& loc, uint64_t yyleng) {
         _offset = _nextOffset;
         _nextOffset += yyleng;
@@ -46,7 +42,6 @@ private:
     size_t _nextOffset = 0;
     size_t _offset = 0;
     std::string_view _query;
-    bool _allowNotImplemented = true;
 
     std::string_view getStringView(size_t offset, size_t length) const {
         return _query.substr(offset, length);
