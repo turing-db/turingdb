@@ -453,7 +453,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addComputeExpr(ExprProgram* expr
     PipelineBlockInputInterface& input = compExpr->input();
     PipelineValuesOutputInterface& output = compExpr->output();
 
-    _pendingOutput.connectTo(compExpr->input());
+    _pendingOutput.connectTo(input);
     input.propagateColumns(output);
 
     _pendingOutput.updateInterface(&output);
