@@ -23,9 +23,6 @@ public:
     void setStream(const EntityOutputStream& stream) { _stream = stream; }
 
     const EntityOutputStream& getStream() const { return _stream; }
-
-private:
-    EntityOutputStream _stream;
 };
 
 }

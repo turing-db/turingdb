@@ -74,7 +74,6 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
 }
 
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
-    spdlog::info("generateBinaryExpr");
     Column* lhs = generateExpr(binExpr->getLHS());
     Column* rhs = generateExpr(binExpr->getRHS());
     const ColumnOperator op = getColumnOperator(binExpr->getOperator());
@@ -86,7 +85,6 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
 }
 
 Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr) {
-    spdlog::info("generatePropertyExpr");
     const VarDecl* exprVarDecl = propExpr->getExprVarDecl();
 
     // Search exprVarDecl in column map
