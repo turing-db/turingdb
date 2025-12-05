@@ -8,6 +8,8 @@
 #include "DataPart.h"
 #include "Panic.h"
 
+#include <valgrind/callgrind.h>
+
 namespace db {
 
 ScanEdgesIterator::ScanEdgesIterator(const GraphView& view)
@@ -89,6 +91,7 @@ static constexpr size_t NColumns = 4;
 static constexpr size_t NCombinations = 1 << NColumns;
 
 void ScanEdgesChunkWriter::fill(size_t maxCount) {
+    CALLGRIND_START_INSTRUMENTATION;
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
@@ -190,6 +193,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
     if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
+    CALLGRIND_STOP_INSTRUMENTATION;
 }
 
 }
