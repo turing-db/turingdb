@@ -774,10 +774,11 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
 // TODO GetOutEdges target test for materialise testing
 TEST_F(WriteQueriesTest, createFromTarget) {
     constexpr std::string_view CREATE_QUERY = "MATCH (n)-->(m) CREATE (m)-[e:NEWEDGE]->(p:NEWNODE) RETURN n, m, e, p";
-    constexpr std::string_view MATCH_QUERY = "MATCH (u)-[e]->(v) RETURN u, e, v)";
+    constexpr std::string_view MATCH_QUERY = "MATCH (u)-[e]->(v) RETURN u, e, v";
 
     const size_t totalNodesPrior = read().getTotalNodesAllocated();
     const size_t totalEdgesPrior = read().getTotalEdgesAllocated();
+    ColumnNodeIDs targetsPrior;
 
     {
         using Rows = LineContainer<NodeID, NodeID, EdgeID, NodeID>;
@@ -792,6 +793,7 @@ TEST_F(WriteQueriesTest, createFromTarget) {
                 const EdgeID e = nextEdgeID++;
                 const NodeID p = nextNodeID++;
                 expected.add({n, m, e, p});
+                targetsPrior.push_back(m);
             }
         }
 
@@ -827,11 +829,38 @@ TEST_F(WriteQueriesTest, createFromTarget) {
     {
         using Rows = LineContainer<NodeID, EdgeID, NodeID>;
 
-        Rows expected;
-        { // Just check the new rows
-            EdgeID nextEdgeID = totalEdgesPrior;
-            NodeID nextNodeID = totalNodesPrior;
+        // The IDs get arbitrarily shuffled on SUBMIT, so we cannot really check the values
 
-        }     
+        Rows scan;
+        { // Just check the new rows
+            for (EdgeRecord er : read().scanOutEdges()) {
+                if (er._edgeID < totalEdgesPrior) {
+                    continue;
+                }
+                scan.add({er._nodeID, er._edgeID, er._otherID});
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 3);
+                auto* us = df->cols().front()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(us);
+
+                const size_t rowCount = df->getRowCount();
+                ASSERT_EQ(rowCount, totalEdgesPrior * 2);
+                for (size_t row = 0; row < rowCount; row++) {
+                    if (row < totalEdgesPrior) {
+                        continue;
+                    }
+                    ASSERT_EQ(us->at(row), targetsPrior.at(row - totalEdgesPrior));
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(scan.equals(actual));
     }
 }
