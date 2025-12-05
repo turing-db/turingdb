@@ -95,36 +95,6 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
     msgbioassert(_srcs || _tgts || _edgeIDs || _types,
                  "ScanEdgesChunkWriter must be initialized with at least one valid column");
 
-    [[maybe_unused]] const auto getPrevSize = [&]() {
-        if (_srcs) {
-            return _srcs->size();
-        }
-        if (_edgeIDs) {
-            return _edgeIDs->size();
-        }
-        if (_tgts) {
-            return _tgts->size();
-        }
-        if (_types) {
-            return _types->size();
-        }
-        panic("At least one column must be set");
-    };
-
-    /*
-    if (_srcs) {
-        _srcs->clear();
-    }
-    if (_tgts) {
-        _tgts->clear();
-    }
-    if (_edgeIDs) {
-        _edgeIDs->clear();
-    }
-    if (_types) {
-        _types->clear();
-    }
-    */
     _ptr = 0;
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
