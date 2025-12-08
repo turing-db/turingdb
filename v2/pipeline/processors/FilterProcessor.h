@@ -12,11 +12,11 @@ class FilterProcessor final : public Processor {
 public:
     static FilterProcessor* create(PipelineV2* pipeline);
 
-    std::string describe() const override;
+    void prepare(ExecutionContext* ctxt) final;
+    void reset() final;
+    void execute() final;
 
-    void prepare(ExecutionContext* ctxt) override;
-    void reset() override;
-    void execute() override;
+    std::string describe() const final;
 
     PipelineBlockInputInterface& toFilterInput() { return _toFilterInput; }
     PipelineValuesInputInterface& maskInput() { return _maskInput; }

@@ -54,17 +54,23 @@ std::string FilterProcessor::describe() const {
 FilterProcessor* FilterProcessor::create(PipelineV2* pipeline) {
     FilterProcessor* proc = new FilterProcessor();
 
-    PipelineInputPort* toFilterIn = PipelineInputPort::create(pipeline, proc);
-    PipelineInputPort* maskIn = PipelineInputPort::create(pipeline, proc);
-    PipelineOutputPort* out = PipelineOutputPort::create(pipeline, proc);
+    {
+        PipelineInputPort* filterInput = PipelineInputPort::create(pipeline, proc);
+        proc->_toFilterInput.setPort(filterInput);
+        proc->addInput(filterInput);
+    }
 
-    proc->_toFilterInput.setPort(toFilterIn);
-    proc->_maskInput.setPort(maskIn);
-    proc->_output.setPort(out);
+    {
+        PipelineInputPort* maskInput = PipelineInputPort::create(pipeline, proc);
+        proc->_maskInput.setPort(maskInput);
+        proc->addInput(maskInput);
+    }
 
-    proc->addInput(toFilterIn);
-    proc->addInput(maskIn);
-    proc->addOutput(out);
+    {
+        PipelineOutputPort* out = PipelineOutputPort::create(pipeline, proc);
+        proc->_output.setPort(out);
+        proc->addOutput(out);
+    }
 
     proc->postCreate(pipeline);
 

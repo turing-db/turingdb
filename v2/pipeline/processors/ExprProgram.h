@@ -38,8 +38,8 @@ public:
 private:
     Instructions _instrs;
 
-    ExprProgram();
-    ~ExprProgram();
+    ExprProgram() = default;
+    ~ExprProgram() = default;
     void evalInstr(const Instruction& instr);
 };
 

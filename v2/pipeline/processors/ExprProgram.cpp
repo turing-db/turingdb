@@ -98,13 +98,6 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op,
     }
 
 
-ExprProgram::ExprProgram()
-{
-}
-
-ExprProgram::~ExprProgram() {
-}
-
 ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
     ExprProgram* prog = new ExprProgram();
     pipeline->addExprProgram(prog);
