@@ -47,13 +47,6 @@ void applyMask(const Column* src,
 
 }
 
-FilterProcessor::FilterProcessor()
-{
-}
-
-FilterProcessor::~FilterProcessor() {
-}
-
 std::string FilterProcessor::describe() const {
     return fmt::format("FilterProcessor @={}", fmt::ptr(this));
 }

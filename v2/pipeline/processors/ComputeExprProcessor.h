@@ -10,7 +10,7 @@ namespace db::v2 {
 class ExecutionContext;
 class ExprProgram;
 
-class ComputeExprProcessor : public Processor {
+class ComputeExprProcessor final : public Processor {
 public:
     static ComputeExprProcessor* create(PipelineV2* pipeline,
                                         ExprProgram* exprProg);
@@ -30,7 +30,7 @@ private:
     ExprProgram* _exprProg {nullptr};
 
     ComputeExprProcessor(ExprProgram* exprProg);
-    ~ComputeExprProcessor();
+    ~ComputeExprProcessor() final = default;
     void evalProgram();
 };
 
