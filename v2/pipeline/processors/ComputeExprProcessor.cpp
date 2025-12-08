@@ -4,14 +4,13 @@
 
 #include "PipelineV2.h"
 #include "ExprProgram.h"
+#include "spdlog/spdlog.h"
 
 using namespace db::v2;
 
 ComputeExprProcessor::ComputeExprProcessor(ExprProgram* exprProg)
+    : _exprProg(exprProg)
 {
-}
-
-ComputeExprProcessor::~ComputeExprProcessor() {
 }
 
 std::string ComputeExprProcessor::describe() const {
@@ -43,6 +42,7 @@ void ComputeExprProcessor::reset() {
 }
 
 void ComputeExprProcessor::execute() {
+    spdlog::info("Expr::execute");
     _input.getPort()->consume();
     _output.getPort()->writeData();
 
