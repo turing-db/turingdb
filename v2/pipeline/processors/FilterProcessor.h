@@ -8,7 +8,7 @@
 
 namespace db::v2 {
 
-class FilterProcessor : public Processor {
+class FilterProcessor final : public Processor {
 public:
     static FilterProcessor* create(PipelineV2* pipeline);
 
@@ -27,8 +27,8 @@ private:
     PipelineValuesInputInterface _maskInput;
     PipelineBlockOutputInterface _output;
 
-    FilterProcessor();
-    ~FilterProcessor();
+    FilterProcessor() = default;
+    ~FilterProcessor() final = default ;
 };
 
 }

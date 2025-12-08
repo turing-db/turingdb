@@ -55,8 +55,8 @@ public:
     }
 
 protected:
-    Processor();
-    virtual ~Processor();
+    Processor() = default;
+    virtual ~Processor() = default;
     void postCreate(PipelineV2* pipeline);
     void addInput(PipelineInputPort* port);
     void addOutput(PipelineOutputPort* port);
