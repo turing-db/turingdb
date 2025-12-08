@@ -50,7 +50,6 @@ template <ColumnOperator Op, typename Lhs, typename Rhs>
 static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op,
                                                                Lhs::staticKind(),
                                                                Rhs::staticKind());
-
 }
 
 #define EQUAL_CASE(Lhs, Rhs)                      \
