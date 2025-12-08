@@ -17,9 +17,9 @@ public:
 
     std::string describe() const override;
 
-    void prepare(ExecutionContext* ctxt) override;
-    void reset() override;
-    void execute() override;
+    void prepare(ExecutionContext* ctxt) final;
+    void reset() final;
+    void execute() final;
 
     PipelineBlockInputInterface& input() { return _input; }
     PipelineValuesOutputInterface& output() { return _output; }
