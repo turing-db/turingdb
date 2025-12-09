@@ -11,6 +11,7 @@
 #include "ExecutionContext.h"
 #include "columns/ColumnIDs.h"
 #include "dataframe/NamedColumn.h"
+#include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
 #include "ID.h"
 #include "versioning/CommitBuilder.h"
@@ -185,6 +186,7 @@ void WriteProcessor::createNodes(size_t numIters) {
     NodeID nextNodeID = _writeBuffer->numPendingNodes();
     const Dataframe* outDf = _output.getDataframe();
 
+    LabelSet lblset;
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // Get the column in the output DF which will contain this node's IDs
         if (!outDf->hasColumn(node._tag)) {
@@ -206,7 +208,7 @@ void WriteProcessor::createNodes(size_t numIters) {
         if (labels.empty()) {
             throw PipelineException("Nodes require at least 1 label.");
         }
-        const LabelSet lblset = getLabelSet(labels);
+        lblset = getLabelSet(labels);
 
         // Add each node that we need to the CommitWriteBuffer
         // Add labels first as they are locally contiguous in vector
@@ -230,6 +232,7 @@ void WriteProcessor::createNodes(size_t numIters) {
 // @warn assumes all pending nodes have already been created
 void WriteProcessor::createEdges(size_t numIters) {
     EdgeID nextEdgeID = _writeBuffer->numPendingEdges();
+    const Dataframe* inDf = _input ? _input->getDataframe() : nullptr;
     const Dataframe* outDf = _output.getDataframe();
 
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
@@ -253,8 +256,7 @@ void WriteProcessor::createEdges(size_t numIters) {
         // If the tag exists in the input, it must be an already existing NodeID
         // column - e.g. something returned by a MATCH query - otherwise it is a
         // pending node which was created in this CREATE query
-        const bool srcIsPending =
-            !_input || _input->getDataframe()->getColumn(srcTag) == nullptr;
+        const bool srcIsPending = !inDf || inDf->getColumn(srcTag) == nullptr;
 
         // However, all input columns are also propagated to the output, so we can
         // always retrieve the column from the output dataframe, regardless of whether
@@ -274,8 +276,7 @@ void WriteProcessor::createEdges(size_t numIters) {
 
         ColumnNodeIDs* tgtCol {nullptr};
         const ColumnTag tgtTag = edge._tgtTag;
-        const bool tgtIsPending =
-            !_input || _input->getDataframe()->getColumn(tgtTag) == nullptr;
+        const bool tgtIsPending = !inDf || inDf->getColumn(tgtTag) == nullptr;
 
         if (!outDf->hasColumn(tgtTag)) {
             throw FatalException(fmt::format("Attempted to create edge {} with "
