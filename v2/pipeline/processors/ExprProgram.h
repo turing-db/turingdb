@@ -15,28 +15,31 @@ class PipelineV2;
 class ExprProgram {
 public:
     friend PipelineV2;
+    struct Instruction;
+
+    using Instructions = std::vector<Instruction>;
 
     struct Instruction {
-        ColumnOperator _op;
+        ColumnOperator _op {ColumnOperator::_SIZE};
         Column* _res {nullptr};
         Column* _lhs {nullptr};
         Column* _rhs {nullptr};
     };
 
-    using Instructions = std::vector<Instruction>;
-
     static ExprProgram* create(PipelineV2* pipeline);
 
     const Instructions& instrs() const { return _instrs; }
 
-    void addInstr(const Instruction& instr) {
-        _instrs.emplace_back(instr);
+    template <typename... Args>
+    void addInstr(Args&&... args) {
+        _instrs.emplace_back(std::forward<Args>(args)...);
     }
 
     void execute();
 
 private:
     Instructions _instrs;
+    Column* _rootColumn {nullptr};
 
     ExprProgram() = default;
     ~ExprProgram() = default;

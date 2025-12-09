@@ -1,12 +1,12 @@
 #include "PipelineBuilder.h"
 
-#include "EntityOutputStream.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
+#include "processors/ExprProgram.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/ScanNodesByLabelProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
@@ -565,19 +565,19 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadNeo4j(std::string_view gra
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addFilter(PipelineOutputInterface* toFilter) {
-    FilterProcessor* filterProc = FilterProcessor::create(_pipeline);
+PipelineBlockOutputInterface& PipelineBuilder::addFilter(ExprProgram* exprProg) {
+    FilterProcessor* filterProc = FilterProcessor::create(_pipeline, exprProg);
 
+    PipelineBlockInputInterface& filterInput = filterProc->input();
     PipelineBlockOutputInterface& filterOutput = filterProc->output();
-    PipelineBlockInputInterface& filterInput = filterProc->toFilterInput();
-    PipelineValuesInputInterface& maskInput = filterProc->maskInput();
 
-    _pendingOutput.connectTo(maskInput);
-    toFilter->connectTo(filterInput);
+    _pendingOutput.connectTo(filterInput);
 
-    _pendingOutput.setInterface(&filterOutput);
     duplicateDataframeShape(_mem, _dfMan, filterInput.getDataframe(), filterOutput.getDataframe());
-    filterOutput.setStream(filterInput.getStream());
+
+    filterOutput.setStream(_pendingOutput.getInterface()->getStream());
+
+    _pendingOutput.updateInterface(&filterOutput);
 
     return filterOutput;
 }

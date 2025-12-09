@@ -110,7 +110,7 @@ public:
     PipelineValuesOutputInterface& addComputeExpr(ExprProgram* exprProg);
 
     // Filter
-    PipelineBlockOutputInterface& addFilter(PipelineOutputInterface* toFilter);
+    PipelineBlockOutputInterface& addFilter(ExprProgram* exprProg);
 
     // Joins and Products
     // LHS is implict in @ref _pendingOutput

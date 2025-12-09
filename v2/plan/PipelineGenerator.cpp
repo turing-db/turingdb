@@ -555,21 +555,15 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 
     const auto& predicates = node->getPredicates();
     if (!predicates.empty()) {
-        // Save the incoming interface
-        PipelineOutputInterface* prevIface = _builder.getPendingOutputInterface();
-
         // Compile predicate expression into an expression program
         ExprProgram* exprProg = ExprProgram::create(_pipeline);
         ExprProgramGenerator exprGen(_mem, exprProg);
         for (const Predicate* pred : predicates) {
             exprGen.generatePredicate(pred);
         }
- 
-        // First add a compute expression processor
-        _builder.addComputeExpr(exprProg);
 
         // Then add a filter processor, taking the expression and node inputs
-        _builder.addFilter(prevIface);
+        _builder.addFilter(exprProg);
     }
 
     const auto& labelConstrs = node->getLabelConstraints();

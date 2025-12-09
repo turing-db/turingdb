@@ -3,14 +3,15 @@
 #include "Processor.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
-#include "interfaces/PipelineValuesInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 
 namespace db::v2 {
 
+class ExprProgram;
+
 class FilterProcessor final : public Processor {
 public:
-    static FilterProcessor* create(PipelineV2* pipeline);
+    static FilterProcessor* create(PipelineV2* pipeline, ExprProgram* exprProg);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
@@ -18,16 +19,16 @@ public:
 
     std::string describe() const final;
 
-    PipelineBlockInputInterface& toFilterInput() { return _toFilterInput; }
-    PipelineValuesInputInterface& maskInput() { return _maskInput; }
+    PipelineBlockInputInterface& input() { return _input; }
     PipelineBlockOutputInterface& output() { return _output; }
 
 private:
-    PipelineBlockInputInterface _toFilterInput;
-    PipelineValuesInputInterface _maskInput;
+    PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;
 
-    FilterProcessor() = default;
+    ExprProgram* _exprProg {nullptr};
+
+    FilterProcessor(ExprProgram* exprProg);
     ~FilterProcessor() final = default ;
 };
 

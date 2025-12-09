@@ -43,9 +43,6 @@ ColumnOperator getColumnOperator(BinaryOperator bop) {
     }
 }
 
-template <typename T>
-using ColumnValues = ColumnVector<typename T::Primitive>;
-
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
@@ -79,7 +76,7 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
     const ColumnOperator op = getColumnOperator(binExpr->getOperator());
     Column* resCol = allocResultColumn(binExpr);
 
-    _exprProg->addInstr({op, resCol, lhs, rhs});
+    _exprProg->addInstr(op, resCol, lhs, rhs);
 
     return nullptr;
 }
@@ -125,23 +122,23 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     }
 }
 
-#define ALLOC_EVALTYPE_COL(EvalType, Type) \
-    case EvaluatedType::EvalType:                           \
-        return _mem->alloc<ColumnValues<types::Type>>();    \
-    break;                                                  \
-
+#define ALLOC_EVALTYPE_COL(EvalType, Type)             \
+    case EvalType:                                     \
+        return _mem->alloc<ColumnValues<Type>>();      \
+    break;
 
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
 
     switch (exprType) {
-        case EvaluatedType::Invalid:
-            throw PlannerException("ExprProgramGenerator: encountered expression of invalid type");
-        break;
+        ALLOC_EVALTYPE_COL(EvaluatedType::Integer, types::Int64)
+        ALLOC_EVALTYPE_COL(EvaluatedType::String, types::String)
+        ALLOC_EVALTYPE_COL(EvaluatedType::Bool, types::Bool)
 
-        ALLOC_EVALTYPE_COL(Integer, Int64)
-        ALLOC_EVALTYPE_COL(String, String)
-        ALLOC_EVALTYPE_COL(Bool, Bool)
+        case EvaluatedType::Invalid:
+            throw PlannerException(
+                "ExprProgramGenerator: encountered expression of invalid type");
+        break;
 
         default:
             throw PlannerException(fmt::format(

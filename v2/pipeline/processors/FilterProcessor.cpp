@@ -10,6 +10,7 @@
 #include "PipelinePort.h"
 
 #include "PipelineException.h"
+#include "processors/ExprProgram.h"
 
 using namespace db;
 using namespace db::v2;
@@ -26,7 +27,7 @@ namespace {
     break;
 
 
-void applyMask(const Column* src,
+[[maybe_unused]] void applyMask(const Column* src,
                const ColumnMask* mask,
                Column* dest) {
     switch (src->getKind()) {
@@ -51,19 +52,18 @@ std::string FilterProcessor::describe() const {
     return fmt::format("FilterProcessor @={}", fmt::ptr(this));
 }
 
-FilterProcessor* FilterProcessor::create(PipelineV2* pipeline) {
-    FilterProcessor* proc = new FilterProcessor();
+FilterProcessor::FilterProcessor(ExprProgram* exprProg)
+    : _exprProg(exprProg)
+{
+}
+
+FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, ExprProgram* exprProg) {
+    auto* proc = new FilterProcessor(exprProg);
 
     {
         PipelineInputPort* filterInput = PipelineInputPort::create(pipeline, proc);
-        proc->_toFilterInput.setPort(filterInput);
+        proc->_input.setPort(filterInput);
         proc->addInput(filterInput);
-    }
-
-    {
-        PipelineInputPort* maskInput = PipelineInputPort::create(pipeline, proc);
-        proc->_maskInput.setPort(maskInput);
-        proc->addInput(maskInput);
     }
 
     {
@@ -79,7 +79,7 @@ FilterProcessor* FilterProcessor::create(PipelineV2* pipeline) {
 
 void FilterProcessor::prepare(ExecutionContext* ctxt) {
     // Check dataframes have same number of columns
-    const Dataframe* srcDF = _toFilterInput.getDataframe();
+    const Dataframe* srcDF = _input.getDataframe();
     const Dataframe* destDF = _output.getDataframe();
     if (!srcDF->hasSameShape(destDF)) {
         throw PipelineException("FilterProcessor input and output dataframes must have same size and columns of same type");
@@ -93,13 +93,10 @@ void FilterProcessor::reset() {
 }
 
 void FilterProcessor::execute() {
-    _toFilterInput.getPort()->consume();
-    _maskInput.getPort()->consume();
-    _output.getPort()->writeData();
-
-    const ColumnMask* mask = _maskInput.getValues()->as<ColumnMask>();
-    const Dataframe* srcDF = _toFilterInput.getDataframe();
+    const Dataframe* srcDF = _input.getDataframe();
     Dataframe* destDF = _output.getDataframe();
+
+    _exprProg->execute();
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();
@@ -107,8 +104,10 @@ void FilterProcessor::execute() {
     for (size_t i = 0; i < colCount; i++) {
         const Column* srcCol = srcCols[i]->getColumn();
         Column* destCol = destCols[i]->getColumn(); 
-        applyMask(srcCol, mask, destCol);
+        destCol->assign(srcCol);
     }
 
+    _input.getPort()->consume();
+    _output.getPort()->writeData();
     finish();
 }
