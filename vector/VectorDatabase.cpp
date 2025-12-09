@@ -4,6 +4,7 @@
 
 #include "RandomGenerator.h"
 #include "StorageManager.h"
+#include "LSHShardRouter.h"
 #include "VecLib.h"
 
 using namespace vec;

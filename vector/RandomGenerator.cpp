@@ -3,6 +3,7 @@
 #include <random>
 
 #include "VectorException.h"
+#include "Panic.h"
 
 namespace vec {
 
@@ -25,12 +26,26 @@ void RandomGenerator::initialize() {
     _impl = {new Impl, deleteImpl};
 }
 
-uint64_t RandomGenerator::generate() {
+template <typename T>
+T RandomGenerator::generate() {
     if (!_impl) {
         throw VectorException("Random generator not initialized");
     }
 
-    return _impl->_generator();
+    if constexpr (std::is_integral_v<T>) {
+        return (T)_impl->_generator();
+    } else if constexpr (std::is_floating_point_v<T>) {
+        return (T)_impl->_generator() / (T)std::numeric_limits<T>::max();
+    } else {
+        COMPILE_ERROR("RandomGenerator: unsupported type");
+    }
 }
+
+template int32_t RandomGenerator::generate<int32_t>();
+template uint32_t RandomGenerator::generate<uint32_t>();
+template int64_t RandomGenerator::generate<int64_t>();
+template uint64_t RandomGenerator::generate<uint64_t>();
+template float RandomGenerator::generate<float>();
+template double RandomGenerator::generate<double>();
 
 }

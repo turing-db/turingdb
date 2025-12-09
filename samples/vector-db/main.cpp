@@ -32,9 +32,9 @@ int main(int argc, char** argv) {
 
     constexpr vec::Dimension dim = 512;
     constexpr vec::DistanceMetric metric = vec::DistanceMetric::INNER_PRODUCT;
-    constexpr size_t vecCount = 100'000'000;
+    constexpr size_t vecCount = 1'000'000;
     constexpr size_t memUsage = vecCount * dim * sizeof(float);
-    constexpr size_t batchCount = 100;
+    constexpr size_t batchCount = 10;
 
     // Creating a library
     const vec::VectorResult<vec::VecLibID> createRes = db->createLibrary("test", dim, metric);
