@@ -231,7 +231,7 @@ bool PipelineBuilder::isSingleMaterializeStep() const {
     return _matProc->getMaterializeData().isSingleStep();
 }
 
-ForkOutputs PipelineBuilder::addFork(size_t count) {
+PipelineBuilder::ForkOutputs& PipelineBuilder::addFork(size_t count) {
     ForkProcessor* fork = ForkProcessor::create(_pipeline, count);
 
     PipelineBlockInputInterface& input = fork->input();

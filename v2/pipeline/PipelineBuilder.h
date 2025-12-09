@@ -25,7 +25,6 @@
 #include "LocalMemory.h"
 
 namespace db::v2 {
-using ForkOutputs = std::vector<PipelineBlockOutputInterface>&;
 
 class PipelineV2;
 class PipelineOutputInterface;
@@ -34,6 +33,8 @@ class MaterializeProcessor;
 
 class PipelineBuilder {
 public:
+    using ForkOutputs = std::vector<PipelineBlockOutputInterface>;
+
     PipelineBuilder(LocalMemory* mem,
                     PipelineV2* pipeline)
         : _mem(mem),
@@ -109,7 +110,8 @@ public:
     void addLambda(const LambdaProcessor::Callback& callback);
 
     // Fork
-    ForkOutputs addFork(size_t count);
+    ForkOutputs& addFork(size_t count);
+
     // Materialize
     PipelineBlockOutputInterface& addMaterialize();
     void setMaterializeProc(MaterializeProcessor* matProc) { _matProc = matProc; }
