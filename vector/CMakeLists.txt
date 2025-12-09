@@ -1,0 +1,29 @@
+# faiss
+find_package(Faiss REQUIRED)
+
+# threads
+find_package(Threads REQUIRED)
+
+# OpenMP (required by Faiss)
+find_package(OpenMP REQUIRED)
+
+set(VECTOR_SOURCES
+        RandomGenerator.cpp
+        StorageManager.cpp
+        VectorResult.cpp
+        VectorDatabase.cpp
+        VecLib.cpp
+        VecLibIdentifier.cpp)
+
+add_library(turing_vector_s STATIC ${VECTOR_SOURCES})
+
+target_include_directories(turing_vector_s
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(turing_vector_s
+    PUBLIC  turing_common_s
+            Threads::Threads
+            turing_db_io_fs_s
+            nlohmann_json::nlohmann_json
+            faiss)
+

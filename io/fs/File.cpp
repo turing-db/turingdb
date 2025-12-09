@@ -67,7 +67,7 @@ Result<FileRegion> File::map(size_t size, size_t offset) {
     const size_t alignment = (offset / pageSize) * pageSize;
     const size_t alignmentOffset = (offset % pageSize);
 
-    char* map = (char*)::mmap(nullptr, size + alignmentOffset, prot, MAP_SHARED, _fd, alignment);
+    void* map = (char*)::mmap(nullptr, size + alignmentOffset, prot, MAP_SHARED, _fd, alignment);
 
     if (map == MAP_FAILED) {
         const int err = errno;
@@ -75,7 +75,7 @@ Result<FileRegion> File::map(size_t size, size_t offset) {
         return Error::result(ErrorType::MAP, err);
     }
 
-    return FileRegion {map, size, alignmentOffset};
+    return FileRegion {static_cast<char*>(map), size, alignmentOffset};
 }
 
 Result<void> File::read(void* buf, size_t size) const {
