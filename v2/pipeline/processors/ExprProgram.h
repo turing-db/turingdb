@@ -35,7 +35,7 @@ public:
         _instrs.emplace_back(std::forward<Args>(args)...);
     }
 
-    void execute();
+    void evaluateInstructions();
 
 private:
     Instructions _instrs;

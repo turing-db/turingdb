@@ -1,6 +1,7 @@
 #include "FilterProcessor.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <range/v3/view/drop.hpp>
 
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperators.h"
@@ -10,10 +11,16 @@
 #include "PipelinePort.h"
 
 #include "PipelineException.h"
+#include "metadata/PropertyType.h"
 #include "processors/ExprProgram.h"
+
+#include "FatalException.h"
 
 using namespace db;
 using namespace db::v2;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 namespace {
 
@@ -96,7 +103,28 @@ void FilterProcessor::execute() {
     const Dataframe* srcDF = _input.getDataframe();
     Dataframe* destDF = _output.getDataframe();
 
-    _exprProg->execute();
+    // 1. Evaluate all instructions
+    _exprProg->evaluateInstructions();
+    // 2. Combine into single mask
+    const ExprProgram::Instructions instrs = _exprProg->instrs();
+
+    ColumnMask mask;
+    if (instrs.front()._res->getKind() != ColumnVector<types::Bool::Primitive>::staticKind()) {
+        throw FatalException("Attempted to evaluate a non-Boolean ColumnVector result column in FilterProcessor.");
+    }
+    mask.ofColumnVector(*instrs.front()._res->cast<ColumnVector<types::Bool::Primitive>>());
+
+    for (const ExprProgram::Instruction& instr : instrs | rv::drop(1)) {
+        const Column* res = instr._res;
+
+        if (res->getKind() != ColumnMask::staticKind()) {
+            throw FatalException(
+                "Attempted to evaluate a non-mask result column in FilterProcessor.");
+        }
+        const auto* instrMask = static_cast<const ColumnMask*>(res);
+
+        ColumnOperators::andOp(&mask, &mask, instrMask);
+    }
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();

@@ -51,7 +51,7 @@ void ComputeExprProcessor::execute() {
     _input.getPort()->consume();
     _output.getPort()->writeData();
 
-    _exprProg->execute();
+    _exprProg->evaluateInstructions();
 
     finish();
 }

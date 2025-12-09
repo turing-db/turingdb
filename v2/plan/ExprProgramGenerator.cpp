@@ -122,9 +122,10 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     }
 }
 
-#define ALLOC_EVALTYPE_COL(EvalType, Type)             \
-    case EvalType:                                     \
-        return _mem->alloc<ColumnValues<Type>>();      \
+// XXX: Check if this should be ColumnVector or else
+#define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \
+    case EvalType:                                                                       \
+        return _mem->alloc<ColumnVector<Type::Primitive>>();                             \
     break;
 
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {

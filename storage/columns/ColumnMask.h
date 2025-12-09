@@ -3,9 +3,11 @@
 #include <vector>
 
 #include "Column.h"
+#include "ColumnVector.h"
 
 #include "DebugDump.h"
 #include "BioAssert.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -139,6 +141,12 @@ public:
     std::vector<Bool_t>& getRaw() { return _data; }
     const std::vector<Bool_t>& getRaw() const { return _data; }
 
+    void ofColumnVector(const ColumnVector<types::Bool::Primitive>& vec) {
+        this->clear();
+        for (CustomBool b : vec.getRaw()) {
+            this->push_back(b._boolean);
+        }
+    }
 
     static consteval auto staticKind() { return _staticKind; }
 

@@ -52,7 +52,8 @@ protected:
 
     explicit PipelinePort(Processor* processor)
         : _processor(processor)
-    {}
+    {
+    }
 
     ~PipelinePort() = default;
 
@@ -97,7 +98,7 @@ public:
 
     void writeData() {
         if (_connectedPort) {
-            _buffer->writeData();
+            _connectedPort->getBuffer()->writeData();
         }
     }
 
@@ -110,7 +111,8 @@ public:
 private:
     PipelineOutputPort(Processor* processor)
         : PipelinePort(processor)
-    {}
+    {
+    }
 
     ~PipelineOutputPort() = default;
 };

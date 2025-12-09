@@ -47,9 +47,8 @@ constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
 }
 
 template <ColumnOperator Op, typename Lhs, typename Rhs>
-static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op,
-                                                               Lhs::staticKind(),
-                                                               Rhs::staticKind());
+constexpr ColumnKind::ColumnKindCode OpCase =
+    getOpCase(Op, Lhs::staticKind(), Rhs::staticKind());
 }
 
 #define EQUAL_CASE(Lhs, Rhs)                      \
@@ -74,7 +73,7 @@ static constexpr ColumnKind::ColumnKindCode OpCase = getOpCase(Op,
     case OpCase<OP_OR, Lhs, Rhs>: {               \
         ColumnOperators::orOp(                    \
             static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs), \
+            static_cast<const Lhs*>(instr._lhs),  \
             static_cast<const Rhs*>(instr._rhs)); \
         break;                                    \
     }
@@ -105,7 +104,7 @@ ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
     return prog;
 }
 
-void ExprProgram::execute() {
+void ExprProgram::evaluateInstructions() {
     for (const Instruction& instr : _instrs) {
         evalInstr(instr);
     }
