@@ -43,8 +43,8 @@ set(processors_sources
     processors/S3PullProcessor.cpp
     processors/S3PushProcessor.cpp
     processors/LambdaSourceProcessor.cpp
-    processors/EvalExprProcessor.cpp
-    processors/EvalProgram.cpp
+    processors/ComputeExprProcessor.cpp
+    processors/ExprProgram.cpp
     processors/FilterProcessor.cpp
 )
 

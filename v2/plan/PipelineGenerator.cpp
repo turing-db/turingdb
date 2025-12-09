@@ -549,7 +549,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
 }
 
 PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
