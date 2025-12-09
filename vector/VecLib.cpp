@@ -6,6 +6,7 @@
 
 #include "BatchVectorCreate.h"
 #include "BatchVectorSearch.h"
+#include "LSHShardRouter.h"
 #include "VecLibShard.h"
 
 #include "TuringTime.h"
@@ -20,7 +21,6 @@ VecLib::Builder::Builder() {
 }
 
 std::unique_ptr<VecLib> VecLib::Builder::build() {
-    auto& meta = _vecLib->_metadata;
     auto& storageManager = _vecLib->_storage;
 
     msgbioassert(storageManager, "VecLib storage must be set");
@@ -31,7 +31,12 @@ std::unique_ptr<VecLib> VecLib::Builder::build() {
         throw VectorException(res.error().fmtMessage());
     }
 
-    auto& shard = storageManager->addShard(*_vecLib);
+    auto& meta = _vecLib->_metadata;
+
+    // TODO: sync on disk
+    constexpr uint8_t nbits = 12;
+    _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(meta._dimension, nbits);
+    _vecLib->_shardRouter->initialize();
 
     const auto now = Clock::now()
                          .time_since_epoch()
@@ -40,43 +45,25 @@ std::unique_ptr<VecLib> VecLib::Builder::build() {
     _vecLib->_metadata._createdAt = now;
     _vecLib->_metadata._modifiedAt = now;
 
-    shard._path = storageManager->getShardPath(meta._id, 0);
-
     return std::move(_vecLib);
 }
 
 VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
-    VecLibStorage& storage = _storage->getStorage(_metadata._id);
-    msgbioassert(!storage._shards.empty(), "VecLib storage must have at least one shard");
-
-    auto* shard = &storage._shards.back();
-    msgbioassert(shard->_isLoaded, "Shard must be loaded");
-
-    size_t remainingPoints = batch.count();
     const float* embeddings = batch.embeddings().data();
+    const size_t dim = batch.dimension();
 
-    while (remainingPoints > 0) {
-        if ((int)batch.dimension() != shard->_index->d) {
-            return VectorError::result(VectorErrorCode::InvalidDimension);
-        }
+    for (size_t i = 0; i < batch.count(); i++) {
+        std::span<const float> vector(embeddings + i * dim, dim);
 
-        size_t pointsToAdd = std::min(shard->getAvailPointCount(), remainingPoints);
+        LSHSignature signature = _shardRouter->getSignature(vector);
+        auto& shard = getShard(signature);
 
-        if (pointsToAdd == 0) {
-            // Allocate a new shard
-            shard = &_storage->addShard(*this);
-            continue;
-        }
-
-        shard->_index->add(pointsToAdd, embeddings);
-        shard->_vecCount += pointsToAdd;
-        embeddings += pointsToAdd * shard->_index->d;
-        remainingPoints -= pointsToAdd;
+        shard._index->add(1, embeddings + i * dim);
+        shard._vecCount++;
     }
 
     return {};
 }
-
 VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchResult& results) {
     VecLibStorage& storage = _storage->getStorage(_metadata._id);
     msgbioassert(!storage._shards.empty(), "VecLib storage must have at least one shard");
@@ -86,18 +73,18 @@ VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchRe
     const size_t resultCount = query.resultCount();
     msgbioassert(queryCount != 0, "Must have at least one query");
 
-    for (VecLibShard& shard : storage._shards) {
-        if (!shard._isLoaded) {
-            shard.load();
+    for (auto& [signature, shard] : storage._shards) {
+        if (!shard->_isLoaded) {
+            shard->load();
         }
 
         auto [distances, indices] = results.prepareNewQuery(queryCount);
 
-        const size_t k = std::min(resultCount, (size_t)shard._index->ntotal);
-        shard._index->search(queryCount, embeddings, k, distances.data(), indices.data());
+        const size_t k = std::min(resultCount, (size_t)shard->_index->ntotal);
+        shard->_index->search(queryCount, embeddings, k, distances.data(), indices.data());
 
-        if (shard._isFull) {
-            shard.unload();
+        if (shard->_isFull) {
+            shard->unload();
         }
     }
 
@@ -106,9 +93,35 @@ VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchRe
     return {};
 }
 
-const VecLibShard& VecLib::getShard(size_t index) const {
-    msgbioassert(index < _metadata._shardCount, "Shard index out of bounds");
-    return _storage->getStorage(_metadata._id)._shards.at(index);
+VecLibShard& VecLib::getShard(LSHSignature signature) {
+    auto& storage = _storage->getStorage(_metadata._id);
+    
+    auto it = storage._shards.find(signature);
+    if (it != storage._shards.end()) {
+        return *it->second;
+    }
+
+    auto shard = std::make_unique<VecLibShard>();
+    shard->_path = _storage->getShardPath(_metadata._id, signature);
+
+    switch (_metadata._metric) {
+        case DistanceMetric::EUCLIDEAN_DIST:
+            shard->_index = std::make_unique<faiss::IndexFlatL2>(_metadata._dimension);
+            break;
+        case DistanceMetric::INNER_PRODUCT:
+            shard->_index = std::make_unique<faiss::IndexFlatIP>(_metadata._dimension);
+            break;
+    }
+
+    shard->_dim = _metadata._dimension;
+
+    storage._shards.emplace(signature, std::move(shard));
+
+    return *storage._shards.at(signature);
+}
+
+const VecLibShard& VecLib::getShard(LSHSignature signature) const {
+    return *_storage->getStorage(_metadata._id)._shards.at(signature);
 }
 
 VecLib::VecLib() {

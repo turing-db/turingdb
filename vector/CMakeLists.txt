@@ -10,6 +10,7 @@ find_package(OpenMP REQUIRED)
 set(VECTOR_SOURCES
         RandomGenerator.cpp
         StorageManager.cpp
+        LSHShardRouter.cpp
         VectorResult.cpp
         VectorDatabase.cpp
         VecLib.cpp

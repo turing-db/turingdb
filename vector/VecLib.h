@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LSHSignature.h"
 #include "StorageManager.h"
 #include "VecLibIdentifier.h"
 #include "VecLibMetadata.h"
@@ -16,6 +17,7 @@ struct VecLibShard;
 class BatchVectorCreate;
 class BatchVectorSearch;
 class VectorSearchResult;
+class LSHShardRouter;
 
 class VecLib {
 public:
@@ -68,7 +70,8 @@ public:
         return _metadata._shardCount;
     }
 
-    [[nodiscard]] const VecLibShard& getShard(size_t index) const;
+    [[nodiscard]] VecLibShard& getShard(LSHSignature signature);
+    [[nodiscard]] const VecLibShard& getShard(LSHSignature signature) const;
 
 private:
     friend Builder;
@@ -77,6 +80,7 @@ private:
 
     VecLibIdentifier _identifier;
     VecLibMetadata _metadata;
+    std::unique_ptr<LSHShardRouter> _shardRouter;
 
     VecLib();
 };

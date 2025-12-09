@@ -16,7 +16,9 @@ public:
     RandomGenerator& operator=(RandomGenerator&&) = delete;
 
     static void initialize();
-    static uint64_t generate();
+
+    template <typename T = uint64_t>
+    static T generate();
 
 private:
     static std::unique_ptr<Impl, void (*)(Impl*)> _impl;

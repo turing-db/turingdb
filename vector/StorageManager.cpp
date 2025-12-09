@@ -92,45 +92,45 @@ bool StorageManager::libraryExists(const VecLibID& libID) const {
     return p.exists();
 }
 
-VecLibShard& StorageManager::addShard(VecLib& lib) {
-    auto& meta = lib.metadata();
-    auto& storage = _storages.at(meta._id);
-
-    if (!storage->_shards.empty()) {
-        auto& prevShard = storage->_shards.back();
-        prevShard._isFull = true;
-        faiss::write_index(prevShard._index.get(), prevShard._path.c_str());
-        prevShard.unload();
-    }
-
-    const size_t shardIndex = storage->_shards.size();
-    auto& shard = storage->_shards.emplace_back();
-    shard._path = getShardPath(meta._id, shardIndex);
-
-    const auto now = Clock::now()
-                         .time_since_epoch()
-                         .count();
-
-    meta._shardCount = storage->_shards.size();
-    meta._modifiedAt = now;
-
-    if (auto res = writeMetadata(storage->_metadataWriter, meta); !res) {
-        throw VectorException("Could not write metadata file");
-    }
-
-    switch (meta._metric) {
-        case DistanceMetric::EUCLIDEAN_DIST:
-            shard._index = std::make_unique<faiss::IndexFlatL2>(meta._dimension);
-            break;
-        case DistanceMetric::INNER_PRODUCT:
-            shard._index = std::make_unique<faiss::IndexFlatIP>(meta._dimension);
-            break;
-    }
-
-    shard._dim = meta._dimension;
-
-    return storage->_shards.back();
-}
+// VecLibShard& StorageManager::addShard(VecLib& lib) {
+//     auto& meta = lib.metadata();
+//     auto& storage = _storages.at(meta._id);
+// 
+//     if (!storage->_shards.empty()) {
+//         auto& prevShard = storage->_shards.back();
+//         prevShard._isFull = true;
+//         faiss::write_index(prevShard._index.get(), prevShard._path.c_str());
+//         prevShard.unload();
+//     }
+// 
+//     const size_t shardIndex = storage->_shards.size();
+//     auto& shard = storage->_shards.emplace_back();
+//     shard._path = getShardPath(meta._id, shardIndex);
+// 
+//     const auto now = Clock::now()
+//                          .time_since_epoch()
+//                          .count();
+// 
+//     meta._shardCount = storage->_shards.size();
+//     meta._modifiedAt = now;
+// 
+//     if (auto res = writeMetadata(storage->_metadataWriter, meta); !res) {
+//         throw VectorException("Could not write metadata file");
+//     }
+// 
+//     switch (meta._metric) {
+//         case DistanceMetric::EUCLIDEAN_DIST:
+//             shard._index = std::make_unique<faiss::IndexFlatL2>(meta._dimension);
+//             break;
+//         case DistanceMetric::INNER_PRODUCT:
+//             shard._index = std::make_unique<faiss::IndexFlatIP>(meta._dimension);
+//             break;
+//     }
+// 
+//     shard._dim = meta._dimension;
+// 
+//     return storage->_shards.back();
+// }
 
 const VecLibStorage& StorageManager::getStorage(const VecLibID& libID) const {
     return *_storages.at(libID);
@@ -152,8 +152,8 @@ fs::Path StorageManager::getNodeIdsPath(const VecLibID& libID) const {
     return getLibraryPath(libID) / "node_ids.bin";
 }
 
-fs::Path StorageManager::getShardPath(const VecLibID& libID, size_t shardIndex) const {
-    return getLibraryPath(libID) / "embeddings-" + std::to_string(shardIndex) + ".index";
+fs::Path StorageManager::getShardPath(const VecLibID& libID, LSHSignature sig) const {
+    return getLibraryPath(libID) / "embeddings-" + std::to_string(sig) + ".index";
 }
 
 VectorResult<void> StorageManager::writeMetadata(MetadataWriter& writer, const VecLibMetadata& metadata) {
