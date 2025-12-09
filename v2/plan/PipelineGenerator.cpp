@@ -775,7 +775,6 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
                     "Attempted to create a pending node with no variable declaration.");
             }
             const std::string_view nodeVarName = pendingPlanNode._name->getName();
-            // XXX: Does the plan graph ensure a valid node? e.g. at least one label, etc?
 
             const std::span planLabels = data->labelConstraints();
             std::vector<std::string_view> labels;
