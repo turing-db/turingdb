@@ -827,9 +827,17 @@ TEST_F(WriteQueriesTest, createFromTarget) {
     submitCurrentChange();
 
     {
-        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
-
-        // The IDs get arbitrarily shuffled on SUBMIT, so we cannot really check the values
+        using Rows = LineContainer<NodeID, EdgeID>; // Targets are sorted arbitrarily,
+                                                    // only check source and edge
+        ranges::sort(targetsPrior.getRaw()); // GetOutEdges will return sorted by targets
+        Rows expected;
+        {
+            EdgeID nextEdgeID = totalEdgesPrior;
+            // We expect 1 new edge for each target that existed previously
+            for (NodeID tgt : targetsPrior) {
+                expected.add({tgt, nextEdgeID++});
+            }
+        }
 
         Rows scan;
         { // Just check the new rows
@@ -837,9 +845,10 @@ TEST_F(WriteQueriesTest, createFromTarget) {
                 if (er._edgeID < totalEdgesPrior) {
                     continue;
                 }
-                scan.add({er._nodeID, er._edgeID, er._otherID});
+                scan.add({er._nodeID, er._edgeID});
             }
         }
+        ASSERT_TRUE(expected.equals(scan));
 
         Rows actual;
         {
@@ -847,7 +856,9 @@ TEST_F(WriteQueriesTest, createFromTarget) {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* us = df->cols().front()->as<ColumnNodeIDs>();
+                auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
                 ASSERT_TRUE(us);
+                ASSERT_TRUE(es);
 
                 const size_t rowCount = df->getRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior * 2);
@@ -856,11 +867,14 @@ TEST_F(WriteQueriesTest, createFromTarget) {
                         continue;
                     }
                     ASSERT_EQ(us->at(row), targetsPrior.at(row - totalEdgesPrior));
+                    ASSERT_EQ(es->at(row), row);
+                    actual.add({us->at(row), es->at(row)});
                 }
             });
             ASSERT_TRUE(res);
         }
 
         EXPECT_TRUE(scan.equals(actual));
+        EXPECT_TRUE(expected.equals(actual));
     }
 }
