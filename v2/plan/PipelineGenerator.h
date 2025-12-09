@@ -78,6 +78,10 @@ public:
     };
 
     using BinaryNodeVisitedMap = std::unordered_map<PlanGraphNode*, BinaryNodeVisitInformation>;
+    using VarColumnMap = std::unordered_map<const VarDecl*, ColumnTag>;
+
+    const VarColumnMap& varColMap() const { return _declToColumn; }
+    LocalMemory& memory() { return *_mem; }
 
 private:
     const PlanGraph* _graph {nullptr};
@@ -89,7 +93,7 @@ private:
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
 
-    std::unordered_map<const VarDecl*, ColumnTag> _declToColumn;
+     VarColumnMap _declToColumn;
 
     ColumnTag getCol(const VarDecl* var);
 

@@ -1,5 +1,6 @@
 #include "FilterProcessor.h"
 
+#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <range/v3/view/drop.hpp>
 
@@ -15,6 +16,7 @@
 #include "processors/ExprProgram.h"
 
 #include "FatalException.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 using namespace db::v2;
@@ -34,7 +36,7 @@ namespace {
     break;
 
 
-[[maybe_unused]] void applyMask(const Column* src,
+void applyMask(const Column* src,
                const ColumnMask* mask,
                Column* dest) {
     switch (src->getKind()) {
@@ -113,27 +115,38 @@ void FilterProcessor::execute() {
         throw FatalException("Attempted to evaluate a non-Boolean ColumnVector result column in FilterProcessor.");
     }
     mask.ofColumnVector(*instrs.front()._res->cast<ColumnVector<types::Bool::Primitive>>());
+    spdlog::info("Mask of size {}", instrs.front()._res->size());
 
-    for (const ExprProgram::Instruction& instr : instrs | rv::drop(1)) {
-        const Column* res = instr._res;
+    {
+        ColumnMask instrMask;
+        for (const ExprProgram::Instruction& instr : instrs | rv::drop(1)) {
+            Column* res = instr._res;
+            spdlog::info("Mask of size {}", res->size());
 
-        if (res->getKind() != ColumnMask::staticKind()) {
-            throw FatalException(
-                "Attempted to evaluate a non-mask result column in FilterProcessor.");
+            if (res->getKind() != ColumnVector<types::Bool::Primitive>::staticKind()) {
+                throw FatalException("Attempted to evaluate a non-Boolean ColumnVector "
+                                     "result column in FilterProcessor.");
+            }
+            const auto* instrRes = res->cast<ColumnVector<types::Bool::Primitive>>();
+            instrMask.ofColumnVector(*instrRes);
+
+            ColumnOperators::andOp(&mask, &mask, &instrMask);
         }
-        const auto* instrMask = static_cast<const ColumnMask*>(res);
-
-        ColumnOperators::andOp(&mask, &mask, instrMask);
     }
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();
     const auto& destCols = destDF->cols();
+    spdlog::info("Out before mask:");
+    destDF->dump(std::cout);
     for (size_t i = 0; i < colCount; i++) {
         const Column* srcCol = srcCols[i]->getColumn();
         Column* destCol = destCols[i]->getColumn(); 
         destCol->assign(srcCol);
+        applyMask(srcCol, &mask, destCol);
     }
+    spdlog::info("\n\nOut after mask");
+    destDF->dump(std::cout);
 
     _input.getPort()->consume();
     _output.getPort()->writeData();

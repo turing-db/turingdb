@@ -557,7 +557,7 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     if (!predicates.empty()) {
         // Compile predicate expression into an expression program
         ExprProgram* exprProg = ExprProgram::create(_pipeline);
-        ExprProgramGenerator exprGen(_mem, exprProg);
+        ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
         for (const Predicate* pred : predicates) {
             exprGen.generatePredicate(pred);
         }

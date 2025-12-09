@@ -9,6 +9,7 @@
 #include "PipelineV2.h"
 
 #include "PipelineException.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 using namespace db::v2;
@@ -112,8 +113,11 @@ void ExprProgram::evaluateInstructions() {
 
 void ExprProgram::evalInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
+    spdlog::info("Evaluating instruction");
     const Column* lhs = instr._lhs;
+    spdlog::info("\t lhs size = {}", lhs->size());
     const Column* rhs = instr._rhs;
+    spdlog::info("\t rhs size = {}", rhs->size());
     switch (getOpCase(op, lhs->getKind(), rhs->getKind())) {
         EQUAL_CASE(ColumnVector<size_t>, ColumnVector<size_t>)
         EQUAL_CASE(ColumnVector<size_t>, ColumnConst<size_t>)

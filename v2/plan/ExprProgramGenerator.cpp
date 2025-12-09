@@ -3,6 +3,8 @@
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
+#include "PipelineGenerator.h"
+#include "interfaces/PipelineOutputInterface.h"
 #include "processors/ExprProgram.h"
 #include "Predicate.h"
 
@@ -13,12 +15,14 @@
 #include "Literal.h"
 #include "metadata/PropertyType.h"
 
+#include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnVector.h"
 
 #include "LocalMemory.h"
 
 #include "PlannerException.h"
+#include "FatalException.h"
 
 using namespace db::v2;
 using namespace db;
@@ -85,23 +89,28 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     const VarDecl* exprVarDecl = propExpr->getExprVarDecl();
 
     // Search exprVarDecl in column map
-    const auto foundIt = _propColumnMap.find(exprVarDecl);
-    if (foundIt == _propColumnMap.end()) {
+    const auto foundIt = _gen->varColMap().find(exprVarDecl);
+    if (foundIt == _gen->varColMap().end()) {
         return allocResultColumn(propExpr);
-        throw PlannerException(fmt::format("ExprProgramGenerator: can not find column for property expression {}.{}",
-            propExpr->getEntityVarDecl()->getName(),
-            propExpr->getPropName()));
     }
 
-    return foundIt->second;
+    const NamedColumn* inCol = _pendingOut.getDataframe()->getColumn(foundIt->second);
+    if (!inCol) {
+        throw FatalException(fmt::format(
+            "Could not get column in input to ExprProgramGenerator for variable {}.",
+            foundIt->second.getValue()));
+    }
+
+    return inCol->getColumn();
 }
 
-#define GEN_LITERAL_CASE(MyKind, Type, LiteralType) \
-    case Literal::Kind::MyKind: {                                                                        \
-        ColumnConst<types::Type::Primitive>* value = _mem->alloc<ColumnConst<types::Type::Primitive>>(); \
-        value->set(static_cast<const LiteralType*>(literal)->getValue());                                \
-        return value;                                                                                    \
-    }                                                                                                    \
+#define GEN_LITERAL_CASE(MyKind, Type, LiteralType)                                      \
+    case Literal::Kind::MyKind: {                                                        \
+        ColumnConst<types::Type::Primitive>* value =                                     \
+            _gen->memory().alloc<ColumnConst<types::Type::Primitive>>();                 \
+        value->set(static_cast<const LiteralType*>(literal)->getValue());                \
+        return value;                                                                    \
+    }                                                                                        \
     break;
 
 
@@ -125,7 +134,7 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
 // XXX: Check if this should be ColumnVector or else
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \
     case EvalType:                                                                       \
-        return _mem->alloc<ColumnVector<Type::Primitive>>();                             \
+        return _gen->memory().alloc<ColumnVector<Type::Primitive>>();                    \
     break;
 
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {

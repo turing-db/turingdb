@@ -1,7 +1,5 @@
 #pragma once
 
-#include <unordered_map>
-
 namespace db {
 class Column;
 class LocalMemory;
@@ -16,21 +14,32 @@ class VarDecl;
 class BinaryExpr;
 class PropertyExpr;
 class LiteralExpr;
+class PipelineGenerator;
+class PendingOutputView;
 
 class ExprProgramGenerator {
 public:
-    ExprProgramGenerator(LocalMemory* mem, ExprProgram* exprProg)
-        : _mem(mem),
-        _exprProg(exprProg)
+    ExprProgramGenerator(PipelineGenerator* gen, ExprProgram* exprProg,
+                         const PendingOutputView& pendingOut)
+        : _gen(gen),
+        _exprProg(exprProg),
+        _pendingOut(pendingOut)
     {
     }
+
+    ~ExprProgramGenerator() = default;
+
+    ExprProgramGenerator(const ExprProgramGenerator&) = delete;
+    ExprProgramGenerator& operator=(const ExprProgramGenerator&) = delete;
+    ExprProgramGenerator(ExprProgramGenerator&&) = delete;
+    ExprProgramGenerator& operator=(ExprProgramGenerator&&) = delete;
 
     void generatePredicate(const Predicate* pred);
 
 private:
-    LocalMemory* _mem {nullptr};
+    PipelineGenerator* _gen;
     ExprProgram* _exprProg {nullptr};
-    std::unordered_map<const VarDecl*, Column*> _propColumnMap;
+    const PendingOutputView& _pendingOut;
     Column* _rootColumn {nullptr};
 
     Column* generateExpr(const Expr* expr);
