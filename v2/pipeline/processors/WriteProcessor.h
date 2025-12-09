@@ -4,7 +4,6 @@
 #include <optional>
 #include <string_view>
 
-#include "FatalException.h"
 #include "Processor.h"
 #include "WriteProcessorTypes.h"
 
@@ -13,6 +12,8 @@
 #include "dataframe/ColumnTag.h"
 #include "interfaces/PipelineInputInterface.h"
 #include "metadata/LabelSet.h"
+
+#include "FatalException.h"
 
 namespace db {
 
@@ -47,7 +48,7 @@ public:
 
     PipelineBlockInputInterface& input() {
         if (!_input) {
-            throw FatalException("Attempted to get null input of WriteProcessor");
+            throw FatalException("Attempted to get null input of WriteProcessor.");
         }
         return _input.value();
     }

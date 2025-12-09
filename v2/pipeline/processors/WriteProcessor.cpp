@@ -266,7 +266,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              "source node with no such column: {}",
                                              edge._name, edge._srcTag.getValue()));
         }
-        srcCol = _output.getDataframe()->getColumn(srcTag)->as<ColumnNodeIDs>();
+        srcCol = outDf->getColumn(srcTag)->as<ColumnNodeIDs>();
         if (!srcCol) { // @ref as<> performs dynamic_cast
             throw FatalException(fmt::format("Column {} was marked as a column of"
                                              " pending source nodes, but is not a NodeID"
@@ -283,7 +283,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              "target node with no such column: {}",
                                              edge._name, edge._tgtTag.getValue()));
         }
-        tgtCol = _output.getDataframe()->getColumn(tgtTag)->as<ColumnNodeIDs>();
+        tgtCol = outDf->getColumn(tgtTag)->as<ColumnNodeIDs>();
         if (!tgtCol) { // @ref as<> performs dynamic_cast
             throw FatalException(fmt::format("Column {} was marked as a column of"
                                              " pending target nodes, but is not a NodeID"
@@ -365,7 +365,7 @@ void WriteProcessor::postProcessTempIDs() {
                             "output dataframe for PendingEdge with tag {}.",
                             edge._tag.getValue()));
         }
-        auto* col = _output.getDataframe()->getColumn(edge._tag)->as<ColumnEdgeIDs>();
+        auto* col = out->getColumn(edge._tag)->as<ColumnEdgeIDs>();
         if (!col) {
             throw FatalException(
                 fmt::format("Could not get column in WriteProcessor "
