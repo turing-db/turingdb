@@ -23,7 +23,6 @@ public:
     PipelineBlockOutputInterface& output() { return _output; }
 
 private:
-
     PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;
 

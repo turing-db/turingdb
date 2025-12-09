@@ -18,6 +18,7 @@
 #include "processors/ExprProgram.h"
 
 #include "FatalException.h"
+#include "processors/ExprProgram.h"
 
 using namespace db;
 using namespace db::v2;
@@ -37,7 +38,7 @@ namespace {
     break;
 
 
-void applyMask(const Column* src,
+[[maybe_unused]] void applyMask(const Column* src,
                const ColumnMask* mask,
                Column* dest) {
     switch (src->getKind()) {
