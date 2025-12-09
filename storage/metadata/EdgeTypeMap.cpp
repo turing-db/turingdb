@@ -64,7 +64,7 @@ size_t EdgeTypeMap::getCount() const {
     return _nameMap.size();
 }
 
-EdgeTypeID EdgeTypeMap::getOrCreate(const std::string& name) {
+EdgeTypeID EdgeTypeMap::getOrCreate(std::string_view name) {
     auto it = _nameMap.find(name);
     if (it != _nameMap.end()) {
         return _container[it->second]._id;

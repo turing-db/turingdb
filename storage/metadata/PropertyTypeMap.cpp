@@ -79,7 +79,7 @@ size_t PropertyTypeMap::getCount() const {
     return _nameMap.size();
 }
 
-PropertyType PropertyTypeMap::getOrCreate(const std::string& name, ValueType valueType) {
+PropertyType PropertyTypeMap::getOrCreate(std::string_view name, ValueType valueType) {
     auto it = _nameMap.find(name);
     if (it != _nameMap.end()) {
         return _container[it->second]._pt;

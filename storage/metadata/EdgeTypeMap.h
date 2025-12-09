@@ -34,7 +34,7 @@ public:
     [[nodiscard]] Container::const_iterator begin() const { return _container.begin(); }
     [[nodiscard]] Container::const_iterator end() const { return _container.end(); }
 
-    EdgeTypeID getOrCreate(const std::string& edgeTypeName);
+    EdgeTypeID getOrCreate(std::string_view edgeTypeName);
 
 private:
     Container _container;

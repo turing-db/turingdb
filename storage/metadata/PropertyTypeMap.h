@@ -35,7 +35,7 @@ public:
     [[nodiscard]] Container::const_iterator begin() const { return _container.begin(); }
     [[nodiscard]] Container::const_iterator end() const { return _container.end(); }
 
-    PropertyType getOrCreate(const std::string& labelName, ValueType valueType);
+    PropertyType getOrCreate(std::string_view labelName, ValueType valueType);
 
 private:
     Container _container;
