@@ -107,7 +107,10 @@ void WriteProcessor::reset() {
 void WriteProcessor::execute() {
     // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
     // meaning if we are deleting, we require an input. This may change.
-    if (_input && (!_deletedNodes.empty() || !_deletedEdges.empty())) {
+    if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
+        if (!_input) {
+            throw PipelineException("Cannot delete pending entity: DELETE queries require a MATCH input.");
+        }
         performDeletions();
     }
 
@@ -199,8 +202,10 @@ void WriteProcessor::createNodes(size_t numIters) {
         bioassert(col->size() == 0);
 
         const std::span labels = node._labels;
-        // TODO: Is this checked in planner?
-        bioassert(labels.size() > 0);
+
+        if (labels.empty()) {
+            throw PipelineException("Nodes require at least 1 label.");
+        }
         const LabelSet lblset = getLabelSet(labels);
 
         // Add each node that we need to the CommitWriteBuffer

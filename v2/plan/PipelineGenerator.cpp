@@ -742,7 +742,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
 }
 
 PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
