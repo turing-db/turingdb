@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <string_view>
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -6,6 +7,8 @@
 #include "SystemManager.h"
 #include "columns/Block.h"
 #include "columns/ColumnIDs.h"
+#include "metadata/PropertyType.h"
+#include "ID.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
@@ -30,6 +33,15 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
     Graph* _graph {nullptr};
+
+    GraphReader read() { return _graph->openTransaction().readGraph(); }
+
+    // To test queries which require multiple changes, use WriteQueriesTest.cpp
+    auto queryV2(std::string_view query, auto callback) {
+        auto res = _db->queryV2(query, _graphName, &_env->getMem(), callback,
+                                CommitHash::head(), ChangeID::head());
+        return res;
+    }
 };
 
 template <typename T>
@@ -1664,4 +1676,41 @@ int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
     });
+}
+
+TEST_F(QueriesTest, whereName) {
+    const auto MATCH_QUERY = [](std::string_view name) -> std::string {
+        return fmt::format("MATCH (n) WHERE n.name = \"{}\" RETURN n", name);
+    };
+
+    using Rows = LineContainer<NodeID, std::string_view>;
+
+    std::vector<std::string_view> names;
+    Rows expected;
+    {
+        // TODO: Find a way to dynamically get the PropertyID of the "name" property
+        const PropertyTypeID nameID = 0;
+        NodeID nextNodeID = 0;
+        for (std::string_view name : read().scanNodeProperties<types::String>(nameID)) {
+            expected.add({nextNodeID++, name});
+            names.emplace_back(name);
+        }
+    }
+
+    Rows actual;
+    {
+        for (std::string_view name : names) {
+            auto res = queryV2(MATCH_QUERY(name), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(1, df->size()); // Just the 'n' column
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                ASSERT_EQ(1, ns->size());
+                NodeID n = ns->front();
+                actual.add({n, name});
+            });
+            ASSERT_TRUE(res);
+        }
+    }
+    EXPECT_TRUE(expected.equals(actual));
 }

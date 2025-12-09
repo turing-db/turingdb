@@ -91,7 +91,9 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     // Search exprVarDecl in column map
     const auto foundIt = _gen->varColMap().find(exprVarDecl);
     if (foundIt == _gen->varColMap().end()) {
-        return allocResultColumn(propExpr);
+        throw FatalException(
+            fmt::format("Could not find column associated with property variable {}.",
+                        exprVarDecl->getName()));
     }
 
     const NamedColumn* inCol = _pendingOut.getDataframe()->getColumn(foundIt->second);
