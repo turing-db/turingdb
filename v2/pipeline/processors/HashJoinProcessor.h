@@ -12,6 +12,7 @@ class ColumnTag;
 }
 
 namespace db::v2 {
+
 using HashJoinMap = std::unordered_map<NodeID, std::vector<RowOffset>>;
 
 struct RowOffsetsCopyState {
@@ -56,7 +57,7 @@ public:
     void reset() override;
     void execute() override;
 
-    std::string describe() const final;
+    std::string getName() const override;
 
 private:
     PipelineBlockInputInterface _rightInput;

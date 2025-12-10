@@ -1,7 +1,5 @@
 #include "ForkProcessor.h"
 
-#include "spdlog/fmt/bundled/format.h"
-
 #include "dataframe/Dataframe.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
@@ -9,13 +7,13 @@
 
 using namespace db::v2;
 
-std::string ForkProcessor::describe() const {
-    return fmt::format("ForkProcessor");
-}
-
 ForkProcessor::ForkProcessor(size_t count)
     : _outputs(count)
 {
+}
+
+std::string ForkProcessor::getName() const {
+    return "ForkProcessor";
 }
 
 ForkProcessor* ForkProcessor::create(PipelineV2* pipeline,

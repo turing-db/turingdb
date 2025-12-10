@@ -18,7 +18,7 @@ public:
     void reset() final;
     void execute() final;
 
-    std::string describe() const final;
+    std::string getName() const override;
 
 private:
     PipelineBlockInputInterface _input;

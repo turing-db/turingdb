@@ -39,8 +39,8 @@ std::vector<RowOffset>& getMap(std::unordered_map<Key, std::vector<RowOffset>>& 
 
 }
 
-std::string HashJoinProcessor::describe() const {
-    return fmt::format("HashJoinProcessor @={}", fmt::ptr(this));
+std::string HashJoinProcessor::getName() const {
+    return "HashJoinProcessor";
 }
 
 HashJoinProcessor::HashJoinProcessor(const ColumnTag leftJoinKey,

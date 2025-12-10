@@ -24,7 +24,7 @@ public:
     static DatabaseProcedureProcessor* create(PipelineV2* pipeline,
                                               const ProcedureBlueprint& blueprint);
 
-    std::string describe() const override;
+    std::string getName() const override;
 
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;

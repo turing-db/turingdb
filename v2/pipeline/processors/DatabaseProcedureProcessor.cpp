@@ -32,8 +32,8 @@ DatabaseProcedureProcessor* DatabaseProcedureProcessor::create(PipelineV2* pipel
     return processor;
 }
 
-std::string DatabaseProcedureProcessor::describe() const {
-    return fmt::format("DatabaseProcedureProcessor @={}", fmt::ptr(this));
+std::string DatabaseProcedureProcessor::getName() const {
+    return "DatabaseProcedureProcessor";
 }
 
 void DatabaseProcedureProcessor::prepare(ExecutionContext* ctxt) {

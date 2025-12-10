@@ -95,14 +95,12 @@ BranchGenerator::~BranchGenerator() {
 void BranchGenerator::translateBranch(PipelineBranch* branch) {
     setupBranch(branch);
 
-    fmt::print("Branch\n");
     for (PlanGraphNode* node : branch->nodes()) {
-        fmt::print("Translate node {} {}\n", fmt::ptr(node), PlanGraphOpcodeDescription::value(node->getOpcode()));
         translateNode(node);
     }
 
     // Add materialize at the end of the branch if necessary
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -194,6 +192,7 @@ PipelineOutputInterface* BranchGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::WRITE:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::ORDER_BY:
+        case PlanGraphOpcode::PROCEDURE_EVAL:
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
             throw PlannerException(fmt::format("BranchGenerator does not support PlanGraphNode: {}",
@@ -320,7 +319,7 @@ PipelineOutputInterface* BranchGenerator::translateGetPropertyNode(GetPropertyNo
 }
 
 PipelineOutputInterface* BranchGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -390,7 +389,7 @@ PipelineOutputInterface* BranchGenerator::translateEdgeFilterNode(EdgeFilterNode
 PipelineOutputInterface* BranchGenerator::translateProduceResultsNode(ProduceResultsNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -436,7 +435,7 @@ PipelineOutputInterface* BranchGenerator::translateJoinNode(JoinNode* node) {
 PipelineOutputInterface* BranchGenerator::translateSkipNode(SkipNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -462,7 +461,7 @@ PipelineOutputInterface* BranchGenerator::translateSkipNode(SkipNode* node) {
 PipelineOutputInterface* BranchGenerator::translateLimitNode(LimitNode* node) {
     // If MaterializeNode has not been seen at that point,
     // we materialize if we have data in flight
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -505,7 +504,7 @@ PipelineOutputInterface* BranchGenerator::translateCartesianProductNode(Cartesia
 }
 
 PipelineOutputInterface* BranchGenerator::translateAggregateEvalNode(AggregateEvalNode* node) {
-    if (_builder.isMaterializeOpen() && !_builder.isSingleMaterializeStep()) {
+    if (!_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
