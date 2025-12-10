@@ -24,6 +24,8 @@ public:
         Column* _res {nullptr};
         Column* _lhs {nullptr};
         Column* _rhs {nullptr};
+
+        bool isUnaryPredicate() const { return _op == ColumnOperator::OP_NOOP; }
     };
 
     static ExprProgram* create(PipelineV2* pipeline);

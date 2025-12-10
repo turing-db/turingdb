@@ -1,15 +1,19 @@
 #include "ExprProgram.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <string_view>
 
+#include "FatalException.h"
+#include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnKind.h"
+#include "columns/ColumnVector.h"
 #include "metadata/LabelSet.h"
 
 #include "PipelineV2.h"
 
 #include "PipelineException.h"
-#include "spdlog/spdlog.h"
+#include "metadata/PropertyType.h"
 
 using namespace db;
 using namespace db::v2;
@@ -107,17 +111,21 @@ ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
 
 void ExprProgram::evaluateInstructions() {
     for (const Instruction& instr : _instrs) {
-        evalInstr(instr);
+        if (!instr.isUnaryPredicate()) {
+            evalInstr(instr);
+        }
     }
 }
 
 void ExprProgram::evalInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
-    spdlog::info("Evaluating instruction");
+
+    if (op == ColumnOperator::OP_NOOP) {
+        throw FatalException("Attempted to evaluate instruction with NOOP operator.");
+    }
+
     const Column* lhs = instr._lhs;
-    spdlog::info("\t lhs size = {}", lhs->size());
     const Column* rhs = instr._rhs;
-    spdlog::info("\t rhs size = {}", rhs->size());
     switch (getOpCase(op, lhs->getKind(), rhs->getKind())) {
         EQUAL_CASE(ColumnVector<size_t>, ColumnVector<size_t>)
         EQUAL_CASE(ColumnVector<size_t>, ColumnConst<size_t>)
@@ -168,6 +176,7 @@ void ExprProgram::evalInstr(const Instruction& instr) {
 
         AND_CASE(ColumnMask, ColumnMask)
         OR_CASE(ColumnMask, ColumnMask)
+        OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
 
         PROJECT_CASE(ColumnVector<size_t>, ColumnMask)
         PROJECT_CASE(ColumnMask, ColumnVector<size_t>)
@@ -183,9 +192,10 @@ void ExprProgram::evalInstr(const Instruction& instr) {
         IN_CASE(ColumnVector<int64_t>, ColumnSet<int64_t>)
 
         default: {
-            throw PipelineException(fmt::format("Operator not implemented (kinds: {} and {})",
-                                    lhs->getKind(),
-                                    rhs->getKind()));
+            const std::string_view opName = ColumnOperatorDescription::value(op);
+            throw PipelineException(
+                fmt::format("Operator {} not implemented (kinds: {} and {})", opName,
+                            lhs->getKind(), rhs->getKind()));
         }
     }
 }

@@ -1,9 +1,9 @@
 #include "FilterProcessor.h"
 
-#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <range/v3/view/drop.hpp>
 
+#include "ID.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperators.h"
 #include "dataframe/NamedColumn.h"
@@ -16,7 +16,6 @@
 #include "processors/ExprProgram.h"
 
 #include "FatalException.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 using namespace db::v2;
@@ -40,13 +39,18 @@ void applyMask(const Column* src,
                const ColumnMask* mask,
                Column* dest) {
     switch (src->getKind()) {
-        APPLY_MASK_CASE(ColumnVector<size_t>)
+        APPLY_MASK_CASE(ColumnVector<types::Bool::Primitive>)
+        APPLY_MASK_CASE(ColumnVector<types::Int64::Primitive>)
+        APPLY_MASK_CASE(ColumnVector<types::String::Primitive>) // Also covers string_view
+        APPLY_MASK_CASE(ColumnVector<types::UInt64::Primitive>) // Also covers size_t
+        APPLY_MASK_CASE(ColumnVector<types::Double::Primitive>)
         APPLY_MASK_CASE(ColumnVector<EntityID>)
         APPLY_MASK_CASE(ColumnVector<NodeID>)
         APPLY_MASK_CASE(ColumnVector<EdgeID>)
         APPLY_MASK_CASE(ColumnVector<LabelSetID>)
+        APPLY_MASK_CASE(ColumnVector<EdgeTypeID>)
+        APPLY_MASK_CASE(ColumnVector<PropertyTypeID>)
         APPLY_MASK_CASE(ColumnVector<std::string>)
-        APPLY_MASK_CASE(ColumnVector<std::string_view>)
 
         default: {
             throw PipelineException(fmt::format("Unsupported mask application for kind {}",
@@ -105,48 +109,52 @@ void FilterProcessor::execute() {
     const Dataframe* srcDF = _input.getDataframe();
     Dataframe* destDF = _output.getDataframe();
 
-    // 1. Evaluate all instructions
     _exprProg->evaluateInstructions();
-    // 2. Combine into single mask
     const ExprProgram::Instructions instrs = _exprProg->instrs();
 
-    ColumnMask mask;
-    if (instrs.front()._res->getKind() != ColumnVector<types::Bool::Primitive>::staticKind()) {
-        throw FatalException("Attempted to evaluate a non-Boolean ColumnVector result column in FilterProcessor.");
+    // XXX: Should this be an error, or should we just not apply any filters?
+    if (instrs.empty()) {
+        throw FatalException("Pipeline encountered empty FilterProcessor.");
     }
-    mask.ofColumnVector(*instrs.front()._res->cast<ColumnVector<types::Bool::Primitive>>());
-    spdlog::info("Mask of size {}", instrs.front()._res->size());
 
+    // Ensure all instructions outputs are the same size, so they may be combined
+    const size_t maskSize = instrs.front()._res->size();
+    if (!std::ranges::all_of(instrs, [maskSize](const ExprProgram::Instruction& instr) {
+            return instr._res->size() == maskSize;
+        })) {
+        throw FatalException("FilterProcessor ExprProgram contained instructions with "
+                             "output columns of differing sizes.");
+    }
+    // Ensure all instruction outputs are ColumnVector bools, so they can be converted to masks
+    if (!std::ranges::all_of(instrs, [](const ExprProgram::Instruction& instr) {
+            return instr._res->getKind()
+                == ColumnVector<types::Bool::Primitive>::staticKind();
+        })) {
+        throw FatalException("FilterProcessor ExprProgram contained an instruction which "
+                             "was not a predicate.");
+    }
+
+    // Fold over all instructions, combining their output masks with logical AND
+    ColumnMask finalMask(maskSize, true);
     {
         ColumnMask instrMask;
-        for (const ExprProgram::Instruction& instr : instrs | rv::drop(1)) {
+        for (const ExprProgram::Instruction& instr : instrs) {
             Column* res = instr._res;
-            spdlog::info("Mask of size {}", res->size());
-
-            if (res->getKind() != ColumnVector<types::Bool::Primitive>::staticKind()) {
-                throw FatalException("Attempted to evaluate a non-Boolean ColumnVector "
-                                     "result column in FilterProcessor.");
-            }
             const auto* instrRes = res->cast<ColumnVector<types::Bool::Primitive>>();
             instrMask.ofColumnVector(*instrRes);
 
-            ColumnOperators::andOp(&mask, &mask, &instrMask);
+            ColumnOperators::andOp(&finalMask, &finalMask, &instrMask);
         }
     }
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();
     const auto& destCols = destDF->cols();
-    spdlog::info("Out before mask:");
-    destDF->dump(std::cout);
     for (size_t i = 0; i < colCount; i++) {
         const Column* srcCol = srcCols[i]->getColumn();
         Column* destCol = destCols[i]->getColumn(); 
-        destCol->assign(srcCol);
-        applyMask(srcCol, &mask, destCol);
+        applyMask(srcCol, &finalMask, destCol);
     }
-    spdlog::info("\n\nOut after mask");
-    destDF->dump(std::cout);
 
     _input.getPort()->consume();
     _output.getPort()->writeData();

@@ -8,6 +8,7 @@
 #include "ColumnMask.h"
 #include "ColumnVector.h"
 #include "columns/ColumnSet.h"
+#include "metadata/PropertyType.h"
 
 #include "BioAssert.h"
 
@@ -185,8 +186,8 @@ public:
      * @brief Fills a mask corresponding to 'lhs || rhs'
      *
      * @param mask The mask to fill
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
+     * @param lhs Left hand side mask
+     * @param rhs Right hand side mask
      */
     static void orOp(ColumnMask* mask,
                      const ColumnMask* lhs,
@@ -200,6 +201,28 @@ public:
         const auto size = rhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i]._value || rhsd[i]._value;
+        }
+    }
+
+    /**
+     * @brief Fills a mask corresponding to 'lhs || rhs'
+     *
+     * @param mask The mask to fill
+     * @param lhs Left hand side Boolean column
+     * @param rhs Right hand side Boolean column
+     */
+    static void orOp(ColumnMask* mask,
+                     const ColumnVector<types::Bool::Primitive>* lhs,
+                     const ColumnVector<types::Bool::Primitive>* rhs) {
+        msgbioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+        auto* maskd = mask->data();
+        const auto* lhsd = lhs->data();
+        const auto* rhsd = rhs->data();
+        const auto size = rhs->size();
+        for (size_t i = 0; i < size; i++) {
+            maskd[i]._value = lhsd[i] || rhsd[i];
         }
     }
 

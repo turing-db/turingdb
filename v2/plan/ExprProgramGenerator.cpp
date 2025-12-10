@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include "PipelineGenerator.h"
+#include "expr/PropertyExpr.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "processors/ExprProgram.h"
 #include "Predicate.h"
@@ -50,7 +51,12 @@ ColumnOperator getColumnOperator(BinaryOperator bop) {
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
-    _rootColumn = generateExpr(pred->getExpr());
+    if (pred->getExpr()->getKind() == Expr::Kind::PROPERTY) {
+        const auto* booleanProperty = static_cast<const PropertyExpr*>(pred->getExpr());
+        Column* booleanPropCol = generatePropertyExpr(booleanProperty);
+        _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
+    }
+    generateExpr(pred->getExpr());
 }
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
@@ -144,6 +150,7 @@ Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
 
     switch (exprType) {
         ALLOC_EVALTYPE_COL(EvaluatedType::Integer, types::Int64)
+        ALLOC_EVALTYPE_COL(EvaluatedType::Double, types::Double)
         ALLOC_EVALTYPE_COL(EvaluatedType::String, types::String)
         ALLOC_EVALTYPE_COL(EvaluatedType::Bool, types::Bool)
 

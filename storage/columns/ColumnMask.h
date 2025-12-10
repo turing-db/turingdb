@@ -68,6 +68,12 @@ public:
     {
     }
 
+    explicit ColumnMask(size_t size, Bool_t val)
+        : Column(_staticKind),
+          _data(size, val)
+    {
+    }
+
     ~ColumnMask() override = default;
 
     ColumnMask& operator=(const ColumnMask&) = default;
@@ -142,9 +148,10 @@ public:
     const std::vector<Bool_t>& getRaw() const { return _data; }
 
     void ofColumnVector(const ColumnVector<types::Bool::Primitive>& vec) {
-        this->clear();
-        for (CustomBool b : vec.getRaw()) {
-            this->push_back(b._boolean);
+        const size_t sz = vec.size();
+        this->resize(sz);
+        for (size_t i {0}; i < sz; i++) {
+            getRaw()[i] = vec[i];
         }
     }
 

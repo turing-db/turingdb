@@ -40,7 +40,6 @@ private:
     PipelineGenerator* _gen;
     ExprProgram* _exprProg {nullptr};
     const PendingOutputView& _pendingOut;
-    Column* _rootColumn {nullptr};
 
     Column* generateExpr(const Expr* expr);
     Column* generateBinaryExpr(const BinaryExpr* expr);

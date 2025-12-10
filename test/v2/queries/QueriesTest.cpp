@@ -1714,3 +1714,78 @@ TEST_F(QueriesTest, whereName) {
     }
     EXPECT_TRUE(expected.equals(actual));
 }
+
+TEST_F(QueriesTest, predicateOR) {
+    constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE n.hasPhD OR n.isFrench RETURN n";
+    // TODO: Find way to get these PropertyIDs dynamically
+    const PropertyTypeID ISFRENCH_PROPID = 3;
+    const PropertyTypeID HASPHD_PROPID = 4;
+
+    using Boolean = types::Bool::Primitive;
+    using Rows = LineContainer<NodeID>;
+
+    Rows expected;
+    {
+        for (const NodeID n : read().scanNodes()) {
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
+            if ((french && *french) || (phd && *phd)) {
+                expected.add({n});
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size()); // Just the 'n' column
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns);
+            for (NodeID n : *ns) {
+                actual.add({n});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(QueriesTest, predicateAND) {
+    constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE n.hasPhD AND n.isFrench RETURN n";
+    // TODO: Find way to get these PropertyIDs dynamically
+    const PropertyTypeID ISFRENCH_PROPID = 3;
+    const PropertyTypeID HASPHD_PROPID = 4;
+
+    using Boolean = types::Bool::Primitive;
+    using Rows = LineContainer<NodeID>;
+
+    Rows expected;
+    {
+        for (const NodeID n : read().scanNodes()) {
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
+            if (!french || !phd) {
+                continue;
+            }
+            if (*french && *phd) {
+                expected.add({n});
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size()); // Just the 'n' column
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns);
+            for (NodeID n : *ns) {
+                actual.add({n});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
