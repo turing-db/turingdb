@@ -92,11 +92,13 @@ TEST_F(CommitJournalSerialisationTest, emptyOnCreation) {
 
 TEST_F(CommitJournalSerialisationTest, createNodeThenLoad) {
     size_t numCommits = 0;
+    size_t numNodes = 0;
     {
         const auto tx = _builtGraph->openTransaction();
         const auto reader = tx.readGraph();
         const auto commitViews = reader.commits();
         numCommits = commitViews.size();
+        numNodes = reader.getNodeCount();
     }
 
     // Make a change to the graph
@@ -128,7 +130,7 @@ TEST_F(CommitJournalSerialisationTest, createNodeThenLoad) {
         const CommitJournal& journalOfInterest = commitOfInterest.history().journal();
 
         ASSERT_TRUE(journalOfInterest.nodeWriteSet().size() == 1);
-        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(13));
+        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(numNodes));
     }
 
     dumpLoadSimpleDB();
@@ -146,17 +148,19 @@ TEST_F(CommitJournalSerialisationTest, createNodeThenLoad) {
         const CommitJournal& journalOfInterest = commitOfInterest.history().journal();
 
         ASSERT_TRUE(journalOfInterest.nodeWriteSet().size() == 1);
-        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(13));
+        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(numNodes));
     }
 }
 
 TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
     size_t numCommits = 0;
+    size_t numNodes = 0;
     {
         const auto tx = _builtGraph->openTransaction();
         const auto reader = tx.readGraph();
         const auto commitViews = reader.commits();
         numCommits = commitViews.size();
+        numNodes = reader.getNodeCount();
     }
 
     // Make a change to the graph
@@ -175,17 +179,17 @@ TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
         ASSERT_TRUE(res3);
     }
 
-    auto VERIFY = [](const CommitView& commit) {
+    auto VERIFY = [numNodes](const CommitView& commit) {
         ASSERT_FALSE(commit.history().journal().empty());
         const CommitJournal& journalOfInterest = commit.history().journal();
 
         ASSERT_TRUE(journalOfInterest.nodeWriteSet().size() == 3);
-        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(13));
-        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(14));
-        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(15));
+        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(numNodes));
+        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(numNodes+1));
+        ASSERT_TRUE(journalOfInterest.nodeWriteSet().contains(numNodes+2));
 
         ASSERT_TRUE(journalOfInterest.edgeWriteSet().size() == 1);
-        ASSERT_TRUE(journalOfInterest.edgeWriteSet().contains(13));
+        ASSERT_TRUE(journalOfInterest.edgeWriteSet().contains(numNodes));
     };
 
     { // Check the commits
