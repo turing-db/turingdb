@@ -331,8 +331,8 @@ TEST_F(QueriesTest, scanExpand2) {
 TEST_F(QueriesTest, scanExpandIn) {
     const std::string query = "MATCH (n)<--(m) RETURN n, m";
 
-    LineContainer<NodeID,NodeID> returned;
-    LineContainer<NodeID,NodeID> expected;
+    LineContainer<NodeID, NodeID> returned;
+    LineContainer<NodeID, NodeID> expected;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
