@@ -616,7 +616,7 @@ TEST_F(QueriesTest, scanNodesCartProd) {
                      [&](const Dataframe* df) -> void {
                          ASSERT_TRUE(df != nullptr);
                          ASSERT_EQ(df->size(), 2);
-                         ASSERT_EQ(df->getRowCount(), 13 * 13);
+                         ASSERT_EQ(df->getRowCount(), expectedLines.size());
                          const auto& nCols = df->cols();
                          const auto* n = nCols.front()->as<ColumnNodeIDs>();
                          const auto* m = nCols.back()->as<ColumnNodeIDs>();
