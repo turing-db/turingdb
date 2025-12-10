@@ -7,6 +7,8 @@
 #include "views/EdgeView.h"
 #include "properties/PropertyManager.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 size_t GraphReader::getTotalNodesAllocated() const {
@@ -31,7 +33,7 @@ size_t GraphReader::getNodeCount() const {
     const size_t totalCount = getTotalNodesAllocated();
     const size_t deletedCount = _view.tombstones().nodeTombstones().size();
 
-    bioassert(deletedCount <= totalCount);
+    bioassert(deletedCount <= totalCount, "invalid deleted count");
 
     return totalCount - deletedCount;
 }
@@ -40,7 +42,7 @@ size_t GraphReader::getEdgeCount() const {
     const size_t totalCount = getTotalEdgesAllocated();
     const size_t deletedCount = _view.tombstones().edgeTombstones().size();
 
-    bioassert(deletedCount <= totalCount);
+    bioassert(deletedCount <= totalCount, "invalid deleted count");
 
     return totalCount - deletedCount;
 }

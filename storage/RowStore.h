@@ -1,13 +1,13 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
-#include <cstring>
+#include <stdint.h>
+#include <string.h>
 #include <list>
 
-#include "BioAssert.h"
 #include "columns/Column.h"
-#include "spdlog/spdlog.h"
+
+#include "BioAssert.h"
 
 namespace db {
 class Dataframe;
@@ -20,7 +20,7 @@ public:
 
     template <typename T>
     const T* getValue(size_t offset) {
-        bioassert(offset < BATCH_SIZE);
+        bioassert(offset < BATCH_SIZE, "invalid offset");
 
         return static_cast<const T*>(_data.data() + offset);
     }
@@ -28,7 +28,7 @@ public:
     template <typename T>
     size_t setValue(T val) {
         const size_t offset = _freeData - _data.data();
-        bioassert(offset + sizeof(T) <= BATCH_SIZE);
+        bioassert(offset + sizeof(T) <= BATCH_SIZE, "object outside of batch");
 
         std::memcpy(_freeData, &val, sizeof(T));
         _freeData += sizeof(T);
@@ -95,7 +95,7 @@ private:
                           size_t rowIdx,
                           uint8_t** rowPtr) {
         auto& rawVec = outputCol->getRaw();
-        bioassert(rowIdx <= rawVec.size());
+        bioassert(rowIdx <= rawVec.size(), "Invalid index");
 
         std::memcpy(rawVec.data() + rowIdx,
                     *rowPtr,
@@ -109,7 +109,7 @@ private:
               && std::is_trivially_copyable_v<typename T::ValueType>
     void fillStore(T* inputCol,
                    size_t rowNumber) {
-        bioassert(rowNumber < inputCol->size());
+        bioassert(rowNumber < inputCol->size(), "Invalid row number");
         const auto& val = inputCol->data()[rowNumber];
         _dataList.back().setValue<typename T::ValueType>(val);
     }

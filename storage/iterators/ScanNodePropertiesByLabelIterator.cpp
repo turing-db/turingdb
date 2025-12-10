@@ -3,7 +3,8 @@
 #include "DataPart.h"
 #include "IteratorUtils.h"
 #include "properties/PropertyManager.h"
-#include "Panic.h"
+
+#include "BioAssert.h"
 
 namespace db {
 
@@ -114,15 +115,12 @@ ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(co
 template <SupportedType T>
 void ScanNodePropertiesByLabelChunkWriter<T>::filterTombstones() {
     // Base column of this ChunkWriter is _nodeIDs
-    bioassert(_nodeIDs);
-
     _filter.populateRanges(_nodeIDs);
 
     _filter.filter(_nodeIDs);
 
     if (_properties) {
         _filter.filter(_properties);
-        bioassert(_properties->size() == _nodeIDs->size());
     }
 
     _filter.reset();
@@ -134,8 +132,8 @@ static constexpr size_t NCombinations = 1 << NColumns;
 template <SupportedType T>
 void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
-    msgbioassert(_properties || _nodeIDs,
-                 "ScanNodePropertiesByLabelChunkWriter must be initialized with a valid column");
+    bioassert(_properties || _nodeIDs,
+              "ScanNodePropertiesByLabelChunkWriter must be initialized with a valid column");
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
 
@@ -146,7 +144,8 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
         if (_nodeIDs) {
             return _nodeIDs->size();
         }
-        panic("At least one column must be set");
+
+        bioassert(false, "At least one column must be set");
     };
 
     if (_properties) {

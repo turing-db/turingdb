@@ -84,13 +84,13 @@ public:
 
     void assign(const Column* other) override {
         const ColumnVector<T>* otherCol = dynamic_cast<const ColumnVector<T>*>(other);
-        msgbioassert(otherCol, "ColumnVector::assign: other is not a ColumnVector of the same type");
+        bioassert(otherCol, "ColumnVector::assign: other is not a ColumnVector of the same type");
         _data = otherCol->_data;
     }
 
     void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
         const ColumnVector<T>* otherCol = dynamic_cast<const ColumnVector<T>*>(other);
-        msgbioassert(otherCol, "ColumnVector::assignFromLine: other is not a ColumnVector of the same type");
+        bioassert(otherCol, "ColumnVector::assignFromLine: other is not a ColumnVector of the same type");
 
         _data.clear();
         const auto otherStart = otherCol->_data.cbegin() + startLine;

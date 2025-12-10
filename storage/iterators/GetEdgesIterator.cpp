@@ -2,11 +2,12 @@
 
 #include <algorithm>
 
-#include "Panic.h"
 #include "columns/ColumnIDs.h"
 #include "indexers/EdgeIndexer.h"
 #include "DataPart.h"
 #include "IteratorUtils.h"
+
+#include "BioAssert.h"
 
 namespace db {
 
@@ -139,25 +140,17 @@ GetEdgesChunkWriter::GetEdgesChunkWriter(const GraphView& view,
 
 void GetEdgesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
-    if (!_edgeIDs) {
-        panic("Cannot filter tombstones if the edge ID column is not set");
-    }
-
     _filter.populateRanges(_edgeIDs);
 
     _filter.filter(_edgeIDs);
     _filter.filter(_indices);
 
-    bioassert(_indices->size() == _edgeIDs->size());
-
     if (_others) {
         _filter.filter(_others);
-        bioassert(_others->size() == _edgeIDs->size());
     }
 
     if (_types) {
         _filter.filter(_types);
-        bioassert(_types->size() == _edgeIDs->size());
     }
 
     _filter.reset();
@@ -244,7 +237,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
         CASE(7);
 
         default:
-            panic("Unexpected column combination");
+            bioassert(false, "Unexpected column combination");
     }
 
     // Base column is _edgeIDs: only need to check if there are edge tombstones

@@ -4,6 +4,8 @@
 
 #include "views/EntityPropertyView.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 PropertyManager::PropertyManager()
@@ -16,7 +18,7 @@ PropertyManager::~PropertyManager() {
 void PropertyManager::fillEntityPropertyView(EntityID entityID,
                                              const LabelSetHandle& labelset,
                                              EntityPropertyView& view) const {
-    msgbioassert(labelset.isValid(), "Labelset must be valid");
+    bioassert(labelset.isValid(), "Labelset must be valid");
 
     const auto fill = [&](const auto& container, PropertyTypeID ptID) {
         if (!_indexers.contains(ptID)) {

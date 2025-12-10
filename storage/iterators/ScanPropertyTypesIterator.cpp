@@ -15,11 +15,11 @@ ScanPropertyTypesIterator ScanPropertyTypesIterator::end(const PropertyTypeMap& 
 }
 
 void ScanPropertyTypesIterator::reset() {
-    throw std::runtime_error("Cannot reset ScanPropertyTypesIterator");
+    bioassert(false, "Cannot reset ScanPropertyTypesIterator");
 }
 
 void ScanPropertyTypesIterator::next() {
-    msgbioassert(isValid(), "ScanPropertyTypesIterator::next(): Iterator out of bounds");
+    bioassert(isValid(), "ScanPropertyTypesIterator::next(): Iterator out of bounds");
     ++_it;
 }
 
@@ -29,7 +29,7 @@ ScanPropertyTypesChunkWriter::ScanPropertyTypesChunkWriter(const PropertyTypeMap
 }
 
 void ScanPropertyTypesChunkWriter::fill(size_t maxCount) {
-    msgbioassert(_ids || _names || _valueTypes, "ScanPropertyTypesChunkWriter::fill(): All columns are null");
+    bioassert(_ids || _names || _valueTypes, "ScanPropertyTypesChunkWriter::fill(): All columns are null");
 
     for (size_t i = 0; i < maxCount && isValid(); ++i) {
         if (_ids) {

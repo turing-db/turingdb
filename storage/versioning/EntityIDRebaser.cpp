@@ -34,13 +34,13 @@ EntityIDRebaser& EntityIDRebaser::operator=(EntityIDRebaser&& other) noexcept = 
 // NodeID which is greater than the nextNodeID at time of Change creation, as these
 // are edges between locally created nodes.
 NodeID EntityIDRebaser::rebaseNodeID(NodeID old) const {
-    bioassert(_branchTimeNextNodeID <= _newNextNodeID);
+    bioassert(_branchTimeNextNodeID <= _newNextNodeID, "invalid _branchTimeNextNodeID");
     return old >= _branchTimeNextNodeID ? old + _newNextNodeID - _branchTimeNextNodeID
                                         : old;
 }
 
 EdgeID EntityIDRebaser::rebaseEdgeID(EdgeID old) const {
-    bioassert(_branchTimeNextEdgeID <= _newNextEdgeID);
+    bioassert(_branchTimeNextEdgeID <= _newNextEdgeID, "invalid _branchTimeNextEdgeID");
     return old >= _branchTimeNextEdgeID ? old + _newNextEdgeID - _branchTimeNextEdgeID
                                         : old;
 }

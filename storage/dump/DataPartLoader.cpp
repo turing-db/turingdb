@@ -18,8 +18,9 @@
 #include "EdgeContainerLoader.h"
 #include "PropertyContainerLoader.h"
 #include "PropertyIndexerLoader.h"
-#include "spdlog/spdlog.h"
 #include "versioning/VersionController.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -162,7 +163,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             } else if constexpr (std::is_same_v<T, types::Bool>) {
                 manager._bools.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
             } else {
-                COMPILE_ERROR("Missing trivial property type");
+                bioassert(false, "Missing trivial property type");
             }
 
             return {};
@@ -220,7 +221,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             }
             case ValueType::Invalid:
             case ValueType::_SIZE:
-                panic("Invalid value type");
+                bioassert(false, "Invalid value type");
         }
 
         return {};
@@ -310,7 +311,6 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         auto res = nodeStringIndexLoader.load();
         if (!res) {
-            spdlog::error(res.error().fmtMessage());
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
         }
@@ -345,7 +345,6 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         auto res = edgeStringIndexLoader.load();
         if (!res) {
-            spdlog::error(res.error().fmtMessage());
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER);
         }

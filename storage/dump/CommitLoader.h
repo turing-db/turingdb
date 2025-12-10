@@ -20,6 +20,8 @@
 #include "versioning/CommitHistoryBuilder.h"
 #include "versioning/VersionController.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 class Commit;
@@ -81,7 +83,7 @@ public:
         // Reading journal
         {
             CommitJournal& journal = *commit->_data->_history._journal;
-            bioassert(&journal); // Should be initialised in commit constructor
+            bioassert(&journal, "invalid journal"); // Should be initialised in commit constructor
 
             const fs::Path journalPath = path / "journal";
 

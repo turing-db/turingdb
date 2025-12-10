@@ -6,6 +6,8 @@
 #include "TombstoneFilter.h"
 #include "NodeContainer.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 ScanNodesByLabelIterator::ScanNodesByLabelIterator(const GraphView& view,
@@ -78,8 +80,6 @@ ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter(const GraphView& view, 
 
 void ScanNodesByLabelChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _nodeIDs
-    bioassert(_nodeIDs);
-
     _filter.populateRanges(_nodeIDs);
     _filter.filter(_nodeIDs);
     _filter.reset();
@@ -87,7 +87,7 @@ void ScanNodesByLabelChunkWriter::filterTombstones() {
 
 void ScanNodesByLabelChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
-    msgbioassert(_nodeIDs, "ScanNodesByLabelChunkWriter must be initialized with a valid column");
+    bioassert(_nodeIDs, "ScanNodesByLabelChunkWriter must be initialized with a valid column");
 
     _nodeIDs->clear();
 

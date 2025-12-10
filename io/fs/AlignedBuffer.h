@@ -7,7 +7,6 @@
 #include <span>
 #include <string_view>
 
-#include "BioAssert.h"
 #include "PageSizeConfig.h"
 #include "Primitives.h"
 
@@ -61,18 +60,15 @@ public:
     }
 
     void write(const uint8_t* data, size_t size) {
-        bioassert(avail() >= size);
         std::memcpy(_buffer + _size, data, size);
         _size += size;
     }
 
     void patch(const uint8_t* data, size_t size, size_t offset) {
-        bioassert(_size >= offset + size);
         std::memcpy(_buffer + offset, data, size);
     }
 
     void reserveSpace(size_t byteCount) {
-        bioassert(avail() >= byteCount);
         std::memset(_buffer + _size, 0, byteCount);
         resize(_size + byteCount);
     }
@@ -82,7 +78,6 @@ public:
     }
 
     void resize(size_t size) {
-        bioassert(size <= _capacity);
         _size = size;
     }
 

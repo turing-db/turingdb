@@ -5,7 +5,8 @@
 #include "indexers/EdgeIndexer.h"
 #include "TombstoneFilter.h"
 #include "IteratorUtils.h"
-#include "Panic.h"
+
+#include "BioAssert.h"
 
 namespace db {
 
@@ -80,23 +81,18 @@ ScanOutEdgesByLabelChunkWriter::ScanOutEdgesByLabelChunkWriter(const GraphView& 
 
 void ScanOutEdgesByLabelChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
-    bioassert(_edgeIDs);
-
     _filter.populateRanges(_edgeIDs);
 
     _filter.filter(_edgeIDs);
 
     if (_srcs) {
         _filter.filter(_srcs);
-        bioassert(_srcs->size() == _edgeIDs->size());
     }
     if (_tgts) {
         _filter.filter(_tgts);
-        bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
         _filter.filter(_types);
-        bioassert(_types->size() == _edgeIDs->size());
     }
 
     _filter.reset();
@@ -110,8 +106,8 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
 
-    msgbioassert(_srcs || _tgts || _edgeIDs || _types,
-                 "ScanOutEdgesByLabelChunkWriter must be initialized with at least one valid column");
+    bioassert(_srcs || _tgts || _edgeIDs || _types,
+              "ScanOutEdgesByLabelChunkWriter must be initialized with at least one valid column");
 
     const auto getPrevSize = [&]() {
         if (_srcs) {
@@ -126,7 +122,8 @@ void ScanOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
         if (_types) {
             return _types->size();
         }
-        panic("At least one column must be set");
+
+        bioassert(false, "At least one column must be set");
     };
 
     if (_srcs) {

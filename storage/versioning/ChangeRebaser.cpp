@@ -9,9 +9,10 @@
 #include "CommitWriteBuffer.h"
 #include "DataPartRebaser.h"
 #include "reader/GraphReader.h"
-#include "BioAssert.h"
 #include "ChangeConflictChecker.h"
 #include "Tombstones.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -26,9 +27,6 @@ ChangeRebaser::ChangeRebaser(Change& change,
 
 void ChangeRebaser::init(const GraphReader& mainReader,
                          const GraphReader& branchTimeReader) {
-    bioassert(_branchTimeReader == nullptr);
-    bioassert(_newMainReader == nullptr);
-
     _branchTimeReader = &branchTimeReader;
     _newMainReader = &mainReader;
 
@@ -52,7 +50,7 @@ void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
 }
 
 void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
-    bioassert(!_newMainReader->commits().empty());
+    bioassert(!_newMainReader->commits().empty(), "we must have commits");
 
     Tombstones::NodeTombstones& nodeTombstones = tombstones._nodeTombstones;
     Tombstones::EdgeTombstones& edgeTombstones = tombstones._edgeTombstones;

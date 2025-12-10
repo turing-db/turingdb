@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "BioAssert.h"
+
 using namespace fs;
 
 Result<FilePageWriter> FilePageWriter::open(const Path& path, size_t pageSize) {
@@ -49,7 +51,7 @@ void FilePageWriter::write(const uint8_t* data, size_t size) {
 }
 
 void FilePageWriter::writeToCurrentPage(std::span<const uint8_t> data) {
-    bioassert(_buffer.avail() >= data.size());
+    bioassert(_buffer.avail() >= data.size(), "buffer has not enough available space");
 
     const size_t size = data.size();
 

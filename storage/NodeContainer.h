@@ -7,6 +7,8 @@
 #include "NodeRecord.h"
 #include "indexers/LabelSetIndexer.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 class NodeContainerLoader;
@@ -37,12 +39,10 @@ public:
     }
 
     NodeID getID(size_t offset) const {
-        msgbioassert(hasOffset(offset), "DataPart does not have this node");
         return NodeID {_firstID + offset};
     }
 
     size_t getOffset(NodeID nodeID) const {
-        msgbioassert(hasEntity(nodeID), "DataPart does not have this node");
         return (nodeID - _firstID).getValue();
     }
 
@@ -57,9 +57,9 @@ public:
     const LabelSetIndexer<NodeRange>& getLabelSetIndexer() const { return _ranges; }
 
     NodeRange getRange(const LabelSetHandle& labelset) const {
-        msgbioassert(_ranges.contains(labelset),
-                     "Datapart does not have any "
-                     "node with the requested labelset");
+        bioassert(_ranges.contains(labelset),
+                  "Datapart does not have any "
+                  "node with the requested labelset");
         return _ranges.at(labelset);
     }
 

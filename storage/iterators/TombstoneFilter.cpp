@@ -8,7 +8,6 @@
 #include "ID.h"
 
 #include "FatalException.h"
-#include "BioAssert.h"
 
 using namespace db;
 
@@ -26,8 +25,6 @@ TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
 
 template <TypedInternalID IDT>
 void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
-    bioassert(baseCol);
-
     if (!baseCol) [[unlikely]] {
         throw FatalException(
             "Planner failed to provide necessary column to ChunkWriter for filtering.");

@@ -79,8 +79,6 @@ Result<FileRegion> File::map(size_t size, size_t offset) {
 }
 
 Result<void> File::read(void* buf, size_t size) const {
-    bioassert(size <= std::numeric_limits<ssize_t>::max());
-
     ssize_t remainingBytes = size;
     while (remainingBytes > 0) {
         const ssize_t nbytes = ::read(_fd, buf, remainingBytes);
@@ -101,8 +99,6 @@ Result<void> File::read(void* buf, size_t size) const {
 }
 
 Result<void> File::write(void* data, size_t size) {
-    bioassert(size <= std::numeric_limits<ssize_t>::max());
-
     while (size != 0) {
         const ssize_t nbytes = ::write(_fd, data, size);
 

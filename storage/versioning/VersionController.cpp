@@ -2,10 +2,7 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "BioAssert.h"
 #include "JobSystem.h"
-#include "Panic.h"
-#include "Profiler.h"
 #include "Graph.h"
 #include "CommitView.h"
 #include "mergers/DataPartMerger.h"
@@ -16,6 +13,9 @@
 #include "versioning/DataPartRebaser.h"
 #include "versioning/Transaction.h"
 #include "CommitJournal.h"
+
+#include "Profiler.h"
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -153,12 +153,11 @@ ssize_t VersionController::getCommitIndex(CommitHash hash) const {
 // NOTE: Called within locked-context
 Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from) const {
     // Should not be trying to check conflicts if we are not rebasing
-    bioassert(from != CommitHash::head());
-    ssize_t startIndex = getCommitIndex(from);
-    if (startIndex == -1) {
-        panic("Could not find Commit with hash {:x}", from.get());
-    }
-    bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size());
+    bioassert(from != CommitHash::head(), "should not be checking conflicts if not rebasing");
+
+    const ssize_t startIndex = getCommitIndex(from);
+    bioassert(startIndex != -1, "Could not find Commit with hash {:x}", from.get());
+    bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size(), "invalid startIndex");
 
     // +1 to skip the commit we branched from
     const auto* spanStart = _commits.data() + startIndex + 1;

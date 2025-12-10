@@ -4,7 +4,6 @@
 #include "IteratorUtils.h"
 #include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"
-#include "Panic.h"
 
 namespace db {
 
@@ -84,14 +83,11 @@ ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView&
 template <SupportedType T>
 void ScanEdgePropertiesChunkWriter<T>::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
-    bioassert(_edgeIDs);
-
     _filter.populateRanges(_edgeIDs);
     _filter.filter(_edgeIDs);
 
     if (_properties ) {
         _filter.filter(_properties);
-        bioassert(_edgeIDs->size() == _properties->size());
     }
 
     _filter.reset();
@@ -103,8 +99,8 @@ static constexpr size_t NCombinations = 1 << NColumns;
 template <SupportedType T>
 void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
-    msgbioassert(_properties || _edgeIDs,
-                 "ScanEdgePropertiesChunkWriter must be initialized with a valid column");
+    bioassert(_properties || _edgeIDs,
+              "ScanEdgePropertiesChunkWriter must be initialized with a valid column");
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
 
@@ -115,7 +111,8 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
         if (_edgeIDs) {
             return _edgeIDs->size();
         }
-        panic("At least one column must be set");
+
+        bioassert(false, "At least one column must be set");
     };
 
     if (_properties) {

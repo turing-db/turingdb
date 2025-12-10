@@ -15,11 +15,11 @@ ScanLabelsIterator ScanLabelsIterator::end(const LabelMap& labelMap) {
 }
 
 void ScanLabelsIterator::reset() {
-    throw std::runtime_error("Cannot reset ScanLabelsIterator");
+    bioassert(false, "Cannot reset ScanLabelsIterator");
 }
 
 void ScanLabelsIterator::next() {
-    msgbioassert(isValid(), "ScanLabelsIterator::next(): Iterator out of bounds");
+    bioassert(isValid(), "ScanLabelsIterator::next(): Iterator out of bounds");
     ++_it;
 }
 
@@ -29,7 +29,7 @@ ScanLabelsChunkWriter::ScanLabelsChunkWriter(const LabelMap& labelMap)
 }
 
 void ScanLabelsChunkWriter::fill(size_t maxCount) {
-    msgbioassert(_ids || _names, "ScanLabelsChunkWriter::fill(): Both columns are null");
+    bioassert(_ids || _names, "ScanLabelsChunkWriter::fill(): Both columns are null");
 
     for (size_t i = 0; i < maxCount && isValid(); ++i) {
         if (_ids) {

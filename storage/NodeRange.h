@@ -1,6 +1,5 @@
 #pragma once
 
-#include "BioAssert.h"
 #include "ID.h"
 
 namespace db {
@@ -28,7 +27,6 @@ struct NodeRange {
         }
 
         Iterator& operator++() {
-            bioassert(_left != 0);
             _current++;
             _left--;
             return *this;

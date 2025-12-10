@@ -3,7 +3,6 @@
 #include <range/v3/view/enumerate.hpp>
 
 #include "reader/GraphReader.h"
-#include "Profiler.h"
 #include "Graph.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHistoryBuilder.h"
@@ -15,11 +14,17 @@
 #include "writers/MetadataBuilder.h"
 #include "CommitJournal.h"
 
+#include "Profiler.h"
+#include "BioAssert.h"
+
 using namespace db;
 
-CommitBuilder::CommitBuilder() = default;
+CommitBuilder::CommitBuilder()
+{
+}
 
-CommitBuilder::~CommitBuilder() = default;
+CommitBuilder::~CommitBuilder() {
+}
 
 std::unique_ptr<CommitBuilder> CommitBuilder::prepare(VersionController& controller,
                                                       Change* change,
@@ -115,7 +120,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitWriteBuffer& wb = writeBuffer();
     Tombstones& tombstones = _commitData->_tombstones;
 
-    bioassert(_commit->history().journal().empty());
+    bioassert(_commit->history().journal().empty(), "journal must be empty");
 
     if (wb.containsDeletes()) {
         // At this point, conflict checking should have already been done in @ref
@@ -165,7 +170,7 @@ void CommitBuilder::initialize() {
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
 
     _commitData->_history._journal = CommitJournal::emptyJournal();
-    bioassert(_commitData->_history._journal);
+    bioassert(_commitData->_history._journal, "Invalid journal");
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());

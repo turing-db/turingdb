@@ -2,9 +2,9 @@
 
 #include <unordered_set>
 
-#include "BioAssert.h"
 #include "Column.h"
 #include "DebugDump.h"
+#include "BioAssert.h"
 
 namespace db {
 
@@ -63,13 +63,13 @@ public:
 
     void assign(const Column* other) override {
         const ColumnSet<T>* otherCol = dynamic_cast<const ColumnSet<T>*>(other);
-        msgbioassert(otherCol,
-                     "ColumnSet::assign: other is not a ColumnSet of the same type");
+        bioassert(otherCol,
+                  "ColumnSet::assign: other is not a ColumnSet of the same type");
         _data = otherCol->_data;
     }
 
     void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
-        msgbioassert(false, "ColumnSet::assignFromLine: not implemented for ColumnSet");
+        bioassert(false, "ColumnSet::assignFromLine: not implemented for ColumnSet");
     }
 
     void clear() noexcept { _data.clear(); }

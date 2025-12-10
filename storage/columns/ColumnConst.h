@@ -41,13 +41,13 @@ public:
 
     void assign(const Column* other) override {
         const ColumnConst<T>* otherCol = dynamic_cast<const ColumnConst<T>*>(other);
-        msgbioassert(otherCol, "ColumnConst::assign: other is not a ColumnConst of the same type");
+        bioassert(otherCol, "ColumnConst::assign: other is not a ColumnConst of the same type");
         _value = otherCol->_value;
     }
 
     void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
         const ColumnConst<T>* otherCol = dynamic_cast<const ColumnConst<T>*>(other);
-        msgbioassert(otherCol, "ColumnConst::assignFromLine: other is not a ColumnConst of the same type");
+        bioassert(otherCol, "ColumnConst::assignFromLine: other is not a ColumnConst of the same type");
 
         if (rowCount == 0) {
             return;

@@ -30,7 +30,6 @@ void ChangeConflictChecker::getWritesSinceCommit(ConflictCheckSets& writes) {
     for (const std::unique_ptr<Commit>& commit : _commitsSinceBranch) {
         const CommitHistory& history = commit->history();
         const CommitJournal& journal = history.journal();
-        bioassert(&journal);
         WriteSet<NodeID>::setUnion(writes.writtenNodes, journal.nodeWriteSet());
         WriteSet<EdgeID>::setUnion(writes.writtenEdges, journal.edgeWriteSet());
     }
@@ -72,7 +71,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
         numDPsCreatedSinceBranch += commit->data().commitDataparts().size();
     }
 
-    bioassert(totalDPsOnMain >= numDPsCreatedSinceBranch);
+    bioassert(totalDPsOnMain >= numDPsCreatedSinceBranch, "invalid number of data parts in main");
 
     // Check the case where commits were added onto main since this change branched, but
     // no dataparts were created. This can happen if a commit only deletes nodes/edges, as

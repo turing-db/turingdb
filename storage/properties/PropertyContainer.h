@@ -6,8 +6,6 @@
 
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"
-#include "Panic.h"
-#include "BioAssert.h"
 
 namespace db {
 
@@ -105,15 +103,11 @@ public:
     }
 
     const T::Primitive& get(EntityID entityID) const {
-        auto it = find(entityID);
-        msgbioassert(it != _values.end(),
-                     "Trying to access a property that does not exist");
+        const auto it = find(entityID);
         return *it;
     }
 
     const T::Primitive& get(size_t offset) const {
-        msgbioassert(offset < _values.size(),
-                     "Trying to access a property that does not exist");
         return _values[offset];
     }
 
@@ -178,14 +172,12 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, std::string_view v) {
-        if (!_values.alloc(v)) {
-            panic("Could not allocate string");
-        }
+        _values.alloc(v);
         _ids.emplace_back(entityID);
     }
 
     bool has(EntityID entityID) const override {
-        auto it = find(entityID);
+        const auto it = find(entityID);
         return it != _values.end();
     }
 
@@ -207,15 +199,11 @@ public:
     }
 
     const std::string_view& get(EntityID entityID) const {
-        auto it = find(entityID);
-        msgbioassert(it != _values.end(),
-                     "Trying to access a property that does not exist");
+        const auto it = find(entityID);
         return *it;
     }
 
     const std::string_view& get(size_t offset) const {
-        msgbioassert(offset < _values.size(),
-                     "Trying to access a property that does not exist");
         return _values.getView(offset);
     }
 
@@ -266,9 +254,7 @@ public:
             });
 
         for (size_t i : offsets) {
-            if (!newValues.alloc(_values.getView(i))) {
-                panic("Could not allocate string");
-            }
+            newValues.alloc(_values.getView(i));
         }
 
         _values = std::move(newValues);

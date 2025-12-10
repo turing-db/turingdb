@@ -15,11 +15,11 @@ ScanEdgeTypesIterator ScanEdgeTypesIterator::end(const EdgeTypeMap& edgeTypeMap)
 }
 
 void ScanEdgeTypesIterator::reset() {
-    throw std::runtime_error("Cannot reset ScanEdgeTypesIterator");
+    bioassert(false, "Cannot reset ScanEdgeTypesIterator");
 }
 
 void ScanEdgeTypesIterator::next() {
-    msgbioassert(isValid(), "ScanEdgeTypesIterator::next(): Iterator out of bounds");
+    bioassert(isValid(), "ScanEdgeTypesIterator::next(): Iterator out of bounds");
     ++_it;
 }
 
@@ -29,7 +29,7 @@ ScanEdgeTypesChunkWriter::ScanEdgeTypesChunkWriter(const EdgeTypeMap& edgeTypeMa
 }
 
 void ScanEdgeTypesChunkWriter::fill(size_t maxCount) {
-    msgbioassert(_ids || _names, "ScanEdgeTypesChunkWriter::fill(): Both columns are null");
+    bioassert(_ids || _names, "ScanEdgeTypesChunkWriter::fill(): Both columns are null");
 
     for (size_t i = 0; i < maxCount && isValid(); ++i) {
         if (_ids) {

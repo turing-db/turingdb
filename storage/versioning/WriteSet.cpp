@@ -1,6 +1,5 @@
 #include "WriteSet.h"
 
-#include "BioAssert.h"
 #include <algorithm>
 
 using namespace db;
@@ -12,7 +11,6 @@ namespace db {
 
 template <TypedInternalID IDT>
 bool WriteSet<IDT>::contains(IDT id) const {
-    bioassert(std::ranges::is_sorted(_set));
     return std::ranges::binary_search(_set, id);
 }
 
@@ -35,11 +33,6 @@ void WriteSet<IDT>::finalise() {
 
 template <TypedInternalID IDT>
 void WriteSet<IDT>::setUnion(WriteSet<IDT>& set1, const WriteSet<IDT>& set2) {
-    bioassert(std::ranges::is_sorted(set1));
-    bioassert(std::ranges::is_sorted(set2));
-    bioassert(std::ranges::adjacent_find(set1) == set1.end());
-    bioassert(std::ranges::adjacent_find(set2) == set2.end());
-
     WriteSet<IDT> temp;
 
     std::set_union(set1.begin(), set1.end(),

@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "BioAssert.h"
+
 using namespace fs;
 
 Result<FilePageReader> FilePageReader::open(const Path& path, size_t pageSize) {
@@ -53,7 +55,7 @@ Result<void> FilePageReader::nextPage() {
         remainingBytes -= nbytes;
     }
 
-    bioassert(remainingBytes >= 0);
+    bioassert(remainingBytes >= 0, "remainingBytes became negative");
     _buffer.resize(_buffer.capacity() - remainingBytes);
 
     return {};

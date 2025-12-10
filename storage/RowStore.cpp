@@ -93,7 +93,7 @@ uint8_t* RowStore::getRow(RowOffset row) {
 
 // copy row from the given row offset into the given data frame.
 void RowStore::copyRow(Dataframe* frame, size_t startingColIdx, size_t rowIdx, size_t rowLen, RowOffset offset) {
-    bioassert(startingColIdx + rowLen <= frame->size());
+    bioassert(startingColIdx + rowLen <= frame->size(), "Row does not fit into frame");
     uint8_t* row = getRow(offset);
 
     for (size_t i = 0; i < rowLen; ++i) {

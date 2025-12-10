@@ -3,10 +3,11 @@
 #include <memory>
 #include <unordered_map>
 
-#include "metadata/PropertyType.h"
 #include "ID.h"
+#include "metadata/PropertyType.h"
 #include "indexers/PropertyIndexer.h"
 #include "PropertyContainer.h"
+#include "FatalException.h"
 
 namespace db {
 
@@ -32,8 +33,10 @@ public:
 
     template <SupportedType T>
     void registerPropertyType(PropertyTypeID ptID) {
-        msgbioassert(_map.find(ptID) == _map.end(),
-                     "Trying to register a type that was already registered");
+        if (_map.find(ptID) != _map.end()) {
+            throw FatalException("Trying to register a type that was already registered");
+        }
+
         auto* ptr = new TypedPropertyContainer<T>;
         _map.emplace(ptID, static_cast<PropertyContainer*>(ptr));
 
@@ -94,16 +97,22 @@ public:
 
     template <SupportedType T>
     TypedPropertyContainer<T>& getMutableContainer(PropertyTypeID ptID) {
-        msgbioassert(_map.find(ptID) != _map.end(),
-                     "Trying to access a property type that was not registered");
-        return _map.at(ptID)->cast<T>();
+        const auto it = _map.find(ptID);
+        if (it == _map.end()) {
+            throw FatalException("Trying to access a property type that was not registered");
+        }
+
+        return it->second->cast<T>();
     }
 
     template <SupportedType T>
     const TypedPropertyContainer<T>& getContainer(PropertyTypeID ptID) const {
-        msgbioassert(_map.find(ptID) != _map.end(),
-                     "Trying to access a property type that was not registered");
-        return _map.at(ptID)->cast<T>();
+        const auto it = _map.find(ptID);
+        if (it != _map.end()) {
+            throw FatalException("Trying to access a property type that was not registered");
+        }
+
+        return it->second->cast<T>();
     }
 
     void fillEntityPropertyView(EntityID entityID,

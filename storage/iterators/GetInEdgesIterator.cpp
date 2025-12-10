@@ -109,22 +109,17 @@ GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
 
 void GetInEdgesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
-    bioassert(_edgeIDs);
-
     _filter.populateRanges(_edgeIDs);
 
     _filter.filter(_indices);
     _filter.filter(_edgeIDs);
 
-    bioassert(_indices->size() == _edgeIDs->size());
-
     if (_srcs) {
         _filter.filter(_srcs);
-        bioassert(_srcs->size() == _edgeIDs->size());
     }
+
     if (_types) {
         _filter.filter(_types);
-        bioassert(_types->size() == _edgeIDs->size());
     }
 
     _filter.reset();

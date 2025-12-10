@@ -9,7 +9,9 @@
 #include "properties/PropertyContainer.h"
 #include "properties/PropertyManager.h"
 #include "indexers/PropertyIndexer.h"
+
 #include "Profiler.h"
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -18,7 +20,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
                              DataPart& part) {
     Profile profile {"DataPartRebaser::rebase"};
 
-    bioassert(_idRebaser);
+    bioassert(_idRebaser, "invalid _idRebaser");
 
     auto& nodes = part._nodes;
     auto& edges = part._edges;

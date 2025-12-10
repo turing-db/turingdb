@@ -5,6 +5,8 @@
 #include "columns/ColumnVector.h"
 #include "ID.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 class Tombstones;
@@ -69,9 +71,9 @@ private:
 
 template <typename T>
 void TombstoneFilter::filter(ColumnVector<T>* col) {
-    bioassert(col);
-    bioassert(_initialised);
-    bioassert(_nonDeletedRanges);
+    bioassert(col, "Column must be valid");
+    bioassert(_initialised, "TombstoneFilter must be initialised");
+    bioassert(_nonDeletedRanges, "TombstoneFilter must have _nonDeletedRanges");
 
     if (!col) [[unlikely]] {
         return;

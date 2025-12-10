@@ -204,7 +204,7 @@ void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
 }
 
 void CommitWriteBufferRebaser::rebase() {
-    bioassert(_idRebaser);
+    bioassert(_idRebaser, "Invalid _idRebaser");
     // We only need to rebase things which refer to a concrete NodeID or EdgeID.
     // Since pending nodes don't yet have an ID, we do not need to rebase them.
     // Since pending edges don't yet have an ID, we do not need to rebase them.

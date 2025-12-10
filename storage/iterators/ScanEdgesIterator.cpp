@@ -4,9 +4,9 @@
 #include "EdgeContainer.h"
 #include "IteratorUtils.h"
 #include "Bitmask.h"
-#include "BioAssert.h"
 #include "DataPart.h"
-#include "Panic.h"
+
+#include "BioAssert.h"
 
 namespace db {
 
@@ -64,22 +64,17 @@ ScanEdgesChunkWriter::ScanEdgesChunkWriter(const GraphView& view)
 
 void ScanEdgesChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
-    bioassert(_edgeIDs);
-
     _filter.populateRanges(_edgeIDs);
     _filter.filter(_edgeIDs);
 
     if (_srcs) {
         _filter.filter(_srcs);
-        bioassert(_srcs->size() == _edgeIDs->size());
     }
     if (_tgts) {
         _filter.filter(_tgts);
-        bioassert(_tgts->size() == _edgeIDs->size());
     }
     if (_types) {
         _filter.filter(_types);
-        bioassert(_types->size() == _edgeIDs->size());
     }
 
     _filter.reset();
@@ -92,8 +87,8 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
-    msgbioassert(_srcs || _tgts || _edgeIDs || _types,
-                 "ScanEdgesChunkWriter must be initialized with at least one valid column");
+    bioassert(_srcs || _tgts || _edgeIDs || _types,
+              "ScanEdgesChunkWriter must be initialized with at least one valid column");
 
     const auto getPrevSize = [&]() {
         if (_srcs) {
@@ -108,7 +103,8 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
         if (_types) {
             return _types->size();
         }
-        panic("At least one column must be set");
+
+        bioassert(false, "At least one column must be set");
     };
 
     if (_srcs) {

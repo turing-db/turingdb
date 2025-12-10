@@ -1,12 +1,13 @@
 #pragma once
 
-#include <cstring>
+#include <string.h>
 #include <span>
 #include <vector>
 #include <string_view>
 
-#include "BioAssert.h"
 #include "StringBucket.h"
+
+#include "BioAssert.h"
 
 namespace db {
 class DataPartMerger;
@@ -27,10 +28,9 @@ public:
     StringContainer(const StringContainer& other) = delete;
     StringContainer& operator=(const StringContainer& other) = delete;
 
-    bool alloc(std::string_view content) {
-        if (StringBucket::BUCKET_SIZE < content.size()) {
-            return false;
-        }
+    void alloc(std::string_view content) {
+        bioassert(StringBucket::BUCKET_SIZE < content.size(),
+                  "Content larger than bucket size");
 
         StringBucket* bucket = &_buckets.back();
         if (bucket->availSpace() < content.size()) {
@@ -38,8 +38,6 @@ public:
         }
 
         _views.push_back(bucket->alloc(content));
-
-        return true;
     }
 
     void clear() {
@@ -91,7 +89,7 @@ public:
     }
 
     const std::string_view& getView(size_t index) const {
-        msgbioassert(index < _views.size(), "String index invalid");
+        bioassert(index < _views.size(), "String index invalid");
         return _views[index];
     }
 
