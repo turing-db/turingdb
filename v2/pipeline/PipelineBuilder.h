@@ -23,6 +23,7 @@
 #include "processors/WriteProcessor.h"
 
 #include "metadata/SupportedType.h"
+#include "metadata/LabelSet.h"
 
 #include "LocalMemory.h"
 
@@ -51,6 +52,7 @@ public:
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
+    PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
     PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
                                                        std::span<ProcedureBlueprint::YieldItem> yield);

@@ -35,6 +35,7 @@ class CartesianProductNode;
 class AggregateEvalNode;
 class ProcedureEvalNode;
 class WriteNode;
+class ScanNodesByLabelNode;
 
 class PipelineGenerator {
 public:
@@ -105,5 +106,7 @@ private:
     PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
     PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
     PipelineOutputInterface* translateWriteNode(WriteNode* node);
+    PipelineOutputInterface* translateScanNodesByLabelNode(ScanNodesByLabelNode* node);
 };
+
 }

@@ -11,6 +11,7 @@
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/WriteNode.h"
+#include "nodes/ScanNodesByLabelNode.h"
 
 #include "stmt/OrderByItem.h"
 #include "views/GraphView.h"
@@ -92,6 +93,16 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             } break;
 
             case PlanGraphOpcode::SCAN_NODES: {
+            } break;
+
+            case PlanGraphOpcode::SCAN_NODES_BY_LABEL: {
+                const auto* scanNodesByLabel = dynamic_cast<ScanNodesByLabelNode*>(node.get());
+                std::vector<LabelID> labels;
+                scanNodesByLabel->getLabelSet().decompose(labels);
+
+                for (const auto& label : labels) {
+                    output << "        __label__: " << labelMap.getName(label).value() << "\n";
+                }
             } break;
 
             case PlanGraphOpcode::CREATE_GRAPH: {

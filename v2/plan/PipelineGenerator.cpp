@@ -47,6 +47,7 @@
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/WriteNode.h"
+#include "nodes/ScanNodesByLabelNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -228,6 +229,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateScanNodesNode(static_cast<ScanNodesNode*>(node));
         break;
 
+        case PlanGraphOpcode::SCAN_NODES_BY_LABEL:
+            return translateScanNodesByLabelNode(static_cast<ScanNodesByLabelNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_OUT_EDGES:
             return translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
         break;
@@ -342,6 +347,11 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
 
 PipelineOutputInterface* PipelineGenerator::translateScanNodesNode(ScanNodesNode* node) {
     _builder.addScanNodes();
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateScanNodesByLabelNode(ScanNodesByLabelNode* node) {
+    _builder.addScanNodesByLabel(&node->getLabelSet());
     return _builder.getPendingOutputInterface();
 }
 
