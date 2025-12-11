@@ -66,17 +66,16 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
     constexpr std::string_view CREATE_QUERY = "MATCH (n) CREATE (m:NEWNODE) RETURN n, m";
     constexpr std::string_view MATCH_QUERY = "MATCH (n) RETURN n";
 
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
     { // CREATE query execution and ensure correct DF is returned
         using Rows = LineContainer<NodeID, NodeID>;
         Rows expectedRows;
         {
-            auto transaction = _graph->openTransaction();
-            auto reader = transaction.readGraph();
-            const size_t numNodes = reader.getTotalNodesAllocated();
             // For each existing node we create a new node. New nodes start from current
             // max node ID
-            for (const NodeID n : reader.scanNodes()) {
-                expectedRows.add({n, n + numNodes});
+            for (const NodeID n : read().scanNodes()) {
+                expectedRows.add({n, n + numNodesPrior});
             }
         }
 
@@ -107,8 +106,8 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
 
         Rows expectedRows;
         { // We should now have 26 nodes
-            constexpr size_t EXP_NUM_NODES = 26;
-            for (size_t i = 0; i < EXP_NUM_NODES; i++) {
+            const size_t expectedNumNodes = numNodesPrior * 2;
+            for (size_t i = 0; i < expectedNumNodes; i++) {
                 expectedRows.add({i});
             }
         }
@@ -144,18 +143,16 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
 TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
     constexpr std::string_view CREATE_QUERY = "MATCH (n) CREATE (m:NEWNODE), (p:NEWERNODE) RETURN n, m, p";
     constexpr std::string_view MATCH_QUERY = "MATCH (n) RETURN n";
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
 
     { // CREATE query execution and ensure correct DF is returned
         using Rows = LineContainer<NodeID, NodeID, NodeID>;
         Rows expectedRows;
         {
-            auto transaction = _graph->openTransaction();
-            auto reader = transaction.readGraph();
-            const size_t numNodes = reader.getTotalNodesAllocated();
             // For each existing node we create a new node. New nodes start from current
             // max node ID
-            for (const NodeID n : reader.scanNodes()) {
-                expectedRows.add({n, n + numNodes, n + (2 * numNodes)});
+            for (const NodeID n : read().scanNodes()) {
+                expectedRows.add({n, n + numNodesPrior, n + (2 * numNodesPrior)});
             }
         }
 
@@ -186,9 +183,9 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
         using Rows = LineContainer<NodeID>;
 
         Rows expectedRows;
-        { // We should now have 26 nodes
-            constexpr size_t EXP_NUM_NODES = 13 + (2 * 13);
-            for (size_t i = 0; i < EXP_NUM_NODES; i++) {
+        {
+            const size_t expectedNumNodes = numNodesPrior + (2 * numNodesPrior);
+            for (size_t i = 0; i < expectedNumNodes; i++) {
                 expectedRows.add({i});
             }
         }
