@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include "PipelineGenerator.h"
+#include "decl/EvaluatedType.h"
 #include "expr/PropertyExpr.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "processors/ExprProgram.h"
@@ -51,11 +52,24 @@ ColumnOperator getColumnOperator(BinaryOperator bop) {
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
+    // Predicates can be unary operations in the case that they are singular Boolean properties.
+    // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a unary predicate.
     if (pred->getExpr()->getKind() == Expr::Kind::PROPERTY) {
-        const auto* booleanProperty = static_cast<const PropertyExpr*>(pred->getExpr());
-        Column* booleanPropCol = generatePropertyExpr(booleanProperty);
+        const auto* propExpr = static_cast<const PropertyExpr*>(pred->getExpr());
+        if (propExpr->getType() != EvaluatedType::Bool) {
+            throw FatalException("Attempted to generate ExprProgram instruction for "
+                                 "non-Boolean property unary predicate.");
+        }
+        Column* booleanPropCol = generatePropertyExpr(propExpr);
+        // In the case of such unary predicates, we do not need to execute anything (hence
+        // NOOP), and we have no operand columns (hence nullptr lhs and rhs), because the
+        // result of the instruction is already manifested in the column containing the
+        // Boolean property values.
         _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
+        return;
     }
+    // All other predicates should be binary expressions, whose corresponding instructions
+    // are added in @ref generateBinaryExpr.
     generateExpr(pred->getExpr());
 }
 
@@ -118,7 +132,7 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
             _gen->memory().alloc<ColumnConst<types::Type::Primitive>>();                 \
         value->set(static_cast<const LiteralType*>(literal)->getValue());                \
         return value;                                                                    \
-    }                                                                                        \
+    }                                                                                    \
     break;
 
 
@@ -139,7 +153,7 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     }
 }
 
-// XXX: Check if this should be ColumnVector or else
+// XXX: Check if this should be ColumnVector or else; @Remy used "ColumnValues"
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \
     case EvalType:                                                                       \
         return _gen->memory().alloc<ColumnVector<Type::Primitive>>();                    \

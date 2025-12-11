@@ -562,7 +562,7 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
             exprGen.generatePredicate(pred);
         }
 
-        // Then add a filter processor, taking the expression and node inputs
+        // Then add a filter processor, taking the built expression program to execute
         _builder.addFilter(exprProg);
     }
 
