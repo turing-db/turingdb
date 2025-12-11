@@ -227,52 +227,40 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
 }
 
 TEST_F(QueriesTest, scanExpand1) {
-    const std::string query = "MATCH (n)-->(m) RETURN n, m";
+    const std::string query = "MATCH (n)-[e]->(m) RETURN n, m, e";
 
-    LineContainer<NodeID,NodeID> returned;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
-        ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->size(), 2);
+    const size_t numEdges = read().getEdgeCount();
 
-        const ColumnNodeIDs* targetIDs = nullptr;
-        const ColumnNodeIDs* sourceIDs = nullptr;
-        for (auto* col : df->cols()) {
-            const auto name = col->getName();
-            if (name == "m") {
-                targetIDs = col->as<ColumnNodeIDs>();
-            } else if (name == "n") {
-                sourceIDs = col->as<ColumnNodeIDs>();
-            }
-        }
+    LineContainer<NodeID, NodeID, EdgeID> returned;
+    auto res = queryV2(query, [&returned, numEdges](const Dataframe* df) -> void {
+        ASSERT_TRUE(df);
+        ASSERT_EQ(df->size(), 3);
 
-        ASSERT_TRUE(targetIDs != nullptr);
-        ASSERT_FALSE(targetIDs->empty());
-        ASSERT_TRUE(sourceIDs != nullptr);
-        ASSERT_FALSE(sourceIDs->empty());
+        const auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+        const auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
+        const auto* es = df->cols().back()->as<ColumnEdgeIDs>();
 
-        ASSERT_EQ(targetIDs->size(), sourceIDs->size());
-        const size_t size = targetIDs->size();
-        for (size_t i = 0; i < size; i++) {
-            returned.add({sourceIDs->at(i), targetIDs->at(i)});
+        ASSERT_TRUE(ns);
+        ASSERT_TRUE(ms);
+        ASSERT_TRUE(es);
+
+        ASSERT_EQ(numEdges, ns->size());
+        ASSERT_EQ(numEdges, ms->size());
+        ASSERT_EQ(numEdges, es->size());
+        for (size_t i = 0; i < numEdges; i++) {
+            returned.add({ns->at(i), ms->at(i), es->at(i)});
         }
     });
+    ASSERT_TRUE(res);
 
-    // Get all expected node IDs
-    LineContainer<NodeID, NodeID> expected;
+    LineContainer<NodeID, NodeID, EdgeID> expected;
     {
-        auto transaction = _graph->openTransaction();
-        auto reader = transaction.readGraph();
-        auto nodes = reader.scanNodes();
-        for (auto node : nodes) {
-            const auto edgeView = reader.getNodeView(node).edges();
-            for (auto edge : edgeView.outEdges()) {
-                expected.add({node, edge._otherID});
-            }
+        for (const EdgeRecord& e : read().scanOutEdges()) {
+                expected.add({e._nodeID, e._otherID, e._edgeID});
         }
     }
 
-    ASSERT_TRUE(returned.equals(expected));
+    ASSERT_TRUE(expected.equals(returned));
 }
 
 TEST_F(QueriesTest, scanExpand2) {

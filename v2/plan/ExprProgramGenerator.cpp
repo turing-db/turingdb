@@ -75,6 +75,7 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
     switch (expr->getKind()) {
+        // TODO: Unary operators @cyrus
         case Expr::Kind::BINARY:
             return generateBinaryExpr(static_cast<const BinaryExpr*>(expr));
         break;
@@ -88,9 +89,10 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
         break;
 
         default:
-            throw PlannerException(fmt::format("ExprProgramGenerator: expression of kind {} not implemented",
-                (size_t)expr->getKind()));
-        break;
+            throw PlannerException(
+                fmt::format("ExprProgramGenerator: expression of kind {} not implemented",
+                            (uint8_t)expr->getKind()));
+            break;
     }
 }
 
