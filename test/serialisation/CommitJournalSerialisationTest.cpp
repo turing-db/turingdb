@@ -53,7 +53,7 @@ protected:
 
     ChangeID newChange() {
         auto changeRes = _env->getDB().getSystemManager().newChange("simple");
-        bioassert(changeRes);
+        bioassert(changeRes, "invalid change");
         Change* change = changeRes.value();
         ChangeID changeID = change->id();
         return changeID;

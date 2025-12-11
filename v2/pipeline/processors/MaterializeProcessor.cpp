@@ -12,7 +12,7 @@
 #include "PipelineBuffer.h"
 #include "PipelinePort.h"
 
-#include "Panic.h"
+#include "BioAssert.h"
 
 using namespace db::v2;
 using namespace db;
@@ -49,8 +49,8 @@ inline void copyChunk(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
 
         default: {
-            panic("copyChunk operator not handled between columns of kind {} and {}",
-                  srcPtr->getKind(), dstPtr->getKind());
+            bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
+                      srcPtr->getKind(), dstPtr->getKind());
         }
     }
 }
@@ -67,7 +67,6 @@ inline void copyChunk(const Column* srcPtr,
 inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
                                  const Column* srcPtr,
                                  Column* dstPtr) {
-    msgbioassert(srcPtr, "col is invalid");
     switch (srcPtr->getKind()) {
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityID>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<NodeID>)
@@ -87,8 +86,8 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
         default: {
-            panic("copyTransformedChunk operator not handled between columns of kind {} and {}",
-                  srcPtr->getKind(), dstPtr->getKind());
+            bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",
+                      srcPtr->getKind(), dstPtr->getKind());
         }
     }
 }

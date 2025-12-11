@@ -1,10 +1,10 @@
 #include "PipelineGenerator.h"
 
 #include <stack>
-
-#include <spdlog/fmt/fmt.h>
 #include <string_view>
+
 #include <range/v3/view/zip.hpp>
+#include <spdlog/fmt/fmt.h>
 
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
@@ -56,6 +56,7 @@
 #include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
+#include "BioAssert.h"
 
 using namespace db::v2;
 
@@ -186,7 +187,6 @@ void PipelineGenerator::generate() {
                 const PendingOutputView& pendingOutput = _builder.getPendingOutput();
                 const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
                 const bool isLhs = (node == binaryNodeInputs.front());
-                bioassert((node == binaryNodeInputs.front()) || (node == binaryNodeInputs.back()));
 
                 const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
                 _binaryVisitedMap.emplace(nextNode, info);
@@ -317,15 +317,15 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
 
     const auto visitor = Overloaded {
         [&](const EntityOutputStream::NodeStream& stream) {
-            msgbioassert(stream._nodeIDsTag.isValid(), "NodeStream does not have a nodeIDsTag");
-            msgbioassert(outDf->getColumn(stream._nodeIDsTag), "NodeStream does not have a nodeIDs column");
+            bioassert(stream._nodeIDsTag.isValid(), "NodeStream does not have a nodeIDsTag");
+            bioassert(outDf->getColumn(stream._nodeIDsTag), "NodeStream does not have a nodeIDs column");
 
             _declToColumn[node->getVarDecl()] = stream._nodeIDsTag;
             outDf->getColumn(stream._nodeIDsTag)->rename(varName);
         },
         [&](const EntityOutputStream::EdgeStream& stream) {
-            msgbioassert(stream._edgeIDsTag.isValid(), "EdgeStream does not have a edgeIDsTag");
-            msgbioassert(outDf->getColumn(stream._edgeIDsTag), "EdgeStream does not have a edgeIDs column");
+            bioassert(stream._edgeIDsTag.isValid(), "EdgeStream does not have a edgeIDsTag");
+            bioassert(outDf->getColumn(stream._edgeIDsTag), "EdgeStream does not have a edgeIDs column");
 
             _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
             outDf->getColumn(stream._edgeIDsTag)->rename(varName);

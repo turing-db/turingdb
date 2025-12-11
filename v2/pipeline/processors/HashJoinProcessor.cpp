@@ -1,10 +1,12 @@
 #include "HashJoinProcessor.h"
-#include "BioAssert.h"
+
 #include "ExecutionContext.h"
 #include "RowStore.h"
 #include "columns/ColumnDispatcher.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 using namespace db::v2;
@@ -18,7 +20,8 @@ void fillOutputColumn(T* outputColumn,
                       const size_t rowIndex,
                       const size_t offset,
                       const size_t rowsToCopy) {
-    bioassert(outputColumn->size() >= offset + rowsToCopy);
+    bioassert(outputColumn->size() >= offset + rowsToCopy,
+              "rows to copy do not fit in output column");
     std::fill_n(outputColumn->begin() + offset,
                 rowsToCopy,
                 (*inputColumn)[rowIndex]);

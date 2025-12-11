@@ -26,8 +26,6 @@
 
 #include "metadata/LabelSet.h"
 
-#include "BioAssert.h"
-
 using namespace db;
 using namespace db::v2;
 
@@ -37,7 +35,6 @@ void outputDependency(std::ostream& output, const ExprDependencies::VarDependenc
     output << "        __dep__ _" << dep._var->getVarDecl()->getName() << "_";
     if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
         const auto* types = expr->getTypes();
-        bioassert(types);
 
         for (const auto& type : *types) {
             output << ":_" << type->getName() << "_\n";
@@ -91,7 +88,6 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
         switch (node->getOpcode()) {
             case PlanGraphOpcode::VAR: {
                 const auto* n = dynamic_cast<VarNode*>(node.get());
-                bioassert(n->getVarDecl());
                 output << fmt::format("        __name__: {}\n", n->getVarDecl()->getName());
             } break;
 
@@ -253,14 +249,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::GET_PROPERTY: {
                 const auto* n = dynamic_cast<GetPropertyNode*>(node.get());
-                bioassert(n->getEntityVarDecl());
                 output << "        __var__ " << n->getEntityVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
             } break;
 
             case PlanGraphOpcode::GET_PROPERTY_WITH_NULL: {
                 const auto* n = dynamic_cast<GetPropertyWithNullNode*>(node.get());
-                bioassert(n->getEntityVarDecl());
                 output << "        __var__ " << n->getEntityVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
             } break;
@@ -268,17 +262,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::GET_ENTITY_TYPE: {
                 const auto* n = dynamic_cast<GetEntityTypeNode*>(node.get());
                 const VarDecl* decl = n->getEntityVarDecl();
-                bioassert(decl);
                 output << "        __type__ " << ((decl->getType() == EvaluatedType::NodePattern) ? "node" : "edge") << "\n";
                 output << "        __var__ " << decl->getName() << "\n";
             } break;
 
             case PlanGraphOpcode::PROCEDURE_EVAL: {
                 const auto* n = dynamic_cast<ProcedureEvalNode*>(node.get());
-                bioassert(n
-                          && n->getFuncExpr()
-                          && n->getFuncExpr()->getFunctionInvocation()
-                          && n->getFuncExpr()->getFunctionInvocation()->getSignature());
                 const auto* signature = n->getFuncExpr()->getFunctionInvocation()->getSignature();
                 output << "        __func__ " << signature->_fullName << "\n";
 

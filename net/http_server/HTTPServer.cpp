@@ -153,7 +153,7 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
     TCPConnectionManager connectionManager(ctxt);
 
     auto threadContext = ctxt._createThreadContext();
-    msgbioassert(threadContext, "createThreadContext function was not set");
+    bioassert(threadContext, "createThreadContext function was not set");
     threadContext->setThreadID(threadID);
 
     for (;;) {

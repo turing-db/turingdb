@@ -29,7 +29,7 @@ public:
     StringContainer& operator=(const StringContainer& other) = delete;
 
     void alloc(std::string_view content) {
-        bioassert(StringBucket::BUCKET_SIZE < content.size(),
+        bioassert(content.size() <= StringBucket::BUCKET_SIZE,
                   "Content larger than bucket size");
 
         StringBucket* bucket = &_buckets.back();

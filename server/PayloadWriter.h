@@ -227,7 +227,6 @@ private:
     }
 
     void write(const NodeView& n) {
-        bioassert(_metadata);
         const auto& propTypes = _metadata->propTypes();
         const auto& labels = _metadata->labels();
 
@@ -280,8 +279,6 @@ private:
     }
 
     void write(const EdgeView& e) {
-        bioassert(_metadata);
-
         const auto& props = e.properties();
 
         this->arr();

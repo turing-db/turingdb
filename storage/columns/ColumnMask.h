@@ -97,13 +97,13 @@ public:
 
     void assign(const Column* other) override {
         const ColumnMask* otherCol = dynamic_cast<const ColumnMask*>(other);
-        msgbioassert(otherCol, "ColumnMask::assign: other is not a ColumnMask of the same type");
+        bioassert(otherCol, "ColumnMask::assign: other is not a ColumnMask of the same type");
         _data = otherCol->_data;
     }
 
     void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
         const ColumnMask* otherCol = dynamic_cast<const ColumnMask*>(other);
-        msgbioassert(otherCol, "ColumnMask::assignFromLine: other is not a ColumnMask of the same type");
+        bioassert(otherCol, "ColumnMask::assignFromLine: other is not a ColumnMask of the same type");
 
         _data.clear();
         const auto otherStart = otherCol->_data.cbegin() + startLine;

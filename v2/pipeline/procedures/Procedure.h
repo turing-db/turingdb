@@ -4,6 +4,7 @@
 
 #include "ProcedureBlueprint.h"
 #include "ProcedureData.h"
+
 #include "BioAssert.h"
 
 namespace db::v2 {
@@ -20,8 +21,8 @@ public:
 
     template <ProcedureDataType T>
     T& data() {
-        msgbioassert(_data != nullptr, "Procedure data is not initialized");
-        msgbioassert(dynamic_cast<T*>(_data.get()) != nullptr, "Procedure data is not of the expected type");
+        bioassert(_data != nullptr, "Procedure data is not initialized");
+        bioassert(dynamic_cast<T*>(_data.get()) != nullptr, "Procedure data is not of the expected type");
         return *static_cast<T*>(_data.get());
     }
 

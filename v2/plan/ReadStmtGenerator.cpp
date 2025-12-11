@@ -2,7 +2,6 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include "BioAssert.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "Pattern.h"
@@ -37,6 +36,8 @@
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
+
+#include "BioAssert.h"
 
 using namespace db::v2;
 
@@ -110,7 +111,7 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
         throwError("OPTIONAL CALL not supported", callStmt);
     }
 
-    bioassert(callStmt->getFunc() && "Function invocation expression is null");
+    bioassert(callStmt->getFunc(), "Function invocation expression is null");
 
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     YieldClause* yield = callStmt->getYield();
@@ -121,7 +122,7 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
         _tree->newOut<ProduceResultsNode>(procNode);
         return;
     } else {
-        bioassert(yield && "Procedure call without YIELD must be a standalone CALL");
+        bioassert(yield, "Procedure call without YIELD must be a standalone CALL");
     }
 }
 

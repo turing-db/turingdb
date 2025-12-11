@@ -7,11 +7,11 @@
 #include "ExecutionContext.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
-
-#include "BioAssert.h"
-#include "FatalException.h"
 #include "columns/ColumnDispatcher.h"
 #include "dataframe/NamedColumn.h"
+
+#include "FatalException.h"
+#include "BioAssert.h"
 
 using namespace db::v2;
 
@@ -213,13 +213,13 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left,
             return;
         }
 
-        bioassert(remainingSpace < m);
-        bioassert(ourRhsPtr == 0);
+        bioassert(remainingSpace < m, "Not enough remaining space");
+        bioassert(ourRhsPtr == 0, "ourRhsPtr must be 0");
 
         const auto& lhsElement = lhsCol->at(ourLhsPtr);
         const auto startIt = begin(outRaw) + ourRowPtr;
         const auto endIt = startIt + remainingSpace;
-        bioassert(endIt == end(outRaw));
+        bioassert(endIt == end(outRaw), "Invalid endIt iterator");
 
         std::fill(startIt, endIt, lhsElement);
     });
@@ -286,11 +286,11 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
         const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
         const bool canWriteLeftovers = remainingSpace % m != 0;
 
-        bioassert(ourRhsPtr == 0);
+        bioassert(ourRhsPtr == 0, "ourRhsPtr must be zero");
         for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
             const auto rStart = begin(rhsRaw) + ourRhsPtr;
             const auto rEnd = rStart + m; // We know we can fit m rows here
-            bioassert(rEnd == end(rhsRaw));
+            bioassert(rEnd == end(rhsRaw), "rEnd is not valid");
             const auto outStart = begin(outRaw) + ourRowPtr;
 
             std::copy(rStart, rEnd, outStart);
@@ -307,15 +307,15 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
             return;
         }
 
-        bioassert(remainingSpace < m);
-        bioassert(ourRhsPtr == 0);
+        bioassert(remainingSpace < m, "not enough remaining space");
+        bioassert(ourRhsPtr == 0, "ourRhsPtr must be zero");
 
         const auto rStart = begin(rhsRaw) + ourRhsPtr;
         const auto rEnd = rStart + remainingSpace;
-        bioassert(rEnd != end(rhsRaw));
+        bioassert(rEnd != end(rhsRaw), "invalid rEnd");
 
         const auto outStart = begin(outRaw) + ourRowPtr;
-        bioassert(outStart + remainingSpace == end(outRaw));
+        bioassert(outStart + remainingSpace == end(outRaw), "invalid outStart");
 
         std::copy(rStart, rEnd, outStart);
 
@@ -323,7 +323,7 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
         ourRowPtr += remainingSpace;
         remainingSpace -= remainingSpace;
 
-        bioassert(remainingSpace == 0);
+        bioassert(remainingSpace == 0, "we must not have remainingSpace here");
     });
 }
 
@@ -351,7 +351,7 @@ size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) 
     // Number of rows we need to write based on how far we have progressed so far
     const size_t rowsNeedWrite = (m - _rhsPtr) + (n - _lhsPtr - 1) * (m);
     const size_t rowsShouldWrite = std::min(rowsCanWrite, rowsNeedWrite);
-    bioassert(rowsCanWrite > 0);
+    bioassert(rowsCanWrite > 0, "no rows to write");
 
     const size_t newSize = std::min(chunkSize, _rowsWrittenThisCycle + rowsShouldWrite);
 
@@ -430,7 +430,8 @@ void CartesianProductProcessor::emitFromPorts() {
         return;
     }
 
-    bioassert(_rowsWrittenThisCycle <= _ctxt->getChunkSize());
+    bioassert(_rowsWrittenThisCycle <= _ctxt->getChunkSize(),
+              "more rows to write than the size of a chunk");
 
     const size_t remainingSpace = _ctxt->getChunkSize() - _rowsWrittenThisCycle;
 
@@ -533,12 +534,6 @@ void CartesianProductProcessor::emitFromLeftMemory() {
 }
 
 void CartesianProductProcessor::init() {
-    bioassert(_rhsPtr == 0);
-    bioassert(_lhsPtr == 0);
-    bioassert(_rowsWrittenThisCycle == 0);
-    bioassert(&_leftMemory);
-    bioassert(&_rightMemory);
-
     verifyAllColumnVectors(_lhs.getDataframe());
     verifyAllColumnVectors(_rhs.getDataframe());
     verifyAllColumnVectors(_out.getDataframe());

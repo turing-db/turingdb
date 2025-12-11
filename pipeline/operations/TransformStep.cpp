@@ -11,7 +11,6 @@
 #include "VarDecl.h"
 
 #include "BioAssert.h"
-#include "Panic.h"
 
 using namespace db;
 
@@ -38,8 +37,8 @@ inline void copyChunk(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnVector<types::Bool::Primitive>)
 
         default: {
-            panic("copyChunk operator not handled between columns of kind {} and {}",
-                  srcPtr->getKind(), dstPtr->getKind());
+            bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
+                      srcPtr->getKind(), dstPtr->getKind());
         }
     }
 }
@@ -56,7 +55,6 @@ inline void copyChunk(const Column* srcPtr,
 inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
                                  const Column* srcPtr,
                                  Column* dstPtr) {
-    msgbioassert(srcPtr, "col is invalid");
     switch (srcPtr->getKind()) {
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityID>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<NodeID>)
@@ -67,8 +65,8 @@ inline void copyTransformedChunk(const ColumnVector<size_t>& transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Bool::Primitive>)
         default: {
-            panic("copyTransformedChunk operator not handled between columns of kind {} and {}",
-                  srcPtr->getKind(), dstPtr->getKind());
+            bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",
+                       srcPtr->getKind(), dstPtr->getKind());
         }
     }
 }
@@ -86,8 +84,8 @@ TransformData::~TransformData() {
 
 template <typename T>
 void TransformData::addColumn(const T* col, VarDecl* varDecl) {
-    msgbioassert(_step < _colInfo.size(),
-                 ("Step was not registered with addIndices step=" + std::to_string(_step)).c_str());
+    bioassert(_step < _colInfo.size(),
+              "Step was not registered with addIndices step {}", _step);
     ++_colCount;
     _colInfo[_step].push_back(col);
 

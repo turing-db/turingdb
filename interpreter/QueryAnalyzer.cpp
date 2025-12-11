@@ -195,7 +195,7 @@ void QueryAnalyzer::analyzeMatch(MatchCommand* cmd) {
         analyzeEntityPattern(declContext, entityPattern, isCreate);
 
         if (elements.size() >= 2) {
-            bioassert(elements.size() >= 3);
+            bioassert(elements.size() >= 3, "we need at least 3 pattern elements");
             for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
                 EntityPattern* edge = pair[0];
                 EntityPattern* target = pair[1];
@@ -280,7 +280,7 @@ void QueryAnalyzer::analyzeCreate(CreateCommand* cmd) {
         analyzeEntityPattern(declContext, entityPattern, isCreate);
 
         if (elements.size() >= 2) {
-            bioassert(elements.size() >= 3);
+            bioassert(elements.size() >= 3, "we need at least 3 pattern elements");
             for (auto pair : elements | rv::drop(1) | rv::chunk(2)) {
                 EntityPattern* edge = pair[0];
                 EntityPattern* target = pair[1];
@@ -374,7 +374,6 @@ void QueryAnalyzer::analyzeBinExprConstraint(const BinExpr* binExpr,
 }
 
 void QueryAnalyzer::ensureValidTypeConstraints(EntityPattern* entity) {
-    bioassert(entity);
     if (!entity->getTypeConstraint()) [[unlikely]] {
         std::string error =
             "A label/type constraint is required for all entities in CREATE queries.";

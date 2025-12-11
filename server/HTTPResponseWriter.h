@@ -339,17 +339,17 @@ public:
     }
 
     void writeHttpError(net::HTTP::Status status) {
-        msgbioassert(status != net::HTTP::Status::OK, "HttpStatus is OK but trying to return an error");
+        bioassert(status != net::HTTP::Status::OK, "HttpStatus is OK but trying to return an error");
         writeHeader(status).flush();
     }
 
     void writeQueryError(const QueryStatus& status) {
-        msgbioassert(!status.isOk(), "QueryStatus is OK but trying to return an error");
+        bioassert(!status.isOk(), "QueryStatus is OK but trying to return an error");
         write(QueryStatusDescription::value(status.getStatus()));
     }
 
     void writeEndpointError(EndpointStatus status) {
-        msgbioassert(status != EndpointStatus::OK, "EndpointStatus is OK but trying to return an error");
+        bioassert(status != EndpointStatus::OK, "EndpointStatus is OK but trying to return an error");
         write(EndpointStatusDescription::value(status));
     }
 

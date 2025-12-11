@@ -1,15 +1,15 @@
 #pragma once
 
-#include <cstring>
+#include <string.h>
 #include <string_view>
 #include <sys/socket.h>
 
-#include "BioAssert.h"
 #include "ContentType.h"
 #include "HTTP.h"
 #include "Utils.h"
 #include "ConnectionHeader.h"
-#include "spdlog/spdlog.h"
+
+#include "BioAssert.h"
 
 namespace net {
 
@@ -27,7 +27,7 @@ public:
         static constexpr std::string_view version = "HTTP/1.1 ";
         const std::string_view statusStr = net::HTTP::StatusDescription::value(status);
 
-        msgbioassert(version.size() + statusStr.size() + 2 <= _header._remaining, "Header does not fit in buffer");
+        bioassert(version.size() + statusStr.size() + 2 <= _header._remaining, "Header does not fit in buffer");
 
         memcpy(_header._content.data() + _header._position, version.data(), version.size());
         _header.increment(version.size());
@@ -42,7 +42,7 @@ public:
         static constexpr std::string_view contentLength = "Content-Length: ";
         const std::string lengthStr = std::to_string(length);
 
-        msgbioassert(contentLength.size() + lengthStr.size() + 2 <= _header._remaining, "Header does not fit in buffer");
+        bioassert(contentLength.size() + lengthStr.size() + 2 <= _header._remaining, "Header does not fit in buffer");
 
         memcpy(_header._content.data() + _header._position, contentLength.data(), contentLength.size());
         _header.increment(contentLength.size());
@@ -56,7 +56,7 @@ public:
     void addChunkedTransferEncoding() {
         static constexpr std::string_view encoding = "Transfer-Encoding: chunked\r\n";
 
-        msgbioassert(encoding.size() <= _header._remaining, "Header does not fit in buffer");
+        bioassert(encoding.size() <= _header._remaining, "Header does not fit in buffer");
         memcpy(_header._content.data() + _header._position, encoding.data(), encoding.size());
         _header.increment(encoding.size());
     }
@@ -67,13 +67,13 @@ public:
 
         switch (contentType) {
             case net::ContentType::TEXT: {
-                msgbioassert(text.size() <= _header._remaining, "Header does not fit in buffer");
+                bioassert(text.size() <= _header._remaining, "Header does not fit in buffer");
                 memcpy(_header._content.data() + _header._position, text.data(), text.size());
                 _header.increment(text.size());
                 return;
             }
             case ContentType::JSON: {
-                msgbioassert(json.size() <= _header._remaining, "Header does not fit in buffer");
+                bioassert(json.size() <= _header._remaining, "Header does not fit in buffer");
                 memcpy(_header._content.data() + _header._position, json.data(), json.size());
                 _header.increment(json.size());
                 return;
@@ -87,13 +87,13 @@ public:
 
         switch (connection) {
             case ConnectionHeader::KEEP_ALIVE: {
-                msgbioassert(keepAlive.size() <= _header._remaining, "Header does not fit in buffer");
+                bioassert(keepAlive.size() <= _header._remaining, "Header does not fit in buffer");
                 memcpy(_header._content.data() + _header._position, keepAlive.data(), keepAlive.size());
                 _header.increment(keepAlive.size());
                 return;
             }
             case ConnectionHeader::CLOSE: {
-                msgbioassert(close.size() <= _header._remaining, "Header does not fit in buffer");
+                bioassert(close.size() <= _header._remaining, "Header does not fit in buffer");
                 memcpy(_header._content.data() + _header._position, close.data(), close.size());
                 _header.increment(close.size());
                 return;
@@ -143,10 +143,7 @@ public:
         }
 
         if (content.size() > _chunk._remaining) {
-            if (content.size() > _maxChunkSize) {
-                spdlog::info("String does not fit in buffer:\n{}", content.size());
-            }
-            msgbioassert(content.size() <= _maxChunkSize, "String does not fit in buffer");
+            bioassert(content.size() <= _maxChunkSize, "String does not fit in buffer");
             flush();
         }
 

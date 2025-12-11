@@ -20,7 +20,7 @@ TCPConnectionStorage::~TCPConnectionStorage() {
 }
 
 TCPConnection* TCPConnectionStorage::alloc(utils::DataSocket socket) {
-    bioassert(_initialized);
+    bioassert(_initialized, "TCPConnectionStorage is not initialised");
     std::unique_lock lock(_mutex);
 
     if (_free.empty()) {

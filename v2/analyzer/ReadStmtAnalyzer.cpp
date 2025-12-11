@@ -131,8 +131,8 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
 }
 
 void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {
-    bioassert(func.getSignature() && "Analyzed a yield function that has no signature");
-    bioassert(yield->getItems() && "Analyzed a yield function that has no yield items");
+    bioassert(func.getSignature(), "Analyzed a yield function that has no signature");
+    bioassert(yield->getItems(), "Analyzed a yield function that has no yield items");
 
     FunctionSignature* signature = func.getSignature();
     YieldItems* yieldItems = yield->getItems();
@@ -150,7 +150,7 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
         // Step 3. Find the item in the return values of the function
         for (const FunctionReturnType& returnItem : signature->_returnTypes) {
             if (returnItem._name == yieldItem->getOriginalName()) {
-                bioassert(!returnItem._name.empty() && "Procedure return item has empty name");
+                bioassert(!returnItem._name.empty(), "Procedure return item has empty name");
                 decl = _ctxt->getOrCreateNamedVariable(_ast, returnItem._type, yieldItem->getName());
                 break;
             }

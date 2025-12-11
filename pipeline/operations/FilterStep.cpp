@@ -5,12 +5,13 @@
 #include <string_view>
 
 #include "ID.h"
-#include "Profiler.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnOperators.h"
 #include "metadata/LabelSet.h"
-#include "Panic.h"
+
+#include "Profiler.h"
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -184,9 +185,9 @@ void FilterStep::compute() {
             IN_CASE(ColumnVector<int64_t>, ColumnSet<int64_t>)
 
             default: {
-                panic("Operator not implemented (kinds: {} and {})",
-                      expr._lhs->getKind(),
-                      expr._rhs->getKind());
+                bioassert(false, "Operator not implemented (kinds: {} and {})",
+                          expr._lhs->getKind(),
+                          expr._rhs->getKind());
             }
         }
     }
@@ -227,8 +228,8 @@ void FilterStep::generateIndices() {
 
 template <typename T>
 void applyMask(const ColumnMask& mask, const T& src, T& dst) {
-    msgbioassert(mask.size() == src.size(),
-                 "Mask and source must have matching dimensions");
+    bioassert(mask.size() == src.size(),
+              "Mask and source must have matching dimensions");
     dst.clear();
     for (size_t i = 0; i < mask.size(); i++) {
         if (mask[i]) {
@@ -241,10 +242,10 @@ void apply(const ColumnMask* mask, const Column* src, Column* dst) {
     const ColumnKind::ColumnKindCode srcKind = src->getKind();
     [[maybe_unused]] const ColumnKind::ColumnKindCode dstKind = dst->getKind();
 
-    msgbioassert(src, "Src cannot be nullptr");
-    msgbioassert(dst, "Src cannot be nullptr");
-    msgbioassert(srcKind == dstKind,
-                 "Can not apply a mask to convert a column into a different type "
+    bioassert(src, "Src cannot be nullptr");
+    bioassert(dst, "Src cannot be nullptr");
+    bioassert(srcKind == dstKind,
+              "Can not apply a mask to convert a column into a different type "
                  "(src and tgt must have the same type)");
 
     switch (srcKind) {
@@ -257,7 +258,7 @@ void apply(const ColumnMask* mask, const Column* src, Column* dst) {
         APPLY_MASK_CASE(ColumnVector<std::string_view>)
 
         default: {
-            panic("Mask application not implemented");
+            bioassert(false, "Mask application not implemented");
         }
     }
 }

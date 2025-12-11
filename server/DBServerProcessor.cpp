@@ -37,7 +37,6 @@ DBServerProcessor::~DBServerProcessor() {
 }
 
 void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
-    bioassert(abstractContext);
     _threadContext = static_cast<DBThreadContext*>(abstractContext);
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
 

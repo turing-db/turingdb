@@ -14,7 +14,6 @@
 #include "Neo4jImporter.h"
 
 #include "TuringTime.h"
-#include "BioAssert.h"
 #include "ToolInit.h"
 
 using namespace db;
@@ -247,7 +246,6 @@ int main(int argc, const char** argv) {
 
     auto dataIt = importData.begin();
 
-    bioassert(graphs.size() == importData.size());
     size_t i = 0;
     for (auto& graph : graphs) {
         switch (dataIt->type) {

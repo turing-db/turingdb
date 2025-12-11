@@ -108,7 +108,7 @@ public:
     template <SupportedType T>
     const TypedPropertyContainer<T>& getContainer(PropertyTypeID ptID) const {
         const auto it = _map.find(ptID);
-        if (it != _map.end()) {
+        if (it == _map.end()) {
             throw FatalException("Trying to access a property type that was not registered");
         }
 
