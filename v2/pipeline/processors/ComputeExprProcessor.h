@@ -15,7 +15,7 @@ public:
     static ComputeExprProcessor* create(PipelineV2* pipeline,
                                         ExprProgram* exprProg);
 
-    std::string describe() const override;
+    std::string describe() const final;
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;

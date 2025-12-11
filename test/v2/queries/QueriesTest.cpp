@@ -237,7 +237,7 @@ TEST_F(QueriesTest, scanExpand1) {
 
         const ColumnNodeIDs* targetIDs = nullptr;
         const ColumnNodeIDs* sourceIDs = nullptr;
-        for (auto col : df->cols()) {
+        for (auto* col : df->cols()) {
             const auto name = col->getName();
             if (name == "m") {
                 targetIDs = col->as<ColumnNodeIDs>();
@@ -652,8 +652,12 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
     constexpr std::string_view nQuery = "match (n)-->(a) return n";
     {
         auto res = _db->queryV2(nQuery, _graphName, &_env->getMem(),
-                                [&](const Dataframe* df) -> void {
-                                    ns = *df->cols().front()->as<ColumnNodeIDs>();
+                                [&ns](const Dataframe* df) -> void {
+                                    ASSERT_TRUE(df);
+                                    ASSERT_EQ(1, df->size());
+                                    auto* nCol = df->cols().front()->as<ColumnNodeIDs>();
+                                    ASSERT_TRUE(nCol);
+                                    ns = *nCol;
                                 });
         ASSERT_TRUE(res);
     }
@@ -661,8 +665,12 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
     constexpr std::string_view bQuery = "match (m)-->(b) return b";
     {
         auto res = _db->queryV2(bQuery, _graphName, &_env->getMem(),
-                                [&](const Dataframe* df) -> void {
-                                    bs = *df->cols().front()->as<ColumnNodeIDs>();
+                                [&bs](const Dataframe* df) -> void {
+                                    ASSERT_TRUE(df);
+                                    ASSERT_EQ(1, df->size());
+                                    auto* bCol = df->cols().front()->as<ColumnNodeIDs>();
+                                    ASSERT_TRUE(bCol);
+                                    bs = *bCol;
                                 });
         ASSERT_TRUE(res);
     }
@@ -676,14 +684,16 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
     {
         QueryStatus res = _db->queryV2(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
-                ASSERT_TRUE(df != nullptr);
+                ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 2);
                 const auto& nCols = df->cols();
                 const auto* n = nCols.front()->as<ColumnNodeIDs>();
-                const auto* b = nCols.back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(n);
+                const auto* m = nCols.back()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(m);
 
                 for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
-                    actualRows.add({n->at(rowPtr), b->at(rowPtr)});
+                    actualRows.add({n->at(rowPtr), m->at(rowPtr)});
                 }
             });
         ASSERT_TRUE(res);
