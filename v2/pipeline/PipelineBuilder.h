@@ -55,6 +55,9 @@ public:
     PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
                                                        std::span<ProcedureBlueprint::YieldItem> yield);
 
+    // Get LabelSetID
+    PipelineValuesOutputInterface& addGetLabelSetID();
+
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
     PipelineEdgeOutputInterface& addGetInEdges();

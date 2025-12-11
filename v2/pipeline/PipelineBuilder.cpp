@@ -18,6 +18,7 @@
 #include "processors/CountProcessor.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
+#include "processors/GetLabelSetIDProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
@@ -392,6 +393,24 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
+    GetLabelSetIDProcessor* proc = GetLabelSetIDProcessor::create(_pipeline);
+
+    PipelineNodeInputInterface& input = proc->input();
+    PipelineValuesOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    Dataframe* df = output.getDataframe();
+    NamedColumn* labelsetIDsValues = allocColumn<ColumnVector<LabelSetID>>(df);
+    output.setValues(labelsetIDsValues);
+
     _pendingOutput.updateInterface(&output);
 
     return output;

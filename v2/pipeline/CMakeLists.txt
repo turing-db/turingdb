@@ -30,6 +30,7 @@ set(processors_sources
     processors/HashJoinProcessor.cpp
     processors/LambdaSourceProcessor.cpp
     processors/WriteProcessor.cpp
+    processors/GetLabelSetIDProcessor.cpp
 )
 
 set(procedures_sources

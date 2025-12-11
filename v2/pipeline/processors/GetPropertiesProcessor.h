@@ -2,8 +2,9 @@
 
 #include <memory>
 
-#include "EntityType.h"
 #include "Processor.h"
+
+#include "EntityType.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
