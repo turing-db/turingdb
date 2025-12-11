@@ -111,9 +111,7 @@ ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
 
 void ExprProgram::evaluateInstructions() {
     for (const Instruction& instr : _instrs) {
-        if (!instr.isUnaryPredicate()) {
-            evalInstr(instr);
-        }
+        evalInstr(instr);
     }
 }
 
@@ -121,7 +119,7 @@ void ExprProgram::evalInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
 
     if (op == ColumnOperator::OP_NOOP) {
-        throw FatalException("Attempted to evaluate instruction with NOOP operator.");
+        return;
     }
 
     const Column* lhs = instr._lhs;

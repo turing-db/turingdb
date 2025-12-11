@@ -104,7 +104,7 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
 
     _exprProg->addInstr(op, resCol, lhs, rhs);
 
-    return nullptr;
+    return resCol;
 }
 
 Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr) {

@@ -1,8 +1,10 @@
 #pragma once
 
+#include <stdint.h>
+
 namespace db::v2 {
 
-enum class BinaryOperator {
+enum class BinaryOperator : uint8_t {
     Or,
     Xor,
     And,
@@ -21,13 +23,13 @@ enum class BinaryOperator {
     In,
 };
 
-enum class UnaryOperator {
+enum class UnaryOperator : uint8_t {
     Not,
     Minus,
     Plus,
 };
 
-enum class StringOperator {
+enum class StringOperator : uint8_t {
     StartsWith,
     EndsWith,
     Contains,
