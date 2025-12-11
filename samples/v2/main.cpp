@@ -18,6 +18,7 @@
 #include "PipelineV2.h"
 #include "LocalMemory.h"
 #include "PipelineGenerator.h"
+#include "PlanOptimizer.h"
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
 
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
     const GraphView view = transaction.viewGraph();
 
     bool pipelineGenEnabled = false;
+    bool planOptEnabled = true;
     if (argc >= 2 && strlen(argv[1]) > 0) {
         queryStr = argv[1];
         pipelineGenEnabled = true;
@@ -54,8 +56,12 @@ int main(int argc, char** argv) {
     }
 
     {
-        if (argc >= 3 && strcmp(argv[2], "-nopipeline") == 0) {
-            pipelineGenEnabled = false;
+        for (int i = 2; i < argc; i++) {
+            if (!strcmp(argv[i], "-nopipelinegen")) {
+                pipelineGenEnabled = false;
+            } else if (!strcmp(argv[i], "-noplanopt")) {
+                planOptEnabled = false;
+            }
         }
     }
 
@@ -63,6 +69,8 @@ int main(int argc, char** argv) {
 
     {
         CypherParser parser(&ast);
+
+        fmt::print("\n=== Cypher parsing ===\n\n");
 
         try {
             auto t0 = Clock::now();
@@ -73,6 +81,8 @@ int main(int argc, char** argv) {
             fmt::print("{}\n", e.what());
             return 0;
         }
+
+        fmt::print("\n=== Cypher analysis ===\n\n");
 
         CypherAnalyzer analyzer(&ast, view);
 
@@ -92,8 +102,9 @@ int main(int argc, char** argv) {
     }
 
     PlanGraphGenerator planGen(ast, view);
-    const PlanGraph& planGraph = planGen.getPlanGraph();
+    PlanGraph& planGraph = planGen.getPlanGraph();
     {
+        fmt::print("\n=== Query plan generation ===\n\n");
         try {
             auto t0 = Clock::now();
             planGen.generate(ast.queries().front());
@@ -107,10 +118,29 @@ int main(int argc, char** argv) {
         PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
     }
 
+    if (planOptEnabled) {
+        fmt::print("\n=== Query plan optimisation ===\n\n");
+
+        try {
+            auto t0 = Clock::now();
+            PlanOptimizer planOpt(&planGraph);
+            planOpt.optimize();
+            auto t1 = Clock::now();
+            fmt::print("Query plan optimised in {} us\n", duration<Microseconds>(t0, t1));
+        } catch (const CompilerException& e) {
+            fmt::print("{}\n", e.what());
+            return EXIT_FAILURE;
+        }
+
+        PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
+    }
+
     if (pipelineGenEnabled) {
         LocalMemory mem;
         PipelineV2 pipeline;
         {
+            fmt::print("\n=== Pipeline generation ===\n\n");
+
             auto callback = [](const Dataframe* dataframe) {};
 
             PipelineGenerator pipelineGen(&planGraph,
@@ -129,12 +159,11 @@ int main(int argc, char** argv) {
                 fmt::print("{}\n", e.what());
                 return EXIT_FAILURE;
             }
-            const PlanGraph& planGraph = planGen.getPlanGraph();
-
-            PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
         }
 
         {
+            fmt::print("\n=== Execution ===\n\n");
+
             ExecutionContext execCtxt(view);
             PipelineExecutor executor(&pipeline, &execCtxt);
             try {

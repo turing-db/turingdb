@@ -5,6 +5,7 @@
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
 #include "processors/ScanNodesProcessor.h"
+#include "processors/ScanNodesByLabelProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
 #include "processors/GetEdgesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
@@ -421,6 +422,22 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
     _pendingOutput.updateInterface(&output);
 
     return output;
+}
+
+PipelineNodeOutputInterface& PipelineBuilder::addScanNodesByLabel(const LabelSet* labelset) {
+    ScanNodesByLabelProcessor* proc = ScanNodesByLabelProcessor::create(_pipeline, labelset);
+    PipelineNodeOutputInterface& outNodeIDs = proc->outNodeIDs();
+
+    // Allocate output node IDs column
+    NamedColumn* nodeIDs = allocColumn<ColumnNodeIDs>(outNodeIDs.getDataframe());
+    outNodeIDs.setNodeIDs(nodeIDs);
+
+    // Register output in materialize data
+    _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(nodeIDs);
+
+    _pendingOutput.updateInterface(&outNodeIDs);
+
+    return outNodeIDs;
 }
 
 template <EntityType Entity, db::SupportedType T>

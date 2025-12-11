@@ -9,6 +9,7 @@
 #include "CypherAnalyzer.h"
 #include "PlanGraphGenerator.h"
 #include "PipelineV2.h"
+#include "PlanOptimizer.h"
 #include "PipelineGenerator.h"
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
@@ -96,7 +97,21 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                            "Unknown exception occurred");
     }
 
-    const PlanGraph& planGraph = planGen.getPlanGraph();
+    PlanGraph& planGraph = planGen.getPlanGraph();
+
+    // Optimize plan graph
+    PlanOptimizer planOpt(&planGraph);
+    try {
+        planOpt.optimize();
+    } catch (const CompilerException& e) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
+    } catch (const std::exception& e) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
+                           std::string("Unexpected exception: ") + e.what());
+    } catch (...) {
+        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
+                           "Unknown exception occurred");
+    }
 
     // Generate pipeline
     LocalMemory* mem = ctxt.getLocalMemory();
