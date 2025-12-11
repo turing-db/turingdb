@@ -1,9 +1,8 @@
 #pragma once
 
 #include "LSHSignature.h"
-#include "StorageManager.h"
-#include "VecLibIdentifier.h"
 #include "VecLibMetadata.h"
+#include "VectorResult.h"
 
 #include <memory>
 
@@ -14,6 +13,9 @@ struct Index;
 namespace vec {
 
 struct VecLibShard;
+struct VecLibStorage;
+class StorageManager;
+class ShardCache;
 class BatchVectorCreate;
 class BatchVectorSearch;
 class VectorSearchResult;
@@ -21,6 +23,13 @@ class LSHShardRouter;
 
 class VecLib {
 public:
+    ~VecLib();
+
+    VecLib(const VecLib&) = delete;
+    VecLib(VecLib&&) = delete;
+    VecLib& operator=(const VecLib&) = delete;
+    VecLib& operator=(VecLib&&) = delete;
+
     class Builder {
     public:
         Builder();
@@ -30,8 +39,18 @@ public:
             return *this;
         }
 
-        Builder& setIdentifier(VecLibIdentifier&& identifier) {
-            _vecLib->_metadata._id = std::move(identifier);
+        Builder& setShardCache(ShardCache* shardCache) {
+            _vecLib->_shardCache = shardCache;
+            return *this;
+        }
+
+        Builder& setID(VecLibID id) {
+            _vecLib->_metadata._id = id;
+            return *this;
+        }
+
+        Builder& setName(std::string_view name) {
+            _vecLib->_metadata._name = name;
             return *this;
         }
 
@@ -51,11 +70,36 @@ public:
         std::unique_ptr<VecLib> _vecLib;
     };
 
+    class Loader {
+    public:
+        Loader();
+
+        Loader& setStorageManager(StorageManager* storage) {
+            _vecLib->_storage = storage;
+            return *this;
+        }
+
+        Loader& setShardCache(ShardCache* shardCache) {
+            _vecLib->_shardCache = shardCache;
+            return *this;
+        }
+
+        [[nodiscard]] VectorResult<std::unique_ptr<VecLib>> load(VecLibStorage& storage);
+
+    private:
+        std::unique_ptr<VecLib> _vecLib;
+    };
+
     [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate& batch);
     [[nodiscard]] VectorResult<void> search(const BatchVectorSearch& query, VectorSearchResult& results);
+    [[nodiscard]] BatchVectorCreate prepareCreateBatch(Dimension dimension);
 
     [[nodiscard]] VecLibID id() const {
-        return _metadata._id.view();
+        return _metadata._id;
+    }
+
+    [[nodiscard]] std::string_view name() const {
+        return _metadata._name;
     }
 
     [[nodiscard]] const VecLibMetadata& metadata() const {
@@ -66,19 +110,18 @@ public:
         return _metadata;
     }
 
-    [[nodiscard]] size_t getShardCount() const {
-        return _metadata._shardCount;
+    [[nodiscard]] const LSHShardRouter& shardRouter() const {
+        return *_shardRouter;
     }
 
-    [[nodiscard]] VecLibShard& getShard(LSHSignature signature);
-    [[nodiscard]] const VecLibShard& getShard(LSHSignature signature) const;
+    [[nodiscard]] const VecLibStorage& getStorage() const;
 
 private:
     friend Builder;
 
     StorageManager* _storage {nullptr};
+    ShardCache* _shardCache {nullptr};
 
-    VecLibIdentifier _identifier;
     VecLibMetadata _metadata;
     std::unique_ptr<LSHShardRouter> _shardRouter;
 

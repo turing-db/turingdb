@@ -23,8 +23,12 @@ public:
     void initialize();
 
     LSHSignature getSignature(std::span<const float> vector) const;
+    void getSearchSignatures(std::span<const float> vector, std::vector<LSHSignature>& signatures) const;
 
 private:
+    friend class LSHShardRouterLoader;
+    friend class LSHShardRouterWriter;
+
     size_t _dim;
     uint8_t _nbits;
     std::vector<std::vector<float>> _hyperplanes;

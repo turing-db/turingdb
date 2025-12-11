@@ -3,47 +3,32 @@
 #include <faiss/Index.h>
 #include <faiss/index_io.h>
 
-#include "BioAssert.h"
+#include "FileReader.h"
+#include "FileWriter.h"
 #include "Path.h"
+#include "VectorResult.h"
 
 namespace vec {
 
+struct VecLibMetadata;
+
 struct VecLibShard {
-    static constexpr size_t MAX_MEM = 256ul * 1024 * 1024; // 256 MB
+    fs::Path _indexPath;
 
-    fs::Path _path;
+    fs::File _idsFile;
+    fs::FileWriter<4096> _idsWriter;
+    fs::FileReader _idsReader;
+
     std::unique_ptr<faiss::Index> _index;
-    size_t _dim = 0;
-    size_t _vecCount = 0;
-    bool _isFull = false;
-    bool _isLoaded = true;
-
-    void load() {
-        _index.reset(faiss::read_index(_path.c_str()));
-        _isLoaded = true;
-    }
-
-    void unload() {
-        _index.reset();
-        _isLoaded = false;
-    }
-
-    [[nodiscard]] size_t getAvailMem() const {
-        const size_t memUsage = sizeof(float) * _dim * _vecCount;
-
-        msgbioassert(memUsage <= MAX_MEM, "Shard memory usage exceeds maximum");
-
-        return MAX_MEM - memUsage;
-    }
-
-    [[nodiscard]] size_t getAvailPointCount() const {
-        const size_t availMem = getAvailMem();
-        return availMem / sizeof(float) / _dim;
-    }
+    std::vector<uint64_t> _ids;
 
     [[nodiscard]] size_t getUsedMem() const {
-        return _vecCount * sizeof(float) * _dim;
+        return _index->ntotal * sizeof(float) * _index->d
+             + _ids.size() * sizeof(uint64_t);
     }
+
+    VectorResult<void> save();
+    VectorResult<void> load(const VecLibMetadata& meta);
 };
 
 }

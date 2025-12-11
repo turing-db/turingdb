@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 
 namespace vec {
@@ -19,6 +20,9 @@ public:
 
     template <typename T = uint64_t>
     static T generate();
+
+    template <typename T = uint64_t>
+    static T generateUnique(const std::function<bool(T)>& predicate);
 
 private:
     static std::unique_ptr<Impl, void (*)(Impl*)> _impl;

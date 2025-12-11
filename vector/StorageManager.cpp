@@ -1,14 +1,12 @@
 #include "StorageManager.h"
 
+#include <charconv>
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
 
+#include "LSHShardRouter.h"
 #include "VecLibStorage.h"
 #include "VecLib.h"
-#include "VecLibShard.h"
-
-#include "TuringTime.h"
-#include "VectorException.h"
 
 using namespace vec;
 
@@ -36,6 +34,10 @@ VectorResult<std::unique_ptr<StorageManager>> StorageManager::create(const fs::P
         }
     }
 
+    if (auto res = storage->initialize(); !res) {
+        return res.get_unexpected();
+    }
+
     return storage;
 }
 
@@ -44,11 +46,7 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
 
     const fs::Path libRoot = getLibraryPath(meta._id);
     const fs::Path metadataPath = getMetadataPath(meta._id);
-    const fs::Path nodeIdsPath = getNodeIdsPath(meta._id);
-
-    fmt::println("Lib root: {}", libRoot.c_str());
-    fmt::println("Metadata path: {}", metadataPath.c_str());
-    fmt::println("Node IDs path: {}", nodeIdsPath.c_str());
+    const fs::Path shardRouterPath = getShardRouterPath(meta._id);
 
     if (_storages.contains(meta._id)) {
         return VectorError::result(VectorErrorCode::LibraryStorageAlreadyExists);
@@ -58,15 +56,7 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
 
     // Create library directory
     if (auto res = libRoot.mkdir(); !res) {
-        return VectorError::result(VectorErrorCode::CouldNotCreateLibraryStorage);
-    }
-
-    // Create node IDs file
-    fmt::print("Creating node IDs file at {}\n", nodeIdsPath.c_str());
-    if (auto res = fs::File::createAndOpen(nodeIdsPath)) {
-        storage->_nodeIdsFile = std::move(res.value());
-    } else {
-        return VectorError::result(VectorErrorCode::CouldNotCreateNodeIdsStorage);
+        return VectorError::result(VectorErrorCode::CouldNotCreateLibraryStorage, res.error());
     }
 
     // Create metadata file
@@ -74,11 +64,24 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
         storage->_metadataFile = std::move(res.value());
         storage->_metadataWriter.setFile(&storage->_metadataFile);
     } else {
-        return VectorError::result(VectorErrorCode::CouldNotCreateMetadataStorage);
+        return VectorError::result(VectorErrorCode::CouldNotCreateMetadataStorage, res.error());
+    }
+
+    // Create shard router file
+    if (auto res = fs::File::createAndOpen(shardRouterPath)) {
+        storage->_shardRouterFile = std::move(res.value());
+        storage->_shardRouterWriter.setFile(&storage->_shardRouterFile);
+    } else {
+        return VectorError::result(VectorErrorCode::CouldNotCreateShardRouterStorage, res.error());
+    }
+
+    // Write shard router file
+    if (auto res = storage->_shardRouterWriter.write(lib.shardRouter()); !res) {
+        return res.get_unexpected();
     }
 
     // Write metadata file
-    if (auto res = writeMetadata(storage->_metadataWriter, meta); !res) {
+    if (auto res = storage->_metadataWriter.write(meta); !res) {
         return res.get_unexpected();
     }
 
@@ -88,49 +91,8 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
 }
 
 bool StorageManager::libraryExists(const VecLibID& libID) const {
-    const fs::Path p = _rootPath / libID;
-    return p.exists();
+    return getLibraryPath(libID).exists();
 }
-
-// VecLibShard& StorageManager::addShard(VecLib& lib) {
-//     auto& meta = lib.metadata();
-//     auto& storage = _storages.at(meta._id);
-// 
-//     if (!storage->_shards.empty()) {
-//         auto& prevShard = storage->_shards.back();
-//         prevShard._isFull = true;
-//         faiss::write_index(prevShard._index.get(), prevShard._path.c_str());
-//         prevShard.unload();
-//     }
-// 
-//     const size_t shardIndex = storage->_shards.size();
-//     auto& shard = storage->_shards.emplace_back();
-//     shard._path = getShardPath(meta._id, shardIndex);
-// 
-//     const auto now = Clock::now()
-//                          .time_since_epoch()
-//                          .count();
-// 
-//     meta._shardCount = storage->_shards.size();
-//     meta._modifiedAt = now;
-// 
-//     if (auto res = writeMetadata(storage->_metadataWriter, meta); !res) {
-//         throw VectorException("Could not write metadata file");
-//     }
-// 
-//     switch (meta._metric) {
-//         case DistanceMetric::EUCLIDEAN_DIST:
-//             shard._index = std::make_unique<faiss::IndexFlatL2>(meta._dimension);
-//             break;
-//         case DistanceMetric::INNER_PRODUCT:
-//             shard._index = std::make_unique<faiss::IndexFlatIP>(meta._dimension);
-//             break;
-//     }
-// 
-//     shard._dim = meta._dimension;
-// 
-//     return storage->_shards.back();
-// }
 
 const VecLibStorage& StorageManager::getStorage(const VecLibID& libID) const {
     return *_storages.at(libID);
@@ -141,67 +103,82 @@ VecLibStorage& StorageManager::getStorage(const VecLibID& libID) {
 }
 
 fs::Path StorageManager::getLibraryPath(const VecLibID& libID) const {
-    return _rootPath / libID;
+    return _rootPath / std::to_string(libID);
 }
 
 fs::Path StorageManager::getMetadataPath(const VecLibID& libID) const {
     return getLibraryPath(libID) / "metadata.json";
 }
 
-fs::Path StorageManager::getNodeIdsPath(const VecLibID& libID) const {
-    return getLibraryPath(libID) / "node_ids.bin";
+fs::Path StorageManager::getExternalIDsPath(const VecLibID& libID, LSHSignature sig) const {
+    return getLibraryPath(libID) / "external_ids-" + std::to_string(sig) + ".bin";
+}
+
+fs::Path StorageManager::getShardRouterPath(const VecLibID& libID) const {
+    return getLibraryPath(libID) / "shard_router.bin";
 }
 
 fs::Path StorageManager::getShardPath(const VecLibID& libID, LSHSignature sig) const {
     return getLibraryPath(libID) / "embeddings-" + std::to_string(sig) + ".index";
 }
 
-VectorResult<void> StorageManager::writeMetadata(MetadataWriter& writer, const VecLibMetadata& metadata) {
-    if (auto res = writer.file().clearContent(); !res) {
-        return VectorError::result(VectorErrorCode::CouldNotClearMetadataFile);
+VectorResult<void> StorageManager::initialize() {
+    auto listRes = _rootPath.listDir();
+    if (!listRes) {
+        return VectorError::result(VectorErrorCode::CouldNotListLibraries);
     }
 
-    const fs::Path metadataPath = getMetadataPath(metadata._id);
+    const std::vector<fs::Path> libPaths = std::move(listRes.value());
 
-    writer.write("{\n");
+    for (const fs::Path& libPath : libPaths) {
+        const auto info = libPath.getFileInfo();
 
-    // Library ID
-    writer.write("    \"library_id\": \"");
-    writer.write(metadata._id.view());
-    writer.write("\",\n");
+        if (!info) {
+            return VectorError::result(VectorErrorCode::CouldNotListLibraries);
+        }
 
-    // Dimension
-    writer.write("    \"dimension\": ");
-    writer.write(std::to_string(metadata._dimension));
-    writer.write(",\n");
+        if (info->_type != fs::FileType::Directory) {
+            return VectorError::result(VectorErrorCode::NotVecLibFile);
+        }
 
-    // Metric
-    writer.write("    \"metric\": \"");
-    writer.write(metadata._metric == DistanceMetric::EUCLIDEAN_DIST
-                     ? "EUCLIDEAN_DIST"
-                     : "INNER_PRODUCT");
-    writer.write("\",\n");
+        // Parse library ID
+        const std::string_view idStr = libPath.filename();
+        uint64_t id {};
+        const std::from_chars_result idRes = std::from_chars(idStr.begin(), idStr.end(), id);
+        const bool idFailure = (idRes.ec == std::errc::result_out_of_range)
+                            || (idRes.ec == std::errc::invalid_argument);
+        const size_t charCount = std::distance(idStr.begin(), idRes.ptr);
 
-    // Precision
-    writer.write("    \"precision\": 32,\n");
+        if (idFailure || charCount != idStr.size()) {
+            return VectorError::result(VectorErrorCode::NotVecLibFile);
+        }
 
-    // Created timestamp
-    writer.write("    \"created_at\": ");
-    writer.write(std::to_string(metadata._createdAt));
-    writer.write(",\n");
+        if (_storages.contains(id)) {
+            return VectorError::result(VectorErrorCode::LibraryAlreadyLoaded);
+        }
 
-    // Modified timestamp
-    writer.write("    \"modified_at\": ");
-    writer.write(std::to_string(metadata._modifiedAt));
-    writer.write(",\n");
+        auto storage = std::make_unique<VecLibStorage>();
 
-    // Shard count
-    writer.write("    \"shard_count\": ");
-    writer.write(std::to_string(metadata._shardCount));
-    writer.write(",\n");
+        // Read metadata
+        const fs::Path metadataPath = getMetadataPath(id);
+        if (auto res = fs::File::open(metadataPath); !res) {
+            return VectorError::result(VectorErrorCode::CouldNotOpenMetadataFile);
+        } else {
+            storage->_metadataFile = std::move(res.value());
+            storage->_metadataWriter.setFile(&storage->_metadataFile);
+        }
 
-    if (writer.errorOccured()) {
-        return VectorError::result(VectorErrorCode::CouldNotWriteMetadataFile);
+        // Read shard router
+        const fs::Path shardRouterPath = getShardRouterPath(id);
+        if (auto res = fs::File::open(shardRouterPath); !res) {
+            return VectorError::result(VectorErrorCode::CouldNotOpenShardRouterFile);
+        } else {
+            storage->_shardRouterFile = std::move(res.value());
+            storage->_shardRouterWriter.setFile(&storage->_shardRouterFile);
+        }
+
+        // Storage library storage
+        _storages.emplace(id, std::move(storage));
     }
 
     return {};

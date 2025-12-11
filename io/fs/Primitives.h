@@ -15,7 +15,8 @@ concept CharPrimitive = std::same_as<T, char>
 
 template <typename T>
 concept TrivialPrimitive = std::is_trivial_v<T>
-                        && std::is_standard_layout_v<T>;
+                        && std::is_standard_layout_v<T>
+                        && !std::is_same_v<const char*, T>;
 
 template <typename T>
 concept TrivialNonCharPrimitive = TrivialPrimitive<T> && !CharPrimitive<T>;

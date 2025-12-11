@@ -5,10 +5,9 @@
 
 using namespace vec;
 
-LSHShardRouter::LSHShardRouter(size_t dim, uint8_t nbits) :
-    _dim(dim),
-    _nbits(nbits)
-{
+LSHShardRouter::LSHShardRouter(size_t dim, uint8_t nbits)
+    : _dim(dim),
+      _nbits(nbits) {
 }
 
 LSHShardRouter::~LSHShardRouter() {
@@ -47,4 +46,19 @@ LSHSignature LSHShardRouter::getSignature(std::span<const float> vector) const {
     }
 
     return signature;
+}
+
+void LSHShardRouter::getSearchSignatures(std::span<const float> vector, std::vector<LSHSignature>& signatures) const {
+    msgbioassert(vector.size() == _dim, "LSHShardRouter: vector size must be equal to dimension");
+    signatures.resize(_nbits + 1);
+    
+    const LSHSignature sig = getSignature(vector);
+
+    // Exact match
+    signatures[0] = sig;
+
+    // Hamming distance 1: flip one bit
+    for (size_t i = 0; i < _nbits; i++) {
+        signatures[i + 1] = sig ^ (1ull << i);
+    }
 }

@@ -56,6 +56,11 @@ public:
     }
 
     template <CharPrimitive T>
+    void write(const T* str) {
+        write(std::basic_string_view<T> {str});
+    }
+
+    template <CharPrimitive T>
     void write(std::basic_string_view<T> str) {
         static constexpr size_t charSize = sizeof(T);
 
@@ -116,6 +121,7 @@ public:
         _buffer.clear();
     }
 
+    bool hasFile() const { return _file != nullptr; }
     const std::vector<uint8_t>& getBuffer() const { return _buffer; }
     bool errorOccured() const { return _error.has_value(); }
     const std::optional<Error>& error() const { return _error; }

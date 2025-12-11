@@ -1,17 +1,21 @@
 #pragma once
 
+#include "LSHSignature.h"
 #include "Path.h"
-#include "VecLibIdentifier.h"
 #include "VecLibStorage.h"
 #include "VectorResult.h"
+#include "VecLibMetadata.h"
 
 namespace vec {
 
 class VecLib;
-class VecLibMetadata;
+class LSHShardRouter;
+struct VecLibMetadata;
 
 class StorageManager {
 public:
+    using StorageMap = std::unordered_map<VecLibID, std::unique_ptr<VecLibStorage>>;
+
     StorageManager();
     ~StorageManager();
 
@@ -23,7 +27,6 @@ public:
     StorageManager& operator=(StorageManager&&) = delete;
 
     [[nodiscard]] VectorResult<void> createLibraryStorage(const VecLib& lib);
-    [[nodiscard]] VectorResult<void> loadLibraryStorage(const VecLib& lib);
     [[nodiscard]] bool libraryExists(const VecLibID& libID) const;
 
     [[nodiscard]] const VecLibStorage& getStorage(const VecLibID& libID) const;
@@ -31,14 +34,23 @@ public:
 
     [[nodiscard]] fs::Path getLibraryPath(const VecLibID& libID) const;
     [[nodiscard]] fs::Path getMetadataPath(const VecLibID& libID) const;
-    [[nodiscard]] fs::Path getNodeIdsPath(const VecLibID& libID) const;
+    [[nodiscard]] fs::Path getShardRouterPath(const VecLibID& libID) const;
+    [[nodiscard]] fs::Path getExternalIDsPath(const VecLibID& libID, LSHSignature sig) const;
     [[nodiscard]] fs::Path getShardPath(const VecLibID& libID, LSHSignature sig) const;
+
+    [[nodiscard]] StorageMap::const_iterator begin() const {
+        return _storages.begin();
+    }
+
+    [[nodiscard]] StorageMap::const_iterator end() const {
+        return _storages.end();
+    }
 
 private:
     fs::Path _rootPath;
-    std::unordered_map<VecLibID, std::unique_ptr<VecLibStorage>> _storages;
+    StorageMap _storages;
 
-    [[nodiscard]] VectorResult<void> writeMetadata(MetadataWriter& writer, const VecLibMetadata& metadata);
+    VectorResult<void> initialize();
 };
 
 }

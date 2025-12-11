@@ -13,8 +13,13 @@ set(VECTOR_SOURCES
         LSHShardRouter.cpp
         VectorResult.cpp
         VectorDatabase.cpp
-        VecLib.cpp
-        VecLibIdentifier.cpp)
+        VecLibMetadataLoader.cpp
+        VecLibMetadataWriter.cpp
+        LSHShardRouterLoader.cpp
+        LSHShardRouterWriter.cpp
+        ShardCache.cpp
+        VecLibShard.cpp
+        VecLib.cpp)
 
 add_library(turing_vector_s STATIC ${VECTOR_SOURCES})
 

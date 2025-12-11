@@ -7,6 +7,7 @@
 #include <tuple>
 
 #include "FaissIdx.h"
+#include "LSHSignature.h"
 
 namespace vec {
 
@@ -24,8 +25,8 @@ public:
         return _indices.size();
     }
 
-    [[nodiscard]] std::span<const size_t> shards() const {
-        return _shardIdx;
+    [[nodiscard]] std::span<const LSHSignature> shards() const {
+        return _shardSig;
     }
 
     [[nodiscard]] std::span<const FaissIdx> indices() const {
@@ -44,28 +45,21 @@ public:
         return _distances;
     }
 
-    [[nodiscard]] std::tuple<std::span<float>, std::span<FaissIdx>> prepareNewQuery(size_t queryCount) {
-        const size_t offset = _shardIdx.size();
-        const size_t shardIdx = _nextShardIdx++;
-        _shardIdx.resize(_shardIdx.size() + queryCount);
-
-        for (size_t i = 0; i < queryCount; i++) {
-            _shardIdx[offset + i] = shardIdx;
-        }
-
-        _indices.resize(_indices.size() + queryCount);
-        _distances.resize(_distances.size() + queryCount);
-
-        std::span indices {_indices};
-        std::span distances {_distances};
-
-        return {
-            distances.subspan(offset, queryCount),
-            indices.subspan(offset, queryCount),
-        };
+    void reset() {
+        _shardSig.clear();
+        _indices.clear();
+        _distances.clear();
+        _resultCount = 0;
     }
 
-    void finishSearch(size_t resultCount) {
+    void addResult(LSHSignature shardSig, FaissIdx index, float distance) {
+        _shardSig.push_back(shardSig);
+        _indices.push_back(index);
+        _distances.push_back(distance);
+        _resultCount++;
+    }
+
+    void finishSearch(size_t maxResultCount) {
         std::vector<size_t> sortIdx(_distances.size());
         std::iota(sortIdx.begin(), sortIdx.end(), 0);
 
@@ -73,30 +67,35 @@ public:
             return _distances[a] < _distances[b];
         });
 
-        std::vector<size_t> shardIdx(_shardIdx.size());
+        std::vector<size_t> shardIdx(_shardSig.size());
         std::vector<FaissIdx> indices(_indices.size());
         std::vector<float> distances(_distances.size());
 
         for (size_t i = 0; i < _distances.size(); i++) {
-            shardIdx[i] = _shardIdx[sortIdx[i]];
+            shardIdx[i] = _shardSig[sortIdx[i]];
             indices[i] = _indices[sortIdx[i]];
             distances[i] = _distances[sortIdx[i]];
         }
 
-        _shardIdx = std::move(shardIdx);
+        _shardSig = std::move(shardIdx);
         _indices = std::move(indices);
         _distances = std::move(distances);
 
-        _shardIdx.resize(resultCount);
-        _indices.resize(resultCount);
-        _distances.resize(resultCount);
+        if (_resultCount <= maxResultCount) {
+            return;
+        }
+
+        _shardSig.resize(maxResultCount);
+        _indices.resize(maxResultCount);
+        _distances.resize(maxResultCount);
+        _resultCount = maxResultCount;
     }
 
 private:
-    size_t _nextShardIdx {0};
-    std::vector<size_t> _shardIdx;
+    std::vector<LSHSignature> _shardSig;
     std::vector<FaissIdx> _indices;
     std::vector<float> _distances;
+    size_t _resultCount {0};
 };
 
 }

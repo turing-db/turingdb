@@ -15,7 +15,7 @@ class FileReader {
 public:
     FileReader() = default;
 
-    void setFile(const File* f) {
+    void setFile(File* f) {
         _file = f;
         _buffer.clear();
         _error.reset();
@@ -31,13 +31,15 @@ public:
         }
     }
 
+    fs::File& file() const { return *_file; }
+    bool hasFile() const { return _file != nullptr; }
     const ByteBuffer& getBuffer() const { return _buffer; }
     ByteBufferIterator iterateBuffer() const { return ByteBufferIterator {_buffer}; }
     bool errorOccured() const { return _error.has_value(); }
     const std::optional<Error>& error() const { return _error; }
 
 private:
-    const File* _file {nullptr};
+    File* _file {nullptr};
     ByteBuffer _buffer;
     std::optional<Error> _error;
 };

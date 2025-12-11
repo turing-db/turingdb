@@ -78,6 +78,14 @@ Result<FileRegion> File::map(size_t size, size_t offset) {
     return FileRegion {static_cast<char*>(map), size, alignmentOffset};
 }
 
+Result<void> File::seek(size_t offset) {
+    if (::lseek(_fd, offset, SEEK_SET) < 0) {
+        return Error::result(ErrorType::SEEK_FILE, errno);
+    }
+
+    return {};
+}
+
 Result<void> File::read(void* buf, size_t size) const {
     ssize_t remainingBytes = size;
     while (remainingBytes > 0) {
