@@ -103,7 +103,9 @@ struct PropertyTypeDispatcher {
 
 }
 
-db::ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
+namespace db {
+
+ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
     if (!var) {
         throw FatalException("Attempted to get column for null variable");
     }
@@ -112,8 +114,10 @@ db::ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
     if (it == end(_declToColumn)) {
         throw PlannerException(fmt::format("Failed to find column for variable {}.", var->getName()));
     }
-    ColumnTag tag = it->second;
+    const ColumnTag tag = it->second;
     return tag;
+}
+
 }
 
 void PipelineGenerator::generate() {
