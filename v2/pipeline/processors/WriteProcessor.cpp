@@ -127,8 +127,6 @@ void WriteProcessor::execute() {
 }
 
 void WriteProcessor::performDeletions() {
-    bioassert(_input);
-
     const GraphReader reader = _ctxt->getGraphView().read();
     const Dataframe* inDf = _input->getDataframe();
 
@@ -201,7 +199,8 @@ void WriteProcessor::createNodes(size_t numIters) {
                                              " pending nodes, but is not a NodeID"
                                              " column.", node._tag.getValue()));
         }
-        bioassert(col->size() == 0);
+
+        bioassert(col->size() == 0, "pending node column should be empty");
 
         const std::span labels = node._labels;
 
@@ -249,9 +248,10 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              " pending edges, but is not an EdgeID"
                                              " column.", edge._tag.getValue()));
         }
-        bioassert(col->size() == 0);
 
-        ColumnNodeIDs* srcCol {nullptr};
+        bioassert(col->size() == 0, "pending edges column should be empty");
+
+        ColumnNodeIDs* srcCol = nullptr;
         const ColumnTag srcTag = edge._srcTag;
         // If the tag exists in the input, it must be an already existing NodeID
         // column - e.g. something returned by a MATCH query - otherwise it is a
@@ -274,7 +274,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              srcTag.getValue()));
         }
 
-        ColumnNodeIDs* tgtCol {nullptr};
+        ColumnNodeIDs* tgtCol = nullptr;
         const ColumnTag tgtTag = edge._tgtTag;
         const bool tgtIsPending = !inDf || inDf->getColumn(tgtTag) == nullptr;
 
@@ -291,8 +291,8 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              tgtTag.getValue()));
         }
 
-        bioassert(tgtCol->size() == srcCol->size());
-        bioassert(tgtCol->size() == numIters);
+        bioassert(tgtCol->size() == srcCol->size(), "src and target column should have same dimension");
+        bioassert(tgtCol->size() == numIters, "invalid size of target column");
 
         for (size_t rowPtr = 0; rowPtr < numIters; rowPtr++) {
             // If src/tgt is a pending (to be created; result of CREATE clause),

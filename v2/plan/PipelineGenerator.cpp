@@ -816,14 +816,14 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             // to the @ref WriteProcessorTypes::PendingEdge to be later updated in the
             // builder call.
             const VarDecl* srcVar = pendingPlanEdge._src;
-            ColumnTag srcTag {};
+            ColumnTag srcTag;
             const std::string_view srcName = srcVar->getName();
             if (const auto it = _declToColumn.find(srcVar); it != end(_declToColumn)) {
                 srcTag = it->second;
             }
 
             const VarDecl* tgtVar = pendingPlanEdge._tgt;
-            ColumnTag tgtTag {};
+            ColumnTag tgtTag;
             const std::string_view tgtName = tgtVar->getName();
             if (const auto it = _declToColumn.find(tgtVar); it != end(_declToColumn)) {
                 tgtTag = it->second;
@@ -832,7 +832,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             const std::string_view edgeVarName = pendingPlanEdge._name->getName();
 
             const std::span edgeTypes = data->edgeTypeConstraints();
-            bioassert(edgeTypes.size() == 1);
+            bioassert(edgeTypes.size() == 1, "only one edge type is supported");
             const std::string_view edgeType = edgeTypes.front();
 
             // Properties

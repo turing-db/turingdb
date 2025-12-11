@@ -474,8 +474,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
     PipelineBlockOutputInterface& output = processor->output();
     Dataframe* outDf = output.getDataframe();
 
-    bioassert(outDf->size() == 0);
-
     // Track node vars -> columns allocd to register edge src/tgt cols
     std::unordered_map<std::string_view, ColumnTag> varToCol;
     varToCol.reserve(pendingNodes.size());
@@ -488,7 +486,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
             NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
             // TODO: Make exception?
-            bioassert(inputColumnToDelete);
+            bioassert(inputColumnToDelete, "input column not found");
 
             // Skip if the column already exists for cases like MATCH (n) DELETE n,n
             if (outDf->getColumn(inputColumnToDelete->getTag())) {
@@ -501,7 +499,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
         for (const ColumnTag deletedEdgeCol : edgeColumnsToDelete) {
             NamedColumn* inputColumnToDelete = inDf->getColumn(deletedEdgeCol);
             // TODO: Make exception?
-            bioassert(inputColumnToDelete);
+            bioassert(inputColumnToDelete, "input column not found");
 
             // Skip if the column already exists for cases like MATCH (n) DELETE n, n
             if (outDf->getColumn(inputColumnToDelete->getTag())) {
