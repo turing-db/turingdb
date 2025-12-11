@@ -41,7 +41,7 @@ TEST_F(GetLabelSetIDProcessorTest, test) {
         }
 
         // Retrieve the results of the current pipeline iteration (chunk)
-        EXPECT_EQ(df->size(), 3);
+        ASSERT_EQ(df->size(), 2);
 
         const ColumnNodeIDs* nodeIDs = df->getColumn<ColumnNodeIDs>(nodeIDsTag);
         ASSERT_TRUE(nodeIDs != nullptr);
@@ -58,6 +58,16 @@ TEST_F(GetLabelSetIDProcessorTest, test) {
 
     _builder->addMaterialize();
     _builder->addLambda(callback);
+
+    EXECUTE(view, 1);
+    EXPECT_TRUE(results.equals(expected));
+
+    results.clear();
+    EXECUTE(view, 10);
+    EXPECT_TRUE(results.equals(expected));
+
+    results.clear();
+    EXECUTE(view, 1000);
     EXPECT_TRUE(results.equals(expected));
 }
 

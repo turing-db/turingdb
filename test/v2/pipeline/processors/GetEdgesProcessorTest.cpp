@@ -56,7 +56,7 @@ TEST_F(GetEdgesProcessorTest, test) {
         }
 
         // Retrieve the results of the current pipeline iteration (chunk)
-        EXPECT_EQ(df->size(), 4);
+        ASSERT_EQ(df->size(), 4);
 
         const ColumnNodeIDs* originIDs = df->getColumn<ColumnNodeIDs>(originIDsTag);
         ASSERT_TRUE(originIDs != nullptr);

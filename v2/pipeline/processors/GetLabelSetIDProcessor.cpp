@@ -66,5 +66,7 @@ void GetLabelSetIDProcessor::execute() {
         i++;
     }
 
+    _input.getPort()->consume();
     _output.getPort()->writeData();
+    finish();
 }
