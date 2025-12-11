@@ -415,6 +415,9 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
     NamedColumn* labelsetIDsValues = allocColumn<ColumnVector<LabelSetID>>(df);
     output.setValues(labelsetIDsValues);
 
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.addToStep<ColumnVector<LabelSetID>>(labelsetIDsValues);
+
     _pendingOutput.updateInterface(&output);
 
     return output;
