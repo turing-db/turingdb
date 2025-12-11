@@ -575,6 +575,9 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 }
 
 PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+            _builder.addMaterialize();
+    }
     if (node->isEmpty()) {
         return _builder.getPendingOutputInterface();
     }
