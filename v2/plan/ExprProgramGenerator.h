@@ -1,5 +1,7 @@
 #pragma once
 
+#include "columns/ColumnOperator.h"
+#include "expr/Operators.h"
 namespace db {
 class Column;
 class LocalMemory;
@@ -11,6 +13,7 @@ class ExprProgram;
 class Predicate;
 class Expr;
 class VarDecl;
+class UnaryExpr;
 class BinaryExpr;
 class PropertyExpr;
 class LiteralExpr;
@@ -42,10 +45,14 @@ private:
     const PendingOutputView& _pendingOut;
 
     Column* generateExpr(const Expr* expr);
+    Column* generateUnaryExpr(const UnaryExpr* expr);
     Column* generateBinaryExpr(const BinaryExpr* expr);
     Column* allocResultColumn(const Expr* expr);
     Column* generatePropertyExpr(const PropertyExpr* propExpr);
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
+
+    static ColumnOperator unaryOperatorToColumnOperator(UnaryOperator op);
+    static ColumnOperator binaryOperatorToColumnOperator(BinaryOperator op);
 };
 
 }

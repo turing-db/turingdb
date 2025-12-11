@@ -1,11 +1,14 @@
 #include "ExprProgramGenerator.h"
 
+#include <cstdint>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include "PipelineGenerator.h"
 #include "decl/EvaluatedType.h"
+#include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
+#include "expr/UnaryExpr.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "processors/ExprProgram.h"
 #include "Predicate.h"
@@ -29,31 +32,53 @@
 using namespace db::v2;
 using namespace db;
 
-namespace {
+ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator op) {
+    switch (op) {
+        case UnaryOperator::Not:
+            return ColumnOperator::OP_NOT;
+        break;
 
-ColumnOperator getColumnOperator(BinaryOperator bop) {
-    switch (bop) {
-        case BinaryOperator::Or:
-            return ColumnOperator::OP_OR;
+        case UnaryOperator::Minus:
+            return ColumnOperator::OP_MINUS;
+        break;
 
-        case BinaryOperator::And:
-            return ColumnOperator::OP_AND;
-
-        case BinaryOperator::Equal:
-            return ColumnOperator::OP_EQUAL;
+        case UnaryOperator::Plus:
+            return ColumnOperator::OP_PLUS;
+        break;
 
         default:
-            throw PlannerException(fmt::format("ExprProgramGenerator: expression operator of kind {} not supported",
-                (size_t)bop));
+            throw PlannerException(fmt::format("ExprProgramGenerator: unary expression "
+                                               "operator of kind {} not supported",
+                                               UnaryOperatorDescription::value(op)));
         break;
     }
 }
 
+ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperator op) {
+    switch (op) {
+        case BinaryOperator::Or:
+            return ColumnOperator::OP_OR;
+        break;
+
+        case BinaryOperator::And:
+            return ColumnOperator::OP_AND;
+        break;
+
+        case BinaryOperator::Equal:
+            return ColumnOperator::OP_EQUAL;
+        break;
+
+        default:
+            throw PlannerException(fmt::format("ExprProgramGenerator: binary expression "
+                                               "operator of kind {} not supported",
+                                               BinaryOperatorDescription::value(op)));
+        break;
+    }
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
-    // Predicates can be unary operations in the case that they are singular Boolean properties.
-    // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a unary predicate.
+    // Predicates can be predicates in the case that they are singular Boolean properties.
+    // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a predicate.
     if (pred->getExpr()->getKind() == Expr::Kind::PROPERTY) {
         const auto* propExpr = static_cast<const PropertyExpr*>(pred->getExpr());
         if (propExpr->getType() != EvaluatedType::Bool) {
@@ -61,10 +86,10 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
                                  "non-Boolean property unary predicate.");
         }
         Column* booleanPropCol = generatePropertyExpr(propExpr);
-        // In the case of such unary predicates, we do not need to execute anything (hence
-        // NOOP), and we have no operand columns (hence nullptr lhs and rhs), because the
-        // result of the instruction is already manifested in the column containing the
-        // Boolean property values.
+        // In the case of such property predicates, we do not need to execute anything
+        // (hence NOOP), and we have no operand columns (hence nullptr lhs and rhs),
+        // because the result of the instruction is already manifested in the column
+        // containing the Boolean property values.
         _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
         return;
     }
@@ -76,6 +101,10 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
     switch (expr->getKind()) {
         // TODO: Unary operators @cyrus
+        case Expr::Kind::UNARY:
+            return generateUnaryExpr(static_cast<const UnaryExpr*>(expr));
+        break;
+
         case Expr::Kind::BINARY:
             return generateBinaryExpr(static_cast<const BinaryExpr*>(expr));
         break;
@@ -96,10 +125,23 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
     }
 }
 
+Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
+    const Expr* operand = unExpr->getSubExpr();
+    const UnaryOperator optor = unExpr->getOperator();
+    const ColumnOperator colOp = unaryOperatorToColumnOperator(optor);
+
+    Column* operandColumn = generateExpr(operand);
+    Column* resCol = allocResultColumn(unExpr);
+
+    _exprProg->addInstr(colOp, resCol, operandColumn, nullptr);
+
+    return nullptr;
+}
+
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
     Column* lhs = generateExpr(binExpr->getLHS());
     Column* rhs = generateExpr(binExpr->getRHS());
-    const ColumnOperator op = getColumnOperator(binExpr->getOperator());
+    const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
     Column* resCol = allocResultColumn(binExpr);
 
     _exprProg->addInstr(op, resCol, lhs, rhs);

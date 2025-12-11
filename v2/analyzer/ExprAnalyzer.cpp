@@ -178,6 +178,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 throwError(error, expr);
             }
         } break;
+
+        case BinaryOperator::_SIZE: {
+            throwError("Invalid operand in binary expression.");
+        }
+        break;
     }
 
     expr->setType(type);
@@ -223,6 +228,11 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
             }
 
         } break;
+
+        case UnaryOperator::_SIZE: {
+            throwError("Invalid operand in unary expression.");
+        }
+        break;
     }
 
     expr->setType(type);
