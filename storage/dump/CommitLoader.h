@@ -82,8 +82,8 @@ public:
 
         // Reading journal
         {
-            CommitJournal& journal = *commit->_data->_history._journal;
-            bioassert(&journal, "invalid journal"); // Should be initialised in commit constructor
+            CommitJournal* journal = commit->_data->_history._journal.get();
+            bioassert(journal, "invalid journal"); // Should be initialised in commit constructor
 
             const fs::Path journalPath = path / "journal";
 
@@ -94,7 +94,7 @@ public:
             }
 
             CommitJournalLoader loader(readerRes.value());
-            if (auto res = loader.load(journal); !res) {
+            if (auto res = loader.load(*journal); !res) {
                 return res.get_unexpected();
             }
         }
