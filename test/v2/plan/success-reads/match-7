@@ -27,12 +27,12 @@ flowchart TD
         __FILTER_NODE__
     `"]
     6["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ n
         __prop__ duration
     `"]
     7["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ m
         __prop__ duration
     `"]

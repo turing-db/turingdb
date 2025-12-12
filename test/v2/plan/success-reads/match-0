@@ -61,12 +61,12 @@ flowchart TD
         __label__: Person
     `"]
     15["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ n
         __prop__ name
     `"]
     16["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ e
         __prop__ name
     `"]

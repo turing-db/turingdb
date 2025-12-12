@@ -45,17 +45,17 @@ flowchart TD
         __dep__ _m_._name_ (String)
     `"]
     9["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ a
         __prop__ name
     `"]
     10["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ m
         __prop__ name
     `"]
     11["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ e
         __prop__ duration
     `"]

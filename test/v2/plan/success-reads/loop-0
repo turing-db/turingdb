@@ -63,12 +63,12 @@ flowchart TD
         __JOIN__
     `"]
     17["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ b
         __prop__ name
     `"]
     18["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ a
         __prop__ name
     `"]
