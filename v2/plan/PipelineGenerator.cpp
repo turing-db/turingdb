@@ -517,13 +517,13 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
 
     if (entityDecl->getType() == EvaluatedType::NodePattern) {
         const auto process = [&]<SupportedType Type> {
-            output = &_builder.addGetPropertiesWithNull<EntityType::Node, Type>(entityTag, *foundProp);
+            output = &_builder.addGetPropertiesWithNull<EntityType::Node, Type>(*foundProp);
         };
 
         PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
     } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
         const auto process = [&]<SupportedType Type> {
-            output = &_builder.addGetPropertiesWithNull<EntityType::Edge, Type>(entityTag, *foundProp);
+            output = &_builder.addGetPropertiesWithNull<EntityType::Edge, Type>(*foundProp);
         };
 
         PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
