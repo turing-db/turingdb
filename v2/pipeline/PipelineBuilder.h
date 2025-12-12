@@ -91,16 +91,19 @@ public:
     }
 
     template <EntityType Entity, SupportedType T>
-    PipelineValuesOutputInterface& addGetPropertiesWithNull(PropertyType propertyType);
+    PipelineValuesOutputInterface& addGetPropertiesWithNull(ColumnTag entityTag,
+                                                            PropertyType propertyType);
 
     template <SupportedType T>
-    PipelineValuesOutputInterface& addGetNodePropertiesWithNull(PropertyType propertyType) {
-        return addGetPropertiesWithNull<EntityType::Node, T>(propertyType);
+    PipelineValuesOutputInterface& addGetNodePropertiesWithNull(ColumnTag entityTag,
+                                                                PropertyType propertyType) {
+        return addGetPropertiesWithNull<EntityType::Node, T>(ColumnTag {entityTag}, propertyType);
     }
 
     template <SupportedType T>
-    PipelineValuesOutputInterface& addGetEdgePropertiesWithNull(PropertyType propertyType) {
-        return addGetPropertiesWithNull<EntityType::Edge, T>(propertyType);
+    PipelineValuesOutputInterface& addGetEdgePropertiesWithNull(ColumnTag entityTag,
+                                                                PropertyType propertyType) {
+        return addGetPropertiesWithNull<EntityType::Edge, T>(entityTag, propertyType);
     }
 
     // Expression evaluation

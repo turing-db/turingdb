@@ -28,6 +28,7 @@ public:
     using ColumnIDs = typename ChunkWriter::ColumnIDs;
 
     static GetPropertiesWithNullProcessor* create(PipelineV2* pipeline,
+                                                  ColumnTag entityTag,
                                                   PropertyType propType);
 
     std::string describe() const override;
@@ -41,11 +42,13 @@ public:
 
 protected:
     PropertyType _propType;
+    ColumnTag _entityTag;
     std::unique_ptr<ChunkWriter> _propWriter;
     PipelineBlockInputInterface _input;
     PipelineValuesOutputInterface _output;
 
-    explicit GetPropertiesWithNullProcessor(PropertyType propType);
+    explicit GetPropertiesWithNullProcessor(ColumnTag entityTag,
+                                            PropertyType propType);
     ~GetPropertiesWithNullProcessor() = default;
 };
 
