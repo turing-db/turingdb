@@ -102,6 +102,31 @@ if [[ "$(uname)" != "Darwin" ]]; then
     fi
 fi
 
+# Install BLAS
+if [[ "$(uname)" == "Darwin" ]]; then
+    # macOS - use Homebrew
+    if ! command -v brew &> /dev/null; then
+        echo "Homebrew not found. Please install Homebrew first."
+        exit 1
+    fi
+
+    if ! brew list openblas &> /dev/null; then
+        echo "Installing openblas via Homebrew..."
+        brew install openblas
+    else
+        echo "openblas is already installed"
+    fi
+else
+    # Linux - use apt
+    if command -v apt-get &> /dev/null; then
+        echo "Installing BLAS via apt..."
+        sudo apt-get install -qqy libopenblas-dev
+    else
+        echo "apt-get not found. Please install BLAS manually."
+        exit 1
+    fi
+fi
+
 # # Build aws-sdk-cpp
 # mkdir -p $BUILD_DIR/aws-sdk-cpp
 # cd $BUILD_DIR/aws-sdk-cpp
