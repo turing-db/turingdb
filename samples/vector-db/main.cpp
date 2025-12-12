@@ -1,21 +1,17 @@
 #include <spdlog/fmt/fmt.h>
-#include <random>
 
-#include "BatchVectorSearch.h"
+#include "VectorSearchQuery.h"
 #include "BatchVectorCreate.h"
 #include "VecLib.h"
-#include "VecLibShard.h"
 #include "VectorDatabase.h"
 #include "VectorSearchResult.h"
+#include "RandomGenerator.h"
 #include "TuringTime.h"
 
 int main(int argc, char** argv) {
     const fs::Path rootPath {SAMPLE_DIR "/storage"};
+    vec::RandomGenerator::initialize(1);
 
-    // Random number generator
-    // std::random_device rd;
-    std::mt19937 gen(1); // NOLINT
-    std::uniform_real_distribution<float> rand(0.0f, 1.0f);
     std::string_view libName = "test2";
 
     // Creating a database
@@ -30,17 +26,15 @@ int main(int argc, char** argv) {
 
     fmt::println("Initialized database at {}", rootPath.c_str());
 
-    constexpr vec::Dimension dim = 256;
+    constexpr vec::Dimension dim = 1024;
     constexpr vec::DistanceMetric metric = vec::DistanceMetric::INNER_PRODUCT;
-    constexpr size_t vecCount = 1'000'000;
-    constexpr size_t batchCount = 20;
-    constexpr size_t memUsage = vecCount * dim * sizeof(float) // Vectors
-                              + vecCount * sizeof(uint64_t);   // External IDs
+    constexpr size_t vecCount = 10'000;
+    constexpr size_t batchCount = 5;
 
     // Vector to search
     std::vector<float> queryData(dim);
     for (size_t i = 0; i < dim; i++) {
-        queryData[i] = rand(gen);
+        queryData[i] = vec::RandomGenerator::generate<float>();
     }
 
     if (!db->libraryExists(libName)) {
@@ -61,7 +55,7 @@ int main(int argc, char** argv) {
         }
 
         fmt::println("- Created library with ID {}", libID);
-        fmt::println("- Will allocate {} vectors ({} MiB)", vecCount, memUsage / (1024ul * 1024));
+        fmt::println("- Will allocate {} vectors", vecCount);
 
         constexpr size_t vecCountPerBatch = vecCount / batchCount;
 
@@ -74,17 +68,16 @@ int main(int argc, char** argv) {
 
         // Generating vectors
         {
-            vec::BatchVectorCreate batch = lib->prepareCreateBatch(dim);
+            vec::BatchVectorCreate batch = lib->prepareCreateBatch();
 
             for (size_t b = 0; b < batchCount; b++) {
                 batch.clear();
-                constexpr size_t memPerBatch = vecCountPerBatch * dim * sizeof(float);
-                fmt::println("    * Generating {} vectors ({} MiB)", vecCountPerBatch, memPerBatch / (1024ul * 1024));
+                fmt::println("    * Generating {} vectors", vecCountPerBatch);
 
                 t1 = Clock::now();
                 for (size_t i = 0; i < vecCountPerBatch; i++) {
                     for (size_t j = 0; j < dim; j++) {
-                        vec[j] = rand(gen);
+                        vec[j] = vec::RandomGenerator::generate<float>();
                     }
                     batch.addPoint(i, vec);
                 }
@@ -107,7 +100,7 @@ int main(int argc, char** argv) {
 
     vec::VecLib* lib = db->getLibrary(libName);
 
-    vec::BatchVectorSearch query {dim};
+    vec::VectorSearchQuery query {dim};
     query.setMaxResultCount(20);
     query.setVector(queryData);
 
@@ -123,7 +116,7 @@ int main(int argc, char** argv) {
     fmt::println("Found {} results in {} ms", results.count(), duration<Milliseconds>(t0Search, Clock::now()));
 
     const std::span distances = results.distances();
-    const std::span indices = results.indices();
+    const std::span ids = results.ids();
     const std::span shards = results.shards();
 
     if (results.count() == 0) {
@@ -132,7 +125,7 @@ int main(int argc, char** argv) {
     }
 
     for (size_t i = 0; i < results.count(); i++) {
-        fmt::println(" * Result [{}]: {}. Shard={} Distance={:.4f}", i, indices[i], shards[i], distances[i]);
+        fmt::println(" * Result [{}]: {}. Shard={} Distance={:.4f}", i, ids[i], shards[i], distances[i]);
     }
 
     return 0;

@@ -48,6 +48,7 @@ public:
     [[nodiscard]] VecLibShard& getShard(const VecLibMetadata& meta, LSHSignature signature);
 
     void updateMemUsage();
+    void evictLibraryShards(VecLibID libID);
 
     void setMemLimit(ssize_t memLimit) {
         _memLimit = memLimit;
@@ -66,7 +67,7 @@ private:
     AccessedList _accessed;
     ShardIdentifier::Map<AccessedList::iterator> _accessedMap;
 
-    ssize_t _memLimit {256ull * 1024 * 1024}; // 20 GB
+    ssize_t _memLimit {10ull * 1024 * 1024 * 1024}; // 10 GB
     ssize_t _memUsage {0};
 
     ssize_t evictOne();

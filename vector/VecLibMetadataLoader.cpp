@@ -50,7 +50,18 @@ VectorResult<void> VecLibMetadataLoader::load(VecLibMetadata& metadata) {
         } else if (metric == "INNER_PRODUCT") {
             metadata._metric = DistanceMetric::INNER_PRODUCT;
         } else {
-            return VectorError::result<void>(VectorErrorCode::InvalidDimension);
+            return VectorError::result<void>(VectorErrorCode::InvalidMetric);
+        }
+
+        // Library index type
+        const std::string& indexType = json["index_type"].get<std::string>();
+
+        if (indexType == "BRUTE_FORCE") {
+            metadata._indexType = IndexType::BRUTE_FORCE;
+        } else if (indexType == "HNSW") {
+            metadata._indexType = IndexType::HNSW;
+        } else {
+            return VectorError::result<void>(VectorErrorCode::InvalidIndexType);
         }
 
         // Library timestamps

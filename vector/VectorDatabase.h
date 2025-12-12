@@ -31,7 +31,7 @@ public:
     [[nodiscard]] VectorResult<VecLibID> createLibrary(std::string_view libName,
                                                        Dimension dim,
                                                        DistanceMetric metric = DistanceMetric::INNER_PRODUCT);
-    [[nodiscard]] VectorResult<void> deleteLibrary(const VecLibID& libID);
+    [[nodiscard]] VectorResult<void> deleteLibrary(std::string_view libName);
 
     void listLibraries(std::vector<VecLibID>& out) const;
 

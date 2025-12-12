@@ -7,7 +7,7 @@
 #include "ShardCache.h"
 #include "StorageManager.h"
 #include "BatchVectorCreate.h"
-#include "BatchVectorSearch.h"
+#include "VectorSearchQuery.h"
 #include "LSHShardRouter.h"
 #include "VecLibMetadataLoader.h"
 #include "LSHShardRouterLoader.h"
@@ -27,7 +27,7 @@ VecLib::Builder::Builder() {
     _vecLib = std::unique_ptr<VecLib>(new VecLib);
 }
 
-std::unique_ptr<VecLib> VecLib::Builder::build() {
+VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
     auto& storageManager = _vecLib->_storage;
     auto& meta = _vecLib->_metadata;
 
@@ -35,12 +35,12 @@ std::unique_ptr<VecLib> VecLib::Builder::build() {
     msgbioassert(_vecLib->_shardCache, "VecLib shard cache must be set");
     msgbioassert(meta._dimension > 0, "VecLib dimension must be set");
 
-    constexpr uint8_t nbits = 8;
+    constexpr uint8_t nbits = 10;
     _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(meta._dimension, nbits);
     _vecLib->_shardRouter->initialize();
 
     if (auto res = storageManager->createLibraryStorage(*_vecLib); !res) {
-        throw VectorException(res.error().fmtMessage());
+        return res.get_unexpected();
     }
 
     const auto now = Clock::now()
@@ -100,10 +100,12 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
         _shardCache->updateMemUsage();
     }
 
+    _metadata._modifiedAt = Clock::now().time_since_epoch().count();
+
     return {};
 }
 
-VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchResult& results) {
+VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchResult& results) {
     const std::span<const float> embeddings = query.embeddings();
     const size_t maxResultCount = query.resultCount();
 
@@ -120,11 +122,7 @@ VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchRe
     for (const LSHSignature& signature : searchSignatures) {
         auto& shard = _shardCache->getShard(_metadata, signature);
 
-        const float memUsage = (float)shard.getUsedMem() / 1024.0f / 1024.0f;
-        fmt::println("  * Probing shard {} with {} vectors ({} MiB)", signature, shard._index->ntotal, memUsage);
-
         if (shard._index->ntotal == 0) {
-            fmt::println("      No vectors found");
             continue;
         }
 
@@ -136,7 +134,7 @@ VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchRe
                 break;
             }
 
-            results.addResult(signature, indices[i], distances[i]);
+            results.addResult(signature, shard._ids.at(indices[i]), distances[i]);
         }
     }
 
@@ -145,8 +143,8 @@ VectorResult<void> VecLib::search(const BatchVectorSearch& query, VectorSearchRe
     return {};
 }
 
-BatchVectorCreate VecLib::prepareCreateBatch(Dimension dimension) {
-    return BatchVectorCreate(*_shardRouter, dimension);
+BatchVectorCreate VecLib::prepareCreateBatch() {
+    return BatchVectorCreate(*_shardRouter, _metadata._dimension);
 }
 
 const VecLibStorage& VecLib::getStorage() const {

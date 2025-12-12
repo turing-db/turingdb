@@ -38,13 +38,16 @@ VectorResult<void> VecLibMetadataWriter::write(const VecLibMetadata& metadata) {
 
     // Metric
     _writer.write("    \"metric\": \"");
-    _writer.write(metadata._metric == DistanceMetric::EUCLIDEAN_DIST
-                      ? "EUCLIDEAN_DIST"
-                      : "INNER_PRODUCT");
+    _writer.write(DistanceMetricName::value(metadata._metric));
     _writer.write("\",\n");
 
     // Precision
     _writer.write("    \"precision\": 32,\n");
+
+    // Index type
+    _writer.write("    \"index_type\": \"");
+    _writer.write(IndexTypeName::value(metadata._indexType));
+    _writer.write("\",\n");
 
     // Created timestamp
     _writer.write("    \"created_at\": ");

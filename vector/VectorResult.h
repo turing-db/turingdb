@@ -16,6 +16,7 @@ enum class VectorErrorCode : uint8_t {
     NotVecLibFile,
     InvalidDimension,
     InvalidMetric,
+    InvalidIndexType,
     InvalidMetadata,
     ReaderNotInitialized,
     WriterNotInitialized,
@@ -28,6 +29,7 @@ enum class VectorErrorCode : uint8_t {
 
     CouldNotCreateStorage,
     CouldNotCreateLibraryStorage,
+    CouldNotDeleteLibraryStorage,
     CouldNotCreateShardRouterStorage,
     CouldNotCreateMetadataStorage,
     CouldNotCreateExternalIDsStorage,
@@ -69,6 +71,7 @@ using VectorErrorTypeDescription = EnumToString<VectorErrorCode>::Create<
     EnumStringPair<VectorErrorCode::NotVecLibFile, "Not a vectorlib file">,
     EnumStringPair<VectorErrorCode::InvalidDimension, "Invalid dimension">,
     EnumStringPair<VectorErrorCode::InvalidMetric, "Invalid metric">,
+    EnumStringPair<VectorErrorCode::InvalidIndexType, "Invalid index type">,
     EnumStringPair<VectorErrorCode::InvalidMetadata, "Invalid metadata file">,
     EnumStringPair<VectorErrorCode::ReaderNotInitialized, "Reader not initialized">,
     EnumStringPair<VectorErrorCode::WriterNotInitialized, "Writer not initialized">,
@@ -81,6 +84,7 @@ using VectorErrorTypeDescription = EnumToString<VectorErrorCode>::Create<
 
     EnumStringPair<VectorErrorCode::CouldNotCreateStorage, "Could not create storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateLibraryStorage, "Could not create library storage">,
+    EnumStringPair<VectorErrorCode::CouldNotDeleteLibraryStorage, "Could not delete library storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateShardRouterStorage, "Could not create shard router storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateMetadataStorage, "Could not create metadata storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateExternalIDsStorage, "Could not create node IDs storage">,

@@ -2,12 +2,15 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace vec {
 
 class RandomGenerator {
 public:
     struct Impl;
+    using ImplDeleter = void (*)(Impl*);
+    using ImplUniquePtr = std::unique_ptr<Impl, ImplDeleter>;
 
     ~RandomGenerator() = delete;
     RandomGenerator() = delete;
@@ -16,16 +19,20 @@ public:
     RandomGenerator(RandomGenerator&&) = delete;
     RandomGenerator& operator=(RandomGenerator&&) = delete;
 
-    static void initialize();
+    static void initialize(std::optional<uint64_t> seed = {});
+
+    [[nodiscard]] static bool initialized() {
+        return _impl != nullptr;
+    }
 
     template <typename T = uint64_t>
-    static T generate();
+    [[nodiscard]] static T generate();
 
     template <typename T = uint64_t>
-    static T generateUnique(const std::function<bool(T)>& predicate);
+    [[nodiscard]] static T generateUnique(const std::function<bool(T)>& predicate);
 
 private:
-    static std::unique_ptr<Impl, void (*)(Impl*)> _impl;
+    static ImplUniquePtr _impl;
 };
 
 }

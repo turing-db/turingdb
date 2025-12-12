@@ -17,7 +17,7 @@ struct VecLibStorage;
 class StorageManager;
 class ShardCache;
 class BatchVectorCreate;
-class BatchVectorSearch;
+class VectorSearchQuery;
 class VectorSearchResult;
 class LSHShardRouter;
 
@@ -64,7 +64,7 @@ public:
             return *this;
         }
 
-        [[nodiscard]] std::unique_ptr<VecLib> build();
+        [[nodiscard]] VectorResult<std::unique_ptr<VecLib>> build();
 
     private:
         std::unique_ptr<VecLib> _vecLib;
@@ -91,8 +91,8 @@ public:
     };
 
     [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate& batch);
-    [[nodiscard]] VectorResult<void> search(const BatchVectorSearch& query, VectorSearchResult& results);
-    [[nodiscard]] BatchVectorCreate prepareCreateBatch(Dimension dimension);
+    [[nodiscard]] VectorResult<void> search(const VectorSearchQuery& query, VectorSearchResult& results);
+    [[nodiscard]] BatchVectorCreate prepareCreateBatch();
 
     [[nodiscard]] VecLibID id() const {
         return _metadata._id;

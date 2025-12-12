@@ -94,6 +94,21 @@ bool StorageManager::libraryExists(const VecLibID& libID) const {
     return getLibraryPath(libID).exists();
 }
 
+VectorResult<void> StorageManager::deleteLibraryStorage(const VecLibID& libID) {
+    const fs::Path libPath = getLibraryPath(libID);
+    if (!libPath.exists()) {
+        return VectorError::result(VectorErrorCode::LibraryDoesNotExist);
+    }
+
+    if (auto res = libPath.rm(); !res) {
+        return VectorError::result(VectorErrorCode::CouldNotDeleteLibraryStorage, res.error());
+    }
+
+    _storages.erase(libID);
+
+    return {};
+}
+
 const VecLibStorage& StorageManager::getStorage(const VecLibID& libID) const {
     return *_storages.at(libID);
 }

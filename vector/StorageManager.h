@@ -9,7 +9,7 @@
 namespace vec {
 
 class VecLib;
-class LSHShardRouter;
+struct LSHShardRouter;
 struct VecLibMetadata;
 
 class StorageManager {
@@ -28,6 +28,7 @@ public:
 
     [[nodiscard]] VectorResult<void> createLibraryStorage(const VecLib& lib);
     [[nodiscard]] bool libraryExists(const VecLibID& libID) const;
+    [[nodiscard]] VectorResult<void> deleteLibraryStorage(const VecLibID& libID);
 
     [[nodiscard]] const VecLibStorage& getStorage(const VecLibID& libID) const;
     [[nodiscard]] VecLibStorage& getStorage(const VecLibID& libID);
