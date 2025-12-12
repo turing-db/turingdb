@@ -1,5 +1,6 @@
 #include <spdlog/fmt/fmt.h>
 
+#include "VecLibAccessor.h"
 #include "VectorSearchQuery.h"
 #include "BatchVectorCreate.h"
 #include "VecLib.h"
@@ -48,8 +49,8 @@ int main(int argc, char** argv) {
 
         const vec::VecLibID libID = createRes.value();
 
-        vec::VecLib* lib = db->getLibrary(libID);
-        if (!lib) {
+        vec::VecLibAccessor lib = db->getLibrary(libID);
+        if (!lib.isValid()) {
             fmt::println("Library not found");
             return 1;
         }
@@ -68,7 +69,7 @@ int main(int argc, char** argv) {
 
         // Generating vectors
         {
-            vec::BatchVectorCreate batch = lib->prepareCreateBatch();
+            vec::BatchVectorCreate batch = lib.prepareCreateBatch();
 
             for (size_t b = 0; b < batchCount; b++) {
                 batch.clear();
@@ -85,7 +86,7 @@ int main(int argc, char** argv) {
                 fmt::println("      Generated {} vectors in {:.2f} ms", vecCountPerBatch, dur);
 
                 t1 = Clock::now();
-                if (auto res = lib->addEmbeddings(batch); !res) {
+                if (auto res = lib.addEmbeddings(batch); !res) {
                     fmt::println("Could not add vectors: {}", res.error().fmtMessage());
                     return 1;
                 }
@@ -98,7 +99,12 @@ int main(int argc, char** argv) {
         fmt::println("- Generated vectors in {:.2f} s", totalDur);
     }
 
-    vec::VecLib* lib = db->getLibrary(libName);
+    vec::VecLibAccessor lib = db->getLibrary(libName);
+
+    if (!lib.isValid()) {
+        fmt::println("Library not found");
+        return 1;
+    }
 
     vec::VectorSearchQuery query {dim};
     query.setMaxResultCount(20);
@@ -108,7 +114,7 @@ int main(int argc, char** argv) {
 
     auto t0Search = Clock::now();
 
-    if (auto res = lib->search(query, results); !res) {
+    if (auto res = lib.search(query, results); !res) {
         fmt::println("Could not search vectors. {}", res.error().fmtMessage());
         return 1;
     }

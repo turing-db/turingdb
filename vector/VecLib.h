@@ -1,10 +1,11 @@
 #pragma once
 
-#include "LSHSignature.h"
-#include "VecLibMetadata.h"
-#include "VectorResult.h"
 
 #include <memory>
+#include <shared_mutex>
+
+#include "VecLibMetadata.h"
+#include "VectorResult.h"
 
 namespace faiss {
 struct Index;
@@ -20,6 +21,7 @@ class BatchVectorCreate;
 class VectorSearchQuery;
 class VectorSearchResult;
 class LSHShardRouter;
+class VecLibAccessor;
 
 class VecLib {
 public:
@@ -116,8 +118,12 @@ public:
 
     [[nodiscard]] const VecLibStorage& getStorage() const;
 
+    [[nodiscard]] VecLibAccessor access();
+
 private:
     friend Builder;
+    
+    mutable std::shared_mutex _mutex;
 
     StorageManager* _storage {nullptr};
     ShardCache* _shardCache {nullptr};

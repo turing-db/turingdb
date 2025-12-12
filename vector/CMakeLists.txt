@@ -19,6 +19,7 @@ set(VECTOR_SOURCES
         LSHShardRouterWriter.cpp
         ShardCache.cpp
         VecLibShard.cpp
+        VecLibAccessor.cpp
         VecLib.cpp)
 
 add_library(turing_vector_s STATIC ${VECTOR_SOURCES})

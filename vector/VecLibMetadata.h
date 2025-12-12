@@ -1,8 +1,10 @@
 #pragma once
 
-#include "EnumToString.h"
+#include <atomic>
 #include <stdint.h>
 #include <string>
+
+#include "EnumToString.h"
 
 namespace vec {
 
@@ -37,8 +39,8 @@ struct VecLibMetadata {
     Dimension _dimension {0};
     DistanceMetric _metric {DistanceMetric::EUCLIDEAN_DIST};
     IndexType _indexType {IndexType::BRUTE_FORCE};
-    uint64_t _createdAt {0};
-    uint64_t _modifiedAt {0};
+    std::atomic<uint64_t> _createdAt {0};
+    std::atomic<uint64_t> _modifiedAt {0};
 };
 
 }

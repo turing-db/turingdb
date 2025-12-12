@@ -13,6 +13,7 @@
 #include "VecLibMetadataLoader.h"
 #include "LSHShardRouterLoader.h"
 #include "VecLibShard.h"
+#include "VecLibAccessor.h"
 
 #include "TuringTime.h"
 #include "BioAssert.h"
@@ -156,6 +157,10 @@ BatchVectorCreate VecLib::prepareCreateBatch() {
 
 const VecLibStorage& VecLib::getStorage() const {
     return _storage->getStorage(_metadata._id);
+}
+
+VecLibAccessor VecLib::access() {
+    return VecLibAccessor {_mutex, *this};
 }
 
 VecLib::VecLib()
