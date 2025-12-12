@@ -1,6 +1,7 @@
 set(fs_sources File.cpp
                FileResult.cpp
                FileRegion.cpp
+               FileReader.cpp
                FilePageReader.cpp
                FilePageWriter.cpp
                Path.cpp)
