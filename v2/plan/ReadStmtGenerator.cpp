@@ -27,6 +27,7 @@
 #include "nodes/GetOutEdgesNode.h"
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetEntityTypeNode.h"
+#include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/JoinNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
@@ -498,7 +499,7 @@ void ReadStmtGenerator::placePredicateJoins() {
                     continue;
                 }
 
-                GetPropertyNode* n = _tree->insertBefore<GetPropertyNode>(filter, expr->getPropName());
+                GetPropertyWithNullNode* n = _tree->insertBefore<GetPropertyWithNullNode>(filter, expr->getPropName());
                 n->setEntityVarDecl(entityDecl);
                 n->setExpr(expr);
 
