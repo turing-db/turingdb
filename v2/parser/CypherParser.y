@@ -51,6 +51,7 @@
     #include "stmt/OrderBy.h"
     #include "stmt/OrderByItem.h"
     #include "stmt/SetItem.h"
+    #include "LoadGraphQuery.h"
 
     namespace db::v2 {
         class YCypherScanner;
@@ -139,6 +140,7 @@
 %token<std::string_view> UNION
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
+%token<std::string_view> GRAPH
 %token<std::string_view> DESC
 %token<std::string_view> CALL
 %token<std::string_view> NULL_
@@ -152,6 +154,7 @@
 %token<std::string_view> DROP
 %token<std::string_view> SKIP
 %token<std::string_view> WITH
+%token<std::string_view> LOAD
 %token<std::string_view> ANY
 %token<std::string_view> SET
 %token<std::string_view> ALL
@@ -253,6 +256,7 @@
 %type<db::v2::SinglePartQuery*> singlePartQuery
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
+%type<db::v2::LoadGraphQuery*> loadGraph
 %type<db::v2::Stmt*> readingStatement
 %type<db::v2::Stmt*> updatingStatement
 %type<db::v2::StmtContainer*> readingStatements
@@ -304,6 +308,11 @@ singleQuery
     | multiPartQuery { scanner.notImplemented(@$, "Multi-part queries"); }
     | createConstraint { scanner.notImplemented(@$, "CREATE CONSTRAINT"); }
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
+    | loadGraph { $$ = $1; }
+    ;
+
+loadGraph
+    : LOAD GRAPH ID { $$ = LoadGraphQuery::create(ast, $3); LOC($$, @$); }
     ;
 
 returnSt

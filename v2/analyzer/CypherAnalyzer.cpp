@@ -11,6 +11,7 @@
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "LoadGraphQuery.h"
 #include "Projection.h"
 #include "expr/Expr.h"
 #include "stmt/StmtContainer.h"
@@ -46,10 +47,18 @@ void CypherAnalyzer::analyze() {
         _readAnalyzer->setDeclContext(ctxt);
         _writeAnalyzer->setDeclContext(ctxt);
 
-        if (const SinglePartQuery* q = dynamic_cast<const SinglePartQuery*>(query)) {
-            analyze(q);
-        } else {
-            throwError("Unsupported query type", query);
+        switch (query->getKind()) {
+            case QueryCommand::Kind::SINGLE_PART_QUERY:
+                analyze(static_cast<const SinglePartQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LOAD_GRAPH_QUERY:
+                analyze(static_cast<const LoadGraphQuery*>(query));
+            break;
+
+            default:
+                throwError("Unsupported query type", query);
+            break;
         }
     }
 }
@@ -160,6 +169,13 @@ void CypherAnalyzer::analyze(Limit* limitSt) {
 
     if (expr->isDynamic() || expr->isAggregate()) {
         throwError("LIMIT expression must be a value that can be evaluated at compile time", limitSt);
+    }
+}
+
+void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
+    std::string_view graphName = loadGraph->getGraphName();
+    if (graphName.empty()) {
+        throwError("LOAD GRAPH should not have an empty graph name");
     }
 }
 

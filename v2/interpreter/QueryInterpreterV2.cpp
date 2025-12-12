@@ -136,7 +136,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     }
 
     // Execute pipeline
-    ExecutionContext execCtxt(view, &txRes.value());
+    ExecutionContext execCtxt(_sysMan, view, &txRes.value());
     PipelineExecutor executor(&pipeline, &execCtxt);
     try {
         executor.execute();

@@ -30,6 +30,7 @@ class StringExpr;
 class PropertyExpr;
 class VarDecl;
 class FunctionInvocationExpr;
+class LoadGraphQuery;
 
 class NodePatternData;
 class EdgePatternData;
@@ -51,6 +52,7 @@ private:
     std::unordered_set<const VarDecl*> _dumpedVariables;
 
     void dump(std::ostream& out, const SinglePartQuery* query);
+    void dump(std::ostream& out, const LoadGraphQuery* query);
     void dump(std::ostream& out, const MatchStmt* match);
     void dump(std::ostream& out, const Limit* lim);
     void dump(std::ostream& out, const Skip* skip);

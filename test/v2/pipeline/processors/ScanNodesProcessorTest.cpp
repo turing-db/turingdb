@@ -66,7 +66,7 @@ TEST_F(ScanNodesProcessorTest, scanNodesVarChunk) {
             std::cout << "Executing chunksize=" << chunkSize << '\n';
             const auto transaction = _graph->openTransaction();
             const GraphView view = transaction.viewGraph();
-            ExecutionContext execCtxt(view);
+            ExecutionContext execCtxt(&_env->getSystemManager(), view);
             execCtxt.setChunkSize(chunkSize);
             PipelineExecutor executor(&pipeline, &execCtxt);
             executor.execute();

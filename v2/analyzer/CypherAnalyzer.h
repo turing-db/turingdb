@@ -9,30 +9,11 @@ class ReadStmtAnalyzer;
 class WriteStmtAnalyzer;
 class ExprAnalyzer;
 class SinglePartQuery;
-class MatchStmt;
-class CreateStmt;
+class LoadGraphQuery;
 class OrderBy;
 class Skip;
 class Limit;
 class ReturnStmt;
-class Pattern;
-class PatternElement;
-class NodePattern;
-class EdgePattern;
-class EntityPattern;
-class Expr;
-class BinaryExpr;
-class UnaryExpr;
-class SymbolExpr;
-class LiteralExpr;
-class ParameterExpr;
-class PropertyExpr;
-class StringExpr;
-class EntityTypeExpr;
-class PathExpr;
-class DeclContext;
-class VarDecl;
-class AnalysisData;
 
 class CypherAnalyzer {
 public:
@@ -51,6 +32,7 @@ public:
     // Query types
     void analyze(const SinglePartQuery* query);
     void analyze(const ReturnStmt* returnSt);
+    void analyze(const LoadGraphQuery* loadGraph);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

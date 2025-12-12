@@ -28,10 +28,12 @@
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
+#include "nodes/LoadGraphNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "stmt/StmtContainer.h"
+#include "LoadGraphQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -56,11 +58,15 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
     switch (query->getKind()) {
         case QueryCommand::Kind::SINGLE_PART_QUERY:
             generateSinglePartQuery(static_cast<const SinglePartQuery*>(query));
-            break;
+        break;
+
+        case QueryCommand::Kind::LOAD_GRAPH_QUERY:
+            generateLoadGraphQuery(static_cast<const LoadGraphQuery*>(query));
+        break;
 
         default:
             throwError(fmt::format("Unsupported query command of type {}", (uint64_t)query->getKind()), query);
-            break;
+        break;
     }
 
     _tree.removeIsolatedNodes();
@@ -104,6 +110,11 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     if (returnStmt) {
         generateReturnStmt(returnStmt, currentNode);
     }
+}
+
+void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* loadGraph) {
+    LoadGraphNode* loadGraphNode = _tree.create<LoadGraphNode>(loadGraph->getGraphName());
+    _tree.newOut<ProduceResultsNode>(loadGraphNode);
 }
 
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {

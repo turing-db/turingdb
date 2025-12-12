@@ -67,6 +67,7 @@ class CypherParserState;
 class YCypherParser;
 class FunctionDecls;
 class ProcedureBlueprintMap;
+class LoadGraphQuery;
 
 class CypherAST {
 public:
@@ -119,6 +120,7 @@ public:
     friend VarDecl;
     friend NodePatternData;
     friend EdgePatternData;
+    friend LoadGraphQuery;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

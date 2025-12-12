@@ -58,7 +58,7 @@ TEST_F(PipelineTest, emptyPipeline) {
 
     auto view = _graph->openTransaction().viewGraph();
 
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 }
@@ -101,7 +101,7 @@ TEST_F(PipelineTest, scanNodes) {
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 }
@@ -162,7 +162,7 @@ TEST_F(PipelineTest, scanNodesExpand1) {
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 
@@ -248,7 +248,7 @@ TEST_F(PipelineTest, scanNodesExpand2) {
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 }
@@ -285,7 +285,7 @@ TEST_F(PipelineTest, scanNodesLimit) {
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 
@@ -335,7 +335,7 @@ TEST_F(PipelineTest, scanNodesSkip) {
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 
@@ -391,7 +391,7 @@ TEST_F(PipelineTest, scanNodesCount) {
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 }
@@ -448,7 +448,7 @@ TEST_F(PipelineTest, multiChunkCount) {
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
     
@@ -556,7 +556,7 @@ TEST_F(PipelineTest, abcOverwrite) {
     // Execute pipeline
     const auto transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
-    ExecutionContext execCtxt(view);
+    ExecutionContext execCtxt(&_env->getSystemManager(), view);
     PipelineExecutor executor(&pipeline, &execCtxt);
     executor.execute();
 

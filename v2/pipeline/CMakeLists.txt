@@ -32,6 +32,7 @@ set(processors_sources
     processors/LambdaSourceProcessor.cpp
     processors/WriteProcessor.cpp
     processors/GetLabelSetIDProcessor.cpp
+    processors/LoadGraphProcessor.cpp
 )
 
 set(procedures_sources
@@ -54,4 +55,5 @@ target_link_libraries(turing_db_v2_pipeline_s PUBLIC
     turing_db_memory_s)
 
 target_link_libraries(turing_db_v2_pipeline_s PRIVATE
-    turing_db_storage_s)
+    turing_db_storage_s
+    turing_db_system_s)

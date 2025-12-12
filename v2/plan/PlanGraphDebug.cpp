@@ -12,6 +12,7 @@
 #include "nodes/CreateGraphNode.h"
 #include "nodes/WriteNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
+#include "nodes/LoadGraphNode.h"
 
 #include "stmt/OrderByItem.h"
 #include "views/GraphView.h"
@@ -78,6 +79,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
     output << "flowchart TD\n";
 
+    fmt::println("PlanGraph size={}", planGraph._nodes.size());
     for (size_t i = 0; i < planGraph._nodes.size(); i++) {
         const auto& node = planGraph._nodes[i];
         nodeOrder[node.get()] = i;
@@ -103,6 +105,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const auto& label : labels) {
                     output << "        __label__: " << labelMap.getName(label).value() << "\n";
                 }
+            }
+            break;
+
+            case PlanGraphOpcode::LOAD_GRAPH: {
+                const auto* n = dynamic_cast<LoadGraphNode*>(node.get());
+                output << "        __graph__: " << n->getGraphName() << "\n";
             } break;
 
             case PlanGraphOpcode::CREATE_GRAPH: {

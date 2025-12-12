@@ -20,6 +20,7 @@
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "processors/GetLabelSetIDProcessor.h"
+#include "processors/LoadGraphProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
@@ -438,6 +439,20 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodesByLabel(const LabelSet
     _pendingOutput.updateInterface(&outNodeIDs);
 
     return outNodeIDs;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view graphName) {
+    LoadGraphProcessor* loadGraph = LoadGraphProcessor::create(_pipeline, graphName);
+    
+    PipelineValueOutputInterface& output = loadGraph->output();
+
+    Dataframe* df = output.getDataframe();
+    NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    output.setValue(graphNameValue);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
 }
 
 template <EntityType Entity, db::SupportedType T>

@@ -36,6 +36,7 @@ class AggregateEvalNode;
 class ProcedureEvalNode;
 class WriteNode;
 class ScanNodesByLabelNode;
+class LoadGraphNode;
 
 class PipelineGenerator {
 public:
@@ -107,6 +108,7 @@ private:
     PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
     PipelineOutputInterface* translateWriteNode(WriteNode* node);
     PipelineOutputInterface* translateScanNodesByLabelNode(ScanNodesByLabelNode* node);
+    PipelineOutputInterface* translateLoadGraph(LoadGraphNode* node);
 };
 
 }

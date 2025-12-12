@@ -19,6 +19,7 @@
 #include "decl/VarDecl.h"
 #include "QualifiedName.h"
 #include "FunctionInvocation.h"
+#include "LoadGraphQuery.h"
 
 #include "expr/All.h"
 
@@ -69,12 +70,15 @@ void CypherASTDumper::dump(std::ostream& out) {
     out << "erDiagram\n";
 
     for (const auto& query : _ast->queries()) {
-        if (const SinglePartQuery* q = dynamic_cast<const SinglePartQuery*>(query)) {
-            dump(out, q);
-            continue;
-        }
+        switch (query->getKind()) {
+            case QueryCommand::Kind::SINGLE_PART_QUERY:
+                dump(out, static_cast<const SinglePartQuery*>(query));
+            break;
 
-        throw CompilerException("Only single part queries are supported");
+            case QueryCommand::Kind::LOAD_GRAPH_QUERY:
+                dump(out, static_cast<const LoadGraphQuery*>(query));
+            break;
+        }
     }
 }
 
@@ -108,6 +112,13 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
         out << "    _" << std::hex << query << " ||--o{ _" << std::hex << retSt << " : \"\"\n";
         dump(out, retSt);
     }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const LoadGraphQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType LoadGraphQuery\n";
+    out << "    }\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {

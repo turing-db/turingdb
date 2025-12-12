@@ -21,6 +21,8 @@
 #include "PlanOptimizer.h"
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
 
 using namespace db;
 using namespace db::v2;
@@ -28,12 +30,15 @@ using namespace db::v2;
 int main(int argc, char** argv) {
     std::string queryStr;
 
-    std::unique_ptr<Graph> graph = Graph::create();
-    SimpleGraph::createSimpleGraph(graph.get());
+    TuringConfig config;
+    config.setSyncedOnDisk(false);
+    SystemManager sysMan(&config);
+    Graph* graph = sysMan.createGraph("simpledb");
+    SimpleGraph::createSimpleGraph(graph);
 
     auto procedures = ProcedureBlueprintMap::create();
 
-    const Transaction transaction = graph->openTransaction();
+    Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
     bool pipelineGenEnabled = false;
@@ -164,7 +169,7 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Execution ===\n\n");
 
-            ExecutionContext execCtxt(view);
+            ExecutionContext execCtxt(&sysMan, view, &transaction);
             PipelineExecutor executor(&pipeline, &execCtxt);
             try {
                 auto t0 = Clock::now();

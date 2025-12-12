@@ -88,7 +88,7 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         const auto transaction = _graph->openTransaction();
         const GraphView view = transaction.viewGraph();
 
-        ExecutionContext execCtxt(view);
+        ExecutionContext execCtxt(&_env->getSystemManager(), view);
         execCtxt.setChunkSize(chunkSize);
         PipelineExecutor executor(&pipeline, &execCtxt);
         executor.execute();
@@ -157,7 +157,7 @@ TEST_F(CountProcessorTest, expand3) {
         const auto transaction = _graph->openTransaction();
         const GraphView view = transaction.viewGraph();
 
-        ExecutionContext execCtxt(view);
+        ExecutionContext execCtxt(&_env->getSystemManager(), view);
         execCtxt.setChunkSize(chunkSize);
         PipelineExecutor executor(&pipeline, &execCtxt);
         executor.execute();

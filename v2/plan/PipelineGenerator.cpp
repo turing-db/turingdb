@@ -48,6 +48,7 @@
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/WriteNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
+#include "nodes/LoadGraphNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -293,6 +294,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::WRITE:
             return translateWriteNode(static_cast<WriteNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LOAD_GRAPH:
+            return translateLoadGraph(static_cast<LoadGraphNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -934,5 +939,10 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         _declToColumn[planPendingEdge._name] = procPendingEdge._tag;
     }
 
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* loadGraph) {
+    _builder.addLoadGraph(loadGraph->getGraphName());
     return _builder.getPendingOutputInterface();
 }

@@ -19,7 +19,7 @@ using namespace turing::test;
 
 #define EXECUTE(view, chunkSize)                          \
     {                                                     \
-        ExecutionContext execCtxt(view);                  \
+        ExecutionContext execCtxt(&_env->getSystemManager(), view); \
         execCtxt.setChunkSize(chunkSize);                 \
         _pipeline.clear();                                \
         PipelineExecutor executor(&_pipeline, &execCtxt); \
