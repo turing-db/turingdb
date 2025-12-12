@@ -118,6 +118,8 @@
 %token<std::string_view> EXTRACT
 %token<std::string_view> REQUIRE
 %token<std::string_view> COLLECT
+%token<std::string_view> SUBMIT
+%token<std::string_view> CHANGE
 %token<std::string_view> STARTS
 %token<std::string_view> UNIQUE
 %token<std::string_view> FILTER
@@ -141,6 +143,7 @@
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
+%token<std::string_view> LIST
 %token<std::string_view> DESC
 %token<std::string_view> CALL
 %token<std::string_view> NULL_
@@ -155,6 +158,7 @@
 %token<std::string_view> SKIP
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
+%token<std::string_view> NEW
 %token<std::string_view> ANY
 %token<std::string_view> SET
 %token<std::string_view> ALL
@@ -1138,61 +1142,73 @@ dropConstraint
     ;
 
 reservedWord
-    : ALL { $$ = Symbol::create(ast, $1); }
-    | ASC { $$ = Symbol::create(ast, $1); }
+    : DESCENDING { $$ = Symbol::create(ast, $1); }
+    | CONSTRAINT { $$ = Symbol::create(ast, $1); }
+    | MANDATORY { $$ = Symbol::create(ast, $1); }
     | ASCENDING { $$ = Symbol::create(ast, $1); }
-    | BY { $$ = Symbol::create(ast, $1); }
+    | OPTIONAL { $$ = Symbol::create(ast, $1); }
+    | CONTAINS { $$ = Symbol::create(ast, $1); }
+    | DISTINCT { $$ = Symbol::create(ast, $1); }
+    // | EXTRACT { $$ = Symbol::create(ast, $1); }
+    | REQUIRE { $$ = Symbol::create(ast, $1); }
+    | COLLECT { $$ = Symbol::create(ast, $1); }
+    | SUBMIT { $$ = Symbol::create(ast, $1); }
+    | CHANGE { $$ = Symbol::create(ast, $1); }
+    | STARTS { $$ = Symbol::create(ast, $1); }
+    | UNIQUE { $$ = Symbol::create(ast, $1); }
+    // | FILTER { $$ = Symbol::create(ast, $1); }
+    | SINGLE { $$ = Symbol::create(ast, $1); }
+    | SCALAR { $$ = Symbol::create(ast, $1); }
+    | UNWIND { $$ = Symbol::create(ast, $1); }
+    | REMOVE { $$ = Symbol::create(ast, $1); }
+    | RETURN { $$ = Symbol::create(ast, $1); }
     | CREATE { $$ = Symbol::create(ast, $1); }
     | DELETE { $$ = Symbol::create(ast, $1); }
-    | DESC { $$ = Symbol::create(ast, $1); }
-    | DESCENDING { $$ = Symbol::create(ast, $1); }
     | DETACH { $$ = Symbol::create(ast, $1); }
     | EXISTS { $$ = Symbol::create(ast, $1); }
     | LIMIT { $$ = Symbol::create(ast, $1); }
+    | YIELD { $$ = Symbol::create(ast, $1); }
     | MATCH { $$ = Symbol::create(ast, $1); }
     | MERGE { $$ = Symbol::create(ast, $1); }
-    | ON { $$ = Symbol::create(ast, $1); }
-    | IF { $$ = Symbol::create(ast, $1); }
-    | OPTIONAL { $$ = Symbol::create(ast, $1); }
     | ORDER { $$ = Symbol::create(ast, $1); }
-    | REMOVE { $$ = Symbol::create(ast, $1); }
-    | RETURN { $$ = Symbol::create(ast, $1); }
-    | SET { $$ = Symbol::create(ast, $1); }
-    | SKIP { $$ = Symbol::create(ast, $1); }
     | WHERE { $$ = Symbol::create(ast, $1); }
-    | WITH { $$ = Symbol::create(ast, $1); }
     | UNION { $$ = Symbol::create(ast, $1); }
-    | UNWIND { $$ = Symbol::create(ast, $1); }
-    | AND { $$ = Symbol::create(ast, $1); }
-    | AS { $$ = Symbol::create(ast, $1); }
-    | CONTAINS { $$ = Symbol::create(ast, $1); }
-    | DISTINCT { $$ = Symbol::create(ast, $1); }
-    | ENDS { $$ = Symbol::create(ast, $1); }
-    | IN { $$ = Symbol::create(ast, $1); }
-    | IS { $$ = Symbol::create(ast, $1); }
-    | NOT { $$ = Symbol::create(ast, $1); }
-    | OR { $$ = Symbol::create(ast, $1); }
-    | STARTS { $$ = Symbol::create(ast, $1); }
-    | XOR { $$ = Symbol::create(ast, $1); }
     | FALSE { $$ = Symbol::create(ast, $1); }
-    | TRUE { $$ = Symbol::create(ast, $1); }
+    | COUNT { $$ = Symbol::create(ast, $1); }
+    | LIST { $$ = Symbol::create(ast, $1); }
+    | DESC { $$ = Symbol::create(ast, $1); }
+    | CALL { $$ = Symbol::create(ast, $1); }
     | NULL_ { $$ = Symbol::create(ast, $1); }
-    | CONSTRAINT { $$ = Symbol::create(ast, $1); }
-    | DO { $$ = Symbol::create(ast, $1); }
-    | FOR { $$ = Symbol::create(ast, $1); }
-    | REQUIRE { $$ = Symbol::create(ast, $1); }
-    | COLLECT { $$ = Symbol::create(ast, $1); }
-    | UNIQUE { $$ = Symbol::create(ast, $1); }
-    | CASE { $$ = Symbol::create(ast, $1); }
+    | TRUE { $$ = Symbol::create(ast, $1); }
     | WHEN { $$ = Symbol::create(ast, $1); }
+    | NONE { $$ = Symbol::create(ast, $1); }
     | THEN { $$ = Symbol::create(ast, $1); }
     | ELSE { $$ = Symbol::create(ast, $1); }
-    | END { $$ = Symbol::create(ast, $1); }
-    | MANDATORY { $$ = Symbol::create(ast, $1); }
-    | SCALAR { $$ = Symbol::create(ast, $1); }
-    | OF { $$ = Symbol::create(ast, $1); }
-    | ADD { $$ = Symbol::create(ast, $1); }
+    | CASE { $$ = Symbol::create(ast, $1); }
+    | ENDS { $$ = Symbol::create(ast, $1); }
     | DROP { $$ = Symbol::create(ast, $1); }
+    | SKIP { $$ = Symbol::create(ast, $1); }
+    | WITH { $$ = Symbol::create(ast, $1); }
+    | NEW { $$ = Symbol::create(ast, $1); }
+    | ANY { $$ = Symbol::create(ast, $1); }
+    | SET { $$ = Symbol::create(ast, $1); }
+    | ALL { $$ = Symbol::create(ast, $1); }
+    | ASC { $$ = Symbol::create(ast, $1); }
+    | NOT { $$ = Symbol::create(ast, $1); }
+    | END { $$ = Symbol::create(ast, $1); }
+    | XOR { $$ = Symbol::create(ast, $1); }
+    | FOR { $$ = Symbol::create(ast, $1); }
+    | ADD { $$ = Symbol::create(ast, $1); }
+    | AND { $$ = Symbol::create(ast, $1); }
+    | OR { $$ = Symbol::create(ast, $1); }
+    | IN { $$ = Symbol::create(ast, $1); }
+    | IS { $$ = Symbol::create(ast, $1); }
+    | BY { $$ = Symbol::create(ast, $1); }
+    | DO { $$ = Symbol::create(ast, $1); }
+    | OF { $$ = Symbol::create(ast, $1); }
+    | ON { $$ = Symbol::create(ast, $1); }
+    | IF { $$ = Symbol::create(ast, $1); }
+    | AS { $$ = Symbol::create(ast, $1); }
     ;
 
 %%
