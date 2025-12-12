@@ -49,6 +49,10 @@ struct CustomBool {
         return _boolean || other._boolean;
     }
 
+    bool operator!() const {
+        return !_boolean;
+    }
+
     operator bool() const { return _boolean; }
 
     bool _boolean;
