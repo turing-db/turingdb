@@ -10,6 +10,7 @@ class WriteStmtAnalyzer;
 class ExprAnalyzer;
 class SinglePartQuery;
 class LoadGraphQuery;
+class ChangeQuery;
 class OrderBy;
 class Skip;
 class Limit;

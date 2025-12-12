@@ -2,8 +2,7 @@
 
 #include <spdlog/fmt/bundled/core.h>
 
-#include "AnalyzeException.h"
-
+#include "ChangeQuery.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "ReadStmtAnalyzer.h"
@@ -21,6 +20,8 @@
 #include "stmt/Skip.h"
 #include "stmt/CallStmt.h"
 #include "stmt/Limit.h"
+
+#include "AnalyzeException.h"
 
 using namespace db::v2;
 
@@ -56,8 +57,8 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const LoadGraphQuery*>(query));
             break;
 
-            default:
-                throwError("Unsupported query type", query);
+            case QueryCommand::Kind::CHANGE_QUERY:
+                analyze(static_cast<const ChangeQuery*>(query));
             break;
         }
     }

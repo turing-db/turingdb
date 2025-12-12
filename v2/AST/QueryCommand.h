@@ -11,7 +11,8 @@ public:
 
     enum class Kind {
         SINGLE_PART_QUERY = 0,
-        LOAD_GRAPH_QUERY
+        LOAD_GRAPH_QUERY,
+        CHANGE_QUERY,
     };
 
     virtual Kind getKind() const = 0;

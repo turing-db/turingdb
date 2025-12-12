@@ -1,5 +1,6 @@
 #include "PlanGraphGenerator.h"
 
+#include "BioAssert.h"
 #include "FunctionInvocation.h"
 #include "Projection.h"
 #include "QualifiedName.h"
@@ -32,6 +33,7 @@
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "ChangeQuery.h"
 #include "stmt/StmtContainer.h"
 #include "LoadGraphQuery.h"
 
@@ -64,12 +66,20 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             generateLoadGraphQuery(static_cast<const LoadGraphQuery*>(query));
         break;
 
+        case QueryCommand::Kind::CHANGE_QUERY:
+            generateChangeQuery(static_cast<const ChangeQuery*>(query));
+            break;
+
         default:
             throwError(fmt::format("Unsupported query command of type {}", (uint64_t)query->getKind()), query);
         break;
     }
 
     _tree.removeIsolatedNodes();
+}
+
+void PlanGraphGenerator::generateChangeQuery(const ChangeQuery* query) {
+    msgbioassert(_tree.nodes().empty(), "CHANGE queries are standalone queries");
 }
 
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {

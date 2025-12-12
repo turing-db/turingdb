@@ -42,6 +42,7 @@ set(ast_sources
     QueryCommand.cpp
     SinglePartQuery.cpp
     LoadGraphQuery.cpp
+    ChangeQuery.cpp
     NodePattern.cpp
     EdgePattern.cpp
     Symbol.cpp

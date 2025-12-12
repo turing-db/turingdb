@@ -44,6 +44,7 @@
     #include "NodePattern.h"
     #include "EdgePattern.h"
     #include "SinglePartQuery.h"
+    #include "ChangeQuery.h"
     #include "Projection.h"
     #include "PatternElement.h"
     #include "stmt/Skip.h"
@@ -258,6 +259,7 @@
 
 
 %type<db::v2::SinglePartQuery*> singlePartQuery
+%type<db::v2::ChangeQuery*> changeQuery
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
@@ -265,6 +267,7 @@
 %type<db::v2::Stmt*> updatingStatement
 %type<db::v2::StmtContainer*> readingStatements
 %type<db::v2::StmtContainer*> updatingStatements
+%type<db::v2::ChangeQuery::Op> changeOp
 %type<db::v2::MatchStmt*> matchSt
 %type<db::v2::CallStmt*> callSt
 %type<db::v2::CreateStmt*> createSt
@@ -313,6 +316,7 @@ singleQuery
     | createConstraint { scanner.notImplemented(@$, "CREATE CONSTRAINT"); }
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
     | loadGraph { $$ = $1; }
+    | changeQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -405,6 +409,17 @@ singlePartQuery
     | readingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
     | readingStatements updatingStatements { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); LOC($$, @$); }
     | readingStatements updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); $$->setReturnStmt($3); LOC($$, @$); }
+    ;
+
+changeQuery
+    : CHANGE changeOp { $$ = ChangeQuery::create(ast, $2); LOC($$, @$); }
+    ;
+
+changeOp
+    : NEW { $$ = ChangeQuery::Op::NEW; }
+    | SUBMIT { $$ = ChangeQuery::Op::SUBMIT; }
+    | DELETE { $$ = ChangeQuery::Op::DELETE; }
+    | LIST { $$ = ChangeQuery::Op::LIST; }
     ;
 
 readingStatements

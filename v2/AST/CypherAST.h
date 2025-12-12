@@ -55,6 +55,7 @@ class SetStmt;
 class DeleteStmt;
 class QueryCommand;
 class SinglePartQuery;
+class ChangeQuery;
 class ReturnStmt;
 class WhereClause;
 class YieldClause;
@@ -116,6 +117,7 @@ public:
     friend YieldClause;
     friend YieldItems;
     friend SinglePartQuery;
+    friend ChangeQuery;
     friend DeclContext;
     friend VarDecl;
     friend NodePatternData;
