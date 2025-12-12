@@ -5,4 +5,3 @@ compile_commands.json
 external/dependencies/
 build/
 turingdb.out
-vector-ai

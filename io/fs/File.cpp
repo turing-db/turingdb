@@ -80,7 +80,7 @@ Result<FileRegion> File::map(size_t size, size_t offset) {
 
 Result<void> File::seek(size_t offset) {
     if (::lseek(_fd, offset, SEEK_SET) < 0) {
-        return Error::result(ErrorType::SEEK_FILE, errno);
+        return Error::result(ErrorType::COULD_NOT_SEEK, errno);
     }
 
     return {};
