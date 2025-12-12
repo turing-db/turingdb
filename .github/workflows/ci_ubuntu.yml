@@ -34,7 +34,7 @@ jobs:
       run: cd ${{ github.workspace }}/build && make -j8 && make install
     - name: Prepare SimpleDB
       shell: bash
-      run: mkdir -p $HOME/.turing/graphs && cp -r ${{ github.workspace }}/examples/binary/simpledb $HOME/.turing/graphs
+      run: cd ${{ github.workspace }}/build/samples/simpledb && ./simpledb && mkdir -p $HOME/.turing/graphs && cp -r simpledb.out/simpledb $HOME/.turing/graphs
     - name: Run unit tests
       shell: bash
       run: cd ${{ github.workspace }}/build && make test
