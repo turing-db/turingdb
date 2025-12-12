@@ -13,7 +13,13 @@ class File;
 
 class FileReader {
 public:
-    FileReader() = default;
+    FileReader();
+    ~FileReader();
+
+    FileReader(const FileReader&) = delete;
+    FileReader(FileReader&&) noexcept = default;
+    FileReader& operator=(const FileReader&) = delete;
+    FileReader& operator=(FileReader&&) noexcept = default;
 
     void setFile(File* f) {
         _file = f;
@@ -21,16 +27,7 @@ public:
         _error.reset();
     }
 
-    void read() {
-        _buffer.clear();
-        _buffer.resize(_file->getInfo()._size);
-
-        auto res = _file->read(_buffer.data(), _buffer.size());
-        if (!res) {
-            _error = res.error();
-        }
-    }
-
+    void read();
     fs::File& file() const { return *_file; }
     bool hasFile() const { return _file != nullptr; }
     const ByteBuffer& getBuffer() const { return _buffer; }
