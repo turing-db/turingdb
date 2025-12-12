@@ -6,6 +6,7 @@
 #include <range/v3/view/zip.hpp>
 #include <spdlog/fmt/fmt.h>
 
+#include "EntityOutputStream.h"
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
@@ -432,7 +433,22 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
         throw PlannerException("GetPropertyWithNullNode does not have an entity variable declaration");
     }
 
-    ColumnTag entityTag = _declToColumn.at(entityDecl);
+    ColumnTag entityTag {};
+    const auto foundDeclIt = _declToColumn.find(entityDecl);
+    if (foundDeclIt != end(_declToColumn)) { // if the decl is registered, use that column
+        entityTag = foundDeclIt->second;
+    } else { // if it is not registered, it must be from our incoming stream
+        const EntityOutputStream& stream = _builder.getPendingOutputInterface()->getStream();
+        if (stream.isNodeStream()) {
+            entityTag = stream.asNodeStream()._nodeIDsTag;
+        } else if (stream.isEdgeStream()) {
+            entityTag = stream.asEdgeStream()._edgeIDsTag;
+        }
+        else {
+            throw FatalException("Attempted to add GetPropertiesWithNull to pipeline "
+                                 "with unkown entity and empty stream.");
+        }
+    }
 
     const std::string propName {node->getPropName()};
 
