@@ -1374,6 +1374,105 @@ TEST_F(QueriesTest, db_history) {
     actualRows.clear();
 }
 
+TEST_F(QueriesTest, scanByLabelOutEdges) {
+    const std::string query = "MATCH (n:Person)-[e]->(m) RETURN n, e, m";
+
+    LineContainer<NodeID, EdgeID, NodeID> returnedLines;
+    LineContainer<NodeID, EdgeID, NodeID> expectedLines;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 3);
+        ASSERT_EQ(df->size(), 3);
+
+        const ColumnNodeIDs* sourceIDs = nullptr;
+        const ColumnEdgeIDs* edgeIDs = nullptr;
+        const ColumnNodeIDs* targetIDs = nullptr;
+
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "n") {
+                sourceIDs = col->as<ColumnNodeIDs>();
+            } else if (name == "e") {
+                edgeIDs = col->as<ColumnEdgeIDs>();
+            } else if (name == "m") {
+                targetIDs = col->as<ColumnNodeIDs>();
+            }
+        }
+
+        ASSERT_TRUE(sourceIDs != nullptr);
+        ASSERT_FALSE(sourceIDs->empty());
+        ASSERT_TRUE(edgeIDs != nullptr);
+        ASSERT_FALSE(edgeIDs->empty());
+        ASSERT_TRUE(targetIDs != nullptr);
+        ASSERT_FALSE(targetIDs->empty());
+
+        const size_t lineCount = targetIDs->size();
+        for (size_t i = 0; i < lineCount; i++) {
+            returnedLines.add({sourceIDs->at(i), edgeIDs->at(i), targetIDs->at(i)});
+        }
+    });
+
+    // Get all expected node IDs from :Person
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+    
+        const LabelID labelPerson = reader.getMetadata().labels().get("Person").value();
+
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const LabelSetHandle nodeLabelSet = reader.getNodeLabelSet(node);
+            if (!nodeLabelSet.hasLabel(labelPerson)) {
+                continue;
+            }
+
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (auto edge : edgeView.outEdges()) {
+                expectedLines.add({edge._nodeID, edge._edgeID, edge._otherID});
+            }
+        }
+    }
+
+    ASSERT_TRUE(returnedLines.equals(expectedLines));
+}
+
+TEST_F(QueriesTest, scanNodesByLabel) {
+    const std::string query = "MATCH (n:Person) RETURN n";
+
+    LineContainer<NodeID> returnedLines;
+    LineContainer<NodeID> expectedLines;
+    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+
+        ColumnNodeIDs* nodeIDs = df->cols().front()->as<ColumnNodeIDs>();
+
+        const size_t lineCount = nodeIDs->size();
+        for (size_t i = 0; i < lineCount; i++) {
+            returnedLines.add({nodeIDs->at(i)});
+        }
+    });
+
+    // Get all expected node IDs from :Person
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+    
+        const LabelID labelPerson = reader.getMetadata().labels().get("Person").value();
+
+        auto nodes = reader.scanNodes();
+        for (auto node : nodes) {
+            const LabelSetHandle nodeLabelSet = reader.getNodeLabelSet(node);
+            if (!nodeLabelSet.hasLabel(labelPerson)) {
+                continue;
+            }
+            expectedLines.add({node});
+        }
+    }
+
+    ASSERT_TRUE(returnedLines.equals(expectedLines));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
