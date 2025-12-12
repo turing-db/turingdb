@@ -93,7 +93,7 @@ void ShardCache::updateMemUsage() {
         memUsage -= evictOne();
     }
 
-    msgbioassert(memUsage >= 0, "Shard cache memory usage cannot be negative");
+    bioassert(memUsage >= 0, "Shard cache memory usage cannot be negative");
 
     _memUsage = memUsage;
 }
@@ -112,7 +112,7 @@ void ShardCache::evictLibraryShards(VecLibID libID) {
 }
 
 ssize_t ShardCache::evictOne() {
-    msgbioassert(!_accessed.empty(), "Shard cache is empty");
+    bioassert(!_accessed.empty(), "Shard cache is empty");
 
     // Find shard with lowest access count
     auto victim = _accessed.begin();

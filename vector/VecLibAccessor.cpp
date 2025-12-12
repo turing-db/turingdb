@@ -23,16 +23,16 @@ VecLibAccessor::VecLibAccessor(std::shared_mutex& mutex, VecLib& vecLib)
 }
 
 BatchVectorCreate VecLibAccessor::prepareCreateBatch() {
-    msgbioassert(_vecLib, "Invalid VecLib accessor");
+    bioassert(_vecLib, "Invalid VecLib accessor");
     return _vecLib->prepareCreateBatch();
 }
 
 VectorResult<void> VecLibAccessor::addEmbeddings(const BatchVectorCreate& batch) {
-    msgbioassert(_vecLib, "Invalid VecLib accessor");
+    bioassert(_vecLib, "Invalid VecLib accessor");
     return _vecLib->addEmbeddings(batch);
 }
 
 VectorResult<void> VecLibAccessor::search(const VectorSearchQuery& query, VectorSearchResult& results) {
-    msgbioassert(_vecLib, "Invalid VecLib accessor");
+    bioassert(_vecLib, "Invalid VecLib accessor");
     return _vecLib->search(query, results);
 }

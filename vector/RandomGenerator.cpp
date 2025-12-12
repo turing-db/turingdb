@@ -34,7 +34,7 @@ void RandomGenerator::initialize(std::optional<uint64_t> seed) {
 
 template <typename T>
 T RandomGenerator::generate() {
-    msgbioassert(_impl, "Random generator not initialized");
+    bioassert(_impl, "Random generator not initialized");
 
     if constexpr (std::is_integral_v<T>) {
         return (T)_impl->_generator();
@@ -47,7 +47,7 @@ T RandomGenerator::generate() {
 
 template <typename T>
 T RandomGenerator::generateUnique(const std::function<bool(T)>& predicate) {
-    msgbioassert(_impl, "Random generator not initialized");
+    bioassert(_impl, "Random generator not initialized");
 
     size_t attempts = 0;
     T value {};

@@ -33,9 +33,9 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
     auto& storageManager = _vecLib->_storage;
     auto& meta = _vecLib->_metadata;
 
-    msgbioassert(storageManager, "VecLib storage must be set");
-    msgbioassert(_vecLib->_shardCache, "VecLib shard cache must be set");
-    msgbioassert(meta._dimension > 0, "VecLib dimension must be set");
+    bioassert(storageManager, "VecLib storage must be set");
+    bioassert(_vecLib->_shardCache, "VecLib shard cache must be set");
+    bioassert(meta._dimension > 0, "VecLib dimension must be set");
 
     constexpr uint8_t nbits = 10;
     _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(meta._dimension, nbits);
@@ -63,8 +63,8 @@ VecLib::Loader::Loader()
 VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storage) {
     auto& meta = _vecLib->_metadata;
 
-    msgbioassert(_vecLib->_storage, "VecLib storage must be set");
-    msgbioassert(_vecLib->_shardCache, "VecLib shard cache must be set");
+    bioassert(_vecLib->_storage, "VecLib storage must be set");
+    bioassert(_vecLib->_shardCache, "VecLib shard cache must be set");
 
     _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(0, 0);
 

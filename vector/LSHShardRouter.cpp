@@ -15,8 +15,8 @@ LSHShardRouter::~LSHShardRouter() {
 }
 
 void LSHShardRouter::initialize() {
-    msgbioassert(_dim > 0, "LSHShardRouter: dimension must be greater than 0");
-    msgbioassert(_nbits >= 2 && _nbits < 16, "LSHShardRouter: number of bits must be between 2 and 15");
+    bioassert(_dim > 0, "LSHShardRouter: dimension must be greater than 0");
+    bioassert(_nbits >= 2 && _nbits < 16, "LSHShardRouter: number of bits must be between 2 and 15");
     _hyperplanes.resize(_nbits);
 
     for (auto& hyperplane : _hyperplanes) {
@@ -50,7 +50,7 @@ LSHSignature LSHShardRouter::getSignature(std::span<const float> vector) const {
 }
 
 void LSHShardRouter::getSearchSignatures(std::span<const float> vector, std::vector<LSHSignature>& signatures) const {
-    msgbioassert(vector.size() == _dim, "LSHShardRouter: vector size must be equal to dimension");
+    bioassert(vector.size() == _dim, "LSHShardRouter: vector size must be equal to dimension");
     signatures.resize(_nbits + 1);
     
     const LSHSignature sig = getSignature(vector);
