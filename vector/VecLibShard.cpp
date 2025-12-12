@@ -5,6 +5,7 @@
 
 #include "FileReader.h"
 #include "FileWriter.h"
+#include "Panic.h"
 #include "VecLibMetadata.h"
 
 using namespace vec;
@@ -33,6 +34,9 @@ VectorResult<void> VecLibShard::load(const VecLibMetadata& meta) {
             break;
         case DistanceMetric::INNER_PRODUCT:
             _index = std::make_unique<faiss::IndexFlatIP>(meta._dimension);
+            break;
+        case DistanceMetric::_SIZE:
+            panic("VecLibShard: invalid distance metric");
             break;
     }
 

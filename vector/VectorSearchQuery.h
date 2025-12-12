@@ -10,18 +10,18 @@
 
 namespace vec {
 
-class BatchVectorSearch {
+class VectorSearchQuery {
 public:
-    explicit BatchVectorSearch(Dimension dimension)
+    explicit VectorSearchQuery(Dimension dimension)
         : _dimension(dimension) {
     }
 
-    ~BatchVectorSearch() = default;
+    ~VectorSearchQuery() = default;
 
-    BatchVectorSearch(const BatchVectorSearch&) = delete;
-    BatchVectorSearch& operator=(const BatchVectorSearch&) = delete;
-    BatchVectorSearch(BatchVectorSearch&&) = delete;
-    BatchVectorSearch& operator=(BatchVectorSearch&&) = delete;
+    VectorSearchQuery(const VectorSearchQuery&) = delete;
+    VectorSearchQuery& operator=(const VectorSearchQuery&) = delete;
+    VectorSearchQuery(VectorSearchQuery&&) = delete;
+    VectorSearchQuery& operator=(VectorSearchQuery&&) = delete;
 
     void setVector(std::span<const float> newPoint) {
         _embeddings.clear();

@@ -2,6 +2,7 @@
 
 #include <random>
 
+#include "BioAssert.h"
 #include "VectorException.h"
 #include "Panic.h"
 
@@ -9,28 +10,31 @@ namespace vec {
 
 struct RandomGenerator::Impl {
     std::random_device _rd;
-    std::mt19937_64 _generator {_rd()};
+    std::mt19937_64 _generator;
+
+    explicit Impl(std::optional<uint64_t> seed = {})
+        : _generator(seed ? *seed : _rd())
+    {
+    }
 };
 
 static void deleteImpl(RandomGenerator::Impl* impl) {
     delete impl;
 }
 
-std::unique_ptr<RandomGenerator::Impl, void (*)(RandomGenerator::Impl*)> RandomGenerator::_impl {nullptr, deleteImpl};
+RandomGenerator::ImplUniquePtr RandomGenerator::_impl {nullptr, deleteImpl};
 
-void RandomGenerator::initialize() {
+void RandomGenerator::initialize(std::optional<uint64_t> seed) {
     if (_impl) {
         return;
     }
 
-    _impl = {new Impl, deleteImpl};
+    _impl = ImplUniquePtr {new Impl(seed), deleteImpl};
 }
 
 template <typename T>
 T RandomGenerator::generate() {
-    if (!_impl) {
-        throw VectorException("Random generator not initialized");
-    }
+    msgbioassert(_impl, "Random generator not initialized");
 
     if constexpr (std::is_integral_v<T>) {
         return (T)_impl->_generator();
@@ -43,9 +47,7 @@ T RandomGenerator::generate() {
 
 template <typename T>
 T RandomGenerator::generateUnique(const std::function<bool(T)>& predicate) {
-    if (!_impl) {
-        throw VectorException("Random generator not initialized");
-    }
+    msgbioassert(_impl, "Random generator not initialized");
 
     size_t attempts = 0;
     T value {};

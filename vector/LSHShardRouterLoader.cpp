@@ -28,7 +28,6 @@ VectorResult<void> LSHShardRouterLoader::load(LSHShardRouter& router) {
 
     const fs::ByteBuffer& buffer = _reader.getBuffer();
 
-    fmt::println("Reading shard router file size: {}", buffer.size());
     fs::ByteBufferIterator it = _reader.iterateBuffer();
     CHECK_VALID(it, VectorErrorCode::ShardRouterFileEmpty);
 

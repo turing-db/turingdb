@@ -31,5 +31,5 @@ target_link_libraries(turing_vector_s
             Threads::Threads
             turing_db_io_fs_s
             nlohmann_json::nlohmann_json
-            faiss)
-
+            faiss
+            OpenMP::OpenMP_CXX)

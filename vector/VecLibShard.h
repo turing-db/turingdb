@@ -8,6 +8,10 @@
 #include "Path.h"
 #include "VectorResult.h"
 
+namespace faiss {
+struct HNSWIndex;
+}
+
 namespace vec {
 
 struct VecLibMetadata;

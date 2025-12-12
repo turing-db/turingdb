@@ -9,14 +9,17 @@
 
 using namespace vec;
 
-VectorDatabase::VectorDatabase() {
+VectorDatabase::VectorDatabase()
+{
 }
 
 VectorDatabase::~VectorDatabase() {
 }
 
 VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::Path& rootPath) {
-    RandomGenerator::initialize();
+    if (!RandomGenerator::initialized()) {
+        RandomGenerator::initialize();
+    }
 
     std::unique_ptr<VectorDatabase> database {new VectorDatabase};
 
@@ -53,31 +56,48 @@ VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
         return _vecLibs.contains(v);
     });
 
-    std::unique_ptr<VecLib> lib = VecLib::Builder()
-                                      .setStorage(_storageManager.get())
-                                      .setShardCache(_shardCache.get())
-                                      .setID(id)
-                                      .setName(libName)
-                                      .setDimension(dim)
-                                      .setMetric(metric)
-                                      .build();
+    auto lib = VecLib::Builder()
+                   .setStorage(_storageManager.get())
+                   .setShardCache(_shardCache.get())
+                   .setID(id)
+                   .setName(libName)
+                   .setDimension(dim)
+                   .setMetric(metric)
+                   .build();
 
-    _vecLibIDs.emplace(lib->name(), id);
-    _vecLibs.emplace(id, std::move(lib));
+    if (!lib) {
+        return lib.get_unexpected();
+    }
+
+    _vecLibIDs.emplace(lib.value()->name(), id);
+    _vecLibs.emplace(id, std::move(lib.value()));
 
     return id;
 }
 
-VectorResult<void> VectorDatabase::deleteLibrary(const VecLibID& libID) {
+VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
     std::unique_lock lock {_mutex};
+
+    const auto itID = _vecLibIDs.find(libName);
+
+    if (itID == _vecLibIDs.end()) {
+        return VectorError::result(VectorErrorCode::LibraryDoesNotExist);
+    }
+
+    const VecLibID libID = itID->second;
 
     if (!_vecLibs.contains(libID)) {
         return VectorError::result(VectorErrorCode::LibraryDoesNotExist);
     }
 
-    _vecLibs.erase(libID);
+    _shardCache->evictLibraryShards(libID);
 
-    // TODO Here delete library storage
+    if (auto res = _storageManager->deleteLibraryStorage(libID); !res) {
+        return res.get_unexpected();
+    }
+
+    _vecLibs.erase(libID);
+    _vecLibIDs.erase(itID);
 
     return {};
 }

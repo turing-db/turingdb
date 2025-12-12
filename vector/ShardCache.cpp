@@ -97,6 +97,19 @@ void ShardCache::updateMemUsage() {
     _memUsage = memUsage;
 }
 
+void ShardCache::evictLibraryShards(VecLibID libID) {
+    std::unique_lock lock {_mutex};
+
+    for (auto it = _accessedMap.begin(); it != _accessedMap.end();) {
+        if (it->first._libID == libID) {
+            it->second->second.shard->save();
+            it = _accessedMap.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 ssize_t ShardCache::evictOne() {
     msgbioassert(!_accessed.empty(), "Shard cache is empty");
 
