@@ -523,7 +523,7 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
     ASSERT_TRUE(agePropType.has_value());
     ASSERT_TRUE(namePropType.has_value());
 
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    auto res = _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 3);
         ASSERT_EQ(df->size(), 3);
@@ -558,6 +558,8 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
             returnedLines.add({srcAges->at(i), edgeNames->at(i), tgtAges->at(i)});
         }
     });
+
+    ASSERT_TRUE(res);
 
     // Get all expected node IDs
     {

@@ -83,19 +83,16 @@ public:
     }
 
     template <EntityType Entity, SupportedType T>
-    PipelineValuesOutputInterface& addGetPropertiesWithNull(ColumnTag entityTag,
-                                                            PropertyType propertyType);
+    PipelineValuesOutputInterface& addGetPropertiesWithNull(PropertyType propertyType);
 
     template <SupportedType T>
-    PipelineValuesOutputInterface& addGetNodePropertiesWithNull(ColumnTag entityTag,
-                                                                PropertyType propertyType) {
-        return addGetPropertiesWithNull<EntityType::Node, T>(ColumnTag {entityTag}, propertyType);
+    PipelineValuesOutputInterface& addGetNodePropertiesWithNull(PropertyType propertyType) {
+        return addGetPropertiesWithNull<EntityType::Node, T>(propertyType);
     }
 
     template <SupportedType T>
-    PipelineValuesOutputInterface& addGetEdgePropertiesWithNull(ColumnTag entityTag,
-                                                                PropertyType propertyType) {
-        return addGetPropertiesWithNull<EntityType::Edge, T>(entityTag, propertyType);
+    PipelineValuesOutputInterface& addGetEdgePropertiesWithNull(PropertyType propertyType) {
+        return addGetPropertiesWithNull<EntityType::Edge, T>(propertyType);
     }
 
     // Joins/Products

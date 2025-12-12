@@ -52,7 +52,7 @@ TEST_F(GetPropertiesWithNullProcessorTest, test) {
     _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
     const ColumnTag originIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
 
-    const auto& propInterface = _builder->addGetPropertiesWithNull<EntityType::Node, types::Int64>(originIDsTag, ageType);
+    const auto& propInterface = _builder->addGetPropertiesWithNull<EntityType::Node, types::Int64>(ageType);
     const ColumnTag& agesTag = propInterface.getValues()->getTag();
 
     _builder->addMaterialize();

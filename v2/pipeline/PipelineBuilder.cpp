@@ -458,13 +458,12 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetProperties(PropertyType pr
 }
 
 template <EntityType Entity, db::SupportedType T>
-PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnTag entityTag,
-                                                                         PropertyType propertyType) {
+PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(PropertyType propertyType) {
     using GetPropsProc = GetPropertiesWithNullProcessor<Entity, T>;
     using ColumnValues = typename GetPropsProc::ColumnValues;
 
     // Create get node properties processor
-    auto* getProps = GetPropsProc::create(_pipeline, entityTag, propertyType);
+    auto* getProps = GetPropsProc::create(_pipeline, propertyType);
 
     PipelineBlockInputInterface& input = getProps->input();
     PipelineValuesOutputInterface& output = getProps->output();
@@ -581,13 +580,13 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<Entity
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::String>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Bool>(PropertyType);
 
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Int64>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::UInt64>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Double>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::String>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Bool>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Int64>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::UInt64>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Double>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::String>(ColumnTag, PropertyType);
-template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(ColumnTag, PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Int64>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::UInt64>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Double>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::String>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Bool>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Int64>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::UInt64>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Double>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::String>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(PropertyType);
