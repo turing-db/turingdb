@@ -1,9 +1,14 @@
 #pragma once
 
+#include <concepts>
+#include <optional>
+#include <type_traits>
+
 #include "ColumnConst.h"
 #include "ColumnMask.h"
 #include "ColumnVector.h"
 #include "columns/ColumnSet.h"
+#include "metadata/PropertyType.h"
 
 #include "BioAssert.h"
 
@@ -14,6 +19,15 @@ concept Stringy = (
     (std::same_as<T, std::string_view> && std::same_as<std::string, U>) ||
     (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
 );
+
+template <typename T>
+struct is_optional : std::false_type{};
+
+template <typename U>
+struct is_optional<std::optional<U>> : std::true_type{};
+
+template <typename T>
+inline constexpr bool is_optional_v = is_optional<T>::value;
 
 class ColumnOperators {
 public:
@@ -26,17 +40,29 @@ public:
      */
     template <typename T, typename U>
     requires (Stringy<T,U> || std::same_as<T,U>)
-    static void equal(ColumnMask& mask,
-                      const ColumnVector<T>& lhs,
-                      const ColumnVector<U>& rhs) {
-        bioassert(lhs.size() == rhs.size(),
-                  "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto* rhsd = rhs.data();
-        const auto size = lhs.size();
+    static void equal(ColumnMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
         for (size_t i = 0; i < size; i++) {
+            if constexpr (is_optional_v<T>) {
+                if (!lhsd[i]) {
+                    maskd[i]._value = false;;
+                    continue;
+                }
+            }
+            if constexpr (is_optional_v<U>) {
+                if (!rhsd[i]) {
+                    maskd[i]._value = false;
+                    continue;
+                }
+            }
             maskd[i]._value = lhsd[i] == rhsd[i];
         }
     }
@@ -50,15 +76,20 @@ public:
      */
     template <typename T, typename U>
     requires (Stringy<T,U> || std::same_as<T,U>)
-    static void equal(ColumnMask& mask,
-                      const ColumnVector<T>& lhs,
-                      const ColumnConst<U>& rhs) {
-        mask.resize(lhs.size());
-        auto* maskd = mask.data();
-        const auto* lhsd = lhs.data();
-        const auto& rhsd = rhs.getRaw();
-        const auto size = lhs.size();
+    static void equal(ColumnMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
         for (size_t i = 0; i < size; i++) {
+            if constexpr (is_optional_v<T>) {
+                if (!lhsd[i]) {
+                    maskd[i]._value = false;
+                }
+            }
             maskd[i]._value = lhsd[i] == rhsd;
         }
     }
