@@ -10,11 +10,11 @@
 
 using namespace vec;
 
-VectorDatabase::VectorDatabase()
-{
+VectorDatabase::VectorDatabase() {
 }
 
-VectorDatabase::~VectorDatabase() {
+VectorDatabase::~VectorDatabase()
+{
 }
 
 VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::Path& rootPath) {
@@ -87,18 +87,29 @@ VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
 
     const VecLibID libID = itID->second;
 
-    if (!_vecLibs.contains(libID)) {
+    auto it = _vecLibs.find(libID);
+    if (it == _vecLibs.end()) {
         return VectorError::result(VectorErrorCode::LibraryDoesNotExist);
     }
 
-    _shardCache->evictLibraryShards(libID);
+    // Extract the library
+    std::unique_ptr<VecLib> lib = std::move(it->second);
+    {
+        std::unique_lock libLock {lib->_mutex};
 
-    if (auto res = _storageManager->deleteLibraryStorage(libID); !res) {
-        return res.get_unexpected();
+        // Perform the deletion
+
+        _shardCache->evictLibraryShards(libID);
+
+        if (auto res = _storageManager->deleteLibraryStorage(libID); !res) {
+            return res.get_unexpected();
+        }
+
+        _vecLibs.erase(libID);
+        _vecLibIDs.erase(itID);
     }
 
-    _vecLibs.erase(libID);
-    _vecLibIDs.erase(itID);
+    // The library is deleted at the end of the scope
 
     return {};
 }

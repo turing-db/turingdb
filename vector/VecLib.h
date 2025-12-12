@@ -15,6 +15,7 @@ namespace vec {
 
 struct VecLibShard;
 struct VecLibStorage;
+class VectorDatabase;
 class StorageManager;
 class ShardCache;
 class BatchVectorCreate;
@@ -122,6 +123,7 @@ public:
 
 private:
     friend Builder;
+    friend VectorDatabase;
     
     mutable std::shared_mutex _mutex;
 
