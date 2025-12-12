@@ -27,7 +27,7 @@ flowchart TD
         __dep__ _n_:_Person_
     `"]
     6["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ m
         __prop__ isFrench
     `"]

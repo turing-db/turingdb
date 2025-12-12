@@ -17,7 +17,7 @@ flowchart TD
         __dep__ _n_._name_ (String)
     `"]
     3["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ n
         __prop__ name
     `"]

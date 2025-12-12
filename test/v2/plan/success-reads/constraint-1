@@ -18,12 +18,12 @@ flowchart TD
         __dep__ _a_._name_ (String)
     `"]
     3["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ a
         __prop__ duration
     `"]
     4["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ a
         __prop__ name
     `"]

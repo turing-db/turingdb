@@ -91,17 +91,17 @@ flowchart TD
         __JOIN__
     `"]
     25["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ a
         __prop__ name
     `"]
     26["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ b
         __prop__ name
     `"]
     27["`
-        __GET_PROPERTY__
+        __GET_PROPERTY_WITH_NULL__
         __var__ c
         __prop__ name
     `"]
