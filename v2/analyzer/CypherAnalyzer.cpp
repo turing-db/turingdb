@@ -56,8 +56,13 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const LoadGraphQuery*>(query));
             break;
 
+            // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
-                // Nothing to analyze
+            case QueryCommand::Kind::LIST_GRAPH_QUERY:
+            break;
+
+             default:
+                 throwError("Unsupported query type", query);
             break;
         }
     }

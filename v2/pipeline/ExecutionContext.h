@@ -24,12 +24,12 @@ public:
     {
     }
 
-    SystemManager* getSystemManager() const { return _sysMan; }
     const GraphView& getGraphView() const { return _graphView; }
     size_t getChunkSize() const { return _chunkSize; }
     Transaction* getTransaction() { return _tx; }
     std::string_view getGraphName() const { return _graphName; }
     JobSystem* getJobSystem() const { return _jobSystem; }
+    SystemManager* getSystemManager() const { return _sysMan; }
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setTransaction(Transaction* tx) { _tx = tx; }

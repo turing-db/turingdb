@@ -21,6 +21,7 @@
 #include "QualifiedName.h"
 #include "FunctionInvocation.h"
 #include "LoadGraphQuery.h"
+#include "ListGraphQuery.h"
 
 #include "expr/All.h"
 
@@ -82,6 +83,10 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::CHANGE_QUERY:
                 dump(out, static_cast<const ChangeQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LIST_GRAPH_QUERY:
+                dump(out, static_cast<const ListGraphQuery*>(query));
             break;
         }
     }
@@ -147,6 +152,13 @@ void CypherASTDumper::dump(std::ostream& out, const ChangeQuery* query) {
             out << "    _" << std::hex << query << " ||--o{ SUBMIT : \"\"\n";
             break;
     }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const ListGraphQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType ListGraphQuery\n";
+    out << "    }\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {

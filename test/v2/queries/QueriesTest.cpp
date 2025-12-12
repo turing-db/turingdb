@@ -1586,6 +1586,26 @@ TEST_F(QueriesTest, change) {
     }
 }
 
+TEST_F(QueriesTest, db_listGraph) {
+    ColumnVector<std::string_view> expectedGraphNames;
+    ColumnVector<std::string_view> actualGraphNames;
+    _env->getSystemManager().listGraphs(expectedGraphNames.getRaw());
+
+    bool callBackExecuted = false;
+    _db->queryV2("list graph", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        callBackExecuted = true;
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getRowCount(), expectedGraphNames.size());
+        const auto& cols = df->cols();
+        auto* actualGraphNames = cols.at(0)->as<ColumnVector<std::string_view>>();
+
+        EXPECT_EQ(expectedGraphNames.getRaw(), actualGraphNames->getRaw());
+    });
+
+    ASSERT_TRUE(callBackExecuted);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;

@@ -45,6 +45,7 @@
     #include "EdgePattern.h"
     #include "SinglePartQuery.h"
     #include "ChangeQuery.h"
+    #include "ListGraphQuery.h"
     #include "Projection.h"
     #include "PatternElement.h"
     #include "stmt/Skip.h"
@@ -144,7 +145,6 @@
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
-%token<std::string_view> LIST
 %token<std::string_view> DESC
 %token<std::string_view> CALL
 %token<std::string_view> NULL_
@@ -160,6 +160,7 @@
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
 %token<std::string_view> NEW
+%token<std::string_view> LIST
 %token<std::string_view> ANY
 %token<std::string_view> SET
 %token<std::string_view> ALL
@@ -260,6 +261,7 @@
 
 %type<db::v2::SinglePartQuery*> singlePartQuery
 %type<db::v2::ChangeQuery*> changeQuery
+%type<db::v2::ListGraphQuery*> listGraphQuery
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
@@ -317,10 +319,15 @@ singleQuery
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
     | loadGraph { $$ = $1; }
     | changeQuery { $$ = $1; }
+    | listGraphQuery { $$ = $1; }
     ;
 
 loadGraph
     : LOAD GRAPH ID { $$ = LoadGraphQuery::create(ast, $3); LOC($$, @$); }
+    ;
+
+listGraphQuery
+    : LIST GRAPH { $$ = ListGraphQuery::create(ast); LOC($$, @$); }
     ;
 
 returnSt

@@ -51,6 +51,7 @@
 #include "nodes/WriteNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
+#include "nodes/ListGraphNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -302,6 +303,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::CHANGE:
             return translateChangeNode(static_cast<ChangeNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LIST_GRAPH:
+            return translateListGraphNode(static_cast<ListGraphNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -968,5 +973,10 @@ PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* lo
 PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node) {
     _builder.addChangeOp(node->getOp());
 
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateListGraphNode(ListGraphNode* node) {
+    _builder.addListGraph();
     return _builder.getPendingOutputInterface();
 }

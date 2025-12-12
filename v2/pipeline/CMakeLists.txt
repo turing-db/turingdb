@@ -34,6 +34,7 @@ set(processors_sources
     processors/WriteProcessor.cpp
     processors/GetLabelSetIDProcessor.cpp
     processors/LoadGraphProcessor.cpp
+    processors/ListGraphProcessor.cpp
 )
 
 set(procedures_sources

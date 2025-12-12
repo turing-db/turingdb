@@ -19,6 +19,7 @@
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
 #include "processors/WriteProcessor.h"
+#include "processors/ListGraphProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "processors/GetLabelSetIDProcessor.h"
 #include "processors/LoadGraphProcessor.h"
@@ -617,6 +618,20 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::De
     }
 
     _pendingOutput.updateInterface(&output);
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addListGraph() {
+    ListGraphProcessor* loadGraph = ListGraphProcessor::create(_pipeline);
+
+    PipelineValueOutputInterface& output = loadGraph->output();
+    Dataframe* df = output.getDataframe();
+    NamedColumn* graphNameValue = allocColumn<ColumnVector<types::String::Primitive>>(df);
+    graphNameValue->rename("graphName");
+    output.setValue(graphNameValue);
+
+    _pendingOutput.setInterface(&output);
+
     return output;
 }
 

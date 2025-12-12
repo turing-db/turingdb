@@ -99,9 +99,8 @@ using Token = db::v2::YCypherParser::token;
 "WHERE" { KEYWORD(WHERE) }
 "UNION" { KEYWORD(UNION) }
 "FALSE" { KEYWORD(FALSE) }
-"COUNT" { KEYWORD(COUNT) }
 "GRAPH" { KEYWORD(GRAPH) }
-"LIST" { KEYWORD(LIST) }
+"COUNT" { KEYWORD(COUNT) }
 "DESC" { KEYWORD(DESC) }
 "CALL" { KEYWORD(CALL) }
 "NULL" { KEYWORD(NULL_) }
@@ -114,6 +113,7 @@ using Token = db::v2::YCypherParser::token;
 "ENDS" { KEYWORD(ENDS) }
 "DROP" { KEYWORD(DROP) }
 "SKIP" { KEYWORD(SKIP) }
+"LIST" { KEYWORD(LIST) }
 "WITH" { KEYWORD(WITH) }
 "LOAD" { KEYWORD(LOAD) }
 "NEW" { KEYWORD(NEW) }

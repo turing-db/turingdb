@@ -17,6 +17,7 @@ class SinglePartQuery;
 class ChangeQuery;
 class ReturnStmt;
 class LoadGraphQuery;
+class ListGraphQuery;
 class QueryCommand;
 
 class PlanGraphGenerator {
@@ -39,8 +40,8 @@ private:
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);
     void generateLoadGraphQuery(const LoadGraphQuery* query);
+    void generateListGraphQuery(const ListGraphQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
-
 }

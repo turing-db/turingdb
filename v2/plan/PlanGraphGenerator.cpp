@@ -31,10 +31,12 @@
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/LoadGraphNode.h"
+#include "nodes/ListGraphNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "ChangeQuery.h"
+#include "ListGraphQuery.h"
 #include "stmt/StmtContainer.h"
 #include "LoadGraphQuery.h"
 
@@ -65,6 +67,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::LOAD_GRAPH_QUERY:
             generateLoadGraphQuery(static_cast<const LoadGraphQuery*>(query));
+        break;
+        
+        case QueryCommand::Kind::LIST_GRAPH_QUERY:
+            generateListGraphQuery(static_cast<const ListGraphQuery*> (query));
         break;
 
         case QueryCommand::Kind::CHANGE_QUERY:
@@ -124,8 +130,13 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     }
 }
 
-void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* loadGraph) {
-    LoadGraphNode* loadGraphNode = _tree.create<LoadGraphNode>(loadGraph->getGraphName());
+void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* query) {
+    LoadGraphNode* loadGraphNode = _tree.create<LoadGraphNode>(query->getGraphName());
+    _tree.newOut<ProduceResultsNode>(loadGraphNode);
+}
+
+void PlanGraphGenerator::generateListGraphQuery(const ListGraphQuery* query) {
+    ListGraphNode* loadGraphNode = _tree.create<ListGraphNode>();
     _tree.newOut<ProduceResultsNode>(loadGraphNode);
 }
 
