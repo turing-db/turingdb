@@ -447,20 +447,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
     return output;
 }
 
-PipelineValuesOutputInterface& PipelineBuilder::addComputeExpr(ExprProgram* exprProg) {
-    ComputeExprProcessor* compExpr = ComputeExprProcessor::create(_pipeline, exprProg);
-
-    PipelineBlockInputInterface& input = compExpr->input();
-    PipelineValuesOutputInterface& output = compExpr->output();
-
-    _pendingOutput.connectTo(input);
-    input.propagateColumns(output);
-
-    _pendingOutput.updateInterface(&output);
-
-    return output;
-}
-
 PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
     GetLabelSetIDProcessor* proc = GetLabelSetIDProcessor::create(_pipeline);
 

@@ -161,7 +161,7 @@ TEST_F(GetPropertiesWithNullProcessorTest, DISABLED_emptyTest) {
     _builder->addLambdaSource(sourceCallback);
     _builder->addColumnToOutput<ColumnNodeIDs>(nodesTag);
 
-    const auto& propInterface = _builder->addGetPropertiesWithNull<EntityType::Node, types::Int64>(ageType);
+    const auto& propInterface = _builder->addGetPropertiesWithNull<EntityType::Node, types::Int64>(nodesTag, ageType);
     const ColumnTag& agesTag = propInterface.getValues()->getTag();
 
     _builder->addMaterialize();

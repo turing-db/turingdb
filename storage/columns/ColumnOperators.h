@@ -218,7 +218,7 @@ public:
     static void orOp(ColumnMask* mask,
                      const ColumnVector<BoolT>* lhs,
                      const ColumnVector<BoolT>* rhs) {
-        msgbioassert(lhs->size() == rhs->size(),
+        bioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
         mask->resize(lhs->size());
         auto* maskd = mask->data();
@@ -334,7 +334,7 @@ public:
     static void applyMask(const ColumnVector<T>* src, 
                           const ColumnMask* mask,
                           ColumnVector<T>* dest) {
-        msgbioassert(src->size() == mask->size(), "src and mask must have same size");
+        bioassert(src->size() == mask->size(), "src and mask must have same size");
 
         dest->clear();
         dest->reserve(mask->size());
