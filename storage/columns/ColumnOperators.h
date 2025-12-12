@@ -9,6 +9,8 @@
 #include "ColumnVector.h"
 #include "columns/ColumnSet.h"
 #include "metadata/PropertyType.h"
+#include <concepts>
+#include <functional>
 
 #include "BioAssert.h"
 
@@ -211,18 +213,39 @@ public:
      * @param lhs Left hand side Boolean column
      * @param rhs Right hand side Boolean column
      */
+    template <typename BoolT>
+        requires requires(BoolT a, BoolT b) { a || b; }
     static void orOp(ColumnMask* mask,
-                     const ColumnVector<types::Bool::Primitive>* lhs,
-                     const ColumnVector<types::Bool::Primitive>* rhs) {
+                     const ColumnVector<BoolT>* lhs,
+                     const ColumnVector<BoolT>* rhs) {
         msgbioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
         mask->resize(lhs->size());
         auto* maskd = mask->data();
         const auto* lhsd = lhs->data();
         const auto* rhsd = rhs->data();
-        const auto size = rhs->size();
+        const size_t size = rhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i] || rhsd[i];
+        }
+    }
+
+    /**
+     * @brief Fills a mask corresponding to 'NOT input'
+     *
+     * @param mask The mask to fill
+     * @param input Operand of Boolean negation
+     */
+    template <typename BoolT>
+        requires requires(BoolT x) { !x; }
+    static void notOp(ColumnMask* mask,
+                      const ColumnVector<BoolT>* input) {
+        auto& maskd = mask->getRaw();
+        const auto& ind = input->getRaw();
+        const size_t size = input->size();
+        mask->resize(size);
+        for (size_t i = 0; i < size; i++) {
+            maskd[i]._value = !ind[i];
         }
     }
 

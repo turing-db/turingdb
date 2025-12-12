@@ -546,6 +546,7 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
             }
         }
 
+
         ASSERT_TRUE(srcAges != nullptr);
         ASSERT_FALSE(srcAges->empty());
         ASSERT_TRUE(edgeNames != nullptr);

@@ -24,7 +24,12 @@ public:
             _value = v;
             return *this;
         }
+
         operator bool() const { return _value; }
+
+        bool operator!() const {
+            return !_value;
+        }
 
         bool _value {false};
     };

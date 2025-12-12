@@ -1,6 +1,5 @@
 #include "ExprProgramGenerator.h"
 
-#include <cstdint>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
@@ -100,9 +99,33 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
     switch (expr->getKind()) {
-        // TODO: Unary operators @cyrus
         case Expr::Kind::UNARY:
             return generateUnaryExpr(static_cast<const UnaryExpr*>(expr));
+        break;
+
+        // TODO
+        case Expr::Kind::STRING:
+            throw PlannerException("String expressions are currently not supported.");
+        break;
+
+        // TODO
+        case Expr::Kind::PATH:
+            throw PlannerException("Path expressions are currently not supported.");
+        break;
+
+        // TODO
+        case Expr::Kind::FUNCTION_INVOCATION:
+            throw PlannerException("Function expressions are currently not supported.");
+        break;
+
+        // TODO
+        case Expr::Kind::ENTITY_TYPES:
+            throw PlannerException("Entity expressions are currently not supported.");
+        break;
+
+        // TODO
+        case Expr::Kind::SYMBOL:
+            throw PlannerException("Symbol expressions are currently not supported.");
         break;
 
         case Expr::Kind::BINARY:
@@ -116,26 +139,22 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
         case Expr::Kind::LITERAL:
             return generateLiteralExpr(static_cast<const LiteralExpr*>(expr));
         break;
-
-        default:
-            throw PlannerException(
-                fmt::format("ExprProgramGenerator: expression of kind {} not implemented",
-                            (uint8_t)expr->getKind()));
-            break;
     }
+
+    throw FatalException("Invalid Expr type in ExprProgramGenerator.");
 }
 
 Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
     const Expr* operand = unExpr->getSubExpr();
     const UnaryOperator optor = unExpr->getOperator();
-    const ColumnOperator colOp = unaryOperatorToColumnOperator(optor);
 
+    const ColumnOperator colOp = unaryOperatorToColumnOperator(optor);
     Column* operandColumn = generateExpr(operand);
     Column* resCol = allocResultColumn(unExpr);
 
     _exprProg->addInstr(colOp, resCol, operandColumn, nullptr);
 
-    return nullptr;
+    return resCol;
 }
 
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {

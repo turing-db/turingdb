@@ -1,6 +1,5 @@
 #pragma once
-
-#include <vector>
+ #include <vector>
 
 #include "Column.h"
 #include "DebugDump.h"
@@ -59,8 +58,8 @@ public:
     bool empty() const { return _data.empty(); }
     size_t size() const override { return _data.size(); }
 
-    const T* data() const { return _data.data(); }
     T* data() { return _data.data(); }
+    const T* data() const { return _data.data(); }
 
     const T& operator[](size_t i) const { return _data[i]; }
     T& operator[](size_t i) { return _data[i]; }

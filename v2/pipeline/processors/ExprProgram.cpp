@@ -1,5 +1,7 @@
 #include "ExprProgram.h"
 
+#include <cstdint>
+#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <string_view>
 
@@ -14,6 +16,8 @@
 
 #include "PipelineException.h"
 #include "metadata/PropertyType.h"
+#include "spdlog/fmt/bundled/base.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 using namespace db::v2;
@@ -51,10 +55,20 @@ constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
     return op * basePairCount * internalCount + getPairKind(lhs, rhs);
 }
 
+// Unary operator
+constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
+                                               ColumnKind::ColumnKindCode lhs) {
+    const auto internalCount = ColumnKind::getInternalTypeKindCount();
+    return (op * internalCount) + lhs;
+}
+
 template <ColumnOperator Op, typename Lhs, typename Rhs>
 constexpr ColumnKind::ColumnKindCode OpCase =
     getOpCase(Op, Lhs::staticKind(), Rhs::staticKind());
 }
+
+template <ColumnOperator Op, typename Lhs>
+constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind());
 
 #define EQUAL_CASE(Lhs, Rhs)                      \
     case OpCase<OP_EQUAL, Lhs, Rhs>: {            \
@@ -81,6 +95,14 @@ constexpr ColumnKind::ColumnKindCode OpCase =
             static_cast<const Lhs*>(instr._lhs),  \
             static_cast<const Rhs*>(instr._rhs)); \
         break;                                    \
+    }
+
+#define NOT_CASE(Lhs)                             \
+    case UnaryOpCase<OP_NOT, Lhs>: {              \
+        ColumnOperators::notOp(                   \
+            static_cast<ColumnMask*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs)); \
+    break;                                        \
     }
 
 #define PROJECT_CASE(Lhs, Rhs)                    \
@@ -110,6 +132,7 @@ ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
 }
 
 void ExprProgram::evaluateInstructions() {
+    fmt::println(" we have {} instrs", _instrs.size());
     for (const Instruction& instr : _instrs) {
         evalInstr(instr);
     }
@@ -118,12 +141,36 @@ void ExprProgram::evaluateInstructions() {
 void ExprProgram::evalInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
 
-    if (op == ColumnOperator::OP_NOOP) {
-        return;
-    }
+    switch (getOperatorType(op)) {
+        case ColumnOperatorType::OPTYPE_BINARY:
+            evalBinaryInstr(instr);
+        break;
 
+        case ColumnOperatorType::OPTYPE_UNARY:
+            evalUnaryInstr(instr);
+        break;
+
+        case ColumnOperatorType::OPTYPE_NOOP:
+            return;
+        break;
+    }
+    fmt::println("Evaluated instruction, result column:");
+    instr._res->dump(std::cout);
+}
+
+void ExprProgram::evalBinaryInstr(const Instruction& instr) {
+    fmt::println("Evalutaing binary expr");
+    const ColumnOperator op = instr._op;
     const Column* lhs = instr._lhs;
     const Column* rhs = instr._rhs;
+
+    if (!lhs) {
+        throw FatalException("Binary instruction had null left input.");
+    }
+    if (!rhs) {
+        throw FatalException("Binary instruction had null right input.");
+    }
+
     switch (getOpCase(op, lhs->getKind(), rhs->getKind())) {
         EQUAL_CASE(ColumnVector<size_t>, ColumnVector<size_t>)
         EQUAL_CASE(ColumnVector<size_t>, ColumnConst<size_t>)
@@ -194,6 +241,24 @@ void ExprProgram::evalInstr(const Instruction& instr) {
             throw PipelineException(
                 fmt::format("Operator {} not implemented (kinds: {} and {})", opName,
                             lhs->getKind(), rhs->getKind()));
+        }
+    }
+}
+
+void ExprProgram::evalUnaryInstr(const Instruction& instr) {
+    fmt::println("Evalutaing unary expr");
+    const ColumnOperator op = instr._op;
+    const Column* input = instr._lhs;
+
+    switch (getOpCase(op, input->getKind())) {
+        // XXX: What else can NOT be applied to?
+        NOT_CASE(ColumnVector<types::Bool::Primitive>); // Also handles CustomBool
+
+        default: {
+            const std::string_view opName = ColumnOperatorDescription::value(op);
+            throw PipelineException(
+                fmt::format("Unary operator {} not implemented for input kind: {} ",
+                            opName, (uint8_t)input->getKind()));
         }
     }
 }

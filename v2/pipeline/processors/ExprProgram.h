@@ -44,6 +44,8 @@ private:
     ExprProgram() = default;
     ~ExprProgram() = default;
     void evalInstr(const Instruction& instr);
+    void evalBinaryInstr(const Instruction& instr);
+    void evalUnaryInstr(const Instruction& instr);
 };
 
 }
