@@ -13,6 +13,7 @@ namespace vec {
 class VecLib;
 class StorageManager;
 class ShardCache;
+class VecLibAccessor;
 
 class VectorDatabase {
 public:
@@ -38,27 +39,8 @@ public:
     [[nodiscard]] bool libraryExists(const VecLibID& libID) const;
     [[nodiscard]] bool libraryExists(std::string_view libName) const;
 
-    [[nodiscard]] VecLib* getLibrary(const VecLibID& libID) {
-        std::shared_lock lock {_mutex};
-
-        auto it = _vecLibs.find(libID);
-        if (it == _vecLibs.end()) {
-            return nullptr;
-        }
-
-        return it->second.get();
-    }
-
-    [[nodiscard]] VecLib* getLibrary(std::string_view libName) {
-        std::shared_lock lock {_mutex};
-
-        auto it = _vecLibIDs.find(libName);
-        if (it == _vecLibIDs.end()) {
-            return nullptr;
-        }
-
-        return getLibrary(it->second);
-    }
+    [[nodiscard]] VecLibAccessor getLibrary(const VecLibID& libID);
+    [[nodiscard]] VecLibAccessor getLibrary(std::string_view libName);
 
 private:
     mutable std::shared_mutex _mutex;

@@ -6,6 +6,7 @@
 #include "ShardCache.h"
 #include "StorageManager.h"
 #include "VecLib.h"
+#include "VecLibAccessor.h"
 
 using namespace vec;
 
@@ -120,6 +121,28 @@ bool VectorDatabase::libraryExists(std::string_view libName) const {
     std::shared_lock lock {_mutex};
 
     return _vecLibIDs.contains(libName);
+}
+
+VecLibAccessor VectorDatabase::getLibrary(const VecLibID& libID) {
+    std::shared_lock lock {_mutex};
+
+    auto it = _vecLibs.find(libID);
+    if (it == _vecLibs.end()) {
+        return VecLibAccessor {};
+    }
+
+    return it->second->access();
+}
+
+VecLibAccessor VectorDatabase::getLibrary(std::string_view libName) {
+    std::shared_lock lock {_mutex};
+
+    auto it = _vecLibIDs.find(libName);
+    if (it == _vecLibIDs.end()) {
+        return VecLibAccessor {};
+    }
+
+    return getLibrary(it->second);
 }
 
 VectorResult<void> VectorDatabase::load() {
