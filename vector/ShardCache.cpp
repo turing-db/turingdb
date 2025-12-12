@@ -12,7 +12,8 @@
 using namespace vec;
 
 ShardCache::ShardCache(StorageManager& storageManager)
-    : _storageManager(&storageManager) {
+    : _storageManager(&storageManager)
+{
 }
 
 ShardCache::~ShardCache() noexcept {

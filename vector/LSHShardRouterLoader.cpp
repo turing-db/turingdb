@@ -9,7 +9,8 @@ using namespace vec;
         return VectorError::result<void>(e); \
     }
 
-LSHShardRouterLoader::LSHShardRouterLoader() {
+LSHShardRouterLoader::LSHShardRouterLoader()
+{
 }
 
 LSHShardRouterLoader::~LSHShardRouterLoader() {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <shared_mutex>
+
 #include "LSHSignature.h"
 #include "Path.h"
 #include "VecLibStorage.h"
@@ -48,6 +50,8 @@ public:
     }
 
 private:
+    mutable std::shared_mutex _mutex;
+
     fs::Path _rootPath;
     StorageMap _storages;
 

@@ -6,7 +6,8 @@
 
 using namespace vec;
 
-VecLibMetadataLoader::VecLibMetadataLoader() {
+VecLibMetadataLoader::VecLibMetadataLoader()
+{
 }
 
 VecLibMetadataLoader::~VecLibMetadataLoader() {

@@ -5,15 +5,13 @@
 
 #include "VecLibMetadata.h"
 
-#include "VectorException.h"
-#include "BioAssert.h"
-
 namespace vec {
 
 class VectorSearchQuery {
 public:
     explicit VectorSearchQuery(Dimension dimension)
-        : _dimension(dimension) {
+        : _dimension(dimension)
+    {
     }
 
     ~VectorSearchQuery() = default;

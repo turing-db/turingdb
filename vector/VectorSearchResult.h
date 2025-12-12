@@ -4,9 +4,7 @@
 #include <span>
 #include <vector>
 #include <stdint.h>
-#include <tuple>
 
-#include "FaissIdx.h"
 #include "LSHSignature.h"
 
 namespace vec {

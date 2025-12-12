@@ -39,6 +39,8 @@ public:
     [[nodiscard]] bool libraryExists(std::string_view libName) const;
 
     [[nodiscard]] VecLib* getLibrary(const VecLibID& libID) {
+        std::shared_lock lock {_mutex};
+
         auto it = _vecLibs.find(libID);
         if (it == _vecLibs.end()) {
             return nullptr;
@@ -48,6 +50,8 @@ public:
     }
 
     [[nodiscard]] VecLib* getLibrary(std::string_view libName) {
+        std::shared_lock lock {_mutex};
+
         auto it = _vecLibIDs.find(libName);
         if (it == _vecLibIDs.end()) {
             return nullptr;

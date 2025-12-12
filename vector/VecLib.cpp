@@ -3,6 +3,7 @@
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
+#include <mutex>
 
 #include "ShardCache.h"
 #include "StorageManager.h"
@@ -14,7 +15,6 @@
 #include "VecLibShard.h"
 
 #include "TuringTime.h"
-#include "VectorException.h"
 #include "BioAssert.h"
 #include "VectorSearchResult.h"
 
@@ -23,8 +23,9 @@ using namespace vec;
 VecLib::~VecLib() {
 }
 
-VecLib::Builder::Builder() {
-    _vecLib = std::unique_ptr<VecLib>(new VecLib);
+VecLib::Builder::Builder()
+    : _vecLib(new VecLib)
+{
 }
 
 VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
@@ -53,8 +54,9 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
     return std::move(_vecLib);
 }
 
-VecLib::Loader::Loader() {
-    _vecLib = std::unique_ptr<VecLib>(new VecLib);
+VecLib::Loader::Loader()
+    : _vecLib(new VecLib)
+{
 }
 
 VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storage) {
@@ -89,13 +91,17 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
 
         auto& shard = _shardCache->getShard(_metadata, signature++);
 
-        // Add all ids to the shard
-        shard._ids.insert(shard._ids.end(),
-                                  data._externalIDs.begin(),
-                                  data._externalIDs.end());
+        {
+            std::unique_lock lock {shard._mutex};
 
-        // Add vectors to index
-        shard._index->add(data._externalIDs.size(), data._embeddings.data());
+            // Add all ids to the shard
+            shard._ids.insert(shard._ids.end(),
+                              data._externalIDs.begin(),
+                              data._externalIDs.end());
+
+            // Add vectors to index
+            shard._index->add(data._externalIDs.size(), data._embeddings.data());
+        }
 
         _shardCache->updateMemUsage();
     }
@@ -121,6 +127,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchRe
 
     for (const LSHSignature& signature : searchSignatures) {
         auto& shard = _shardCache->getShard(_metadata, signature);
+        std::unique_lock lock {shard._mutex};
 
         if (shard._index->ntotal == 0) {
             continue;
@@ -151,5 +158,6 @@ const VecLibStorage& VecLib::getStorage() const {
     return _storage->getStorage(_metadata._id);
 }
 
-VecLib::VecLib() {
+VecLib::VecLib()
+{
 }
