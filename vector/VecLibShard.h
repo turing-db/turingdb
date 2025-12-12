@@ -17,6 +17,8 @@ namespace vec {
 struct VecLibMetadata;
 
 struct VecLibShard {
+    mutable std::mutex _mutex;
+
     fs::Path _indexPath;
 
     fs::File _idsFile;

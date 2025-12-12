@@ -7,7 +7,8 @@ using namespace vec;
 
 LSHShardRouter::LSHShardRouter(size_t dim, uint8_t nbits)
     : _dim(dim),
-      _nbits(nbits) {
+    _nbits(nbits)
+{
 }
 
 LSHShardRouter::~LSHShardRouter() {

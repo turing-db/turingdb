@@ -4,7 +4,8 @@
 
 using namespace vec;
 
-LSHShardRouterWriter::LSHShardRouterWriter() {
+LSHShardRouterWriter::LSHShardRouterWriter()
+{
 }
 
 LSHShardRouterWriter::~LSHShardRouterWriter() {

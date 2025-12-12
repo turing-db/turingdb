@@ -3,6 +3,7 @@
 #include <charconv>
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
+#include <mutex>
 
 #include "LSHShardRouter.h"
 #include "VecLibStorage.h"
@@ -10,7 +11,8 @@
 
 using namespace vec;
 
-StorageManager::StorageManager() {
+StorageManager::StorageManager()
+{
 }
 
 StorageManager::~StorageManager() {
@@ -47,6 +49,8 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
     const fs::Path libRoot = getLibraryPath(meta._id);
     const fs::Path metadataPath = getMetadataPath(meta._id);
     const fs::Path shardRouterPath = getShardRouterPath(meta._id);
+
+    std::unique_lock lock {_mutex};
 
     if (_storages.contains(meta._id)) {
         return VectorError::result(VectorErrorCode::LibraryStorageAlreadyExists);
@@ -96,6 +100,9 @@ bool StorageManager::libraryExists(const VecLibID& libID) const {
 
 VectorResult<void> StorageManager::deleteLibraryStorage(const VecLibID& libID) {
     const fs::Path libPath = getLibraryPath(libID);
+
+    std::unique_lock lock {_mutex};
+
     if (!libPath.exists()) {
         return VectorError::result(VectorErrorCode::LibraryDoesNotExist);
     }
@@ -110,10 +117,14 @@ VectorResult<void> StorageManager::deleteLibraryStorage(const VecLibID& libID) {
 }
 
 const VecLibStorage& StorageManager::getStorage(const VecLibID& libID) const {
+    std::shared_lock lock {_mutex};
+
     return *_storages.at(libID);
 }
 
 VecLibStorage& StorageManager::getStorage(const VecLibID& libID) {
+    std::shared_lock lock {_mutex};
+
     return *_storages.at(libID);
 }
 

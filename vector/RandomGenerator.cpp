@@ -73,7 +73,5 @@ template int32_t RandomGenerator::generateUnique<int32_t>(const std::function<bo
 template uint32_t RandomGenerator::generateUnique<uint32_t>(const std::function<bool(uint32_t)>& predicate);
 template int64_t RandomGenerator::generateUnique<int64_t>(const std::function<bool(int64_t)>& predicate);
 template uint64_t RandomGenerator::generateUnique<uint64_t>(const std::function<bool(uint64_t)>& predicate);
-template float RandomGenerator::generateUnique<float>(const std::function<bool(float)>& predicate);
-template double RandomGenerator::generateUnique<double>(const std::function<bool(double)>& predicate);
 
 }

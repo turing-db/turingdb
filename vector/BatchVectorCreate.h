@@ -1,7 +1,6 @@
 #pragma once
 
 #include <span>
-#include <unordered_map>
 #include <vector>
 
 #include "LSHShardRouter.h"
@@ -9,8 +8,6 @@
 #include "VecLibMetadata.h"
 
 #include "VectorException.h"
-#include "BioAssert.h"
-#include "spdlog/fmt/bundled/base.h"
 
 namespace vec {
 
@@ -23,7 +20,8 @@ public:
 
     BatchVectorCreate(LSHShardRouter& router, Dimension dimension)
         : _dimension(dimension),
-          _router(&router) {
+        _router(&router)
+    {
     }
 
     ~BatchVectorCreate() = default;
