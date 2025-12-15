@@ -177,6 +177,13 @@ void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
     if (graphName.empty()) {
         throwError("LOAD GRAPH should not have an empty graph name");
     }
+
+    // Check that the graph name is only [A-Z0-9_]+
+    for (char c : graphName) {
+        if (!(isalnum(c) || c == '_')) [[unlikely]] {
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGraph);
+        }
+    }
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {
