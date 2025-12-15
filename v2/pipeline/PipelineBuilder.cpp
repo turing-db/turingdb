@@ -554,18 +554,17 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadNeo4j(std::string_view gra
 PipelineBlockOutputInterface& PipelineBuilder::addFilter(ExprProgram* exprProg) {
     FilterProcessor* filterProc = FilterProcessor::create(_pipeline, exprProg);
 
-    PipelineBlockInputInterface& filterInput = filterProc->input();
-    PipelineBlockOutputInterface& filterOutput = filterProc->output();
+    PipelineBlockInputInterface& input = filterProc->input();
+    PipelineBlockOutputInterface& output = filterProc->output();
 
-    _pendingOutput.connectTo(filterInput);
+    _pendingOutput.connectTo(input);
 
-    duplicateDataframeShape(_mem, _dfMan, filterInput.getDataframe(), filterOutput.getDataframe());
+    duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
 
-    filterOutput.setStream(_pendingOutput.getInterface()->getStream());
+    output.setStream(_pendingOutput.getInterface()->getStream());
+    _pendingOutput.updateInterface(&output);
 
-    _pendingOutput.updateInterface(&filterOutput);
-
-    return filterOutput;
+    return output;
 }
 
 template <EntityType Entity, db::SupportedType T>

@@ -19,6 +19,7 @@ class PropertyExpr;
 class LiteralExpr;
 class PipelineGenerator;
 class PendingOutputView;
+class LabelSet;
 
 class ExprProgramGenerator {
 public:
@@ -38,6 +39,7 @@ public:
     ExprProgramGenerator& operator=(ExprProgramGenerator&&) = delete;
 
     void generatePredicate(const Predicate* pred);
+    void addLabelConstraint(const LabelSet& lblset);
 
 private:
     PipelineGenerator* _gen;

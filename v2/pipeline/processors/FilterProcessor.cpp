@@ -90,12 +90,12 @@ FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, ExprProgram* expr
     return proc;
 }
 
-void FilterProcessor::prepare(ExecutionContext* ctxt) {
+void FilterProcessor::prepare(ExecutionContext*) {
     // Check dataframes have same number of columns
     const Dataframe* srcDF = _input.getDataframe();
     const Dataframe* destDF = _output.getDataframe();
     if (!srcDF->hasSameShape(destDF)) {
-        throw PipelineException("FilterProcessor input and output dataframes must have same size and columns of same type");
+        throw PipelineException("FilterProcessor input and output dataframes must have same size and columns of same type.");
     }
 
     markAsPrepared();
@@ -134,7 +134,7 @@ void FilterProcessor::execute() {
                              "was not a predicate.");
     }
 
-    // Fold over all instructions, combining their output masks with logical AND
+    // Fold over all instructions, combining their output masks with column-wise AND
     ColumnMask finalMask(maskSize, true);
     {
         ColumnMask instrMask;

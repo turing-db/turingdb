@@ -11,6 +11,7 @@
 #include "FunctionInvocation.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
+#include "Predicate.h"
 #include "Symbol.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
@@ -554,22 +555,29 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     }
 
     const auto& predicates = node->getPredicates();
+    const auto& labelConstrs = node->getLabelConstraints();
+
+    if (predicates.empty() && labelConstrs.empty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
+    ExprProgram* exprProg = ExprProgram::create(_pipeline);
+    ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+
     if (!predicates.empty()) {
-        // Compile predicate expression into an expression program
-        ExprProgram* exprProg = ExprProgram::create(_pipeline);
-        ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+        // Compile predicate expressions into an expression program
         for (const Predicate* pred : predicates) {
             exprGen.generatePredicate(pred);
         }
-
-        // Then add a filter processor, taking the built expression program to execute
-        _builder.addFilter(exprProg);
     }
 
-    const auto& labelConstrs = node->getLabelConstraints();
     if (!labelConstrs.empty()) {
-        throw PlannerException("PipelineGenerator: label constraints in filter nodes are not supported");
+        // throw PlannerException("PipelineGenerator: label constraints in filter nodes are not supported");
+        _builder.addGetLabelSetID();
     }
+
+    // Then add a filter processor, taking the built expression program to execute
+    _builder.addFilter(exprProg);
 
     return _builder.getPendingOutputInterface();
 }

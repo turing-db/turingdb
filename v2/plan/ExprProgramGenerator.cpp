@@ -75,6 +75,9 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
     }
 }
 
+void ExprProgramGenerator::addLabelConstraint(const LabelSet& lblset) {
+}
+
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
     // Predicates can be predicates in the case that they are singular Boolean properties.
     // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a predicate.

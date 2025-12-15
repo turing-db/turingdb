@@ -5,20 +5,18 @@
 #include <spdlog/fmt/fmt.h>
 #include <string_view>
 
-#include "FatalException.h"
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "metadata/LabelSet.h"
+#include "metadata/PropertyType.h"
 
 #include "PipelineV2.h"
 
 #include "PipelineException.h"
-#include "metadata/PropertyType.h"
-#include "spdlog/fmt/bundled/base.h"
-#include "spdlog/spdlog.h"
+#include "FatalException.h"
 
 using namespace db;
 using namespace db::v2;
@@ -133,7 +131,6 @@ ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
 }
 
 void ExprProgram::evaluateInstructions() {
-    fmt::println(" we have {} instrs", _instrs.size());
     for (const Instruction& instr : _instrs) {
         evalInstr(instr);
     }
@@ -160,7 +157,6 @@ void ExprProgram::evalInstr(const Instruction& instr) {
 }
 
 void ExprProgram::evalBinaryInstr(const Instruction& instr) {
-    fmt::println("Evalutaing binary expr");
     const ColumnOperator op = instr._op;
     const Column* lhs = instr._lhs;
     const Column* rhs = instr._rhs;

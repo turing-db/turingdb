@@ -233,6 +233,7 @@ public:
      * @param mask The mask to fill
      * @param input Operand of Boolean negation
      */
+     // TODO: Check with optional
     template <typename BoolT>
         requires requires(BoolT x) { !x; }
     static void notOp(ColumnMask* mask,
@@ -241,6 +242,7 @@ public:
         const auto& ind = input->getRaw();
         const size_t size = input->size();
         mask->resize(size);
+
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = !ind[i];
         }
