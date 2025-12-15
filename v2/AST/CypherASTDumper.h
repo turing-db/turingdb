@@ -7,6 +7,7 @@ namespace db::v2 {
 
 class CypherAST;
 class SinglePartQuery;
+class ChangeQuery;
 class MatchStmt;
 class Limit;
 class Skip;
@@ -53,6 +54,7 @@ private:
 
     void dump(std::ostream& out, const SinglePartQuery* query);
     void dump(std::ostream& out, const LoadGraphQuery* query);
+    void dump(std::ostream& out, const ChangeQuery* query);
     void dump(std::ostream& out, const MatchStmt* match);
     void dump(std::ostream& out, const Limit* lim);
     void dump(std::ostream& out, const Skip* skip);

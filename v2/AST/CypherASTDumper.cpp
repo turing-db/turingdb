@@ -2,6 +2,7 @@
 
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
+#include "ChangeQuery.h"
 #include "SymbolChain.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
@@ -78,6 +79,10 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::LOAD_GRAPH_QUERY:
                 dump(out, static_cast<const LoadGraphQuery*>(query));
             break;
+
+            case QueryCommand::Kind::CHANGE_QUERY:
+                dump(out, static_cast<const ChangeQuery*>(query));
+            break;
         }
     }
 }
@@ -119,6 +124,29 @@ void CypherASTDumper::dump(std::ostream& out, const LoadGraphQuery* query) {
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType LoadGraphQuery\n";
     out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const ChangeQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType ChangeQuery\n";
+    out << "    }\n";
+
+    ChangeOp op = query->getOp();
+    switch (op) {
+        case ChangeOp::NEW:
+            out << "    _" << std::hex << query << " ||--o{ NEW : \"\"\n";
+            break;
+        case ChangeOp::DELETE:
+            out << "    _" << std::hex << query << " ||--o{ DELETE : \"\"\n";
+            break;
+        case ChangeOp::LIST:
+            out << "    _" << std::hex << query << " ||--o{ LIST : \"\"\n";
+            break;
+        case ChangeOp::SUBMIT:
+            out << "    _" << std::hex << query << " ||--o{ SUBMIT : \"\"\n";
+            break;
+    }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {
