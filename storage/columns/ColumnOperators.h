@@ -53,13 +53,13 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                if (lhsd[i] == std::nullopt) {
+                if (!lhsd[i]) {
                     maskd[i]._value = false;
                     continue;
                 }
             }
             if constexpr (is_optional_v<U>) {
-                if (rhsd[i] == std::nullopt) {
+                if (!rhsd[i]) {
                     maskd[i]._value = false;
                     continue;
                 }
@@ -88,7 +88,7 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                if (lhsd[i] == std::nullopt) {
+                if (!lhsd[i]) {
                     maskd[i]._value = false;
                     continue;
                 }
@@ -117,7 +117,7 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<U>) {
-                if (rhsd[i] == std::nullopt) {
+                if (!rhsd[i]) {
                     maskd[i] = false;
                     continue;
                 }
@@ -205,7 +205,7 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                if (lhs[i] == std::nullopt) {
+                if (!lhs[i]) {
                     maskd[i] = false;
                     continue;
                 }
