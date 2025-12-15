@@ -1,12 +1,3 @@
-# faiss
-find_package(Faiss REQUIRED)
-
-# threads
-find_package(Threads REQUIRED)
-
-# OpenMP (required by Faiss)
-find_package(OpenMP REQUIRED)
-
 set(VECTOR_SOURCES
         RandomGenerator.cpp
         StorageManager.cpp

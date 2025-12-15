@@ -1,9 +1,10 @@
 #include "VecLib.h"
 
+#include <mutex>
+
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
-#include <mutex>
 
 #include "ShardCache.h"
 #include "StorageManager.h"

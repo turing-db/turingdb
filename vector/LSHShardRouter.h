@@ -29,8 +29,8 @@ private:
     friend class LSHShardRouterLoader;
     friend class LSHShardRouterWriter;
 
-    size_t _dim;
-    uint8_t _nbits;
+    size_t _dim {};
+    uint8_t _nbits {};
     std::vector<std::vector<float>> _hyperplanes;
 };
 
