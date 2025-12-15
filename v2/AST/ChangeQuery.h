@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "QueryCommand.h"
+#include "ChangeOp.h"
 
 namespace db::v2 {
 
@@ -13,23 +14,17 @@ class DeclContext;
 
 class ChangeQuery : public QueryCommand {
 public:
-    enum class Op : uint8_t {
-        NEW = 0,
-        SUBMIT,
-        DELETE,
-        LIST,
-    };
-
-    static ChangeQuery* create(CypherAST* ast, Op op);
+    static ChangeQuery* create(CypherAST* ast, ChangeOp op);
 
     Kind getKind() const override { return Kind::CHANGE_QUERY; }
-    Op getOp() const { return _op; }
+
+    ChangeOp getOp() const { return _op; }
 
 private:
-    ChangeQuery(DeclContext* declContext, Op op);
-    ~ChangeQuery() override;
+    ChangeOp _op;
 
-    Op _op {};
+    ChangeQuery(DeclContext* declContext, ChangeOp op);
+    ~ChangeQuery() override;
 };
 
 }

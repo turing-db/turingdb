@@ -1,6 +1,7 @@
 #include "PipelineBuilder.h"
 
 #include "processors/CartesianProductProcessor.h"
+#include "processors/ChangeProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
@@ -23,10 +24,12 @@
 #include "processors/LoadGraphProcessor.h"
 
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
+#include "versioning/ChangeID.h"
 
 using namespace db::v2;
 using namespace db;
@@ -387,6 +390,20 @@ PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const Proced
     _pendingOutput.updateInterface(&output);
 
     proc->allocColumns(*_mem, *_dfMan, yield);
+
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addChangeOp(ChangeOp op) {
+    ChangeProcessor* proc = ChangeProcessor::create(_pipeline, op);
+    auto& output = proc->output();
+
+    Dataframe* df = output.getDataframe();
+    NamedColumn* changeIDCol = allocColumn<ColumnVector<ChangeID>>(df);
+    changeIDCol->rename("Change ID");
+    proc->setColumn(static_cast<ColumnVector<ChangeID>*>(changeIDCol->getColumn()));
+
+    _pendingOutput.updateInterface(&output);
 
     return output;
 }

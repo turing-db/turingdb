@@ -22,7 +22,6 @@
 #include "expr/SymbolExpr.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
-#include "nodes/GetPropertyNode.h"
 #include "procedures/ProcedureBlueprintMap.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
@@ -31,10 +30,12 @@
 
 #include "processors/MaterializeProcessor.h"
 
+#include "nodes/ChangeNode.h"
 #include "nodes/CartesianProductNode.h"
 #include "nodes/JoinNode.h"
 #include "nodes/PlanGraphNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
+#include "nodes/GetPropertyNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/GetOutEdgesNode.h"
@@ -105,7 +106,6 @@ struct PropertyTypeDispatcher {
     }
 };
 
-
 }
 
 namespace db {
@@ -136,7 +136,6 @@ void PipelineGenerator::generate() {
         // create a new materialize processor for every branch
         nodeStack.emplace(node, nullptr, MaterializeProcessor::create(_pipeline, _mem));
     }
-
 
     // Translate nodes in a DFS manner
     while (!nodeStack.empty()) {
@@ -301,6 +300,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateLoadGraph(static_cast<LoadGraphNode*>(node));
         break;
 
+        case PlanGraphOpcode::CHANGE:
+            return translateChangeNode(static_cast<ChangeNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::CREATE_GRAPH:
         case PlanGraphOpcode::PROJECT_RESULTS:
@@ -346,7 +349,6 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
     };
 
     stream.visit(visitor);
-
 
     return _builder.getPendingOutputInterface();
 }
@@ -960,5 +962,21 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
 PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* loadGraph) {
     _builder.addLoadGraph(loadGraph->getGraphName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node) {
+    _builder.addChangeOp(node->getOp());
+
+    auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+
+        _callback(df);
+    };
+
+    _builder.addLambda(lambdaCallback);
+
     return _builder.getPendingOutputInterface();
 }

@@ -66,6 +66,7 @@ public:
     T& at(size_t i) { return _data.at(i); }
 
     void set(size_t i, T&& v) { _data[i] = std::move(v); }
+    void set(size_t i, const T& v) { _data[i] = v; }
     T getCopy(size_t i) const { return _data[i]; }
 
     Iterator begin() { return _data.begin(); }

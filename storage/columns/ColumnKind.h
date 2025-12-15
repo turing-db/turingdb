@@ -8,6 +8,7 @@
 
 #include "ID.h"
 #include "metadata/PropertyType.h"
+#include "versioning/ChangeID.h"
 
 namespace db {
 
@@ -68,6 +69,10 @@ public:
         } else if constexpr (std::is_same_v<T, PropertyTypeID>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, std::string>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, ValueType>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, ChangeID>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, ColumnVector<EntityID>>) {
             return __COUNTER__ - minKind;

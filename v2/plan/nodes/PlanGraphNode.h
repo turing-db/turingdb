@@ -33,6 +33,7 @@ enum class PlanGraphOpcode {
     LIMIT,
     PRODUCE_RESULTS,
     LOAD_GRAPH,
+    CHANGE,
     _SIZE
 };
 
@@ -62,7 +63,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::SKIP, "SKIP">,
     EnumStringPair<PlanGraphOpcode::LIMIT, "LIMIT">,
     EnumStringPair<PlanGraphOpcode::PRODUCE_RESULTS, "PRODUCE_RESULTS">,
-    EnumStringPair<PlanGraphOpcode::LOAD_GRAPH, "LOAD_GRAPH">>;
+    EnumStringPair<PlanGraphOpcode::LOAD_GRAPH, "LOAD_GRAPH">,
+    EnumStringPair<PlanGraphOpcode::CHANGE, "CHANGE">>;
 
 class PlanGraphNode {
 public:

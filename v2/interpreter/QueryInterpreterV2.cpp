@@ -137,6 +137,11 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
 
     // Execute pipeline
     ExecutionContext execCtxt(_sysMan, view, &txRes.value());
+    execCtxt.setTransaction(&txRes.value());
+    execCtxt.setGraphName(graphName);
+    execCtxt.setSystemManager(_sysMan);
+    execCtxt.setJobSystem(_jobSystem);
+
     PipelineExecutor executor(&pipeline, &execCtxt);
     try {
         executor.execute();

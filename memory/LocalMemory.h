@@ -15,6 +15,7 @@
 
 #include "metadata/PropertyType.h"
 #include "ID.h"
+#include "versioning/ChangeID.h"
 
 namespace db {
 
@@ -37,6 +38,7 @@ public:
         MakeMemoryPool<ColumnVector<EdgeTypeID>>::type,
         MakeMemoryPool<ColumnVector<PropertyTypeID>>::type,
         MakeMemoryPool<ColumnVector<PropertyType>>::type,
+        MakeMemoryPool<ColumnVector<ChangeID>>::type,
         MakeMemoryPool<ColumnVector<ValueType>>::type,
         MakeMemoryPool<ColumnVector<size_t>>::type,
         MakeMemoryPool<ColumnVector<std::string_view>>::type,

@@ -1,6 +1,7 @@
 #include "PlanGraphDebug.h"
 
 #include "nodes/AggregateEvalNode.h"
+#include "nodes/ChangeNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/FuncEvalNode.h"
 #include "nodes/GetEntityTypeNode.h"
@@ -298,6 +299,24 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 output << "        __yield__\n";
                 for (const auto* item : *yield->getItems()) {
                     output << "        __yield_item__: " << item->getSymbol()->getName() << "\n";
+                }
+            } break;
+
+            case PlanGraphOpcode::CHANGE: {
+                const auto* n = dynamic_cast<ChangeNode*>(node.get());
+                switch (n->getOp()) {
+                    case ChangeOp::NEW: {
+                        output << "        __op__: new\n";
+                    } break;
+                    case ChangeOp::SUBMIT: {
+                        output << "        __op__: submit\n";
+                    } break;
+                    case ChangeOp::DELETE: {
+                        output << "        __op__: delete\n";
+                    } break;
+                    case ChangeOp::LIST: {
+                        output << "        __op__: list\n";
+                    } break;
                 }
             } break;
 
