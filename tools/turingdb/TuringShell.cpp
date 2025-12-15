@@ -293,6 +293,10 @@ void tabulateWrite(tabulate::RowStream& rs, db::ValueType v) {
     rs << ValueTypeName::value(v);
 }
 
+void tabulateWrite(tabulate::RowStream& rs, ChangeID changeID) {
+    rs << fmt::format("{:x}", changeID.get());
+}
+
 void tabulateWrite(tabulate::RowStream& rs, const CommitBuilder* commit) {
     rs << fmt::format("{:x}", commit->hash().get());
 }
@@ -397,7 +401,8 @@ void queryCallbackV2(size_t execCount, const Dataframe* df, tabulate::Table& tab
                 TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
                 TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
                 TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
-                TABULATE_COL_CASE(ColumnVector<db::ValueType>, i)
+                TABULATE_COL_CASE(ColumnVector<ValueType>, i)
+                TABULATE_COL_CASE(ColumnVector<ChangeID>, i)
                 TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
                 TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
                 TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)

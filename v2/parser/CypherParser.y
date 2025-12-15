@@ -267,7 +267,7 @@
 %type<db::v2::Stmt*> updatingStatement
 %type<db::v2::StmtContainer*> readingStatements
 %type<db::v2::StmtContainer*> updatingStatements
-%type<db::v2::ChangeQuery::Op> changeOp
+%type<db::v2::ChangeOp> changeOp
 %type<db::v2::MatchStmt*> matchSt
 %type<db::v2::CallStmt*> callSt
 %type<db::v2::CreateStmt*> createSt
@@ -416,10 +416,10 @@ changeQuery
     ;
 
 changeOp
-    : NEW { $$ = ChangeQuery::Op::NEW; }
-    | SUBMIT { $$ = ChangeQuery::Op::SUBMIT; }
-    | DELETE { $$ = ChangeQuery::Op::DELETE; }
-    | LIST { $$ = ChangeQuery::Op::LIST; }
+    : NEW { $$ = ChangeOp::NEW; }
+    | SUBMIT { $$ = ChangeOp::SUBMIT; }
+    | DELETE { $$ = ChangeOp::DELETE; }
+    | LIST { $$ = ChangeOp::LIST; }
     ;
 
 readingStatements

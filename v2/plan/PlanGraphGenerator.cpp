@@ -8,6 +8,7 @@
 #include "expr/Expr.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "ExprDependencies.h"
+#include "nodes/ChangeNode.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -79,7 +80,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 }
 
 void PlanGraphGenerator::generateChangeQuery(const ChangeQuery* query) {
-    msgbioassert(_tree.nodes().empty(), "CHANGE queries are standalone queries");
+    _tree.create<ChangeNode>(query->getOp());
 }
 
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {

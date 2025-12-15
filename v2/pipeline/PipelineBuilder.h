@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "ChangeOp.h"
 #include "EntityType.h"
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
@@ -56,6 +57,7 @@ public:
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
     PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
                                                        std::span<ProcedureBlueprint::YieldItem> yield);
+    PipelineBlockOutputInterface& addChangeOp(ChangeOp op);
 
     // Get LabelSetID
     PipelineValuesOutputInterface& addGetLabelSetID();
