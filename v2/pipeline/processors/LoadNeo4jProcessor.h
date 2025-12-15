@@ -29,7 +29,7 @@ protected:
     PipelineValueOutputInterface _outName;
 
     LoadNeo4jProcessor(const fs::Path& path, std::string_view graphName);
-    ~LoadNeo4jProcessor();
+    ~LoadNeo4jProcessor() override;
 };
 
 }

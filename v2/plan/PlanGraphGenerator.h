@@ -20,6 +20,7 @@ class LoadGraphQuery;
 class ListGraphQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
+class LoadNeo4jQuery;
 class QueryCommand;
 
 class PlanGraphGenerator {
@@ -45,6 +46,7 @@ private:
     void generateListGraphQuery(const ListGraphQuery* query);
     void generateCreateGraphQuery(const CreateGraphQuery* query);
     void generateLoadGMLQuery(const LoadGMLQuery* query);
+    void generateLoadNeo4jQuery(const LoadNeo4jQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
