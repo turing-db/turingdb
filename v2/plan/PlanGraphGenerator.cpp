@@ -69,7 +69,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::CHANGE_QUERY:
             generateChangeQuery(static_cast<const ChangeQuery*>(query));
-            break;
+        break;
 
         default:
             throwError(fmt::format("Unsupported query command of type {}", (uint64_t)query->getKind()), query);

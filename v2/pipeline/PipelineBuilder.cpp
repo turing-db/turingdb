@@ -400,7 +400,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addChangeOp(ChangeOp op) {
 
     Dataframe* df = output.getDataframe();
     NamedColumn* changeIDCol = allocColumn<ColumnVector<ChangeID>>(df);
-    changeIDCol->rename("Change ID");
+    changeIDCol->rename("changeID");
     proc->setColumn(static_cast<ColumnVector<ChangeID>*>(changeIDCol->getColumn()));
 
     _pendingOutput.updateInterface(&output);
@@ -465,6 +465,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view gra
 
     Dataframe* df = output.getDataframe();
     NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    graphNameValue->rename("graphName");
     output.setValue(graphNameValue);
 
     _pendingOutput.setInterface(&output);
