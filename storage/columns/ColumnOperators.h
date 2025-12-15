@@ -8,7 +8,6 @@
 #include "ColumnMask.h"
 #include "ColumnVector.h"
 #include "columns/ColumnSet.h"
-#include "metadata/PropertyType.h"
 
 #include "BioAssert.h"
 
