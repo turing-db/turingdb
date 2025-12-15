@@ -20,13 +20,31 @@ concept Stringy = (
 );
 
 template <typename T>
-struct is_optional : std::false_type{};
+struct is_optional : std::false_type {};
 
 template <typename U>
-struct is_optional<std::optional<U>> : std::true_type{};
+struct is_optional<std::optional<U>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<T>::value;
+
+template <typename T>
+struct unwrap_optional {
+    using underlying_type = T;
+};
+
+template <typename U>
+struct unwrap_optional<std::optional<U>> {
+    using underlying_type = U;
+};
+
+template <typename T>
+using unwrap_optional_t = typename unwrap_optional<T>::underlying_type;
+
+template <typename T, typename U>
+concept OptionallyComparable =
+    (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
+     || std::same_as<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
 class ColumnOperators {
 public:
@@ -38,7 +56,7 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-        requires (Stringy<T, U> || std::same_as<T, U>)
+        requires OptionallyComparable<T, U>
     static void equal(ColumnMask& mask,
                       const ColumnVector<T>& lhs,
                       const ColumnVector<U>& rhs) {
@@ -75,7 +93,7 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-        requires (Stringy<T, U> || std::same_as<T, U>)
+        requires OptionallyComparable<T, U>
     static void equal(ColumnMask& mask,
                       const ColumnVector<T>& lhs,
                       const ColumnConst<U>& rhs) {
@@ -104,7 +122,7 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-        requires (Stringy<T, U> || std::same_as<T, U>)
+        requires OptionallyComparable<T, U>
     static void equal(ColumnMask& mask,
                       const ColumnConst<T>& lhs,
                       const ColumnVector<U>& rhs) {
@@ -133,7 +151,7 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-        requires (Stringy<T, U> || std::same_as<T, U>)
+        requires OptionallyComparable<T, U>
     static void equal(ColumnMask& mask,
                       const ColumnConst<T>& lhs,
                       const ColumnConst<U>& rhs) {
@@ -194,7 +212,7 @@ public:
      * @param rhs Lookup set
      */
     template <typename T, typename U>
-        requires (Stringy<T, U> || std::same_as<T, U>)
+        requires OptionallyComparable<T, U> && (!is_optional_v<U>)
     static void inOp(ColumnMask& mask,
                      const ColumnVector<T>& lhs,
                      const ColumnSet<U>& rhs) {
@@ -206,10 +224,12 @@ public:
             if constexpr (is_optional_v<T>) {
                 if (!lhs[i]) {
                     maskd[i] = false;
-                    continue;
+                } else {
+                    maskd[i] = rhs.contains(*lhs[i]);
                 }
+            } else {
+                maskd[i] = rhs.contains(lhs[i]);
             }
-            maskd[i] = rhs.contains(lhs[i]);
         }
     }
 
@@ -262,5 +282,4 @@ public:
         }
     }
 };
-
 }
