@@ -1,7 +1,8 @@
 #include "LSHShardRouter.h"
 
-#include "BioAssert.h"
 #include "RandomGenerator.h"
+
+#include "BioAssert.h"
 
 using namespace vec;
 

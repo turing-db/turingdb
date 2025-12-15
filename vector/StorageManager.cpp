@@ -1,9 +1,10 @@
 #include "StorageManager.h"
 
 #include <charconv>
+#include <mutex>
+
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
-#include <mutex>
 
 #include "LSHShardRouter.h"
 #include "VecLibStorage.h"

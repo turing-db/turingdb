@@ -108,6 +108,13 @@ find_package(FLEX REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS system)
 
+# Faiss
+find_package(Faiss REQUIRED)
+
+# OpenMP (required by Faiss)
+find_package(OpenMP REQUIRED)
+
+
 # Use Homebrew for Flex and Bison on macOS
 if(APPLE)
     find_program(BREW_EXECUTABLE brew)
