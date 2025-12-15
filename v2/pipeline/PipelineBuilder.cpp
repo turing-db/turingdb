@@ -23,6 +23,7 @@
 #include "processors/WriteProcessorTypes.h"
 #include "processors/GetLabelSetIDProcessor.h"
 #include "processors/LoadGraphProcessor.h"
+#include "processors/CreateGraphProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -627,6 +628,20 @@ PipelineValueOutputInterface& PipelineBuilder::addListGraph() {
     PipelineValueOutputInterface& output = loadGraph->output();
     Dataframe* df = output.getDataframe();
     NamedColumn* graphNameValue = allocColumn<ColumnVector<types::String::Primitive>>(df);
+    graphNameValue->rename("graphName");
+    output.setValue(graphNameValue);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addCreateGraph(std::string_view graphName) {
+    CreateGraphProcessor* loadGraph = CreateGraphProcessor::create(_pipeline, graphName);
+
+    PipelineValueOutputInterface& output = loadGraph->output();
+    Dataframe* df = output.getDataframe();
+    NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
     graphNameValue->rename("graphName");
     output.setValue(graphNameValue);
 

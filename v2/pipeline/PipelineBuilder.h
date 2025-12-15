@@ -145,6 +145,9 @@ public:
     // List Graph
     PipelineValueOutputInterface& addListGraph();
 
+    // Create Graph
+    PipelineValueOutputInterface& addCreateGraph(std::string_view graphName);
+
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
     NamedColumn* addColumnToOutput(ColumnTag tag) {

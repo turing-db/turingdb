@@ -6,16 +6,16 @@ namespace db::v2 {
 
 class CreateGraphNode : public PlanGraphNode {
 public:
-    explicit CreateGraphNode(const std::string& graphName)
+    explicit CreateGraphNode(std::string_view graphName)
         : PlanGraphNode(PlanGraphOpcode::CREATE_GRAPH),
         _graphName(graphName)
     {
     }
 
-    const std::string& getGraphName() const { return _graphName; }
+    std::string_view getGraphName() const { return _graphName; }
 
 private:
-    std::string _graphName;
+    std::string_view _graphName;
 };
 
 }

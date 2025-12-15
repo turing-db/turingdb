@@ -67,6 +67,7 @@ class EdgePatternData;
 class CypherParserState;
 class YCypherParser;
 class ListGraphQuery;
+class CreateGraphQuery;
 class FunctionDecls;
 class ProcedureBlueprintMap;
 class LoadGraphQuery;
@@ -125,6 +126,7 @@ public:
     friend EdgePatternData;
     friend LoadGraphQuery;
     friend ListGraphQuery;
+    friend CreateGraphQuery;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

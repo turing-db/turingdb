@@ -52,6 +52,7 @@
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
 #include "nodes/ListGraphNode.h"
+#include "nodes/CreateGraphNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -309,8 +310,11 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateListGraphNode(static_cast<ListGraphNode*>(node));
         break;
 
-        case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::CREATE_GRAPH:
+            return translateCreateGraphNode(static_cast<CreateGraphNode*>(node));
+        break;
+
+        case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::ORDER_BY:
@@ -978,5 +982,10 @@ PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node
 
 PipelineOutputInterface* PipelineGenerator::translateListGraphNode(ListGraphNode* node) {
     _builder.addListGraph();
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateCreateGraphNode(CreateGraphNode* node) {
+    _builder.addCreateGraph(node->getGraphName());
     return _builder.getPendingOutputInterface();
 }

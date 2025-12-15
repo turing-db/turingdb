@@ -46,6 +46,7 @@
     #include "SinglePartQuery.h"
     #include "ChangeQuery.h"
     #include "ListGraphQuery.h"
+    #include "CreateGraphQuery.h"
     #include "Projection.h"
     #include "PatternElement.h"
     #include "stmt/Skip.h"
@@ -262,6 +263,7 @@
 %type<db::v2::SinglePartQuery*> singlePartQuery
 %type<db::v2::ChangeQuery*> changeQuery
 %type<db::v2::ListGraphQuery*> listGraphQuery
+%type<db::v2::CreateGraphQuery*> createGraphQuery
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
@@ -320,6 +322,7 @@ singleQuery
     | loadGraph { $$ = $1; }
     | changeQuery { $$ = $1; }
     | listGraphQuery { $$ = $1; }
+    | createGraphQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -328,6 +331,10 @@ loadGraph
 
 listGraphQuery
     : LIST GRAPH { $$ = ListGraphQuery::create(ast); LOC($$, @$); }
+    ;
+
+createGraphQuery
+    : CREATE GRAPH ID { $$ = CreateGraphQuery::create(ast, $3); LOC($$, @$); }
     ;
 
 returnSt
