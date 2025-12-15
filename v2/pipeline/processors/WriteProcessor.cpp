@@ -7,8 +7,10 @@
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
-
 #include "ExecutionContext.h"
+
+#include "processors/ExprProgram.h"
+
 #include "columns/ColumnIDs.h"
 #include "dataframe/NamedColumn.h"
 #include "metadata/LabelSet.h"
@@ -57,10 +59,17 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
 template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
 template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
+void
+
 }
 
-WriteProcessor* WriteProcessor::create(PipelineV2* pipeline, bool hasInput) {
-    auto* processor = new WriteProcessor();
+WriteProcessor::WriteProcessor(ExprProgram* exprProg)
+    : _exprProgram(exprProg)
+{
+}
+
+WriteProcessor* WriteProcessor::create(PipelineV2* pipeline, ExprProgram* exprProg, bool hasInput) {
+    auto* processor = new WriteProcessor(exprProg);
 
     if (hasInput) {
         processor->_input = std::make_optional<PipelineBlockInputInterface>();
@@ -116,6 +125,9 @@ void WriteProcessor::execute() {
     }
 
     if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
+        // Evaluate instructions so that property columns are populated with their
+        // evaluated value
+        _exprProgram->evaluateInstructions();
         performCreations();
     }
 
@@ -208,6 +220,15 @@ void WriteProcessor::createNodes(size_t numIters) {
             throw PipelineException("Nodes require at least 1 label.");
         }
         lblset = getLabelSet(labels);
+
+        const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(lblset);
+        std::vector<CommitWriteBuffer::UntypedProperties> props;
+        {
+            for (const auto& [name, type, valueCol] : node._properties) {
+                // TODO: Need to add one of each to each node, but the value might differ
+                // based on the index in the column
+            }
+        }
 
         // Add each node that we need to the CommitWriteBuffer
         // Add labels first as they are locally contiguous in vector

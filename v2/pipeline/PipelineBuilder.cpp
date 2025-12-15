@@ -649,12 +649,13 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
+PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
+                                                        const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                                         const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
                                                         WriteProcessor::PendingNodes& pendingNodes,
                                                         WriteProcessor::PendingEdges& pendingEdges) {
     const bool hasInput = _pendingOutput.getInterface();
-    auto* processor = WriteProcessor::create(_pipeline, hasInput);
+    auto* processor = WriteProcessor::create(_pipeline, exprProg, hasInput);
     if (hasInput) {
         _pendingOutput.connectTo(processor->input());
     }

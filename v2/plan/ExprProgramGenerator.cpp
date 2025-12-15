@@ -130,6 +130,11 @@ void ExprProgramGenerator::addEdgeTypeConstraint(Column* edgeTypeCol,
     _exprProg->addTopLevelPredicate(finalEdgeTypeMask);
 }
 
+const Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
+    const Column* resCol =  generateExpr(expr);
+    return resCol;
+}
+
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
     // Predicates can be singular Boolean properties.
     // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a predicate.

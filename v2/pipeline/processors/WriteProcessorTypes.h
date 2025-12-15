@@ -6,6 +6,12 @@
 #include "dataframe/ColumnTag.h"
 #include "metadata/PropertyType.h"
 
+namespace db {
+
+class Column;
+
+}
+
 namespace db::v2 {
 
 class WriteProcessorTypes {
@@ -20,7 +26,7 @@ public:
     struct PropertyConstraint {
         std::string_view _propName;
         ValueType _type;
-        ColumnTag _tag; // Column where the values of this property may be found
+        const Column* _col; // Column where the values of this property may be found
     };
 
     struct PendingNode {

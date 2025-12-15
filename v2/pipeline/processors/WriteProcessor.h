@@ -26,6 +26,7 @@ class CommitWriteBuffer;
 namespace db::v2 {
 
 class PipelineV2;
+class ExprProgram;
 
 class WriteProcessor final : public Processor {
 public:
@@ -34,7 +35,9 @@ public:
     using PendingNodes = std::vector<WriteProcessorTypes::PendingNode>;
     using PendingEdges = std::vector<WriteProcessorTypes::PendingEdge>;
 
-    static WriteProcessor* create(PipelineV2* pipeline, bool hasInput = false);
+    static WriteProcessor* create(PipelineV2* pipeline,
+                                  ExprProgram* exprProg,
+                                  bool hasInput = false);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
@@ -74,6 +77,8 @@ private:
 
     PendingNodes _pendingNodes;
     PendingEdges _pendingEdges;
+
+    ExprProgram* _exprProgram;
 
     /**
      * @brief Adds nodes and edges which are marked to be deleted to the @ref
@@ -121,7 +126,7 @@ private:
     */
     LabelSet getLabelSet(std::span<const std::string_view> labels);
 
-    WriteProcessor() = default;
+    WriteProcessor(ExprProgram* exprProg);
     ~WriteProcessor() final = default;
 };
 

@@ -144,7 +144,8 @@ public:
     void rename(std::string_view name) { _pendingOutput.rename(name); }
 
     // Write/Updates
-    PipelineBlockOutputInterface& addWrite(const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
+    PipelineBlockOutputInterface& addWrite(ExprProgram* exprProg,
+                                           const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                            const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
                                            WriteProcessor::PendingNodes& pendingNodes,
                                            WriteProcessor::PendingEdges& pendingEdges);

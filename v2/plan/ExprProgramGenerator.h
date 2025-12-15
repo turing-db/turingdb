@@ -46,6 +46,8 @@ public:
     void addLabelConstraint(Column* lblsetCol, const LabelSet& lblConstraint);
     void addEdgeTypeConstraint(Column* edgeTypeCol, const EdgeTypeID& typeConstr);
 
+    const Column* registerPropertyConstraint(const Expr* expr);
+
 private:
     PipelineGenerator* _gen {nullptr};
     ExprProgram* _exprProg {nullptr};

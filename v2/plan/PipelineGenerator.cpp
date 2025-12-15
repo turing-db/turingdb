@@ -949,6 +949,9 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         _builder.addMaterialize();
     }
 
+    ExprProgram* exprProg = ExprProgram::create(_pipeline);
+    ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+
     WriteProcessor::DeletedNodes delNodes;
     delNodes.reserve(node->toDeleteNodes().size());
     { // Add the columns containing deleted node variables
@@ -987,9 +990,8 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             WriteProcessorTypes::PropertyConstraints props;
             props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
-                throw PipelineException("Unsupported: Creating nodes with properties");
                 const auto& [name, type, expr] = propConstr;
-                const ColumnTag propCol = getCol(expr->getExprVarDecl());
+                const Column* propCol = exprGen.registerPropertyConstraint(expr);
 
                 props.emplace_back(name, type, propCol);
             }
@@ -1038,9 +1040,9 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             WriteProcessorTypes::PropertyConstraints props;
             props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
-                throw PipelineException("Unsupported: Creating edges with properties");
                 const auto& [name, type, expr] = propConstr;
-                const ColumnTag propCol = getCol(expr->getExprVarDecl());
+                const Column* propCol = exprGen.registerPropertyConstraint(expr);
+
                 props.emplace_back(name, type, propCol);
             }
 
@@ -1054,7 +1056,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
     // Has the side effect of allocing columns, and modifying the @ref _tag field of
     // elements of @ref penNodes and @ref penEdges in-place
-    _builder.addWrite(delNodes, delEdges, penNodes, penEdges);
+    _builder.addWrite(exprProg, delNodes, delEdges, penNodes, penEdges);
 
     // Above call to @ref addWrite alloc'd columns for the new nodes/edges, storing the
     // tag in the elements of @ref penNodes @ref penEdges. We may need to reference these
