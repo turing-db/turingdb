@@ -10,6 +10,7 @@
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "LoadGraphQuery.h"
+#include "CreateGraphQuery.h"
 #include "Projection.h"
 #include "expr/Expr.h"
 #include "stmt/StmtContainer.h"
@@ -54,6 +55,10 @@ void CypherAnalyzer::analyze() {
 
             case QueryCommand::Kind::LOAD_GRAPH_QUERY:
                 analyze(static_cast<const LoadGraphQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::CREATE_GRAPH_QUERY:
+                analyze(static_cast<const CreateGraphQuery*>(query));
             break;
 
             // Nothing to analyze
@@ -181,6 +186,20 @@ void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
     std::string_view graphName = loadGraph->getGraphName();
     if (graphName.empty()) {
         throwError("LOAD GRAPH should not have an empty graph name");
+    }
+
+    // Check that the graph name is only [A-Z0-9_]+
+    for (char c : graphName) {
+        if (!(isalnum(c) || c == '_')) [[unlikely]] {
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGraph);
+        }
+    }
+}
+
+void CypherAnalyzer::analyze(const CreateGraphQuery* loadGraph) {
+    std::string_view graphName = loadGraph->getGraphName();
+    if (graphName.empty()) {
+        throwError("CREATE GRAPH should not have an empty graph name");
     }
 
     // Check that the graph name is only [A-Z0-9_]+

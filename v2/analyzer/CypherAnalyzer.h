@@ -10,7 +10,7 @@ class WriteStmtAnalyzer;
 class ExprAnalyzer;
 class SinglePartQuery;
 class LoadGraphQuery;
-class ChangeQuery;
+class CreateGraphQuery;
 class OrderBy;
 class Skip;
 class Limit;
@@ -34,6 +34,7 @@ public:
     void analyze(const SinglePartQuery* query);
     void analyze(const ReturnStmt* returnSt);
     void analyze(const LoadGraphQuery* loadGraph);
+    void analyze(const CreateGraphQuery* loadGraph);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

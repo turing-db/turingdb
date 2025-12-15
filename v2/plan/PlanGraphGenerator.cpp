@@ -32,13 +32,15 @@
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/LoadGraphNode.h"
 #include "nodes/ListGraphNode.h"
+#include "nodes/CreateGraphNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "ChangeQuery.h"
 #include "ListGraphQuery.h"
-#include "stmt/StmtContainer.h"
+#include "CreateGraphQuery.h"
 #include "LoadGraphQuery.h"
+#include "stmt/StmtContainer.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -75,6 +77,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::CHANGE_QUERY:
             generateChangeQuery(static_cast<const ChangeQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::CREATE_GRAPH_QUERY:
+            generateCreateGraphQuery(static_cast<const CreateGraphQuery*> (query));
         break;
 
         default:
@@ -137,6 +143,11 @@ void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* query) {
 
 void PlanGraphGenerator::generateListGraphQuery(const ListGraphQuery* query) {
     ListGraphNode* loadGraphNode = _tree.create<ListGraphNode>();
+    _tree.newOut<ProduceResultsNode>(loadGraphNode);
+}
+
+void PlanGraphGenerator::generateCreateGraphQuery(const CreateGraphQuery* query) {
+    CreateGraphNode* loadGraphNode = _tree.create<CreateGraphNode>(query->getGraphName());
     _tree.newOut<ProduceResultsNode>(loadGraphNode);
 }
 
