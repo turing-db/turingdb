@@ -39,26 +39,27 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-    requires (Stringy<T,U> || std::same_as<T,U>)
-    static void equal(ColumnMask* mask,
-                      const ColumnVector<T>* lhs,
-                      const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(),
+        requires (Stringy<T, U> || std::same_as<T, U>)
+    static void equal(ColumnMask& mask,
+                      const ColumnVector<T>& lhs,
+                      const ColumnVector<U>& rhs) {
+        bioassert(lhs.size() == rhs.size(),
                      "Columns must have matching dimensions");
-        mask->resize(lhs->size());
-        auto& maskd = mask->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-        const auto size = lhs->size();
+        mask.resize(lhs.size());
+        auto& maskd = mask.getRaw();
+        const auto& lhsd = lhs.getRaw();
+        const auto& rhsd = rhs.getRaw();
+        const auto size = lhs.size();
+
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                if (!lhsd[i]) {
-                    maskd[i]._value = false;;
+                if (lhsd[i] == std::nullopt) {
+                    maskd[i]._value = false;
                     continue;
                 }
             }
             if constexpr (is_optional_v<U>) {
-                if (!rhsd[i]) {
+                if (rhsd[i] == std::nullopt) {
                     maskd[i]._value = false;
                     continue;
                 }
@@ -75,19 +76,21 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-    requires (Stringy<T,U> || std::same_as<T,U>)
-    static void equal(ColumnMask* mask,
-                      const ColumnVector<T>* lhs,
-                      const ColumnConst<U>* rhs) {
-        mask->resize(lhs->size());
-        auto& maskd = mask->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-        const auto size = lhs->size();
+        requires (Stringy<T, U> || std::same_as<T, U>)
+    static void equal(ColumnMask& mask,
+                      const ColumnVector<T>& lhs,
+                      const ColumnConst<U>& rhs) {
+        mask.resize(lhs.size());
+        auto& maskd = mask.getRaw();
+        const auto& lhsd = lhs.getRaw();
+        const auto& rhsd = rhs.getRaw();
+        const auto size = lhs.size();
+
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                if (!lhsd[i]) {
+                if (lhsd[i] == std::nullopt) {
                     maskd[i]._value = false;
+                    continue;
                 }
             }
             maskd[i]._value = lhsd[i] == rhsd;
@@ -102,17 +105,24 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-    requires (Stringy<T,U> || std::same_as<T,U>)
+        requires (Stringy<T, U> || std::same_as<T, U>)
     static void equal(ColumnMask& mask,
                       const ColumnConst<T>& lhs,
                       const ColumnVector<U>& rhs) {
         mask.resize(rhs.size());
-        auto* maskd = mask.data();
-        const auto& lhsd = lhs.getRaw();
-        const auto* rhsd = rhs.data();
+        auto& maskd = mask.getRaw();
+        const auto& rhsd = rhs.getRaw();
+        const T& val = lhs.getRaw();
         const auto size = rhs.size();
+
         for (size_t i = 0; i < size; i++) {
-            maskd[i]._value = lhsd == rhsd[i];
+            if constexpr (is_optional_v<U>) {
+                if (rhsd[i] == std::nullopt) {
+                    maskd[i] = false;
+                    continue;
+                }
+            }
+            maskd[i] = val == rhsd[i];
         }
     }
 
@@ -124,7 +134,7 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-    requires (Stringy<T,U> || std::same_as<T,U>)
+        requires (Stringy<T, U> || std::same_as<T, U>)
     static void equal(ColumnMask& mask,
                       const ColumnConst<T>& lhs,
                       const ColumnConst<U>& rhs) {
@@ -171,6 +181,7 @@ public:
         const auto* lhsd = lhs.data();
         const auto* rhsd = rhs.data();
         const auto size = rhs.size();
+
         for (size_t i = 0; i < size; i++) {
             maskd[i]._value = lhsd[i]._value || rhsd[i]._value;
         }
@@ -184,14 +195,21 @@ public:
      * @param rhs Lookup set
      */
     template <typename T, typename U>
-    requires (Stringy<T,U> || std::same_as<T,U>)
+        requires (Stringy<T, U> || std::same_as<T, U>)
     static void inOp(ColumnMask& mask,
                      const ColumnVector<T>& lhs,
                      const ColumnSet<U>& rhs) {
         mask.resize(lhs.size());
-        auto* maskd = mask.data();
+        auto& maskd = mask.getRaw();
         const auto size = lhs.size();
+
         for (size_t i = 0; i < size; i++) {
+            if constexpr (is_optional_v<T>) {
+                if (lhs[i] == std::nullopt) {
+                    maskd[i] = false;
+                    continue;
+                }
+            }
             maskd[i] = rhs.contains(lhs[i]);
         }
     }
