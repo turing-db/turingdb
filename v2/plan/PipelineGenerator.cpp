@@ -554,12 +554,12 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
         _builder.addMaterialize();
     }
 
-    const auto& predicates = node->getPredicates();
-    const auto& labelConstrs = node->getLabelConstraints();
-
-    if (predicates.empty() && labelConstrs.empty()) {
+    if (node->isEmpty()) {
         return _builder.getPendingOutputInterface();
     }
+
+    const auto& predicates = node->getPredicates();
+    const auto& labelConstrs = node->getLabelConstraints();
 
     ExprProgram* exprProg = ExprProgram::create(_pipeline);
     ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
@@ -586,9 +586,13 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
     if (!_builder.isSingleMaterializeStep()) {
             _builder.addMaterialize();
     }
+
     if (node->isEmpty()) {
         return _builder.getPendingOutputInterface();
     }
+
+    [[maybe_unused]] const auto& predicates = node->getPredicates();
+    [[maybe_unused]] const auto& typeConstraint = node->getEdgeTypeConstraints();
 
     throw PlannerException("EdgeFilterNode not supported");
 }
