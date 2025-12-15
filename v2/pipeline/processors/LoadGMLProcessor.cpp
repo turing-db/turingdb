@@ -52,7 +52,7 @@ void LoadGMLProcessor::execute() {
     JobSystem* jobSys = _ctxt->getJobSystem();
     const fs::Path filePath {std::string(_filePath)};
 
-    const bool res = sysMan->importGraph(std::string(_graphName), filePath, jobSys);
+    const bool res = sysMan->importGraph(std::string(_graphName), filePath, *jobSys);
     if (!res) {
         throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
     }
