@@ -169,7 +169,8 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Execution ===\n\n");
 
-            ExecutionContext execCtxt(&sysMan, view, &transaction);
+            ExecutionContext execCtxt(&sysMan, view);
+            execCtxt.setTransaction(&transaction);
             PipelineExecutor executor(&pipeline, &execCtxt);
             try {
                 auto t0 = Clock::now();

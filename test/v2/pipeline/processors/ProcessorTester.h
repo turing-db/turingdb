@@ -17,13 +17,13 @@ using namespace db;
 using namespace db::v2;
 using namespace turing::test;
 
-#define EXECUTE(view, chunkSize)                          \
-    {                                                     \
+#define EXECUTE(view, chunkSize)                                    \
+    {                                                               \
         ExecutionContext execCtxt(&_env->getSystemManager(), view); \
-        execCtxt.setChunkSize(chunkSize);                 \
-        _pipeline.clear();                                \
-        PipelineExecutor executor(&_pipeline, &execCtxt); \
-        executor.execute();                               \
+        execCtxt.setChunkSize(chunkSize);                           \
+        _pipeline.clear();                                          \
+        PipelineExecutor executor(&_pipeline, &execCtxt);           \
+        executor.execute();                                         \
     }
 
 class ProcessorTester : public TuringTest {

@@ -2,7 +2,6 @@
 
 #include <spdlog/fmt/bundled/core.h>
 
-#include "ChangeQuery.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "ReadStmtAnalyzer.h"
@@ -58,7 +57,7 @@ void CypherAnalyzer::analyze() {
             break;
 
             case QueryCommand::Kind::CHANGE_QUERY:
-                analyze(static_cast<const ChangeQuery*>(query));
+                // Nothing to analyze
             break;
         }
     }

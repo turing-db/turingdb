@@ -17,8 +17,10 @@ namespace db::v2 {
 
 class ExecutionContext {
 public:
-    ExecutionContext(const GraphView& graphView)
-        : _graphView(graphView)
+    ExecutionContext(SystemManager* sysMan,
+                     const GraphView& graphView)
+        : _sysMan(sysMan),
+        _graphView(graphView)
     {
     }
 
@@ -32,7 +34,6 @@ public:
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setTransaction(Transaction* tx) { _tx = tx; }
     void setGraphName(std::string_view graphName) { _graphName = graphName; }
-    void setSystemManager(SystemManager* sysMan) { _sysMan = sysMan; }
     void setJobSystem(JobSystem* jobSystem) { _jobSystem = jobSystem; }
 
 private:
