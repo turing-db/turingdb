@@ -13,8 +13,6 @@
 
 #include "PipelineV2.h"
 
-#include "PipelineV2.h"
-
 #include "PipelineException.h"
 #include "FatalException.h"
 
