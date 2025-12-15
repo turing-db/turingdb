@@ -33,6 +33,7 @@
 #include "nodes/LoadGraphNode.h"
 #include "nodes/ListGraphNode.h"
 #include "nodes/CreateGraphNode.h"
+#include "nodes/LoadGMLNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -41,6 +42,7 @@
 #include "CreateGraphQuery.h"
 #include "LoadGraphQuery.h"
 #include "stmt/StmtContainer.h"
+#include "LoadGMLQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -81,6 +83,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::CREATE_GRAPH_QUERY:
             generateCreateGraphQuery(static_cast<const CreateGraphQuery*> (query));
+        break;
+
+        case QueryCommand::Kind::LOAD_GML_QUERY:
+            generateLoadGMLQuery(static_cast<const LoadGMLQuery*>(query));
         break;
 
         default:
@@ -149,6 +155,11 @@ void PlanGraphGenerator::generateListGraphQuery(const ListGraphQuery* query) {
 void PlanGraphGenerator::generateCreateGraphQuery(const CreateGraphQuery* query) {
     CreateGraphNode* loadGraphNode = _tree.create<CreateGraphNode>(query->getGraphName());
     _tree.newOut<ProduceResultsNode>(loadGraphNode);
+}
+
+void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
+    LoadGMLNode* loadGMLNode = _tree.create<LoadGMLNode>(loadGML->getGraphName());
+    _tree.newOut<ProduceResultsNode>(loadGMLNode);
 }
 
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {

@@ -40,6 +40,7 @@ class LoadGraphNode;
 class ChangeNode;
 class ListGraphNode;
 class CreateGraphNode;
+class LoadGMLNode;
 
 class PipelineGenerator {
 public:
@@ -115,6 +116,7 @@ private:
     PipelineOutputInterface* translateChangeNode(ChangeNode* node);
     PipelineOutputInterface* translateListGraphNode(ListGraphNode* node);
     PipelineOutputInterface* translateCreateGraphNode(CreateGraphNode* node);
+    PipelineOutputInterface* translateLoadGML(LoadGMLNode* node);
 };
 
 }

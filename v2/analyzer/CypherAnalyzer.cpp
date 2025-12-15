@@ -11,6 +11,7 @@
 #include "SinglePartQuery.h"
 #include "LoadGraphQuery.h"
 #include "CreateGraphQuery.h"
+#include "LoadGMLQuery.h"
 #include "Projection.h"
 #include "expr/Expr.h"
 #include "stmt/StmtContainer.h"
@@ -68,6 +69,14 @@ void CypherAnalyzer::analyze() {
 
              default:
                  throwError("Unsupported query type", query);
+            break;
+
+            case QueryCommand::Kind::LOAD_GML_QUERY:
+                analyze(static_cast<const LoadGMLQuery*>(query));
+            break;
+
+            default:
+                throwError("Unsupported query type", query);
             break;
         }
     }
@@ -200,6 +209,20 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* loadGraph) {
     std::string_view graphName = loadGraph->getGraphName();
     if (graphName.empty()) {
         throwError("CREATE GRAPH should not have an empty graph name");
+    }
+
+    // Check that the graph name is only [A-Z0-9_]+
+    for (char c : graphName) {
+        if (!(isalnum(c) || c == '_')) [[unlikely]] {
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGraph);
+        }
+    }
+}
+
+void CypherAnalyzer::analyze(const LoadGMLQuery* loadGML) {
+    std::string_view graphName = loadGML->getGraphName();
+    if (graphName.empty()) {
+        throwError("LOAD GML should not have an empty graph name");
     }
 
     // Check that the graph name is only [A-Z0-9_]+

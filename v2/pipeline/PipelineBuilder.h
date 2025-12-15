@@ -141,6 +141,7 @@ public:
 
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);
+    PipelineValueOutputInterface& addLoadGML(std::string_view graphName, std::string_view filePath);
 
     // List Graph
     PipelineValueOutputInterface& addListGraph();

@@ -15,6 +15,7 @@ public:
         CHANGE_QUERY,
         LIST_GRAPH_QUERY,
         CREATE_GRAPH_QUERY,
+        LOAD_GML_QUERY
     };
 
     virtual Kind getKind() const = 0;

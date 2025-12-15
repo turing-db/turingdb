@@ -34,6 +34,7 @@ class FunctionInvocationExpr;
 class LoadGraphQuery;
 class ListGraphQuery;
 class CreateGraphQuery;
+class LoadGMLQuery;
 
 class NodePatternData;
 class EdgePatternData;
@@ -59,6 +60,7 @@ private:
     void dump(std::ostream& out, const ChangeQuery* query);
     void dump(std::ostream& out, const ListGraphQuery* query);
     void dump(std::ostream& out, const CreateGraphQuery* query);
+    void dump(std::ostream& out, const LoadGMLQuery* query);
     void dump(std::ostream& out, const MatchStmt* match);
     void dump(std::ostream& out, const Limit* lim);
     void dump(std::ostream& out, const Skip* skip);
