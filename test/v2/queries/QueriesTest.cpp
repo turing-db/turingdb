@@ -88,7 +88,7 @@ TEST_F(QueriesTest, scanAllSkip) {
     ASSERT_FALSE(allNodeIDs.empty());
 
     const size_t extraSkip = 10;
-    const size_t maxSkip = allNodeIDs.size() + extraSkip;
+    const size_t maxSkip = allNodeIDs.size()+extraSkip;
     for (size_t skip = 0; skip <= maxSkip; ++skip) {
         const std::string query = "MATCH (n) RETURN n SKIP " + std::to_string(skip);
 
@@ -141,7 +141,7 @@ TEST_F(QueriesTest, scanAllLimit) {
     ASSERT_FALSE(allNodeIDs.empty());
 
     const size_t extraLimit = 10;
-    const size_t maxLimit = allNodeIDs.size() + extraLimit;
+    const size_t maxLimit = allNodeIDs.size()+extraLimit;
     for (size_t limit = 0; limit <= maxLimit; ++limit) {
         const std::string query = "MATCH (n) RETURN n LIMIT " + std::to_string(limit);
 
@@ -183,14 +183,14 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
     ASSERT_FALSE(allNodeIDs.empty());
 
     const size_t extra = 10;
-    const size_t maxSkip = allNodeIDs.size() + extra;
-    const size_t maxLimit = allNodeIDs.size() + extra;
+    const size_t maxSkip = allNodeIDs.size()+extra;
+    const size_t maxLimit = allNodeIDs.size()+extra;
     std::vector<NodeID> returnedNodeIDs;
     for (size_t skip = 0; skip <= maxSkip; ++skip) {
         for (size_t limit = 0; limit <= maxLimit; ++limit) {
-            const std::string query = "MATCH (n) RETURN n SKIP "
-                                    + std::to_string(skip) + " LIMIT "
-                                    + std::to_string(limit);
+            const std::string query = "MATCH (n) RETURN n SKIP " 
+            + std::to_string(skip) + " LIMIT " 
+            + std::to_string(limit);
 
             returnedNodeIDs.clear();
             bool executedLambda = false;
@@ -207,7 +207,7 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
             });
 
             const size_t skipCompare = std::min(skip, allNodeIDs.size());
-            const size_t limitCompare = std::min(limit, allNodeIDs.size() - skipCompare);
+            const size_t limitCompare = std::min(limit, allNodeIDs.size()-skipCompare);
             assertSpanEqual(std::span<const NodeID>(returnedNodeIDs),
                             std::span<const NodeID>(allNodeIDs).subspan(skipCompare, limitCompare));
         }
@@ -217,7 +217,7 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
 TEST_F(QueriesTest, scanExpand1) {
     const std::string query = "MATCH (n)-->(m) RETURN n, m";
 
-    LineContainer<NodeID, NodeID> returned;
+    LineContainer<NodeID,NodeID> returned;
     _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
@@ -532,7 +532,7 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
         using NameContainer = ColumnOptVector<types::String::Primitive>;
 
         const AgeContainer* srcAges = nullptr;
-        const NameContainer* edgeNames = nullptr;
+        const NameContainer*  edgeNames = nullptr;
         const AgeContainer* tgtAges = nullptr;
 
         for (auto* col : df->cols()) {
@@ -561,7 +561,7 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
 
     // Get all expected node IDs
     {
-        for (const auto& edge : reader.scanOutEdges()) {
+        for (const auto& edge: reader.scanOutEdges()) {
             ColumnNodeIDs srcID = {edge._nodeID};
             ColumnEdgeIDs edgeID = {edge._edgeID};
             ColumnNodeIDs tgtID = {edge._otherID};
@@ -708,7 +708,7 @@ TEST_F(QueriesTest, twoHopXOneHop) {
 
         ASSERT_TRUE((ns.size() == ms.size()) && (ns.size() == os.size()));
         ASSERT_TRUE(ps.size() == qs.size());
-        for (size_t i = 0; i < ns.size(); i++) {
+        for (size_t i = 0 ; i < ns.size(); i++) {
             for (size_t j = 0; j < ps.size(); j++) {
                 expectedRows.add({ns[i], ms[i], os[i], ps[j], qs[j]});
             }
@@ -818,6 +818,7 @@ TEST_F(QueriesTest, simpleAncestorJoinTest) {
         }
     }
 
+
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c),(a)-->(b) RETURN a,b,c";
@@ -872,6 +873,7 @@ TEST_F(QueriesTest, doubleAncestorJoinTest) {
         }
     }
 
+
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c),(a)-->(b), (a)-->(d) RETURN a,b,c,d";
@@ -924,6 +926,7 @@ TEST_F(QueriesTest, simpleSucessorJoinTest) {
             }
         }
     }
+
 
     Rows actualRows;
     {
