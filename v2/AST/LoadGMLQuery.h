@@ -19,6 +19,8 @@ public:
 
     std::string_view getGraphName() const { return _graphName; }
 
+    std::string_view getFilePath() const { return _filePath; }
+
 private:
     std::string_view _graphName;
     std::string_view _filePath;

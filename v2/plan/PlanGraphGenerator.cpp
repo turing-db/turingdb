@@ -158,7 +158,7 @@ void PlanGraphGenerator::generateCreateGraphQuery(const CreateGraphQuery* query)
 }
 
 void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
-    LoadGMLNode* loadGMLNode = _tree.create<LoadGMLNode>(loadGML->getGraphName());
+    LoadGMLNode* loadGMLNode = _tree.create<LoadGMLNode>(loadGML->getGraphName(), loadGML->getFilePath());
     _tree.newOut<ProduceResultsNode>(loadGMLNode);
 }
 

@@ -14,6 +14,7 @@
 #include "nodes/WriteNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
+#include "nodes/LoadGMLNode.h"
 
 #include "stmt/OrderByItem.h"
 #include "views/GraphView.h"
@@ -111,6 +112,11 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::LOAD_GRAPH: {
                 const auto* n = dynamic_cast<LoadGraphNode*>(node.get());
+                output << "        __graph__: " << n->getGraphName() << "\n";
+            } break;
+
+            case PlanGraphOpcode::LOAD_GML: {
+                const auto* n = dynamic_cast<LoadGMLNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
             } break;
 

@@ -986,7 +986,7 @@ PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node
 }
 
 PipelineOutputInterface* PipelineGenerator::translateLoadGML(LoadGMLNode* loadGML) {
-    _builder.addLoadGML(loadGML->getGraphName());
+    _builder.addLoadGML(loadGML->getGraphName(), loadGML->getFilePath());
     return _builder.getPendingOutputInterface();
 }
 
