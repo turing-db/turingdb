@@ -72,6 +72,7 @@ class FunctionDecls;
 class ProcedureBlueprintMap;
 class LoadGraphQuery;
 class LoadGMLQuery;
+class LoadNeo4jQuery;
 
 class CypherAST {
 public:
@@ -129,6 +130,7 @@ public:
     friend ListGraphQuery;
     friend CreateGraphQuery;
     friend LoadGMLQuery;
+    friend LoadNeo4jQuery;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

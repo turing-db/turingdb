@@ -12,6 +12,7 @@ public:
     enum class Kind {
         SINGLE_PART_QUERY = 0,
         LOAD_GRAPH_QUERY,
+        LOAD_NEO4J_QUERY,
         CHANGE_QUERY,
         LIST_GRAPH_QUERY,
         CREATE_GRAPH_QUERY,

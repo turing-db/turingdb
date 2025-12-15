@@ -12,6 +12,7 @@
 #include "LoadGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
+#include "LoadNeo4jQuery.h"
 #include "Projection.h"
 #include "expr/Expr.h"
 #include "stmt/StmtContainer.h"
@@ -58,6 +59,10 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const LoadGraphQuery*>(query));
             break;
 
+            case QueryCommand::Kind::LOAD_GML_QUERY:
+                analyze(static_cast<const LoadGMLQuery*>(query));
+            break;
+
             case QueryCommand::Kind::CREATE_GRAPH_QUERY:
                 analyze(static_cast<const CreateGraphQuery*>(query));
             break;
@@ -67,12 +72,8 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
             break;
 
-            case QueryCommand::Kind::LOAD_GML_QUERY:
-                analyze(static_cast<const LoadGMLQuery*>(query));
-            break;
-
             default:
-                throwError("Unsupported query type", query);
+                 throwError("Unsupported query type", query);
             break;
         }
     }
@@ -205,12 +206,31 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
     std::string_view graphName = createGraph->getGraphName();
     if (graphName.empty()) {
         throwError("CREATE GRAPH should not have an empty graph name");
+        // Check that the graph name is only [A-Z0-9_]+
+        for (char c : graphName) {
+            if (!(isalnum(c) || c == '_')) [[unlikely]] {
+                throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
+                                       "character '{}' not allowed.",
+                                       c),
+                           createGraph);
+            }
+        }
+    }
+}
+
+void CypherAnalyzer::analyze(const LoadNeo4jQuery* loadNeo4j) {
+    std::string_view graphName = loadNeo4j->getGraphName();
+    if (graphName.empty()) {
+        graphName = loadNeo4j->getPath().basename();
     }
 
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
         if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), createGraph);
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
+                                   "character '{}' not allowed.",
+                                   c),
+                       loadNeo4j);
         }
     }
 }
@@ -224,7 +244,10 @@ void CypherAnalyzer::analyze(const LoadGMLQuery* loadGML) {
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
         if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGML);
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
+                                   "character '{}' not allowed.",
+                                   c),
+                       loadGML);
         }
     }
 }

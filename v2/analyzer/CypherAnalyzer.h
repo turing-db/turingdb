@@ -13,6 +13,8 @@ class LoadGraphQuery;
 class CreateGraphQuery;
 class ChangeQuery;
 class LoadGMLQuery;
+class LoadNeo4jQuery;
+class ChangeQuery;
 class OrderBy;
 class Skip;
 class Limit;
@@ -38,6 +40,7 @@ public:
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(const LoadGMLQuery* loadGML);
+    void analyze(const LoadNeo4jQuery* loadNeo4j);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

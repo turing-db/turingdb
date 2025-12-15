@@ -56,6 +56,7 @@
     #include "stmt/SetItem.h"
     #include "LoadGraphQuery.h"
     #include "LoadGMLQuery.h"
+    #include "LoadNeo4jQuery.h"
 
     namespace db::v2 {
         class YCypherScanner;
@@ -147,6 +148,8 @@
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
+%token<std::string_view> NEO4J
+%token<std::string_view> LIST
 %token<std::string_view> DESC
 %token<std::string_view> CALL
 %token<std::string_view> NULL_
@@ -270,6 +273,7 @@
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
 %type<db::v2::LoadGMLQuery*> loadGML
+%type<db::v2::QueryCommand*> loadGraph
 %type<db::v2::Stmt*> readingStatement
 %type<db::v2::Stmt*> updatingStatement
 %type<db::v2::StmtContainer*> readingStatements
@@ -331,6 +335,13 @@ singleQuery
 
 loadGraph
     : LOAD GRAPH ID { $$ = LoadGraphQuery::create(ast, $3); LOC($$, @$); }
+    | LOAD NEO4J STRING_LITERAL { $$ = LoadNeo4jQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$); }
+    | LOAD NEO4J STRING_LITERAL AS ID {
+        auto* q = LoadNeo4jQuery::create(ast, fs::Path(std::string($3)));
+        $$ = q;
+        q->setGraphName($5);
+        LOC($$, @$);
+      }
     ;
 
 listGraphQuery

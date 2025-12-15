@@ -4,6 +4,7 @@
 
 #include "ChangeOp.h"
 #include "EntityType.h"
+#include "Path.h"
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
 #include "procedures/ProcedureBlueprint.h"
@@ -143,6 +144,7 @@ public:
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);
     PipelineValueOutputInterface& addLoadGML(std::string_view graphName, const fs::Path& filePath);
+    PipelineValueOutputInterface& addLoadNeo4j(std::string_view graphName, const fs::Path& filePath);
 
     // List Graph
     PipelineValueOutputInterface& addListGraph();
