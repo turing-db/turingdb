@@ -37,6 +37,7 @@ set(processors_sources
     processors/ListGraphProcessor.cpp
     processors/CreateGraphProcessor.cpp
     processors/LoadGMLProcessor.cpp
+    processors/LoadNeo4jProcessor.cpp
 )
 
 set(procedures_sources

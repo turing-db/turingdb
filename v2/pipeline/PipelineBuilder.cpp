@@ -25,7 +25,7 @@
 #include "processors/LoadGraphProcessor.h"
 #include "processors/CreateGraphProcessor.h"
 #include "processors/LoadGMLProcessor.h"
-#include "processors/LoadNeo4Processor.h"
+#include "processors/LoadNeo4jProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -493,12 +493,13 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graph
 }
 
 PipelineValueOutputInterface& PipelineBuilder::addLoadNeo4j(std::string_view graphName, const fs::Path& path) {
-    LoadNeo4jProcessor* proc = LoadNeo4jProcessor::create(_pipeline, graphName, path);
+    LoadNeo4jProcessor* proc = LoadNeo4jProcessor::create(_pipeline, path, graphName);
 
     PipelineValueOutputInterface& output = proc->output();
 
     Dataframe* df = output.getDataframe();
     NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    graphNameValue->rename("graphName");
     output.setValue(graphNameValue);
 
     _pendingOutput.setInterface(&output);

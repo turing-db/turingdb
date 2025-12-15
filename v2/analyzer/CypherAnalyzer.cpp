@@ -67,7 +67,10 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const CreateGraphQuery*>(query));
             break;
 
-            // Nothing to analyze
+            case QueryCommand::Kind::LOAD_NEO4J_QUERY:
+                analyze(static_cast<const LoadNeo4jQuery*>(query));
+            break;
+
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
             break;
