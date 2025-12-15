@@ -9,6 +9,7 @@
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnKind.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "metadata/LabelSet.h"
 
@@ -219,6 +220,10 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnVector<int64_t>, ColumnConst<int64_t>)
         EQUAL_CASE(ColumnConst<int64_t>, ColumnVector<int64_t>)
 
+        // Property opts
+        EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
+        EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
+
         AND_CASE(ColumnMask, ColumnMask)
         OR_CASE(ColumnMask, ColumnMask)
         OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
@@ -246,7 +251,6 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
 }
 
 void ExprProgram::evalUnaryInstr(const Instruction& instr) {
-    fmt::println("Evalutaing unary expr");
     const ColumnOperator op = instr._op;
     const Column* input = instr._lhs;
 
