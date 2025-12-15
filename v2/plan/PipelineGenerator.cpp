@@ -968,15 +968,5 @@ PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* lo
 PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node) {
     _builder.addChangeOp(node->getOp());
 
-    auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
-        if (operation == LambdaProcessor::Operation::RESET) {
-            return;
-        }
-
-        _callback(df);
-    };
-
-    _builder.addLambda(lambdaCallback);
-
     return _builder.getPendingOutputInterface();
 }

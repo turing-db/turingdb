@@ -80,7 +80,8 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 }
 
 void PlanGraphGenerator::generateChangeQuery(const ChangeQuery* query) {
-    _tree.create<ChangeNode>(query->getOp());
+    auto* n = _tree.create<ChangeNode>(query->getOp());
+    _tree.newOut<ProduceResultsNode>(n);
 }
 
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
