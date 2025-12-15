@@ -55,6 +55,7 @@
     #include "stmt/OrderByItem.h"
     #include "stmt/SetItem.h"
     #include "LoadGraphQuery.h"
+    #include "LoadGMLQuery.h"
 
     namespace db::v2 {
         class YCypherScanner;
@@ -162,6 +163,7 @@
 %token<std::string_view> LOAD
 %token<std::string_view> NEW
 %token<std::string_view> LIST
+%token<std::string_view> GML
 %token<std::string_view> ANY
 %token<std::string_view> SET
 %token<std::string_view> ALL
@@ -267,6 +269,7 @@
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
+%type<db::v2::LoadGMLQuery*> loadGML
 %type<db::v2::Stmt*> readingStatement
 %type<db::v2::Stmt*> updatingStatement
 %type<db::v2::StmtContainer*> readingStatements
@@ -323,6 +326,7 @@ singleQuery
     | changeQuery { $$ = $1; }
     | listGraphQuery { $$ = $1; }
     | createGraphQuery { $$ = $1; }
+    | loadGML { $$ = $1; }
     ;
 
 loadGraph
@@ -335,6 +339,10 @@ listGraphQuery
 
 createGraphQuery
     : CREATE GRAPH ID { $$ = CreateGraphQuery::create(ast, $3); LOC($$, @$); }
+    ;
+
+loadGML
+    : LOAD GML STRING_LITERAL AS ID { $$ = LoadGMLQuery::create(ast, $5, $3); LOC($$, @$); }
     ;
 
 returnSt

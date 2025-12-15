@@ -45,6 +45,7 @@ set(ast_sources
     ChangeQuery.cpp
     ListGraphQuery.cpp
     CreateGraphQuery.cpp
+    LoadGMLQuery.cpp
     NodePattern.cpp
     EdgePattern.cpp
     Symbol.cpp

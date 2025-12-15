@@ -11,6 +11,8 @@ class ExprAnalyzer;
 class SinglePartQuery;
 class LoadGraphQuery;
 class CreateGraphQuery;
+class ChangeQuery;
+class LoadGMLQuery;
 class OrderBy;
 class Skip;
 class Limit;
@@ -35,6 +37,7 @@ public:
     void analyze(const ReturnStmt* returnSt);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* loadGraph);
+    void analyze(const LoadGMLQuery* loadGML);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

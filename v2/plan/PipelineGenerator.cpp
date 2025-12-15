@@ -53,6 +53,7 @@
 #include "nodes/LoadGraphNode.h"
 #include "nodes/ListGraphNode.h"
 #include "nodes/CreateGraphNode.h"
+#include "nodes/LoadGMLNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -310,10 +311,15 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateListGraphNode(static_cast<ListGraphNode*>(node));
         break;
 
+        case PlanGraphOpcode::LOAD_GML:
+            return translateLoadGML(static_cast<LoadGMLNode*>(node));
+        break;
+
         case PlanGraphOpcode::CREATE_GRAPH:
             return translateCreateGraphNode(static_cast<CreateGraphNode*>(node));
         break;
 
+        case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::FUNC_EVAL:
@@ -976,7 +982,11 @@ PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* lo
 
 PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node) {
     _builder.addChangeOp(node->getOp());
+    return _builder.getPendingOutputInterface();
+}
 
+PipelineOutputInterface* PipelineGenerator::translateLoadGML(LoadGMLNode* loadGML) {
+    _builder.addLoadGML(loadGML->getGraphName());
     return _builder.getPendingOutputInterface();
 }
 

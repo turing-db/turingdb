@@ -24,6 +24,7 @@
 #include "processors/GetLabelSetIDProcessor.h"
 #include "processors/LoadGraphProcessor.h"
 #include "processors/CreateGraphProcessor.h"
+#include "processors/LoadGMLProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -468,6 +469,20 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view gra
     Dataframe* df = output.getDataframe();
     NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
     graphNameValue->rename("graphName");
+    output.setValue(graphNameValue);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graphName, std::string_view filePath) {
+    LoadGMLProcessor* loadGML = LoadGMLProcessor::create(_pipeline, graphName, filePath);
+    
+    PipelineValueOutputInterface& output = loadGML->output();
+
+    Dataframe* df = output.getDataframe();
+    NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
     output.setValue(graphNameValue);
 
     _pendingOutput.setInterface(&output);

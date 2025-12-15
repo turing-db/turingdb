@@ -117,6 +117,7 @@ using Token = db::v2::YCypherParser::token;
 "WITH" { KEYWORD(WITH) }
 "LOAD" { KEYWORD(LOAD) }
 "NEW" { KEYWORD(NEW) }
+"GML" { KEYWORD(GML) }
 "ANY" { KEYWORD(ANY) }
 "SET" { KEYWORD(SET) }
 "ALL" { KEYWORD(ALL) }
