@@ -23,6 +23,7 @@ class PropertyExpr;
 class LiteralExpr;
 class PipelineGenerator;
 class PendingOutputView;
+class LabelSet;
 
 class ExprProgramGenerator {
 public:
