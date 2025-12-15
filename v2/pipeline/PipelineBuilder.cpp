@@ -483,6 +483,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graph
 
     Dataframe* df = output.getDataframe();
     NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    graphNameValue->rename("graphName");
     output.setValue(graphNameValue);
 
     _pendingOutput.setInterface(&output);
