@@ -25,6 +25,8 @@
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadNeo4jQuery.h"
+#include "S3ConnectQuery.h"
+#include "S3TransferQuery.h"
 
 #include "expr/All.h"
 
@@ -102,6 +104,14 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::LOAD_GML_QUERY:
                 dump(out, static_cast<const LoadGMLQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::S3_CONNECT_QUERY:
+                dump(out, static_cast<const S3ConnectQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::S3_TRANSFER_QUERY:
+                dump(out, static_cast<const S3TransferQuery*>(query));
             break;
         }
     }
@@ -194,6 +204,40 @@ void CypherASTDumper::dump(std::ostream& out, const CreateGraphQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType CreateGraphQuery\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const S3ConnectQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType S3ConnectQuery\n";
+    out << "        AccessId " << query->getAccessId() << "\n";
+    out << "        Region " << query->getRegion() << "\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const S3TransferQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType S3TransferQuery\n";
+
+    if (query->getDirection() == S3TransferQuery::Direction::PULL) {
+        out << "        Direction PULL\n";
+    } else {
+        out << "        Direction PUSH\n";
+    }
+
+    out << "        S3Bucket " << query->getS3Bucket() << "\n";
+
+    if (!query->getS3Prefix().empty()) {
+        out << "        S3Prefix " << query->getS3Prefix() << "\n";
+    }
+
+    if (!query->getS3File().empty()) {
+        out << "        S3File " << query->getS3File() << "\n";
+    }
+
+    out << "        LocalPath " << query->getLocalPath() << "\n";
     out << "    }\n";
 }
 

@@ -13,6 +13,8 @@
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadNeo4jQuery.h"
+#include "S3ConnectQuery.h"
+#include "S3TransferQuery.h"
 #include "Projection.h"
 #include "expr/Expr.h"
 #include "stmt/StmtContainer.h"
@@ -43,7 +45,7 @@ CypherAnalyzer::~CypherAnalyzer() {
 }
 
 void CypherAnalyzer::analyze() {
-    for (const QueryCommand* query : _ast->queries()) {
+    for (QueryCommand* query : _ast->queries()) {
         DeclContext* ctxt = query->getDeclContext();
 
         _exprAnalyzer->setDeclContext(ctxt);
@@ -71,6 +73,15 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const LoadNeo4jQuery*>(query));
             break;
 
+            case QueryCommand::Kind::S3_CONNECT_QUERY:
+                analyze(static_cast<const S3ConnectQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::S3_TRANSFER_QUERY:
+                analyze(static_cast<S3TransferQuery*>(query));
+            break;
+
+            // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
             break;
@@ -253,6 +264,54 @@ void CypherAnalyzer::analyze(const LoadGMLQuery* loadGML) {
                        loadGML);
         }
     }
+}
+
+void CypherAnalyzer::analyze(const S3ConnectQuery* s3Connect) {
+    const std::string_view accessId = s3Connect->getAccessId();
+    const std::string_view secretKey = s3Connect->getSecretKey();
+    const std::string_view region = s3Connect->getRegion();
+
+    if (accessId.empty()) {
+        throwError("S3 Access ID cannot be empty", s3Connect);
+    }
+
+    if (secretKey.empty()) {
+        throwError("S3 Secret Key cannot be empty", s3Connect);
+    }
+
+    if (region.empty()) {
+        throwError("S3 Region cannot be empty", s3Connect);
+    }
+}
+
+void CypherAnalyzer::analyze(S3TransferQuery* s3Transfer) {
+    std::string_view s3URL = s3Transfer->getS3Url();
+
+    if (s3URL.substr(0, 5) != "s3://") {
+        throw db::v2::AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
+    }
+    s3URL.remove_prefix(5);
+    const auto bucketEnd = s3URL.find('/');
+
+    if (bucketEnd == std::string_view::npos) {
+        throw db::v2::AnalyzeException(fmt::format("S3 Bucket Not Found: {}", s3URL));
+    }
+
+    s3Transfer->setS3Bucket(s3URL.substr(0, bucketEnd));
+    s3URL.remove_prefix(bucketEnd + 1);
+
+    if (s3URL.empty()) {
+        throw db::v2::AnalyzeException(fmt::format("S3 Prefix/Folder not found: {}", s3URL));
+    }
+
+    if (s3URL.back() != '/') {
+        // S3 'file' resource
+        s3Transfer->setS3File(s3URL);
+        return;
+    }
+
+    // S3 Directory Resource
+    s3Transfer->setS3Prefix(s3URL);
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {

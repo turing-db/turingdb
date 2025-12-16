@@ -16,7 +16,9 @@ public:
         CHANGE_QUERY,
         LIST_GRAPH_QUERY,
         CREATE_GRAPH_QUERY,
-        LOAD_GML_QUERY
+        LOAD_GML_QUERY,
+        S3_CONNECT_QUERY,
+        S3_TRANSFER_QUERY,
     };
 
     virtual Kind getKind() const = 0;

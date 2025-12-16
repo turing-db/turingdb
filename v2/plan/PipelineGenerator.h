@@ -42,6 +42,8 @@ class ChangeNode;
 class ListGraphNode;
 class CreateGraphNode;
 class LoadGMLNode;
+class S3ConnectNode;
+class S3TransferNode;
 
 class PipelineGenerator {
 public:
@@ -119,6 +121,8 @@ private:
     PipelineOutputInterface* translateListGraphNode(ListGraphNode* node);
     PipelineOutputInterface* translateCreateGraphNode(CreateGraphNode* node);
     PipelineOutputInterface* translateLoadGML(LoadGMLNode* node);
+    PipelineOutputInterface* translateS3ConnectNode(S3ConnectNode* node);
+    PipelineOutputInterface* translateS3TransferNode(S3TransferNode* node);
 };
 
 }

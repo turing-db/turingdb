@@ -36,6 +36,8 @@ class ListGraphQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
+class S3ConnectQuery;
+class S3TransferQuery;
 
 class NodePatternData;
 class EdgePatternData;
@@ -63,6 +65,8 @@ private:
     void dump(std::ostream& out, const ListGraphQuery* query);
     void dump(std::ostream& out, const CreateGraphQuery* query);
     void dump(std::ostream& out, const LoadGMLQuery* query);
+    void dump(std::ostream& out, const S3ConnectQuery* query);
+    void dump(std::ostream& out, const S3TransferQuery* query);
     void dump(std::ostream& out, const MatchStmt* match);
     void dump(std::ostream& out, const Limit* lim);
     void dump(std::ostream& out, const Skip* skip);

@@ -36,12 +36,16 @@
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/LoadNeo4jNode.h"
+#include "nodes/S3ConnectNode.h"
+#include "nodes/S3TransferNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "ChangeQuery.h"
 #include "ListGraphQuery.h"
 #include "CreateGraphQuery.h"
+#include "S3ConnectQuery.h"
+#include "S3TransferQuery.h"
 #include "LoadGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadNeo4jQuery.h"
@@ -93,6 +97,14 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::LOAD_GML_QUERY:
             generateLoadGMLQuery(static_cast<const LoadGMLQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::S3_CONNECT_QUERY:
+            generateS3ConnectQuery(static_cast<const S3ConnectQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::S3_TRANSFER_QUERY:
+            generateS3TransferQuery(static_cast<const S3TransferQuery*>(query));
         break;
 
         default:
@@ -171,6 +183,26 @@ void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
 void PlanGraphGenerator::generateLoadNeo4jQuery(const LoadNeo4jQuery* query) {
     LoadNeo4jNode* n = _tree.create<LoadNeo4jNode>(query->getFilePath(), query->getGraphName());
     _tree.newOut<ProduceResultsNode>(n);
+}
+
+void PlanGraphGenerator::generateS3ConnectQuery(const S3ConnectQuery* query) {
+    S3ConnectNode* s3ConnectNode = _tree.create<S3ConnectNode>(query->getAccessId(),
+                                                               query->getSecretKey(),
+                                                               query->getRegion());
+    _tree.newOut<ProduceResultsNode>(s3ConnectNode);
+}
+
+void PlanGraphGenerator::generateS3TransferQuery(const S3TransferQuery* query) {
+    const S3TransferNode::Direction direction = (query->getDirection() == S3TransferQuery::Direction::PULL)
+        ? S3TransferNode::Direction::PULL
+        : S3TransferNode::Direction::PUSH;
+
+    S3TransferNode* s3TransferNode = _tree.create<S3TransferNode>(direction,
+                                                                  query->getS3Bucket(),
+                                                                  query->getS3Prefix(),
+                                                                  query->getS3File(),
+                                                                  query->getLocalPath());
+    _tree.newOut<ProduceResultsNode>(s3TransferNode);
 }
 
 void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {

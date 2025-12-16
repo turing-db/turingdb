@@ -15,6 +15,8 @@ class ChangeQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
 class ChangeQuery;
+class S3ConnectQuery;
+class S3TransferQuery;
 class OrderBy;
 class Skip;
 class Limit;
@@ -41,6 +43,8 @@ public:
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(const LoadGMLQuery* loadGML);
     void analyze(const LoadNeo4jQuery* loadNeo4j);
+    void analyze(const S3ConnectQuery* s3Connect);
+    void analyze(S3TransferQuery* s3Transfer);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

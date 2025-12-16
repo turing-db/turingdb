@@ -26,6 +26,9 @@
 #include "processors/CreateGraphProcessor.h"
 #include "processors/LoadGMLProcessor.h"
 #include "processors/LoadNeo4jProcessor.h"
+#include "processors/S3ConnectProcessor.h"
+#include "processors/S3PullProcessor.h"
+#include "processors/S3PushProcessor.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -680,6 +683,48 @@ PipelineValueOutputInterface& PipelineBuilder::addCreateGraph(std::string_view g
     _pendingOutput.setInterface(&output);
 
     return output;
+}
+
+void PipelineBuilder::addS3Connect(std::string_view accessId,
+                                   std::string_view secretKey,
+                                   std::string_view region) {
+    auto* connectProc = S3ConnectProcessor::create(_pipeline,
+                                                   accessId,
+                                                   secretKey,
+                                                   region);
+
+    PipelineValueOutputInterface& output = connectProc->output();
+    _pendingOutput.setInterface(&output);
+}
+
+void PipelineBuilder::addS3Pull(std::string_view s3Bucket,
+                                std::string_view s3Prefix,
+                                std::string_view s3File,
+                                std::string_view localPath) {
+    auto* pullProc = S3PullProcessor::create(_pipeline,
+                                             s3Bucket,
+                                             s3Prefix,
+                                             s3File,
+                                             localPath);
+
+    PipelineValueOutputInterface& output = pullProc->output();
+
+    _pendingOutput.setInterface(&output);
+}
+
+void PipelineBuilder::addS3Push(std::string_view s3Bucket,
+                                std::string_view s3Prefix,
+                                std::string_view s3File,
+                                std::string_view localPath) {
+    auto* pushProc = S3PushProcessor::create(_pipeline,
+                                             s3Bucket,
+                                             s3Prefix,
+                                             s3File,
+                                             localPath);
+
+    PipelineValueOutputInterface& output = pushProc->output();
+
+    _pendingOutput.setInterface(&output);
 }
 
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Int64>(PropertyType);

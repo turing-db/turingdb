@@ -76,6 +76,7 @@ using Token = db::v2::YCypherParser::token;
 "EXTRACT" { KEYWORD(EXTRACT) }
 "REQUIRE" { KEYWORD(REQUIRE) }
 "COLLECT" { KEYWORD(COLLECT) }
+"CONNECT" { KEYWORD(CONNECT) }
 "SUBMIT" { KEYWORD(SUBMIT) }
 "CHANGE" { KEYWORD(CHANGE) }
 "STARTS" { KEYWORD(STARTS) }
@@ -117,6 +118,8 @@ using Token = db::v2::YCypherParser::token;
 "SKIP" { KEYWORD(SKIP) }
 "WITH" { KEYWORD(WITH) }
 "LOAD" { KEYWORD(LOAD) }
+"PUSH" { KEYWORD(PUSH) }
+"PULL" { KEYWORD(PULL) }
 "NEW" { KEYWORD(NEW) }
 "GML" { KEYWORD(GML) }
 "ANY" { KEYWORD(ANY) }
@@ -133,6 +136,7 @@ using Token = db::v2::YCypherParser::token;
 "||" { KEYWORD(OR) }
 "IN" { KEYWORD(IN) }
 "IS" { KEYWORD(IS) }
+"S3" { KEYWORD(S3) }
 "BY" { KEYWORD(BY) }
 "DO" { KEYWORD(DO) }
 "OF" { KEYWORD(OF) }

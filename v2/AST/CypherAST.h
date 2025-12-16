@@ -73,6 +73,8 @@ class ProcedureBlueprintMap;
 class LoadGraphQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
+class S3ConnectQuery;
+class S3TransferQuery;
 
 class CypherAST {
 public:
@@ -131,6 +133,8 @@ public:
     friend CreateGraphQuery;
     friend LoadGMLQuery;
     friend LoadNeo4jQuery;
+    friend S3ConnectQuery;
+    friend S3TransferQuery;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

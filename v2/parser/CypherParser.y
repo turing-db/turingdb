@@ -47,6 +47,8 @@
     #include "ChangeQuery.h"
     #include "ListGraphQuery.h"
     #include "CreateGraphQuery.h"
+    #include "S3ConnectQuery.h"
+    #include "S3TransferQuery.h"
     #include "Projection.h"
     #include "PatternElement.h"
     #include "stmt/Skip.h"
@@ -123,6 +125,7 @@
 %token<std::string_view> EXTRACT
 %token<std::string_view> REQUIRE
 %token<std::string_view> COLLECT
+%token<std::string_view> CONNECT
 %token<std::string_view> SUBMIT
 %token<std::string_view> CHANGE
 %token<std::string_view> STARTS
@@ -164,6 +167,8 @@
 %token<std::string_view> SKIP
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
+%token<std::string_view> PUSH
+%token<std::string_view> PULL
 %token<std::string_view> NEW
 %token<std::string_view> GML
 %token<std::string_view> ANY
@@ -179,6 +184,7 @@
 %token<std::string_view> OR
 %token<std::string_view> IN
 %token<std::string_view> IS
+%token<std::string_view> S3
 %token<std::string_view> BY
 %token<std::string_view> DO
 %token<std::string_view> OF
@@ -268,6 +274,8 @@
 %type<db::v2::ChangeQuery*> changeQuery
 %type<db::v2::ListGraphQuery*> listGraphQuery
 %type<db::v2::CreateGraphQuery*> createGraphQuery
+%type<db::v2::S3ConnectQuery*> s3ConnectQuery
+%type<db::v2::S3TransferQuery*> s3TransferQuery
 %type<db::v2::QueryCommand*> singleQuery
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
@@ -331,6 +339,8 @@ singleQuery
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
     | loadNeo4j { $$ = $1; }
+    | s3ConnectQuery { $$ = $1; }
+    | s3TransferQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -357,6 +367,23 @@ createGraphQuery
 loadGML
     : LOAD GML STRING_LITERAL AS ID { $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3))); $$->setGraphName($5); LOC($$, @$); }
     | LOAD GML STRING_LITERAL  { $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$);  }
+    ;
+
+s3ConnectQuery
+    : S3 CONNECT STRING_LITERAL STRING_LITERAL STRING_LITERAL { $$ = S3ConnectQuery::create(ast, $3, $4, $5); LOC($$, @$); }
+    ;
+
+s3TransferQuery
+//             <S3-URL>       <LOCAL-DIR>
+    : S3 PULL STRING_LITERAL STRING_LITERAL { $$ = S3TransferQuery::create(ast,
+                                                   S3TransferQuery::Direction::PULL,
+                                                   $3,
+                                                   $4); LOC($$, @$); }
+//            <LOCAL-DIR>     <S3-URL>
+    | S3 PUSH STRING_LITERAL STRING_LITERAL { $$ = S3TransferQuery::create(ast,
+                                                   S3TransferQuery::Direction::PUSH,
+                                                   $4,
+                                                   $3); LOC($$, @$); }
     ;
 
 returnSt

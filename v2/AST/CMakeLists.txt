@@ -47,6 +47,8 @@ set(ast_sources
     CreateGraphQuery.cpp
     LoadGMLQuery.cpp
     LoadNeo4jQuery.cpp
+    S3ConnectQuery.cpp
+    S3TransferQuery.cpp
     NodePattern.cpp
     EdgePattern.cpp
     Symbol.cpp

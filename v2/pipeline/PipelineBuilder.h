@@ -152,6 +152,19 @@ public:
     // Create Graph
     PipelineValueOutputInterface& addCreateGraph(std::string_view graphName);
 
+    // S3 Commands
+    void addS3Connect(std::string_view accessId,
+                      std::string_view secretKey,
+                      std::string_view region);
+    void addS3Pull(std::string_view s3Bucket,
+                   std::string_view s3Prefix,
+                   std::string_view s3File,
+                   std::string_view localPath);
+    void addS3Push(std::string_view s3Bucket,
+                   std::string_view s3Prefix,
+                   std::string_view s3File,
+                   std::string_view localPath);
+
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
     NamedColumn* addColumnToOutput(ColumnTag tag) {

@@ -55,6 +55,8 @@
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/LoadNeo4jNode.h"
+#include "nodes/S3ConnectNode.h"
+#include "nodes/S3TransferNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -322,6 +324,14 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::CREATE_GRAPH:
             return translateCreateGraphNode(static_cast<CreateGraphNode*>(node));
+        break;
+
+        case PlanGraphOpcode::S3_CONNECT:
+            return translateS3ConnectNode(static_cast<S3ConnectNode*>(node));
+        break;
+
+        case PlanGraphOpcode::S3_TRANSFER:
+            return translateS3TransferNode(static_cast<S3TransferNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -1006,5 +1016,25 @@ PipelineOutputInterface* PipelineGenerator::translateListGraphNode(ListGraphNode
 
 PipelineOutputInterface* PipelineGenerator::translateCreateGraphNode(CreateGraphNode* node) {
     _builder.addCreateGraph(node->getGraphName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateS3ConnectNode(S3ConnectNode* node) {
+    _builder.addS3Connect(node->getAccessId(), node->getSecretKey(), node->getRegion());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateS3TransferNode(S3TransferNode* node) {
+    if (node->getDirection() == S3TransferNode::Direction::PULL) {
+        _builder.addS3Pull(node->getS3Bucket(),
+                           node->getS3Prefix(),
+                           node->getS3File(),
+                           node->getLocalPath());
+    } else {
+        _builder.addS3Push(node->getS3Bucket(),
+                           node->getS3Prefix(),
+                           node->getS3File(),
+                           node->getLocalPath());
+    }
     return _builder.getPendingOutputInterface();
 }
