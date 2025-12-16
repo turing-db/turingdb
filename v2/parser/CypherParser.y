@@ -273,7 +273,6 @@
 %type<db::v2::LoadGraphQuery*> loadGraph
 %type<db::v2::LoadGMLQuery*> loadGML
 %type<db::v2::LoadNeo4jQuery*> loadNeo4j
-%type<db::v2::QueryCommand*> loadGraph
 %type<db::v2::Stmt*> readingStatement
 %type<db::v2::Stmt*> updatingStatement
 %type<db::v2::StmtContainer*> readingStatements
