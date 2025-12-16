@@ -103,7 +103,6 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             type = EvaluatedType::Bool;
 
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
-                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Char)
