@@ -4,9 +4,9 @@
 
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnConst.h"
-
 #include "ExecutionContext.h"
 #include "SystemManager.h"
+
 #include "PipelineException.h"
 
 using namespace db::v2;
@@ -15,7 +15,8 @@ using namespace db;
 LoadNeo4jProcessor::LoadNeo4jProcessor(const fs::Path& path,
                                        std::string_view graphName)
     : _path(path),
-      _graphName(graphName) {
+    _graphName(graphName)
+{
 }
 
 LoadNeo4jProcessor::~LoadNeo4jProcessor() {
