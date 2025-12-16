@@ -4,6 +4,7 @@
 
 #include "Column.h"
 #include "ColumnVector.h"
+#include "columns/ColumnOptVector.h"
 
 #include "DebugDump.h"
 #include "BioAssert.h"
@@ -157,6 +158,14 @@ public:
         this->resize(sz);
         for (size_t i {0}; i < sz; i++) {
             getRaw()[i] = vec[i];
+        }
+    }
+
+    void ofColumnVector(const ColumnOptVector<types::Bool::Primitive>& vec) {
+        const size_t sz = vec.size();
+        this->resize(sz);
+        for (size_t i {0}; i < sz; i++) {
+            getRaw()[i] = vec[i].value_or(false);
         }
     }
 
