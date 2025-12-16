@@ -22,6 +22,7 @@
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
 #include "SystemManager.h"
+#include "JobSystem.h"
 #include "TuringConfig.h"
 
 using namespace db;
@@ -33,6 +34,7 @@ int main(int argc, char** argv) {
     TuringConfig config;
     config.setSyncedOnDisk(false);
 
+    auto jobSystem = JobSystem::create();
     SystemManager sysMan(&config);
     Graph* graph = sysMan.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
@@ -172,6 +174,8 @@ int main(int argc, char** argv) {
 
             ExecutionContext execCtxt(&sysMan, view);
             execCtxt.setTransaction(&transaction);
+            execCtxt.setJobSystem(jobSystem.get());
+
             PipelineExecutor executor(&pipeline, &execCtxt);
             try {
                 auto t0 = Clock::now();
