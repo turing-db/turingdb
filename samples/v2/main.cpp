@@ -32,6 +32,7 @@ int main(int argc, char** argv) {
 
     TuringConfig config;
     config.setSyncedOnDisk(false);
+
     SystemManager sysMan(&config);
     Graph* graph = sysMan.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);

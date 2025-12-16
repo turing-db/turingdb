@@ -6,7 +6,7 @@ namespace db {
 
 class TuringConfig {
 public:
-    TuringConfig();
+    explicit TuringConfig();
     ~TuringConfig();
 
     TuringConfig(const TuringConfig&);
@@ -21,8 +21,6 @@ public:
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     void setTuringDirectory(const fs::Path& turingDir);
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
-
-    [[nodiscard]] static TuringConfig createDefault();
 
 private:
     fs::Path _turingDir;

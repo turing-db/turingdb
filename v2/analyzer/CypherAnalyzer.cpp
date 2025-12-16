@@ -192,7 +192,7 @@ void CypherAnalyzer::analyze(Limit* limitSt) {
 }
 
 void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
-    std::string_view graphName = loadGraph->getGraphName();
+    const std::string_view graphName = loadGraph->getGraphName();
     if (graphName.empty()) {
         throwError("LOAD GRAPH should not have an empty graph name");
     }
@@ -222,7 +222,7 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* loadGraph) {
 void CypherAnalyzer::analyze(const LoadGMLQuery* loadGML) {
     std::string_view graphName = loadGML->getGraphName();
     if (graphName.empty()) {
-        throwError("LOAD GML should not have an empty graph name");
+        graphName = loadGML->getFilePath().basename();
     }
 
     // Check that the graph name is only [A-Z0-9_]+

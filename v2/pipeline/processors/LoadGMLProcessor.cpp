@@ -1,7 +1,6 @@
 #include "LoadGMLProcessor.h"
 
 #include <spdlog/fmt/fmt.h>
-#include <string_view>
 
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnConst.h"
@@ -9,11 +8,12 @@
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 #include "PipelineException.h"
+#include "BioAssert.h"
 
 using namespace db::v2;
 using namespace db;
 
-LoadGMLProcessor::LoadGMLProcessor(std::string_view graphName, std::string_view filePath)
+LoadGMLProcessor::LoadGMLProcessor(std::string_view graphName, const fs::Path& filePath)
     : _graphName(graphName),
     _filePath(filePath)
 {
@@ -22,7 +22,7 @@ LoadGMLProcessor::LoadGMLProcessor(std::string_view graphName, std::string_view 
 LoadGMLProcessor::~LoadGMLProcessor() {
 }
 
-LoadGMLProcessor* LoadGMLProcessor::create(PipelineV2* pipeline, std::string_view graphName, std::string_view filePath) {
+LoadGMLProcessor* LoadGMLProcessor::create(PipelineV2* pipeline, std::string_view graphName, const fs::Path& filePath) {
     LoadGMLProcessor* loadGML = new LoadGMLProcessor(graphName, filePath);
 
     PipelineOutputPort* outName = PipelineOutputPort::create(pipeline, loadGML);
@@ -50,9 +50,10 @@ void LoadGMLProcessor::reset() {
 void LoadGMLProcessor::execute() {
     SystemManager* sysMan = _ctxt->getSystemManager();
     JobSystem* jobSys = _ctxt->getJobSystem();
-    const fs::Path filePath {std::string(_filePath)};
+    bioassert(sysMan, "SystemManager not initialised");
+    bioassert(jobSys, "JobSystem not initialised");
 
-    const bool res = sysMan->importGraph(std::string(_graphName), filePath, *jobSys);
+    const bool res = sysMan->importGraph(std::string(_graphName), _filePath, *jobSys);
     if (!res) {
         throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
     }

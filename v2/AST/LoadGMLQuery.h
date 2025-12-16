@@ -4,6 +4,8 @@
 
 #include "QueryCommand.h"
 
+#include "Path.h"
+
 namespace db::v2 {
 
 class CypherAST;
@@ -12,22 +14,22 @@ class DeclContext;
 class LoadGMLQuery : public QueryCommand {
 public:
     static LoadGMLQuery* create(CypherAST* ast,
-                                std::string_view graphName,
-                                std::string_view filePath);
+                                fs::Path&& filePath);
 
     Kind getKind() const override { return Kind::LOAD_GML_QUERY; }
 
     std::string_view getGraphName() const { return _graphName; }
 
-    std::string_view getFilePath() const { return _filePath; }
+    void setGraphName(std::string_view name) { _graphName = name; }
+
+    const fs::Path& getFilePath() const { return _filePath; }
 
 private:
+    fs::Path _filePath;
     std::string_view _graphName;
-    std::string_view _filePath;
 
     LoadGMLQuery(DeclContext* declContext,
-                 std::string_view graphName,
-                 std::string_view filePath);
+                 fs::Path&& filePath);
     ~LoadGMLQuery() override;
 };
 

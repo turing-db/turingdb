@@ -476,7 +476,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view gra
     return output;
 }
 
-PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graphName, std::string_view filePath) {
+PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graphName, const fs::Path& filePath) {
     LoadGMLProcessor* loadGML = LoadGMLProcessor::create(_pipeline, graphName, filePath);
     
     PipelineValueOutputInterface& output = loadGML->output();
