@@ -1791,7 +1791,7 @@ TEST_F(QueriesTest, predicateAND) {
 }
 
 TEST_F(QueriesTest, predicateNOT) {
-    constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE NOT n.isFrench RETURN n, n.name";
+    std::string_view MATCH_QUERY = "MATCH (n) WHERE NOT n.isFrench RETURN n, n.name";
     // TODO: Find way to get these PropertyIDs dynamically
     const PropertyTypeID NAME_PROPID = 0;
     const PropertyTypeID ISFRENCH_PROPID = 3;
@@ -1829,4 +1829,11 @@ TEST_F(QueriesTest, predicateNOT) {
         ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(QueriesTest, cartProdThenFilter) {
+    std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.name = m.name RETURN n.name";
+
+    auto res = queryV2(MATCH_QUERY, [](const Dataframe* df) { ASSERT_TRUE(df); });
+    ASSERT_TRUE(res);
 }

@@ -184,6 +184,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     duplicateDataframeShape(_mem, _dfMan, leftDf, outDf);
     concatDataframeShape(_mem, _dfMan, rightDf, outDf);
 
+    // Stream does not change when adding CartesianProduct
+    output.setStream(_pendingOutput.getInterface()->getStream());
     _pendingOutput.updateInterface(&output);
 
     // Initialise the processor's "memory" stores for left and right ports

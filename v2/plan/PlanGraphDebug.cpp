@@ -80,6 +80,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
     std::unordered_map<const PlanGraphNode*, size_t> nodeOrder;
 
+    fmt::println("PlanGraph size={}", planGraph._nodes.size());
     output << "flowchart TD\n";
 
     for (size_t i = 0; i < planGraph._nodes.size(); i++) {
