@@ -418,9 +418,17 @@ bool Neo4jImporter::fromDumpFileToJsonDirImpl(JobSystem& jobSystem,
         instance.stop();
     }
 
-    instance.setup();
-    instance.importDumpedDB(args._dumpFilePath);
-    instance.start();
+    if (!instance.setup()) {
+        return false;
+    }
+
+    if (!instance.importDumpedDB(args._dumpFilePath)) {
+        return false;
+    }
+
+    if (!instance.start()) {
+        return false;
+    }
 
     FileUtils::Path jsonDir = args._workDir / "json";
 
