@@ -270,11 +270,22 @@ void WriteProcessor::createNodes(size_t numIters) {
         }
         lblset = getLabelSet(labels);
 
+        // Get all properties: this can throw, so we do this BEFORE adding PendingNodes to
+        // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
+        // state.
+        std::vector<CommitWriteBuffer::UntypedProperty> constProps;
+        constProps.reserve(node._properties.size());
+        for (const auto& [name, type, valueCol] : node._properties) {
+            const PropertyTypeID propID =
+                _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+
+            constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
+        }
+
         {
             // Create nodes, set label set
             const size_t numPendingNodesPrior = _writeBuffer->numPendingNodes();
             const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(lblset);
-            // XXX: Check for all exceptions first so we do not get hanging pending nodes
             for (size_t i = 0; i < numIters; i++) {
                 CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
                 newNode.labelsetHandle = hdl;
@@ -282,14 +293,11 @@ void WriteProcessor::createNodes(size_t numIters) {
 
             // Add each property; NOTE: for now all ColumnConst, so all same value.
             // Extract the value first, then add that value to each node to create.
-            for (const auto& [name, type, valueCol] : node._properties) {
-                const PropertyTypeID propID =
-                    _metadataBuilder->getOrCreatePropertyType(name, type)._id;
-                const auto& untypedProp = getConstPropertyValue(valueCol, type, propID);
-
+            // TODO: More cache friendly access patterns
+            for (const CommitWriteBuffer::UntypedProperty& prop : constProps) {
                 for (size_t i = 0; i < numIters; i++) {
                     auto& pendingNode = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
-                    pendingNode.properties.emplace_back(untypedProp);
+                    pendingNode.properties.emplace_back(prop);
                 }
             }
         }
