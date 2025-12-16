@@ -9,6 +9,9 @@
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
+#include "columns/ColumnConst.h"
+#include "metadata/PropertyType.h"
+#include "metadata/SupportedType.h"
 #include "processors/ExprProgram.h"
 
 #include "columns/ColumnIDs.h"
@@ -59,8 +62,54 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
 template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
 template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
-void
+CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
+                                                         ValueType type,
+                                                         PropertyTypeID propID) {
+    switch (type) {
+        case ValueType::Int64: {
+            const auto* casted = dynamic_cast<ColumnConst<types::Int64::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get constant property value.");
+            return {propID, casted->getRaw()};
+        }
+        break;
 
+        case ValueType::UInt64: {
+            const auto* casted = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get constant property value.");
+            return {propID, casted->getRaw()};
+        }
+        break;
+
+        case ValueType::String: {
+            const auto* casted = dynamic_cast<ColumnConst<types::String::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get constant property value.");
+            return {propID, std::string(casted->getRaw())};
+
+        }
+        break;
+
+        case ValueType::Double: {
+            const auto* casted = dynamic_cast<ColumnConst<types::Double::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get constant property value.");
+            return {propID, casted->getRaw()};
+        }
+        break;
+
+        case ValueType::Bool: {
+            const auto* casted = dynamic_cast<ColumnConst<types::Bool::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get constant property value.");
+            return {propID, casted->getRaw()};
+        }
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE: {
+            throw FatalException("Property value column with invalid type.");
+        }
+        break;
+    }
+    throw FatalException("Failed to match against property value type.");
+}
 }
 
 WriteProcessor::WriteProcessor(ExprProgram* exprProg)
@@ -221,22 +270,29 @@ void WriteProcessor::createNodes(size_t numIters) {
         }
         lblset = getLabelSet(labels);
 
-        const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(lblset);
-        std::vector<CommitWriteBuffer::UntypedProperties> props;
         {
+            // Create nodes, set label set
+            const size_t numPendingNodesPrior = _writeBuffer->numPendingNodes();
+            const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(lblset);
+            // XXX: Check for all exceptions first so we do not get hanging pending nodes
+            for (size_t i = 0; i < numIters; i++) {
+                CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
+                newNode.labelsetHandle = hdl;
+            }
+
+            // Add each property; NOTE: for now all ColumnConst, so all same value.
+            // Extract the value first, then add that value to each node to create.
             for (const auto& [name, type, valueCol] : node._properties) {
-                // TODO: Need to add one of each to each node, but the value might differ
-                // based on the index in the column
+                const PropertyTypeID propID =
+                    _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+                const auto& untypedProp = getConstPropertyValue(valueCol, type, propID);
+
+                for (size_t i = 0; i < numIters; i++) {
+                    auto& pendingNode = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
+                    pendingNode.properties.emplace_back(untypedProp);
+                }
             }
         }
-
-        // Add each node that we need to the CommitWriteBuffer
-        // Add labels first as they are locally contiguous in vector
-        for (size_t i = 0; i < numIters; i++) {
-            CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
-            newNode.labelsetHandle = _metadataBuilder->getOrCreateLabelSet(lblset);
-        }
-        // TODO: Properties; once their collumn is alloc'd
 
         std::vector<NodeID>& raw = col->getRaw();
 

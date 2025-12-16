@@ -1,8 +1,10 @@
 #include "WriteStmtGenerator.h"
 
 #include <spdlog/fmt/bundled/format.h>
+#include <type_traits>
 
 #include "CypherAST.h"
+#include "ExprDependencies.h"
 #include "Overloaded.h"
 #include "DiagnosticsManager.h"
 #include "Pattern.h"
@@ -29,6 +31,23 @@
 #include "stmt/DeleteStmt.h"
 
 using namespace db::v2;
+
+namespace {
+
+template <typename T>
+    requires (std::is_same_v<const NodePatternData*, T>) || (std::is_same_v<const EdgePatternData*, T>)
+void checkDependencies(PlanGraphVariables* vars, T data) {
+    ExprDependencies deps;
+    for (auto&& d : data->exprConstraints()) {
+        deps.genExprDependencies(*vars, d._expr);
+    }
+    if (!deps.empty()) {
+        throw PlannerException("CREATE statements with entity dependencies "
+                               "are not yet supported.");
+    }
+}
+
+}
 
 WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
                                        PlanGraph* tree,
@@ -173,6 +192,7 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
 
     if (!_currentNode->hasPendingNode(originDecl) && varNode == nullptr) {
         // Node is not created yet and is not an input
+        checkDependencies(_variables, data);
         _currentNode->addNode(originDecl, data);
     }
 
@@ -187,11 +207,16 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
 
         if (!_currentNode->hasPendingNode(rhs) && rhsVarNode == nullptr) {
             // Node is not created yet and is not an input
+            checkDependencies(_variables, rhsData);
             _currentNode->addNode(rhs, rhsData);
         }
 
         // - Create the new edge
         const VarDecl* edgeDecl = edge->getDecl();
+        {
+            const EdgePatternData* edgeData = edge->getData();
+            checkDependencies(_variables, edgeData);
+        }
 
         switch (edge->getDirection()) {
             case EdgePattern::Direction::Undirected:
