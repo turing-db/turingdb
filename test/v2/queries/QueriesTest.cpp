@@ -7,6 +7,7 @@
 #include "SystemManager.h"
 #include "columns/Block.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "ID.h"
 #include "versioning/Transaction.h"
@@ -1782,6 +1783,47 @@ TEST_F(QueriesTest, predicateAND) {
             ASSERT_TRUE(ns);
             for (NodeID n : *ns) {
                 actual.add({n});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(QueriesTest, predicateNOT) {
+    constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE NOT n.isFrench RETURN n, n.name";
+    // TODO: Find way to get these PropertyIDs dynamically
+    const PropertyTypeID NAME_PROPID = 0;
+    const PropertyTypeID ISFRENCH_PROPID = 3;
+
+    using Boolean = types::Bool::Primitive;
+    using String = types::String::Primitive;
+    using Rows = LineContainer<NodeID, String>;
+
+    Rows expected;
+    {
+        for (const NodeID n : read().scanNodes()) {
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            if (french != nullptr && !*french) {
+                const String* name = read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+                expected.add({n, *name});
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size()); // Just the 'n' column
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnVector<std::optional<String>>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            for (size_t row = 0; row < ns->size(); row++) {
+                auto& n = ns->at(row);
+                auto& name = names->at(row);
+                actual.add({n, *name});
             }
         });
         ASSERT_TRUE(res);

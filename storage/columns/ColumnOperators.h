@@ -273,16 +273,17 @@ public:
      * @brief Fills a mask corresponding to 'NOT input'
      *
      * @param mask The mask to fill
-     * @param input Operand of Boolean negation
+     * @param input Operand column of Boolean negation
      */
     template <typename T>
         requires BooleanOpt<T>
     static void notOp(ColumnMask* mask,
                       const ColumnVector<T>* input) {
-        auto& maskd = mask->getRaw();
-        const auto& ind = input->getRaw();
         const size_t size = input->size();
         mask->resize(size);
+
+        auto& maskd = mask->getRaw();
+        const auto& ind = input->getRaw();
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
@@ -420,7 +421,7 @@ private:
      * @detail Returns true iff operand is valued and false.
      */
     static bool optNOT(const std::optional<CustomBool>& a) {
-        return a.has_value() ? !a : false;
+        return a.has_value() && !*a;
     }
 };
 }
