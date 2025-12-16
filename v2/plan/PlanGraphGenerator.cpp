@@ -169,7 +169,7 @@ void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
 }
 
 void PlanGraphGenerator::generateLoadNeo4jQuery(const LoadNeo4jQuery* query) {
-    LoadNeo4jNode* n = _tree.create<LoadNeo4jNode>(query->getPath(), query->getGraphName());
+    LoadNeo4jNode* n = _tree.create<LoadNeo4jNode>(query->getFilePath(), query->getGraphName());
     _tree.newOut<ProduceResultsNode>(n);
 }
 

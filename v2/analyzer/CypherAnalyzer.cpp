@@ -224,7 +224,7 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
 void CypherAnalyzer::analyze(const LoadNeo4jQuery* loadNeo4j) {
     std::string_view graphName = loadNeo4j->getGraphName();
     if (graphName.empty()) {
-        graphName = loadNeo4j->getPath().basename();
+        graphName = loadNeo4j->getFilePath().basename();
     }
 
     // Check that the graph name is only [A-Z0-9_]+
