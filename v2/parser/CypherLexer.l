@@ -115,7 +115,6 @@ using Token = db::v2::YCypherParser::token;
 "ENDS" { KEYWORD(ENDS) }
 "DROP" { KEYWORD(DROP) }
 "SKIP" { KEYWORD(SKIP) }
-"LIST" { KEYWORD(LIST) }
 "WITH" { KEYWORD(WITH) }
 "LOAD" { KEYWORD(LOAD) }
 "NEW" { KEYWORD(NEW) }

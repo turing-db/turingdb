@@ -165,7 +165,6 @@
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
 %token<std::string_view> NEW
-%token<std::string_view> LIST
 %token<std::string_view> GML
 %token<std::string_view> ANY
 %token<std::string_view> SET
@@ -273,6 +272,7 @@
 %type<db::v2::QueryCommand*> query
 %type<db::v2::LoadGraphQuery*> loadGraph
 %type<db::v2::LoadGMLQuery*> loadGML
+%type<db::v2::LoadNeo4jQuery*> loadNeo4j
 %type<db::v2::QueryCommand*> loadGraph
 %type<db::v2::Stmt*> readingStatement
 %type<db::v2::Stmt*> updatingStatement
@@ -331,15 +331,18 @@ singleQuery
     | listGraphQuery { $$ = $1; }
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
+    | loadNeo4j { $$ = $1; }
     ;
 
 loadGraph
     : LOAD GRAPH ID { $$ = LoadGraphQuery::create(ast, $3); LOC($$, @$); }
-    | LOAD NEO4J STRING_LITERAL { $$ = LoadNeo4jQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$); }
+    ;
+
+loadNeo4j
+    : LOAD NEO4J STRING_LITERAL { $$ = LoadNeo4jQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$); }
     | LOAD NEO4J STRING_LITERAL AS ID {
-        auto* q = LoadNeo4jQuery::create(ast, fs::Path(std::string($3)));
-        $$ = q;
-        q->setGraphName($5);
+        $$ = LoadNeo4jQuery::create(ast, fs::Path(std::string($3)));
+        $$->setGraphName($5);
         LOC($$, @$);
       }
     ;
