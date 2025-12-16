@@ -286,7 +286,7 @@ void WriteProcessor::createNodes(size_t numIters) {
             // Create nodes, set label set
             const size_t numPendingNodesPrior = _writeBuffer->numPendingNodes();
             const LabelSetHandle hdl = _metadataBuilder->getOrCreateLabelSet(lblset);
-            for (size_t i = 0; i < numIters; i++) {
+            for (size_t row = 0; row < numIters; row++) {
                 CommitWriteBuffer::PendingNode& newNode = _writeBuffer->newPendingNode();
                 newNode.labelsetHandle = hdl;
             }
@@ -379,6 +379,20 @@ void WriteProcessor::createEdges(size_t numIters) {
         bioassert(tgtCol->size() == srcCol->size(), "src and target column should have same dimension");
         bioassert(tgtCol->size() == numIters, "invalid size of target column");
 
+        // Get all properties: this can throw, so we do this BEFORE adding PendingEdges to
+        // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
+        // state.
+        std::vector<CommitWriteBuffer::UntypedProperty> constProps;
+        constProps.reserve(edge._properties.size());
+        for (const auto& [name, type, valueCol] : edge._properties) {
+            const PropertyTypeID propID =
+                _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+
+            constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
+        }
+
+        const size_t numPendingEdgesPrior = _writeBuffer->numPendingEdges();
+        const EdgeTypeID typeID = _metadataBuilder->getOrCreateEdgeType(edge._edgeType);
         for (size_t rowPtr = 0; rowPtr < numIters; rowPtr++) {
             // If src/tgt is a pending (to be created; result of CREATE clause),
             // then set it to be the corresponding index in its column. Otherwise,
@@ -402,7 +416,18 @@ void WriteProcessor::createEdges(size_t numIters) {
                                  std::in_place_type<NodeID>, tgtCol->at(rowPtr)
                                };
 
-            _writeBuffer->newPendingEdge(source, target);
+            auto& pendingEdge = _writeBuffer->newPendingEdge(source, target);
+            pendingEdge.edgeType = typeID;
+        }
+
+        // Add each property; NOTE: for now all ColumnConst, so all same value.
+        // Extract the value first, then add that value to each node to create.
+        // TODO: More cache friendly access patterns
+        for (const CommitWriteBuffer::UntypedProperty& prop : constProps) {
+            for (size_t i = 0; i < numIters; i++) {
+                auto& pendingEdge = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
+                pendingEdge.properties.emplace_back(prop);
+            }
         }
 
         std::vector<EdgeID>& raw = col->getRaw();
