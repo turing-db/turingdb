@@ -55,7 +55,7 @@ void runPlan2(std::string_view query) {
         turingDir.rm();
     }
 
-    TuringConfig config = TuringConfig::createDefault();
+    TuringConfig config;
     config.setTuringDirectory(turingDir);
     TuringDB db(&config);
     db.run();

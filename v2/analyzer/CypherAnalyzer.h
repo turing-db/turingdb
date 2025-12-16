@@ -36,7 +36,7 @@ public:
     void analyze(const SinglePartQuery* query);
     void analyze(const ReturnStmt* returnSt);
     void analyze(const LoadGraphQuery* loadGraph);
-    void analyze(const CreateGraphQuery* loadGraph);
+    void analyze(const CreateGraphQuery* createGraph);
     void analyze(const LoadGMLQuery* loadGML);
 
     // Sub-statements

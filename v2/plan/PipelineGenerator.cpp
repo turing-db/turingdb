@@ -320,7 +320,6 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
-        case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::ORDER_BY:

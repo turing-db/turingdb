@@ -30,7 +30,7 @@ int main(int argc, const char** argv) {
 
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "simpledb";
 
-    TuringConfig config = TuringConfig::createDefault();
+    TuringConfig config;
     config.setTuringDirectory(fs::Path(SAMPLE_DIR) / ".turing");
 
     TuringDB db(&config);

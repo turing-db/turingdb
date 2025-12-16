@@ -53,7 +53,7 @@ int main(int argc, const char** argv) {
     }
 
     // Config
-    TuringConfig config = TuringConfig::createDefault();
+    TuringConfig config;
     config.setSyncedOnDisk(!inMemory);
 
     spdlog::info("TuringDB path: {}", config.getTuringDir().get());

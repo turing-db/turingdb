@@ -26,7 +26,7 @@ int main() {
 
     auto awsClient = S3::AwsS3ClientWrapper<>();
     auto turingS3client = S3::TuringS3Client(std::move(awsClient));
-    db::TuringConfig config = db::TuringConfig::createDefault();
+    db::TuringConfig config;
     config.setSyncedOnDisk(false);
     db::TuringDB db(&config);
     db.run();

@@ -201,8 +201,8 @@ void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
     }
 }
 
-void CypherAnalyzer::analyze(const CreateGraphQuery* loadGraph) {
-    std::string_view graphName = loadGraph->getGraphName();
+void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
+    std::string_view graphName = createGraph->getGraphName();
     if (graphName.empty()) {
         throwError("CREATE GRAPH should not have an empty graph name");
     }
@@ -210,7 +210,7 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* loadGraph) {
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
         if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGraph);
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), createGraph);
         }
     }
 }
@@ -224,7 +224,7 @@ void CypherAnalyzer::analyze(const LoadGMLQuery* loadGML) {
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
         if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGraph);
+            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGML);
         }
     }
 }
