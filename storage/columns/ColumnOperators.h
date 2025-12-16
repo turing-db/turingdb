@@ -46,6 +46,9 @@ concept OptionallyComparable =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
      || std::same_as<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
+template <typename T>
+concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
+
 class ColumnOperators {
 public:
     /**
@@ -89,8 +92,8 @@ public:
      * @brief Fills a mask corresponding to 'lhs == rhs'
      *
      * @param mask The mask to fill
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
+     * @param lhs Left hand side column
+     * @param rhs Constant value to compare against
      */
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
@@ -105,7 +108,7 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                if (!lhsd[i]) {
+                if (!lhsd[i].has_value()) {
                     maskd[i]._value = false;
                     continue;
                 }
@@ -118,8 +121,8 @@ public:
      * @brief Fills a mask corresponding to 'lhs == rhs'
      *
      * @param mask The mask to fill
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
+     * @param lhs Constant value to compare against
+     * @param rhs Right hand side column
      */
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
@@ -134,7 +137,7 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<U>) {
-                if (!rhsd[i]) {
+                if (!rhsd[i].has_value()) {
                     maskd[i] = false;
                     continue;
                 }
@@ -147,15 +150,16 @@ public:
      * @brief Fills a mask corresponding to 'lhs == rhs'
      *
      * @param mask The mask to fill
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
+     * @param lhs Constant value
+     * @param rhs Constant value
      */
     template <typename T, typename U>
         requires(Stringy<T, U> || std::same_as<T, U>)
-    static void equal(ColumnMask* mask, const ColumnConst<T>* lhs,
+    static void equal(ColumnMask* mask,
+                      const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs) {
         mask->resize(1);
-        auto* maskd = mask->data();
+        auto& maskd = mask->getRaw();
         maskd[0] = (lhs->getRaw() == rhs->getRaw());
     }
 
@@ -163,21 +167,53 @@ public:
      * @brief Fills a mask corresponding to 'lhs && rhs'
      *
      * @param mask The mask to fill
-     * @param lhs Right hand side column
-     * @param lhs Light hand side column
+     * @param lhs Left hand side mask
+     * @param rhs Right hand side mask
      */
     static void andOp(ColumnMask* mask,
                       const ColumnMask* lhs,
                       const ColumnMask* rhs) {
         bioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
+
         mask->resize(lhs->size());
-        auto* maskd = mask->data();
-        const auto* lhsd = lhs->data();
-        const auto* rhsd = rhs->data();
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
         const auto size = rhs->size();
+
         for (size_t i = 0; i < size; i++) {
-            maskd[i]._value = lhsd[i]._value && rhsd[i]._value;
+            maskd[i] = lhsd[i] && rhsd[i];
+        }
+    }
+
+    /**
+     * @brief Fills a mask corresponding to 'lhs && rhs'
+     *
+     * @param mask The mask to fill
+     * @param lhs Left hand side Column(Opt)Vector
+     * @param rhs Right hand side Column(Opt)Vector
+     */
+    template <typename T>
+        requires BooleanOpt<T>
+    static void andOp(ColumnMask* mask,
+                  const ColumnVector<T>* lhs,
+                  const ColumnVector<T>* rhs) {
+        bioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = rhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            if constexpr (is_optional_v<T>) {
+                maskd[i] = optAND(lhsd[i], rhsd[i]);
+            } else {
+                maskd[i] = lhsd[i] && rhsd[i];
+            }
         }
     }
 
@@ -193,13 +229,15 @@ public:
                      const ColumnMask* rhs) {
         bioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
+
         mask->resize(lhs->size());
-        auto* maskd = mask->data();
-        const auto* lhsd = lhs->data();
-        const auto* rhsd = rhs->data();
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
         const auto size = rhs->size();
+
         for (size_t i = 0; i < size; i++) {
-            maskd[i]._value = lhsd[i]._value || rhsd[i]._value;
+            maskd[i] = lhsd[i] || rhsd[i];
         }
     }
 
@@ -210,20 +248,24 @@ public:
      * @param lhs Left hand side Boolean column
      * @param rhs Right hand side Boolean column
      */
-    template <typename BoolT>
-        requires requires(BoolT a, BoolT b) { a || b; }
-    static void orOp(ColumnMask* mask,
-                     const ColumnVector<BoolT>* lhs,
-                     const ColumnVector<BoolT>* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+    template <typename T>
+        requires BooleanOpt<T>
+    static void orOp(ColumnMask* mask, const ColumnVector<T>* lhs,
+                     const ColumnVector<T>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+
         mask->resize(lhs->size());
-        auto* maskd = mask->data();
-        const auto* lhsd = lhs->data();
-        const auto* rhsd = rhs->data();
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
         const size_t size = rhs->size();
+
         for (size_t i = 0; i < size; i++) {
-            maskd[i]._value = lhsd[i] || rhsd[i];
+            if constexpr (is_optional_v<T>) {
+                maskd[i] = optOR(lhsd[i], rhsd[i]);
+            } else {
+                maskd[i] = lhsd[i] || rhsd[i];
+            }
         }
     }
 
@@ -233,18 +275,21 @@ public:
      * @param mask The mask to fill
      * @param input Operand of Boolean negation
      */
-     // TODO: Check with optional
-    template <typename BoolT>
-        requires requires(BoolT x) { !x; }
+    template <typename T>
+        requires BooleanOpt<T>
     static void notOp(ColumnMask* mask,
-                      const ColumnVector<BoolT>* input) {
+                      const ColumnVector<T>* input) {
         auto& maskd = mask->getRaw();
         const auto& ind = input->getRaw();
         const size_t size = input->size();
         mask->resize(size);
 
         for (size_t i = 0; i < size; i++) {
-            maskd[i]._value = !ind[i];
+            if constexpr (is_optional_v<T>) {
+                maskd[i] = optNOT(ind[i]);
+            } else {
+                maskd[i] = !ind[i];
+            }
         }
     }
 
@@ -262,18 +307,19 @@ public:
                      const ColumnSet<U>* rhs) {
         mask->resize(lhs->size());
         auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
         const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
+            const T& val = lhsd[i];
+
             if constexpr (is_optional_v<T>) {
-                if (!lhs[i]) {
+                if (!val.has_value()) {
                     maskd[i] = false;
                 } else {
-                    const T& val = lhs->at(i);
                     maskd[i] = rhs->contains(val);
                 }
             } else {
-                const T& val = lhs->at(i);
                 maskd[i] = rhs->contains(val);
             }
         }
@@ -348,6 +394,33 @@ public:
                 dest->push_back(srcd[i]);
             }
         }
+    }
+
+private:
+    /**
+     * @brief Custom semantics for logical OR of two optional Bool-likes.
+     * @detail Operates like a regular logical OR, treating std::nullopt as false.
+     */
+    static bool optOR(const std::optional<CustomBool>& a,
+                      const std::optional<CustomBool>& b) {
+        return a.value_or(false) || b.value_or(false);
+    }
+
+    /**
+     * @brief Custom semantics for logical AND of two optional Bool-likes.
+     * @detail Returns true iff both operands are valued and true.
+     */
+    static bool optAND(const std::optional<CustomBool>& a,
+                       const std::optional<CustomBool>& b) {
+        return a.value_or(false) && b.value_or(false);
+    }
+
+    /**
+     * @brief Custom semantics for logical NOT of an optional Bool-like.
+     * @detail Returns true iff operand is valued and false.
+     */
+    static bool optNOT(const std::optional<CustomBool>& a) {
+        return a.has_value() ? !a : false;
     }
 };
 }

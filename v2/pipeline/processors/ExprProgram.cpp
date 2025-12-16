@@ -152,8 +152,6 @@ void ExprProgram::evalInstr(const Instruction& instr) {
             return;
         break;
     }
-    fmt::println("Evaluated instruction, result column:");
-    instr._res->dump(std::cout);
 }
 
 void ExprProgram::evalBinaryInstr(const Instruction& instr) {
@@ -221,8 +219,11 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
 
         AND_CASE(ColumnMask, ColumnMask)
+        AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+
         OR_CASE(ColumnMask, ColumnMask)
         OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
+        OR_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
 
         PROJECT_CASE(ColumnVector<size_t>, ColumnMask)
         PROJECT_CASE(ColumnMask, ColumnVector<size_t>)
@@ -253,6 +254,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
     switch (getOpCase(op, input->getKind())) {
         // XXX: What else can NOT be applied to?
         NOT_CASE(ColumnVector<types::Bool::Primitive>); // Also handles CustomBool
+        NOT_CASE(ColumnOptVector<types::Bool::Primitive>); // Also handles CustomBool
 
         default: {
             const std::string_view opName = ColumnOperatorDescription::value(op);

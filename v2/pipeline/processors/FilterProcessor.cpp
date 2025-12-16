@@ -4,8 +4,10 @@
 #include <range/v3/view/drop.hpp>
 
 #include "ID.h"
+#include "columns/ColumnKind.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperators.h"
+#include "columns/ColumnOptVector.h"
 #include "dataframe/NamedColumn.h"
 #include "dataframe/Dataframe.h"
 
@@ -44,6 +46,13 @@ void applyMask(const Column* src,
         APPLY_MASK_CASE(ColumnVector<types::String::Primitive>) // Also covers string_view
         APPLY_MASK_CASE(ColumnVector<types::UInt64::Primitive>) // Also covers size_t
         APPLY_MASK_CASE(ColumnVector<types::Double::Primitive>)
+
+        APPLY_MASK_CASE(ColumnOptVector<types::Bool::Primitive>)
+        APPLY_MASK_CASE(ColumnOptVector<types::Int64::Primitive>)
+        APPLY_MASK_CASE(ColumnOptVector<types::String::Primitive>) // Also covers string_view
+        APPLY_MASK_CASE(ColumnOptVector<types::UInt64::Primitive>) // Also covers size_t
+        APPLY_MASK_CASE(ColumnOptVector<types::Double::Primitive>)
+
         APPLY_MASK_CASE(ColumnVector<EntityID>)
         APPLY_MASK_CASE(ColumnVector<NodeID>)
         APPLY_MASK_CASE(ColumnVector<EdgeID>)
@@ -125,10 +134,15 @@ void FilterProcessor::execute() {
         throw FatalException("FilterProcessor ExprProgram contained instructions with "
                              "output columns of differing sizes.");
     }
-    // Ensure all instruction outputs are ColumnVector bools, so they can be converted to masks
+    // Ensure all instruction outputs are Column(Opt)Vector bools, so they can be converted to masks
     if (!std::ranges::all_of(instrs, [](const ExprProgram::Instruction& instr) {
-            return instr._res->getKind()
-                == ColumnVector<types::Bool::Primitive>::staticKind();
+            const ColumnKind::ColumnKindCode thisKind = instr._res->getKind();
+            const ColumnKind::ColumnKindCode optBoolKind =
+                ColumnOptVector<types::Bool::Primitive>::staticKind();
+            const ColumnKind::ColumnKindCode boolKind =
+                ColumnVector<types::Bool::Primitive>::staticKind();
+
+            return (thisKind == optBoolKind) || (thisKind == boolKind);
         })) {
         throw FatalException("FilterProcessor ExprProgram contained an instruction which "
                              "was not a predicate.");
@@ -140,8 +154,16 @@ void FilterProcessor::execute() {
         ColumnMask instrMask;
         for (const ExprProgram::Instruction& instr : instrs) {
             Column* res = instr._res;
-            const auto* instrRes = res->cast<ColumnVector<types::Bool::Primitive>>();
-            instrMask.ofColumnVector(*instrRes);
+            if (const auto* boolRes = dynamic_cast<ColumnVector<types::Bool::Primitive>*>(res);
+                boolRes) {
+                instrMask.ofColumnVector(*boolRes);
+            } else if (const auto* optBoolRes = dynamic_cast<ColumnOptVector<types::Bool::Primitive>*>(res);
+               optBoolRes) {
+                instrMask.ofColumnVector(*optBoolRes);
+            } else {
+                throw FatalException(
+                    "FilterProcessor ExprProgram encountered non-predicate instruction.");
+            }
 
             ColumnOperators::andOp(&finalMask, &finalMask, &instrMask);
         }
