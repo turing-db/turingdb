@@ -189,7 +189,7 @@
 %token<std::string_view> ID
 %token<char> CHAR_LITERAL
 %token<int64_t> DIGIT
-%token<float> FLOAT
+%token<double> DOUBLE
 
 %token UNKNOWN
 
@@ -1085,7 +1085,7 @@ boolLit
 
 numLit
     : DIGIT { $$ = IntegerLiteral::create(ast, $1); }
-    | FLOAT { $$ = DoubleLiteral::create(ast, $1); }
+    | DOUBLE { $$ = DoubleLiteral::create(ast, $1); }
     ;
 
 stringLit

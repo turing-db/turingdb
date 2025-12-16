@@ -167,31 +167,31 @@ using Token = db::v2::YCypherParser::token;
 }
 
 -?[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fd]? {
-    /* Float pattern */
-    float v = 0.0f;
+    /* Double pattern */
+    double v = 0.0;
     std::from_chars(yytext, yytext + yyleng, v);
-    yylval->emplace<float>(v);
+    yylval->emplace<double>(v);
 
-    return Token::FLOAT;
+    return Token::DOUBLE;
 }
 
 
 -?[0-9]+[eE][+-]?[0-9]+[fd]? {
-    /* Float pattern */
-    float v = 0.0f;
+    /* Double pattern */
+    double v = 0.0;
     std::from_chars(yytext, yytext + yyleng, v);
-    yylval->emplace<float>(v);
+    yylval->emplace<double>(v);
 
-    return Token::FLOAT;
+    return Token::DOUBLE;
 }
 
 
 -?[0-9]+[fd] {
-    float v = 0.0f;
+    double v = 0.0;
     std::from_chars(yytext, yytext + yyleng, v);
-    yylval->emplace<float>(v);
+    yylval->emplace<double>(v);
 
-    return Token::FLOAT;
+    return Token::DOUBLE;
 }
 
 
