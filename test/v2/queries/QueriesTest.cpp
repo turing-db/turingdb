@@ -1815,7 +1815,7 @@ TEST_F(QueriesTest, predicateNOT) {
     {
         auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(2, df->size()); // Just the 'n' column
+            ASSERT_EQ(2, df->size());
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             auto* names = df->cols().back()->as<ColumnVector<std::optional<String>>>();
             ASSERT_TRUE(ns);
@@ -1832,7 +1832,51 @@ TEST_F(QueriesTest, predicateNOT) {
 }
 
 TEST_F(QueriesTest, cartProdThenFilter) {
-    std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.name = m.name RETURN n.name";
+    // Match pairs of (French, Not French)
+    std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.isFrench AND NOT m.isFrench RETURN n.name, m.name";
+    const PropertyTypeID NAME_PROPID = 0;
+    const PropertyTypeID ISFRENCH_PROPID = 3;
+
+    using Boolean = types::Bool::Primitive;
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String, String>;
+
+    Rows expected;
+    {
+        for (NodeID n : read().scanNodes()) {
+            const Boolean* nfrench = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            if (!nfrench || !*nfrench) {
+                continue;
+            }
+            const String* nname = read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+            for (NodeID m : read().scanNodes()) {
+                const Boolean* mfrench = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, m);
+                if (!mfrench || *mfrench) {
+                    continue;
+                }
+                const String* mname = read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+                expected.add({*nname, *mname});
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            auto* nnames = df->cols().front()->as<ColumnVector<std::optional<String>>>();
+            auto* mnames = df->cols().back()->as<ColumnVector<std::optional<String>>>();
+            ASSERT_TRUE(nnames);
+            ASSERT_TRUE(mnames);
+            for (size_t row = 0; row < nnames->size(); row++) {
+                auto& nname = nnames->at(row);
+                auto& mname = mnames->at(row);
+                actual.add({*nname, *mname});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
 
     auto res = queryV2(MATCH_QUERY, [](const Dataframe* df) { ASSERT_TRUE(df); });
     ASSERT_TRUE(res);
