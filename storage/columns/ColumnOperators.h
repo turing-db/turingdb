@@ -57,16 +57,16 @@ public:
      */
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static void equal(ColumnMask& mask,
-                      const ColumnVector<T>& lhs,
-                      const ColumnVector<U>& rhs) {
-        bioassert(lhs.size() == rhs.size(),
+    static void equal(ColumnMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
-        mask.resize(lhs.size());
-        auto& maskd = mask.getRaw();
-        const auto& lhsd = lhs.getRaw();
-        const auto& rhsd = rhs.getRaw();
-        const auto size = lhs.size();
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
@@ -94,14 +94,14 @@ public:
      */
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static void equal(ColumnMask& mask,
-                      const ColumnVector<T>& lhs,
-                      const ColumnConst<U>& rhs) {
-        mask.resize(lhs.size());
-        auto& maskd = mask.getRaw();
-        const auto& lhsd = lhs.getRaw();
-        const auto& rhsd = rhs.getRaw();
-        const auto size = lhs.size();
+    static void equal(ColumnMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
@@ -123,14 +123,14 @@ public:
      */
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static void equal(ColumnMask& mask,
-                      const ColumnConst<T>& lhs,
-                      const ColumnVector<U>& rhs) {
-        mask.resize(rhs.size());
-        auto& maskd = mask.getRaw();
-        const auto& rhsd = rhs.getRaw();
-        const T& val = lhs.getRaw();
-        const auto size = rhs.size();
+    static void equal(ColumnMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(rhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const T& val = lhs->getRaw();
+        const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<U>) {
@@ -257,22 +257,24 @@ public:
      */
     template <typename T, typename U>
         requires OptionallyComparable<T, U> && (!is_optional_v<U>)
-    static void inOp(ColumnMask& mask,
-                     const ColumnVector<T>& lhs,
-                     const ColumnSet<U>& rhs) {
-        mask.resize(lhs.size());
-        auto& maskd = mask.getRaw();
-        const auto size = lhs.size();
+    static void inOp(ColumnMask* mask,
+                     const ColumnVector<T>* lhs,
+                     const ColumnSet<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
                 if (!lhs[i]) {
                     maskd[i] = false;
                 } else {
-                    maskd[i] = rhs.contains(*lhs[i]);
+                    const T& val = lhs->at(i);
+                    maskd[i] = rhs->contains(val);
                 }
             } else {
-                maskd[i] = rhs.contains(lhs[i]);
+                const T& val = lhs->at(i);
+                maskd[i] = rhs->contains(val);
             }
         }
     }
