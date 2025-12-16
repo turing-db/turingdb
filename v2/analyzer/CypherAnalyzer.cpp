@@ -67,10 +67,6 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
             break;
 
-             default:
-                 throwError("Unsupported query type", query);
-            break;
-
             case QueryCommand::Kind::LOAD_GML_QUERY:
                 analyze(static_cast<const LoadGMLQuery*>(query));
             break;
