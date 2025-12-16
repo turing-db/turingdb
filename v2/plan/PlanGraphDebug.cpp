@@ -125,7 +125,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::LOAD_NEO4J: {
                 const auto* n = dynamic_cast<LoadNeo4jNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
-                output << "        __filepath__: " << n->getPath().get() << "\n";
+                output << "        __filepath__: " << n->getFilePath().get() << "\n";
             } break;
 
             case PlanGraphOpcode::CREATE_GRAPH: {

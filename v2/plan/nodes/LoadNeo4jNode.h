@@ -16,7 +16,7 @@ public:
     {
     }
 
-    const fs::Path& getPath() const { return _path; }
+    const fs::Path& getFilePath() const { return _path; }
     std::string_view getGraphName() const { return _graphName; }
 
 private:
