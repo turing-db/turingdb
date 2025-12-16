@@ -999,7 +999,7 @@ TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     }
 }
 
-TEST_F(WriteQueriesTest, multipleCreates) {
+TEST_F(WriteQueriesTest, multipleCreateNodes) {
     setWorkingGraph("default");
 
     size_t NUM_PROPS = 3;
@@ -1049,6 +1049,59 @@ TEST_F(WriteQueriesTest, multipleCreates) {
             const size_t rowCount = df->getRowCount();
             for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                 actual.add({names->at(rowPtr), heights->at(rowPtr), weights->at(rowPtr)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(WriteQueriesTest, multipleCreates) {
+    setWorkingGraph("default");
+
+    std::string_view CREATE_1 = R"(CREATE (n:NEWNODE{name:"Land"})-[e:NEWEDGE{name:"Bridge"}]->(m:NEWNODE))";
+    std::string_view CREATE_2 = R"(CREATE (n:NEWNODE)-[e:NEWEDGE]->(m:NEWNODE))";
+    std::string_view CREATE_3 = R"(CREATE (n:NEWNODE{name:"There"})<-[e:NEWEDGE{name:"to"}]-(m:NEWNODE{name:"Here"}))";
+    std::string_view MATCH = R"(MATCH (n)-[e]->(m) return n.name, e.name, m.name)";
+
+    using Name = std::optional<types::String::Primitive>;
+    using Rows = LineContainer<Name, Name, Name>;
+
+    Rows expected;
+    {
+        expected.add({"Land", "Bridge", std::nullopt});
+        expected.add({std::nullopt, std::nullopt, std::nullopt});
+        expected.add({"Here", "to", "There"});
+    }
+
+    {
+        newChange();
+        for (auto&& query : {CREATE_1, CREATE_2, CREATE_3}) {
+            auto res = queryV2(query, [](const Dataframe* df) { ASSERT_TRUE(df); });
+            ASSERT_TRUE(res);
+        }
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1 + 1 + 1, df->size());
+            const auto* ns = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* es = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ms = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(es);
+            ASSERT_TRUE(ms);
+            ASSERT_EQ(ns->size(), 3);
+            ASSERT_EQ(es->size(), 3);
+            ASSERT_EQ(ms->size(), 3);
+
+            const size_t rowCount = df->getRowCount();
+            for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+                actual.add({ns->at(rowPtr), es->at(rowPtr), ms->at(rowPtr)});
             }
         });
         ASSERT_TRUE(res);
