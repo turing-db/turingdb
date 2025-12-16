@@ -215,11 +215,22 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnConst<int64_t>, ColumnVector<int64_t>)
 
         // Property opts
+        EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
+        EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
+
+        EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
+        EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
+
+        EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
+        EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
+
         EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
         EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
 
-        AND_CASE(ColumnMask, ColumnMask)
         AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+        EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
+
+        AND_CASE(ColumnMask, ColumnMask)
 
         OR_CASE(ColumnMask, ColumnMask)
         OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
