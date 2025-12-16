@@ -991,7 +991,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
                 const auto& [name, type, expr] = propConstr;
-                const Column* propCol = exprGen.registerPropertyConstraint(expr);
+                Column* propCol = exprGen.registerPropertyConstraint(expr);
 
                 props.emplace_back(name, type, propCol);
             }
@@ -1041,7 +1041,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             props.reserve(data->exprConstraints().size());
             for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
                 const auto& [name, type, expr] = propConstr;
-                const Column* propCol = exprGen.registerPropertyConstraint(expr);
+                Column* propCol = exprGen.registerPropertyConstraint(expr);
 
                 props.emplace_back(name, type, propCol);
             }

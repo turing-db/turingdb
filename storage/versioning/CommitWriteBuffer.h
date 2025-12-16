@@ -132,6 +132,9 @@ public:
     void setUnflushed() { _flushed = false; }
     bool isFlushed() const { return _flushed; }
 
+    PendingNode& getPendingNode(size_t idx) { return _pendingNodes.at(idx); }
+    PendingEdge& getPendingEdge(size_t idx) { return _pendingEdges.at(idx); }
+
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;

@@ -44,6 +44,10 @@ public:
         return _funcDeps;
     }
 
+    bool empty() const {
+        return _varDeps.empty() && _funcDeps.empty();
+    }
+
     void genExprDependencies(const PlanGraphVariables& variables, Expr* expr) {
         switch (expr->getKind()) {
             case Expr::Kind::BINARY: {

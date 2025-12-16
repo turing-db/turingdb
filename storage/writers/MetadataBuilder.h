@@ -24,7 +24,7 @@ public:
     EdgeTypeID getOrCreateEdgeType(const std::string& edgeTypeName);
 
     // PropertyTypes
-    PropertyType getOrCreatePropertyType(const std::string& propTypeName, ValueType valueType);
+    PropertyType getOrCreatePropertyType(std::string_view propTypeName, ValueType valueType);
 
     [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const GraphMetadata& prevMetadata, GraphMetadata* metadata);
 

@@ -130,8 +130,8 @@ void ExprProgramGenerator::addEdgeTypeConstraint(Column* edgeTypeCol,
     _exprProg->addTopLevelPredicate(finalEdgeTypeMask);
 }
 
-const Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
-    const Column* resCol =  generateExpr(expr);
+Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
+    Column* resCol =  generateExpr(expr);
     return resCol;
 }
 

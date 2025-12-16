@@ -26,7 +26,7 @@ public:
     struct PropertyConstraint {
         std::string_view _propName;
         ValueType _type;
-        const Column* _col; // Column where the values of this property may be found
+        Column* _col; // Column where the values of this property may be found
     };
 
     struct PendingNode {
