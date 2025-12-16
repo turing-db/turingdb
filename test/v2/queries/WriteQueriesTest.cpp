@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <optional>
 
 #include "EdgeRecord.h"
 #include "TuringDB.h"
@@ -876,7 +877,7 @@ TEST_F(WriteQueriesTest, createFromTarget) {
     }
 }
 
-TEST_F(WriteQueriesTest, scanNodesCreateNodeWithConstProp) {
+TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
     // NOTE: Returning properties of just-created nodes is not yet supported
     constexpr std::string_view CREATE_QUERY = R"(MATCH (n) CREATE (m:NEWNODE{name:"NEWNAME"}) RETURN n, m)";
     constexpr std::string_view MATCH_QUERY = "MATCH (n) RETURN n, n.name";
@@ -946,14 +947,13 @@ TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     const size_t numNodesPrior = read().getTotalNodesAllocated();
 
     using Rows = LineContainer<NodeID, types::String::Primitive, types::Int64::Primitive, bool>;
-    PropertyTypeID NAME_PROP_ID {0}; // TODO: find way to do dynamically
 
     Rows expected;
     {
         expected.add({0, "NEWNAME", 99, true});
     }
 
-    { // Apply CREATEs; NOTE: returned values not testsed - see @ref scanNodesCreateNode
+    { // Apply CREATEs; NOTE: returned values not tested - see @ref scanNodesCreateNode
         newChange();
         auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
@@ -997,4 +997,62 @@ TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
         }
         ASSERT_TRUE(expected.equals(actual));
     }
+}
+
+TEST_F(WriteQueriesTest, multipleCreates) {
+    setWorkingGraph("default");
+
+    size_t NUM_PROPS = 3;
+    size_t NUM_CREATED_NODES = 3;
+    std::string_view CREATE_NODE_1 = R"(CREATE (n:NEWNODE{name:"First", height: 182}))";
+    std::string_view CREATE_NODE_2 = R"(CREATE (n:NEWNODE{name:"Second", weight: 23.122}))";
+    std::string_view CREATE_NODE_3 = R"(CREATE (n:NEWNODE{name:"Third", height:190, weight: 45.3}))";
+    std::string_view MATCH_NODES = R"(MATCH (n) return n.name, n.height, n.weight)";
+
+    using Name = std::optional<types::String::Primitive>;
+    using Height = std::optional<types::Int64::Primitive>;
+    using Weight = std::optional<types::Double::Primitive>;
+    using Rows = LineContainer<Name, Height, Weight>;
+
+    Rows expected;
+    {
+        expected.add({"First", 182, std::nullopt});
+        expected.add({"Second", std::nullopt, 23.122});
+        expected.add({"Third", 190, 45.3});
+    }
+
+    {
+        newChange();
+        for (auto&& query : {CREATE_NODE_1, CREATE_NODE_2, CREATE_NODE_3}) {
+            auto res =
+                queryV2(query, [](const Dataframe* df) -> void { ASSERT_TRUE(df); });
+            ASSERT_TRUE(res);
+        }
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_NODES, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(NUM_PROPS, df->size());
+            const auto* names = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* heights = df->cols().at(1)->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* weights = df->cols().back()->as<ColumnOptVector<types::Double::Primitive>>();
+            ASSERT_TRUE(names);
+            ASSERT_TRUE(heights);
+            ASSERT_TRUE(weights);
+            ASSERT_EQ(names->size(), NUM_CREATED_NODES);
+            ASSERT_EQ(heights->size(), NUM_CREATED_NODES);
+            ASSERT_EQ(weights->size(), NUM_CREATED_NODES);
+
+            const size_t rowCount = df->getRowCount();
+            for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+                actual.add({names->at(rowPtr), heights->at(rowPtr), weights->at(rowPtr)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_TRUE(expected.equals(actual));
 }

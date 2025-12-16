@@ -21,7 +21,7 @@ public:
     LabelSetHandle getOrCreateLabelSet(const LabelSet& labelset);
 
     // EdgeTypes
-    EdgeTypeID getOrCreateEdgeType(const std::string& edgeTypeName);
+    EdgeTypeID getOrCreateEdgeType(std::string_view edgeTypeName);
 
     // PropertyTypes
     PropertyType getOrCreatePropertyType(std::string_view propTypeName, ValueType valueType);

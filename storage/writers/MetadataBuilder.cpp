@@ -23,7 +23,7 @@ LabelSetHandle MetadataBuilder::getOrCreateLabelSet(const LabelSet& labelset) {
     return _metadata->_labelsetMap.getOrCreate(labelset);
 }
 
-EdgeTypeID MetadataBuilder::getOrCreateEdgeType(const std::string& edgeTypeName) {
+EdgeTypeID MetadataBuilder::getOrCreateEdgeType(std::string_view edgeTypeName) {
     std::unique_lock lock {_spinLock};
 
     return _metadata->_edgeTypeMap.getOrCreate(edgeTypeName);
