@@ -6,6 +6,7 @@
 #include "SimpleGraph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
@@ -768,7 +769,6 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
     }
 }
 
-// TODO GetOutEdges target test for materialise testing
 TEST_F(WriteQueriesTest, createFromTarget) {
     constexpr std::string_view CREATE_QUERY = "MATCH (n)-->(m) CREATE (m)-[e:NEWEDGE]->(p:NEWNODE) RETURN n, m, e, p";
     constexpr std::string_view MATCH_QUERY = "MATCH (u)-[e]->(v) RETURN u, e, v";
@@ -873,5 +873,128 @@ TEST_F(WriteQueriesTest, createFromTarget) {
 
         EXPECT_TRUE(scan.equals(actual));
         EXPECT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, scanNodesCreateNodeWithConstProp) {
+    // NOTE: Returning properties of just-created nodes is not yet supported
+    constexpr std::string_view CREATE_QUERY = R"(MATCH (n) CREATE (m:NEWNODE{name:"NEWNAME"}) RETURN n, m)";
+    constexpr std::string_view MATCH_QUERY = "MATCH (n) RETURN n, n.name";
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    PropertyTypeID NAME_PROP_ID {0}; // TODO: find way to do dynamically
+
+    Rows expected;
+    {
+        for (const NodeID n : read().scanNodes()) {
+            const types::String::Primitive* name =
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+            ASSERT_TRUE(name);
+            expected.add({n, *name});
+            expected.add({n + numNodesPrior, "NEWNAME"});
+        }
+    }
+
+    { // Apply CREATEs; NOTE: returned values not testsed - see @ref scanNodesCreateNode
+        newChange();
+        auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2);
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* ms = df->cols().back()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(ms);
+            ASSERT_EQ(ns->size(), numNodesPrior);
+            ASSERT_EQ(ms->size(), numNodesPrior);
+        });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    { // Ensure CREATE command created expected nodes with expected properties
+        Rows actual;
+        {
+            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 2);
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(ns);
+                ASSERT_TRUE(names);
+                ASSERT_EQ(ns->size(), numNodesPrior * 2);
+                ASSERT_EQ(names->size(), numNodesPrior * 2);
+                const size_t rowCount = df->getRowCount();
+                for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+                    ASSERT_TRUE(names->at(rowPtr)); // No node should have null name
+                    actual.add({ns->at(rowPtr), *names->at(rowPtr)});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
+    setWorkingGraph("default");
+    // NOTE: Returning properties of just-created nodes is not yet supported
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (m:NEWNODE{name:"NEWNAME", age:99, isNew:true}))";
+    constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name, n.age, n.isNew)";
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive, types::Int64::Primitive, bool>;
+    PropertyTypeID NAME_PROP_ID {0}; // TODO: find way to do dynamically
+
+    Rows expected;
+    {
+        expected.add({0, "NEWNAME", 99, true});
+    }
+
+    { // Apply CREATEs; NOTE: returned values not testsed - see @ref scanNodesCreateNode
+        newChange();
+        auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+        });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    { // Ensure CREATE command created expected nodes with expected properties
+        Rows actual;
+        {
+            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(df->size(), 4);
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(names);
+                auto* ages = df->cols().at(2)->as<ColumnOptVector<types::Int64::Primitive>>();
+                ASSERT_TRUE(ages);
+                auto* news = df->cols().back()->as<ColumnOptVector<types::Bool::Primitive>>();
+                ASSERT_TRUE(news);
+
+                ASSERT_EQ(ns->size(), numNodesPrior + 1);
+                ASSERT_EQ(names->size(), numNodesPrior + 1);
+                ASSERT_EQ(ages->size(), numNodesPrior + 1);
+                ASSERT_EQ(news->size(), numNodesPrior + 1);
+
+                const size_t rowCount = df->getRowCount();
+                for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+                    ASSERT_TRUE(names->at(rowPtr)); // No node should have null props
+                    ASSERT_TRUE(ages->at(rowPtr));
+                    ASSERT_TRUE(news->at(rowPtr));
+                    actual.add({ns->at(rowPtr),
+                               *names->at(rowPtr),
+                               *ages->at(rowPtr),
+                               news->at(rowPtr)->_boolean});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(actual));
     }
 }
