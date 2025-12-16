@@ -4,24 +4,27 @@
 
 #include "PlanGraphNode.h"
 
+#include "Path.h"
+
 namespace db::v2 {
 
 class LoadGMLNode : public PlanGraphNode {
 public:
     LoadGMLNode(std::string_view graphName,
-                std::string_view filePath)
+                const fs::Path& filePath)
         : PlanGraphNode(PlanGraphOpcode::LOAD_GML),
-        _graphName(graphName)
+        _graphName(graphName),
+        _filePath(filePath)
     {
     }
 
     std::string_view getGraphName() const { return _graphName; }
 
-    std::string_view getFilePath() const { return _filePath; }
+    const fs::Path& getFilePath() const { return _filePath; }
 
 private:
     std::string_view _graphName;
-    std::string_view _filePath;
+    fs::Path _filePath;
 };
 
 }

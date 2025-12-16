@@ -27,6 +27,7 @@
 #include "metadata/LabelSet.h"
 
 #include "LocalMemory.h"
+#include "Path.h"
 
 namespace db::v2 {
 
@@ -141,7 +142,7 @@ public:
 
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);
-    PipelineValueOutputInterface& addLoadGML(std::string_view graphName, std::string_view filePath);
+    PipelineValueOutputInterface& addLoadGML(std::string_view graphName, const fs::Path& filePath);
 
     // List Graph
     PipelineValueOutputInterface& addListGraph();

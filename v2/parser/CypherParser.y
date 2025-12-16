@@ -342,7 +342,8 @@ createGraphQuery
     ;
 
 loadGML
-    : LOAD GML STRING_LITERAL AS ID { $$ = LoadGMLQuery::create(ast, $5, $3); LOC($$, @$); }
+    : LOAD GML STRING_LITERAL AS ID { $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3))); $$->setGraphName($5); LOC($$, @$); }
+    | LOAD GML STRING_LITERAL  { $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$);  }
     ;
 
 returnSt

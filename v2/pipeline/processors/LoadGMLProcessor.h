@@ -6,13 +6,15 @@
 
 #include "interfaces/PipelineValueOutputInterface.h"
 
+#include "Path.h"
+
 namespace db::v2 {
 
 class LoadGMLProcessor : public Processor {
 public:
     static LoadGMLProcessor* create(PipelineV2* pipeline,
                                     std::string_view graphName,
-                                    std::string_view filePath);
+                                    const fs::Path& filePath);
 
     std::string describe() const override;
 
@@ -24,11 +26,11 @@ public:
 
 protected:
     std::string_view _graphName;
-    std::string_view _filePath;
+    fs::Path _filePath;
     PipelineValueOutputInterface _outName;
 
     LoadGMLProcessor(std::string_view graphName,
-                     std::string_view filePath);
+                     const fs::Path& filePath);
     ~LoadGMLProcessor();
 };
 

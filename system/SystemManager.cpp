@@ -72,8 +72,11 @@ Graph* SystemManager::loadGraph(const std::string& name) {
 Graph* SystemManager::createGraph(const std::string& name) {
     const fs::Path path = _config->getGraphsDir() / name;
 
-    if (path.exists()) {
-        throw TuringException(fmt::format("Graph '{}' already exists", name));
+    const bool syncedOnDisk = _config->isSyncedOnDisk();
+    if (syncedOnDisk) {
+        if (path.exists()) {
+            throw TuringException(fmt::format("Graph '{}' already exists", name));
+        }
     }
 
     auto graph = Graph::create(name, path);
@@ -151,7 +154,7 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
     }
 
     // Step 2. Validate the path. It should be within the data directory
-    fs::Path absolute = _config->getDataDir() / filePath;
+    const fs::Path absolute = _config->getDataDir() / filePath;
     if (!absolute.isSubDirectory(_config->getDataDir())) {
         spdlog::error("File is not within the data directory: {}", absolute.get());
         return false;

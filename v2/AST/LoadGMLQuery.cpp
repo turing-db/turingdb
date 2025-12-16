@@ -6,11 +6,9 @@
 using namespace db::v2;
 
 LoadGMLQuery::LoadGMLQuery(DeclContext* declContext,
-                           std::string_view graphName,
-                           std::string_view filePath)
+                           fs::Path&& filePath)
     : QueryCommand(declContext),
-    _graphName(graphName),
-    _filePath(filePath)
+    _filePath(std::move(filePath))
 {
 }
 
@@ -18,10 +16,9 @@ LoadGMLQuery::~LoadGMLQuery() {
 }
 
 LoadGMLQuery* LoadGMLQuery::create(CypherAST* ast,
-                                   std::string_view graphName,
-                                   std::string_view filePath) {
+                                   fs::Path&& filePath) {
     DeclContext* declContext = DeclContext::create(ast, nullptr);
-    LoadGMLQuery* loadGML = new LoadGMLQuery(declContext, graphName, filePath);
+    LoadGMLQuery* loadGML = new LoadGMLQuery(declContext, std::move(filePath));
     ast->addQuery(loadGML);
     return loadGML;
 }
