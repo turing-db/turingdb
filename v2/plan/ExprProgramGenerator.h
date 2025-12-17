@@ -2,6 +2,7 @@
 
 #include "columns/ColumnOperator.h"
 #include "expr/Operators.h"
+#include "metadata/LabelSet.h"
 
 namespace db {
 
@@ -22,7 +23,6 @@ class PropertyExpr;
 class LiteralExpr;
 class PipelineGenerator;
 class PendingOutputView;
-class LabelSet;
 
 class ExprProgramGenerator {
 public:
@@ -42,7 +42,7 @@ public:
     ExprProgramGenerator& operator=(ExprProgramGenerator&&) = delete;
 
     void generatePredicate(const Predicate* pred);
-    void addLabelConstraint(const LabelSet& lblset);
+    void addLabelConstraint(Column* lblsetCol, const LabelSet& lblConstraint);
 
 private:
     PipelineGenerator* _gen {nullptr};

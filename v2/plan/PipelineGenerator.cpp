@@ -572,8 +572,14 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     }
 
     if (!labelConstrs.empty()) {
-        // throw PlannerException("PipelineGenerator: label constraints in filter nodes are not supported");
-        _builder.addGetLabelSetID();
+        const PipelineValuesOutputInterface& lblsetIf = _builder.addGetLabelSetID();
+        const NamedColumn* lblSetCol = lblsetIf.getValues();
+
+        if (!lblSetCol) {
+            throw FatalException("Could not get label set column for label filter.");
+        }
+
+        exprGen.addLabelConstraint(lblSetCol->getColumn(), labelConstrs);
     }
 
     // Then add a filter processor, taking the built expression program to execute

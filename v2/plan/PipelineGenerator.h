@@ -82,6 +82,7 @@ public:
 
     const VarColumnMap& varColMap() const { return _declToColumn; }
     LocalMemory& memory() { return *_mem; }
+    GraphView view() { return _view; }
 
 private:
     const PlanGraph* _graph {nullptr};
