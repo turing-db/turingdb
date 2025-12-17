@@ -56,10 +56,10 @@ int main(int argc, const char** argv) {
     TuringConfig config;
     config.setSyncedOnDisk(!inMemory);
 
-    spdlog::info("TuringDB path: {}", config.getTuringDir().get());
     if (!turingDir.empty()) {
         config.setTuringDirectory(fs::Path {turingDir});
     }
+    spdlog::info("TuringDB path: {}", config.getTuringDir().get());
 
     // Delete existing `default` graph if requested
     if (resetDefault) {

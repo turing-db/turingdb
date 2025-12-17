@@ -1,38 +1,22 @@
-macro(regress_test REGRESS_NAME SOURCES)
-    set( _SOURCES ${SOURCES} ${ARGN} ) 
-    install(FILES ${_SOURCES}
-        DESTINATION regress/${REGRESS_NAME})
+file(GLOB REGRESS_LIST ${CMAKE_CURRENT_SOURCE_DIR}/*/main.py)
+file(REAL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/pytester/ PYTESTER)
 
-    set(REGRESS_RUNSH ${CMAKE_CURRENT_SOURCE_DIR}/run.sh)
+set(PYTURINGDB "turingdb @ git+https://github.com/turing-db/turingdb-sdk-python")
 
-    # check that run.sh exists
-    if (NOT EXISTS "${REGRESS_RUNSH}")
-        message(FATAL_ERROR "Run script for the regress does not exist ${REGRESS_RUNSH}")
-    endif()
+set(RUN_REGRESS_CONTENT "#!/bin/bash\n")
+set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}set -e\n\n")
+set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}[ $1 ] && PYTURINGDB=\"${PYTURINGDB}@$1\" || PYTURINGDB=turingdb\n")
+set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}echo \"- Using turingdb: $PYTURINGDB\"\n\n")
 
-    # add regress name to list
-    set(REGRESS_RUNSH_INSTALL ${CMAKE_INSTALL_PREFIX}/regress/${REGRESS_NAME}/run.sh)
-    list(APPEND REGRESS_LIST ${REGRESS_RUNSH_INSTALL})
-    set(REGRESS_LIST ${REGRESS_LIST} PARENT_SCOPE)
-endmacro()
-
-# subdirectories
-add_subdirectory(create_turingdb_object)
-add_subdirectory(json_error_msg)
-add_subdirectory(list_graphs)
-add_subdirectory(change_submit_alice)
-add_subdirectory(change_10)
-add_subdirectory(submit_empty_change)
-add_subdirectory(create_edges_inject)
-add_subdirectory(call_labels)
-add_subdirectory(complex_rebases)
-add_subdirectory(serialization)
-add_subdirectory(snapshot_isolation)
-
-# write run_regress target
-set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")
 foreach(test IN ITEMS ${REGRESS_LIST})
-    set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}bash ${test}\n")
+    get_filename_component(testdir ${test} DIRECTORY)
+    set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}echo 'Running ${test}'\n")
+    set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}cd ${testdir}\n")
+    set(CMD "uv run \\\n")
+    set(CMD "${CMD}    --with \"$PYTURINGDB\" \\\n")
+    set(CMD "${CMD}    --project ${PYTESTER} \\\n")
+    set(CMD "${CMD}    ${test}")
+    set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}${CMD}\n")
 endforeach()
 
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/run_regress.sh

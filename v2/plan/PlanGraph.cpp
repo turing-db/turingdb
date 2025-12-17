@@ -33,8 +33,7 @@ void PlanGraph::removeIsolatedNodes() {
 
     for (auto& node : _nodes) {
         if (node->inputs().empty()
-            && node->outputs().empty()
-            && node->getOpcode() != PlanGraphOpcode::WRITE) {
+            && node->outputs().empty()) {
             continue;
         }
 

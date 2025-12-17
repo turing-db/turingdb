@@ -1,13 +1,16 @@
-from turingdb import TuringDB
+from pytester import TuringdbTester
 
-client = TuringDB(host="http://localhost:6666")
-graph = "test_graph4"
-client.query(f"CREATE GRAPH {graph}")
-client.set_graph(graph)
+tester = TuringdbTester()
+tester.spawn()
+t = tester.client()
+
+graph = "mygraph"
+t.query(f"CREATE GRAPH {graph}")
+t.set_graph(graph)
 
 for i in range(11):
-    change = client.query("CHANGE NEW")[0][0]
-    client.checkout(change=int(change))
+    change = t.query("CHANGE NEW")["changeID"][0]
+    t.checkout(change=change)
     print(f"Submitting change {change}")
-    client.query("CHANGE SUBMIT")
-    client.checkout()
+    t.query("CHANGE SUBMIT")
+    t.checkout()

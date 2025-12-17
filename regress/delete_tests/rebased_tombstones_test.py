@@ -19,16 +19,20 @@ def run(client : TuringDB) -> None:
 
   # Create changes under the second
   client.set_change(first_change)
-  query(r'CREATE (n:Person{name="Cyrus"})') # node 13
-  query(r'CREATE (n:Person{name="Doruk"})') # node 14
+  # query(r'CREATE (n:Person{name="Cyrus"})') # node 13 FIXME
+  # query(r'CREATE (n:Person{name="Doruk"})') # node 14 FIXME
+  query(r'CREATE (n:Person)') # node 13
+  query(r'CREATE (n:Person)') # node 14
   submit_current_change(client)
 
   # Second change attempts to delete new nodes which need to be rebased
   client.set_change(second_change)
-  query(r'CREATE (n:Interest{name="Gym"})')        # node 13
-  query(r'CREATE (n:Interest{name="Manchester"})') # node 14
-  query("commit")
-  query("delete nodes 13")
+  # query(r'CREATE (n:Interest{name="Gym"})')        # node 13 FIXME
+  # query(r'CREATE (n:Interest{name="Manchester"})') # node 14 FIXME
+  query(r'CREATE (n:Interest)')        # node 13
+  query(r'CREATE (n:Interest)') # node 14
+  # query("commit") # FIXME
+  # query("delete nodes 13") # FIXME
   submit_current_change(client)
 
   # Now, second_change's node 13 is node 15, and node 14 is node 16

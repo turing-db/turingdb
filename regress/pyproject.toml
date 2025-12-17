@@ -1,0 +1,8 @@
+[project]
+name = "regress"
+requires-python = ">=3.13"
+version = "0.1.0"
+dependencies = ["pytester"]
+
+[tool.uv.sources]
+pytester = { path = "./pytester", editable = true }
