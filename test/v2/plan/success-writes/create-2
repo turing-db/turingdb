@@ -3,7 +3,12 @@ CREATE (n:Person { newProp: "This is a new string prop" })
 
 /// RESULT
 flowchart TD
+PlanGraph size=2
     0["`
         __WRITE__
         __node__ (0:Person {newProp (String): *expr* })
     `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1

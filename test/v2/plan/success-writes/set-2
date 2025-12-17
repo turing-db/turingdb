@@ -3,6 +3,7 @@ MATCH (n) SET n.integer = 5, n.name = "Node"
 
 /// RESULT
 flowchart TD
+PlanGraph size=5
     0["`
         __SCAN_NODES__
     `"]
@@ -18,6 +19,10 @@ flowchart TD
         __node_update__ integer
         __node_update__ name
     `"]
+    4["`
+        __PRODUCE_RESULTS__
+    `"]
     0-->2
     1-->3
     2-->1
+    3-->4

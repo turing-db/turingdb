@@ -4,6 +4,7 @@ DELETE n, e
 
 /// RESULT
 flowchart TD
+PlanGraph size=12
     0["`
         __SCAN_NODES__
     `"]
@@ -48,6 +49,9 @@ flowchart TD
         __delete_node__ n
         __delete_edge__ e
     `"]
+    11["`
+        __PRODUCE_RESULTS__
+    `"]
     0-->9
     1-->3
     2-->1
@@ -58,3 +62,4 @@ flowchart TD
     7-->10
     8-->7
     9-->2
+    10-->11
