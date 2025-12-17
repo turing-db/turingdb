@@ -1,8 +1,6 @@
 #include "ExprProgramGenerator.h"
 
-#include <iostream>
 #include <spdlog/fmt/fmt.h>
-#include <spdlog/spdlog.h>
 
 #include "PipelineGenerator.h"
 #include "decl/EvaluatedType.h"
@@ -22,7 +20,6 @@
 
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
-#include "columns/ColumnVector.h"
 
 #include "LocalMemory.h"
 
@@ -81,7 +78,7 @@ void ExprProgramGenerator::addLabelConstraint(const LabelSet& lblset) {
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
-    // Predicates can be predicates in the case that they are singular Boolean properties.
+    // Predicates can be singular Boolean properties.
     // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a predicate.
     if (pred->getExpr()->getKind() == Expr::Kind::PROPERTY) {
         const auto* propExpr = static_cast<const PropertyExpr*>(pred->getExpr());
@@ -95,13 +92,13 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
         // because the result of the instruction is already manifested in the column
         // containing the Boolean property values.
         _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
-        _exprProg->addTopLevelResult(booleanPropCol);
+        _exprProg->addTopLevelPredicate(booleanPropCol);
         return;
     }
     // All other predicates should be binary expressions, whose corresponding instructions
     // are added in @ref generateBinaryExpr.
     Column* predicateResultColumn = generateExpr(pred->getExpr());
-    _exprProg->addTopLevelResult(predicateResultColumn);
+    _exprProg->addTopLevelPredicate(predicateResultColumn);
 }
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
@@ -223,7 +220,6 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     }
 }
 
-// XXX: Check if this should be ColumnVector or else; @Remy used "ColumnValues"
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \
     case EvalType:                                                                       \
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \

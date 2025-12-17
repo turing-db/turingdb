@@ -2,9 +2,12 @@
 
 #include "columns/ColumnOperator.h"
 #include "expr/Operators.h"
+
 namespace db {
+
 class Column;
 class LocalMemory;
+
 }
 
 namespace db::v2 {
@@ -42,16 +45,17 @@ public:
     void addLabelConstraint(const LabelSet& lblset);
 
 private:
-    PipelineGenerator* _gen;
+    PipelineGenerator* _gen {nullptr};
     ExprProgram* _exprProg {nullptr};
     const PendingOutputView& _pendingOut;
 
     Column* generateExpr(const Expr* expr);
     Column* generateUnaryExpr(const UnaryExpr* expr);
     Column* generateBinaryExpr(const BinaryExpr* expr);
-    Column* allocResultColumn(const Expr* expr);
     Column* generatePropertyExpr(const PropertyExpr* propExpr);
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
+
+    Column* allocResultColumn(const Expr* expr);
 
     static ColumnOperator unaryOperatorToColumnOperator(UnaryOperator op);
     static ColumnOperator binaryOperatorToColumnOperator(BinaryOperator op);

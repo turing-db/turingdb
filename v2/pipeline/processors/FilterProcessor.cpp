@@ -119,7 +119,7 @@ void FilterProcessor::execute() {
     Dataframe* destDF = _output.getDataframe();
 
     _exprProg->evaluateInstructions();
-    const std::vector<Column*> predResults = _exprProg->getTopLevelResults();
+    const std::vector<Column*> predResults = _exprProg->getTopLevelPredicates();
 
     // XXX: Should this be an error, or should we just not apply any filters?
     if (predResults.empty()) {
@@ -150,18 +150,18 @@ void FilterProcessor::execute() {
     // null values
     ColumnOptMask finalOptMask(maskSize, true);
     {
-        for (Column* res : _exprProg->getTopLevelResults()) {
-            const auto* predOptMask = dynamic_cast<ColumnOptMask*>(res);
-            if (!predOptMask) {
+        for (Column* predicateResult : _exprProg->getTopLevelPredicates()) {
+            const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
+            if (!predResOptMask) {
                 throw FatalException(
                     "FilterProcessor ExprProgram encountered non-predicate instruction.");
             }
-            ColumnOperators::andOp(&finalOptMask, &finalOptMask, predOptMask);
+            ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResOptMask);
         }
     }
 
     ColumnMask finalMask;
-    finalMask.ofColumnVector(finalOptMask);
+    finalMask.ofColumnOptVector(finalOptMask);
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();

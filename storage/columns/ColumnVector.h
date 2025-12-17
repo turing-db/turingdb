@@ -28,31 +28,31 @@ public:
 
     ColumnVector(std::initializer_list<T> v)
         : Column(_staticKind),
-          _data(v)
+        _data(v)
     {
     }
 
     explicit ColumnVector(const std::vector<T>& vec)
         : Column(_staticKind),
-          _data(vec)
+        _data(vec)
     {
     }
 
     explicit ColumnVector(std::vector<T>&& vec) noexcept
         : Column(_staticKind),
-          _data(std::move(vec))
+        _data(std::move(vec))
     {
     }
 
     explicit ColumnVector(size_t size)
         : Column(_staticKind),
-          _data(size)
+        _data(size)
     {
     }
 
     explicit ColumnVector(size_t size, const T& value)
         : Column(_staticKind),
-          _data(size, value)
+        _data(size, value)
     {
     }
 
