@@ -1,6 +1,5 @@
 #include "FilterProcessor.h"
 
-#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <range/v3/view/drop.hpp>
 
@@ -139,8 +138,7 @@ void FilterProcessor::execute() {
     if (!std::ranges::all_of(predResults, [](const Column* res) {
             const ColumnKind::ColumnKindCode thisKind = res->getKind();
 
-            const ColumnKind::ColumnKindCode optBoolKind =
-                ColumnOptVector<types::Bool::Primitive>::staticKind();
+            const ColumnKind::ColumnKindCode optBoolKind = ColumnOptMask::staticKind();
 
             return thisKind == optBoolKind;
         })) {
@@ -153,8 +151,7 @@ void FilterProcessor::execute() {
     ColumnOptMask finalOptMask(maskSize, true);
     {
         for (Column* res : _exprProg->getTopLevelResults()) {
-            const auto* predOptMask =
-                dynamic_cast<ColumnOptVector<types::Bool::Primitive>*>(res);
+            const auto* predOptMask = dynamic_cast<ColumnOptMask*>(res);
             if (!predOptMask) {
                 throw FatalException(
                     "FilterProcessor ExprProgram encountered non-predicate instruction.");

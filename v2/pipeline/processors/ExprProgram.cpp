@@ -1,7 +1,6 @@
 #include "ExprProgram.h"
 
 #include <cstdint>
-#include <iostream>
 #include <string_view>
 
 #include "columns/ColumnOperator.h"
@@ -94,13 +93,12 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
 
 
 // Property-based operators - these use a ColumnOpt as their result
-#define EQUAL_CASE(Lhs, Rhs)                      \
-    case OpCase<OP_EQUAL, Lhs, Rhs>: {            \
-        ColumnOperators::equal(                   \
-            static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs),  \
-            static_cast<const Rhs*>(instr._rhs)); \
-        break;                                    \
+#define EQUAL_CASE(Lhs, Rhs)                                                             \
+    case OpCase<OP_EQUAL, Lhs, Rhs>: {                                                   \
+        ColumnOperators::equal(static_cast<ColumnOptMask*>(instr._res),                  \
+                               static_cast<const Lhs*>(instr._lhs),                      \
+                               static_cast<const Rhs*>(instr._rhs));                     \
+        break;                                                                           \
     }
 
 #define AND_CASE(Lhs, Rhs)                                                               \

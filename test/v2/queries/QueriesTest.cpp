@@ -1896,16 +1896,15 @@ TEST_F(QueriesTest, complexPredicate) {
     {
         for (NodeID n : read().scanNodes()) {
             const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
-            if (!french || *french) { // NOT isFrench
-                continue;
-            }
-            // OR
             const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
-            if (!phd|| !*phd) { // hasPhD
+            if (!phd || !french) { // Don't have these props: skip
                 continue;
             }
-            const String* name= read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
-            expected.add({n, *name});
+            if (!*french || *phd) { // not french or has phd
+                const String* name =
+                    read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+                expected.add({n, *name});
+            }
         }
     }
 
