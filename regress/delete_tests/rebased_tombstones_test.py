@@ -31,7 +31,7 @@ def run(client : TuringDB) -> None:
   # query(r'CREATE (n:Interest{name="Manchester"})') # node 14 FIXME
   query(r'CREATE (n:Interest)')        # node 13
   query(r'CREATE (n:Interest)') # node 14
-  # query("commit") # FIXME
+  query("commit")
   # query("delete nodes 13") # FIXME
   submit_current_change(client)
 

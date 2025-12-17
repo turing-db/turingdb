@@ -15,7 +15,7 @@ change = t.query('CHANGE NEW')["changeID"][0]
 t.checkout(change=str(change))
 #t.query("CREATE (:Person {name: 'Alice'})") # FIXME
 t.query("CREATE (:Person)")
-# t.query("COMMIT") # FIXME
+t.query("COMMIT")
 t.query("CHANGE SUBMIT")
 
 print('* change_submit_alice: done')

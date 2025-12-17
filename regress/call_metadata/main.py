@@ -37,7 +37,7 @@ t.query("CREATE (:Person:Employee)")
 t.query("CREATE (:Employee)-[e:WORKS_FOR]->(:Company)")
 
 # Submit change
-# t.query("COMMIT") # FIXME
+t.query("COMMIT")
 t.query("CHANGE SUBMIT")
 
 # Go on to main

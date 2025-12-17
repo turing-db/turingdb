@@ -19,7 +19,7 @@ def make_local_changes(
     for _ in range(num_nodes):
         client.query(f"create (n:NEWNODE{ts})")
 
-    # client.query(f"commit") # FIXME
+    client.query(f"commit")
 
     for _ in range(num_edges):
         client.query(f"create (n:NEWNODE{ts})-[:NEWEDGE{ts}]->(m:NEWNODE{ts})")
