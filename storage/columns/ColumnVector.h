@@ -50,6 +50,12 @@ public:
     {
     }
 
+    explicit ColumnVector(size_t size, const T& value)
+        : Column(_staticKind),
+          _data(size, value)
+    {
+    }
+
     ~ColumnVector() override = default;
 
     ColumnVector& operator=(const ColumnVector&) = default;

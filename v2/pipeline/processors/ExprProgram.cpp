@@ -1,6 +1,7 @@
 #include "ExprProgram.h"
 
 #include <cstdint>
+#include <iostream>
 #include <string_view>
 
 #include "columns/ColumnOperator.h"
@@ -67,6 +68,32 @@ constexpr ColumnKind::ColumnKindCode OpCase =
 template <ColumnOperator Op, typename Lhs>
 constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind());
 
+// Mask operators
+#define AND_MASK_CASE(Lhs, Rhs)                                                          \
+    case OpCase<OP_AND, Lhs, Rhs>: {                                                     \
+        ColumnOperators::andOp(static_cast<ColumnMask*>(instr._res),                     \
+                               static_cast<const Lhs*>(instr._lhs),                      \
+                               static_cast<const Rhs*>(instr._rhs));                     \
+        break;                                                                           \
+    }
+
+#define OR_MASK_CASE(Lhs, Rhs)                                                           \
+    case OpCase<OP_OR, Lhs, Rhs>: {                                                      \
+        ColumnOperators::orOp(static_cast<ColumnMask*>(instr._res),                      \
+                              static_cast<const Lhs*>(instr._lhs),                       \
+                              static_cast<const Rhs*>(instr._rhs));                      \
+        break;                                                                           \
+    }
+
+#define NOT_MASK_CASE(Lhs)                                                               \
+    case UnaryOpCase<OP_NOT, Lhs>: {                                                     \
+        ColumnOperators::notOp(static_cast<ColumnMask*>(instr._res),                     \
+                               static_cast<const Lhs*>(instr._lhs));                     \
+        break;                                                                           \
+    }
+
+
+// Property-based operators - these use a ColumnOpt as their result
 #define EQUAL_CASE(Lhs, Rhs)                      \
     case OpCase<OP_EQUAL, Lhs, Rhs>: {            \
         ColumnOperators::equal(                   \
@@ -76,30 +103,30 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                    \
     }
 
-#define AND_CASE(Lhs, Rhs)                        \
-    case OpCase<OP_AND, Lhs, Rhs>: {              \
-        ColumnOperators::andOp(                   \
-            static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs),  \
-            static_cast<const Rhs*>(instr._rhs)); \
-        break;                                    \
+#define AND_CASE(Lhs, Rhs)                                                               \
+    case OpCase<OP_AND, Lhs, Rhs>: {                                                     \
+        ColumnOperators::andOp(                                                          \
+            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res),           \
+            static_cast<const Lhs*>(instr._lhs),                                         \
+            static_cast<const Rhs*>(instr._rhs));                                        \
+        break;                                                                           \
     }
 
-#define OR_CASE(Lhs, Rhs)                         \
-    case OpCase<OP_OR, Lhs, Rhs>: {               \
-        ColumnOperators::orOp(                    \
-            static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs),  \
-            static_cast<const Rhs*>(instr._rhs)); \
-        break;                                    \
+#define OR_CASE(Lhs, Rhs)                                                                \
+    case OpCase<OP_OR, Lhs, Rhs>: {                                                      \
+        ColumnOperators::orOp(                                                           \
+            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res),           \
+            static_cast<const Lhs*>(instr._lhs),                                         \
+            static_cast<const Rhs*>(instr._rhs));                                        \
+        break;                                                                           \
     }
 
-#define NOT_CASE(Lhs)                             \
-    case UnaryOpCase<OP_NOT, Lhs>: {              \
-        ColumnOperators::notOp(                   \
-            static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs)); \
-    break;                                        \
+#define NOT_CASE(Lhs)                                                                    \
+    case UnaryOpCase<OP_NOT, Lhs>: {                                                     \
+        ColumnOperators::notOp(                                                          \
+            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res),           \
+            static_cast<const Lhs*>(instr._lhs));                                        \
+        break;                                                                           \
     }
 
 #define PROJECT_CASE(Lhs, Rhs)                    \
@@ -244,8 +271,8 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         PROJECT_CASE(ColumnMask, ColumnVector<size_t>)
 
         // Mask ops
-        AND_CASE(ColumnMask, ColumnMask)
-        OR_CASE(ColumnMask, ColumnMask)
+        AND_MASK_CASE(ColumnMask, ColumnMask)
+        OR_MASK_CASE(ColumnMask, ColumnMask)
 
         // Set ops
         IN_CASE(ColumnVector<size_t>, ColumnSet<size_t>)

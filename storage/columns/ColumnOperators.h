@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <iostream>
 #include <optional>
 #include <type_traits>
 
@@ -10,6 +11,7 @@
 #include "columns/ColumnSet.h"
 
 #include "BioAssert.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -188,16 +190,17 @@ public:
     }
 
     /**
-     * @brief Fills a mask corresponding to 'lhs && rhs'
+     * @brief Fills a mask corresponding to 'lhs && rhs', but where the result is
+     * std::nullopt if either operand is std::nullopt.
      *
      * @param mask The mask to fill
      * @param lhs Left hand side Column(Opt)Vector
      * @param rhs Right hand side Column(Opt)Vector
      */
     template <BooleanOpt T, BooleanOpt U>
-    static void andOp(ColumnMask* mask,
-                  const ColumnVector<T>* lhs,
-                  const ColumnVector<U>* rhs) {
+    static void andOp(ColumnOptVector<types::Bool::Primitive>* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
 
@@ -208,22 +211,10 @@ public:
         const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
-            bool l {false};
-            bool r {false};
+            const auto& l = lhsd[i];
+            const auto& r = rhsd[i];
 
-            if constexpr (is_optional_v<T>) {
-                l = lhsd[i].value_or(false);
-            } else {
-                l = lhsd[i];
-            }
-
-            if constexpr (is_optional_v<U>) {
-                r = rhsd[i].value_or(false);
-            } else {
-                r = rhsd[i];
-            }
-
-            maskd[i] = l && r;
+            maskd[i] = optionalAnd(l, r);
         }
     }
 
@@ -259,7 +250,7 @@ public:
      * @param rhs Right hand side Boolean column
      */
     template <BooleanOpt T, BooleanOpt U>
-    static void orOp(ColumnMask* mask,
+    static void orOp(ColumnOptVector<types::Bool::Primitive>* mask,
                      const ColumnVector<T>* lhs,
                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
@@ -271,22 +262,7 @@ public:
         const size_t size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
-            bool l {false};
-            bool r {false};
-
-            if constexpr (is_optional_v<T>) {
-                l = lhsd[i].value_or(false);
-            } else {
-                l = lhsd[i];
-            }
-
-            if constexpr (is_optional_v<U>) {
-                r = rhsd[i].value_or(false);
-            } else {
-                r = rhsd[i];
-            }
-
-            maskd[i] = l || r;
+            maskd[i] = optionalOr(lhsd[i], rhsd[i]);
         }
     }
 
@@ -311,6 +287,20 @@ public:
             } else {
                 maskd[i] = !ind[i];
             }
+        }
+    }
+
+    template <BooleanOpt T>
+    static void notOp(ColumnOptVector<types::Bool::Primitive>* mask,
+                      const ColumnVector<T>* input) {
+        const size_t size = input->size();
+        mask->resize(size);
+
+        auto& maskd = mask->getRaw();
+        const auto& ind = input->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalNot(ind[i]);
         }
     }
 
@@ -415,6 +405,40 @@ public:
                 dest->push_back(srcd[i]);
             }
         }
+    }
+
+private:
+    template <BooleanOpt T, BooleanOpt U>
+    static std::optional<bool> optionalOr(const T& a, const U& b) {
+        if (a == CustomBool {true} || b == CustomBool {true}) {
+            return true;
+        }
+        if (a == CustomBool {false} && b == CustomBool {false}) {
+            return false;
+        }
+        return std::nullopt;
+    }
+
+    template <BooleanOpt T, BooleanOpt U>
+    static std::optional<bool> optionalAnd(const T& a, const U& b) {
+        if (a == CustomBool {true} && b == CustomBool {true}) {
+            return true;
+        }
+        if (a == CustomBool {false} || b == CustomBool {false}) {
+            return false;
+        }
+        return std::nullopt;
+    }
+
+    template <BooleanOpt T>
+    static std::optional<bool> optionalNot(const T& a) {
+        if (a == CustomBool {true}) {
+            return false;
+        }
+        if (a == CustomBool{false}) {
+            return true;
+        }
+        return std::nullopt;
     }
 };
 

@@ -1,5 +1,6 @@
 #include "ExprProgramGenerator.h"
 
+#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
@@ -27,6 +28,7 @@
 
 #include "PlannerException.h"
 #include "FatalException.h"
+#include "spdlog/fmt/bundled/base.h"
 
 using namespace db::v2;
 using namespace db;
@@ -224,7 +226,7 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
 // XXX: Check if this should be ColumnVector or else; @Remy used "ColumnValues"
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \
     case EvalType:                                                                       \
-        return _gen->memory().alloc<ColumnVector<Type::Primitive>>();                    \
+        return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
 
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
