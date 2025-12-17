@@ -3,6 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PipelineGenerator.h"
+#include "columns/ColumnOptMask.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
@@ -21,6 +22,7 @@
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
 
+#include "metadata/LabelSet.h"
 #include "LocalMemory.h"
 
 #include "PlannerException.h"
@@ -74,7 +76,35 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
     }
 }
 
-void ExprProgramGenerator::addLabelConstraint(const LabelSet& lblset) {
+void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
+                                              const LabelSet& lblConstraint) {
+    std::vector<LabelSetID> matchingLblSets;
+    for (const auto& [id, labelset] : _gen->view().metadata().labelsets()) {
+        if (labelset->hasAtLeastLabels(lblConstraint)) {
+            matchingLblSets.push_back(id);
+        }
+    }
+
+    // Fold over all label constraints, taking the logical OR
+    Column* finalLabelMask {nullptr};
+    for (const LabelSetID lsID : matchingLblSets) {
+        auto* constCol = _gen->memory().alloc<ColumnConst<LabelSetID>>();
+        constCol->set(lsID);
+
+        auto* resCol = _gen->memory().alloc<ColumnOptMask>();
+
+        _exprProg->addInstr(ColumnOperator::OP_EQUAL, resCol, lblsetCol, constCol);
+        if (finalLabelMask) {
+            _exprProg->addInstr(ColumnOperator::OP_OR,
+                                resCol,
+                                finalLabelMask,
+                                resCol);
+        }
+
+        finalLabelMask = resCol;
+    }
+
+    _exprProg->addTopLevelPredicate(finalLabelMask);
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
@@ -91,7 +121,7 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
         // (hence NOOP), and we have no operand columns (hence nullptr lhs and rhs),
         // because the result of the instruction is already manifested in the column
         // containing the Boolean property values.
-        _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
+        // _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
         _exprProg->addTopLevelPredicate(booleanPropCol);
         return;
     }
