@@ -1606,6 +1606,60 @@ TEST_F(QueriesTest, db_listGraph) {
     ASSERT_TRUE(callBackExecuted);
 }
 
+TEST_F(QueriesTest, db_commit) {
+    auto transaction = _graph->openTransaction();
+    auto reader = transaction.readGraph();
+
+    const auto originalCommitHash = reader.commits().back().hash();
+    CommitHash newCommitHash;
+    ChangeID changeID;
+
+    {
+        const std::string query = "COMMIT";
+        auto res = _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->size(), 0);
+            ASSERT_EQ(df->cols().size(), 0);
+        });
+
+        EXPECT_TRUE(res.hasErrorMessage());
+        EXPECT_EQ(res.getError(), "CommitProcessor: Cannot commit outside of a write transaction");
+    }
+
+    {
+        const std::string query = "CHANGE NEW";
+        _db->queryV2(query, _graphName, &_env->getMem(), [&changeID](const Dataframe* df) -> void {
+            const ColumnVector<ChangeID>* changeIDs = df->cols().front()->as<ColumnVector<ChangeID>>();
+
+            changeID = changeIDs->at(0);
+        });
+        auto transaction = _env->getSystemManager().openTransaction(_graphName,
+                                                                    CommitHash::head(),
+                                                                    changeID);
+        auto reader = transaction->readGraph();
+        newCommitHash = reader.commits().back().hash();
+        EXPECT_NE(originalCommitHash, newCommitHash);
+    }
+
+    {
+        const std::string query = "COMMIT";
+        auto res = _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->size(), 0);
+            ASSERT_EQ(df->cols().size(), 0); }, CommitHash::head(), changeID);
+
+        auto transaction = _env->getSystemManager().openTransaction(_graphName,
+                                                                    CommitHash::head(),
+                                                                    changeID);
+        auto reader = transaction->readGraph();
+        const auto finalCommitHash = reader.commits().back().hash();
+
+        EXPECT_FALSE(res.hasErrorMessage());
+        EXPECT_NE(newCommitHash, finalCommitHash);
+        EXPECT_NE(originalCommitHash, finalCommitHash);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;

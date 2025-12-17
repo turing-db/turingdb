@@ -45,6 +45,7 @@
     #include "EdgePattern.h"
     #include "SinglePartQuery.h"
     #include "ChangeQuery.h"
+    #include "CommitQuery.h"
     #include "ListGraphQuery.h"
     #include "CreateGraphQuery.h"
     #include "S3ConnectQuery.h"
@@ -128,6 +129,7 @@
 %token<std::string_view> CONNECT
 %token<std::string_view> SUBMIT
 %token<std::string_view> CHANGE
+%token<std::string_view> COMMIT
 %token<std::string_view> STARTS
 %token<std::string_view> UNIQUE
 %token<std::string_view> FILTER
@@ -272,6 +274,7 @@
 
 %type<db::v2::SinglePartQuery*> singlePartQuery
 %type<db::v2::ChangeQuery*> changeQuery
+%type<db::v2::CommitQuery*> commitQuery
 %type<db::v2::ListGraphQuery*> listGraphQuery
 %type<db::v2::CreateGraphQuery*> createGraphQuery
 %type<db::v2::S3ConnectQuery*> s3ConnectQuery
@@ -335,6 +338,7 @@ singleQuery
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
     | loadGraph { $$ = $1; }
     | changeQuery { $$ = $1; }
+    | commitQuery { $$ = $1; }
     | listGraphQuery { $$ = $1; }
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
@@ -483,6 +487,10 @@ changeOp
     | SUBMIT { $$ = ChangeOp::SUBMIT; }
     | DELETE { $$ = ChangeOp::DELETE; }
     | LIST { $$ = ChangeOp::LIST; }
+    ;
+
+commitQuery
+    : COMMIT { $$ = CommitQuery::create(ast); LOC($$, @$); }
     ;
 
 readingStatements
@@ -637,8 +645,8 @@ yieldItemChain
     ;
 
 yieldItem
-    : symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
-    | symbol AS symbol {
+    : name { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
+    | name AS name {
         $1->setAs($3->getName());
         $$ = SymbolExpr::create(ast, $1);
         LOC($$, @$);
@@ -1244,6 +1252,7 @@ reservedWord
     | DELETE { $$ = Symbol::create(ast, $1); }
     | DETACH { $$ = Symbol::create(ast, $1); }
     | EXISTS { $$ = Symbol::create(ast, $1); }
+    | COMMIT { $$ = Symbol::create(ast, $1); }
     | LIMIT { $$ = Symbol::create(ast, $1); }
     | YIELD { $$ = Symbol::create(ast, $1); }
     | MATCH { $$ = Symbol::create(ast, $1); }

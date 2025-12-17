@@ -31,6 +31,7 @@
 #include "processors/MaterializeProcessor.h"
 
 #include "nodes/ChangeNode.h"
+#include "nodes/CommitNode.h"
 #include "nodes/CartesianProductNode.h"
 #include "nodes/JoinNode.h"
 #include "nodes/PlanGraphNode.h"
@@ -312,6 +313,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::CHANGE:
             return translateChangeNode(static_cast<ChangeNode*>(node));
+        break;
+
+        case PlanGraphOpcode::COMMIT:
+            return translateCommitNode(static_cast<CommitNode*>(node));
         break;
 
         case PlanGraphOpcode::LIST_GRAPH:
@@ -1001,6 +1006,11 @@ PipelineOutputInterface* PipelineGenerator::translateLoadNeo4j(LoadNeo4jNode* no
 
 PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node) {
     _builder.addChangeOp(node->getOp());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateCommitNode(CommitNode* node) {
+    _builder.addCommit();
     return _builder.getPendingOutputInterface();
 }
 

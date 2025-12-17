@@ -9,6 +9,7 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "ExprDependencies.h"
 #include "nodes/ChangeNode.h"
+#include "nodes/CommitNode.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -42,6 +43,7 @@
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "ChangeQuery.h"
+#include "CommitQuery.h"
 #include "ListGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "S3ConnectQuery.h"
@@ -91,6 +93,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             generateChangeQuery(static_cast<const ChangeQuery*>(query));
         break;
 
+        case QueryCommand::Kind::COMMIT_QUERY:
+            generateCommitQuery(static_cast<const CommitQuery*>(query));
+        break;
+
         case QueryCommand::Kind::CREATE_GRAPH_QUERY:
             generateCreateGraphQuery(static_cast<const CreateGraphQuery*> (query));
         break;
@@ -117,6 +123,11 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
 void PlanGraphGenerator::generateChangeQuery(const ChangeQuery* query) {
     auto* n = _tree.create<ChangeNode>(query->getOp());
+    _tree.newOut<ProduceResultsNode>(n);
+}
+
+void PlanGraphGenerator::generateCommitQuery(const CommitQuery* query) {
+    auto* n = _tree.create<CommitNode>();
     _tree.newOut<ProduceResultsNode>(n);
 }
 

@@ -83,6 +83,7 @@ void CypherAnalyzer::analyze() {
 
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
+            case QueryCommand::Kind::COMMIT_QUERY:
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
             break;
 

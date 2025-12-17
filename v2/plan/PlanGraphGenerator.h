@@ -15,6 +15,7 @@ class PlanGraph;
 class PlanGraphVariables;
 class SinglePartQuery;
 class ChangeQuery;
+class CommitQuery;
 class ReturnStmt;
 class LoadGraphQuery;
 class ListGraphQuery;
@@ -42,6 +43,7 @@ private:
     std::unique_ptr<PlanGraphVariables> _variables;
 
     void generateChangeQuery(const ChangeQuery* query);
+    void generateCommitQuery(const CommitQuery* query);
     void generateSinglePartQuery(const SinglePartQuery* query);
     void generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);
     void generateLoadGraphQuery(const LoadGraphQuery* query);

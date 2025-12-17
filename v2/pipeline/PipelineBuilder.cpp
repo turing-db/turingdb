@@ -2,6 +2,7 @@
 
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
+#include "processors/CommitProcessor.h"
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
@@ -409,6 +410,15 @@ PipelineBlockOutputInterface& PipelineBuilder::addChangeOp(ChangeOp op) {
     NamedColumn* changeIDCol = allocColumn<ColumnVector<ChangeID>>(df);
     changeIDCol->rename("changeID");
     proc->setColumn(static_cast<ColumnVector<ChangeID>*>(changeIDCol->getColumn()));
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addCommit() {
+    CommitProcessor* proc = CommitProcessor::create(_pipeline);
+    auto& output = proc->output();
 
     _pendingOutput.updateInterface(&output);
 

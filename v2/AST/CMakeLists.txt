@@ -43,6 +43,7 @@ set(ast_sources
     SinglePartQuery.cpp
     LoadGraphQuery.cpp
     ChangeQuery.cpp
+    CommitQuery.cpp
     ListGraphQuery.cpp
     CreateGraphQuery.cpp
     LoadGMLQuery.cpp

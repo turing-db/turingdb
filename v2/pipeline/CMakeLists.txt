@@ -11,6 +11,7 @@ set(pipeline_sources
 set(processors_sources
     processors/DatabaseProcedureProcessor.cpp
     processors/ChangeProcessor.cpp
+    processors/CommitProcessor.cpp
     processors/ScanNodesProcessor.cpp
     processors/ScanNodesByLabelProcessor.cpp
     processors/GetInEdgesProcessor.cpp

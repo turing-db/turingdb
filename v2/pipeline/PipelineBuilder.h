@@ -60,6 +60,7 @@ public:
     PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
                                                        std::span<ProcedureBlueprint::YieldItem> yield);
     PipelineBlockOutputInterface& addChangeOp(ChangeOp op);
+    PipelineBlockOutputInterface& addCommit();
 
     // Get LabelSetID
     PipelineValuesOutputInterface& addGetLabelSetID();

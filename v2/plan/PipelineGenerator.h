@@ -44,6 +44,7 @@ class CreateGraphNode;
 class LoadGMLNode;
 class S3ConnectNode;
 class S3TransferNode;
+class CommitNode;
 
 class PipelineGenerator {
 public:
@@ -118,6 +119,7 @@ private:
     PipelineOutputInterface* translateLoadGraph(LoadGraphNode* node);
     PipelineOutputInterface* translateLoadNeo4j(LoadNeo4jNode* node);
     PipelineOutputInterface* translateChangeNode(ChangeNode* node);
+    PipelineOutputInterface* translateCommitNode(CommitNode* node);
     PipelineOutputInterface* translateListGraphNode(ListGraphNode* node);
     PipelineOutputInterface* translateCreateGraphNode(CreateGraphNode* node);
     PipelineOutputInterface* translateLoadGML(LoadGMLNode* node);

@@ -8,6 +8,7 @@ namespace db::v2 {
 class CypherAST;
 class SinglePartQuery;
 class ChangeQuery;
+class CommitQuery;
 class MatchStmt;
 class Limit;
 class Skip;
@@ -62,6 +63,7 @@ private:
     void dump(std::ostream& out, const LoadGraphQuery* query);
     void dump(std::ostream& out, const LoadNeo4jQuery* query);
     void dump(std::ostream& out, const ChangeQuery* query);
+    void dump(std::ostream& out, const CommitQuery* query);
     void dump(std::ostream& out, const ListGraphQuery* query);
     void dump(std::ostream& out, const CreateGraphQuery* query);
     void dump(std::ostream& out, const LoadGMLQuery* query);

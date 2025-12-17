@@ -14,6 +14,7 @@ public:
         LOAD_GRAPH_QUERY,
         LOAD_NEO4J_QUERY,
         CHANGE_QUERY,
+        COMMIT_QUERY,
         LIST_GRAPH_QUERY,
         CREATE_GRAPH_QUERY,
         LOAD_GML_QUERY,

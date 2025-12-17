@@ -3,6 +3,7 @@
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
 #include "ChangeQuery.h"
+#include "CommitQuery.h"
 #include "SymbolChain.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
@@ -92,6 +93,10 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::CHANGE_QUERY:
                 dump(out, static_cast<const ChangeQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::COMMIT_QUERY:
+                dump(out, static_cast<const CommitQuery*>(query));
             break;
 
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
@@ -184,6 +189,13 @@ void CypherASTDumper::dump(std::ostream& out, const ChangeQuery* query) {
             out << "    _" << std::hex << query << " ||--o{ SUBMIT : \"\"\n";
             break;
     }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const CommitQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType CommitQuery\n";
+    out << "    }\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const LoadGMLQuery* query) {

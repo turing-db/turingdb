@@ -1,5 +1,6 @@
 #include "HistoryProcedure.h"
 
+#include <iostream>
 #include <span>
 
 #include "ExecutionContext.h"

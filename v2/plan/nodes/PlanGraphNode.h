@@ -37,6 +37,7 @@ enum class PlanGraphOpcode {
     LOAD_NEO4J,
     LIST_GRAPH,
     CHANGE,
+    COMMIT,
     S3_CONNECT,
     S3_TRANSFER,
     _SIZE
@@ -72,6 +73,7 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::LOAD_GML, "LOAD_GML">,
     EnumStringPair<PlanGraphOpcode::LOAD_NEO4J, "LOAD_NEO4J">,
     EnumStringPair<PlanGraphOpcode::CHANGE, "CHANGE">,
+    EnumStringPair<PlanGraphOpcode::COMMIT, "COMMIT">,
     EnumStringPair<PlanGraphOpcode::LIST_GRAPH, "LIST_GRAPH">,
     EnumStringPair<PlanGraphOpcode::S3_CONNECT, "S3_CONNECT">,
     EnumStringPair<PlanGraphOpcode::S3_TRANSFER, "S3_TRANSFER">>;
