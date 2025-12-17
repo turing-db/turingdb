@@ -3,12 +3,10 @@
 #include <vector>
 
 #include "Column.h"
-#include "ColumnVector.h"
 #include "columns/ColumnOptVector.h"
 
 #include "DebugDump.h"
 #include "BioAssert.h"
-#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -153,15 +151,7 @@ public:
     std::vector<Bool_t>& getRaw() { return _data; }
     const std::vector<Bool_t>& getRaw() const { return _data; }
 
-    void ofColumnVector(const ColumnVector<types::Bool::Primitive>& vec) {
-        const size_t sz = vec.size();
-        this->resize(sz);
-        for (size_t i {0}; i < sz; i++) {
-            getRaw()[i] = vec[i];
-        }
-    }
-
-    void ofColumnVector(const ColumnOptVector<types::Bool::Primitive>& vec) {
+    void ofColumnOptVector(const ColumnOptVector<types::Bool::Primitive>& vec) {
         const size_t sz = vec.size();
         this->resize(sz);
         for (size_t i {0}; i < sz; i++) {
