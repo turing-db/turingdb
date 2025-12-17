@@ -194,11 +194,10 @@ public:
      * @param lhs Left hand side Column(Opt)Vector
      * @param rhs Right hand side Column(Opt)Vector
      */
-    template <typename T>
-        requires BooleanOpt<T>
+    template <BooleanOpt T, BooleanOpt U>
     static void andOp(ColumnMask* mask,
                   const ColumnVector<T>* lhs,
-                  const ColumnVector<T>* rhs) {
+                  const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(),
                      "Columns must have matching dimensions");
 
@@ -209,11 +208,22 @@ public:
         const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
+            bool l {false};
+            bool r {false};
+
             if constexpr (is_optional_v<T>) {
-                maskd[i] = optAND(lhsd[i], rhsd[i]);
+                l = lhsd[i].value_or(false);
             } else {
-                maskd[i] = lhsd[i] && rhsd[i];
+                l = lhsd[i];
             }
+
+            if constexpr (is_optional_v<U>) {
+                r = rhsd[i].value_or(false);
+            } else {
+                r = rhsd[i];
+            }
+
+            maskd[i] = l && r;
         }
     }
 
@@ -248,10 +258,10 @@ public:
      * @param lhs Left hand side Boolean column
      * @param rhs Right hand side Boolean column
      */
-    template <typename T>
-        requires BooleanOpt<T>
-    static void orOp(ColumnMask* mask, const ColumnVector<T>* lhs,
-                     const ColumnVector<T>* rhs) {
+    template <BooleanOpt T, BooleanOpt U>
+    static void orOp(ColumnMask* mask,
+                     const ColumnVector<T>* lhs,
+                     const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
 
         mask->resize(lhs->size());
@@ -261,11 +271,22 @@ public:
         const size_t size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
+            bool l {false};
+            bool r {false};
+
             if constexpr (is_optional_v<T>) {
-                maskd[i] = optOR(lhsd[i], rhsd[i]);
+                l = lhsd[i].value_or(false);
             } else {
-                maskd[i] = lhsd[i] || rhsd[i];
+                l = lhsd[i];
             }
+
+            if constexpr (is_optional_v<U>) {
+                r = rhsd[i].value_or(false);
+            } else {
+                r = rhsd[i];
+            }
+
+            maskd[i] = l || r;
         }
     }
 
@@ -275,8 +296,7 @@ public:
      * @param mask The mask to fill
      * @param input Operand column of Boolean negation
      */
-    template <typename T>
-        requires BooleanOpt<T>
+    template <BooleanOpt T>
     static void notOp(ColumnMask* mask,
                       const ColumnVector<T>* input) {
         const size_t size = input->size();
@@ -287,7 +307,7 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (is_optional_v<T>) {
-                maskd[i] = optNOT(ind[i]);
+                maskd[i] = ind[i].has_value() && !*ind[i];
             } else {
                 maskd[i] = !ind[i];
             }
@@ -396,32 +416,6 @@ public:
             }
         }
     }
-
-private:
-    /**
-     * @brief Custom semantics for logical OR of two optional Bool-likes.
-     * @detail Operates like a regular logical OR, treating std::nullopt as false.
-     */
-    static bool optOR(const std::optional<CustomBool>& a,
-                      const std::optional<CustomBool>& b) {
-        return a.value_or(false) || b.value_or(false);
-    }
-
-    /**
-     * @brief Custom semantics for logical AND of two optional Bool-likes.
-     * @detail Returns true iff both operands are valued and true.
-     */
-    static bool optAND(const std::optional<CustomBool>& a,
-                       const std::optional<CustomBool>& b) {
-        return a.value_or(false) && b.value_or(false);
-    }
-
-    /**
-     * @brief Custom semantics for logical NOT of an optional Bool-like.
-     * @detail Returns true iff operand is valued and false.
-     */
-    static bool optNOT(const std::optional<CustomBool>& a) {
-        return a.has_value() && !*a;
-    }
 };
+
 }

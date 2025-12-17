@@ -227,8 +227,13 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
         EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
 
-        AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+        EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
+
+        AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+        AND_CASE(ColumnVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+        AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
+        AND_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
 
         AND_CASE(ColumnMask, ColumnMask)
 
