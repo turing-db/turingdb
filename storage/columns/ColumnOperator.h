@@ -1,9 +1,10 @@
 #pragma once
 
+#include <cstdint>
+#include <spdlog/fmt/bundled/format.h>
+
 #include "EnumToString.h"
 #include "FatalException.h"
-#include "spdlog/fmt/bundled/format.h"
-#include <cstdint>
 
 namespace db {
 

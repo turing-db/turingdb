@@ -35,14 +35,14 @@ public:
         _instrs.emplace_back(std::forward<Args>(args)...);
     }
 
-    void addTopLevelResult(Column* resultCol) { _topLevelResults.push_back(resultCol); }
-    const std::vector<Column*>& getTopLevelResults() const { return _topLevelResults; }
+    void addTopLevelPredicate(Column* resultCol) { _topLevelPredicate.push_back(resultCol); }
+    const std::vector<Column*>& getTopLevelPredicates() const { return _topLevelPredicate; }
 
     void evaluateInstructions();
 
 private:
     Instructions _instrs;
-    std::vector<Column*> _topLevelResults;
+    std::vector<Column*> _topLevelPredicate;
 
     ExprProgram() = default;
     ~ExprProgram() = default;
