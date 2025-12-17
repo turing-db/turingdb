@@ -1,5 +1,6 @@
 #include "FilterProcessor.h"
 
+#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <range/v3/view/drop.hpp>
 
@@ -119,54 +120,51 @@ void FilterProcessor::execute() {
     Dataframe* destDF = _output.getDataframe();
 
     _exprProg->evaluateInstructions();
-    const ExprProgram::Instructions instrs = _exprProg->instrs();
+    const std::vector<Column*> predResults = _exprProg->getTopLevelResults();
 
     // XXX: Should this be an error, or should we just not apply any filters?
-    if (instrs.empty()) {
+    if (predResults.empty()) {
         throw FatalException("Pipeline encountered empty FilterProcessor.");
     }
 
     // Ensure all instructions outputs are the same size, so they may be combined
-    const size_t maskSize = instrs.front()._res->size();
-    if (!std::ranges::all_of(instrs, [maskSize](const ExprProgram::Instruction& instr) {
-            return instr._res->size() == maskSize;
+    const size_t maskSize = predResults.front()->size();
+    if (!std::ranges::all_of(predResults, [maskSize](const Column* res) {
+            return res->size() == maskSize;
         })) {
         throw FatalException("FilterProcessor ExprProgram contained instructions with "
                              "output columns of differing sizes.");
     }
     // Ensure all instruction outputs are Column(Opt)Vector bools, so they can be converted to masks
-    if (!std::ranges::all_of(instrs, [](const ExprProgram::Instruction& instr) {
-            const ColumnKind::ColumnKindCode thisKind = instr._res->getKind();
+    if (!std::ranges::all_of(predResults, [](const Column* res) {
+            const ColumnKind::ColumnKindCode thisKind = res->getKind();
+
             const ColumnKind::ColumnKindCode optBoolKind =
                 ColumnOptVector<types::Bool::Primitive>::staticKind();
-            const ColumnKind::ColumnKindCode boolKind =
-                ColumnVector<types::Bool::Primitive>::staticKind();
 
-            return (thisKind == optBoolKind) || (thisKind == boolKind);
+            return thisKind == optBoolKind;
         })) {
         throw FatalException("FilterProcessor ExprProgram contained an instruction which "
                              "was not a predicate.");
     }
 
-    // Fold over all instructions, combining their output masks with column-wise AND
-    ColumnMask finalMask(maskSize, true);
+    // Fold over all instructions, combining their output masks with AND, but maintaining
+    // null values
+    ColumnOptMask finalOptMask(maskSize, true);
     {
-        ColumnMask instrMask;
         for (Column* res : _exprProg->getTopLevelResults()) {
-            if (const auto* boolRes = dynamic_cast<ColumnVector<types::Bool::Primitive>*>(res);
-                boolRes) {
-                instrMask.ofColumnVector(*boolRes);
-            } else if (const auto* optBoolRes = dynamic_cast<ColumnOptVector<types::Bool::Primitive>*>(res);
-               optBoolRes) {
-                instrMask.ofColumnVector(*optBoolRes);
-            } else {
+            const auto* predOptMask =
+                dynamic_cast<ColumnOptVector<types::Bool::Primitive>*>(res);
+            if (!predOptMask) {
                 throw FatalException(
                     "FilterProcessor ExprProgram encountered non-predicate instruction.");
             }
-
-            ColumnOperators::andOp(&finalMask, &finalMask, &instrMask);
+            ColumnOperators::andOp(&finalOptMask, &finalOptMask, predOptMask);
         }
     }
+
+    ColumnMask finalMask;
+    finalMask.ofColumnVector(finalOptMask);
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();
