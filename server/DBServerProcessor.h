@@ -46,6 +46,7 @@ private:
     const net::HTTP::Info& getHttpInfo() const;
 
     void query();
+    void query_v1();
     void load_graph();
     void history();
     void get_graph_status();

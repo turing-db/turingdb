@@ -25,6 +25,29 @@
 
 using namespace db;
 
+namespace {
+
+std::string sanitizeJsonString(const std::string& input) {
+    std::string result;
+    result.reserve(input.size() * 1.2); // Pre-allocate
+
+    for (char c : input) {
+        if (c == '"') {
+            result += "\\\"";
+        } else if (c == '\\') {
+            result += "\\\\";
+        } else if (c == '\n') {
+            result += "\\n";
+        } else {
+            result += c;
+        }
+    }
+
+    return result;
+}
+
+}
+
 DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
     : _writer(&connection.getWriter()),
@@ -49,6 +72,10 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
     switch ((Endpoint)httpInfo._endpoint) {
         case Endpoint::QUERY: {
              query();
+        }
+        break;
+        case Endpoint::QUERY_V1: {
+             query_v1();
         }
         break;
         case Endpoint::LOAD_GRAPH: {
@@ -144,6 +171,60 @@ const net::HTTP::Info& DBServerProcessor::getHttpInfo() const {
 }
 
 void DBServerProcessor::query() {
+    LocalMemory& mem = _threadContext->getLocalMemory();
+    const auto& httpInfo = getHttpInfo();
+
+    const auto transactionInfo = getTransactionInfo();
+
+    const auto header = _writer.startHeader(net::HTTP::Status::OK,
+                                            !_connection.isCloseRequired());
+
+    PayloadWriter payload(_writer.getWriter());
+    payload.obj();
+
+    size_t execCount = 0;
+
+    const QueryCallbackV2 queryCallback = [&](const Dataframe* df) { 
+        if (execCount++ == 0) {
+            JsonEncoder::writeDataframeHeader(payload, *df);
+            payload.key("data");
+            payload.arr();
+        }
+
+        JsonEncoder::writeDataframe(payload, *df);
+    };
+
+    const auto res = _db.queryV2(
+        httpInfo._payload,
+        transactionInfo.graphName,
+        &mem,
+        queryCallback,
+        transactionInfo.commit,
+        transactionInfo.change);
+
+    if (!res.isOk()) {
+        payload.key("error");
+        const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
+        payload.value(errorType);
+
+        const std::string& errorMsg =
+            res.getError().empty() ? "No error message available." : res.getError();
+
+        payload.key("error_details");
+
+        payload.value(sanitizeJsonString(errorMsg));
+
+        return;
+    }
+
+    payload.end();
+    payload.key("time");
+    payload.value(res.getTotalTime().count());
+
+    payload.end();
+}
+
+void DBServerProcessor::query_v1() {
     LocalMemory& mem = _threadContext->getLocalMemory();
     const auto& httpInfo = getHttpInfo();
 

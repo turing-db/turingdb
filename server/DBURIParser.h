@@ -85,6 +85,7 @@ public:
 
 private:
     static constexpr std::string_view STR_QUERY = "/query";
+    static constexpr std::string_view STR_QUERY_V1 = "/query_v1";
     static constexpr std::string_view STR_LOAD_GRAPH = "/load_graph";
     static constexpr std::string_view STR_GET_GRAPH_STATUS = "/get_graph_status";
     static constexpr std::string_view STR_IS_GRAPH_LOADED = "/is_graph_loaded";
@@ -107,6 +108,7 @@ private:
         using EndpointMap = std::unordered_map<net::HTTP::Path, net::HTTP::EndpointIndex>;
         static const EndpointMap endpoints = {
             {STR_QUERY,               (size_t)Endpoint::QUERY              },
+            {STR_QUERY_V1,            (size_t)Endpoint::QUERY_V1           },
             {STR_LOAD_GRAPH,          (size_t)Endpoint::LOAD_GRAPH         },
             {STR_GET_GRAPH_STATUS,    (size_t)Endpoint::GET_GRAPH_STATUS   },
             {STR_IS_GRAPH_LOADED,     (size_t)Endpoint::IS_GRAPH_LOADED    },

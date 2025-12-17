@@ -35,6 +35,7 @@ enum class Endpoint : int64_t {
     UNKNOWN = -1,
 
     QUERY,
+    QUERY_V1,
     LOAD_GRAPH,
     GET_GRAPH_STATUS,
     IS_GRAPH_LOADED,

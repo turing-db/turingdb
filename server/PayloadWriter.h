@@ -85,6 +85,10 @@ public:
     }
 
     void end() {
+        if (_closingTokens.empty()) {
+            return;
+        }
+
         _writer->write(_closingTokens.back());
         _closingTokens.pop_back();
         _comma = true;
@@ -148,6 +152,10 @@ public:
         write(v);
         write('"');
         _comma = true;
+    }
+
+    void value(ChangeID changeID) {
+        value(fmt::format("{:x}", changeID.get()));
     }
 
     void value(ValueType v) {
