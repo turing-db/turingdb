@@ -1,13 +1,13 @@
 #pragma once
 
 #include <concepts>
-#include <iostream>
 #include <optional>
 #include <type_traits>
 
 #include "ColumnConst.h"
 #include "ColumnMask.h"
 #include "ColumnVector.h"
+#include "ColumnOptMask.h"
 #include "columns/ColumnSet.h"
 
 #include "BioAssert.h"
@@ -61,7 +61,7 @@ public:
      * @param lhs Light hand side column
      */
     template <typename T, typename U>
-        requires OptionallyComparable<T, U>
+        requires(Stringy<T, U> || std::same_as<T, U>)
     static void equal(ColumnMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
@@ -74,19 +74,26 @@ public:
         const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
-            if constexpr (is_optional_v<T>) {
-                if (!lhsd[i]) {
-                    maskd[i]._value = false;
-                    continue;
-                }
-            }
-            if constexpr (is_optional_v<U>) {
-                if (!rhsd[i]) {
-                    maskd[i]._value = false;
-                    continue;
-                }
-            }
             maskd[i]._value = lhsd[i] == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void equal(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(),
+                     "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalEq(lhsd[i], rhsd[i]);
         }
     }
 
@@ -98,7 +105,7 @@ public:
      * @param rhs Constant value to compare against
      */
     template <typename T, typename U>
-        requires OptionallyComparable<T, U>
+        requires(Stringy<T, U> || std::same_as<T, U>)
     static void equal(ColumnMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnConst<U>* rhs) {
@@ -109,13 +116,23 @@ public:
         const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
-            if constexpr (is_optional_v<T>) {
-                if (!lhsd[i].has_value()) {
-                    maskd[i]._value = false;
-                    continue;
-                }
-            }
             maskd[i]._value = lhsd[i] == rhsd;
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void equal(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& val = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalEq(lhsd[i], val);
         }
     }
 
@@ -127,7 +144,7 @@ public:
      * @param rhs Right hand side column
      */
     template <typename T, typename U>
-        requires OptionallyComparable<T, U>
+        requires(Stringy<T, U> || std::same_as<T, U>)
     static void equal(ColumnMask* mask,
                       const ColumnConst<T>* lhs,
                       const ColumnVector<U>* rhs) {
@@ -138,14 +155,34 @@ public:
         const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
-            if constexpr (is_optional_v<U>) {
-                if (!rhsd[i].has_value()) {
-                    maskd[i] = false;
-                    continue;
-                }
-            }
             maskd[i] = val == rhsd[i];
         }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void equal(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& val = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalEq(val, rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void equal(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+        auto& maskd = mask->getRaw();
+        maskd.front() = optionalEq(lhs->getRaw(), rhs->getRaw());
     }
 
     /**
@@ -198,7 +235,7 @@ public:
      * @param rhs Right hand side Column(Opt)Vector
      */
     template <BooleanOpt T, BooleanOpt U>
-    static void andOp(ColumnOptVector<types::Bool::Primitive>* mask,
+    static void andOp(ColumnOptMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(),
@@ -250,7 +287,7 @@ public:
      * @param rhs Right hand side Boolean column
      */
     template <BooleanOpt T, BooleanOpt U>
-    static void orOp(ColumnOptVector<types::Bool::Primitive>* mask,
+    static void orOp(ColumnOptMask* mask,
                      const ColumnVector<T>* lhs,
                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
@@ -291,7 +328,7 @@ public:
     }
 
     template <BooleanOpt T>
-    static void notOp(ColumnOptVector<types::Bool::Primitive>* mask,
+    static void notOp(ColumnOptMask* mask,
                       const ColumnVector<T>* input) {
         const size_t size = input->size();
         mask->resize(size);
@@ -439,6 +476,34 @@ private:
             return true;
         }
         return std::nullopt;
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static std::optional<bool> optionalEq(const T& a, const U& b) {
+        if constexpr (is_optional_v<T>) {
+            if (!a.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if constexpr (is_optional_v<U>) {
+            if (!b.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        // From herein, a and b are either engaged optionals or values
+
+        if constexpr (is_optional_v<T> && is_optional_v<U>) {
+            return *a == *b;
+        } else if constexpr (is_optional_v<T>) {
+            return *a == b;
+        } else if constexpr (is_optional_v<U>) {
+            return a == *b;
+        } else {
+            return a == b;
+        }
     }
 };
 
