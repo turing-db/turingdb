@@ -19,8 +19,9 @@ int main(int argc, const char** argv) {
 
     auto& argParser = toolInit.getArgParser();
 
-    bool noServer = false;
-    bool nodemon = false;
+    bool serverMode = false;
+    bool cliMode = true;
+    bool demonize = false;
     bool inMemory = false;
     bool resetDefault = false;
     unsigned port = 6666;
@@ -28,14 +29,16 @@ int main(int argc, const char** argv) {
     std::string turingDir;
     std::vector<std::string> graphsToLoad;
 
-    argParser.add_argument("-cli")
-             .store_into(noServer);
     argParser.add_argument("-p")
              .store_into(port);
     argParser.add_argument("-i")
              .store_into(address);
-    argParser.add_argument("-nodemon")
-             .store_into(nodemon);
+    argParser.add_argument("-demon")
+             .store_into(demonize);
+    argParser.add_argument("-cli")
+             .store_into(cliMode);
+    argParser.add_argument("-server")
+             .store_into(serverMode);
     argParser.add_argument("-reset-default")
              .store_into(resetDefault);
     argParser.add_argument("-load")
@@ -48,7 +51,18 @@ int main(int argc, const char** argv) {
 
     toolInit.init(argc, argv);
 
-    if (!noServer && !nodemon) {
+    if (serverMode && cliMode) {
+        spdlog::error("You can not specify both -serverMode and -cli");
+        return EXIT_FAILURE;
+    }
+
+    if (demonize && cliMode) {
+        spdlog::error("You can not specify both -demon and -cli");
+        return EXIT_FAILURE;
+    }
+
+    if (demonize) {
+        serverMode = true;
         Demonology::demonize();
     }
 
@@ -90,7 +104,14 @@ int main(int argc, const char** argv) {
         }
     }
 
-    if (noServer) {
+    if (serverMode) {
+        DBServerConfig config;
+        config.setPort(port);
+        config.setAddress(address);
+
+        TuringServer server(config, turingDB);
+        server.start();
+    } else {
         TuringShell shell(turingDB, &mem);
 
         if (!graphsToLoad.empty()) {
@@ -98,13 +119,6 @@ int main(int argc, const char** argv) {
         }
 
         shell.startLoop();
-    } else {
-        DBServerConfig config;
-        config.setPort(port);
-        config.setAddress(address);
-
-        TuringServer server(config, turingDB);
-        server.start();
     }
 
     return EXIT_SUCCESS;
