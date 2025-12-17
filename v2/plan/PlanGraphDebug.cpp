@@ -82,7 +82,6 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
     output << "flowchart TD\n";
 
-    fmt::println("PlanGraph size={}", planGraph._nodes.size());
     for (size_t i = 0; i < planGraph._nodes.size(); i++) {
         const auto& node = planGraph._nodes[i];
         nodeOrder[node.get()] = i;
