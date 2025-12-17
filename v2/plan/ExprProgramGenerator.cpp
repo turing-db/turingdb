@@ -93,11 +93,13 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
         // because the result of the instruction is already manifested in the column
         // containing the Boolean property values.
         _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
+        _exprProg->addTopLevelResult(booleanPropCol);
         return;
     }
     // All other predicates should be binary expressions, whose corresponding instructions
     // are added in @ref generateBinaryExpr.
-    generateExpr(pred->getExpr());
+    Column* predicateResultColumn = generateExpr(pred->getExpr());
+    _exprProg->addTopLevelResult(predicateResultColumn);
 }
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {

@@ -152,8 +152,7 @@ void FilterProcessor::execute() {
     ColumnMask finalMask(maskSize, true);
     {
         ColumnMask instrMask;
-        for (const ExprProgram::Instruction& instr : instrs) {
-            Column* res = instr._res;
+        for (Column* res : _exprProg->getTopLevelResults()) {
             if (const auto* boolRes = dynamic_cast<ColumnVector<types::Bool::Primitive>*>(res);
                 boolRes) {
                 instrMask.ofColumnVector(*boolRes);

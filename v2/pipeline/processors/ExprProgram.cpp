@@ -1,8 +1,6 @@
 #include "ExprProgram.h"
 
 #include <cstdint>
-#include <iostream>
-#include <spdlog/fmt/fmt.h>
 #include <string_view>
 
 #include "columns/ColumnOperator.h"
@@ -230,20 +228,26 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
 
+        // Boolean property ops
         AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         AND_CASE(ColumnVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
         AND_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
 
-        AND_CASE(ColumnMask, ColumnMask)
-
-        OR_CASE(ColumnMask, ColumnMask)
         OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
+        OR_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
+        OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         OR_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
 
+        // Project ops
         PROJECT_CASE(ColumnVector<size_t>, ColumnMask)
         PROJECT_CASE(ColumnMask, ColumnVector<size_t>)
 
+        // Mask ops
+        AND_CASE(ColumnMask, ColumnMask)
+        OR_CASE(ColumnMask, ColumnMask)
+
+        // Set ops
         IN_CASE(ColumnVector<size_t>, ColumnSet<size_t>)
         IN_CASE(ColumnVector<EntityID>, ColumnSet<EntityID>)
         IN_CASE(ColumnVector<NodeID>, ColumnSet<NodeID>)

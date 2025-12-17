@@ -1854,7 +1854,7 @@ TEST_F(QueriesTest, cartProdThenFilter) {
                 if (!mfrench || *mfrench) {
                     continue;
                 }
-                const String* mname = read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+                const String* mname = read().tryGetNodeProperty<types::String>(NAME_PROPID, m);
                 expected.add({*nname, *mname});
             }
         }
@@ -1878,6 +1878,55 @@ TEST_F(QueriesTest, cartProdThenFilter) {
         ASSERT_TRUE(res);
     }
 
-    auto res = queryV2(MATCH_QUERY, [](const Dataframe* df) { ASSERT_TRUE(df); });
-    ASSERT_TRUE(res);
+    ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(QueriesTest, complexPredicate) {
+    // NOTE: Equivalent to (NOT isFrench OR hasPhD)
+    std::string_view MATCH_QUERY = "MATCH (n) WHERE NOT (n.isFrench AND NOT n.hasPhD) RETURN n, n.name";
+    const PropertyTypeID NAME_PROPID = 0;
+    const PropertyTypeID ISFRENCH_PROPID = 3;
+    const PropertyTypeID HASPHD_PROPID = 4;
+
+    using Boolean = types::Bool::Primitive;
+    using String = types::String::Primitive;
+    using Rows = LineContainer<NodeID, String>;
+
+    Rows expected;
+    {
+        for (NodeID n : read().scanNodes()) {
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            if (!french || *french) { // NOT isFrench
+                continue;
+            }
+            // OR
+            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
+            if (!phd|| !*phd) { // hasPhD
+                continue;
+            }
+            const String* name= read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+            expected.add({n, *name});
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnVector<std::optional<String>>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            ASSERT_EQ(ns->size(), names->size());
+            for (size_t row = 0; row < names->size(); row++) {
+                NodeID n = ns->at(row);
+                auto& name = names->at(row);
+                actual.add({n, *name});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_TRUE(expected.equals(actual));
 }
