@@ -23,6 +23,7 @@
 #include "processors/ListGraphProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "processors/GetLabelSetIDProcessor.h"
+#include "processors/GetEdgeTypeIDProcessor.h"
 #include "processors/LoadGraphProcessor.h"
 #include "processors/CreateGraphProcessor.h"
 #include "processors/LoadGMLProcessor.h"
@@ -31,10 +32,14 @@
 #include "processors/S3PullProcessor.h"
 #include "processors/S3PushProcessor.h"
 
+#include "interfaces/PipelineBlockOutputInterface.h"
+#include "interfaces/PipelineEdgeInputInterface.h"
+#include "interfaces/PipelineValuesOutputInterface.h"
+
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
-#include "interfaces/PipelineBlockOutputInterface.h"
+
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"
@@ -443,6 +448,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineValuesOutputInterface& output = proc->output();
+    output.setStream(_pendingOutput.getInterface()->getStream());
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
@@ -456,6 +462,27 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
 
     _pendingOutput.updateInterface(&output);
 
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addGetEdgeTypeID() {
+    GetEdgeTypeIDProcessor* proc = GetEdgeTypeIDProcessor::create(_pipeline);
+
+    PipelineEdgeInputInterface& input = proc->input();
+    PipelineValuesOutputInterface& output = proc->output();
+    output.setStream(_pendingOutput.getInterface()->getStream());
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    Dataframe* df = output.getDataframe();
+    NamedColumn* edgeTypeIDValues = allocColumn<ColumnVector<EdgeTypeID>>(df);
+    output.setValues(edgeTypeIDValues);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.addToStep<ColumnVector<EdgeTypeID>>(edgeTypeIDValues);
+
+    _pendingOutput.updateInterface(&output);
     return output;
 }
 

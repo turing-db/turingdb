@@ -1,3 +1,4 @@
+#include "columns/ColumnIDs.h"
 #include "processors/ProcessorTester.h"
 
 #include "processors/MaterializeProcessor.h"
@@ -10,7 +11,7 @@ using namespace db;
 using namespace db::v2;
 using namespace turing::test;
 
-class GetLabelSetIDProcessorTest : public ProcessorTester {
+class GetEdgeTypeIDProcessorTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
@@ -19,21 +20,22 @@ public:
     }
 };
 
-TEST_F(GetLabelSetIDProcessorTest, test) {
+TEST_F(GetEdgeTypeIDProcessorTest, test) {
     auto [transaction, view, reader] = readGraph();
 
-    LineContainer<NodeID, LabelSetID> expected;
-    LineContainer<NodeID, LabelSetID> results;
-    for (const NodeID nodeID : reader.scanNodes()) {
-        expected.add({nodeID, reader.getNodeLabelSet(nodeID).getID()});
+    LineContainer<EdgeID, EdgeTypeID> expected;
+    LineContainer<EdgeID, EdgeTypeID> results;
+    for (const EdgeRecord& e : reader.scanOutEdges()) {
+        expected.add({e._edgeID, e._edgeTypeID});
     }
-    
+
     // Pipeline definition
     _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
-    const ColumnTag nodeIDsTag = _builder->addScanNodes().getNodeIDs()->getTag();
+    _builder->addScanNodes();
+    const ColumnTag edgeIDsTag = _builder->addGetOutEdges().getEdgeIDs()->getTag();
 
-    const auto& labelsetIDInterface = _builder->addGetLabelSetID();
-    const ColumnTag labelsetIDsTag = labelsetIDInterface.getValues()->getTag();
+    const auto& edgeTypeIDInterface = _builder->addGetEdgeTypeID();
+    const ColumnTag edgeTypeIDsTag = edgeTypeIDInterface.getValues()->getTag();
 
     const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -41,18 +43,18 @@ TEST_F(GetLabelSetIDProcessorTest, test) {
         }
 
         // Retrieve the results of the current pipeline iteration (chunk)
-        ASSERT_EQ(df->size(), 2);
+        ASSERT_EQ(df->size(), 5); // srcs, edge ids, tgts, edgetypeids (getoutedges), edgetypeids
 
-        const ColumnNodeIDs* nodeIDs = df->getColumn<ColumnNodeIDs>(nodeIDsTag);
-        ASSERT_TRUE(nodeIDs != nullptr);
+        const ColumnEdgeIDs* edgeIDs = df->getColumn<ColumnEdgeIDs>(edgeIDsTag);
+        ASSERT_TRUE(edgeIDs != nullptr);
 
-        const ColumnVector<LabelSetID>* labelsetIDs = df->getColumn<ColumnVector<LabelSetID>>(labelsetIDsTag);
-        ASSERT_TRUE(labelsetIDs != nullptr);
+        const ColumnVector<EdgeTypeID>* edgeTypeIDs = df->getColumn<ColumnVector<EdgeTypeID>>(edgeTypeIDsTag);
+        ASSERT_TRUE(edgeTypeIDs != nullptr);
 
-        const size_t lineCount = nodeIDs->size();
+        const size_t lineCount = edgeIDs->size();
 
         for (size_t i = 0; i < lineCount; i++) {
-            results.add({nodeIDs->at(i), labelsetIDs->at(i)});
+            results.add({edgeIDs->at(i), edgeTypeIDs->at(i)});
         }
     };
 

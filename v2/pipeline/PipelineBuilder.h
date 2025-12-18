@@ -62,8 +62,8 @@ public:
     PipelineBlockOutputInterface& addChangeOp(ChangeOp op);
     PipelineBlockOutputInterface& addCommit();
 
-    // Get LabelSetID
     PipelineValuesOutputInterface& addGetLabelSetID();
+    PipelineValuesOutputInterface& addGetEdgeTypeID();
 
     // Get edges
     PipelineEdgeOutputInterface& addGetOutEdges();
