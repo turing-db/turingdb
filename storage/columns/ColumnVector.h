@@ -1,5 +1,6 @@
 #pragma once
- #include <vector>
+
+#include <vector>
 
 #include "Column.h"
 #include "DebugDump.h"

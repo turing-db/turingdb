@@ -151,11 +151,12 @@ public:
     std::vector<Bool_t>& getRaw() { return _data; }
     const std::vector<Bool_t>& getRaw() const { return _data; }
 
-    void ofColumnOptVector(const ColumnOptVector<types::Bool::Primitive>& vec) {
+    void fromColumnOptVector(const ColumnOptVector<types::Bool::Primitive>& vec) {
         const size_t sz = vec.size();
         this->resize(sz);
+        std::vector<Bool_t>& raw = getRaw();
         for (size_t i {0}; i < sz; i++) {
-            getRaw()[i] = vec[i].value_or(false);
+            raw[i] = vec[i].value_or(false);
         }
     }
 

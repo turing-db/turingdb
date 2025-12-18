@@ -1678,7 +1678,7 @@ int main(int argc, char** argv) {
     });
 }
 
-TEST_F(QueriesTest, DISABLED_whereName) {
+TEST_F(QueriesTest, whereName) {
     const auto MATCH_QUERY = [](std::string_view name) -> std::string {
         return fmt::format("MATCH (n) WHERE n.name = \"{}\" RETURN n", name);
     };
@@ -1715,7 +1715,7 @@ TEST_F(QueriesTest, DISABLED_whereName) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(QueriesTest, DISABLED_predicateOR) {
+TEST_F(QueriesTest, predicateOR) {
     constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE n.hasPhD OR n.isFrench RETURN n";
     // TODO: Find way to get these PropertyIDs dynamically
     const PropertyTypeID ISFRENCH_PROPID = 3;
@@ -1751,7 +1751,7 @@ TEST_F(QueriesTest, DISABLED_predicateOR) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(QueriesTest, DISABLED_predicateAND) {
+TEST_F(QueriesTest, predicateAND) {
     constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE n.hasPhD AND n.isFrench RETURN n";
     // TODO: Find way to get these PropertyIDs dynamically
     const PropertyTypeID ISFRENCH_PROPID = 3;
