@@ -15,7 +15,7 @@ NC = "\033[0m"
 
 def spawn_turingdb():
     print(f"- {GREEN}Starting turingdb{NC}")
-    return subprocess.Popen("exec turingdb -turing-dir .turing", shell=True)
+    return subprocess.Popen("exec turingdb -demon -turing-dir .turing", shell=True)
 
 
 def stop_turingdb(proc):
