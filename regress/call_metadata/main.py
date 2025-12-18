@@ -93,12 +93,16 @@ print()
 print(f" -- Checking history")
 df = t.query("CALL db.history()")
 print(df)
-assert df.shape == (2, 4)
+assert df.shape == (3, 4)
 assert isinstance(df["commit"][0], str)
 assert isinstance(df["commit"][1], str)
+assert isinstance(df["commit"][2], str)
 assert df["nodeCount"][0] == 0
 assert df["nodeCount"][1] == 10
+assert df["nodeCount"][2] == 0
 assert df["edgeCount"][0] == 0
 assert df["edgeCount"][1] == 1
+assert df["edgeCount"][2] == 0
 assert df["partCount"][0] == 0
 assert df["partCount"][1] == 1
+assert df["partCount"][2] == 0

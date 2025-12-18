@@ -14,3 +14,5 @@ for i in range(11):
     print(f"Submitting change {change}")
     t.query("CHANGE SUBMIT")
     t.checkout()
+
+tester.stop()

@@ -13,8 +13,9 @@ class TuringdbTester:
         self._instance: Popen | None = None
         self._client: TuringDB | None = None
 
-    def spawn(self, args: list[str] = DEFAULT_ARGS) -> Popen:
-        self.cleanup_turing_dir()
+    def spawn(self, args: list[str] = DEFAULT_ARGS, cleanup: bool = True) -> Popen:
+        if cleanup:
+            self.cleanup_turing_dir()
         self.stop()
         args = ["exec", "turingdb"] + args
         print(f"- Spawning turing with cmd: {' '.join(args)}")
@@ -23,9 +24,17 @@ class TuringdbTester:
 
         return self._instance
 
+    @property
+    def returncode(self) -> int | None:
+        if self._instance is None:
+            return None
+
+        self._instance.poll()
+        return self._instance.returncode
+
     def stop(self) -> None:
         if self._instance is not None:
-            self._instance.send_signal(signal.SIGTERM)
+            self._instance.send_signal(signal.SIGINT)
             self._instance.wait()
             return
 
