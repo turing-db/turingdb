@@ -1,4 +1,5 @@
 #include "GetEdgeTypeIDProcessor.h"
+
 #include "ExecutionContext.h"
 #include "FatalException.h"
 #include "ID.h"
@@ -8,7 +9,6 @@
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
-#include <resolv.h>
 #include <spdlog/fmt/fmt.h>
 
 using namespace db::v2;
