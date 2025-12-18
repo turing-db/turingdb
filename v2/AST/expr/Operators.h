@@ -47,7 +47,7 @@ using BinaryOperatorDescription = EnumToString<BinaryOperator>::Create<
 >;
 
 enum class UnaryOperator : uint8_t {
-    Not,
+    Not = 0,
     Minus,
     Plus,
 
@@ -61,7 +61,7 @@ using UnaryOperatorDescription = EnumToString<UnaryOperator>::Create<
 >;
 
 enum class StringOperator : uint8_t {
-    StartsWith,
+    StartsWith = 0,
     EndsWith,
     Contains,
 
