@@ -576,6 +576,9 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
         const NamedColumn* lblSetCol = lblsetIf.getValues();
 
         if (!lblSetCol) {
+            throw FatalException("Could not get label set column for label filter from dataframe.");
+        }
+        if (!lblSetCol->getColumn()) {
             throw FatalException("Could not get label set column for label filter.");
         }
 
@@ -584,7 +587,6 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 
     // Then add a filter processor, taking the built expression program to execute
     _builder.addFilter(exprProg);
-
     return _builder.getPendingOutputInterface();
 }
 
@@ -597,10 +599,28 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
         return _builder.getPendingOutputInterface();
     }
 
-    [[maybe_unused]] const auto& predicates = node->getPredicates();
-    [[maybe_unused]] const auto& typeConstraint = node->getEdgeTypeConstraints();
+    const auto& predicates = node->getPredicates();
+    const auto& typeConstraint = node->getEdgeTypeConstraints();
 
-    throw PlannerException("EdgeFilterNode not supported");
+    ExprProgram* exprProg = ExprProgram::create(_pipeline);
+    ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+
+    if (!predicates.empty()) {
+        // Compile predicate expressions into an expression program
+        for (const Predicate* pred : predicates) {
+            exprGen.generatePredicate(pred);
+        }
+    }
+
+    if (!typeConstraint.empty()) {
+        throw PlannerException("Edge type constraints are not yet implemented.");
+        // builder.addGetEdgeTypeID
+        // edge type column
+        // exprGen.addEdgeTypeConstraint(type column, type constraint)
+    }
+
+    _builder.addFilter(exprProg);
+    return _builder.getPendingOutputInterface();
 }
 
 PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceResultsNode* node) {

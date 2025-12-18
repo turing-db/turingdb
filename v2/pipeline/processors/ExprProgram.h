@@ -41,7 +41,10 @@ public:
     void evaluateInstructions();
 
 private:
+    // All instructions which need be evaluated
     Instructions _instrs;
+    // Contains pointers to the result columns of different instructions. All need be true
+    // TODO: Refactor this into derived class just for filters
     std::vector<Column*> _topLevelPredicate;
 
     ExprProgram() = default;

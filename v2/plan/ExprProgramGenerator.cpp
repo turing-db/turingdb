@@ -85,7 +85,7 @@ void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
         }
     }
 
-    // Fold over all label constraints, taking the logical OR
+    // Fold over all label constraints with OR
     Column* finalLabelMask {nullptr};
     for (const LabelSetID lsID : matchingLblSets) {
         auto* constCol = _gen->memory().alloc<ColumnConst<LabelSetID>>();
@@ -94,6 +94,7 @@ void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
         auto* resCol = _gen->memory().alloc<ColumnOptMask>();
 
         _exprProg->addInstr(ColumnOperator::OP_EQUAL, resCol, lblsetCol, constCol);
+
         if (finalLabelMask) {
             _exprProg->addInstr(ColumnOperator::OP_OR,
                                 resCol,
