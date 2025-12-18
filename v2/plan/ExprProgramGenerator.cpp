@@ -48,8 +48,8 @@ ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator
         break;
 
         default:
-            throw PlannerException(fmt::format("ExprProgramGenerator: unary expression "
-                                               "operator of kind {} not supported",
+            throw PlannerException(fmt::format("Unary operator "
+                                               "{} not yet supported.",
                                                UnaryOperatorDescription::value(op)));
         break;
     }
@@ -70,8 +70,7 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
         break;
 
         default:
-            throw PlannerException(fmt::format("ExprProgramGenerator: binary expression "
-                                               "operator of kind {} not supported",
+            throw PlannerException(fmt::format("Binary operator {} not yet supported.",
                                                BinaryOperatorDescription::value(op)));
         break;
     }
