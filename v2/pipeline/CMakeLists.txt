@@ -34,6 +34,7 @@ set(processors_sources
     processors/LambdaSourceProcessor.cpp
     processors/WriteProcessor.cpp
     processors/GetLabelSetIDProcessor.cpp
+    processors/GetEdgeTypeIDProcessor.cpp
     processors/LoadGraphProcessor.cpp
     processors/ListGraphProcessor.cpp
     processors/CreateGraphProcessor.cpp
