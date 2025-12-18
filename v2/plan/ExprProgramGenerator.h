@@ -43,6 +43,7 @@ public:
 
     void generatePredicate(const Predicate* pred);
     void addLabelConstraint(Column* lblsetCol, const LabelSet& lblConstraint);
+    void addEdgeTypeConstraint(Column* edgeTypeCol, const EdgeTypeID& typeConstr);
 
 private:
     PipelineGenerator* _gen {nullptr};

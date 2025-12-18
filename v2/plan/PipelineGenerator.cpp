@@ -23,6 +23,7 @@
 #include "expr/SymbolExpr.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
+#include "interfaces/PipelineValuesOutputInterface.h"
 #include "procedures/ProcedureBlueprintMap.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
@@ -612,11 +613,24 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
         }
     }
 
+    if (typeConstraint.size() > 1) {
+        throw PlannerException("Edges can only have 1 type constraint.");
+    }
+
     if (!typeConstraint.empty()) {
-        throw PlannerException("Edge type constraints are not yet implemented.");
-        // builder.addGetEdgeTypeID
-        // edge type column
-        // exprGen.addEdgeTypeConstraint(type column, type constraint)
+        const PipelineValuesOutputInterface& edgeTypeIf = _builder.addGetEdgeTypeID();
+        const NamedColumn* edgeTypecol = edgeTypeIf.getValues();
+
+        if (!edgeTypecol) {
+            throw FatalException("Could not get label set column for label filter from dataframe.");
+        }
+        if (!edgeTypecol->getColumn()) {
+            throw FatalException("Could not get label set column for label filter.");
+        }
+        // Above checks there is exactly 1 type contraint
+        const EdgeTypeID edgeTypeConstr = typeConstraint.front();
+
+        exprGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
     }
 
     _builder.addFilter(exprProg);

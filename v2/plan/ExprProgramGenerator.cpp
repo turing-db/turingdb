@@ -2,6 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ID.h"
 #include "PipelineGenerator.h"
 #include "columns/ColumnOptMask.h"
 #include "decl/EvaluatedType.h"
@@ -106,6 +107,22 @@ void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
     }
 
     _exprProg->addTopLevelPredicate(finalLabelMask);
+}
+
+void ExprProgramGenerator::addEdgeTypeConstraint(Column* edgeTypeCol,
+                                                 const EdgeTypeID& typeConstr) {
+    // Add the instruction to calculate equality
+    auto* constCol = _gen->memory().alloc<ColumnConst<EdgeTypeID>>();
+    constCol->set(typeConstr);
+
+    auto* finalEdgeTypeMask = _gen->memory().alloc<ColumnOptMask>();
+    _exprProg->addInstr(ColumnOperator::OP_EQUAL,
+                        finalEdgeTypeMask,
+                        edgeTypeCol,
+                        constCol);
+
+    // Add the top level predicate that all edges must satisfy this constraint
+    _exprProg->addTopLevelPredicate(finalEdgeTypeMask);
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
