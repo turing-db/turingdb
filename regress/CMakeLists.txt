@@ -19,7 +19,8 @@ foreach(test IN ITEMS ${REGRESS_LIST})
     set(CMD "${CMD}    ${test}")
     set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}${CMD}\n")
     install(DIRECTORY ${testdir}
-            DESTINATION regress)
+            DESTINATION regress
+            FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE)
 endforeach()
 
 file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/run_regress.sh

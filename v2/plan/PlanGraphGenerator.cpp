@@ -163,10 +163,6 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         for (const Stmt* stmt : updateStmts->stmts()) {
             currentNode = writeGenerator.generateStmt(stmt, currentNode);
         }
-
-        if (!returnStmt) {
-            currentNode->connectOut(_tree.create<ProduceResultsNode>());
-        }
     }
 
     // Generate return statement
