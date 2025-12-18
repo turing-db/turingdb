@@ -1929,3 +1929,29 @@ TEST_F(QueriesTest, complexPredicate) {
 
     ASSERT_TRUE(expected.equals(actual));
 }
+
+TEST_F(QueriesTest, emptyResultProjectDifferentProp) {
+    std::string_view MATCH_QUERY = "MATCH (n) WHERE n.isFrench AND NOT n.isFrench RETURN n.name";
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String>;
+
+    Rows expected; // empty
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size());
+            auto* names = df->cols().front()->as<ColumnVector<std::optional<String>>>();
+            ASSERT_TRUE(names);
+            EXPECT_EQ(0, names->size());
+            for (auto& name : *names) {
+                actual.add({*name});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_TRUE(expected.equals(actual));
+}
