@@ -162,7 +162,7 @@ void FilterProcessor::execute() {
     }
 
     ColumnMask finalMask;
-    finalMask.ofColumnOptVector(finalOptMask);
+    finalMask.fromColumnOptVector(finalOptMask);
 
     const size_t colCount = srcDF->size();
     const auto& srcCols = srcDF->cols();

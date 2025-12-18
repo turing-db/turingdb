@@ -65,8 +65,7 @@ public:
     static void equal(ColumnMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
         mask->resize(lhs->size());
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
@@ -83,8 +82,7 @@ public:
     static void equal(ColumnOptMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
         mask->resize(lhs->size());
 
         auto& maskd = mask->getRaw();
@@ -212,8 +210,7 @@ public:
     static void andOp(ColumnMask* mask,
                       const ColumnMask* lhs,
                       const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
 
         mask->resize(lhs->size());
         auto& maskd = mask->getRaw();
@@ -238,8 +235,7 @@ public:
     static void andOp(ColumnOptMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
 
         mask->resize(lhs->size());
         auto& maskd = mask->getRaw();
@@ -265,8 +261,7 @@ public:
     static void orOp(ColumnMask* mask,
                      const ColumnMask* lhs,
                      const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
 
         mask->resize(lhs->size());
         auto& maskd = mask->getRaw();
@@ -376,8 +371,8 @@ public:
     static void projectOp(ColumnMask* mask,
                           const ColumnVector<size_t>* lhs,
                           const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+
         auto* maskd = mask->data();
         const auto* lhsd = lhs->data();
         const auto* rhsd = rhs->data();
@@ -390,8 +385,8 @@ public:
     static void projectOp(ColumnMask* mask,
                           const ColumnMask* lhs,
                           const ColumnVector<size_t>* rhs) {
-        bioassert(rhs->size() == lhs->size(),
-                     "Columns must have matching dimensions");
+        bioassert(rhs->size() == lhs->size(), "Columns must have matching dimensions");
+
         auto* maskd = mask->data();
         const auto* rhsd = rhs->data();
         const auto* lhsd = lhs->data();
