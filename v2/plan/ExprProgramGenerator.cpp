@@ -47,12 +47,13 @@ ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator
             return ColumnOperator::OP_PLUS;
         break;
 
-        default:
-            throw PlannerException(fmt::format("Unary operator "
-                                               "{} not yet supported.",
-                                               UnaryOperatorDescription::value(op)));
+        case UnaryOperator::_SIZE:
+            throw FatalException(
+                "Attempted to generate invalid unary operator in ExprProgramGenerator.");
         break;
     }
+    throw FatalException(
+        "Attempted to generate invalid unary operator in ExprProgramGenerator.");
 }
 
 ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperator op) {
@@ -67,6 +68,11 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
 
         case BinaryOperator::Equal:
             return ColumnOperator::OP_EQUAL;
+        break;
+
+        case BinaryOperator::_SIZE:
+            throw FatalException(
+                "Attempted to generate invalid binary operator in ExprProgramGenerator.");
         break;
 
         default:
