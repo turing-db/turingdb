@@ -1988,3 +1988,52 @@ TEST_F(QueriesTest, edgeTypeFilter) {
     }
     EXPECT_TRUE(expected.equals(actual));
 }
+
+TEST_F(QueriesTest, pitchDeckPersonInterest) {
+    const std::string_view MATCH_QUERY = R"(MATCH (p:Person)-->(i:Interest) RETURN p, i)";
+
+    const auto personLabelOpt = read().getView().metadata().labels().get("Person");
+    ASSERT_TRUE(personLabelOpt);
+    const LabelID personLabel = *personLabelOpt;
+
+    const auto interestLabelOpt = read().getView().metadata().labels().get("Interest");
+    ASSERT_TRUE(interestLabelOpt);
+    const LabelID interestLabel = *interestLabelOpt;
+
+    using Rows = LineContainer<NodeID, NodeID>;
+
+    Rows expected;
+    {
+        ColumnNodeIDs people;
+        for (NodeID n : read().scanNodes()) {
+            NodeView v = read().getNodeView(n);
+            if (v.labelset().hasLabel(personLabel)) {
+                people.push_back(n);
+            }
+        }
+        for (EdgeRecord e : read().getOutEdges(&people)) {
+            NodeView v = read().getNodeView(e._otherID);
+            if (v.labelset().hasLabel(interestLabel)) {
+                expected.add({e._nodeID, e._otherID});
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            auto* ps = df->cols().front()->as<ColumnNodeIDs>();
+            auto* is = df->cols().back()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ps);
+            ASSERT_TRUE(is);
+            ASSERT_EQ(ps->size(), is->size());
+            for (size_t i = 0; i < ps->size(); i++) {
+                actual.add({ps->at(i), is->at(i)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    ASSERT_TRUE(expected.equals(actual));
+}
