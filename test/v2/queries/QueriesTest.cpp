@@ -1955,3 +1955,36 @@ TEST_F(QueriesTest, emptyResultProjectDifferentProp) {
 
     ASSERT_TRUE(expected.equals(actual));
 }
+
+TEST_F(QueriesTest, edgeTypeFilter) {
+    const EdgeTypeID INTERESTED_IN_TYPEID = 1; // TODO find dynamically
+    std::string_view MATCH_QUERY = "MATCH (n)-[e:INTERESTED_IN]->(m) RETURN e";
+
+    using Rows = LineContainer<EdgeID>;
+
+    Rows expected;
+    {
+        for (const EdgeRecord& e : read().scanOutEdges()) {
+            if (read().getEdgeTypeID(e._edgeID) == INTERESTED_IN_TYPEID) {
+                expected.add({e._edgeID});
+            }
+        }
+    }
+
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size());
+            auto* es = df->cols().front()->as<ColumnEdgeIDs>();
+            ASSERT_TRUE(es);
+            for (EdgeID e : *es) {
+                actual.add({e});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
