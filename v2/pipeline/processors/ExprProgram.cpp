@@ -1,6 +1,6 @@
 #include "ExprProgram.h"
 
-#include <cstdint>
+#include <stdint.h>
 #include <string_view>
 
 #include "columns/ColumnOperator.h"
