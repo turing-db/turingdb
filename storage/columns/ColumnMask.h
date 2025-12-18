@@ -50,31 +50,31 @@ public:
 
     ColumnMask(std::initializer_list<Bool_t>&& v)
         : Column(_staticKind),
-          _data(std::forward<std::initializer_list<Bool_t>>(v))
+        _data(std::forward<std::initializer_list<Bool_t>>(v))
     {
     }
 
     explicit ColumnMask(const std::vector<Bool_t>& vec)
         : Column(_staticKind),
-          _data(vec)
+        _data(vec)
     {
     }
 
     explicit ColumnMask(std::vector<Bool_t>&& vec) noexcept
         : Column(_staticKind),
-          _data(std::move(vec))
+        _data(std::move(vec))
     {
     }
 
     explicit ColumnMask(size_t size)
         : Column(_staticKind),
-          _data(size)
+        _data(size)
     {
     }
 
     explicit ColumnMask(size_t size, Bool_t val)
         : Column(_staticKind),
-          _data(size, val)
+        _data(size, val)
     {
     }
 
