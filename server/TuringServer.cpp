@@ -18,9 +18,12 @@ TuringServer::TuringServer(const DBServerConfig& config, TuringDB& db)
 }
 
 TuringServer::~TuringServer() {
+    if (_server) {
+        _server->terminate();
+    }
 }
 
-bool TuringServer::start() {
+void TuringServer::start() {
     net::HTTPServer::Functions functions {
         ._processor =
             [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
@@ -37,31 +40,39 @@ bool TuringServer::start() {
             },
     };
 
-    auto server = std::make_unique<net::HTTPServer>(std::move(functions));
-    server->setAddress(_config.getAddress().c_str());
-    server->setPort(_config.getPort());
-    server->setWorkerCount(_config.getWorkerCount());
-    server->setMaxConnections(_config.getMaxConnections());
+    _server = std::make_unique<net::HTTPServer>(std::move(functions));
+    _server->setAddress(_config.getAddress().c_str());
+    _server->setPort(_config.getPort());
+    _server->setWorkerCount(_config.getWorkerCount());
+    _server->setMaxConnections(_config.getMaxConnections());
 
-    const auto initRes = server->initialize();
+    const auto initRes = _server->initialize();
     if (initRes != net::FlowStatus::OK) {
-        spdlog::error("Failed to initialize server: {}", (uint32_t)initRes);
-        server->terminate();
-        return false;
+        _server->terminate();
+        return;
     }
+
+    auto serverFunc = [&]() {
+        const auto startRes = _server->start();
+        if (startRes != net::FlowStatus::OK) {
+            _server->terminate();
+            return;
+        }
+    };
+
+    _serverThread = std::thread(serverFunc);
 
     spdlog::info("Server listening on address: {}:{}",
-                 server->getAddress(),
-                 server->getPort());
+                 _server->getAddress(),
+                 _server->getPort());
+}
 
-    const auto startRes = server->start();
-    if (startRes != net::FlowStatus::OK) {
-        spdlog::error("Failed to start server: {}", (uint32_t)startRes);
-        server->terminate();
-        return false;
-    }
+void TuringServer::wait() {
+    _serverThread.join();
+    _server->terminate();
+}
 
-    server->terminate();
-
-    return true;
+void TuringServer::stop() {
+    _server->terminate();
+    _serverThread.join();
 }

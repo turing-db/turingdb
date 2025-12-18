@@ -1,5 +1,12 @@
 #pragma once
 
+#include <memory>
+#include <thread>
+
+namespace net {
+    class HTTPServer;
+}
+
 namespace db {
 
 class DBServerConfig;
@@ -10,11 +17,16 @@ public:
     TuringServer(const DBServerConfig& config, TuringDB& db);
     ~TuringServer();
 
-    bool start();
+    void start();
+
+    void wait();
+    void stop();
     
 private:
     const DBServerConfig& _config;
     TuringDB& _db;
+    std::unique_ptr<net::HTTPServer> _server;
+    std::thread _serverThread;
 };
 
 }

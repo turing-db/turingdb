@@ -19,8 +19,6 @@ int main(int argc, const char** argv) {
 
     auto& argParser = toolInit.getArgParser();
 
-    bool serverMode = false;
-    bool cliMode = true;
     bool demonize = false;
     bool inMemory = false;
     bool resetDefault = false;
@@ -35,10 +33,6 @@ int main(int argc, const char** argv) {
              .store_into(address);
     argParser.add_argument("-demon")
              .store_into(demonize);
-    argParser.add_argument("-cli")
-             .store_into(cliMode);
-    argParser.add_argument("-server")
-             .store_into(serverMode);
     argParser.add_argument("-reset-default")
              .store_into(resetDefault);
     argParser.add_argument("-load")
@@ -51,18 +45,7 @@ int main(int argc, const char** argv) {
 
     toolInit.init(argc, argv);
 
-    if (serverMode && cliMode) {
-        spdlog::error("You can not specify both -serverMode and -cli");
-        return EXIT_FAILURE;
-    }
-
-    if (demonize && cliMode) {
-        spdlog::error("You can not specify both -demon and -cli");
-        return EXIT_FAILURE;
-    }
-
     if (demonize) {
-        serverMode = true;
         Demonology::demonize();
     }
 
@@ -104,13 +87,17 @@ int main(int argc, const char** argv) {
         }
     }
 
-    if (serverMode) {
-        DBServerConfig config;
-        config.setPort(port);
-        config.setAddress(address);
+    // Server
+    DBServerConfig serverConfig;
+    serverConfig.setPort(port);
+    serverConfig.setAddress(address);
 
-        TuringServer server(config, turingDB);
-        server.start();
+    TuringServer server(serverConfig, turingDB);
+    server.start();
+
+    // CLI Shell
+    if (demonize) {
+        server.wait();
     } else {
         TuringShell shell(turingDB, &mem);
 
@@ -119,7 +106,9 @@ int main(int argc, const char** argv) {
         }
 
         shell.startLoop();
+        server.stop();
     }
+
 
     return EXIT_SUCCESS;
 }
