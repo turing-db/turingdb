@@ -72,6 +72,7 @@ void GetPropertiesWithNullProcessor<Entity, T>::reset() {
 
 template <EntityType Entity, SupportedType T>
 void GetPropertiesWithNullProcessor<Entity, T>::execute() {
+    reset();
     _propWriter->fill(_ctxt->getChunkSize());
 
     // The GetPropertiesWithNullProcessor always finishes in one step
