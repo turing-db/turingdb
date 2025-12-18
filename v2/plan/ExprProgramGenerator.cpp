@@ -48,7 +48,7 @@ ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator
         break;
 
         case UnaryOperator::_SIZE:
-            throw FatalException(
+            throw PlannerException(
                 "Attempted to generate invalid unary operator in ExprProgramGenerator.");
         break;
     }
