@@ -40,6 +40,7 @@ enum class PlanGraphOpcode {
     COMMIT,
     S3_CONNECT,
     S3_TRANSFER,
+    SHORTEST_PATH,
     _SIZE
 };
 

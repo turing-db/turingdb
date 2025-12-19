@@ -39,6 +39,7 @@
 #include "nodes/LoadNeo4jNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
+#include "nodes/ShortestPathNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -133,6 +134,7 @@ void PlanGraphGenerator::generateCommitQuery(const CommitQuery* query) {
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     const StmtContainer* readStmts = query->getReadStmts();
     const StmtContainer* updateStmts = query->getUpdateStmts();
+    const ShortestPathStmt* shortestPathStmt= query->getShortestPathStmt();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
     PlanGraphNode* currentNode = nullptr;
@@ -163,6 +165,16 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
             currentNode = writeGenerator.generateStmt(stmt, currentNode);
         }
     }
+
+    // Generate update statements (optional)
+    if (shortestPathStmt) {
+        WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get());
+
+        for (const Stmt* stmt : updateStmts->stmts()) {
+            currentNode = writeGenerator.generateStmt(stmt, currentNode);
+        }
+    }
+
 
     // Generate return statement
     if (returnStmt) {
@@ -225,6 +237,18 @@ void PlanGraphGenerator::generateS3TransferQuery(const S3TransferQuery* query) {
                                                                   query->getLocalPath());
     _tree.newOut<ProduceResultsNode>(s3TransferNode);
 }
+
+void PlanGraphGenerator::generateShortestPathStmt(const ShortestPathStmt* stmt,
+                                            PlanGraphNode* prevNode) {
+    // if (prevNode == nullptr) {
+    //     throwError("Return statement without previous node", stmt);
+    // }
+    //
+
+    //const Projection* proj = stmt->getProjection();
+    ShortestPathNode* results = _tree.newOut<ShortestPathNode>(prevNode);
+
+ }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
     if (prevNode == nullptr) {
