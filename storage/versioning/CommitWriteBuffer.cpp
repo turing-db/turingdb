@@ -219,9 +219,7 @@ void CommitWriteBufferRebaser::rebase() {
         }
     }
 
-    // Rebase delete sets: iterators may be invalidated if we do insert/erase in a loop
-    // over unordered_set, so instead construct the rebased sets as temporaries, and then
-    // assign back to the write buffer
+    // Rebase delete sets
     {
         CommitWriteBuffer::DeletedEdges& deletedEdges = _buffer->_deletedEdges;
         CommitWriteBuffer::DeletedEdges temp(deletedEdges.size());

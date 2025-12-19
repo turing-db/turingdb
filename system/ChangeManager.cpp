@@ -48,18 +48,18 @@ ChangeResult<void> ChangeManager::submitChange(ChangeAccessor& access, JobSystem
     std::unique_lock guard(_changesLock);
     const Graph* graph = access.getGraph();
 
-    const auto it = _changes.find(GraphChangePair {graph, access.getID()});
-    if (it == _changes.end()) {
+    const auto findIt = _changes.find(GraphChangePair {graph, access.getID()});
+    if (findIt == _changes.end()) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
 
-    auto& pair = it->second;
-    if (auto res = pair->submit(jobsystem); !res) {
+    auto& change = findIt->second;
+    if (auto res = change->submit(jobsystem); !res) {
         return ChangeError::result(ChangeErrorType::COULD_NOT_ACCEPT_CHANGE, res.error());
     }
 
     access.release();
-    _changes.erase(it);
+    _changes.erase(findIt);
 
     return {};
 }
