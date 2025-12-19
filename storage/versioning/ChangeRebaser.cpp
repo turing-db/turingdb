@@ -96,7 +96,7 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     CommitHistoryRebaser historyRebaser {history};
 
     // If we made a local commit (signified by the write buffer being flushed), undo it
-    if (commitBuilder.writeBuffer().isFlushed()) {
+    if (!commitBuilder.writeBuffer().isFlushed()) {
         historyRebaser.removeCreatedDataParts();
         // We have deleted all created DPs: reset this number
         commitBuilder._datapartCount = 0;
@@ -113,7 +113,8 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     commitBuilder._nextEdgeID = commitBuilder._firstEdgeID = _newNextEdgeID;
 
     _metadataRebaser.clear();
-    _metadataRebaser.rebase(_currentHeadCommitData->metadata(), commitBuilder.metadata(),
+    _metadataRebaser.rebase(_currentHeadCommitData->metadata(),
+                            commitBuilder.metadata(),
                             commitBuilder.writeBuffer());
 
     historyRebaser.rebase(_metadataRebaser, _dataPartRebaser, *_currentHeadHistory);
