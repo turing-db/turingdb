@@ -56,6 +56,7 @@ protected:
 
     void submitChange(ChangeID chid) {
         auto res = _db->query("change submit", _graphName, &_env->getMem(), CommitHash::head(), chid);
+
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
@@ -70,6 +71,15 @@ protected:
         _graphName = name;
         _graph = _env->getSystemManager().getGraph(std::string {name});
         ASSERT_TRUE(_graph);
+    }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            if (col->getName() == name) {
+                return col;
+            }
+        }
+        return nullptr;
     }
 };
 
@@ -180,6 +190,93 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
         });
         ASSERT_TRUE(res);
 
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(ChangeQueriesTest, threeChangeRebase) {
+    setWorkingGraph("default");
+    auto emptyCallback = [](const Dataframe*) -> void {};
+
+    auto makeChanges = [&]() -> void {
+        newChange();
+        { // Change
+            ASSERT_TRUE(queryV2("CREATE (n:NODE)", emptyCallback));
+            ASSERT_TRUE(queryV2("COMMIT", emptyCallback));
+
+            ASSERT_TRUE(queryV2("MATCH (n:NODE) CREATE (n)-[:EDGE]->(m:NODE)", emptyCallback));
+            ASSERT_TRUE(queryV2("COMMIT", emptyCallback));
+        }
+    };
+
+    makeChanges();
+    ChangeID change1 = _currentChange;
+
+    makeChanges();
+    ChangeID change2 = _currentChange;
+
+    makeChanges();
+    ChangeID change3 = _currentChange;
+
+    {
+        submitChange(change3);
+        submitChange(change2);
+        submitChange(change1);
+    }
+
+    { // Verify nodes
+        using Rows = LineContainer<NodeID>;
+        Rows expected;
+        size_t numChanges = 3;
+        size_t nodesPerChange = 2;
+        for (size_t n = 0; n < numChanges * nodesPerChange; n++) {
+            expected.add({n});
+        }
+
+        Rows actual;
+        {
+            auto res = queryV2("MATCH (n) RETURN n", [&actual](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(1, df->size());
+                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                for (auto & n : *ns) {
+                    actual.add({n});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(expected.equals(actual));
+    }
+
+    { // Verify edges
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+        Rows expected;
+        expected.add({0, 0, 1});
+        expected.add({2, 1, 3});
+        expected.add({4, 2, 5});
+
+        Rows actual;
+        {
+            auto res = queryV2("MATCH (n)-[e]->(m) RETURN n,e,m", [&actual](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(3, df->size());
+
+                auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+                auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                auto* ms = findColumn(df, "m")->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(ms);
+
+                for (size_t row {0}; row < ns->size(); row++) {
+                    actual.add({ns->at(row), es->at(row), ms->at(row)});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+
+        actual.print(std::cout);
         ASSERT_TRUE(expected.equals(actual));
     }
 }
