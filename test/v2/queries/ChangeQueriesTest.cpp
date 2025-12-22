@@ -163,14 +163,14 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
             auto* ename = findColumn(df, "e.name")->as<ColumnOptVector<Name>>();
 
             ASSERT_TRUE(nname);
-            ASSERT_TRUE(mname);
             ASSERT_TRUE(ename);
+            ASSERT_TRUE(mname);
 
             ASSERT_EQ(1, nname->size());
-            ASSERT_EQ(1, mname->size());
             ASSERT_EQ(1, ename->size());
+            ASSERT_EQ(1, mname->size());
 
-            actual.add({*nname->front(), *mname->front(), *ename->front()});
+            actual.add({*nname->front(), *ename->front(), *mname->front()});
 
         });
         ASSERT_TRUE(res);
@@ -194,14 +194,14 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
             auto* ename = findColumn(df, "e.name")->as<ColumnOptVector<Name>>();
 
             ASSERT_TRUE(nname);
-            ASSERT_TRUE(mname);
             ASSERT_TRUE(ename);
+            ASSERT_TRUE(mname);
 
             ASSERT_EQ(1, nname->size());
             ASSERT_EQ(1, mname->size());
             ASSERT_EQ(1, ename->size());
 
-            actual.add({*nname->front(), *mname->front(), *ename->front()});
+            actual.add({*nname->front(), *ename->front(), *mname->front()});
         });
         ASSERT_TRUE(res);
 
