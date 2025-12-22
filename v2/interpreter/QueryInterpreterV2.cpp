@@ -18,6 +18,7 @@
 #include "CompilerException.h"
 
 #include "Profiler.h"
+#include "versioning/VersionControlException.h"
 
 using namespace db::v2;
 
@@ -145,6 +146,8 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     try {
         executor.execute();
     } catch (const PipelineException& e) {
+        return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
+    } catch (const VersionControlException& e) {
         return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
     } catch (const std::exception& e) {
         return QueryStatus(QueryStatus::Status::EXEC_ERROR,

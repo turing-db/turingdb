@@ -65,7 +65,7 @@ TEST_F(DeleteQueriesTest, matchNDeleteN) {
 
     {
         newChange();
-        auto res = queryV2(deleteQuery, [&](const Dataframe* df) -> void {});
+        auto res = queryV2(deleteQuery, [&](const Dataframe*) -> void {});
         ASSERT_TRUE(res);
         submitCurrentChange();
     }

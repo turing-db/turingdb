@@ -93,6 +93,15 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         }
     }
 
+    { // Rebase patch node edges
+        std::unordered_map<NodeID, size_t> newPatchOffsets;
+        for (auto& [patchNode, index] : edgeIndexer->_patchNodeOffsets) {
+            newPatchOffsets[_idRebaser->rebaseNodeID(patchNode)] = index;
+        }
+
+        edgeIndexer->_patchNodeOffsets.swap(newPatchOffsets);
+    }
+
     if (metadata.labelsetsChanged()) {
         using EdgeSpan = std::span<const EdgeRecord>;
         using EdgeSpans = std::vector<EdgeSpan>;

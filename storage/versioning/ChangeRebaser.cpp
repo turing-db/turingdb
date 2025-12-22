@@ -96,22 +96,11 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
 
     CommitHistoryRebaser historyRebaser {history};
 
-    // If we made a local commit (signified by the write buffer being flushed), undo it
+    // If we have not yet flushed, we must rebase the write buffer prior to it being flushed
     if (!commitBuilder.writeBuffer().isFlushed()) {
-        historyRebaser.removeCreatedDataParts();
-        // We have deleted all created DPs: reset this number
-        commitBuilder._datapartCount = 0;
-        commitBuilder.writeBuffer().setUnflushed();
+        CommitWriteBufferRebaser wbRb(&_entityIDRebaser, commitBuilder.writeBuffer());
+        wbRb.rebase();
     }
-
-    CommitWriteBufferRebaser wbRb(&_entityIDRebaser, commitBuilder.writeBuffer());
-    wbRb.rebase();
-
-    // These values are initially set at time of the creation of this Change, however
-    // they need to be updated to point to the next ID on the current state of main.
-    // These values will be used when creating new dataparts at time of submit.
-    commitBuilder._nextNodeID = commitBuilder._firstNodeID = _newNextNodeID;
-    commitBuilder._nextEdgeID = commitBuilder._firstEdgeID = _newNextEdgeID;
 
     _metadataRebaser.clear();
     _metadataRebaser.rebase(_currentHeadCommitData->metadata(),
