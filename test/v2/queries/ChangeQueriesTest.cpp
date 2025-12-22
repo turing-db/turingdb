@@ -158,35 +158,20 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
             ASSERT_TRUE(df);
             ASSERT_EQ(3, df->size());
 
-            Name nName;
-            Name eName;
-            Name mName;
-            for (auto* namedCol : df->cols()) {
-                ASSERT_TRUE(namedCol);
-                ASSERT_TRUE(namedCol->getColumn());
-                ASSERT_EQ(1, namedCol->getColumn()->size());
+            auto* nname = findColumn(df, "n.name")->as<ColumnOptVector<Name>>();
+            auto* mname = findColumn(df, "m.name")->as<ColumnOptVector<Name>>();
+            auto* ename = findColumn(df, "e.name")->as<ColumnOptVector<Name>>();
 
-                if (namedCol->getName() == "n.name") {
-                    auto nNameOpt =
-                        namedCol->getColumn()->cast<ColumnOptVector<Name>>()->front();
-                    ASSERT_TRUE(nNameOpt);
-                    nName = *nNameOpt;
-                } else if (namedCol->getName() == "m.name") {
-                    auto mNameOpt =
-                        namedCol->getColumn()->cast<ColumnOptVector<Name>>()->front();
-                    ASSERT_TRUE(mNameOpt);
-                    mName = *mNameOpt;
-                } else if (namedCol->getName() == "e.name") {
-                    auto eNameOpt =
-                        namedCol->getColumn()->cast<ColumnOptVector<Name>>()->front();
-                    ASSERT_TRUE(eNameOpt);
-                    eName = *eNameOpt;
-                } else {
-                    ASSERT_FALSE(true) << "Unexpected column in dataframe";
-                }
-            }
+            ASSERT_TRUE(nname);
+            ASSERT_TRUE(mname);
+            ASSERT_TRUE(ename);
 
-            actual.add({nName, eName, mName});
+            ASSERT_EQ(1, nname->size());
+            ASSERT_EQ(1, mname->size());
+            ASSERT_EQ(1, ename->size());
+
+            actual.add({*nname->front(), *mname->front(), *ename->front()});
+
         });
         ASSERT_TRUE(res);
 
@@ -204,31 +189,19 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
             ASSERT_TRUE(df);
             ASSERT_EQ(3, df->size());
 
-            Name nName;
-            Name eName;
-            Name mName;
-            for (auto* namedCol : df->cols()) {
-                ASSERT_TRUE(namedCol);
-                ASSERT_TRUE(namedCol->getColumn());
-                ASSERT_EQ(1, namedCol->getColumn()->size());
+            auto* nname = findColumn(df, "n.name")->as<ColumnOptVector<Name>>();
+            auto* mname = findColumn(df, "m.name")->as<ColumnOptVector<Name>>();
+            auto* ename = findColumn(df, "e.name")->as<ColumnOptVector<Name>>();
 
-                if (namedCol->getName() == "n.name") {
-                    auto nNameOpt = namedCol->getColumn()->cast<ColumnOptVector<Name>>()->front();
-                    ASSERT_TRUE(nNameOpt);
-                    nName = *nNameOpt;
-                } else if (namedCol->getName() == "m.name") {
-                    auto mNameOpt = namedCol->getColumn()->cast<ColumnOptVector<Name>>()->front();
-                    ASSERT_TRUE(mNameOpt);
-                    mName = *mNameOpt;
-                } else if (namedCol->getName() == "e.name") {
-                    auto eNameOpt = namedCol->getColumn()->cast<ColumnOptVector<Name>>()->front();
-                    ASSERT_TRUE(eNameOpt);
-                    eName = *eNameOpt;
-                } else {
-                    ASSERT_FALSE(true) << "Unexpected column in dataframe";
-                }
-            }
-            actual.add({nName, eName, mName});
+            ASSERT_TRUE(nname);
+            ASSERT_TRUE(mname);
+            ASSERT_TRUE(ename);
+
+            ASSERT_EQ(1, nname->size());
+            ASSERT_EQ(1, mname->size());
+            ASSERT_EQ(1, ename->size());
+
+            actual.add({*nname->front(), *mname->front(), *ename->front()});
         });
         ASSERT_TRUE(res);
 
