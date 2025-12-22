@@ -50,7 +50,8 @@ void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
 }
 
 void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
-    bioassert(!_newMainReader->commits().empty(), "we must have commits");
+    bioassert(!_newMainReader->commits().empty(),
+              "Attempted to rebase tombstones without any commits on main.");
 
     Tombstones::NodeTombstones& nodeTombstones = tombstones._nodeTombstones;
     Tombstones::EdgeTombstones& edgeTombstones = tombstones._edgeTombstones;
