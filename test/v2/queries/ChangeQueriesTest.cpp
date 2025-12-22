@@ -91,9 +91,10 @@ protected:
         return nullptr;
     }
 
+    // Helper to check the output of a db.propertyTypes()
     bool ensureProperties(std::initializer_list<std::string_view> props) {
         bool allPropsFound {true};
-        
+
         auto res = queryV2(GET_PROPERTIES_QUERY, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
 
