@@ -864,3 +864,82 @@ TEST_F(ChangeQueriesTest, rebasedTombstonesWithCommit) {
     }
     EXPECT_TRUE(expected.equals(actual));
 }
+
+TEST_F(ChangeQueriesTest, concurrentWritesSmall) {
+    setWorkingGraph("default");
+    const size_t change0Nodes = 1;
+    const size_t change1Nodes = 3;
+
+    ChangeID change0, change1;
+
+    newChange(), change0 = _currentChange;
+    newChange(), change1 = _currentChange;
+
+    {
+        setChange(change0);
+        ASSERT_TRUE(query("CREATE (n:NODE1)", emptyCallback));
+    }
+
+    {
+        setChange(change1);
+        ASSERT_TRUE(query("CREATE (n:NODE2)", emptyCallback));
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query("CREATE (:NODE3)-[:NEWEDGE1]->(:NODE4)", emptyCallback));
+    }
+
+    submitChange(change0);
+    submitChange(change1);
+
+    {
+        using Rows = LineContainer<NodeID>;
+
+        Rows expected;
+        {
+            for (size_t node {0}; node < change0Nodes + change1Nodes; node++) {
+                expected.add({node});
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = query("MATCH (n) RETURN n", [&actual](const Dataframe* df) {
+                auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+
+                for (NodeID n : *ns) {
+                    actual.add({n});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        EXPECT_TRUE(expected.equals(actual));
+    }
+
+    {
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        {
+            expected.add({2, 0, 3});
+        }
+
+        Rows actual;
+        {
+            auto res = query("MATCH (n)-[e]->(m) RETURN n,e,m", [&actual](const Dataframe* df) {
+                auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+                auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                auto* ms = findColumn(df, "m")->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(ms);
+
+                const size_t numRows = ns->size();
+                for (size_t row {0}; row < numRows; row++) {
+                    actual.add({ns->at(row), es->at(row), ms->at(row)});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        EXPECT_TRUE(expected.equals(actual));
+    }
+}
