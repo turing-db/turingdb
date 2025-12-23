@@ -96,18 +96,19 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
 
     CommitHistoryRebaser historyRebaser {history};
 
-    // If we have not yet flushed, we must rebase the write buffer prior to it being flushed
-    if (!commitBuilder.writeBuffer().isFlushed()) {
-        CommitWriteBufferRebaser wbRb(&_entityIDRebaser, commitBuilder.writeBuffer());
-        wbRb.rebase();
-    }
-
     _metadataRebaser.clear();
     _metadataRebaser.rebase(_currentHeadCommitData->metadata(),
                             commitBuilder.metadata(),
                             commitBuilder.writeBuffer());
 
+    // Rebase the history, including any committed dataparts
     historyRebaser.rebase(_metadataRebaser, _dataPartRebaser, *_currentHeadHistory);
+
+    // If we have not yet flushed, we must rebase the write buffer prior to it being flushed
+    if (!commitBuilder.writeBuffer().isFlushed()) {
+        CommitWriteBufferRebaser wbRb(&_entityIDRebaser, commitBuilder.writeBuffer());
+        wbRb.rebase();
+    }
 
     _currentHeadCommitData = &commitBuilder.commitData();
     _currentHeadHistory = &_currentHeadCommitData->history();

@@ -80,11 +80,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
-        // If caller is @ref Change::submit, @ref _nextNodeID _nextEdgeID are synced to
-        // the current next ID for the latest commit on main. If the caller is @ref
-        // Change::commit we do not want to perform this sync, and can continue with our
-        // local next ID.
-        auto part = _controller->createDataPart(_nextNodeID, _nextEdgeID);
+        auto part = _controller->createDataPart(builder->_firstNodeID, builder->_firstEdgeID);
 
         // Update these values so the next builder which is created starts where the last
         // left off
