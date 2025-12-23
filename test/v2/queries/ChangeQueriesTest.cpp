@@ -710,3 +710,157 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflictWithCommit) {
         submitCurrentChange(); // This should succeed
     }
 }
+
+TEST_F(ChangeQueriesTest, rebasedTombstones) {
+    const PropertyTypeID nameID = 0;
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String>;
+
+    Rows expected;
+    {
+        for (auto&& name : read().scanNodeProperties<types::String>(nameID)) {
+            expected.add({name});
+        }
+        expected.add({"Eleanor"});
+        expected.add({"Cats"});
+        expected.add({"Music"});
+        expected.add({"Dogs"});
+    }
+
+    ChangeID change0, change1;
+
+    newChange(), change0 = _currentChange;
+    newChange(), change1 = _currentChange;
+
+    { // Create changes unknown to change1
+        setChange(change0);
+
+        std::string_view createEleanor = R"(CREATE (e:Person{name:"Eleanor"}))";
+        std::string_view createCats = R"(CREATE (c:Interest{name:"Cats"}))";
+
+        ASSERT_TRUE(query(createEleanor, emptyCallback));
+        ASSERT_TRUE(query(createCats, emptyCallback));
+
+        submitCurrentChange();
+    }
+
+    { // Create new nodes as well, but delete some of them
+        setChange(change1);
+
+        std::string_view createManchester = R"(CREATE (n:Interest{name:"Manchester"}))";
+        std::string_view createMusic = R"(CREATE (n:Interest{name:"Music"}))";
+        std::string_view createDogs = R"(CREATE (n:Interest{name:"Dogs"}))";
+
+        for (auto&& q : {createManchester, createMusic, createDogs}) {
+            ASSERT_TRUE(query(q, emptyCallback));
+        }
+
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+
+        std::string_view deleteManchester =
+            R"(MATCH (m) WHERE m.name = "Manchester" DELETE m)";
+
+        ASSERT_TRUE(query(deleteManchester, emptyCallback));
+
+        // Change1's new nodes will need to be rebased, but Manchester should be deleted
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        std::string_view getNames = "MATCH (n) RETURN n.name";
+
+        auto res = query(getNames, [&actual](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size());
+
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<String>>();
+            ASSERT_TRUE(names);
+
+            const size_t numRows = names->size();
+            for (size_t row {0}; row < numRows; row++) {
+                actual.add({*names->at(row)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(ChangeQueriesTest, rebasedTombstonesWithCommit) {
+    const PropertyTypeID nameID = 0;
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String>;
+
+    Rows expected;
+    {
+        for (auto&& name : read().scanNodeProperties<types::String>(nameID)) {
+            expected.add({name});
+        }
+        expected.add({"Eleanor"});
+        expected.add({"Cats"});
+        expected.add({"Music"});
+        expected.add({"Dogs"});
+    }
+
+    ChangeID change0, change1;
+
+    newChange(), change0 = _currentChange;
+    newChange(), change1 = _currentChange;
+
+    { // Create changes unknown to change1
+        setChange(change0);
+
+        std::string_view createEleanor = R"(CREATE (e:Person{name:"Eleanor"}))";
+        std::string_view createCats = R"(CREATE (c:Interest{name:"Cats"}))";
+
+        ASSERT_TRUE(query(createEleanor, emptyCallback));
+        ASSERT_TRUE(query(createCats, emptyCallback));
+
+        submitCurrentChange();
+    }
+
+    { // Create new nodes as well, but delete some of them
+        setChange(change1);
+
+        std::string_view createManchester = R"(CREATE (n:Interest{name:"Manchester"}))";
+        std::string_view createMusic = R"(CREATE (n:Interest{name:"Music"}))";
+        std::string_view createDogs = R"(CREATE (n:Interest{name:"Dogs"}))";
+
+        ASSERT_TRUE(query(createManchester, emptyCallback));
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query(createMusic, emptyCallback));
+        ASSERT_TRUE(query(createDogs, emptyCallback));
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+
+        std::string_view deleteManchester =
+            R"(MATCH (m) WHERE m.name = "Manchester" DELETE m)";
+
+        ASSERT_TRUE(query(deleteManchester, emptyCallback));
+
+        // Change1's new nodes will need to be rebased, but Manchester should be deleted
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        std::string_view getNames = "MATCH (n) RETURN n.name";
+
+        auto res = query(getNames, [&actual](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size());
+
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<String>>();
+            ASSERT_TRUE(names);
+
+            const size_t numRows = names->size();
+            for (size_t row {0}; row < numRows; row++) {
+                actual.add({*names->at(row)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
