@@ -943,3 +943,112 @@ TEST_F(ChangeQueriesTest, concurrentWritesSmall) {
         EXPECT_TRUE(expected.equals(actual));
     }
 }
+
+TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
+    setWorkingGraph("default");
+
+    const size_t change0SingleNodes = 9;
+    const size_t change0EdgePairs = 6;
+
+    const size_t change1SingleNodes = 6;
+    const size_t change1EdgePairs = 4;
+
+    ChangeID change0, change1;
+
+    {
+        newChange(), change0 = _currentChange;
+
+        for (size_t i {0}; i < change0SingleNodes; i++) {
+            ASSERT_TRUE(query("CREATE (:NODE)", emptyCallback));
+        }
+
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+
+        for (size_t i {0}; i < change0EdgePairs; i++) {
+            ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)", emptyCallback));
+        }
+    }
+
+    {
+        newChange(), change1 = _currentChange;
+
+        for (size_t i {0}; i < change1SingleNodes; i++) {
+            ASSERT_TRUE(query("CREATE (:NODE)", emptyCallback));
+        }
+
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+
+        for (size_t i {0}; i < change1EdgePairs; i++) {
+            ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)", emptyCallback));
+        }
+    }
+
+    submitChange(change0);
+    submitChange(change1);
+
+    const size_t expectedNodes = change0SingleNodes + change1SingleNodes
+                               + (2 * change0EdgePairs) + (2 * change1EdgePairs);
+
+    {
+        using Rows = LineContainer<NodeID>;
+
+        Rows expected;
+        for (NodeID n {0}; n < expectedNodes; n++) {
+            expected.add({n});
+        }
+
+        Rows actual;
+        {
+            auto res = query("MATCH (n) RETURN n", [&actual](const Dataframe* df) {
+                auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                for (NodeID n : *ns) {
+                    actual.add({n});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        EXPECT_TRUE(expected.equals(actual));
+    }
+
+    {
+        using Rows = LineContainer<NodeID, EdgeID, NodeID>;
+
+        Rows expected;
+        {
+            EdgeID e {0};
+            NodeID n {change0SingleNodes};
+            for (size_t i {0}; i < change0EdgePairs; i++) {
+                NodeID src = n;
+                NodeID tgt = n + 1;
+                expected.add({src, e++, tgt});
+                n = tgt + 1;
+            }
+            n += change1SingleNodes;
+            for (size_t i {change1SingleNodes}; i < change1SingleNodes + change1EdgePairs;
+                 i++) {
+                NodeID src = n;
+                NodeID tgt = n + 1;
+                expected.add({src, e++, tgt});
+                n = tgt + 1;
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = query("MATCH (n)-[e]->(m) RETURN n,e,m", [&actual](const Dataframe* df) {
+                auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+                auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                auto* ms = findColumn(df, "m")->as<ColumnNodeIDs>();
+                ASSERT_TRUE(ns);
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(ms);
+                for (size_t i {0}; i < ns->size(); i++) {
+                    actual.add({ns->at(i), es->at(i), ms->at(i)});
+                }
+            });
+            ASSERT_TRUE(res);
+        }
+        EXPECT_TRUE(expected.equals(actual));
+    }
+}
