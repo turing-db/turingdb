@@ -104,9 +104,8 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     }
 
     for (auto& commitBuilder : change->_commits) {
-        // Creates a new builder to execute CREATE/DELETE commands.
-        // If locally `Change::commit` all changes, and no rebase, then no need to flush
-        // again. Otherwise flush again.
+        // If this Change has modifications which were not applied by a "COMMIT" command,
+        // then flush them now
         if (!commitBuilder->writeBuffer().isFlushed()) {
             commitBuilder->flushWriteBuffer(jobSystem);
         }

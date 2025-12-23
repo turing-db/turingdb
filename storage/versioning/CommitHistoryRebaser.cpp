@@ -34,12 +34,14 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
 
     const auto& prevDataParts = prevHistory._allDataparts;
 
-    if (!prevDataParts.empty()) {
-        const auto* prevPart = prevDataParts.back().get();
-        for (auto& part : _history._commitDataparts) {
-            dataPartRebaser.rebase(metadataRebaser, *prevPart, *part);
-            prevPart = part.get();
-        }
+    if (prevDataParts.empty()){
+        return;
+    }
+
+    const auto* prevPart = prevDataParts.back().get();
+    for (auto& part : _history._commitDataparts) {
+        dataPartRebaser.rebase(metadataRebaser, *prevPart, *part);
+        prevPart = part.get();
     }
 }
 
