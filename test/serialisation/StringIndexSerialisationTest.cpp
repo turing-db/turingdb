@@ -27,7 +27,7 @@ public:
         _workingPath = fs::Path {_outDir + "/testfile"};
         _config.setTuringDirectory(_workingPath);
         _db = std::make_unique<TuringDB>(&_config);
-        _db->run();
+        _db->init();
 
         SystemManager& sysMan = _db->getSystemManager();
         _builtGraph = sysMan.createGraph("simple");

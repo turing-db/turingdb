@@ -24,7 +24,7 @@ public:
     TuringDB(const TuringConfig* config);
     ~TuringDB();
 
-    void run();
+    void init();
 
     QueryStatus query(std::string_view query,
                       std::string_view graphName,

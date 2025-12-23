@@ -16,6 +16,7 @@ uv add turingdb
 
 # Make sure turingdb is not running
 pkill turingdb
+rm -rf $SCRIPT_DIR/.turing
 uv run ../main.py
 testres=$?
 

@@ -26,7 +26,7 @@ TuringDB::TuringDB(const TuringConfig* config)
 TuringDB::~TuringDB() {
 }
 
-void TuringDB::run() {
+void TuringDB::init() {
     // Create turing directory if it does not exist
     const auto& turingDir = _config->getTuringDir();
     const auto& graphsDir = _config->getGraphsDir();

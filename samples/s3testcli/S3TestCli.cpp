@@ -29,7 +29,7 @@ int main() {
     db::TuringConfig config;
     config.setSyncedOnDisk(false);
     db::TuringDB db(&config);
-    db.run();
+    db.init();
 
     const auto& turingDir = config.getTuringDir();
 

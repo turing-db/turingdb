@@ -28,12 +28,15 @@ public:
     [[nodiscard]] Path parent() const;
     [[nodiscard]] bool exists() const { return getFileInfo().has_value(); }
     [[nodiscard]] Result<std::vector<Path>> listDir() const;
+    [[nodiscard]] bool isRelative() const;
     [[nodiscard]] std::string_view filename() const;
     [[nodiscard]] std::string_view basename() const;
     [[nodiscard]] std::string_view extension() const;
     [[nodiscard]] bool empty() const { return _path.empty(); }
     [[nodiscard]] bool isSubDirectory(const Path& root) const;
-    [[nodiscard]] Result<void> toCanonical() ;
+    [[nodiscard]] Result<void> toAbsolute();
+
+    [[nodiscard]] Result<Path> getCurrentDir();
 
     friend Path operator/(const Path& lhs, const Path& rhs) {
         std::string p = lhs._path + "/";

@@ -12,7 +12,7 @@ std::unique_ptr<TuringTestEnv> TuringTestEnv::create(const fs::Path& turingDir) 
 
     env->_config.setSyncedOnDisk(false);
     env->_config.setTuringDirectory(turingDir);
-    env->_db.run();
+    env->_db.init();
 
     return env;
 }
@@ -22,7 +22,7 @@ std::unique_ptr<TuringTestEnv> TuringTestEnv::createSyncedOnDisk(const fs::Path&
 
     env->_config.setSyncedOnDisk(true);
     env->_config.setTuringDirectory(turingDir);
-    env->_db.run();
+    env->_db.init();
 
     return env;
 }

@@ -34,7 +34,7 @@ int main(int argc, const char** argv) {
     config.setTuringDirectory(fs::Path(SAMPLE_DIR) / ".turing");
 
     TuringDB db(&config);
-    db.run();
+    db.init();
 
     {
         spdlog::info("Create company graph");

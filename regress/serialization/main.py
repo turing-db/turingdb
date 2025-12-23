@@ -31,7 +31,9 @@ def wait_ready(client):
             client.try_reach(timeout=1)
             return
         except:
-            time.sleep(0.1)
+            time.sleep(1)
+
+    raise RuntimeError('Failed to connect to turingdb')
 
 
 if __name__ == "__main__":

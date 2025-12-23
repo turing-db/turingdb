@@ -59,7 +59,7 @@ void runPlan2(std::string_view query) {
     TuringConfig config;
     config.setTuringDirectory(turingDir);
     TuringDB db(&config);
-    db.run();
+    db.init();
 
     Graph* graph = db.getSystemManager().createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);

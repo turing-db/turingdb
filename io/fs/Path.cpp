@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <filesystem>
 
+#include <spdlog/spdlog.h>
+
 using namespace fs;
 
 Path::Path(const std::string& path)
@@ -83,14 +85,27 @@ Result<FileInfo> Path::getFileInfo() const {
     };
 }
 
-Result<void> Path::toCanonical() {
+Result<void> Path::toAbsolute() {
     try {
-        _path = std::filesystem::canonical(_path).string();
+        if (isRelative()) {
+            const auto curDir = getCurrentDir();
+            if (!curDir) {
+                return BadResult<Error>(curDir.error());
+            }
+
+            _path = (curDir.value()/_path).get();
+        }
+
+        _path = std::filesystem::weakly_canonical(_path).string();
     } catch (const std::filesystem::filesystem_error& e) {
         return Error::result(ErrorType::CANNOT_GET_CANONICAL_PATH, e.code().value());
     }
 
     return {};
+}
+
+bool Path::isRelative() const {
+    return std::filesystem::path(_path).is_relative();
 }
 
 bool Path::isSubDirectory(const Path& root) const {
@@ -204,3 +219,10 @@ Result<void> Path::rm() const {
     return {};
 }
 
+Result<Path> Path::getCurrentDir() {
+    try {
+        return Path(std::filesystem::current_path().string());
+    } catch (const std::filesystem::filesystem_error& e) {
+        return Error::result(ErrorType::CANNOT_GET_CURRENT_DIR, e.code().value());
+    }
+}

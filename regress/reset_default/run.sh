@@ -9,6 +9,7 @@ uv init
 uv add turingdb
 
 pkill turingdb
+rm -rf $SCRIPT_DIR/.turing
 
 # Set up an unloadable graph
 rm -rf "$SCRIPT_GRAPHS_DIR/default/"

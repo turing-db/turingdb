@@ -1,5 +1,8 @@
 #include "TuringServer.h"
 
+#include <signal.h>
+#include <unistd.h>
+
 #include <spdlog/spdlog.h>
 
 #include "HTTPServer.h"
@@ -10,6 +13,18 @@
 #include "DBServerConfig.h"
 
 using namespace db;
+
+namespace {
+
+static TuringServer* _turingServerInstance = nullptr;
+
+void signalHandler(int signum) {
+    if (_turingServerInstance) {
+        _turingServerInstance->stop();
+    }
+}
+
+}
 
 TuringServer::TuringServer(const DBServerConfig& config, TuringDB& db)
     : _config(config),
@@ -61,6 +76,9 @@ void TuringServer::start() {
     };
 
     _serverThread = std::thread(serverFunc);
+    
+    // We need to handle signals in this thread
+    setupSignals();
 
     spdlog::info("Server listening on address: {}:{}",
                  _server->getAddress(),
@@ -75,4 +93,17 @@ void TuringServer::wait() {
 void TuringServer::stop() {
     _server->terminate();
     _serverThread.join();
+}
+
+void TuringServer::setupSignals() {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+
+    sa.sa_handler = &signalHandler;
+    _turingServerInstance = this;
+
+    sigemptyset(&sa.sa_mask);
+    const int sigIntRes = sigaction(SIGINT, &sa, nullptr);
+    const int sigTermRes = sigaction(SIGTERM, &sa, nullptr);
+    bioassert(sigIntRes >= 0 && sigTermRes >= 0, "Failed to setup signal handlers in TuringServer");
 }
