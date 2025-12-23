@@ -82,11 +82,6 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     for (const auto& builder : _builders) {
         auto part = _controller->createDataPart(builder->_firstNodeID, builder->_firstEdgeID);
 
-        // Update these values so the next builder which is created starts where the last
-        // left off
-        _nextNodeID += builder->nodeCount();
-        _nextEdgeID += builder->edgeCount();
-
         if (!part->load(view, jobsystem, *builder)) {
             return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
         }
