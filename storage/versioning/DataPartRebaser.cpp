@@ -31,7 +31,6 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
     _prevFirstNodeID = part._firstNodeID;
     _prevFirstEdgeID = part._firstEdgeID;
 
-    // TODO: Change this to use ID rebaser
     const auto newFirstNodeID = prevPart._firstNodeID + prevPart.getNodeContainerSize();
     const auto newFirstEdgeID = prevPart._firstEdgeID + prevPart.getEdgeContainerSize();
     _nodeOffset = (newFirstNodeID - _prevFirstNodeID).getValue();
