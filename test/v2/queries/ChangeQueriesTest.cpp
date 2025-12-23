@@ -1,13 +1,13 @@
-#include <cstdint>
 #include <gtest/gtest.h>
+
 #include <initializer_list>
 #include <string_view>
+#include <cstdint>
 
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
-#include "columns/Block.h"
 #include "columns/ColumnIDs.h"
 #include "versioning/Change.h"
 #include "columns/ColumnOptVector.h"
@@ -43,6 +43,8 @@ protected:
     static constexpr std::string_view GET_PROPERTIES_QUERY =
         "CALL db.propertyTypes() YIELD propertyType as property";
 
+    static constexpr auto emptyCallback = [](const Dataframe*) -> void {};
+
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     void newChange() {
@@ -54,13 +56,15 @@ protected:
     }
 
     void submitCurrentChange() {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), CommitHash::head(), _currentChange);
+        auto res = _db->queryV2("CHANGE SUBMIT", _graphName, &_env->getMem(),
+                                emptyCallback, CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     void submitChange(ChangeID chid) {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), CommitHash::head(), chid);
+        auto res = _db->queryV2("CHANGE SUBMIT", _graphName, &_env->getMem(),
+                                emptyCallback, CommitHash::head(), chid);
 
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
@@ -70,7 +74,7 @@ protected:
         _currentChange = chid;
     }
 
-    auto queryV2(std::string_view query, auto callback) {
+    auto query(std::string_view query, auto callback) {
         auto res = _db->queryV2(query, _graphName, &_env->getMem(), callback,
                                 CommitHash::head(), _currentChange);
         return res;
@@ -95,7 +99,7 @@ protected:
     bool ensureProperties(std::initializer_list<std::string_view> props) {
         bool allPropsFound {true};
 
-        auto res = queryV2(GET_PROPERTIES_QUERY, [&](const Dataframe* df) {
+        auto res = query(GET_PROPERTIES_QUERY, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
 
             NamedColumn* propCol = findColumn(df, "property");
@@ -132,13 +136,13 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
         newChange(), change1 = _currentChange;
         std::string_view CREATE_QUERY =
             R"(CREATE (n:TestNode1 { name: "1" })-[e:TestEdge1 { name: "1->2" }]->(m:TestNode1 { name: "2" }))";
-        ASSERT_TRUE(queryV2(CREATE_QUERY, [](const Dataframe*){}));
+        ASSERT_TRUE(query(CREATE_QUERY, emptyCallback));
     }
     {
         newChange(), change2 = _currentChange;
         std::string_view CREATE_QUERY =
             R"(CREATE (n:TestNode2 { name: "3" })-[e:TestEdge2 { name: "3->4" }]->(m:TestNode2 { name: "4" }))";
-        ASSERT_TRUE(queryV2(CREATE_QUERY, [](const Dataframe*){}));
+        ASSERT_TRUE(query(CREATE_QUERY, emptyCallback));
     }
 
     submitChange(change2);
@@ -154,7 +158,7 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
         std::string_view MATCH_QUERY = "MATCH (n:TestNode1)-[e:TestEdge1]->(m:TestNode1) "
                                        "RETURN n.name, e.name, m.name";
         Rows actual;
-        auto res = queryV2(MATCH_QUERY, [&actual](const Dataframe* df) {
+        auto res = query(MATCH_QUERY, [&actual](const Dataframe* df) {
             ASSERT_TRUE(df);
             ASSERT_EQ(3, df->size());
 
@@ -185,7 +189,7 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
         std::string_view MATCH_QUERY = "MATCH (n:TestNode2)-[e:TestEdge2]->(m:TestNode2) "
                                        "RETURN n.name, e.name, m.name";
         Rows actual;
-        auto res = queryV2(MATCH_QUERY, [&actual](const Dataframe* df) {
+        auto res = query(MATCH_QUERY, [&actual](const Dataframe* df) {
             ASSERT_TRUE(df);
             ASSERT_EQ(3, df->size());
 
@@ -211,16 +215,15 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
 
 TEST_F(ChangeQueriesTest, threeChangeRebase) {
     setWorkingGraph("default");
-    auto emptyCallback = [](const Dataframe*) -> void {};
 
     auto makeChanges = [&]() -> void {
         newChange();
         { // Change
-            ASSERT_TRUE(queryV2("CREATE (n:NODE)", emptyCallback));
-            ASSERT_TRUE(queryV2("COMMIT", emptyCallback));
+            ASSERT_TRUE(query("CREATE (n:NODE)", emptyCallback));
+            ASSERT_TRUE(query("COMMIT", emptyCallback));
 
-            ASSERT_TRUE(queryV2("MATCH (n:NODE) CREATE (n)-[:EDGE]->(m:NODE)", emptyCallback));
-            ASSERT_TRUE(queryV2("COMMIT", emptyCallback));
+            ASSERT_TRUE(query("MATCH (n:NODE) CREATE (n)-[:EDGE]->(m:NODE)", emptyCallback));
+            ASSERT_TRUE(query("COMMIT", emptyCallback));
         }
     };
 
@@ -250,7 +253,7 @@ TEST_F(ChangeQueriesTest, threeChangeRebase) {
 
         Rows actual;
         {
-            auto res = queryV2("MATCH (n) RETURN n", [&actual](const Dataframe* df) {
+            auto res = query("MATCH (n) RETURN n", [&actual](const Dataframe* df) {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(1, df->size());
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -273,7 +276,7 @@ TEST_F(ChangeQueriesTest, threeChangeRebase) {
 
         Rows actual;
         {
-            auto res = queryV2("MATCH (n)-[e]->(m) RETURN n,e,m", [&actual](const Dataframe* df) {
+            auto res = query("MATCH (n)-[e]->(m) RETURN n,e,m", [&actual](const Dataframe* df) {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(3, df->size());
 
@@ -303,21 +306,21 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
     ChangeID change1 = _currentChange;
 
     { // Change 1 commits locally, does not submit
-        ASSERT_TRUE(queryV2(
+        ASSERT_TRUE(query(
             R"(create (n:CHANGE1LABEL {id:1, changeid: "ONE", committed:true}))",
-            [](const Dataframe*) {}));
+            emptyCallback));
 
-        ASSERT_TRUE(queryV2("COMMIT", [](const Dataframe*) {}));
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
 
-        ASSERT_TRUE(queryV2(
+        ASSERT_TRUE(query(
             R"(create (n:CHANGE1LABEL {cheeky:true, id:2, changeid: "ONE", committed:true}))",
-            [](const Dataframe*) {}));
+            emptyCallback));
 
-        ASSERT_TRUE(queryV2(
+        ASSERT_TRUE(query(
             R"(create (n:CHANGE1LABEL {cheeky:true, id:3, changeid: "ONE", committed:true}))",
-            [](const Dataframe*) {}));
+            emptyCallback));
 
-        ASSERT_TRUE(queryV2("COMMIT", [](const Dataframe*) {}));
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
         ASSERT_TRUE(ensureProperties({"id", "changeid", "committed"}));
     }
 
@@ -325,12 +328,12 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
     [[maybe_unused]] ChangeID change2 = _currentChange;
 
     { // Change 2
-        ASSERT_TRUE(queryV2(
+        ASSERT_TRUE(query(
             R"(create (n:CHANGE2LABEL {id:4, changeid: "TWO", committed:false}))",
-            [](const Dataframe*) {}));
-        ASSERT_TRUE(queryV2(
+            emptyCallback));
+        ASSERT_TRUE(query(
             R"(create (n:CHANGE2LABEL {id:5, changeid: "TWO", committed:false}))",
-            [](const Dataframe*) {}));
+            emptyCallback));
         submitCurrentChange();
     }
 
@@ -347,7 +350,7 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
 
         Rows actual;
         {
-            auto res = queryV2(matchQuery, [&actual](const Dataframe* df) {
+            auto res = query(matchQuery, [&actual](const Dataframe* df) {
                 ASSERT_TRUE(df);
                 auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
                 auto* ids = findColumn(df, "n.id")
@@ -390,7 +393,7 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
 
         Rows actual;
         {
-            auto res = queryV2(matchQuery, [&actual](const Dataframe* df) {
+            auto res = query(matchQuery, [&actual](const Dataframe* df) {
                 ASSERT_TRUE(df);
                 auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
                 auto* ids = findColumn(df, "n.id")
@@ -413,5 +416,297 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
         }
         EXPECT_TRUE(expected.equals(actual));
         EXPECT_TRUE(ensureProperties({"id", "changeid", "committed", "cheeky"}));
+    }
+}
+
+TEST_F(ChangeQueriesTest, deleteNodeConflict) {
+    std::string_view deleteRemy = R"(MATCH (n) WHERE n.name = "Remy" DELETE n)";
+
+    ChangeID change1;
+    ChangeID change2;
+    {
+        newChange(), change1 = _currentChange;
+
+        ASSERT_TRUE(query(deleteRemy, emptyCallback));
+    }
+
+    {
+        newChange(), change2 = _currentChange;
+
+        ASSERT_TRUE(query(deleteRemy, emptyCallback));
+    }
+
+    submitChange(change2);
+
+    setChange(change1);
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+
+    EXPECT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+
+    std::string_view err = res.getError();
+    std::string_view expectedErr = "This change attempted to delete Node 0 (which is now "
+                                   "Node 0 on main) which has been modified on main.";
+
+    EXPECT_EQ(expectedErr, err);
+}
+
+TEST_F(ChangeQueriesTest, deleteEdgeConflict) {
+    std::string_view deleteCyrusTravel =
+        R"(MATCH (n)-[e]->(m) WHERE n.name = "Cyrus" AND m.name = "Travel" DELETE e)";
+
+    ChangeID change1;
+    ChangeID change2;
+    {
+        newChange(), change1 = _currentChange;
+
+        ASSERT_TRUE(query(deleteCyrusTravel, emptyCallback));
+    }
+
+    {
+        newChange(), change2 = _currentChange;
+
+        ASSERT_TRUE(query(deleteCyrusTravel, emptyCallback));
+    }
+
+    submitChange(change2);
+
+    setChange(change1);
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+
+    EXPECT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+
+    std::string_view err = res.getError();
+    std::string_view expectedErr =
+        "This change attempted to delete Edge 14 (which is now "
+        "Edge 14 on main) which has been modified on main.";
+
+    EXPECT_EQ(expectedErr, err);
+}
+
+TEST_F(ChangeQueriesTest, deleteOutEdgeSideEffect) {
+    std::string_view createSuhasCyrus =
+        R"(MATCH (n), (m) WHERE n.name = "Suhas" AND m.name = "Cyrus" CREATE (n)-[:WORKS_WITH]->(m))";
+    std::string_view deleteSuhas = R"(MATCH (n) WHERE n.name = "Suhas" DELETE n)";
+
+    std::string_view expectedError =
+        "Submit rejected: Commits on main have created an edge (ID: 18) incident to Node "
+        "12, which this Change attempts to delete.";
+
+    ChangeID change1, change2;
+
+    {
+        newChange(), change1 = _currentChange;
+
+        ASSERT_TRUE(query(createSuhasCyrus, emptyCallback));
+    }
+
+    {
+        newChange(), change2 = _currentChange;
+
+        ASSERT_TRUE(query(deleteSuhas, emptyCallback));
+    }
+
+    submitChange(change1);
+
+    setChange(change2);
+
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+
+    EXPECT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+    EXPECT_EQ(expectedError, res.getError());
+}
+
+TEST_F(ChangeQueriesTest, deleteInEdgeSideEffect) {
+    std::string_view createCyrusSuhas =
+        R"(MATCH (n), (m) WHERE n.name = "Suhas" AND m.name = "Cyrus" CREATE (m)-[:WORKS_WITH]->(n))";
+    std::string_view deleteSuhas = R"(MATCH (n) WHERE n.name = "Suhas" DELETE n)";
+
+    std::string_view expectedError =
+        "Submit rejected: Commits on main have created an edge (ID: 18) incident to Node "
+        "12, which this Change attempts to delete.";
+
+    ChangeID change1, change2;
+
+    {
+        newChange(), change1 = _currentChange;
+
+        ASSERT_TRUE(query(createCyrusSuhas, emptyCallback));
+    }
+
+    {
+        newChange(), change2 = _currentChange;
+
+        ASSERT_TRUE(query(deleteSuhas, emptyCallback));
+    }
+
+    submitChange(change1);
+
+    setChange(change2);
+
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+
+    EXPECT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+    EXPECT_EQ(expectedError, res.getError());
+}
+
+/*
+Testing the following flow:
+
+1. Change1 is created and creates two nodes, and an edge between them
+2. Submits
+3. Change2 is created deletes the source node
+4. Submits
+5. Change3 is created deletes the target node
+6. Submits
+
+This should be accepted
+*/
+TEST_F(ChangeQueriesTest, noConflictOnDeletedEdge) {
+    setWorkingGraph("default");
+
+    {
+        newChange();
+        std::string_view createQuery = "CREATE (n:Source)-[e:NEWEDGE]->(m:Target)";
+        query(createQuery, emptyCallback);
+        submitCurrentChange();
+    }
+
+    {
+        newChange();
+        // This should also delete the edge "e" created above
+        std::string_view deleteSource = "MATCH (n:Source) DELETE n";
+        query(deleteSource, emptyCallback);
+        submitCurrentChange();
+    }
+
+    {
+        newChange();
+        // This would result in deleting edge "e", but it was already deleted: no conflict
+        std::string_view deleteTarget = "MATCH (n:Target) DELETE n";
+        query(deleteTarget, emptyCallback);
+        submitCurrentChange();
+    }
+}
+
+/*
+Testing the following flow:
+
+1. Change1 is created and creates two nodes, and an edge between them
+2. Submits
+3. Change 2 is created
+4. Change 3 is created
+5. Change 2 deletes the source node
+6. Change 3 deletes the target node
+7. Change 2 submits -> accepted
+8 Change 3 submits -> rejected (write conflict on the edge)
+*/
+TEST_F(ChangeQueriesTest, conflictOnDeletedEdge) {
+    setWorkingGraph("default");
+
+    {
+        newChange();
+        std::string_view createQuery = "CREATE (n:Source)-[e:NEWEDGE]->(m:Target)";
+        ASSERT_TRUE(query(createQuery, emptyCallback));
+        submitCurrentChange();
+    }
+
+    ChangeID change2, change3;
+
+    newChange(), change2 = _currentChange;
+    newChange(), change3 = _currentChange;
+
+    {
+        setChange(change2);
+        ASSERT_TRUE(query("MATCH (n:Source) DELETE n", emptyCallback));
+    }
+
+    {
+        setChange(change3);
+        ASSERT_TRUE(query("MATCH (n:Target) DELETE n", emptyCallback));
+    }
+
+    submitChange(change3); // Should succeed
+
+    setChange(change2);
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+
+    EXPECT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+    std::string_view expectedError =
+        "This change attempted to delete Edge 0 (which is now Edge "
+        "0 on main) which has been modified on main.";
+    EXPECT_EQ(expectedError, res.getError());
+}
+
+TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflict) {
+    ChangeID change0, change1;
+
+    newChange(), change0 = _currentChange;
+    newChange(), change1 = _currentChange;
+
+    { // Try delete Luc
+        setChange(change0);
+        ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Luc" DELETE n)", emptyCallback));
+    }
+
+    { // But create an edge between Luc and Cyrus
+        setChange(change1);
+        std::string_view createLucCyrus =
+            R"(MATCH (l), (c) WHERE l.name = "Luc" AND c.name = "Cyrus" CREATE (l)-[:WORKS_WITH]->(c))";
+
+        ASSERT_TRUE(query(createLucCyrus, emptyCallback));
+        submitCurrentChange();
+    }
+
+    { // But the actually just delete that edge
+        newChange(); // Change 3
+        std::string_view deleteLucCyrus =
+            R"(MATCH (l)-[e]->(c) WHERE l.name = "Luc" AND c.name = "Cyrus" DELETE e)";
+        ASSERT_TRUE(query(deleteLucCyrus, emptyCallback));
+        submitCurrentChange();
+    }
+
+    { // So Change 0 can delete Luc since the graph is the same as when it branched
+        setChange(change0);
+        submitCurrentChange(); // This should succeed
+    }
+}
+
+TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflictWithCommit) {
+    ChangeID change0, change1;
+
+    newChange(), change0 = _currentChange;
+    newChange(), change1 = _currentChange;
+
+    { // Try delete Luc
+        setChange(change0);
+        ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Luc" DELETE n)", emptyCallback));
+        ASSERT_TRUE(query("COMMIT", emptyCallback));
+    }
+
+    { // But create an edge between Luc and Cyrus
+        setChange(change1);
+        std::string_view createLucCyrus =
+            R"(MATCH (l), (c) WHERE l.name = "Luc" AND c.name = "Cyrus" CREATE (l)-[:WORKS_WITH]->(c))";
+
+        ASSERT_TRUE(query(createLucCyrus, emptyCallback));
+        submitCurrentChange();
+    }
+
+    { // But the actually just delete that edge
+        newChange(); // Change 3
+        std::string_view deleteLucCyrus =
+            R"(MATCH (l)-[e]->(c) WHERE l.name = "Luc" AND c.name = "Cyrus" DELETE e)";
+        ASSERT_TRUE(query(deleteLucCyrus, emptyCallback));
+        submitCurrentChange();
+    }
+
+    { // So Change 0 can delete Luc since the graph is the same as when it branched
+        setChange(change0);
+        submitCurrentChange(); // This should succeed
     }
 }
