@@ -56,14 +56,14 @@ protected:
     }
 
     void submitCurrentChange() {
-        auto res = _db->queryV2("CHANGE SUBMIT", _graphName, &_env->getMem(),
+        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
                                 emptyCallback, CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     void submitChange(ChangeID chid) {
-        auto res = _db->queryV2("CHANGE SUBMIT", _graphName, &_env->getMem(),
+        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
                                 emptyCallback, CommitHash::head(), chid);
 
         ASSERT_TRUE(res);
@@ -75,7 +75,7 @@ protected:
     }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->queryV2(query, _graphName, &_env->getMem(), callback,
+        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
                                 CommitHash::head(), _currentChange);
         return res;
     }

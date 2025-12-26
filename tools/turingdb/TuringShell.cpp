@@ -317,54 +317,7 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
         tabulateWrite(rs, src.getRaw());                  \
     } break;
 
-
-void queryCallbackV1(const Block& block, tabulate::Table& table) {
-    const size_t rowCount = block.getRowCount();
-
-    for (size_t i = 0; i < rowCount; ++i) {
-        tabulate::RowStream rs;
-        for (const Column* col : block.columns()) {
-            switch (col->getKind()) {
-                TABULATE_COL_CASE(ColumnVector<EntityID>, i)
-                TABULATE_COL_CASE(ColumnVector<NodeID>, i)
-                TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
-                TABULATE_COL_CASE(ColumnVector<EdgeTypeID>, i)
-                TABULATE_COL_CASE(ColumnVector<LabelID>, i)
-                TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
-                TABULATE_COL_CASE(ColumnVector<LabelSetID>, i)
-                TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, i)
-                TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, i)
-                TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, i)
-                TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, i)
-                TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, i)
-                TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, i)
-                TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, i)
-                TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
-                TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
-                TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
-                TABULATE_COL_CASE(ColumnVector<std::string>, i)
-                TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
-                TABULATE_COL_CASE(ColumnVector<const Change*>, i)
-                TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
-                TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
-                TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
-
-                default: {
-                    panic("can not print columns of kind {}", col->getKind());
-                }
-            }
-        }
-
-        table.add_row(std::move(rs));
-    }
-}
-
-void queryCallbackV2(size_t execCount, const Dataframe* df, tabulate::Table& table) {
+void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table) {
     const size_t rowCount = df->getRowCount();
 
     if (execCount == 0) {
@@ -477,33 +430,20 @@ void TuringShell::processLine(std::string& line) {
     size_t rowCount = 0;
 
     QueryStatus res;
-    if (line.starts_with("#v2")) {
-        const std::string_view query = std::string_view(line).substr(3);
+    {
         size_t execCount = 0;
 
-        auto queryCallback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
+        auto callback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
             rowCount += df->getRowCount();
 
             if (_quiet) {
                 return;
             }
 
-            queryCallbackV2(execCount++, df, table);
+            queryCallback(execCount++, df, table);
         };
 
-        res = _turingDB.queryV2(query, _graphName, _mem, queryCallback, _hash, _changeID);
-    } else {
-        auto queryCallback = [&table, &rowCount, this](const Block& block) -> void {
-            rowCount += block.getRowCount();
-
-            if (_quiet) {
-                return;
-            }
-
-            queryCallbackV1(block, table);
-        };
-    
-        res = _turingDB.query(line, _graphName, _mem, queryCallback, _hash, _changeID);
+        res = _turingDB.query(line, _graphName, _mem, callback, _hash, _changeID);
     }
 
     checkShellContext();

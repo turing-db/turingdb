@@ -1,17 +1,20 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <unordered_set>
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
 #include "SystemManager.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Tombstones.h"
 #include "Graph.h"
 #include "dump/GraphLoader.h"
-#include "columns/Block.h"
+#include "dataframe/Dataframe.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
+#include "columns/ColumnIDs.h"
 #include "Panic.h"
 
 using namespace db;
@@ -40,10 +43,19 @@ public:
 
         // populate the graph
         for (size_t i = 0; i < NUM_EDGES; i++) {
-            ASSERT_TRUE(db.query("create (n:Person)-[e:FRIENDSWITH]-(m:Person)",
-                                 _workingGraphName, &_env->getMem(), CommitHash::head(),
-                                 change->id()));
+            const size_t origin = i;
+            const size_t target = NUM_EDGES+i;
+            const std::string queryStr = "create (n:Person{id:"+std::to_string(origin)
+                                      +"})-[e:FRIENDSWITH{id: "+std::to_string(i)
+                                      +"}]->(m:Person{id:"+std::to_string(target)+"})";
+            const auto res = db.query(queryStr,
+                                      _workingGraphName,
+                                      &_env->getMem(),
+                                      CommitHash::head(),
+                                      change->id());
+            ASSERT_TRUE(res);
         }
+
         spdlog::info("Ran create queries");
 
         // implicit dump on change submit
@@ -51,11 +63,11 @@ public:
                              CommitHash::head(), change->id()));
         spdlog::info("Submitted change");
 
-        const auto VERIFY = [](const Block& block) {
-            if (block.empty()) {
+        const auto VERIFY = [](const Dataframe* df) {
+            if (df->size() == 0) {
                 panic("Failed to populate graph.");
             }
-            if (block.columns().front()->size() != NUM_NODES) {
+            if (df->cols().front()->getColumn()->size() != NUM_NODES) {
                 panic("Failed to populate graph.");
             }
         };
@@ -77,12 +89,24 @@ public:
         Change* delChange = delRes.value();
 
         for (size_t node : DELETED_NODES) {
-            db.query("delete nodes " + std::to_string(node), _workingGraphName,
-                     &_env->getMem(), CommitHash::head(), delChange->id());
+            const std::string queryStr = "match (n{id: " + std::to_string(node) + "}) delete n";
+            const auto res = db.query(queryStr,
+                                      _workingGraphName,
+                                      &_env->getMem(),
+                                      CommitHash::head(),
+                                      delChange->id());
+            spdlog::info(queryStr);
+            ASSERT_TRUE(res);
         }
-        for (size_t node : DELETED_EDGES) {
-            db.query("delete edges " + std::to_string(node), _workingGraphName,
-                     &_env->getMem(), CommitHash::head(), delChange->id());
+        for (size_t edge : DELETED_EDGES) {
+            const std::string queryStr = "match (n)-[e{id: "+ std::to_string(edge)+"}]->(m) delete e";
+            const auto res = db.query(queryStr,
+                                      _workingGraphName,
+                                      &_env->getMem(),
+                                      CommitHash::head(),
+                                      delChange->id());
+            spdlog::info(queryStr);
+            ASSERT_TRUE(res);
         }
         // implicit dump on change submit
         ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
@@ -98,22 +122,19 @@ protected:
     Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     LocalMemory _mem;
-    Block _outBlock;
 
     static constexpr size_t NUM_EDGES = 10;
     static constexpr size_t NUM_NODES = 2 * NUM_EDGES;
 
     static constexpr std::array<size_t, 3> DELETED_NODES = {0, NUM_NODES - 1, 2};
-    static constexpr std::array<size_t, 4> DELETED_EDGES = {0, NUM_EDGES - 1, 1, 4};
+    static constexpr std::array<size_t, 5> DELETED_EDGES = {0, NUM_EDGES - 1, 2, 1, 4};
 };
 
 TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
     _loadedGraph = Graph::create();
-    auto res = GraphLoader::load(
-        _loadedGraph.get(),
+    const auto res = GraphLoader::load(_loadedGraph.get(),
         _env->getSystemManager().getGraph(_workingGraphName)->getPath());
     ASSERT_TRUE(res);
-
 
     const Tombstones& tombstones =
         _loadedGraph->openTransaction().viewGraph().commits().back().tombstones();
@@ -124,13 +145,76 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
     ASSERT_EQ(DELETED_NODES.size(), nodeTombstones.size());
     ASSERT_EQ(DELETED_EDGES.size(), edgeTombstones.size());
 
-    for (const NodeID deletedNode : DELETED_NODES) {
-        ASSERT_TRUE(nodeTombstones.contains(deletedNode));
+    std::unordered_set<size_t> actualNodes;
+    std::unordered_set<size_t> actualEdges;
+    std::unordered_set<size_t> expectedNodes;
+    std::unordered_set<size_t> expectedEdges;
+
+    // Compute expected node and edges in the dumbest way possible
+    for (size_t i = 0; i < NUM_NODES; i++) {
+        expectedNodes.insert(i);
     }
 
-    for (const EdgeID deletedEdge : DELETED_EDGES) {
-        ASSERT_TRUE(edgeTombstones.contains(deletedEdge));
+    for (size_t i = 0; i < NUM_EDGES; i++) {
+        expectedEdges.insert(i);
     }
+
+    for (auto node : DELETED_NODES) {
+        expectedNodes.erase(node);
+    }
+
+    for (auto edge : DELETED_EDGES) {
+        expectedEdges.erase(edge);
+    }
+
+    // Get actual nodes & edges
+    {
+        TuringDB& db = _env->getDB();
+
+        using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
+        auto callback = [&actualNodes](const Dataframe* df) {
+            ASSERT_TRUE(df->size() == 1);
+            ColumnIDProp* nodes = df->cols().front()->as<ColumnIDProp>();
+            ASSERT_TRUE(nodes);
+
+            for (const auto& id : *nodes) {
+                actualNodes.insert(id.value());
+            }
+        };
+
+        const auto res = db.query("match (n) return n.id",
+                                  _workingGraphName,
+                                  &_env->getMem(),
+                                  callback);
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(!actualNodes.empty());
+        ASSERT_EQ(actualNodes.size(), NUM_NODES-DELETED_NODES.size());
+    }
+    {
+        TuringDB& db = _env->getDB();
+
+        using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
+        auto callback = [&actualEdges](const Dataframe* df) {
+            ASSERT_TRUE(df->size() == 1);
+            ColumnIDProp* edges = df->cols().front()->as<ColumnIDProp>();
+            ASSERT_TRUE(edges);
+
+            for (const auto& id : *edges) {
+                actualEdges.insert(id.value());
+            }
+        };
+
+        const auto res = db.query("match (n)-[e]->(m) return e.id",
+                                  _workingGraphName,
+                                  &_env->getMem(),
+                                  callback);
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(!actualEdges.empty());
+        ASSERT_EQ(actualEdges.size(), NUM_EDGES-DELETED_EDGES.size());
+    }
+
+    ASSERT_EQ(actualNodes, expectedNodes);
+    ASSERT_EQ(actualEdges, expectedEdges);
 }
 
 int main(int argc, char** argv) {

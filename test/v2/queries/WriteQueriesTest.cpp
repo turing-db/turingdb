@@ -51,9 +51,9 @@ protected:
         _currentChange = ChangeID::head();
     }
 
-    auto queryV2(std::string_view query, auto callback) {
-        auto res = _db->queryV2(query, _graphName, &_env->getMem(), callback,
-                                CommitHash::head(), _currentChange);
+    auto query(std::string_view query, auto callback) {
+        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+                              CommitHash::head(), _currentChange);
         return res;
     }
 
@@ -84,7 +84,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
         Rows actualRows;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 2);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -125,7 +125,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
 
         Rows queryRows;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -161,7 +161,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
         Rows actualRows;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -203,7 +203,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
 
         Rows queryRows;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -246,7 +246,7 @@ TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
 
         Rows actualRows;
         {
-            auto res = queryV2(CREATE_QUERY, [&actualRows, totalNodesPrior](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&actualRows, totalNodesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1 + 1 + 1 + 1);
                 auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
@@ -280,7 +280,7 @@ TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
 
         Rows actualRows;
         {
-            auto res = queryV2(MATCH_NODES_QUERY, [&actualRows, totalNodesPrior](const Dataframe* df) -> void {
+            auto res = query(MATCH_NODES_QUERY, [&actualRows, totalNodesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -305,7 +305,7 @@ TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
 
         Rows actualRows;
         {
-            auto res = queryV2(MATCH_EDGES_QUERY, [&actualRows, totalEdgesPrior](const Dataframe* df) -> void {
+            auto res = query(MATCH_EDGES_QUERY, [&actualRows, totalEdgesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* es = df->cols().front()->as<ColumnEdgeIDs>();
@@ -342,7 +342,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
 
         Rows actual;
         {
-            auto res = queryV2(CREATE_QUERY, [&actual, totalNodesPrior](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&actual, totalNodesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_TRUE(df->size() == 1 + 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -373,7 +373,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_NODES_QUERY, [&actual, totalNodesPrior](const Dataframe* df) -> void {
+            auto res = query(MATCH_NODES_QUERY, [&actual, totalNodesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -399,7 +399,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_EDGES_QUERY, [&actual, totalEdgesPrior](const Dataframe* df) -> void {
+            auto res = query(MATCH_EDGES_QUERY, [&actual, totalEdgesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* es = df->cols().front()->as<ColumnEdgeIDs>();
@@ -426,7 +426,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_PATHS_QUERY, [&actual, totalEdgesPrior](const Dataframe* df) -> void {
+            auto res = query(MATCH_PATHS_QUERY, [&actual, totalEdgesPrior](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -463,7 +463,7 @@ TEST_F(WriteQueriesTest, createNodeNoInput) {
         Rows actual;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -499,7 +499,7 @@ TEST_F(WriteQueriesTest, createNodeNoInput) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -532,7 +532,7 @@ TEST_F(WriteQueriesTest, createEdgeNoInput) {
         Rows actual;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* us = df->cols().front()->as<ColumnNodeIDs>();
@@ -572,7 +572,7 @@ TEST_F(WriteQueriesTest, createEdgeNoInput) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* us = df->cols().front()->as<ColumnNodeIDs>();
@@ -601,7 +601,7 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
         ASSERT_EQ(0, read().getTotalNodesAllocated()); // We start with an empty graph
         {
             newChange();
-            auto res = queryV2(CREATE_NODE_QUERY, [&](const Dataframe*) -> void {});
+            auto res = query(CREATE_NODE_QUERY, [&](const Dataframe*) -> void {});
             ASSERT_TRUE(res);
             submitCurrentChange();
         }
@@ -625,7 +625,7 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
         Rows actual;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -661,7 +661,7 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* us = df->cols().front()->as<ColumnNodeIDs>();
@@ -690,7 +690,7 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
         ASSERT_EQ(0, read().getTotalNodesAllocated()); // We start with an empty graph
         {
             newChange();
-            auto res = queryV2(CREATE_NODE_QUERY, [&](const Dataframe*) -> void {});
+            auto res = query(CREATE_NODE_QUERY, [&](const Dataframe*) -> void {});
             ASSERT_TRUE(res);
             submitCurrentChange();
         }
@@ -714,7 +714,7 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
         Rows actual;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -750,7 +750,7 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* us = df->cols().front()->as<ColumnNodeIDs>();
@@ -798,7 +798,7 @@ TEST_F(WriteQueriesTest, createFromTarget) {
         Rows actual;
         {
             newChange();
-            auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 4);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -850,7 +850,7 @@ TEST_F(WriteQueriesTest, createFromTarget) {
 
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 3);
                 auto* us = df->cols().front()->as<ColumnNodeIDs>();
@@ -900,7 +900,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
 
     { // Apply CREATEs; NOTE: returned values not testsed - see @ref scanNodesCreateNode
         newChange();
-        auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -917,7 +917,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
     { // Ensure CREATE command created expected nodes with expected properties
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 2);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -955,7 +955,7 @@ TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
 
     { // Apply CREATEs; NOTE: returned values not tested - see @ref scanNodesCreateNode
         newChange();
-        auto res = queryV2(CREATE_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
         });
         ASSERT_TRUE(res);
@@ -965,7 +965,7 @@ TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     { // Ensure CREATE command created expected nodes with expected properties
         Rows actual;
         {
-            auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 4);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -1023,9 +1023,9 @@ TEST_F(WriteQueriesTest, multipleCreateNodes) {
 
     {
         newChange();
-        for (auto&& query : {CREATE_NODE_1, CREATE_NODE_2, CREATE_NODE_3}) {
+        for (auto&& queryStr : {CREATE_NODE_1, CREATE_NODE_2, CREATE_NODE_3}) {
             auto res =
-                queryV2(query, [](const Dataframe* df) -> void { ASSERT_TRUE(df); });
+                query(queryStr, [](const Dataframe* df) -> void { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
         }
         submitCurrentChange();
@@ -1033,7 +1033,7 @@ TEST_F(WriteQueriesTest, multipleCreateNodes) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_NODES, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_NODES, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(NUM_PROPS, df->size());
             const auto* names = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();
@@ -1077,8 +1077,8 @@ TEST_F(WriteQueriesTest, multipleCreates) {
 
     {
         newChange();
-        for (auto&& query : {CREATE_1, CREATE_2, CREATE_3}) {
-            auto res = queryV2(query, [](const Dataframe* df) { ASSERT_TRUE(df); });
+        for (auto&& queryStr : {CREATE_1, CREATE_2, CREATE_3}) {
+            auto res = query(queryStr, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
         }
         submitCurrentChange();
@@ -1086,7 +1086,7 @@ TEST_F(WriteQueriesTest, multipleCreates) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(1 + 1 + 1, df->size());
             const auto* ns = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();

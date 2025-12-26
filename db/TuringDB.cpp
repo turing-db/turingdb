@@ -4,7 +4,6 @@
 
 #include "SystemManager.h"
 #include "JobSystem.h"
-#include "QueryInterpreter.h"
 #include "QueryInterpreterV2.h"
 #include "InterpreterContext.h"
 #include "procedures/ProcedureBlueprintMap.h"
@@ -79,40 +78,23 @@ void TuringDB::init() {
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
-                            QueryCallback callback,
+                            QueryCallbackV2 callback,
                             CommitHash commit,
                             ChangeID change) {
-    QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
-    return interp.execute(query, graphName, mem, callback, [](const auto) {}, commit, change);
-}
-
-QueryStatus TuringDB::query(std::string_view query,
-                            std::string_view graphName,
-                            LocalMemory* mem,
-                            QueryCallback callback,
-                            QueryHeaderCallback headerCallback,
-                            CommitHash commit,
-                            ChangeID change) {
-    QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
-    return interp.execute(query, graphName, mem, callback, headerCallback, commit, change);
-}
-
-QueryStatus TuringDB::query(std::string_view query,
-                            std::string_view graphName,
-                            LocalMemory* mem,
-                            CommitHash commit,
-                            ChangeID change) {
-    QueryInterpreter interp(_systemManager.get(), _jobSystem.get());
-    return interp.execute(query, graphName, mem, [](const auto&) {}, [](const auto) {}, commit, change);
-}
-
-QueryStatus TuringDB::queryV2(std::string_view query,
-                              std::string_view graphName,
-                              LocalMemory* mem,
-                              QueryCallbackV2 callback,
-                              CommitHash commit,
-                              ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
+
+    InterpreterContext ctxt(mem, callback, _procedures.get(), commit, change);
+    return interp.execute(ctxt, query, graphName);
+}
+
+QueryStatus TuringDB::query(std::string_view query,
+                            std::string_view graphName,
+                            LocalMemory* mem,
+                            CommitHash commit,
+                            ChangeID change) {
+    QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
+
+    QueryCallbackV2 callback = [](const Dataframe*){};
 
     InterpreterContext ctxt(mem, callback, _procedures.get(), commit, change);
     return interp.execute(ctxt, query, graphName);

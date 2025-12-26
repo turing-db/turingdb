@@ -170,7 +170,7 @@ TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
                                CommitHash::head(), changeID);
 
         ASSERT_TRUE(res1);
-        auto res2 = _env->getDB().query("create (n:NEWNODE)-[e:NEWEDGE]-(m:NEWNODE)", "simple",
+        auto res2 = _env->getDB().query("create (n:NEWNODE)-[e:NEWEDGE]->(m:NEWNODE)", "simple",
                                &_env->getMem(), CommitHash::head(), changeID);
         ASSERT_TRUE(res2);
 

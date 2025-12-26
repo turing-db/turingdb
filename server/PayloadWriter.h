@@ -85,6 +85,10 @@ public:
     }
 
     void end() {
+        if (_closingTokens.empty()) {
+            return;
+        }
+
         _writer->write(_closingTokens.back());
         _closingTokens.pop_back();
         _comma = true;
@@ -157,6 +161,10 @@ public:
 
     void value(const CommitBuilder* v) {
         value(v->hash().get());
+    }
+
+    void value(ChangeID changeID) {
+        value(fmt::format("{:x}", changeID.get()));
     }
 
     void nullValue() {

@@ -4,14 +4,15 @@
 #include "PayloadWriter.h"
 #include "ReturnField.h"
 #include "ReturnProjection.h"
+#include "metadata/PropertyType.h"
+#include "ChangeCommand.h"
+#include "ID.h"
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
-#include "metadata/PropertyType.h"
-#include "ChangeCommand.h"
-#include "ID.h"
+#include "dataframe/Dataframe.h"
 
 namespace db {
 
@@ -163,6 +164,90 @@ public:
         writer.end();
     }
 
+    static void writeDataframeHeader(PayloadWriter& writer, const Dataframe& df) {
+        writer.key("header");
+        writer.obj();
+        writer.key("column_names");
+        writer.arr();
+
+        for (const NamedColumn* namedCol : df.cols()) {
+            const std::string_view name = namedCol->getName();
+            if (name.empty()) {
+                const ColumnTag tag = namedCol->getTag();
+                writer.value("$" + std::to_string(tag.getValue()));
+            } else {
+                writer.value(name);
+            }
+        }
+
+        writer.end();
+
+        writer.key("column_types");
+        writer.arr();
+
+        for (const NamedColumn* namedCol : df.cols()) {
+            const Column* col = namedCol->getColumn();
+            switch (col->getKind()) {
+                case ColumnVector<EntityID>::staticKind():
+                case ColumnVector<NodeID>::staticKind():
+                case ColumnVector<EdgeID>::staticKind():
+                case ColumnVector<PropertyTypeID>::staticKind():
+                case ColumnVector<LabelID>::staticKind():
+                case ColumnVector<EdgeTypeID>::staticKind():
+                case ColumnVector<LabelSetID>::staticKind():
+                case ColumnVector<types::UInt64::Primitive>::staticKind(): {
+                    writer.value("UInt64");
+                } break;
+                case ColumnVector<types::Int64::Primitive>::staticKind(): {
+                    writer.value("Int64");
+                } break;
+                case ColumnVector<types::Double::Primitive>::staticKind(): {
+                    writer.value("Double");
+                } break;
+                case ColumnVector<types::Bool::Primitive>::staticKind(): {
+                    writer.value("Bool");
+                } break;
+                case ColumnVector<types::String::Primitive>::staticKind():
+                case ColumnVector<std::string>::staticKind():
+                case ColumnVector<ValueType>::staticKind():
+                case ColumnVector<ChangeID>::staticKind(): {
+                    writer.value("String");
+                } break;
+                case ColumnOptVector<types::UInt64::Primitive>::staticKind(): {
+                    writer.value("UInt64");
+                } break;
+                case ColumnOptVector<types::Int64::Primitive>::staticKind(): {
+                    writer.value("Int64");
+                } break;
+                case ColumnOptVector<types::Double::Primitive>::staticKind(): {
+                    writer.value("Double");
+                } break;
+                case ColumnOptVector<types::String::Primitive>::staticKind(): {
+                    writer.value("String");
+                } break;
+                case ColumnOptVector<types::Bool::Primitive>::staticKind(): {
+                    writer.value("Bool");
+                } break;
+                default: {
+                    writer.value("String");
+                } break;
+            }
+        }
+
+        writer.end();
+
+        writer.end();
+    }
+
+    static void writeDataframe(PayloadWriter& writer, const Dataframe& df) {
+        writer.arr();
+        for (const NamedColumn* namedCol : df.cols()) {
+            writeColumn(writer, namedCol->getColumn());
+        }
+
+        writer.end();
+    }
+
     static void writeColumn(PayloadWriter& writer, const Column* col) {
         switch (col->getKind()) {
             JSON_ENCODE_COL_CASE(ColumnVector<EntityID>)
@@ -172,6 +257,7 @@ public:
             JSON_ENCODE_COL_CASE(ColumnVector<EdgeTypeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<PropertyTypeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<LabelSetID>)
+            JSON_ENCODE_COL_CASE(ColumnVector<ChangeID>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::UInt64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Int64::Primitive>)
             JSON_ENCODE_COL_CASE(ColumnVector<types::Double::Primitive>)

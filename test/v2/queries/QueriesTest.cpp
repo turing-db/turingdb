@@ -5,7 +5,6 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
-#include "columns/Block.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
@@ -38,9 +37,9 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     // To test queries which require multiple changes, use WriteQueriesTest.cpp
-    auto queryV2(std::string_view query, auto callback) {
-        auto res = _db->queryV2(query, _graphName, &_env->getMem(), callback,
-                                CommitHash::head(), ChangeID::head());
+    auto query(std::string_view query, auto callback) {
+        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+                              CommitHash::head(), ChangeID::head());
         return res;
     }
 };
@@ -57,7 +56,7 @@ TEST_F(QueriesTest, scanAll) {
     const std::string query = "MATCH (n) RETURN n";
 
     std::vector<NodeID> returnedNodeIDs;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
         ASSERT_EQ(df->size(), 1);
@@ -107,7 +106,7 @@ TEST_F(QueriesTest, scanAllSkip) {
 
         std::vector<NodeID> returnedNodeIDs;
         bool executedLambda = false;
-        _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
             executedLambda = true;
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
@@ -135,7 +134,7 @@ TEST_F(QueriesTest, scanAllSkip) {
 
 TEST_F(QueriesTest, negativeSkip) {
     const std::string query = "MATCH (n) RETURN n SKIP -1";
-    const auto result = _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {});
+    const auto result = _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {});
     ASSERT_FALSE(result.isOk());
 }
 
@@ -160,7 +159,7 @@ TEST_F(QueriesTest, scanAllLimit) {
 
         std::vector<NodeID> returnedNodeIDs;
         bool executedLambda = false;
-        _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
             executedLambda = true;
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
@@ -207,7 +206,7 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
 
             returnedNodeIDs.clear();
             bool executedLambda = false;
-            _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+            _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 executedLambda = true;
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->cols().size(), 1);
@@ -228,12 +227,12 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
 }
 
 TEST_F(QueriesTest, scanExpand1) {
-    const std::string query = "MATCH (n)-[e]->(m) RETURN n, m, e";
+    const std::string queryStr = "MATCH (n)-[e]->(m) RETURN n, m, e";
 
     const size_t numEdges = read().getEdgeCount();
 
     LineContainer<NodeID, NodeID, EdgeID> returned;
-    auto res = queryV2(query, [&returned, numEdges](const Dataframe* df) -> void {
+    auto res = query(queryStr, [&returned, numEdges](const Dataframe* df) -> void {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
 
@@ -270,7 +269,7 @@ TEST_F(QueriesTest, scanExpand2) {
     std::vector<NodeID> returnedTargets1;
     std::vector<NodeID> returnedTargets2;
     std::vector<NodeID> returnedSources;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 3);
         ASSERT_EQ(df->size(), 3);
@@ -334,7 +333,7 @@ TEST_F(QueriesTest, scanExpandIn) {
 
     LineContainer<NodeID, NodeID> returned;
     LineContainer<NodeID, NodeID> expected;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
         ASSERT_EQ(df->size(), 2);
@@ -382,7 +381,7 @@ TEST_F(QueriesTest, scanExpandIn2) {
 
     LineContainer<NodeID, EdgeID, NodeID, EdgeID, NodeID> returnedLines;
     LineContainer<NodeID, EdgeID, NodeID, EdgeID, NodeID> expectedLines;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 5);
         ASSERT_EQ(df->size(), 5);
@@ -453,7 +452,7 @@ TEST_F(QueriesTest, scanEdges) {
 
     LineContainer<NodeID, EdgeID, NodeID> returnedLines;
     LineContainer<NodeID, EdgeID, NodeID> expectedLines;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 3);
         ASSERT_EQ(df->size(), 3);
@@ -524,7 +523,7 @@ TEST_F(QueriesTest, scanPropertiesWithNull) {
     ASSERT_TRUE(agePropType.has_value());
     ASSERT_TRUE(namePropType.has_value());
 
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 3);
         ASSERT_EQ(df->size(), 3);
@@ -614,7 +613,7 @@ TEST_F(QueriesTest, scanNodesCartProd) {
     }
 
     {
-        _db->queryV2(query, _graphName, &_env->getMem(),
+        _db->query(query, _graphName, &_env->getMem(),
                      [&](const Dataframe* df) -> void {
                          ASSERT_TRUE(df != nullptr);
                          ASSERT_EQ(df->size(), 2);
@@ -641,7 +640,7 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
     ColumnNodeIDs ns;
     constexpr std::string_view nQuery = "match (n)-->(a) return n";
     {
-        auto res = _db->queryV2(nQuery, _graphName, &_env->getMem(),
+        auto res = _db->query(nQuery, _graphName, &_env->getMem(),
                                 [&ns](const Dataframe* df) -> void {
                                     ASSERT_TRUE(df);
                                     ASSERT_EQ(1, df->size());
@@ -654,7 +653,7 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
     ColumnNodeIDs bs;
     constexpr std::string_view bQuery = "match (m)-->(b) return b";
     {
-        auto res = _db->queryV2(bQuery, _graphName, &_env->getMem(),
+        auto res = _db->query(bQuery, _graphName, &_env->getMem(),
                                 [&bs](const Dataframe* df) -> void {
                                     ASSERT_TRUE(df);
                                     ASSERT_EQ(1, df->size());
@@ -672,7 +671,7 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
 
     Rows actualRows;
     {
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 2);
@@ -702,7 +701,7 @@ TEST_F(QueriesTest, twoHopXOneHop) {
         ColumnNodeIDs ms;
         ColumnNodeIDs os;
         constexpr std::string_view nQuery = "match (n)-->(m)-->(o) return n, m, o";
-        _db->queryV2(nQuery, _graphName, &_env->getMem(),
+        _db->query(nQuery, _graphName, &_env->getMem(),
                      [&](const Dataframe* df) -> void {
                          ns = *df->cols().at(0)->as<ColumnNodeIDs>();
                          ms = *df->cols().at(1)->as<ColumnNodeIDs>();
@@ -712,7 +711,7 @@ TEST_F(QueriesTest, twoHopXOneHop) {
         ColumnNodeIDs ps;
         ColumnNodeIDs qs;
         constexpr std::string_view bQuery = "match (p)-->(q) return p, q";
-        _db->queryV2(bQuery, _graphName, &_env->getMem(),
+        _db->query(bQuery, _graphName, &_env->getMem(),
                      [&](const Dataframe* df) -> void {
                          ps = *df->cols().front()->as<ColumnNodeIDs>();
                          qs = *df->cols().back()->as<ColumnNodeIDs>();
@@ -729,7 +728,7 @@ TEST_F(QueriesTest, twoHopXOneHop) {
 
     Rows actualRows;
     {
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 5);
@@ -762,7 +761,7 @@ TEST_F(QueriesTest, threeCascadingScanNodesCartProd) {
     {
         constexpr std::string_view scanNodesQuery = "MATCH (n) RETURN n";
         for (auto column : {ss, ts, vs}) {
-            auto res = _db->queryV2(scanNodesQuery, _graphName, &_env->getMem(),
+            auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
                                     [&](const Dataframe* df) -> void {
                                         ASSERT_EQ(df->size(), 1);
                                         column = *df->cols().front()->as<ColumnNodeIDs>();
@@ -781,7 +780,7 @@ TEST_F(QueriesTest, threeCascadingScanNodesCartProd) {
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (s), (t), (v), RETURN s,t,v";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 3);
@@ -803,23 +802,24 @@ TEST_F(QueriesTest, simpleAncestorJoinTest) {
     using Rows = LineContainer<NodeID, NodeID, NodeID>;
 
     Rows expectedRows;
-    ColumnNodeIDs people;
-    ColumnNodeIDs interests;
+    ColumnNodeIDs* people = nullptr;
+    ColumnNodeIDs* interests = nullptr;
     std::unordered_map<NodeID, std::vector<NodeID>> personToInterestMap;
 
     {
-        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        constexpr std::string_view scanNodesQuery = "MATCH (n)-->(m) RETURN n,m";
         auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
-                              [&](const Block& block) -> void {
-                                  ASSERT_EQ(block.size(), 2);
-                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
-                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              [&](const Dataframe* df) -> void {
+                                  ASSERT_EQ(df->size(), 2);
+                                  const auto& cols = df->cols();
+                                  people = cols[0]->as<ColumnNodeIDs>();
+                                  interests = cols[1]->as<ColumnNodeIDs>();
                               });
         ASSERT_TRUE(res);
     }
 
-    for (size_t i = 0; i < people.size(); ++i) {
-        personToInterestMap[people[i]].emplace_back(interests[i]);
+    for (size_t i = 0; i < people->size(); ++i) {
+        personToInterestMap[people->at(i)].emplace_back(interests->at(i));
     }
 
     for (auto& entry : personToInterestMap) {
@@ -834,7 +834,7 @@ TEST_F(QueriesTest, simpleAncestorJoinTest) {
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c),(a)-->(b) RETURN a,b,c";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 3);
@@ -856,23 +856,24 @@ TEST_F(QueriesTest, doubleAncestorJoinTest) {
     using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID>;
 
     Rows expectedRows;
-    ColumnNodeIDs people;
-    ColumnNodeIDs interests;
+    ColumnNodeIDs* people = nullptr;
+    ColumnNodeIDs* interests = nullptr;
     std::unordered_map<NodeID, std::vector<NodeID>> personToInterestMap;
 
     {
-        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        constexpr std::string_view scanNodesQuery = "MATCH (n)-->(m) RETURN n,m";
         auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
-                              [&](const Block& block) -> void {
-                                  ASSERT_EQ(block.size(), 2);
-                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
-                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              [&](const Dataframe* df) -> void {
+                                  ASSERT_EQ(df->size(), 2);
+                                  const auto& cols = df->cols();
+                                  people = cols[0]->as<ColumnNodeIDs>();
+                                  interests = cols[1]->as<ColumnNodeIDs>();
                               });
         ASSERT_TRUE(res);
     }
 
-    for (size_t i = 0; i < people.size(); ++i) {
-        personToInterestMap[people[i]].emplace_back(interests[i]);
+    for (size_t i = 0; i < people->size(); ++i) {
+        personToInterestMap[people->at(i)].emplace_back(interests->at(i));
     }
 
     for (auto& entry : personToInterestMap) {
@@ -885,11 +886,10 @@ TEST_F(QueriesTest, doubleAncestorJoinTest) {
         }
     }
 
-
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c),(a)-->(b), (a)-->(d) RETURN a,b,c,d";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 4);
@@ -912,23 +912,24 @@ TEST_F(QueriesTest, simpleSucessorJoinTest) {
     using Rows = LineContainer<NodeID, NodeID, NodeID>;
 
     Rows expectedRows;
-    ColumnNodeIDs people;
-    ColumnNodeIDs interests;
+    ColumnNodeIDs* people = nullptr;
+    ColumnNodeIDs* interests = nullptr;
     std::unordered_map<NodeID, std::vector<NodeID>> interestToPersonMap;
 
     {
-        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        constexpr std::string_view scanNodesQuery = "MATCH (n)-->(m) RETURN n,m";
         auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
-                              [&](const Block& block) -> void {
-                                  ASSERT_EQ(block.size(), 2);
-                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
-                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              [&](const Dataframe* df) -> void {
+                                  ASSERT_EQ(df->size(), 2);
+                                  const auto& cols = df->cols();
+                                  people = cols[0]->as<ColumnNodeIDs>();
+                                  interests = cols[1]->as<ColumnNodeIDs>();
                               });
         ASSERT_TRUE(res);
     }
 
-    for (size_t i = 0; i < people.size(); ++i) {
-        interestToPersonMap[interests[i]].emplace_back(people[i]);
+    for (size_t i = 0; i < people->size(); ++i) {
+        interestToPersonMap[interests->at(i)].emplace_back(people->at(i));
     }
 
     for (auto& entry : interestToPersonMap) {
@@ -939,11 +940,10 @@ TEST_F(QueriesTest, simpleSucessorJoinTest) {
         }
     }
 
-
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c),(b)-->(c) RETURN a,b,c";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 3);
@@ -965,23 +965,24 @@ TEST_F(QueriesTest, doubleSucessorJoinTest) {
     using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID>;
 
     Rows expectedRows;
-    ColumnNodeIDs people;
-    ColumnNodeIDs interests;
+    ColumnNodeIDs* people = nullptr;
+    ColumnNodeIDs* interests = nullptr;
     std::unordered_map<NodeID, std::vector<NodeID>> interestToPersonMap;
 
     {
-        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        constexpr std::string_view scanNodesQuery = "MATCH (n)-->(m) RETURN n,m";
         auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
-                              [&](const Block& block) -> void {
-                                  ASSERT_EQ(block.size(), 2);
-                                  people = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
-                                  interests = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              [&](const Dataframe* df) -> void {
+                                  ASSERT_EQ(df->size(), 2);
+                                  const auto& cols = df->cols();
+                                  people = cols[0]->as<ColumnNodeIDs>();
+                                  interests = cols[1]->as<ColumnNodeIDs>();
                               });
         ASSERT_TRUE(res);
     }
 
-    for (size_t i = 0; i < people.size(); ++i) {
-        interestToPersonMap[interests[i]].emplace_back(people[i]);
+    for (size_t i = 0; i < people->size(); ++i) {
+        interestToPersonMap[interests->at(i)].emplace_back(people->at(i));
     }
 
     for (auto& entry : interestToPersonMap) {
@@ -999,7 +1000,7 @@ TEST_F(QueriesTest, doubleSucessorJoinTest) {
         // The insertion order of the join column in the return must match the insertion
         // order of the join column in the expectedRow line container
         constexpr std::string_view query = "MATCH (a)-->(c),(d)-->(c),(b)-->(c) RETURN a,b,d,c";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 4);
@@ -1022,25 +1023,26 @@ TEST_F(QueriesTest, sucessorJoinToExpandEdgeTest) {
     using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID>;
 
     Rows expectedRows;
-    ColumnNodeIDs col1;
-    ColumnNodeIDs col2;
+    ColumnNodeIDs* col1 = nullptr;
+    ColumnNodeIDs* col2 = nullptr;
     std::unordered_map<NodeID, std::vector<NodeID>> col1ToCol2Map;
     std::unordered_map<NodeID, std::vector<NodeID>> col2ToCol1Map;
 
     {
-        constexpr std::string_view scanNodesQuery = "MATCH (n)--(m) RETURN n,m";
+        constexpr std::string_view scanNodesQuery = "MATCH (n)-->(m) RETURN n,m";
         auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
-                              [&](const Block& block) -> void {
-                                  ASSERT_EQ(block.size(), 2);
-                                  col1 = *static_cast<ColumnNodeIDs*>(block.columns()[0]);
-                                  col2 = *static_cast<ColumnNodeIDs*>(block.columns()[1]);
+                              [&](const Dataframe* df) -> void {
+                                  ASSERT_EQ(df->size(), 2);
+                                  const auto& cols = df->cols();
+                                  col1 = cols[0]->as<ColumnNodeIDs>();
+                                  col2 = cols[1]->as<ColumnNodeIDs>();
                               });
         ASSERT_TRUE(res);
     }
 
-    for (size_t i = 0; i < col2.size(); ++i) {
-        col2ToCol1Map[col2[i]].emplace_back(col1[i]);
-        col1ToCol2Map[col1[i]].emplace_back(col2[i]);
+    for (size_t i = 0; i < col2->size(); ++i) {
+        col2ToCol1Map[col2->at(i)].emplace_back(col1->at(i));
+        col1ToCol2Map[col1->at(i)].emplace_back(col2->at(i));
     }
 
     for (auto& entry : col2ToCol1Map) {
@@ -1056,7 +1058,7 @@ TEST_F(QueriesTest, sucessorJoinToExpandEdgeTest) {
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c),(b)-->(c)-->(d) RETURN a,b,c,d";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 4);
@@ -1095,7 +1097,7 @@ TEST_F(QueriesTest, xShapedJoinTest) {
 
     {
         constexpr std::string_view scanNodesQuery = "MATCH (l)-->(m), (n)-->(m)-->(p) RETURN l,n,m,p";
-        auto res = _db->queryV2(scanNodesQuery, _graphName, &_env->getMem(),
+        auto res = _db->query(scanNodesQuery, _graphName, &_env->getMem(),
                                 [&](const Dataframe* df) -> void {
                                     ASSERT_TRUE(df != nullptr);
                                     ASSERT_EQ(df->size(), 4);
@@ -1126,7 +1128,7 @@ TEST_F(QueriesTest, xShapedJoinTest) {
     Rows actualRows;
     {
         constexpr std::string_view query = "MATCH (a)-->(c)-->(d), (b)-->(c)-->(e) RETURN a,b,c,d,e";
-        QueryStatus res = _db->queryV2(
+        QueryStatus res = _db->query(
             query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->size(), 5);
@@ -1153,8 +1155,8 @@ TEST_F(QueriesTest, xShapedJoinTest) {
 // The type of join for this test has not been implemented yet - so it is disabled for now
 TEST_F(QueriesTest, blockedBinaryQuery) {
     constexpr std::string_view query = "MATCH (n)-[e]->(m), (n)<-[f]-(m) return n, e, m, f";
-    QueryStatus res = _db->queryV2(query, _graphName, &_env->getMem(),
-                                   [&]([[maybe_unused]] const Dataframe* df) -> void {});
+    QueryStatus res = _db->query(query, _graphName, &_env->getMem(),
+                                   [&](const Dataframe* df) -> void {});
     ASSERT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
     EXPECT_EQ(res.getError(), std::string("Undirected Join Path On Common Successor Not Supported"));
@@ -1175,7 +1177,7 @@ TEST_F(QueriesTest, db_labels) {
         expectedRows.add({id, *name});
     }
 
-    _db->queryV2("CALL db.labels()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query("CALL db.labels()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
         ASSERT_EQ(df->getRowCount(), expectedRows.size());
@@ -1191,7 +1193,7 @@ TEST_F(QueriesTest, db_labels) {
     EXPECT_TRUE(expectedRows.equals(actualRows));
     actualRows.clear();
 
-    _db->queryV2("CALL db.labels() YIELD id, label",
+    _db->query("CALL db.labels() YIELD id, label",
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 2);
@@ -1225,7 +1227,7 @@ TEST_F(QueriesTest, db_edgeTypes) {
         expectedRows.add({id, *name});
     }
 
-    _db->queryV2("CALL db.edgeTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query("CALL db.edgeTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
         ASSERT_EQ(df->getRowCount(), expectedRows.size());
@@ -1241,7 +1243,7 @@ TEST_F(QueriesTest, db_edgeTypes) {
     EXPECT_TRUE(expectedRows.equals(actualRows));
     actualRows.clear();
 
-    _db->queryV2("CALL db.edgeTypes() YIELD id, edgeType",
+    _db->query("CALL db.edgeTypes() YIELD id, edgeType",
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 2);
@@ -1275,7 +1277,7 @@ TEST_F(QueriesTest, db_propertyTypes) {
         expectedRows.add({pt._id, *name, pt._valueType});
     }
 
-    _db->queryV2("CALL db.propertyTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query("CALL db.propertyTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
         ASSERT_EQ(df->getRowCount(), expectedRows.size());
@@ -1292,7 +1294,7 @@ TEST_F(QueriesTest, db_propertyTypes) {
     EXPECT_TRUE(expectedRows.equals(actualRows));
     actualRows.clear();
 
-    _db->queryV2("CALL db.propertyTypes() YIELD id, propertyType, valueType",
+    _db->query("CALL db.propertyTypes() YIELD id, propertyType, valueType",
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 3);
@@ -1345,7 +1347,7 @@ TEST_F(QueriesTest, db_history) {
                           parts.size()});
     }
 
-    _db->queryV2("CALL db.history()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query("CALL db.history()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
         ASSERT_EQ(df->getRowCount(), expectedRows.size());
@@ -1363,7 +1365,7 @@ TEST_F(QueriesTest, db_history) {
     EXPECT_TRUE(expectedRows.equals(actualRows));
     actualRows.clear();
 
-    _db->queryV2("CALL db.history() YIELD commit, nodeCount, edgeCount, partCount",
+    _db->query("CALL db.history() YIELD commit, nodeCount, edgeCount, partCount",
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 4);
@@ -1389,7 +1391,7 @@ TEST_F(QueriesTest, scanByLabelOutEdges) {
 
     LineContainer<NodeID, EdgeID, NodeID> returnedLines;
     LineContainer<NodeID, EdgeID, NodeID> expectedLines;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 3);
         ASSERT_EQ(df->size(), 3);
@@ -1451,7 +1453,7 @@ TEST_F(QueriesTest, scanNodesByLabel) {
 
     LineContainer<NodeID> returnedLines;
     LineContainer<NodeID> expectedLines;
-    _db->queryV2(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query(query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
 
@@ -1486,7 +1488,7 @@ TEST_F(QueriesTest, scanNodesByLabel) {
 TEST_F(QueriesTest, change) {
     {
         const std::string query = "CHANGE NEW";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1503,7 +1505,7 @@ TEST_F(QueriesTest, change) {
 
     {
         const std::string query = "CHANGE LIST";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1520,7 +1522,7 @@ TEST_F(QueriesTest, change) {
 
     {
         const std::string query = "CHANGE SUBMIT";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1537,7 +1539,7 @@ TEST_F(QueriesTest, change) {
 
     {
         const std::string query = "CHANGE LIST";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1551,7 +1553,7 @@ TEST_F(QueriesTest, change) {
 
     {
         const std::string query = "CHANGE NEW";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1568,7 +1570,7 @@ TEST_F(QueriesTest, change) {
 
     {
         const std::string query = "CHANGE DELETE";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1585,7 +1587,7 @@ TEST_F(QueriesTest, change) {
 
     {
         const std::string query = "CHANGE LIST";
-        _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 1);
             ASSERT_EQ(df->cols().size(), 1);
@@ -1604,7 +1606,7 @@ TEST_F(QueriesTest, db_listGraph) {
     _env->getSystemManager().listGraphs(expectedGraphNames.getRaw());
 
     bool callBackExecuted = false;
-    _db->queryV2("list graph", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+    _db->query("list graph", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         callBackExecuted = true;
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
@@ -1628,7 +1630,7 @@ TEST_F(QueriesTest, db_commit) {
 
     {
         const std::string query = "COMMIT";
-        auto res = _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        auto res = _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 0);
             ASSERT_EQ(df->cols().size(), 0);
@@ -1640,7 +1642,7 @@ TEST_F(QueriesTest, db_commit) {
 
     {
         const std::string query = "CHANGE NEW";
-        _db->queryV2(query, _graphName, &_env->getMem(), [&changeID](const Dataframe* df) -> void {
+        _db->query(query, _graphName, &_env->getMem(), [&changeID](const Dataframe* df) -> void {
             const ColumnVector<ChangeID>* changeIDs = df->cols().front()->as<ColumnVector<ChangeID>>();
 
             changeID = changeIDs->at(0);
@@ -1655,7 +1657,7 @@ TEST_F(QueriesTest, db_commit) {
 
     {
         const std::string query = "COMMIT";
-        auto res = _db->queryV2(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
+        auto res = _db->query(query, _graphName, &_env->getMem(), [](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->size(), 0);
             ASSERT_EQ(df->cols().size(), 0); }, CommitHash::head(), changeID);
@@ -1700,7 +1702,7 @@ TEST_F(QueriesTest, whereName) {
     Rows actual;
     {
         for (std::string_view name : names) {
-            auto res = queryV2(MATCH_QUERY(name), [&](const Dataframe* df) -> void {
+            auto res = query(MATCH_QUERY(name), [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(1, df->size()); // Just the 'n' column
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -1737,7 +1739,7 @@ TEST_F(QueriesTest, predicateOR) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(1, df->size()); // Just the 'n' column
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -1776,7 +1778,7 @@ TEST_F(QueriesTest, predicateAND) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(1, df->size()); // Just the 'n' column
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -1813,7 +1815,7 @@ TEST_F(QueriesTest, predicateNOT) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(2, df->size());
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -1862,7 +1864,7 @@ TEST_F(QueriesTest, cartProdThenFilter) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(2, df->size());
             auto* nnames = df->cols().front()->as<ColumnVector<std::optional<String>>>();
@@ -1910,7 +1912,7 @@ TEST_F(QueriesTest, complexPredicate) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(2, df->size());
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
@@ -1940,7 +1942,7 @@ TEST_F(QueriesTest, emptyResultProjectDifferentProp) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(1, df->size());
             auto* names = df->cols().front()->as<ColumnVector<std::optional<String>>>();
@@ -1975,7 +1977,7 @@ TEST_F(QueriesTest, edgeTypeFilter) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(1, df->size());
             auto* es = df->cols().front()->as<ColumnEdgeIDs>();
@@ -2021,7 +2023,7 @@ TEST_F(QueriesTest, pitchDeckPersonInterest) {
 
     Rows actual;
     {
-        auto res = queryV2(MATCH_QUERY, [&](const Dataframe* df) -> void {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(2, df->size());
             auto* ps = df->cols().front()->as<ColumnNodeIDs>();

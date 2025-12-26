@@ -29,31 +29,15 @@ public:
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
-                      QueryCallback callback,
+                      QueryCallbackV2 callback,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
-                      QueryCallback callback,
-                      QueryHeaderCallback headerCallback,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
-
-
-    QueryStatus query(std::string_view query,
-                      std::string_view graphName,
-                      LocalMemory* mem,
-                      CommitHash hash = CommitHash::head(),
-                      ChangeID change = ChangeID::head());
-
-    QueryStatus queryV2(std::string_view query,
-                        std::string_view graphName,
-                        LocalMemory* mem,
-                        QueryCallbackV2 callback,
-                        CommitHash hash = CommitHash::head(),
-                        ChangeID change = ChangeID::head());
 
     SystemManager& getSystemManager() {
         return *_systemManager;

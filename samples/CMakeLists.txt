@@ -43,7 +43,7 @@ add_subdirectory(plan2-test-generator)
 add_subdirectory(parser2)
 add_subdirectory(analyzer2)
 add_subdirectory(v2)
-add_subdirectory(deletions)
+#add_subdirectory(deletions)
 add_subdirectory(vector-db)
 
 set (SCRIPT_LIST_CONTENT "")

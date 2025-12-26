@@ -25,6 +25,26 @@
 
 using namespace db;
 
+namespace {
+
+void sanitizeJsonString(const std::string& input, std::string& res) {
+    res.reserve(input.size()*1.2);
+
+    for (char c : input) {
+        if (c == '"') {
+            res += "\\\"";
+        } else if (c == '\\') {
+            res += "\\\\";
+        } else if (c == '\n') {
+            res += "\\n";
+        } else {
+            res += c;
+        }
+    }
+}
+
+}
+
 DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
     : _writer(&connection.getWriter()),
@@ -155,19 +175,28 @@ void DBServerProcessor::query() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
+    bool isFirstExec = true;
+
+    const QueryCallbackV2 queryCallback = [&](const Dataframe* df) {
+        if (isFirstExec) {
+            JsonEncoder::writeDataframeHeader(payload, *df);
+            payload.key("data");
+            payload.arr();
+            isFirstExec = false;
+        }
+
+        JsonEncoder::writeDataframe(payload, *df);
+    };
+
     const auto res = _db.query(
         httpInfo._payload,
         transactionInfo.graphName,
         &mem,
-        [&](const Block& block) { JsonEncoder::writeBlock(payload, block); },
-        [&](const QueryCommand* cmd) { JsonEncoder::writeHeader(payload, cmd); },
+        queryCallback,
         transactionInfo.commit,
         transactionInfo.change);
 
     if (!res.isOk()) {
-        if (res.getStatus() == QueryStatus::Status::EXEC_ERROR) {
-            payload.end();
-        }
         payload.key("error");
         const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
         payload.value(errorType);
@@ -176,7 +205,10 @@ void DBServerProcessor::query() {
             res.getError().empty() ? "No error message available." : res.getError();
 
         payload.key("error_details");
-        payload.value(errorMsg);
+
+        std::string sanitizedString;
+        sanitizeJsonString(errorMsg, sanitizedString);
+        payload.value(sanitizedString);
 
         return;
     }
@@ -185,6 +217,8 @@ void DBServerProcessor::query() {
 
     payload.key("time");
     payload.value(res.getTotalTime().count());
+
+    payload.end();
 }
 
 void DBServerProcessor::load_graph() {
@@ -342,11 +376,19 @@ void DBServerProcessor::list_loaded_graphs() {
     payload.key("data");
     payload.arr();
 
+    bool firstExec = true;
+    QueryCallbackV2 callback = [&](const Dataframe* df) {
+        if (firstExec) {
+            JsonEncoder::writeDataframeHeader(payload, *df);
+            firstExec = false;
+        }
+        JsonEncoder::writeDataframe(payload, *df);
+    };
+
     const auto res = _db.query("LIST GRAPH",
                                "",
                                &mem,
-                               [&](const Block& block) { JsonEncoder::writeBlock(payload, block); });
-
+                               callback);
     if (!res.isOk()) {
         payload.end();
         payload.key("error");

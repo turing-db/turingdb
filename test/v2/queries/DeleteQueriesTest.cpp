@@ -50,9 +50,9 @@ protected:
         _currentChange = ChangeID::head();
     }
 
-    auto queryV2(std::string_view query, auto callback) {
-        auto res = _db->queryV2(query, _graphName, &_env->getMem(), callback,
-                                CommitHash::head(), _currentChange);
+    auto query(std::string_view query, auto callback) {
+        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+                              CommitHash::head(), _currentChange);
         return res;
     }
 };
@@ -65,7 +65,7 @@ TEST_F(DeleteQueriesTest, matchNDeleteN) {
 
     {
         newChange();
-        auto res = queryV2(deleteQuery, [&](const Dataframe*) -> void {});
+        auto res = query(deleteQuery, [&](const Dataframe*) -> void {});
         ASSERT_TRUE(res);
         submitCurrentChange();
     }
@@ -75,7 +75,7 @@ TEST_F(DeleteQueriesTest, matchNDeleteN) {
     Rows actualRows;
     actualRows.add({0}); // Add a dummy row and then clear it in the callback
     {
-        auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
+        auto res = query(matchQuery, [&](const Dataframe* df) -> void {
             actualRows.clear();
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 1);
@@ -99,7 +99,7 @@ TEST_F(DeleteQueriesTest, deleteIncidentNodesMatchN) {
 
     {
         newChange();
-        auto res = queryV2(deleteQuery, [&](const Dataframe* df) -> void {});
+        auto res = query(deleteQuery, [&](const Dataframe* df) -> void {});
         ASSERT_TRUE(res);
         submitCurrentChange();
     }
@@ -118,7 +118,7 @@ TEST_F(DeleteQueriesTest, deleteIncidentNodesMatchN) {
 
     Rows actualRows;
     {
-        auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
+        auto res = query(matchQuery, [&](const Dataframe* df) -> void {
             actualRows.clear();
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 1);
@@ -142,7 +142,7 @@ TEST_F(DeleteQueriesTest, deleteEdges) {
 
     {
         newChange();
-        auto res = queryV2(deleteQuery, [&](const Dataframe* df) -> void {});
+        auto res = query(deleteQuery, [&](const Dataframe* df) -> void {});
         ASSERT_TRUE(res);
         submitCurrentChange();
     }
@@ -161,7 +161,7 @@ TEST_F(DeleteQueriesTest, deleteEdges) {
         NodeRows actualNodeRows;
         constexpr std::string_view matchQuery = "MATCH (n) RETURN n";
 
-        auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
+        auto res = query(matchQuery, [&](const Dataframe* df) -> void {
             actualNodeRows.clear();
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 1);
@@ -180,7 +180,7 @@ TEST_F(DeleteQueriesTest, deleteEdges) {
         actualEdgeRows.add({0}); // Add a dummy row then clear it before callback
         constexpr std::string_view matchQuery = "MATCH (n)-[e]-(m) RETURN e";
 
-        auto res = queryV2(matchQuery, [&](const Dataframe* df) -> void {
+        auto res = query(matchQuery, [&](const Dataframe* df) -> void {
             actualEdgeRows.clear();
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 1);
