@@ -20,8 +20,7 @@ def spawn_turingdb():
 
 def stop_turingdb(proc):
     print(f"- {GREEN}Stopping turingdb{NC}")
-    proc.send_signal(signal.SIGTERM)
-    proc.wait()
+    subprocess.check_call('pkill turingdb', shell=True)
 
 
 def wait_ready(client):
