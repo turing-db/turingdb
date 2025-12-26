@@ -19,6 +19,7 @@ namespace {
 static TuringServer* _turingServerInstance = nullptr;
 
 void signalHandler(int signum) {
+    spdlog::info("Signal {} received", signum);
     if (_turingServerInstance) {
         _turingServerInstance->stop();
     }
@@ -77,7 +78,6 @@ void TuringServer::start() {
 
     _serverThread = std::thread(serverFunc);
     
-    // We need to handle signals in this thread
     setupSignals();
 
     spdlog::info("Server listening on address: {}:{}",
