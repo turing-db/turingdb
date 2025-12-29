@@ -164,7 +164,7 @@ public:
     }
 
     void value(ChangeID changeID) {
-        value(fmt::format("{:x}", changeID.get()));
+        value(std::to_string(changeID.get()));
     }
 
     void nullValue() {
