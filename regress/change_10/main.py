@@ -6,7 +6,9 @@ client.query(f"CREATE GRAPH {graph}")
 client.set_graph(graph)
 
 for i in range(11):
-    change = client.query("CHANGE NEW")[0][0]
+    res = client.query("CHANGE NEW")
+    change = res['changeID'][0]
+
     client.checkout(change=int(change))
     print(f"Submitting change {change}")
     client.query("CHANGE SUBMIT")

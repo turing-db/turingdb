@@ -10,7 +10,7 @@ turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 
 rm -f pyproject.toml
 uv init
-uv add turingdb
+uv add $PYTURINGDB
 
 uv run main.py
 testres=$?
