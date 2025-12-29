@@ -167,8 +167,19 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate return statement
     if (returnStmt) {
-        generateReturnStmt(returnStmt, currentNode);
+        currentNode = generateReturnStmt(returnStmt, currentNode);
+    } else {
+        // Generate an empty ProduceResults if we have no return
+        // and we have updateStmts.
+        // CALL standalone already handles its own ProduceResults
+        // and readStmts alone must be followed by a RETURN as per grammar
+        if (updateStmts) {
+            currentNode = generateReturnNone(currentNode);
+        }
     }
+
+    bioassert(dynamic_cast<ProduceResultsNode*>(currentNode),
+              "last node of PlanGraph is not a ProduceResultsNode");
 }
 
 void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* query) {
@@ -216,7 +227,7 @@ void PlanGraphGenerator::generateS3TransferQuery(const S3TransferQuery* query) {
     _tree.newOut<ProduceResultsNode>(s3TransferNode);
 }
 
-void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
+PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
     if (prevNode == nullptr) {
         throwError("Return statement without previous node", stmt);
     }
@@ -359,6 +370,15 @@ void PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNod
 
     ProduceResultsNode* results = _tree.newOut<ProduceResultsNode>(prevNode);
     results->setProjection(proj);
+
+    return results;
+
+}
+
+PlanGraphNode* PlanGraphGenerator::generateReturnNone(PlanGraphNode* prevNode) {
+    ProduceResultsNode* prodResults = _tree.newOut<ProduceResultsNode>(prevNode);
+    prodResults->setProduceNone(true);
+    return prodResults;
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {

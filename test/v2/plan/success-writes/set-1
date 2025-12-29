@@ -18,6 +18,10 @@ flowchart TD
         __node_update__ integer
         __node_update__ integer
     `"]
+    4["`
+        __PRODUCE_RESULTS__
+    `"]
     0-->2
     1-->3
     2-->1
+    3-->4

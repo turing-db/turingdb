@@ -8,3 +8,7 @@ flowchart TD
         __node__ (0:Person)
         __node_update__ name
     `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1

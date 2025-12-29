@@ -7,3 +7,7 @@ flowchart TD
         __WRITE__
         __node__ (0:Person {newProp (String): *expr* })
     `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1

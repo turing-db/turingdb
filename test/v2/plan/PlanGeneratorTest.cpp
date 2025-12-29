@@ -114,11 +114,12 @@ public:
             generatedPlan = out.str();
 
             if (resStr != generatedPlan) {
-                fmt::println("== Unit test failed in file: {}", queryFilePath.get());
-                fmt::println("== Generated result differ for query:\n{}", queryStr);
-                fmt::println("== Expected:\n{}", resStr);
-                fmt::println("== Actual:\n{}", generatedPlan);
-                EXPECT_FALSE(true);
+                std::cout << "== Unit test failed in file: " <<  queryFilePath.get() << '\n';
+                std::cout << "== Generated result differ for query:\n" << queryStr << '\n';
+                std::cout << "== Expected:\n" << resStr << '\n';
+                std::cout << "== Actual:\n" << generatedPlan << '\n';
+                std::cout << std::flush;
+                ASSERT_TRUE(false);
             }
         }
     }

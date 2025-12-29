@@ -8,3 +8,7 @@ flowchart TD
         __node__ (0:Person {newProp (Int64): *expr* })
         __node__ (1:Person {newProp (Int64): *expr* })
     `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1

@@ -45,7 +45,8 @@ private:
     void generateChangeQuery(const ChangeQuery* query);
     void generateCommitQuery(const CommitQuery* query);
     void generateSinglePartQuery(const SinglePartQuery* query);
-    void generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);
+    PlanGraphNode* generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode);
+    PlanGraphNode* generateReturnNone(PlanGraphNode* prevNode);
     void generateLoadGraphQuery(const LoadGraphQuery* query);
     void generateListGraphQuery(const ListGraphQuery* query);
     void generateCreateGraphQuery(const CreateGraphQuery* query);

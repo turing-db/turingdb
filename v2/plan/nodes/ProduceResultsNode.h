@@ -21,8 +21,13 @@ public:
         _proj = proj;
     }
 
+    bool isProduceNone() const { return _prodNone; }
+
+    void setProduceNone(bool prodNone) { _prodNone = prodNone; }
+
 private:
     const Projection* _proj {nullptr};
+    bool _prodNone {false};
 };
 
 }

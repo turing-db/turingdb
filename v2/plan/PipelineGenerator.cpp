@@ -668,6 +668,11 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
         _builder.addProjection(items);
     }
 
+    if (node->isProduceNone()) {
+        std::vector<ProjectionItem> noItems;
+        _builder.addProjection(noItems);
+    }
+
     auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;

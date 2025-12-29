@@ -9,3 +9,7 @@ flowchart TD
         __node__ (1:Person)
         __edge__ (0)-[0:NewEdge]->(1)
     `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1
