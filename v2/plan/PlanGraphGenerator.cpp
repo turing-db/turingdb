@@ -177,13 +177,13 @@ void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* query) {
 }
 
 void PlanGraphGenerator::generateListGraphQuery(const ListGraphQuery* query) {
-    ListGraphNode* loadGraphNode = _tree.create<ListGraphNode>();
-    _tree.newOut<ProduceResultsNode>(loadGraphNode);
+    ListGraphNode* listGraphNode = _tree.create<ListGraphNode>();
+    _tree.newOut<ProduceResultsNode>(listGraphNode);
 }
 
 void PlanGraphGenerator::generateCreateGraphQuery(const CreateGraphQuery* query) {
-    CreateGraphNode* loadGraphNode = _tree.create<CreateGraphNode>(query->getGraphName());
-    _tree.newOut<ProduceResultsNode>(loadGraphNode);
+    CreateGraphNode* createGraphNode = _tree.create<CreateGraphNode>(query->getGraphName());
+    _tree.newOut<ProduceResultsNode>(createGraphNode);
 }
 
 void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
