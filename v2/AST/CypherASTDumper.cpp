@@ -8,8 +8,12 @@
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/CallStmt.h"
+#include "stmt/DeleteStmt.h"
+#include "stmt/SetStmt.h"
 #include "stmt/Limit.h"
 #include "stmt/Skip.h"
+#include "stmt/CreateStmt.h"
 #include "Projection.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -28,9 +32,13 @@
 #include "LoadNeo4jQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
+#include "YieldClause.h"
+#include "YieldItems.h"
+#include "stmt/SetItem.h"
 
 #include "expr/All.h"
 
+#include "Overloaded.h"
 #include "CompilerException.h"
 
 using namespace db::v2;
@@ -129,13 +137,49 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
     out << "    }\n";
 
     auto dumpContainer = [&](const StmtContainer* container) {
-        for (const auto& st : container->stmts()) {
-            if (const MatchStmt* matchSt = dynamic_cast<const MatchStmt*>(st)) {
-                out << "    _" << std::hex << query << " ||--o{ _" << std::hex << matchSt << " : \"\"\n";
+        for (const Stmt* stmt : container->stmts()) {
+            switch (stmt->getKind()) {
+                case Stmt::Kind::MATCH: {
+                    const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << matchStmt << " : \"\"\n";
+                    dump(out, matchStmt);
+                }
+                break;
 
-                dump(out, matchSt);
-            } else {
-                throw CompilerException("Unknown statement type");
+                case Stmt::Kind::CREATE: {
+                    const CreateStmt* createStmt = static_cast<const CreateStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << createStmt << " : \"\"\n";
+                    dump(out, createStmt);
+                }
+                break;
+
+                case Stmt::Kind::CALL: {
+                    const CallStmt* callStmt = static_cast<const CallStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << callStmt << " : \"\"\n";
+                    dump(out, callStmt);
+                }
+                break;
+
+                case Stmt::Kind::DELETE: {
+                    const DeleteStmt* deleteStmt = static_cast<const DeleteStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << deleteStmt << " : \"\"\n";
+                    dump(out, deleteStmt);
+                }
+                break;
+
+                case Stmt::Kind::RETURN: {
+                    const ReturnStmt* returnStmt = static_cast<const ReturnStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << returnStmt << " : \"\"\n";
+                    dump(out, returnStmt);
+                }
+                break;
+
+                case Stmt::Kind::SET: {
+                    const SetStmt* setStmt = static_cast<const SetStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << setStmt << " : \"\"\n";
+                    dump(out, setStmt);
+                }
+                break;
             }
         }
     };
@@ -282,14 +326,133 @@ void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {
     }
 }
 
-void CypherASTDumper::dump(std::ostream& out, const Limit* lim) {
-    out << "    _" << std::hex << lim << " {\n";
+void CypherASTDumper::dump(std::ostream& out, const CreateStmt* create) {
+    out << "    _" << std::hex << create << " {\n";
+    out << "        ASTType CREATE\n";
+    out << "    }\n";
+
+    const Pattern* pattern = create->getPattern();
+    out << "    _" << std::hex << create << " ||--o{ _" << std::hex << pattern << " : \"\"\n";
+
+    dump(out, pattern);
+}
+
+void CypherASTDumper::dump(std::ostream& out, const CallStmt* call) {
+    out << "    _" << std::hex << call << " {\n";
+    if (call->isOptional()) {
+        out << "        ASTType CALL\n";
+    } else {
+        out << "        ASTType CALL OPTIONAL\n";
+    }
+    out << "    }\n";
+
+    const FunctionInvocationExpr* funcExpr = call->getFunc();
+    out << "    _" << std::hex << call << " ||--o{ _" << std::hex << funcExpr << " : \"\"\n";
+    dump(out, funcExpr);
+
+    const YieldClause* yield = call->getYield();
+    if (yield) {
+        out << "    _" << std::hex << call << " ||--o{ _" << std::hex << yield << " : \"\"\n";
+        dump(out, yield);
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const YieldClause* yield) {
+    out << "    _" << std::hex << yield << " {\n";
+    out << "        ASTType YIELD\n";
+    out << "    }\n";
+
+    const YieldItems* yieldItems = yield->getItems();
+    for (const SymbolExpr* expr : yieldItems->getItems()) {
+        out << "    _" << std::hex << yield << " ||--o{ _" << std::hex << expr << " : \"\"\n";
+        dump(out, expr);
+    }
+
+    const WhereClause* where = yieldItems->getWhereClause();
+    if (where) {
+        out << "    _" << std::hex << yield << " ||--o{ _" << std::hex << where << " : \"\"\n";
+        dump(out, where);
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const DeleteStmt* deleteStmt) {
+    out << "    _" << std::hex << deleteStmt << " {\n";
+    if (deleteStmt->isDetaching()) {
+        out << "        ASTType DELETE DETACH\n";
+    } else {
+        out << "        ASTType DELETE\n";
+    }
+    out << "    }\n";
+
+    const ExprChain* exprChain = deleteStmt->getExpressions();
+    out << "    _" << std::hex << deleteStmt << " ||--o{ _" << std::hex << exprChain << " : \"\"\n";
+    dump(out, exprChain);
+}
+
+void CypherASTDumper::dump(std::ostream& out, const ExprChain* chain) {
+    out << "    _" << std::hex << chain << " {\n";
+    out << "        ASTType EXPR_CHAIN\n";
+    out << "    }\n";
+
+    for (const Expr* expr : chain->getExprs()) {
+        out << "    _" << std::hex << chain << " ||--o{ _" << std::hex << expr << " : \"\"\n";
+        dump(out, expr);
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const SetStmt* setStmt) {
+    out << "    _" << std::hex << setStmt << " {\n";
+    out << "        ASTType SET\n";
+    out << "    }\n";
+
+    for (const SetItem* item : setStmt->getItems()) {
+        out << "    _" << std::hex << setStmt << " ||--o{ _" << std::hex << item << " : \"\"\n";
+        dump(out, item);
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const SetItem* setItem) {
+    out << "    _" << std::hex << setItem << " {\n";
+    out << "        ASTType SET_ITEM\n";
+    out << "    }\n";
+
+    const auto visitor = Overloaded {
+        [&](const SetItem::PropertyExprAssign& assign) {
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign.propTypeExpr << " : \"\"\n";
+            dump(out, assign.propTypeExpr);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign.propValueExpr << " : \"\"\n";
+            dump(out, assign.propValueExpr);
+        },
+        [&](const SetItem::SymbolAddAssign& symbolAdd) {
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd.symbol << " : \"\"\n";
+            dump(out, symbolAdd.symbol);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd.value << " : \"\"\n";
+            dump(out, symbolAdd.value);
+        },
+        [&](const SetItem::SymbolEntityTypes& symbolEntityTypes) {
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolEntityTypes.value << " : \"\"\n";
+            dump(out, symbolEntityTypes.value);
+        }
+    };
+
+    std::visit(visitor, setItem->item());
+}
+
+void CypherASTDumper::dump(std::ostream& out, const Symbol* symbol) {
+    out << "    _" << std::hex << symbol << " {\n";
+    out << "        ASTType SYMBOL\n";
+    out << "        Name " << symbol->getName() << "\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const Limit* limit) {
+    out << "    _" << std::hex << limit << " {\n";
     out << "        ASTType LIMIT\n";
     out << "    }\n";
 
-    const Expr* expr = lim->getExpr();
+    const Expr* expr = limit->getExpr();
 
-    out << "    _" << std::hex << lim << " ||--o{ _" << std::hex << expr << " : \"\"\n";
+    out << "    _" << std::hex << limit << " ||--o{ _" << std::hex << expr << " : \"\"\n";
 
     dump(out, expr);
 }
