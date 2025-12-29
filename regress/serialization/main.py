@@ -54,18 +54,18 @@ if __name__ == "__main__":
 
         # Make changes
         print(f"- {BLUE}Making changes{NC}")
-        change = client.query("CHANGE NEW")[0][0]
+        change = client.query("CHANGE NEW")['changeID'][0]
         client.checkout(change=str(change))
 
-        create_query = "CREATE (a:Person {name: 'Alice'}), (j:Person {name: 'John'}), (a)-[:KNOWS]-(j)"
+        create_query = "CREATE (a:Person {name: 'Alice'}), (j:Person {name: 'John'}), (a)-[:KNOWS]->(j)"
         print(client.query(create_query))
         print(client.query("COMMIT"))
 
-        create_query = "CREATE (b:Person {name: 'Bob'}), (j at 1)-[:KNOWS]-(b)"
+        create_query = "MATCH (j:Person {name: 'John'}) CREATE (b:Person {name: 'Bob'}), (j)-[:KNOWS]->(b)"
         print(client.query(create_query))
         print(client.query("COMMIT"))
 
-        create_query = "CREATE (c:Person {name: 'Charlie'}), (m:Person {name: 'Mike'}), (c)-[:KNOWS]-(m)"
+        create_query = "CREATE (c:Person {name: 'Charlie'}), (m:Person {name: 'Mike'}), (c)-[:KNOWS]->(m)"
         print(client.query("CHANGE SUBMIT"))
 
         client.checkout()

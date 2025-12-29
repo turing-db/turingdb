@@ -23,14 +23,19 @@ add_subdirectory(list_graphs)
 add_subdirectory(change_submit_alice)
 add_subdirectory(change_10)
 add_subdirectory(submit_empty_change)
-add_subdirectory(create_edges_inject)
+#add_subdirectory(create_edges_inject) Disabled until ID injection in v2
 add_subdirectory(call_labels)
 add_subdirectory(complex_rebases)
 add_subdirectory(serialization)
-add_subdirectory(snapshot_isolation)
+#add_subdirectory(snapshot_isolation) Disabled until ID injection in v2
+
+# Python SDK version to be used by uv
+set(PYTURINGDB "git+https://github.com/turing-db/turingdb-sdk-python")
 
 # write run_regress target
 set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")
+set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}export PYTURINGDB=\"${PYTURINGDB}\"\n\n")
+set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}echo \"- Using turingdb: $PYTURINGDB\"\n\n")
 foreach(test IN ITEMS ${REGRESS_LIST})
     set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}bash ${test}\n")
 endforeach()

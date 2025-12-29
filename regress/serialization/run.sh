@@ -12,7 +12,7 @@ cd $SCRATCH_DIR
 
 # Initialize uv repo
 uv init --bare
-uv add turingdb
+uv add $PYTURINGDB
 
 # Make sure turingdb is not running
 pkill turingdb

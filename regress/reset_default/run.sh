@@ -6,7 +6,7 @@ SCRIPT_GRAPHS_DIR="$SCRIPT_DIR/.turing/graphs"
 
 rm -f pyproject.toml
 uv init
-uv add turingdb
+uv add $PYTURINGDB
 
 pkill turingdb
 rm -rf $SCRIPT_DIR/.turing
