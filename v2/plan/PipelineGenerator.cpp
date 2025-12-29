@@ -646,12 +646,8 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     // No projection can happen in the case of a Standalone call
     // in which case, we can simply output the whole dataframe
-
     if (projNode) {
         std::vector<ProjectionItem> items;
-        // No projection can happen in the case of a Standalone call
-        // in which case, we can simply output the whole dataframe
-
         for (const Expr* item : projNode->items()) {
             const VarDecl* decl = item->getExprVarDecl();
 
