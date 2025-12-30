@@ -221,6 +221,7 @@ public:
         }
     }
 
+    // Greater than
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static void greaterThan(ColumnOptMask* mask,
@@ -740,6 +741,7 @@ private:
      */
     template <typename Operator, typename T, typename U>
         requires OptionallyComparable<T, U>
+              && std::predicate<Operator, unwrap_optional_t<T>, unwrap_optional_t<U>>
     static std::optional<bool> optionalGeneric(const T& a, const U& b) {
         if constexpr (is_optional_v<T>) {
             if (!a.has_value()) {
@@ -753,7 +755,7 @@ private:
             }
         }
 
-        // From herein, a and b are either engaged optionals or values
+        // a and b are both either engaged optionals or values, so safe to unwrap
 
         auto&& av = unwrap(a);
         auto&& bv = unwrap(b);
