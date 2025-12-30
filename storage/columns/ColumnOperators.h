@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <concepts>
+#include <functional>
 #include <optional>
 #include <type_traits>
 
@@ -200,6 +202,7 @@ public:
         maskd[0] = (lhs->getRaw() == rhs->getRaw());
     }
 
+    // Greater than
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static void greaterThan(ColumnOptMask* mask,
@@ -258,6 +261,189 @@ public:
         mask->resize(1);
         auto& maskd = mask->getRaw();
         maskd.front() = optionalGT(lhs->getRaw(), rhs->getRaw());
+    }
+
+    // Less than
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThan(ColumnOptMask* mask,
+                            const ColumnVector<T>* lhs,
+                            const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalLT(lhsd[i], rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThan(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& val = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalLT(lhsd[i], val);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThan(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& val = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalLT(val, rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThan(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+        auto& maskd = mask->getRaw();
+        maskd.front() = optionalLT(lhs->getRaw(), rhs->getRaw());
+    }
+
+    // Greater than or equal
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void greaterThanOrEqual(ColumnOptMask* mask,
+                            const ColumnVector<T>* lhs,
+                            const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalGTE(lhsd[i], rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void greaterThanOrEqual(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& val = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalGTE(lhsd[i], val);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void greaterThanOrEqual(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& val = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalGTE(val, rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void greaterThanOrEqual(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+        auto& maskd = mask->getRaw();
+        maskd.front() = optionalGTE(lhs->getRaw(), rhs->getRaw());
+    }
+
+    // Less than or equal
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThanOrEqual(ColumnOptMask* mask,
+                            const ColumnVector<T>* lhs,
+                            const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalLTE(lhsd[i], rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThanOrEqual(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& val = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalLTE(lhsd[i], val);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThanOrEqual(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& val = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = optionalLTE(val, rhsd[i]);
+        }
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static void lessThanOrEqual(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+        auto& maskd = mask->getRaw();
+        maskd.front() = optionalLTE(lhs->getRaw(), rhs->getRaw());
     }
 
     /**
@@ -500,6 +686,20 @@ public:
     }
 
 private:
+    /**
+     * @brief Partial function which gets the underlying value of an  optional, or
+     * otherwise is the identity function.
+     * @warn Assumes the optional is enganged, does not check for engagement.
+     */
+    template <typename T>
+    constexpr static unwrap_optional_t<T> unwrap(T&& t) {
+        if constexpr (is_optional_v<T>)  {
+            return *std::forward<T>(t);
+        } else {
+            return std::forward<T>(t);
+        }
+    }
+
     template <BooleanOpt T, BooleanOpt U>
     static std::optional<bool> optionalOr(const T& a, const U& b) {
         if (a == CustomBool {true} || b == CustomBool {true}) {
@@ -533,9 +733,14 @@ private:
         return std::nullopt;
     }
 
-    template <typename T, typename U>
+    /**
+     * @brief Generic function to apply an operator to two possibly-optional operands,
+     * where either operand being nullopt results in the final result being nullopt, and the
+     * result of applying the operator otherwise.
+     */
+    template <typename T, typename U, typename Operator>
         requires OptionallyComparable<T, U>
-    static std::optional<bool> optionalEq(const T& a, const U& b) {
+    static std::optional<bool> optionalGeneric(const T& a, const U& b) {
         if constexpr (is_optional_v<T>) {
             if (!a.has_value()) {
                 return std::nullopt;
@@ -550,43 +755,40 @@ private:
 
         // From herein, a and b are either engaged optionals or values
 
-        if constexpr (is_optional_v<T> && is_optional_v<U>) {
-            return *a == *b;
-        } else if constexpr (is_optional_v<T>) {
-            return *a == b;
-        } else if constexpr (is_optional_v<U>) {
-            return a == *b;
-        } else {
-            return a == b;
-        }
+        auto&& av = unwrap(a);
+        auto&& bv = unwrap(b);
+
+        return Operator {}(av, bv);
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static std::optional<bool> optionalEq(const T& a, const U& b) {
+        return optionalGeneric<T, U, std::equal_to<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalGT(const T& a, const U& b) {
-        if constexpr (is_optional_v<T>) {
-            if (!a.has_value()) {
-                return std::nullopt;
-            }
-        }
+        return optionalGeneric<T, U, std::greater<>>(a, b);
+    }
 
-        if constexpr (is_optional_v<U>) {
-            if (!b.has_value()) {
-                return std::nullopt;
-            }
-        }
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static std::optional<bool> optionalLT(const T& a, const U& b) {
+        return optionalGeneric<T, U, std::less<>>(a, b);
+    }
 
-        // From herein, a and b are either engaged optionals or values
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static std::optional<bool> optionalGTE(const T& a, const U& b) {
+        return optionalGeneric<T, U, std::greater_equal<>>(a, b);
+    }
 
-        if constexpr (is_optional_v<T> && is_optional_v<U>) {
-            return *a > *b;
-        } else if constexpr (is_optional_v<T>) {
-            return *a > b;
-        } else if constexpr (is_optional_v<U>) {
-            return a > *b;
-        } else {
-            return a > b;
-        }
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    static std::optional<bool> optionalLTE(const T& a, const U& b) {
+        return optionalGeneric<T, U, std::less_equal<>>(a, b);
     }
 
 };

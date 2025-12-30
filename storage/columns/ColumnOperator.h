@@ -11,9 +11,15 @@ namespace db {
 enum ColumnOperator : uint8_t {
     // Binary operators
     OP_EQUAL = 0,
+
     OP_GREATER_THAN,
+    OP_LESS_THAN,
+    OP_GREATER_THAN_OR_EQUAL,
+    OP_LESS_THAN_OR_EQUAL,
+
     OP_AND,
     OP_OR,
+
     OP_PROJECT,
     OP_IN,
 
@@ -36,9 +42,15 @@ enum class ColumnOperatorType : uint8_t {
 constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
     switch (op) {
         case OP_EQUAL:
+
         case OP_GREATER_THAN:
+        case OP_LESS_THAN:
+        case OP_GREATER_THAN_OR_EQUAL:
+        case OP_LESS_THAN_OR_EQUAL:
+
         case OP_AND:
         case OP_OR:
+
         case OP_PROJECT:
         case OP_IN:
             return ColumnOperatorType::OPTYPE_BINARY;
@@ -66,9 +78,15 @@ constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
 
 using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_EQUAL, "EQUAL">,
+
     EnumStringPair<ColumnOperator::OP_GREATER_THAN, "GREATER_THAN">,
+    EnumStringPair<ColumnOperator::OP_LESS_THAN, "LESS_THAN">,
+    EnumStringPair<ColumnOperator::OP_GREATER_THAN_OR_EQUAL, "GREATER_THAN_OR_EQUAL">,
+    EnumStringPair<ColumnOperator::OP_LESS_THAN_OR_EQUAL, "LESS_THAN_OR_EQUAL">,
+
     EnumStringPair<ColumnOperator::OP_AND, "AND">,
     EnumStringPair<ColumnOperator::OP_OR, "OR">,
+
     EnumStringPair<ColumnOperator::OP_PROJECT, "PROJECT">,
     EnumStringPair<ColumnOperator::OP_IN, "IN">,
 

@@ -2113,23 +2113,21 @@ TEST_F(QueriesTest, int64FilterOperands) {
         testOperand(matchQuery, threshold, std::greater<Duration> {});
     }
 
-    /*
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration < 15 RETURN e)";
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration < 15 RETURN e, e.duration)";
         Duration threshold = 15;
         testOperand(matchQuery, threshold, std::less<Duration> {});
     }
 
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration >= 15 RETURN e)";
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration >= 15 RETURN e, e.duration)";
         Duration threshold = 15;
         testOperand(matchQuery, threshold, std::greater_equal<Duration> {});
     }
 
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration <= 15 RETURN e)";
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration <= 15 RETURN e, e.duration)";
         Duration threshold = 15;
         testOperand(matchQuery, threshold, std::less_equal<Duration> {});
     }
-    */
 }

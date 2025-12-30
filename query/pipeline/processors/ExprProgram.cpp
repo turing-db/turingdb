@@ -108,6 +108,30 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                                                           \
     }
 
+#define LESS_THAN_CASE(Lhs, Rhs)                                                         \
+    case OpCase<OP_LESS_THAN, Lhs, Rhs>: {                                               \
+        ColumnOperators::lessThan(static_cast<ColumnOptMask*>(instr._res),               \
+                                  static_cast<const Lhs*>(instr._lhs),                   \
+                                  static_cast<const Rhs*>(instr._rhs));                  \
+        break;                                                                           \
+    }
+
+#define GREATER_THAN_OR_EQUAL_CASE(Lhs, Rhs)                                             \
+    case OpCase<OP_GREATER_THAN_OR_EQUAL, Lhs, Rhs>: {                                   \
+        ColumnOperators::greaterThanOrEqual(static_cast<ColumnOptMask*>(instr._res),     \
+                                            static_cast<const Lhs*>(instr._lhs),         \
+                                            static_cast<const Rhs*>(instr._rhs));        \
+        break;                                                                           \
+    }
+
+#define LESS_THAN_OR_EQUAL_CASE(Lhs, Rhs)                                                \
+    case OpCase<OP_LESS_THAN_OR_EQUAL, Lhs, Rhs>: {                                      \
+        ColumnOperators::lessThanOrEqual(static_cast<ColumnOptMask*>(instr._res),        \
+                                         static_cast<const Lhs*>(instr._lhs),            \
+                                         static_cast<const Rhs*>(instr._rhs));           \
+        break;                                                                           \
+    }
+
 #define AND_CASE(Lhs, Rhs)                                                               \
     case OpCase<OP_AND, Lhs, Rhs>: {                                                     \
         ColumnOperators::andOp(                                                          \
@@ -275,11 +299,32 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         GREATER_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
         GREATER_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
 
-        GREATER_THAN_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
-        GREATER_THAN_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
+        LESS_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
+        LESS_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
 
-        GREATER_THAN_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
-        GREATER_THAN_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
+        LESS_THAN_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
+        LESS_THAN_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
+
+        LESS_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
+        LESS_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
+
+        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
+        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
+
+        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
+        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
+
+        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
+        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
+
+        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
+        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
+
+        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
+        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
+
+        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
+        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
 
         // Boolean property ops
         AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
