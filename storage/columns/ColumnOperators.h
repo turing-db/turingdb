@@ -45,10 +45,17 @@ struct unwrap_optional<std::optional<U>> {
 template <typename T>
 using unwrap_optional_t = typename unwrap_optional<T>::underlying_type;
 
+// Types that may be compared, but one or both may be wrapped in optional
 template <typename T, typename U>
 concept OptionallyComparable =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
      || std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>);
+
+// Types that are semantically equivalent, but one or both may bew rapped in optional
+template <typename T, typename U>
+concept OptionallyEquivalent =
+    (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
+     || std::same_as<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
 template <typename T>
 concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
@@ -591,7 +598,7 @@ public:
      * @param rhs Lookup set
      */
     template <typename T, typename U>
-        requires OptionallyComparable<T, U> && (!is_optional_v<U>)
+        requires OptionallyEquivalent<T, U> && (!is_optional_v<U>)
     static void inOp(ColumnMask* mask,
                      const ColumnVector<T>* lhs,
                      const ColumnSet<U>* rhs) {
@@ -688,9 +695,9 @@ public:
 
 private:
     /**
-     * @brief Partial function which gets the underlying value of an  optional, or
-     * otherwise is the identity function.
-     * @warn Assumes the optional is enganged, does not check for engagement.
+     * @brief Partial function which returns the underlying value of an  optional, and
+     * is otherwise the identity function. Undefined for nullopt input.
+     * @warn Assumes the optional is engaged, does not check for engagement.
      */
     template <typename T>
     constexpr static unwrap_optional_t<T> unwrap(T&& t) {
@@ -735,14 +742,14 @@ private:
     }
 
     /**
-     * @brief Generic function to apply an operator to two possibly-optional operands,
+     * @brief Generic function to apply a predicate to two possibly-optional operands,
      * where either operand being nullopt results in the final result being nullopt, and the
      * result of applying the operator otherwise.
      */
-    template <typename Operator, typename T, typename U>
+    template <typename Pred, typename T, typename U>
         requires OptionallyComparable<T, U>
-              && std::predicate<Operator, unwrap_optional_t<T>, unwrap_optional_t<U>>
-    static std::optional<bool> optionalGeneric(const T& a, const U& b) {
+              && std::predicate<Pred, unwrap_optional_t<T>, unwrap_optional_t<U>>
+    static std::optional<bool> optionalPredicate(const T& a, const U& b) {
         if constexpr (is_optional_v<T>) {
             if (!a.has_value()) {
                 return std::nullopt;
@@ -760,37 +767,37 @@ private:
         auto&& av = unwrap(a);
         auto&& bv = unwrap(b);
 
-        return Operator {}(av, bv);
+        return Pred {}(av, bv);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalEq(const T& a, const U& b) {
-        return optionalGeneric<std::equal_to<>>(a, b);
+        return optionalPredicate<std::equal_to<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalGT(const T& a, const U& b) {
-        return optionalGeneric<std::greater<>>(a, b);
+        return optionalPredicate<std::greater<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalLT(const T& a, const U& b) {
-        return optionalGeneric<std::less<>>(a, b);
+        return optionalPredicate<std::less<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalGTE(const T& a, const U& b) {
-        return optionalGeneric<std::greater_equal<>>(a, b);
+        return optionalPredicate<std::greater_equal<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalLTE(const T& a, const U& b) {
-        return optionalGeneric<std::less_equal<>>(a, b);
+        return optionalPredicate<std::less_equal<>>(a, b);
     }
 
 };
