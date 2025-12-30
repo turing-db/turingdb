@@ -91,8 +91,11 @@ public:
 
     template <SupportedType T>
     const T::Primitive* tryGet(PropertyTypeID ptID, EntityID entityID) const {
-        const TypedPropertyContainer<T>& container = getContainer<T>(ptID);
-        return container.tryGet(entityID);
+        const TypedPropertyContainer<T>* container = tryGetContainer<T>(ptID);
+        if (!container) {
+            return nullptr;
+        }
+        return container->tryGet(entityID);
     }
 
     template <SupportedType T>
@@ -109,10 +112,22 @@ public:
     const TypedPropertyContainer<T>& getContainer(PropertyTypeID ptID) const {
         const auto it = _map.find(ptID);
         if (it == _map.end()) {
-            throw FatalException("Trying to access a property type that was not registered");
+            throw FatalException(
+                fmt::format("Trying to access property type {} that was not registered",
+                            ptID.getValue()));
         }
 
         return it->second->cast<T>();
+    }
+
+    template <SupportedType T>
+    const TypedPropertyContainer<T>* tryGetContainer(PropertyTypeID ptID) const {
+        const auto it = _map.find(ptID);
+        if (it == _map.end()) {
+            return nullptr;
+        }
+        const auto& casted = it->second->cast<T>();
+        return &casted;
     }
 
     void fillEntityPropertyView(EntityID entityID,
