@@ -2061,41 +2061,69 @@ TEST_F(QueriesTest, pitchDeckPersonInterest) {
     ASSERT_TRUE(expected.equals(actual));
 }
 
-TEST_F(QueriesTest, greaterThanFilter) {
+TEST_F(QueriesTest, int64FilterOperands) {
     using Duration = types::Int64::Primitive;
     using Rows = LineContainer<EdgeID>;
 
-    std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration > 15 RETURN e)";
-    Duration threshold = 15;
+    // Set up
+    auto testOperand = [this](std::string_view matchQuery,
+                              Duration threshold,
+                              auto comp) -> void {
+        PropertyTypeID durationProp = getPropID("duration");
 
-    PropertyTypeID durationProp = getPropID("duration");
+        Rows expected;
+        {
+            for (const EdgeRecord& e : read().scanOutEdges()) {
 
-    Rows expected;
-    {
-        for (const EdgeRecord& e : read().scanOutEdges()) {
-
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
-            if (duration && std::greater<Duration>{}(*duration, threshold)) {
-                expected.add({e._edgeID});
+                const auto* duration =
+                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+                if (duration && comp(*duration, threshold)) {
+                    expected.add({e._edgeID});
+                }
             }
         }
-    }
 
-    Rows actual;
+        Rows actual;
+        {
+            auto res = query(matchQuery, [&actual](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+
+                auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                ASSERT_TRUE(es);
+
+                for (EdgeID e : *es) {
+                    actual.add({e});
+                }
+            });
+
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(expected.equals(actual));
+    };
+
+    // Test cases
     {
-        auto res = query(matchQuery, [&actual](const Dataframe* df) -> void {
-            ASSERT_TRUE(df);
-
-            auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
-            ASSERT_TRUE(es);
-
-            for (EdgeID e : *es) {
-                actual.add({e});
-            }
-        });
-
-        ASSERT_TRUE(res);
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration > 15 RETURN e)";
+        Duration threshold = 15;
+        testOperand(matchQuery, threshold, std::greater<Duration> {});
     }
 
-    EXPECT_TRUE(expected.equals(actual));
+    {
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration < 15 RETURN e)";
+        Duration threshold = 15;
+        testOperand(matchQuery, threshold, std::less<Duration> {});
+    }
+
+    {
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration >= 15 RETURN e)";
+        Duration threshold = 15;
+        testOperand(matchQuery, threshold, std::greater_equal<Duration> {});
+    }
+
+    {
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration <= 15 RETURN e)";
+        Duration threshold = 15;
+        testOperand(matchQuery, threshold, std::less_equal<Duration> {});
+    }
 }
