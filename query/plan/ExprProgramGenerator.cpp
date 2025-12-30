@@ -69,6 +69,10 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
             return ColumnOperator::OP_EQUAL;
         break;
 
+        case BinaryOperator::GreaterThan:
+            return ColumnOperator::OP_GREATER_THAN;
+        break;
+
         case BinaryOperator::_SIZE:
             throw FatalException(
                 "Attempted to generate invalid binary operator in ExprProgramGenerator.");

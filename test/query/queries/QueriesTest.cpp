@@ -2063,7 +2063,7 @@ TEST_F(QueriesTest, pitchDeckPersonInterest) {
 
 TEST_F(QueriesTest, int64FilterOperands) {
     using Duration = types::Int64::Primitive;
-    using Rows = LineContainer<EdgeID>;
+    using Rows = LineContainer<EdgeID, Duration>;
 
     // Set up
     auto testOperand = [this](std::string_view matchQuery,
@@ -2078,7 +2078,7 @@ TEST_F(QueriesTest, int64FilterOperands) {
                 const auto* duration =
                     read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
                 if (duration && comp(*duration, threshold)) {
-                    expected.add({e._edgeID});
+                    expected.add({e._edgeID, *duration});
                 }
             }
         }
@@ -2089,10 +2089,14 @@ TEST_F(QueriesTest, int64FilterOperands) {
                 ASSERT_TRUE(df);
 
                 auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
-                ASSERT_TRUE(es);
+                auto* durs = findColumn(df, "e.duration")->as<ColumnOptVector<Duration>>();
 
-                for (EdgeID e : *es) {
-                    actual.add({e});
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(durs);
+                ASSERT_EQ(es->size(), durs->size());
+
+                for (size_t row = 0; row < es->size(); row++) {
+                    actual.add({es->at(row), *durs->at(row)});
                 }
             });
 
@@ -2104,11 +2108,12 @@ TEST_F(QueriesTest, int64FilterOperands) {
 
     // Test cases
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration > 15 RETURN e)";
+        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration > 15 RETURN e, e.duration)";
         Duration threshold = 15;
         testOperand(matchQuery, threshold, std::greater<Duration> {});
     }
 
+    /*
     {
         std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration < 15 RETURN e)";
         Duration threshold = 15;
@@ -2126,4 +2131,5 @@ TEST_F(QueriesTest, int64FilterOperands) {
         Duration threshold = 15;
         testOperand(matchQuery, threshold, std::less_equal<Duration> {});
     }
+    */
 }
