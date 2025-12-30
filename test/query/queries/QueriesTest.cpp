@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+
+#include <functional>
 #include <string_view>
 
 #include "TuringDB.h"
@@ -14,6 +16,7 @@
 #include "dataframe/Dataframe.h"
 
 #include "LineContainer.h"
+#include "TuringException.h"
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
 
@@ -41,6 +44,24 @@ protected:
         auto res = _db->query(query, _graphName, &_env->getMem(), callback,
                               CommitHash::head(), ChangeID::head());
         return res;
+    }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            if (col->getName() == name) {
+                return col;
+            }
+        }
+        return nullptr;
+    }
+
+    PropertyTypeID getPropID(std::string_view propertyName) {
+        auto propOpt = read().getView().metadata().propTypes().get(propertyName);
+        if (!propOpt) {
+            throw TuringException(
+                fmt::format("Failed to get property: {}.", propertyName));
+        }
+        return propOpt->_id;
     }
 };
 
@@ -2038,4 +2059,43 @@ TEST_F(QueriesTest, pitchDeckPersonInterest) {
         ASSERT_TRUE(res);
     }
     ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(QueriesTest, greaterThanFilter) {
+    using Duration = types::Int64::Primitive;
+    using Rows = LineContainer<EdgeID>;
+
+    std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration > 15 RETURN e)";
+    Duration threshold = 15;
+
+    PropertyTypeID durationProp = getPropID("duration");
+
+    Rows expected;
+    {
+        for (const EdgeRecord& e : read().scanOutEdges()) {
+
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+            if (duration && std::greater<Duration>{}(*duration, threshold)) {
+                expected.add({e._edgeID});
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = query(matchQuery, [&actual](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+
+            auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+            ASSERT_TRUE(es);
+
+            for (EdgeID e : *es) {
+                actual.add({e});
+            }
+        });
+
+        ASSERT_TRUE(res);
+    }
+
+    EXPECT_TRUE(expected.equals(actual));
 }
