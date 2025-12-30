@@ -320,8 +320,26 @@ const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID 
     return nullptr;
 }
 
+template <SupportedType T>
+const T::Primitive* GraphReader::tryGetEdgeProperty(PropertyTypeID ptID, EdgeID edgeID) const {
+    for (const auto& part : _view.dataparts()) {
+        const auto* p = part->edgeProperties().tryGet<T>(ptID, edgeID.getValue());
+        if (p) {
+            return p;
+        }
+    }
+
+    return nullptr;
+}
+
 template const types::UInt64::Primitive* GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::Int64::Primitive* GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::Double::Primitive* GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::String::Primitive* GraphReader::tryGetNodeProperty<types::String>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::Bool::Primitive* GraphReader::tryGetNodeProperty<types::Bool>(PropertyTypeID ptID, NodeID nodeID) const;
+
+template const types::UInt64::Primitive* GraphReader::tryGetEdgeProperty<types::UInt64>(PropertyTypeID ptID, EdgeID edgeID) const;
+template const types::Int64::Primitive* GraphReader::tryGetEdgeProperty<types::Int64>(PropertyTypeID ptID, EdgeID edgeID) const;
+template const types::Double::Primitive* GraphReader::tryGetEdgeProperty<types::Double>(PropertyTypeID ptID, EdgeID edgeID) const;
+template const types::String::Primitive* GraphReader::tryGetEdgeProperty<types::String>(PropertyTypeID ptID, EdgeID edgeID) const;
+template const types::Bool::Primitive* GraphReader::tryGetEdgeProperty<types::Bool>(PropertyTypeID ptID, EdgeID edgeID) const;

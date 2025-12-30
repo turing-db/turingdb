@@ -96,6 +96,10 @@ public:
                                                          NodeID nodeID) const;
 
     template <SupportedType T>
+    [[nodiscard]] const T::Primitive* tryGetEdgeProperty(PropertyTypeID ptID,
+                                                         EdgeID edgeID) const;
+
+    template <SupportedType T>
     [[nodiscard]] ScanNodePropertiesRange<T> scanNodeProperties(PropertyTypeID ptID) const {
         return ScanNodePropertiesRange<T>(_view, ptID);
     }
