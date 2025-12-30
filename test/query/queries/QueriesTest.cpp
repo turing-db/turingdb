@@ -2108,26 +2108,39 @@ TEST_F(QueriesTest, int64FilterOperands) {
 
     // Test cases
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration > 15 RETURN e, e.duration)";
-        Duration threshold = 15;
+        const Duration threshold = 15;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration > {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::greater<Duration> {});
     }
 
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration < 15 RETURN e, e.duration)";
-        Duration threshold = 15;
+        const Duration threshold = 15;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration < {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::less<Duration> {});
     }
 
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration >= 15 RETURN e, e.duration)";
-        Duration threshold = 15;
+        const Duration threshold = 15;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration >= {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::greater_equal<Duration> {});
     }
 
     {
-        std::string_view matchQuery = R"(MATCH (n)-[e]->(m) WHERE e.duration <= 15 RETURN e, e.duration)";
-        Duration threshold = 15;
+        const Duration threshold = 15;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration <= {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::less_equal<Duration> {});
+    }
+
+    // Test empty
+    {
+        const Duration threshold = 0;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration < {} RETURN e, e.duration", threshold);
+        testOperand(matchQuery, threshold, std::less<Duration> {});
+    }
+
+    {
+        const Duration threshold = 9999;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration > {} RETURN e, e.duration", threshold);
+        testOperand(matchQuery, threshold, std::greater<Duration> {});
     }
 }
