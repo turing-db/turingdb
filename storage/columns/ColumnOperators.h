@@ -738,7 +738,7 @@ private:
      * where either operand being nullopt results in the final result being nullopt, and the
      * result of applying the operator otherwise.
      */
-    template <typename T, typename U, typename Operator>
+    template <typename Operator, typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalGeneric(const T& a, const U& b) {
         if constexpr (is_optional_v<T>) {
@@ -764,31 +764,35 @@ private:
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
     static std::optional<bool> optionalEq(const T& a, const U& b) {
-        return optionalGeneric<T, U, std::equal_to<>>(a, b);
+        return optionalGeneric<std::equal_to<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
+              && std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>
     static std::optional<bool> optionalGT(const T& a, const U& b) {
-        return optionalGeneric<T, U, std::greater<>>(a, b);
+        return optionalGeneric<std::greater<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
+              && std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>
     static std::optional<bool> optionalLT(const T& a, const U& b) {
-        return optionalGeneric<T, U, std::less<>>(a, b);
+        return optionalGeneric<std::less<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
+              && std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>
     static std::optional<bool> optionalGTE(const T& a, const U& b) {
-        return optionalGeneric<T, U, std::greater_equal<>>(a, b);
+        return optionalGeneric<std::greater_equal<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
+              && std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>
     static std::optional<bool> optionalLTE(const T& a, const U& b) {
-        return optionalGeneric<T, U, std::less_equal<>>(a, b);
+        return optionalGeneric<std::less_equal<>>(a, b);
     }
 
 };
