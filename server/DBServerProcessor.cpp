@@ -7,7 +7,6 @@
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/EdgeView.h"
-#include "QueryInterpreter.h"
 #include "SystemManager.h"
 #include "Path.h"
 
