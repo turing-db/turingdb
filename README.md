@@ -70,7 +70,7 @@ TuringDB was created to solve real-world performance challenges in critical indu
 - Store large text chunks and numerical values for comprehensive context
 - Ideal for LLM integration, digital twins, and multi-layer graphs
 
-###[**Developer Friendly**](https://docs.turingdb.ai/query/cypher_subset)
+### [**Developer Friendly**](https://docs.turingdb.ai/query/cypher_subset)
 
 - OpenCypher query language
 - Python SDK with comprehensive API
@@ -256,6 +256,6 @@ See [LICENSE](https://www.notion.so/turingbio/LICENSE) for details.
 
 **Star us on GitHub** - it helps the project grow!
 
-[⬆ Back to Top](https://www.notion.so/Github-README-2d33aad664c8801cbb62d27a734ec319?pvs=21)
+[⬆ Back to Top](https://github.com/turing-db)
 
 </div>
