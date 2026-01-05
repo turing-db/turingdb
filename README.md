@@ -12,7 +12,9 @@
 
 [Website](https://turingdb.ai/) • [Documentation](https://docs.turingdb.ai/) • [Discord](https://discord.gg/dMM48ns5VY) • [Examples](https://github.com/turing-db/turingdb-examples)
 
-
+<p align="center">
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/smallerspinning.gif" width="700" />
+</p>
 
 ## What is TuringDB?
 
