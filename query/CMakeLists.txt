@@ -1,3 +1,4 @@
+add_subdirectory(common)
 add_subdirectory(AST)
 add_subdirectory(parser)
 add_subdirectory(analyzer)

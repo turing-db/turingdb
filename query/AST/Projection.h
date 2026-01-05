@@ -3,8 +3,6 @@
 #include <variant>
 #include <vector>
 
-#include "CompilerException.h"
-
 namespace db::v2 {
 
 class Limit;
@@ -57,14 +55,7 @@ public:
         return std::get<Items>(_items);
     }
 
-    void add(Expr* Expr) {
-        auto* items = std::get_if<Items>(&_items);
-        if (!items) {
-            throw CompilerException("Cannot add item to a projection that already holds '*'");
-        }
-
-        items->emplace_back(Expr);
-    }
+    void add(Expr* Expr);
 
     void setAll() { _items = All {}; }
 

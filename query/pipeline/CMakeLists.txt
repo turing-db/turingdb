@@ -59,16 +59,16 @@ set(procedures_sources
     procedures/HistoryProcedure.cpp
 )
 
-add_library(turing_db_v2_pipeline_s
+add_library(turing_db_pipeline_s
     STATIC ${pipeline_sources}
            ${processors_sources}
            ${procedures_sources})
 
-target_include_directories(turing_db_v2_pipeline_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(turing_db_pipeline_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(turing_db_v2_pipeline_s PUBLIC
+target_link_libraries(turing_db_pipeline_s PUBLIC
     turing_db_memory_s)
 
-target_link_libraries(turing_db_v2_pipeline_s PRIVATE
+target_link_libraries(turing_db_pipeline_s PRIVATE
     turing_db_storage_s
     turing_db_system_s)

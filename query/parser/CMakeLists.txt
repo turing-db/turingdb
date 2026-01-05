@@ -20,14 +20,15 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.cp
     PROPERTIES
     COMPILE_FLAGS -Wno-unused-but-set-variable)
 
-add_library(turing_db_v2_parser_s STATIC ${parser_sources})
+add_library(turing_db_parser_s STATIC ${parser_sources})
 
-target_include_directories(turing_db_v2_parser_s
+target_include_directories(turing_db_parser_s
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
   PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(turing_db_v2_parser_s
-  PUBLIC turing_common_s
-         turing_db_v2_ast_s
-         range-v3)
+target_link_libraries(turing_db_parser_s
+    PRIVATE turing_common_s
+            turing_db_query_common_s
+            turing_db_ast_s
+            range-v3)
 
