@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/main/logo_spiral.png" width="400" alt="TuringDB logo">
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/logo_spiral.png" width="400" alt="TuringDB logo">
 </p>
 
 # TuringDB Community Edition
