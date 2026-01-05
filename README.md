@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/main/logo_spiral.png" width="200" alt="TuringDB logo">
+  <img src="https://github.com/turing-db/turingdb/blob/main/logo_spiral.png" width="400" alt="TuringDB logo">
 </p>
 
 # TuringDB Community Edition
@@ -24,13 +24,13 @@ Built from scratch in C++.
 TuringDB delivers **millisecond query latency** on graphs with millions of nodes and edges. TuringDB is commonly 200x faster than Neo4j on deep multihop queries.
 
 
-<p align="center">
+<p align="left">
   <a href="https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1">
     <img src="https://github.com/turing-db/turingdb/blob/update-readme/newyoutubeimage.png" width="400" />
   </a>
 </p>
 
-### Visualizing a massive mesh graph with OpenGL accelerated graph visualization
+#### Visualizing a massive mesh graph with OpenGL accelerated graph visualization
 
 ## Why TuringDB?
 
@@ -44,25 +44,25 @@ TuringDB was created to solve real-world performance challenges in critical indu
 
 ## Key Features
 
-### **Extreme Performance**
+### [**Performance-first Architecture**](https://docs.turingdb.ai/query/benchmarks)
 
 - **0.1-50ms query latency** for analytical queries on 10M+ node graphs
 - Column-oriented architecture with streaming query processing: nodes and edges are processed in chunks for efficiency
 - In-memory graph storage with efficient memory representations
 
-### **Zero-Lock Concurrency**
+### [**Zero-Lock Concurrency**](https://docs.turingdb.ai/concepts/zero_locking)
 
 - Reads and writes never compete - analytical queries run without locking from writes
 - Massive parallelism for dashboards, AI pipelines, and batch processing
 - Each transaction executes on its own immutable snapshot. Guarantees Snapshot Isolation.
 
-### **Git-Like Versioning**
+### [**The First Git-like Versioning System for Graphs**](https://docs.turingdb.ai/concepts/zero_locking)
 
 - Create and commit graph versions, maintain branches, merge changes, and time travel through history
 - Perfect for reproducibility, auditability, and regulatory compliance
 - Immutable snapshots ensure data integrity
 
-### **Rich Graph Semantics & Metadata**
+### [**Rich Graph Semantics & Metadata**](https://docs.turingdb.ai/concepts/commits)
 
 - Unlimited properties per node and edge (up to 1MB per node)
 - Store large text chunks and numerical values for comprehensive context
