@@ -2,12 +2,17 @@
 
 #include <string>
 
-#include "TuringException.h"
+#include "CompilerException.h"
 
-namespace db {
+namespace db::v2 {
 
-class ParserException : public TuringException {
+class ParserException : public CompilerException {
 public:
+    ParserException(const ParserException&) = default;
+    ParserException(ParserException&&) = default;
+    ParserException& operator=(const ParserException&) = default;
+    ParserException& operator=(ParserException&&) = default;
+
     explicit ParserException(std::string&& msg);
     ~ParserException() noexcept override;
 };

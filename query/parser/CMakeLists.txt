@@ -1,28 +1,33 @@
-flex_target(lexer ${CMAKE_CURRENT_SOURCE_DIR}/lexer.l
-            ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp
-            DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/lexer.h)
+flex_target(cypher_lexer ${CMAKE_CURRENT_SOURCE_DIR}/CypherLexer.l
+            ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherLexer.cpp
+            DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherLexer.h)
 
-bison_target(parser ${CMAKE_CURRENT_SOURCE_DIR}/parser.y
-             ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp
-             COMPILE_FLAGS "-d -v")
+bison_target(cypher_parser ${CMAKE_CURRENT_SOURCE_DIR}/CypherParser.y
+             ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.cpp
+             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.h
+             COMPILE_FLAGS "-d -v -Wcounterexamples")
 
-add_flex_bison_dependency(lexer parser)
+add_flex_bison_dependency(cypher_lexer cypher_parser)
 
 set(parser_sources
-        ${BISON_parser_OUTPUTS}
-        ${FLEX_lexer_OUTPUTS}
-        QueryParser.cpp
-        ParserException.cpp)
+    YCypherScanner.cpp
+    CypherParser.cpp
+    ParserException.cpp
+    ${BISON_cypher_parser_OUTPUTS}
+    ${FLEX_cypher_lexer_OUTPUTS})
 
-set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/parser.cpp 
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.cpp 
     PROPERTIES
     COMPILE_FLAGS -Wno-unused-but-set-variable)
 
-add_library(turing_db_query_parser_s STATIC ${parser_sources})
-target_include_directories(turing_db_query_parser_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(turing_db_query_parser_s PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(turing_db_query_parser_s PRIVATE
-    turing_db_query_AST_s
-    turing_common_s
-    turing_db_storage_s
-)
+add_library(turing_db_v2_parser_s STATIC ${parser_sources})
+
+target_include_directories(turing_db_v2_parser_s
+  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+  PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+target_link_libraries(turing_db_v2_parser_s
+  PUBLIC turing_common_s
+         turing_db_v2_ast_s
+         range-v3)
+
