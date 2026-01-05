@@ -1,5 +1,7 @@
 
-![TuringDB logo](https://github.com/turing-db/turingdb/blob/main/logo_spiral.png)
+<p align="center">
+  <img src="https://github.com/turing-db/turingdb/blob/main/logo_spiral.png" width="200" alt="TuringDB logo">
+</p>
 
 # TuringDB
 
