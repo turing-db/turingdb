@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-namespace db::v2 {
+namespace db {
 
 enum class ChangeOp : uint8_t {
     NEW = 0,

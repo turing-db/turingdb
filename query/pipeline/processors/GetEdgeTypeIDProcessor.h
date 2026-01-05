@@ -9,7 +9,7 @@
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class PipelineV2;
 

@@ -10,7 +10,7 @@ namespace db {
 class Dataframe;
 }
 
-namespace db::v2 {
+namespace db {
 
 class LambdaSourceProcessor : public Processor {
 public:

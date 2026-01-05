@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "decl/DeclContext.h"
 
-using namespace db::v2;
+using namespace db;
 
 S3ConnectQuery::S3ConnectQuery(DeclContext* declContext,
                                std::string_view accessId,

@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace db::v2 {
+namespace db {
 
 class Symbol;   
 class CypherAST;

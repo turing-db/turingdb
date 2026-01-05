@@ -9,7 +9,7 @@
 
 #include "PipelineException.h"
 
-using namespace db::v2;
+using namespace db;
 
 CountProcessor::CountProcessor()
 {

@@ -5,7 +5,7 @@
 #include "Path.h"
 #include "PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class LoadNeo4jNode : public PlanGraphNode {
 public:

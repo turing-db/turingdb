@@ -11,7 +11,7 @@ class JobSystem;
 
 }
 
-namespace db::v2 {
+namespace db {
 
 class InterpreterContext;
 

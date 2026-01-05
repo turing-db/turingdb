@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 FunctionInvocation* FunctionInvocation::create(CypherAST* ast, QualifiedName* name) {
     FunctionInvocation* invocation = new FunctionInvocation(name);

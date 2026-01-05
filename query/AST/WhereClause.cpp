@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 WhereClause* WhereClause::create(CypherAST* ast, Expr* expr) {
     WhereClause* clause = new WhereClause(expr);

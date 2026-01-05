@@ -9,7 +9,7 @@
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
-using namespace db::v2;
+using namespace db;
 
 ScanNodesProcessor::ScanNodesProcessor()
 {

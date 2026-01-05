@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 Skip::Skip(Expr* expr)
     : _expr(expr)

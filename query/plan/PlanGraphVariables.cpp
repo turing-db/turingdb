@@ -6,7 +6,7 @@
 #include "nodes/VarNode.h"
 #include "nodes/FilterNode.h"
 
-using namespace db::v2;
+using namespace db;
 
 PlanGraphVariables::PlanGraphVariables(PlanGraph* tree)
     : _tree(tree)

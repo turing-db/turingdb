@@ -27,7 +27,7 @@
 
 #include "AnalyzeException.h"
 
-using namespace db::v2;
+using namespace db;
 
 CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
@@ -289,20 +289,20 @@ void CypherAnalyzer::analyze(S3TransferQuery* s3Transfer) {
     std::string_view s3URL = s3Transfer->getS3Url();
 
     if (s3URL.substr(0, 5) != "s3://") {
-        throw db::v2::AnalyzeException(fmt::format("Invalid S3 URL: {}", s3URL));
+        throwError(fmt::format("Invalid S3 URL: {}", s3URL));
     }
     s3URL.remove_prefix(5);
     const auto bucketEnd = s3URL.find('/');
 
     if (bucketEnd == std::string_view::npos) {
-        throw db::v2::AnalyzeException(fmt::format("S3 Bucket Not Found: {}", s3URL));
+        throwError(fmt::format("S3 Bucket Not Found: {}", s3URL));
     }
 
     s3Transfer->setS3Bucket(s3URL.substr(0, bucketEnd));
     s3URL.remove_prefix(bucketEnd + 1);
 
     if (s3URL.empty()) {
-        throw db::v2::AnalyzeException(fmt::format("S3 Prefix/Folder not found: {}", s3URL));
+        throwError(fmt::format("S3 Prefix/Folder not found: {}", s3URL));
     }
 
     if (s3URL.back() != '/') {

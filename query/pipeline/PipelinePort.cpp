@@ -3,7 +3,7 @@
 #include "PipelineV2.h"
 #include "PipelineBuffer.h"
 
-using namespace db::v2;
+using namespace db;
 
 void PipelinePort::postCreate(PipelineV2* pipeline) {
     pipeline->addPort(this);

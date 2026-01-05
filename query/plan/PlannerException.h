@@ -4,7 +4,7 @@
 
 #include "CompilerException.h"
 
-namespace db::v2 {
+namespace db {
 
 class PlannerException : public CompilerException {
 public:

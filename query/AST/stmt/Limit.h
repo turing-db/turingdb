@@ -2,7 +2,7 @@
 
 #include "SubStmt.h"
 
-namespace db::v2 {
+namespace db {
 
 class Expr;
 class CypherAST;

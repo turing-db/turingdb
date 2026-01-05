@@ -6,7 +6,7 @@
 #include "decl/VarDecl.h"
 #include "nodes/VarNode.h"
 
-using namespace db::v2;
+using namespace db;
 
 PlanGraphTopology::PlanGraphTopology() = default;
 

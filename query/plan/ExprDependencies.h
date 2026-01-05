@@ -16,7 +16,7 @@
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
 
-namespace db::v2 {
+namespace db {
 
 class ExprDependencies {
 public:

@@ -2,7 +2,7 @@
 
 #include "nodes/PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class Projection;
 

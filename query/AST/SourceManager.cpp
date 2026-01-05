@@ -1,7 +1,7 @@
 #include "SourceManager.h"
 #include "spdlog/fmt/bundled/base.h"
 
-using namespace db::v2;
+using namespace db;
 
 namespace {
 

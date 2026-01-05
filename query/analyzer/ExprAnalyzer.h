@@ -11,7 +11,7 @@ namespace db {
 class GraphMetadata;
 }
 
-namespace db::v2 {
+namespace db {
 
 class CypherAST;
 class DeclContext;

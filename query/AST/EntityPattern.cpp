@@ -1,6 +1,6 @@
 #include "EntityPattern.h"
 
-using namespace db::v2;
+using namespace db;
 
 EntityPattern::EntityPattern()
 {

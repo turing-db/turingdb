@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "decl/DeclContext.h"
 
-using namespace db::v2;
+using namespace db;
 
 SinglePartQuery::SinglePartQuery(DeclContext* declContext)
     : QueryCommand(declContext)

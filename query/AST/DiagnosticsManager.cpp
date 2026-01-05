@@ -3,7 +3,7 @@
 #include "SourceLocation.h"
 #include "SourceManager.h"
 
-using namespace db::v2;
+using namespace db;
 
 DiagnosticsManager::DiagnosticsManager(SourceManager* sourceManager)
     : _sourceManager(sourceManager)

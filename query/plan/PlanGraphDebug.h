@@ -6,7 +6,7 @@ namespace db {
 class GraphView;
 }
 
-namespace db::v2 {
+namespace db {
 
 class PlanGraph;
 

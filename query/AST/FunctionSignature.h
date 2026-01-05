@@ -4,7 +4,7 @@
 
 #include "decl/EvaluatedType.h"
 
-namespace db::v2 {
+namespace db {
 
 struct FunctionReturnType {
     EvaluatedType _type;

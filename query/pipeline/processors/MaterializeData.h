@@ -11,7 +11,7 @@ class Dataframe;
 class NamedColumn;
 }
 
-namespace db::v2 {
+namespace db {
 
 class MaterializeData {
 public:

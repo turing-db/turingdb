@@ -4,7 +4,7 @@
 
 #include "EnumToString.h"
 
-namespace db::v2 {
+namespace db {
 
 enum class BinaryOperator : uint8_t {
     Or,

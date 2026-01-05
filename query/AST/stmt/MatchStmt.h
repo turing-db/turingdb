@@ -2,7 +2,7 @@
 
 #include "Stmt.h"
 
-namespace db::v2 {
+namespace db {
 
 class Pattern;
 class OrderBy;

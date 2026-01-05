@@ -30,7 +30,7 @@
 #include "stmt/CreateStmt.h"
 #include "stmt/DeleteStmt.h"
 
-using namespace db::v2;
+using namespace db;
 
 namespace {
 

@@ -12,13 +12,12 @@
 #include "TuringConfig.h"
 
 using namespace db;
-using namespace db::v2;
 
 TuringDB::TuringDB(const TuringConfig* config)
     : _config(config),
     _systemManager(std::make_unique<SystemManager>(config)),
     _jobSystem(JobSystem::create()),
-    _procedures(v2::ProcedureBlueprintMap::create())
+    _procedures(ProcedureBlueprintMap::create())
 {
 }
 

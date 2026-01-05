@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 EdgePattern::EdgePattern(Direction direction)
     : _direction(direction)

@@ -9,7 +9,7 @@
 #include "SystemManager.h"
 #include "PipelineException.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 LoadGraphProcessor::LoadGraphProcessor(std::string_view graphName)

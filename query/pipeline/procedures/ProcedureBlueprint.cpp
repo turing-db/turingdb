@@ -4,7 +4,7 @@
 
 #include "BioAssert.h"
 
-using namespace db::v2;
+using namespace db;
 
 size_t ProcedureBlueprint::getReturnValueIndex(std::string_view name) const {
     for (size_t i = 0; i < _returnValues.size(); ++i) {

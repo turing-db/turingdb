@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "FunctionInvocation.h"
 
-using namespace db::v2;
+using namespace db;
 
 FunctionInvocationExpr::~FunctionInvocationExpr() {
 }

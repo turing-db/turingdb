@@ -27,7 +27,7 @@
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
 
-using namespace db::v2;
+using namespace db;
 
 CypherAST::CypherAST(const ProcedureBlueprintMap& procedures,
                      std::string_view queryString)

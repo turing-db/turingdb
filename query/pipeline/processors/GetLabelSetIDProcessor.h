@@ -8,7 +8,7 @@
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "interfaces/PipelineNodeInputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class GetLabelSetIDProcessor : public Processor {
 public:

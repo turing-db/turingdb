@@ -2,7 +2,7 @@
 
 #include "PipelineBuffer.h"
 
-namespace db::v2 {
+namespace db {
 
 class PipelineV2;
 class Processor;

@@ -3,7 +3,7 @@
 #include "ParserException.h"
 #include "CypherError.h"
 
-using namespace db::v2;
+using namespace db;
 
 void YCypherScanner::syntaxError(const SourceLocation& loc,
                                  const std::string& msg) {

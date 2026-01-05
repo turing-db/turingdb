@@ -8,7 +8,7 @@
 
 #include "PipelineException.h"
 
-using namespace db::v2;
+using namespace db;
 
 std::unique_ptr<ProcedureData> LabelsProcedure::allocData() {
     return std::make_unique<Data>();

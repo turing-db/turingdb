@@ -4,7 +4,7 @@
 
 #include "PipelineV2.h"
 
-using namespace db::v2;
+using namespace db;
 
 PipelineBuffer::PipelineBuffer()
     : _dataframe(std::make_unique<Dataframe>())

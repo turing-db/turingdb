@@ -5,9 +5,9 @@
 %define api.value.type variant
 %define parse.assert
 %define parse.error detailed
-%define api.namespace { db::v2 }
-%parse-param {db::v2::YCypherScanner& scanner}
-%parse-param {db::v2::CypherAST* ast}
+%define api.namespace { db }
+%parse-param {db::YCypherScanner& scanner}
+%parse-param {db::CypherAST* ast}
 %define api.location.type { SourceLocation }
 %locations
 
@@ -61,7 +61,7 @@
     #include "LoadGMLQuery.h"
     #include "LoadNeo4jQuery.h"
 
-    namespace db::v2 {
+    namespace db {
         class YCypherScanner;
         class CypherAST;
         class QualifiedName;
@@ -203,106 +203,106 @@
 
 %token UNKNOWN
 
-%type<db::v2::Literal*> numLit literal
-%type<db::v2::BoolLiteral*> boolLit
-%type<db::v2::CharLiteral*> charLit
-%type<db::v2::StringLiteral*> stringLit
-%type<db::v2::MapLiteral*> mapLit
-%type<std::pair<db::v2::Symbol*, db::v2::Expr*>> mapPair
-%type<db::v2::MapLiteral*> mapPairChain
-%type<db::v2::Symbol*> symbol
-%type<db::v2::QualifiedName*> qualifiedName
-%type<db::v2::QualifiedName*> invocationName
-%type<db::v2::Symbol*> name
-%type<db::v2::Symbol*> reservedWord
-%type<db::v2::FunctionInvocation*> functionInvocation
-%type<db::v2::FunctionInvocation*> countFunc
+%type<db::Literal*> numLit literal
+%type<db::BoolLiteral*> boolLit
+%type<db::CharLiteral*> charLit
+%type<db::StringLiteral*> stringLit
+%type<db::MapLiteral*> mapLit
+%type<std::pair<db::Symbol*, db::Expr*>> mapPair
+%type<db::MapLiteral*> mapPairChain
+%type<db::Symbol*> symbol
+%type<db::QualifiedName*> qualifiedName
+%type<db::QualifiedName*> invocationName
+%type<db::Symbol*> name
+%type<db::Symbol*> reservedWord
+%type<db::FunctionInvocation*> functionInvocation
+%type<db::FunctionInvocation*> countFunc
 
-%type<db::v2::SymbolChain*> nodeLabels
-%type<db::v2::SymbolChain*> edgeTypes
-%type<db::v2::MapLiteral*> properties
+%type<db::SymbolChain*> nodeLabels
+%type<db::SymbolChain*> edgeTypes
+%type<db::MapLiteral*> properties
 
-%type<db::v2::Symbol*> opt_symbol
-%type<db::v2::SymbolChain*> opt_nodeLabels
-%type<db::v2::MapLiteral*> opt_properties
-%type<db::v2::SymbolChain*> opt_edgeTypes
+%type<db::Symbol*> opt_symbol
+%type<db::SymbolChain*> opt_nodeLabels
+%type<db::MapLiteral*> opt_properties
+%type<db::SymbolChain*> opt_edgeTypes
 
-%type<db::v2::ExprChain*> exprChain
-%type<db::v2::ExprChain*> parenExprChain
-%type<db::v2::Expr*> expr
-%type<db::v2::Expr*> xorExpr
-%type<db::v2::Expr*> andExpr
-%type<db::v2::Expr*> notExpr
-%type<db::v2::Expr*> comparisonExpr
-%type<db::v2::Expr*> addSubExpr
-%type<db::v2::Expr*> multDivExpr
-%type<db::v2::Expr*> powerExpr
-%type<db::v2::Expr*> unaryAddSubExpr
-%type<db::v2::Expr*> atomicExpr
-%type<db::v2::Expr*> listExpr
-%type<db::v2::Expr*> stringExpr
-%type<db::v2::Expr*> entityTypeExpr
-%type<db::v2::Expr*> propertyOrLabelExpr
-%type<db::v2::Expr*> propertyExpr
-%type<db::v2::Expr*> atomExpr
-%type<db::v2::Expr*> collectExpr
-%type<db::v2::Expr*> pathExpr
-%type<db::v2::Expr*> parenthesizedExpr
+%type<db::ExprChain*> exprChain
+%type<db::ExprChain*> parenExprChain
+%type<db::Expr*> expr
+%type<db::Expr*> xorExpr
+%type<db::Expr*> andExpr
+%type<db::Expr*> notExpr
+%type<db::Expr*> comparisonExpr
+%type<db::Expr*> addSubExpr
+%type<db::Expr*> multDivExpr
+%type<db::Expr*> powerExpr
+%type<db::Expr*> unaryAddSubExpr
+%type<db::Expr*> atomicExpr
+%type<db::Expr*> listExpr
+%type<db::Expr*> stringExpr
+%type<db::Expr*> entityTypeExpr
+%type<db::Expr*> propertyOrLabelExpr
+%type<db::Expr*> propertyExpr
+%type<db::Expr*> atomExpr
+%type<db::Expr*> collectExpr
+%type<db::Expr*> pathExpr
+%type<db::Expr*> parenthesizedExpr
 
-%type<db::v2::Expr*> projectionItem
-%type<db::v2::Projection*> projectionItems
-%type<db::v2::Projection*> projectionBody
+%type<db::Expr*> projectionItem
+%type<db::Projection*> projectionItems
+%type<db::Projection*> projectionBody
 
-%type<db::v2::BinaryOperator> comparisonSign
-%type<db::v2::StringOperator> stringExpPrefix
+%type<db::BinaryOperator> comparisonSign
+%type<db::StringOperator> stringExpPrefix
 
-%type<db::v2::Pattern*> pattern
-%type<db::v2::Pattern*> patternWhere
-%type<db::v2::PatternElement*> patternPart
-%type<db::v2::PatternElement*> patternElem
-%type<db::v2::PatternElement*> pathExprElem
-%type<db::v2::NodePattern*> nodePattern
-%type<db::v2::EdgePattern*> edgePattern
-%type<db::v2::EdgePattern*> edgeDetail
-%type<std::pair<db::v2::EdgePattern*, db::v2::NodePattern*>> patternElemChain
-%type<db::v2::WhereClause*> whereClause
-%type<db::v2::YieldClause*> yieldClause
-%type<db::v2::YieldItems*> yieldItemChain
-%type<db::v2::YieldItems*> yieldItems
-%type<db::v2::SymbolExpr*> yieldItem
+%type<db::Pattern*> pattern
+%type<db::Pattern*> patternWhere
+%type<db::PatternElement*> patternPart
+%type<db::PatternElement*> patternElem
+%type<db::PatternElement*> pathExprElem
+%type<db::NodePattern*> nodePattern
+%type<db::EdgePattern*> edgePattern
+%type<db::EdgePattern*> edgeDetail
+%type<std::pair<db::EdgePattern*, db::NodePattern*>> patternElemChain
+%type<db::WhereClause*> whereClause
+%type<db::YieldClause*> yieldClause
+%type<db::YieldItems*> yieldItemChain
+%type<db::YieldItems*> yieldItems
+%type<db::SymbolExpr*> yieldItem
 
 
-%type<db::v2::SinglePartQuery*> singlePartQuery
-%type<db::v2::ChangeQuery*> changeQuery
-%type<db::v2::CommitQuery*> commitQuery
-%type<db::v2::ListGraphQuery*> listGraphQuery
-%type<db::v2::CreateGraphQuery*> createGraphQuery
-%type<db::v2::S3ConnectQuery*> s3ConnectQuery
-%type<db::v2::S3TransferQuery*> s3TransferQuery
-%type<db::v2::QueryCommand*> singleQuery
-%type<db::v2::QueryCommand*> query
-%type<db::v2::LoadGraphQuery*> loadGraph
-%type<db::v2::LoadGMLQuery*> loadGML
-%type<db::v2::LoadNeo4jQuery*> loadNeo4j
-%type<db::v2::Stmt*> readingStatement
-%type<db::v2::Stmt*> updatingStatement
-%type<db::v2::StmtContainer*> readingStatements
-%type<db::v2::StmtContainer*> updatingStatements
-%type<db::v2::ChangeOp> changeOp
-%type<db::v2::MatchStmt*> matchSt
-%type<db::v2::CallStmt*> callSt
-%type<db::v2::CreateStmt*> createSt
-%type<db::v2::SetStmt*> setSt
-%type<db::v2::SetItem*> setItem
-%type<db::v2::DeleteStmt*> deleteSt
-%type<db::v2::ReturnStmt*> returnSt
-%type<db::v2::Skip*> skipSSt
-%type<db::v2::Limit*> limitSSt
-%type<db::v2::OrderBy*> orderBySSt
-%type<db::v2::Skip*> opt_skipSSt
-%type<db::v2::Limit*> opt_limitSSt
-%type<db::v2::OrderBy*> opt_orderBySSt
-%type<db::v2::OrderByItem*> orderByItem
+%type<db::SinglePartQuery*> singlePartQuery
+%type<db::ChangeQuery*> changeQuery
+%type<db::CommitQuery*> commitQuery
+%type<db::ListGraphQuery*> listGraphQuery
+%type<db::CreateGraphQuery*> createGraphQuery
+%type<db::S3ConnectQuery*> s3ConnectQuery
+%type<db::S3TransferQuery*> s3TransferQuery
+%type<db::QueryCommand*> singleQuery
+%type<db::QueryCommand*> query
+%type<db::LoadGraphQuery*> loadGraph
+%type<db::LoadGMLQuery*> loadGML
+%type<db::LoadNeo4jQuery*> loadNeo4j
+%type<db::Stmt*> readingStatement
+%type<db::Stmt*> updatingStatement
+%type<db::StmtContainer*> readingStatements
+%type<db::StmtContainer*> updatingStatements
+%type<db::ChangeOp> changeOp
+%type<db::MatchStmt*> matchSt
+%type<db::CallStmt*> callSt
+%type<db::CreateStmt*> createSt
+%type<db::SetStmt*> setSt
+%type<db::SetItem*> setItem
+%type<db::DeleteStmt*> deleteSt
+%type<db::ReturnStmt*> returnSt
+%type<db::Skip*> skipSSt
+%type<db::Limit*> limitSSt
+%type<db::OrderBy*> orderBySSt
+%type<db::Skip*> opt_skipSSt
+%type<db::Limit*> opt_limitSSt
+%type<db::OrderBy*> opt_orderBySSt
+%type<db::OrderByItem*> orderByItem
 %type<bool> opt_distinct
 
 %expect 0
@@ -1300,7 +1300,7 @@ reservedWord
 
 %%
 
-void db::v2::YCypherParser::error(const location_type& l, const std::string& m) {
+void db::YCypherParser::error(const location_type& l, const std::string& m) {
     scanner.syntaxError(l, m);
 }
 

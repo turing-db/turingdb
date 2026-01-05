@@ -5,7 +5,7 @@
 #include "processors/MaterializeProcessor.h"
 
 using namespace db;
-using namespace db::v2;
+using namespace db;
 using namespace turing::test;
 
 class ScanNodesProcessorTest : public ProcessorTester {

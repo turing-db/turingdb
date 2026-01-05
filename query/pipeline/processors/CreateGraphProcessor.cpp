@@ -9,7 +9,7 @@
 #include "SystemManager.h"
 #include "PipelineException.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 CreateGraphProcessor::CreateGraphProcessor(std::string_view graphName)

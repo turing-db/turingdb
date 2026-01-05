@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-namespace db::v2 {
+namespace db {
 
 enum class OrderByType : uint8_t {
     ASC = 0,

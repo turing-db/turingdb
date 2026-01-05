@@ -4,7 +4,7 @@
 
 #include "Stmt.h"
 
-namespace db::v2 {
+namespace db {
 
 class CypherAST;
 

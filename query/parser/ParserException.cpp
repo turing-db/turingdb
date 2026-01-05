@@ -1,6 +1,6 @@
 #include "ParserException.h"
 
-using namespace db::v2;
+using namespace db;
 
 ParserException::ParserException(std::string&& msg)
     : CompilerException(std::move(msg))

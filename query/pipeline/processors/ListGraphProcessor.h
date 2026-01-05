@@ -4,7 +4,7 @@
 
 #include "interfaces/PipelineValueOutputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class ListGraphProcessor final : public Processor {
 public:

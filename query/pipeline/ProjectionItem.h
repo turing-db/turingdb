@@ -4,7 +4,7 @@
 
 #include "dataframe/ColumnTag.h"
 
-namespace db::v2 {
+namespace db {
 
 struct ProjectionItem {
     ColumnTag _tag;

@@ -8,7 +8,7 @@ namespace db {
 class GraphView;
 }
 
-namespace db::v2 {
+namespace db {
 
 class CypherAST;
 class PlanGraph;

@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 
-namespace db::v2 {
+namespace db {
 
 enum class ProcedureReturnType : uint8_t {
     INVALID = 0,

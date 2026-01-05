@@ -3,7 +3,7 @@
 #include <variant>
 #include <vector>
 
-namespace db::v2 {
+namespace db {
 
 class Limit;
 class Skip;

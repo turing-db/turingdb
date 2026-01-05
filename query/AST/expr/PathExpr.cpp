@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "PatternElement.h"
 
-using namespace db::v2;
+using namespace db;
 
 PathExpr::~PathExpr() {
 }

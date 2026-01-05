@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace db::v2 {
+namespace db {
 
 class VarDecl;
 class VarNode;

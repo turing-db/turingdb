@@ -13,7 +13,7 @@
 #include "FatalException.h"
 #include "BioAssert.h"
 
-using namespace db::v2;
+using namespace db;
 
 namespace {
 

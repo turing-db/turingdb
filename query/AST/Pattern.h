@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace db::v2 {
+namespace db {
 
 class PatternElement;
 class WhereClause;

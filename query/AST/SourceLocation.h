@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace db::v2 {
+namespace db {
 
 struct SourceLocation {
     uint32_t beginLine {1};

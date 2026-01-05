@@ -6,7 +6,7 @@
 
 #include "CompilerException.h"
 
-namespace db::v2 {
+namespace db {
 
 class Limit;
 class Skip;

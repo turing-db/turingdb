@@ -7,7 +7,7 @@
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "versioning/ChangeID.h"
 
-namespace db::v2 {
+namespace db {
 
 class ChangeProcessor : public Processor {
 public:

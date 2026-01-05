@@ -41,7 +41,7 @@
 #include "Overloaded.h"
 #include "CompilerException.h"
 
-using namespace db::v2;
+using namespace db;
 
 namespace {
 

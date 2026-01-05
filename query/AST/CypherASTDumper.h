@@ -3,7 +3,7 @@
 #include <ostream>
 #include <unordered_set>
 
-namespace db::v2 {
+namespace db {
 
 class CypherAST;
 class SinglePartQuery;

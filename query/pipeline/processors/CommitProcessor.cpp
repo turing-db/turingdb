@@ -9,7 +9,7 @@
 #include "Profiler.h"
 #include "BioAssert.h"
 
-using namespace db::v2;
+using namespace db;
 
 CommitProcessor::CommitProcessor()
 {

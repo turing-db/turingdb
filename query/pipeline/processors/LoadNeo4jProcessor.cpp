@@ -9,7 +9,7 @@
 
 #include "PipelineException.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 LoadNeo4jProcessor::LoadNeo4jProcessor(const fs::Path& path,

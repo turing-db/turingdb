@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 Symbol* Symbol::create(CypherAST* ast, std::string_view name) {
     Symbol* symbol = new Symbol(name);

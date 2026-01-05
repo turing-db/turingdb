@@ -40,7 +40,7 @@
 
 #include "BioAssert.h"
 
-using namespace db::v2;
+using namespace db;
 
 ReadStmtGenerator::ReadStmtGenerator(const CypherAST* ast,
                                      GraphView graphView,

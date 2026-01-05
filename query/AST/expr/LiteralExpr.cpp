@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "Literal.h"
 
-using namespace db::v2;
+using namespace db;
 
 LiteralExpr::~LiteralExpr() {
 }

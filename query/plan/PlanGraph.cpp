@@ -2,7 +2,7 @@
 
 #include "Predicate.h"
 
-using namespace db::v2;
+using namespace db;
 
 PlanGraph::PlanGraph()
 {

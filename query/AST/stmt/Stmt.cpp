@@ -1,6 +1,6 @@
 #include "Stmt.h"
 
-using namespace db::v2;
+using namespace db;
 
 Stmt::~Stmt() {
 }

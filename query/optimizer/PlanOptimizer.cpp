@@ -5,7 +5,7 @@
 #include "nodes/FilterNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
 
-using namespace db::v2;
+using namespace db;
 
 PlanOptimizer::PlanOptimizer(PlanGraph* plan)
     : _plan(plan)

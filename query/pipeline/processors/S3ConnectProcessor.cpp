@@ -5,7 +5,7 @@
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 S3ConnectProcessor::S3ConnectProcessor(std::string_view accessId,

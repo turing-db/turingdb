@@ -15,7 +15,7 @@
 #include "PipelineException.h"
 
 using namespace db;
-using namespace db::v2;
+using namespace db;
 
 void PipelineOutputInterface::connectTo(PipelineNodeInputInterface& input) {
     throw PipelineException(fmt::format("{}: cannot connect to node input", PipelineInterfaceKindName::value(getKind())));

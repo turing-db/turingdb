@@ -3,7 +3,7 @@
 #include "PlanGraphNode.h"
 #include "metadata/LabelSet.h"
 
-namespace db::v2 {
+namespace db {
 
 class ExprConstraint;
 

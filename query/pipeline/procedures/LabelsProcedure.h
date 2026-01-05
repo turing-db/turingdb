@@ -7,7 +7,7 @@ namespace db {
 class ScanLabelsChunkWriter;
 }
 
-namespace db::v2 {
+namespace db {
 
 struct LabelsProcedure {
     struct Data : public ProcedureData {
