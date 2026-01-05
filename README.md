@@ -6,11 +6,13 @@
 # TuringDB Community Edition
 ## Blazingly Fast Column-Oriented Graph Database Engine
 
+
+
+[Website](https://turingdb.ai/) • [Documentation](https://docs.turingdb.ai/) • [Discord](https://discord.gg/dMM48ns5VY) • [Examples](https://github.com/turing-db/turingdb-examples)
+
 [![CI Ubuntu](https://github.com/turing-db/turingdb/actions/workflows/ci_ubuntu.yml/badge.svg)](https://github.com/turing-db/turingdb/actions/workflows/ci_ubuntu.yml)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/invite/dMM48ns5VY)
 [![Docs](https://img.shields.io/badge/Docs-docs.turingdb.ai-brightgreen?style=for-the-badge)](https://docs.turingdb.ai)
-
-[Website](https://turingdb.ai/) • [Documentation](https://docs.turingdb.ai/) • [Discord](https://discord.gg/dMM48ns5VY) • [Examples](https://github.com/turing-db/turingdb-examples)
 
 <p align="center">
   <img src="https://github.com/turing-db/turingdb/blob/update-readme/smallerspinnning.gif"/>
@@ -24,9 +26,9 @@ Built from scratch in C++.
 TuringDB delivers **millisecond query latency** on graphs with millions of nodes and edges. TuringDB is commonly 200x faster than Neo4j on deep multihop queries.
 
 
-<p align="left">
+<p align="center">
   <a href="https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1">
-    <img src="https://github.com/turing-db/turingdb/blob/update-readme/newyoutubeimage.png" width="400" />
+    <img src="https://github.com/turing-db/turingdb/blob/update-readme/newyoutubeimage.png" width="650" />
   </a>
 </p>
 
@@ -157,23 +159,23 @@ A collection of notebooks demonstrating how to use TuringDB for real-world analy
 
  Each notebook focuses on a different domain and use case, from fraud detection to biological graph exploration, leveraging the performance and versioning capabilities of TuringDB.
 
-Explore the full set of notebooks:
+### Explore the full set of notebooks:
 
 [**github.com/turing-db/turingdb-examples**](https://github.com/turing-db/turingdb-examples/tree/main/examples/notebooks/public_version)
 
-### **Domain: Finance & Fraud Detection**
+#### **Domain: Finance & Fraud Detection**
 
 [**Paysim Financial Fraud Detection**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/paysim_financial_fraud_detection.ipynb)
 
 [**Crypto Orbitaal Fraud Detection**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/crypto_orbitaal_fraud_detection.ipynb)
 
-### **Domain: Transport & Supply Chain**
+#### **Domain: Transport & Supply Chain**
 
 [**London Transport (TfL)**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/london_transport_TfL.ipynb)
 
 [**Supply Chain - ETO Chip Explorer**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/supply_chain_eto-chip-explorer.ipynb)
 
-### **Domain: Healthcare & Life Sciences**
+#### **Domain: Healthcare & Life Sciences**
 
 [**Reactome Biological Pathways**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/reactome.ipynb)
 
