@@ -59,18 +59,17 @@ set(ast_sources
     FunctionInvocation.cpp
     WhereClause.cpp
     YieldClause.cpp
-    YieldItems.cpp
+    YieldItems.cpp)
 
-    CompilerException.cpp)
+add_library(turing_db_ast_s STATIC ${ast_sources})
 
-add_library(turing_db_v2_ast_s STATIC ${ast_sources})
-
-target_include_directories(turing_db_v2_ast_s
+target_include_directories(turing_db_ast_s
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(turing_db_v2_ast_s
-  PRIVATE turing_common_s
+target_link_libraries(turing_db_ast_s
+  PRIVATE turing_db_query_common_s
+          turing_db_storage_s
+          turing_common_s
           range-v3
-  PUBLIC  turing_db_storage_s
-          turing_db_v2_pipeline_s)
+  PUBLIC turing_db_pipeline_s)
 
