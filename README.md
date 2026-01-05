@@ -23,6 +23,13 @@ Built from scratch in C++.
 
 TuringDB delivers **millisecond query latency** on graphs with millions of nodes and edges. TuringDB is commonly 200x faster than Neo4j on deep multihop queries.
 
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1">
+    <img src="https://github.com/turing-db/turingdb/blob/update-readme/youtubeimage.png" width="400" />
+  </a>
+</p>
+
 <div align="center">
 
 [https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1](https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1)
