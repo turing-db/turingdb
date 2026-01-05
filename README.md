@@ -34,8 +34,6 @@ TuringDB was created to solve real-world performance challenges in critical indu
 - **Healthcare & Pharma** - Handle sensitive data with GDPR compliance and auditability
 - **Financial Services** - Audit trails with git-like versioning for regulatory compliance
 
----
-
 ## Key Features
 
 ### **Extreme Performance**
