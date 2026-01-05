@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-using namespace db::v2;
+using namespace db;
 
 LambdaSourceProcessor::LambdaSourceProcessor(Callback callback)
     : _callback(callback)

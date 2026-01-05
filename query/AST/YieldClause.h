@@ -1,6 +1,6 @@
 #pragma once
 
-namespace db::v2 {
+namespace db {
 
 class CypherAST;
 class YieldItems;

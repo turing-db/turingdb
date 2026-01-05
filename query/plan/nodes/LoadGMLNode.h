@@ -6,7 +6,7 @@
 
 #include "Path.h"
 
-namespace db::v2 {
+namespace db {
 
 class LoadGMLNode : public PlanGraphNode {
 public:

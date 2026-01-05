@@ -21,7 +21,7 @@
 #include "processors/ExprProgram.h"
 
 using namespace db;
-using namespace db::v2;
+using namespace db;
 
 namespace rg = ranges;
 namespace rv = rg::views;

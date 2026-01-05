@@ -7,7 +7,7 @@
 #include "CypherAST.h"
 #include "VarDecl.h"
 
-using namespace db::v2;
+using namespace db;
 
 DeclContext::DeclContext(DeclContext* parent)
     : _parent(parent)

@@ -30,7 +30,7 @@
 #include "LocalMemory.h"
 #include "Path.h"
 
-namespace db::v2 {
+namespace db {
 
 class PipelineV2;
 class PipelineOutputInterface;

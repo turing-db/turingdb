@@ -39,7 +39,7 @@
 
 #include "BioAssert.h"
 
-using namespace db::v2;
+using namespace db;
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),

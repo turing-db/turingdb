@@ -7,7 +7,7 @@
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineInputInterface.h"
 
-using namespace db::v2;
+using namespace db;
 
 std::string ForkProcessor::describe() const {
     return fmt::format("ForkProcessor");

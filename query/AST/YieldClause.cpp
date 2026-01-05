@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 YieldClause* YieldClause::create(CypherAST* ast) {
     YieldClause* clause = new YieldClause();

@@ -2,7 +2,7 @@
 
 #include "ExprDependencies.h"
 
-namespace db::v2 {
+namespace db {
 
 class Expr;
 class VarDecl;

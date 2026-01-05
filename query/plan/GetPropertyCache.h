@@ -3,7 +3,7 @@
 #include <string_view>
 #include <unordered_set>
 
-namespace db::v2 {
+namespace db {
 
 class VarDecl;
 

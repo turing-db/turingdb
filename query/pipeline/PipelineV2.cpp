@@ -5,7 +5,7 @@
 #include "PipelineBuffer.h"
 #include "processors/ExprProgram.h"
 
-using namespace db::v2;
+using namespace db;
 
 PipelineV2::PipelineV2()
 {

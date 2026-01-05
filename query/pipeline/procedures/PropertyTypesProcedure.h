@@ -7,7 +7,7 @@ namespace db {
 class ScanPropertyTypesChunkWriter;
 }
 
-namespace db::v2 {
+namespace db {
 
 struct PropertyTypesProcedure {
     struct Data : public ProcedureData {

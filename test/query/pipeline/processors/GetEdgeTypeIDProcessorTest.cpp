@@ -8,7 +8,7 @@
 #include "LineContainer.h"
 
 using namespace db;
-using namespace db::v2;
+using namespace db;
 using namespace turing::test;
 
 class GetEdgeTypeIDProcessorTest : public ProcessorTester {

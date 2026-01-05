@@ -4,7 +4,7 @@
 #include "PipelineV2.h"
 #include "PipelineBuffer.h"
 
-using namespace db::v2;
+using namespace db;
 
 PipelineExecutor::PipelineExecutor(PipelineV2* pipeline,
                                    ExecutionContext* ctxt)

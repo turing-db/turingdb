@@ -4,7 +4,7 @@
 #include "ID.h"
 #include "metadata/LabelSet.h"
 
-namespace db::v2 {
+namespace db {
 
 class VarNode;
 class NodeFilterNode;

@@ -26,7 +26,7 @@
 #include "TuringConfig.h"
 
 using namespace db;
-using namespace db::v2;
+using namespace db;
 
 int main(int argc, char** argv) {
     std::string queryStr;

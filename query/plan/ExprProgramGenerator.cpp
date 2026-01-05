@@ -30,7 +30,7 @@
 #include "FatalException.h"
 #include "spdlog/fmt/bundled/base.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator op) {

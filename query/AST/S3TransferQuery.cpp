@@ -3,7 +3,7 @@
 #include "CypherAST.h"
 #include "decl/DeclContext.h"
 
-using namespace db::v2;
+using namespace db;
 
 S3TransferQuery::S3TransferQuery(DeclContext* declContext,
                                  Direction direction,

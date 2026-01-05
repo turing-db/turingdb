@@ -14,10 +14,7 @@ class SystemManager;
 class LocalMemory;
 class JobSystem;
 class Block;
-
-namespace v2 {
 class ProcedureBlueprintMap;
-}
 
 class TuringDB {
 public:
@@ -47,7 +44,7 @@ public:
         return *_jobSystem;
     }
 
-    const v2::ProcedureBlueprintMap& getProcedures() const {
+    const ProcedureBlueprintMap& getProcedures() const {
         return *_procedures;
     }
 
@@ -55,7 +52,7 @@ private:
     const TuringConfig* _config;
     std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
-    std::unique_ptr<v2::ProcedureBlueprintMap> _procedures;
+    std::unique_ptr<ProcedureBlueprintMap> _procedures;
 };
 
 }

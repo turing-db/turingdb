@@ -10,7 +10,7 @@ namespace db {
 class ScanNodesChunkWriter;
 }
 
-namespace db::v2 {
+namespace db {
 
 class ScanNodesProcessor : public Processor {
 public:

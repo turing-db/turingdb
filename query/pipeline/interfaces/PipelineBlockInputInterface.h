@@ -6,7 +6,7 @@ namespace db {
 class NamedColumn;
 }
 
-namespace db::v2 {
+namespace db {
 
 class PipelineBlockInputInterface : public PipelineInputInterface {
 public:

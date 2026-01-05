@@ -9,7 +9,7 @@
 
 #include "PipelineException.h"
 
-namespace db::v2 {
+namespace db {
 
 template <EntityType Entity, SupportedType T>
 std::string GetPropertiesProcessor<Entity, T>::describe() const {

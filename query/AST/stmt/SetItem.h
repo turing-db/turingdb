@@ -2,7 +2,7 @@
 
 #include <variant>
 
-namespace db::v2 {
+namespace db {
 
 class CypherAST;
 class PropertyExpr;

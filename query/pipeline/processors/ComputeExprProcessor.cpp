@@ -5,7 +5,7 @@
 #include "PipelineV2.h"
 #include "ExprProgram.h"
 
-using namespace db::v2;
+using namespace db;
 
 ComputeExprProcessor::ComputeExprProcessor(ExprProgram* exprProg)
     : _exprProg(exprProg)

@@ -13,7 +13,7 @@ class LocalMemory;
 class DataframeManager;
 }
 
-namespace db::v2 {
+namespace db {
 
 class MaterializeProcessor : public Processor {
 public:

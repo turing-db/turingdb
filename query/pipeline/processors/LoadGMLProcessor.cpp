@@ -10,7 +10,7 @@
 #include "PipelineException.h"
 #include "BioAssert.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 LoadGMLProcessor::LoadGMLProcessor(std::string_view graphName, const fs::Path& filePath)

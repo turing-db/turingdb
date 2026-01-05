@@ -20,7 +20,7 @@
 #include "Profiler.h"
 #include "versioning/VersionControlException.h"
 
-using namespace db::v2;
+using namespace db;
 
 QueryInterpreterV2::QueryInterpreterV2(db::SystemManager* sysMan,
                                        db::JobSystem* jobSystem)

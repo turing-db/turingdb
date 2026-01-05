@@ -3,7 +3,7 @@
 #include "decl/VarDecl.h"
 #include "nodes/PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 enum class JoinType : uint8_t {
     COMMON_ANCESTOR = 0,

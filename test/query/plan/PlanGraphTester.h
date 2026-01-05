@@ -6,7 +6,7 @@
 #include "TuringException.h"
 #include "nodes/VarNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class PlanGraphTester {
 public:

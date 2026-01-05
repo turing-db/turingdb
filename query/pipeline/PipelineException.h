@@ -4,7 +4,7 @@
 
 #include "TuringException.h"
 
-namespace db::v2 {
+namespace db {
 
 class PipelineException : public TuringException {
 public:

@@ -8,7 +8,7 @@
 #include "TuringConfig.h"
 #include "TuringS3Client.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 S3PullProcessor::S3PullProcessor(std::string_view s3Bucket,

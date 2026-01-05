@@ -10,7 +10,7 @@
 
 #include "PipelineException.h"
 
-using namespace db::v2;
+using namespace db;
 
 DatabaseProcedureProcessor* DatabaseProcedureProcessor::create(PipelineV2* pipeline,
                                                                const ProcedureBlueprint& blueprint) {

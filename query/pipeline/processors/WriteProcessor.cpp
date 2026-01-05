@@ -31,7 +31,7 @@
 #include "PipelineException.h"
 
 using namespace db;
-using namespace db::v2;
+using namespace db;
 
 namespace {
 

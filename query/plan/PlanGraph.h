@@ -7,7 +7,7 @@
 #include "GetPropertyCache.h"
 #include "nodes/PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class VarDecl;
 class Expr;

@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 Limit::Limit(Expr* expr)
     : _expr(expr)

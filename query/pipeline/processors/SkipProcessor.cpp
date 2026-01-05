@@ -7,7 +7,7 @@
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 
-using namespace db::v2;
+using namespace db;
 
 SkipProcessor::SkipProcessor(size_t skipCount)
     : _skipCount(skipCount)

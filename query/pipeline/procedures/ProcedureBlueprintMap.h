@@ -4,7 +4,7 @@
 #include <vector>
 #include <memory>
 
-namespace db::v2 {
+namespace db {
 
 class ProcedureBlueprint;
 

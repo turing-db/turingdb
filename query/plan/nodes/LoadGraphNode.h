@@ -4,7 +4,7 @@
 
 #include "PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class LoadGraphNode : public PlanGraphNode {
 public:

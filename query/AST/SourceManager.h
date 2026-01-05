@@ -6,7 +6,7 @@
 
 #include "SourceLocation.h"
 
-namespace db::v2 {
+namespace db {
 
 class SourceManager {
 public:
