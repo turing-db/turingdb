@@ -8,7 +8,6 @@
 #include "TuringConfig.h"
 
 using namespace db;
-using namespace db;
 
 S3PushProcessor::S3PushProcessor(std::string_view s3Bucket,
                                  std::string_view s3Prefix,

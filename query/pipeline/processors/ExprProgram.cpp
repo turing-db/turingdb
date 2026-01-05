@@ -17,7 +17,6 @@
 #include "FatalException.h"
 
 using namespace db;
-using namespace db;
 
 namespace {
 

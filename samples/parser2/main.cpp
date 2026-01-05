@@ -9,7 +9,6 @@
 #include "procedures/ProcedureBlueprintMap.h"
 
 using namespace db;
-using namespace db;
 
 int main(int argc, char** argv) {
     auto procedures = ProcedureBlueprintMap::create();

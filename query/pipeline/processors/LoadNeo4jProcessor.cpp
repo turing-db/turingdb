@@ -10,7 +10,6 @@
 #include "PipelineException.h"
 
 using namespace db;
-using namespace db;
 
 LoadNeo4jProcessor::LoadNeo4jProcessor(const fs::Path& path,
                                        std::string_view graphName)

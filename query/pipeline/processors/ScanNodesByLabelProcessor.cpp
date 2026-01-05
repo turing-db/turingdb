@@ -9,7 +9,6 @@
 #include "metadata/LabelSetHandle.h"
 
 using namespace db;
-using namespace db;
 
 ScanNodesByLabelProcessor::ScanNodesByLabelProcessor(const LabelSet* labelset)
     : _labelset(labelset)

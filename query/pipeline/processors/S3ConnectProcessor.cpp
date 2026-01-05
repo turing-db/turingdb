@@ -6,7 +6,6 @@
 #include "SystemManager.h"
 
 using namespace db;
-using namespace db;
 
 S3ConnectProcessor::S3ConnectProcessor(std::string_view accessId,
                                        std::string_view secretKey,

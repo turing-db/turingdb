@@ -58,7 +58,6 @@
 #include "PlannerException.h"
 
 using namespace db;
-using namespace db;
 
 PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
                                        const GraphView& view)

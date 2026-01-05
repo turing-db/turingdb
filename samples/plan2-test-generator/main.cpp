@@ -21,7 +21,6 @@
 #include "TuringConfig.h"
 
 using namespace db;
-using namespace db;
 
 static void runPlan2(std::string_view query);
 
