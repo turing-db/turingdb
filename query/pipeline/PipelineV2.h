@@ -5,7 +5,7 @@
 
 #include "dataframe/DataframeManager.h"
 
-namespace db::v2 {
+namespace db {
 
 class Processor;
 class PipelinePort;

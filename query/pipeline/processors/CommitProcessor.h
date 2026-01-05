@@ -4,7 +4,7 @@
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class CommitProcessor : public Processor {
 public:

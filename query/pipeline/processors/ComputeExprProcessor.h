@@ -5,7 +5,7 @@
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class ExecutionContext;
 class ExprProgram;

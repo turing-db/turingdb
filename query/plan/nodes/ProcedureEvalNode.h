@@ -2,7 +2,7 @@
 
 #include "PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class FunctionInvocationExpr;
 class YieldClause;

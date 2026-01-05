@@ -8,12 +8,12 @@
 
 #include "GeneratedCypherParser.h"
 
-namespace db::v2 {
+namespace db {
 
 #undef YY_DECL
 
 #define YY_DECL \
-    db::v2::YCypherParser::token_type YCypherScanner::lex(db::v2::YCypherParser::semantic_type* yylval, SourceLocation* yylloc)
+    db::YCypherParser::token_type YCypherScanner::lex(db::YCypherParser::semantic_type* yylval, SourceLocation* yylloc)
 
 class YCypherScanner : public yyFlexLexer {
 public:

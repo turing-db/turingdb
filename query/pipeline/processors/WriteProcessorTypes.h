@@ -12,7 +12,7 @@ class Column;
 
 }
 
-namespace db::v2 {
+namespace db {
 
 class WriteProcessorTypes {
 public:

@@ -2,7 +2,7 @@
 
 #include "PlanGraphNode.h"
 
-namespace db::v2 {
+namespace db {
 
 class ScanNodesNode : public PlanGraphNode {
 public:

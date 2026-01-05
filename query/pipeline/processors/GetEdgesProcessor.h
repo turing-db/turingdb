@@ -11,7 +11,7 @@ namespace db {
 class GetEdgesChunkWriter;
 }
 
-namespace db::v2 {
+namespace db {
 
 class GetEdgesProcessor : public Processor {
 public:

@@ -8,7 +8,7 @@ namespace db {
 class LocalMemory;
 }
 
-namespace db::v2 {
+namespace db {
 
 class ProcedureBlueprintMap;
 

@@ -2,7 +2,7 @@
 
 #include "PipelineV2.h"
 
-using namespace db::v2;
+using namespace db;
 
 void Processor::postCreate(PipelineV2* pipeline) {
     pipeline->addProcessor(this);

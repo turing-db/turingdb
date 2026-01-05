@@ -9,7 +9,7 @@ namespace db {
 class NamedColumn;
 }
 
-namespace db::v2 {
+namespace db {
 
 class PipelineInputPort;
 class PipelineOutputPort;

@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace db::v2 {
+namespace db {
 
 class VarNode;
 class PlanGraphNode;

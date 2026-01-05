@@ -3,7 +3,7 @@
 #include "Processor.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 
-namespace db::v2 {
+namespace db {
 class PipelineBlockOutputInterface;
 class PipelineBlockInputInterface;
 

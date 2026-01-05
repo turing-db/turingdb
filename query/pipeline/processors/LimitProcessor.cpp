@@ -4,7 +4,7 @@
 
 #include "dataframe/Dataframe.h"
 
-using namespace db::v2;
+using namespace db;
 
 LimitProcessor::LimitProcessor(size_t limit)
     : _limit(limit)

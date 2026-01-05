@@ -7,7 +7,7 @@
 
 #include "interfaces/PipelineValueOutputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class LoadNeo4jProcessor : public Processor {
 public:

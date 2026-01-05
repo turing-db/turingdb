@@ -7,7 +7,7 @@ namespace db {
 class ScanEdgeTypesChunkWriter;
 }
 
-namespace db::v2 {
+namespace db {
 
 struct EdgeTypesProcedure {
     struct Data : public ProcedureData {

@@ -3,7 +3,7 @@
 
 #include "CypherAST.h"
 
-namespace db::v2 {
+namespace db {
 
 SetItem* SetItem::create(CypherAST* ast, PropertyExpr* expr, Expr* value) {
     auto* setItem = new SetItem();

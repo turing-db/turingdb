@@ -2,7 +2,7 @@
 
 #include "CypherAST.h"
 
-using namespace db::v2;
+using namespace db;
 
 EntityTypeExpr::EntityTypeExpr(Symbol* symbol, SymbolChain* types)
     : Expr(Kind::ENTITY_TYPES),

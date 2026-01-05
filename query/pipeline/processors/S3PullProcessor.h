@@ -7,7 +7,7 @@
 #include "TuringS3Client.h"
 #include "AwsS3ClientWrapper.h"
 
-namespace db::v2 {
+namespace db {
 
 class S3PullProcessor final : public Processor {
 public:

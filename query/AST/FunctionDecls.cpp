@@ -5,7 +5,7 @@
 
 #include "FatalException.h"
 
-using namespace db::v2;
+using namespace db;
 
 FunctionDecls::FunctionDecls()
 {

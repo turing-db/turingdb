@@ -6,7 +6,7 @@ namespace db {
 class Dataframe;
 }
 
-namespace db::v2 {
+namespace db {
 
 class PipelinePort;
 class PipelineV2;

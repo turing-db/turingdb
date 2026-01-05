@@ -5,7 +5,7 @@
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class LimitProcessor : public Processor {
 public:

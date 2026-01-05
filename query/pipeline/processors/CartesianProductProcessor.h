@@ -7,7 +7,7 @@
 
 #include "dataframe/Dataframe.h"
 
-namespace db::v2 {
+namespace db {
 
 class PipelineV2;
 

@@ -11,7 +11,7 @@ namespace db {
 class ColumnTag;
 }
 
-namespace db::v2 {
+namespace db {
 using HashJoinMap = std::unordered_map<NodeID, std::vector<RowOffset>>;
 
 struct RowOffsetsCopyState {

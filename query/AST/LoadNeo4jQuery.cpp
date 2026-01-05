@@ -4,7 +4,7 @@
 #include "Path.h"
 #include "decl/DeclContext.h"
 
-using namespace db::v2;
+using namespace db;
 
 LoadNeo4jQuery::LoadNeo4jQuery(DeclContext* declContext, fs::Path&& path)
     : QueryCommand(declContext),

@@ -11,7 +11,7 @@ class LocalMemory;
 
 }
 
-namespace db::v2 {
+namespace db {
 
 class ExprProgram;
 class Predicate;

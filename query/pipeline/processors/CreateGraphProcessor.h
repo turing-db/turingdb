@@ -6,7 +6,7 @@
 
 #include "interfaces/PipelineValueOutputInterface.h"
 
-namespace db::v2 {
+namespace db {
 
 class CreateGraphProcessor final : public Processor {
 public:

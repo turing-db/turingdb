@@ -4,7 +4,7 @@
 
 #include "metadata/LabelSet.h"
 
-namespace db::v2 {
+namespace db {
 
 class ScanNodesByLabelNode : public PlanGraphNode {
 public:

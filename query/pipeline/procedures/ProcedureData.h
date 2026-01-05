@@ -9,7 +9,7 @@ namespace db {
 class Column;
 }
 
-namespace db::v2 {
+namespace db {
 
 class ProcedureData {
 public:

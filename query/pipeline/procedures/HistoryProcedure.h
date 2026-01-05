@@ -3,7 +3,7 @@
 #include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
 
-namespace db::v2 {
+namespace db {
 
 struct HistoryProcedure {
     static std::unique_ptr<ProcedureData> allocData();

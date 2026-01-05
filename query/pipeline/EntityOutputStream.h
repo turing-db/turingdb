@@ -6,7 +6,7 @@
 #include "PipelineException.h"
 #include "dataframe/ColumnTag.h"
 
-namespace db::v2 {
+namespace db {
 
 class EntityOutputStream {
 public:

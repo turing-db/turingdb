@@ -8,7 +8,7 @@
 #include "columns/ColumnIDs.h"
 #include "metadata/LabelSetHandle.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 ScanNodesByLabelProcessor::ScanNodesByLabelProcessor(const LabelSet* labelset)

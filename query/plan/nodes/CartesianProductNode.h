@@ -1,7 +1,7 @@
 #pragma once
 
 #include "nodes/PlanGraphNode.h"
-namespace db::v2 {
+namespace db {
 
 class CartesianProductNode : public PlanGraphNode {
 public:

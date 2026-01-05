@@ -7,7 +7,7 @@
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 
-namespace db::v2 {
+namespace db {
 
 template <EntityType Entity, SupportedType T>
 std::string GetPropertiesWithNullProcessor<Entity, T>::describe() const {

@@ -4,7 +4,7 @@
 
 #include "CompilerException.h"
 
-namespace db::v2 {
+namespace db {
 
 class AnalyzeException : public CompilerException {
 public:

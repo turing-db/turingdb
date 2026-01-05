@@ -23,7 +23,7 @@ class CommitWriteBuffer;
 
 }
 
-namespace db::v2 {
+namespace db {
 
 class PipelineV2;
 class ExprProgram;

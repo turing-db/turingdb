@@ -13,7 +13,7 @@ class JobSystem;
 class Graph;
 }
 
-namespace db::v2 {
+namespace db {
 
 class ExecutionContext {
 public:

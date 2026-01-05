@@ -5,7 +5,7 @@
 #include "CypherAST.h"
 #include "YCypherScanner.h"
 
-using namespace db::v2;
+using namespace db;
 
 CypherParser::CypherParser(CypherAST* ast)
     : _ast(ast)

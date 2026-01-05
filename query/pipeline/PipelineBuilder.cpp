@@ -49,7 +49,7 @@
 #include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"
 
-using namespace db::v2;
+using namespace db;
 using namespace db;
 
 namespace {

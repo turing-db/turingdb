@@ -8,7 +8,7 @@
 
 #include "Path.h"
 
-namespace db::v2 {
+namespace db {
 
 class LoadGMLProcessor : public Processor {
 public:

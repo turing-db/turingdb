@@ -6,7 +6,7 @@
 #include "expr/LiteralExpr.h"
 #include "expr/EntityTypeExpr.h"
 
-using namespace db::v2;
+using namespace db;
 
 NodePattern::NodePattern()
 {

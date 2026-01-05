@@ -11,7 +11,7 @@ namespace db {
 class ScanNodesByLabelChunkWriter;
 }
 
-namespace db::v2 {
+namespace db {
 
 class ScanNodesByLabelProcessor : public Processor {
 public:
