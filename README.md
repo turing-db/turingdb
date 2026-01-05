@@ -3,7 +3,8 @@
   <img src="https://github.com/turing-db/turingdb/blob/main/logo_spiral.png" width="200" alt="TuringDB logo">
 </p>
 
-# TuringDB
+# TuringDB Community Edition
+## Blazingly Fast Column-Oriented Graph Database Engine
 
 [![CI Ubuntu](https://github.com/turing-db/turingdb/actions/workflows/ci_ubuntu.yml/badge.svg)](https://github.com/turing-db/turingdb/actions/workflows/ci_ubuntu.yml)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/invite/dMM48ns5VY)
