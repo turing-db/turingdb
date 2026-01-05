@@ -26,15 +26,11 @@ TuringDB delivers **millisecond query latency** on graphs with millions of nodes
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1">
-    <img src="https://github.com/turing-db/turingdb/blob/update-readme/youtubeimage.png" width="400" />
+    <img src="https://github.com/turing-db/turingdb/blob/update-readme/newyoutubeimage.png" width="400" />
   </a>
 </p>
 
-<div align="center">
-
-[https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1](https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1)
-
-</div>
+### Visualizing a massive mesh graph with OpenGL accelerated graph visualization
 
 ## Why TuringDB?
 
