@@ -9,9 +9,9 @@
 
 [Website](https://turingdb.ai/) • [Documentation](https://docs.turingdb.ai/) • [Discord](https://discord.gg/dMM48ns5VY) • [Examples](https://github.com/turing-db/turingdb-examples)
 
----
 
-## What is TuringDB????
+
+## What is TuringDB?
 
 TuringDB is a high-performance in-memory column-oriented graph database engine designed for analytical and read-intensive workloads. 
 Built from scratch in C++.
