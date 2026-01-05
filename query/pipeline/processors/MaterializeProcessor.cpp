@@ -15,7 +15,6 @@
 #include "BioAssert.h"
 
 using namespace db;
-using namespace db;
 
 namespace {
 

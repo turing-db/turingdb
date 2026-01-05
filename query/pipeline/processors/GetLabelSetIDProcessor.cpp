@@ -11,7 +11,6 @@
 #include "ExecutionContext.h"
 
 using namespace db;
-using namespace db;
 
 GetLabelSetIDProcessor::GetLabelSetIDProcessor()
 {

@@ -12,7 +12,6 @@
 #include "versioning/Transaction.h"
 
 using namespace db;
-using namespace db;
 
 class ExpressionTest : public turing::test::TuringTest {
 public:

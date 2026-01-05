@@ -10,7 +10,6 @@
 #include "PipelineException.h"
 
 using namespace db;
-using namespace db;
 
 CreateGraphProcessor::CreateGraphProcessor(std::string_view graphName)
     : _graphName(graphName)

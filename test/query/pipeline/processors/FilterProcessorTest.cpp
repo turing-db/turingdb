@@ -4,7 +4,6 @@
 #include "SimpleGraph.h"
 
 using namespace db;
-using namespace db;
 using namespace turing::test;
 
 class FilterProcessorTest : public ProcessorTester {

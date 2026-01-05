@@ -7,7 +7,6 @@
 #include "LineContainer.h"
 
 using namespace db;
-using namespace db;
 using namespace turing::test;
 
 class GetPropertiesProcessorTest : public ProcessorTester {

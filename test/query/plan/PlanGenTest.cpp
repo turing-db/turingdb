@@ -20,7 +20,6 @@
 #include "TuringTestEnv.h"
 
 using namespace db;
-using namespace db;
 using namespace turing::test;
 
 class PlanGenTest : public TuringTest {

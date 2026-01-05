@@ -19,7 +19,6 @@
 #include "SimpleGraph.h"
 
 using namespace db;
-using namespace db;
 using namespace turing::test;
 namespace rg = ranges;
 namespace rv = rg::views;

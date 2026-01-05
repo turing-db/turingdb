@@ -14,7 +14,6 @@
 #include "TuringTestEnv.h"
 
 using namespace db;
-using namespace db;
 using namespace turing::test;
 
 #define EXECUTE(view, chunkSize)                                    \

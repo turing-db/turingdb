@@ -31,7 +31,6 @@
 #include "PipelineException.h"
 
 using namespace db;
-using namespace db;
 
 namespace {
 

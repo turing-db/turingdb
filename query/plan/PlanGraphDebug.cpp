@@ -32,7 +32,6 @@
 #include "metadata/LabelSet.h"
 
 using namespace db;
-using namespace db;
 
 namespace {
 

@@ -14,7 +14,6 @@
 #include "expr/All.h"
 
 using namespace db;
-using namespace db;
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
