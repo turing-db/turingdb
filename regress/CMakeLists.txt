@@ -24,7 +24,7 @@ add_subdirectory(change_submit_alice)
 add_subdirectory(change_10)
 add_subdirectory(submit_empty_change)
 #add_subdirectory(create_edges_inject) Disabled until ID injection in v2
-add_subdirectory(call_labels)
+add_subdirectory(call_metadata)
 add_subdirectory(complex_rebases)
 add_subdirectory(serialization)
 #add_subdirectory(snapshot_isolation) Disabled until ID injection in v2

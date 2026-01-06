@@ -54,6 +54,22 @@ void HistoryProcedure::execute(Procedure& proc) {
             size_t remaining = std::distance(data._it, _view.commits().end());
             remaining = std::min(remaining, ctxt->getChunkSize());
 
+            if (commitCol) {
+                commitCol->clear();
+            }
+
+            if (nodeCountCol) {
+                nodeCountCol->clear();
+            }
+
+            if (edgeCountCol) {
+                edgeCountCol->clear();
+            }
+
+            if (partCountCol) {
+                partCountCol->clear();
+            }
+
             for (size_t i = 0; i < remaining; ++i) {
                 const CommitView& commit = *data._it;
                 const CommitHash& hash = commit.hash();
