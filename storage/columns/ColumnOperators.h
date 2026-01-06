@@ -394,6 +394,8 @@ private:
 
     // Implementations of basic operations in Kleene/3-valued logic
 
+    // The following Boolean operators have unique semantics for 3-way logic (i.e.
+    // short-circuiting) so are defined explicitly rather than generically
     template <BooleanOpt T, BooleanOpt U>
     static std::optional<bool> optionalOr(const T& a, const U& b) {
         if (a == CustomBool {true} || b == CustomBool {true}) {
@@ -460,6 +462,12 @@ private:
         requires OptionallyComparable<T, U>
     inline static std::optional<bool> optionalEq(const T& a, const U& b) {
         return optionalPredicate<std::equal_to<>>(a, b);
+    }
+
+    template <typename T, typename U>
+        requires OptionallyComparable<T, U>
+    inline static std::optional<bool> optionalNotEq(const T& a, const U& b) {
+        return optionalPredicate<std::not_equal_to<>>(a, b);
     }
 
     template <typename T, typename U>
