@@ -100,6 +100,14 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                                                           \
     }
 
+#define NOT_EQUAL_CASE(Lhs, Rhs)                                                         \
+    case OpCase<OP_NOT_EQUAL, Lhs, Rhs>: {                                               \
+        ColumnOperators::notEqual(static_cast<ColumnOptMask*>(instr._res),               \
+                                  static_cast<const Lhs*>(instr._lhs),                   \
+                                  static_cast<const Rhs*>(instr._rhs));                  \
+        break;                                                                           \
+    }
+
 #define GREATER_THAN_CASE(Lhs, Rhs)                                                      \
     case OpCase<OP_GREATER_THAN, Lhs, Rhs>: {                                            \
         ColumnOperators::greaterThan(static_cast<ColumnOptMask*>(instr._res),            \
@@ -289,6 +297,21 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
 
         EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
+
+        NOT_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
+
+        NOT_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
+
+        NOT_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
+
+        NOT_EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
+
+        NOT_EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
 
         GREATER_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
         GREATER_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
