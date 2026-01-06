@@ -221,20 +221,6 @@ void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, st
 }
 
 void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
-    if (args.size() < 2) {
-        spdlog::error("Usage: sh <command>");
-        return;
-    }
-
-    // Build the command from all arguments after "sh"
-    std::string cmd;
-    for (size_t i = 1; i < args.size(); ++i) {
-        if (i > 1) {
-            cmd += ' ';
-        }
-        cmd += args[i];
-    }
-
     // Get the user's shell from $SHELL, fallback to /bin/sh
     const char* shellPath = getenv("SHELL");
     if (shellPath == nullptr) {
@@ -248,8 +234,22 @@ void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std:
     }
 
     if (pid == 0) {
-        // Child process: execute the command in the user's shell
-        execl(shellPath, shellPath, "-c", cmd.c_str(), nullptr);
+        // Child process
+        if (args.size() < 2) {
+            // No arguments: open interactive shell
+            execl(shellPath, shellPath, nullptr);
+        } else {
+            // Build the command from all arguments after "sh"
+            std::string cmd;
+            for (size_t i = 1; i < args.size(); ++i) {
+                if (i > 1) {
+                    cmd += ' ';
+                }
+                cmd += args[i];
+            }
+            // Execute the command in the user's shell
+            execl(shellPath, shellPath, "-c", cmd.c_str(), nullptr);
+        }
         // If execl returns, it failed
         _exit(127);
     }
