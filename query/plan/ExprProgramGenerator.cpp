@@ -279,7 +279,6 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     }                                                                                    \
     break;
 
-
 Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr) {
     Literal* literal = literalExpr->getLiteral();
     
