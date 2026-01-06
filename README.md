@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/logo_spiral.png" width="400" alt="TuringDB logo">
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/logo_spiral.png" width="250" alt="TuringDB logo">
 </p>
 
 # TuringDB Community Edition
@@ -75,7 +75,7 @@ TuringDB was created to solve real-world performance challenges in critical indu
 - OpenCypher query language
 - Python SDK with comprehensive API
 
----
+
 
 ## Quickstart
 
@@ -172,36 +172,36 @@ A collection of notebooks demonstrating how to use TuringDB for real-world analy
 
 [**github.com/turing-db/turingdb-examples**](https://github.com/turing-db/turingdb-examples/tree/main/examples/notebooks/public_version)
 
-#### **Domain: Finance & Fraud Detection**
+#### **Finance & Fraud Detection**
 
 [**Paysim Financial Fraud Detection**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/paysim_financial_fraud_detection.ipynb)
 
 [**Crypto Orbitaal Fraud Detection**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/crypto_orbitaal_fraud_detection.ipynb)
 
-#### **Domain: Transport & Supply Chain**
+#### **Transport & Supply Chain**
 
 [**London Transport (TfL)**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/london_transport_TfL.ipynb)
 
 [**Supply Chain - ETO Chip Explorer**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/supply_chain_eto-chip-explorer.ipynb)
 
-#### **Domain: Healthcare & Life Sciences**
+#### **Healthcare & Life Sciences**
 
 [**Reactome Biological Pathways**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/reactome.ipynb)
 
 [**Healthcare Knowledge Graph**](https://github.com/turing-db/turingdb-examples/blob/main/examples/notebooks/public_version/healthcare_dataset.ipynb)
 
----
+
 
 ## Core Concepts
 
-- **Columnar Storage**: Nodes and edges stored in columns for efficiency and streaming query processing. Brings modern database research ideas to graph databases.
-- **DataParts**: Immutable data partitions that enable git-like versioning and zero locking between reads and writes
-- **Snapshot Isolation**: Each query sees a consistent snapshot view of the graph
-- **Zero-locking: read optimised architecture for high analytic workloads performance**
+- [**Columnar Storage**](https://docs.turingdb.ai/concepts/columnar_storage): Nodes and edges stored in columns for efficiency and streaming query processing. Brings modern database research ideas to graph databases.
+- [**DataParts**](https://docs.turingdb.ai/concepts/dataparts): Immutable data partitions that enable git-like versioning and zero locking between reads and writes
+- [**Snapshot Isolation**](https://docs.turingdb.ai/concepts/snapshots): Each query sees a consistent snapshot view of the graph
+- [**Zero-locking**](https://docs.turingdb.ai/concepts/zero_locking): Read optimised architecture for high analytic workloads performance
 
 Learn more in our [documentation](https://docs.turingdb.ai/concepts/overview).
 
----
+
 
 ## Documentation
 
@@ -211,7 +211,7 @@ Learn more in our [documentation](https://docs.turingdb.ai/concepts/overview).
 - [**Concepts & Architecture**](https://docs.turingdb.ai/concepts/overview) - Deep dive into TuringDB internals
 - [**Tutorials & Examples**](https://docs.turingdb.ai/tutorials/create_graph) - Learn by doing
 
----
+
 
 ## Community & Support
 
@@ -224,7 +224,7 @@ Learn more in our [documentation](https://docs.turingdb.ai/concepts/overview).
 
 We welcome contributions! Contact our team to contribute to TuringDB: team@turingdb.ai
 
----
+
 
 ## Benchmarks
 
@@ -232,7 +232,7 @@ TuringDB delivers exceptional performance on standard graph workloads 200X faste
 
 See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for more performance data.
 
----
+
 
 ## License
 
@@ -240,7 +240,7 @@ TuringDB Community Edition is licensed under the BSL **License**
 
 See [LICENSE](https://www.notion.so/turingbio/LICENSE) for details.
 
----
+
 
 ## Contact **TuringDB Team**
 
@@ -248,11 +248,11 @@ See [LICENSE](https://www.notion.so/turingbio/LICENSE) for details.
 - 📧 Email: team@turingdb.ai
 - 💼 LinkedIn: [TuringDB](https://www.linkedin.com/company/turingdb-ai)
 
----
+
 
 <div align="center">
 
-**Built with ❤️ for the graph database community**
+### **Built with ❤️ for the graph database community**
 
 **Star us on GitHub** - it helps the project grow!
 
