@@ -155,7 +155,7 @@ public:
     }
 
     void value(ValueType v) {
-        write(ValueTypeName::value(v));
+        value(ValueTypeName::value(v));
         _comma = true;
     }
 

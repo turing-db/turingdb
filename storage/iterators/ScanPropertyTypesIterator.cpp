@@ -31,6 +31,18 @@ ScanPropertyTypesChunkWriter::ScanPropertyTypesChunkWriter(const PropertyTypeMap
 void ScanPropertyTypesChunkWriter::fill(size_t maxCount) {
     bioassert(_ids || _names || _valueTypes, "ScanPropertyTypesChunkWriter::fill(): All columns are null");
 
+    if (_ids) {
+        _ids->clear();
+    }
+
+    if (_valueTypes) {
+        _valueTypes->clear();
+    }
+
+    if (_names) {
+        _names->clear();
+    }
+
     for (size_t i = 0; i < maxCount && isValid(); ++i) {
         if (_ids) {
             _ids->push_back(_it->_pt._id);
