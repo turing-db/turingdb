@@ -2272,3 +2272,65 @@ TEST_F(QueriesTest, int64FilterOperandsDisjunction) {
         testOperand(matchQuery, threshold1, threshold2, std::greater_equal<> {}, std::less_equal<>{});
     }
 }
+
+TEST_F(QueriesTest, notEqualFilter) {
+
+    auto testOperand = [this]<typename T>(std::string_view matchQuery,
+                                          std::string_view propertyName, T::Primitive th1,
+                                          auto comp1) -> void {
+        using Rows = LineContainer<NodeID, typename T::Primitive>;
+
+        PropertyTypeID propID = getPropID(propertyName);
+
+        Rows expected;
+        {
+            for (const NodeID n : read().scanNodes()) {
+                const auto* prop = read().tryGetNodeProperty<T>(propID, n);
+                if (prop && comp1(*prop, th1)) {
+                    expected.add({n, *prop});
+                }
+            }
+        }
+        ASSERT_NE(0, expected.size());
+
+        Rows actual;
+        {
+            auto res = query(matchQuery, [&actual, propertyName](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+
+                auto* es = findColumn(df, "n")->as<ColumnNodeIDs>();
+                auto* props = findColumn(df, fmt::format("n.{}", propertyName))->as<ColumnOptVector<typename T::Primitive>>();
+
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(props);
+                ASSERT_EQ(es->size(), props->size());
+
+                for (size_t row = 0; row < es->size(); row++) {
+                    actual.add({es->at(row), *props->at(row)});
+                }
+            });
+
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(expected.equals(actual));
+    };
+
+    {
+        using Age = types::Int64;
+        std::string_view propertyName = "age";
+        const Age::Primitive threshold = 31; // Remy and Adam only nodes with age, both 32
+        std::string matchQuery = fmt::format("MATCH (n) WHERE n.{} <> {} RETURN n, n.{}",
+                                             propertyName, threshold, propertyName);
+        testOperand.operator()<Age>(matchQuery, propertyName, threshold, std::not_equal_to<> {});
+    }
+
+    {
+        using DoB = types::String;
+        std::string_view propertyName = "dob";
+        const DoB::Primitive threshold = "18/01";
+        std::string matchQuery = fmt::format(R"(MATCH (n) WHERE n.{} <> "{}" RETURN n, n.{})",
+                                             propertyName, threshold, propertyName);
+        testOperand.operator()<DoB>(matchQuery, propertyName, threshold, std::not_equal_to<> {});
+    }
+}
