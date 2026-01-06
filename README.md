@@ -230,6 +230,21 @@ We welcome contributions! Contact our team to contribute to TuringDB: team@turin
 
 TuringDB delivers exceptional performance on standard graph workloads 200X faster than Neo4j:
 
+###  Multi-hop Queries From a Set of Seed Nodes
+
+| Query Depth | Neo4j Mean | TuringDB Mean | Speedup |
+|------------|-----------|---------------|---------|
+| 1-hop      | 1390 ms   | 12 ms         | 115×    |
+| 2-hop      | 1420 ms   | 11 ms         | 129×    |
+| 4-hop      | 1568 ms   | 14 ms         | 112×    |
+| 7-hop      | 51,264 ms | 172 ms        | 298×    |
+| 8-hop      | 98,183 ms | 476 ms        | 206×    |
+
+**Details:**  
+`MATCH` query returning node IDs from a set of 15 seed nodes with an increasing number of hops through outgoing edges.
+
+
+
 See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for more performance data.
 
 
@@ -248,7 +263,7 @@ See [LICENSE](https://www.notion.so/turingbio/LICENSE) for details.
 - 📧 Email: team@turingdb.ai
 - 💼 LinkedIn: [TuringDB](https://www.linkedin.com/company/turingdb-ai)
 
-
+---
 
 <div align="center">
 
