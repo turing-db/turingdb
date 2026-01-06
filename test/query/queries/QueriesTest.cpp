@@ -2120,13 +2120,13 @@ TEST_F(QueriesTest, int64FilterOperands) {
     }
 
     {
-        const Duration threshold = 15;
+        const Duration threshold = 10;
         std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration >= {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::greater_equal<Duration> {});
     }
 
     {
-        const Duration threshold = 15;
+        const Duration threshold = 20;
         std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration <= {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::less_equal<Duration> {});
     }
@@ -2142,5 +2142,133 @@ TEST_F(QueriesTest, int64FilterOperands) {
         const Duration threshold = 9999;
         std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration > {} RETURN e, e.duration", threshold);
         testOperand(matchQuery, threshold, std::greater<Duration> {});
+    }
+}
+
+TEST_F(QueriesTest, int64FilterOperandsConjunction) {
+    using Duration = types::Int64::Primitive;
+    using Rows = LineContainer<EdgeID, Duration>;
+
+    // Set up
+    auto testOperand = [this](std::string_view matchQuery, Duration th1, Duration th2,
+                              auto comp1, auto comp2) -> void {
+        PropertyTypeID durationProp = getPropID("duration");
+
+        Rows expected;
+        {
+            for (const EdgeRecord& e : read().scanOutEdges()) {
+
+                const auto* duration =
+                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+                if (duration && comp1(*duration, th1) && comp2(*duration, th2)) {
+                    expected.add({e._edgeID, *duration});
+                }
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = query(matchQuery, [&actual](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+
+                auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                auto* durs = findColumn(df, "e.duration")->as<ColumnOptVector<Duration>>();
+
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(durs);
+                ASSERT_EQ(es->size(), durs->size());
+
+                for (size_t row = 0; row < es->size(); row++) {
+                    actual.add({es->at(row), *durs->at(row)});
+                }
+            });
+
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(expected.equals(actual));
+    };
+
+    // Test cases
+    {
+        const Duration threshold1 = 10;
+        const Duration threshold2 = 20;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration > {} "
+                                             "AND e.duration < {} RETURN e, e.duration",
+                                             threshold1, threshold2);
+        testOperand(matchQuery, threshold1, threshold2, std::greater<> {}, std::less<>{});
+    }
+
+    {
+        const Duration threshold1 = 10;
+        const Duration threshold2 = 20;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration >= {} "
+                                             "AND e.duration <= {} RETURN e, e.duration",
+                                             threshold1, threshold2);
+        testOperand(matchQuery, threshold1, threshold2, std::greater_equal<> {}, std::less_equal<>{});
+    }
+}
+
+TEST_F(QueriesTest, int64FilterOperandsDisjunction) {
+    using Duration = types::Int64::Primitive;
+    using Rows = LineContainer<EdgeID, Duration>;
+
+    // Set up
+    auto testOperand = [this](std::string_view matchQuery, Duration th1, Duration th2,
+                              auto comp1, auto comp2) -> void {
+        PropertyTypeID durationProp = getPropID("duration");
+
+        Rows expected;
+        {
+            for (const EdgeRecord& e : read().scanOutEdges()) {
+
+                const auto* duration =
+                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+                if (duration && (comp1(*duration, th1) || comp2(*duration, th2))) {
+                    expected.add({e._edgeID, *duration});
+                }
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = query(matchQuery, [&actual](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+
+                auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                auto* durs = findColumn(df, "e.duration")->as<ColumnOptVector<Duration>>();
+
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(durs);
+                ASSERT_EQ(es->size(), durs->size());
+
+                for (size_t row = 0; row < es->size(); row++) {
+                    actual.add({es->at(row), *durs->at(row)});
+                }
+            });
+
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(expected.equals(actual));
+    };
+
+    // Test cases
+    {
+        const Duration threshold1 = 10;
+        const Duration threshold2 = 20;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration > {} "
+                                             "OR e.duration < {} RETURN e, e.duration",
+                                             threshold1, threshold2);
+        testOperand(matchQuery, threshold1, threshold2, std::greater<> {}, std::less<>{});
+    }
+
+    {
+        const Duration threshold1 = 10;
+        const Duration threshold2 = 20;
+        std::string matchQuery = fmt::format("MATCH (n)-[e]->(m) WHERE e.duration >= {} "
+                                             "OR e.duration <= {} RETURN e, e.duration",
+                                             threshold1, threshold2);
+        testOperand(matchQuery, threshold1, threshold2, std::greater_equal<> {}, std::less_equal<>{});
     }
 }
