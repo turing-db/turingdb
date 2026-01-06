@@ -1,4 +1,6 @@
-#include "TuringShell.h"
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include <linenoise.h>
 #include <regex>
@@ -6,6 +8,8 @@
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
 #include <termcolor/termcolor.hpp>
+
+#include "TuringShell.h"
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -216,6 +220,54 @@ void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, st
     }
 }
 
+void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    if (args.size() < 2) {
+        spdlog::error("Usage: sh <command>");
+        return;
+    }
+
+    // Build the command from all arguments after "sh"
+    std::string cmd;
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (i > 1) {
+            cmd += ' ';
+        }
+        cmd += args[i];
+    }
+
+    // Get the user's shell from $SHELL, fallback to /bin/sh
+    const char* shellPath = getenv("SHELL");
+    if (shellPath == nullptr) {
+        shellPath = "/bin/sh";
+    }
+
+    const pid_t pid = fork();
+    if (pid == -1) {
+        spdlog::error("Failed to fork process");
+        return;
+    }
+
+    if (pid == 0) {
+        // Child process: execute the command in the user's shell
+        execl(shellPath, shellPath, "-c", cmd.c_str(), nullptr);
+        // If execl returns, it failed
+        _exit(127);
+    }
+
+    // Parent process: wait for child to complete
+    int status;
+    waitpid(pid, &status, 0);
+
+    if (WIFEXITED(status)) {
+        const int exitCode = WEXITSTATUS(status);
+        if (exitCode != 0) {
+            spdlog::warn("Command exited with status {}", exitCode);
+        }
+    } else if (WIFSIGNALED(status)) {
+        spdlog::warn("Command terminated by signal {}", WTERMSIG(status));
+    }
+}
+
 } // namespace
 
 TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
@@ -231,6 +283,7 @@ TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
     _localCommands.emplace("quiet", Command {quietCommand});
     _localCommands.emplace("unquiet", Command {unquietCommand});
     _localCommands.emplace("read", Command {readCommand});
+    _localCommands.emplace("sh", Command {shCommand});
 }
 
 TuringShell::~TuringShell() {
