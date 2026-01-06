@@ -240,8 +240,7 @@ TuringDB delivers exceptional performance on standard graph workloads 200X faste
 | 7-hop      | 51,264 ms | 172 ms        | 298×    |
 | 8-hop      | 98,183 ms | 476 ms        | 206×    |
 
-**Details:**  
-`MATCH` query returning node IDs from a set of 15 seed nodes with an increasing number of hops through outgoing edges.
+**Details:** `MATCH` query returning node IDs from a set of 15 seed nodes with an increasing number of hops through outgoing edges.
 
 
 
@@ -253,7 +252,7 @@ See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for mor
 
 TuringDB Community Edition is licensed under the BSL **License**
 
-See [LICENSE](https://www.notion.so/turingbio/LICENSE) for details.
+See [LICENSE](https://www.notion.so/turingbio/LICENSE) for more details.
 
 
 
