@@ -372,26 +372,39 @@ void DBServerProcessor::list_loaded_graphs() {
     PayloadWriter payload(_writer.getWriter());
 
     payload.obj();
-    payload.key("data");
-    payload.arr();
 
-    bool firstExec = true;
-    QueryCallbackV2 callback = [&](const Dataframe* df) {
-        if (firstExec) {
+    bool isFirstExec = true;
+
+    const QueryCallbackV2 queryCallback = [&](const Dataframe* df) {
+        if (isFirstExec) {
             JsonEncoder::writeDataframeHeader(payload, *df);
-            firstExec = false;
+            payload.key("data");
+            payload.arr();
+            isFirstExec = false;
         }
+
         JsonEncoder::writeDataframe(payload, *df);
     };
 
     const auto res = _db.query("LIST GRAPH",
                                "",
                                &mem,
-                               callback);
+                               queryCallback);
     if (!res.isOk()) {
-        payload.end();
         payload.key("error");
-        payload.value(QueryStatusDescription::value(res.getStatus()));
+        const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
+        payload.value(errorType);
+
+        const std::string& errorMsg =
+            res.getError().empty() ? "No error message available." : res.getError();
+
+        payload.key("error_details");
+
+        std::string sanitizedString;
+        sanitizeJsonString(errorMsg, sanitizedString);
+        payload.value(sanitizedString);
+
+        return;
     }
 }
 
