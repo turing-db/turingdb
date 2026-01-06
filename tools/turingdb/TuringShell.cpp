@@ -1,3 +1,5 @@
+#include "TuringShell.h"
+
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -8,8 +10,6 @@
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
 #include <termcolor/termcolor.hpp>
-
-#include "TuringShell.h"
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -221,10 +221,10 @@ void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, st
 }
 
 void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
-    // Get the user's shell from $SHELL, fallback to /bin/sh
+    // Get the user's shell from $SHELL, fallback to /bin/bash
     const char* shellPath = getenv("SHELL");
     if (shellPath == nullptr) {
-        shellPath = "/bin/sh";
+        shellPath = "/bin/bash";
     }
 
     const pid_t pid = fork();
