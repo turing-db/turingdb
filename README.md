@@ -81,19 +81,22 @@ TuringDB was created to solve real-world performance challenges in critical indu
 
 ### Requirements
 TuringDB requires:
-- **C++ compiler** with C++23 support
+- **Ubuntu Jammy** 22.04 LTS or later
+- **C++23** support by **GCC compiler** version >=11
 - **CMake** 3.10 or higher
 - **Git** for submodule management
 
 ### How to build
 
-1. Clone with submodules
+1. Build on Ubuntu Jammy or later
+
+2. Clone with submodules
 ```bash
 git clone --recursive https://github.com/turing-db/turingdb.git
 ./pull.sh
 ```
 
-2. Install dependencies (run only once)
+3. Install dependencies (run only once)
 ```bash
 ./dependencies.sh
 ```
@@ -105,7 +108,7 @@ This script will automatically build or install:
 - AWS SDK for C++
 - Faiss vector search library
 
-3. Build TuringDB:
+4. Build TuringDB:
 ```bash
 mkdir -p build && cd build
 
@@ -114,7 +117,7 @@ make -j8
 make install
 ```
 
-4. Setup environment:
+5. Setup environment:
 ```bash
 source setup.sh
 ```
@@ -231,6 +234,12 @@ We welcome contributions! Contact our team to contribute to TuringDB: team@turin
 TuringDB delivers exceptional performance on standard graph workloads 200X faster than Neo4j:
 
 ###  Multi-hop Queries From a Set of Seed Nodes
+
+```
+MATCH (n{displayName: ‘APOE-4’}) RETURN count(n)
+```
+
+**Query for 1-hop**: ``` MATCH (n)—>(m) RETURN count(m) ```
 
 | Query Depth | Neo4j Mean | TuringDB Mean | Speedup |
 |------------|-----------|---------------|---------|
