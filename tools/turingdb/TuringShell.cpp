@@ -284,6 +284,7 @@ TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
     _localCommands.emplace("unquiet", Command {unquietCommand});
     _localCommands.emplace("read", Command {readCommand});
     _localCommands.emplace("sh", Command {shCommand});
+    _localCommands.emplace("shell", Command {shCommand});
 }
 
 TuringShell::~TuringShell() {
