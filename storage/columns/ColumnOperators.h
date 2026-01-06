@@ -30,7 +30,7 @@ template <typename U>
 struct is_optional<std::optional<U>> : std::true_type {};
 
 template <typename T>
-inline constexpr bool is_optional_v = is_optional<T>::value;
+inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
 template <typename T>
 struct unwrap_optional {
@@ -186,6 +186,7 @@ public:
 
     // Optional-based property predicate column operations
     INSTANTIATE_PROPERTY_PREDICATES(equal, optionalEq)
+    INSTANTIATE_PROPERTY_PREDICATES(notEqual, optionalNotEq)
     INSTANTIATE_PROPERTY_PREDICATES(greaterThan, optionalGT)
     INSTANTIATE_PROPERTY_PREDICATES(lessThan, optionalLT)
     INSTANTIATE_PROPERTY_PREDICATES(greaterThanOrEqual, optionalGTE)
@@ -383,8 +384,8 @@ private:
      * @warn Assumes the optional is engaged, does not check for engagement.
      */
     template <typename T>
-    constexpr static unwrap_optional_t<T>&& unwrap(T&& t) {
-        if constexpr (is_optional_v<T>)  {
+    static constexpr decltype(auto) unwrap(T&& t) {
+        if constexpr (is_optional_v<T>) {
             return *std::forward<T>(t);
         } else {
             return std::forward<T>(t);
