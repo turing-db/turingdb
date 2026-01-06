@@ -251,11 +251,11 @@ void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std:
             execl(shellPath, shellPath, "-c", cmd.c_str(), nullptr);
         }
         // If execl returns, it failed
-        _exit(127);
+        exit(EXIT_FAILURE);
     }
 
     // Parent process: wait for child to complete
-    int status;
+    int status = 0;
     waitpid(pid, &status, 0);
 
     if (WIFEXITED(status)) {
