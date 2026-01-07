@@ -5,6 +5,8 @@
 
 #include "ID.h"
 
+#include "BioAssert.h"
+
 namespace db {
 template <std::integral TType, size_t TCount>
 class TemplateLabelSet;
@@ -158,7 +160,14 @@ public:
 
     static std::pair<TType, TType> computeBitShift(LabelID labelID) {
         const size_t integerOffset = labelID.getValue() / IntegerSize;
+
+        bioassert(integerOffset < TCount, "LabelID {} exceeds LabelSet capacity",
+                  labelID.getValue());
+
         const TType bitPosition = labelID.getValue() % IntegerSize;
+
+        bioassert(bitPosition < (sizeof(TType) * 8), "Invalid bit position {}.", bitPosition);
+
         const TType bitShift = ((TType)1 << bitPosition);
         return {integerOffset, bitShift};
     }
