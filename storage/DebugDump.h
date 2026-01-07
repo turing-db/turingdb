@@ -5,6 +5,7 @@
 #include <ostream>
 
 #include "ID.h"
+#include "metadata/Null.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -41,6 +42,10 @@ public:
         } else {
             dumpNull(out);
         }
+    }
+
+    inline static void dump(std::ostream& out, PropertyNull) {
+        dumpNull(out);
     }
 
     static void dump(std::ostream& out, std::string_view str);

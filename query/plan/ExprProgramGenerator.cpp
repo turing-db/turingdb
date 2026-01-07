@@ -288,6 +288,12 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         GEN_LITERAL_CASE(STRING, String, StringLiteral)
         GEN_LITERAL_CASE(DOUBLE, Double, DoubleLiteral)
 
+        case Literal::Kind::NULL_LITERAL: {
+                auto* value = _gen->memory().alloc<ColumnConst<PropertyNull>>();
+                return value;
+        }
+        break;
+
         default:
             throw PlannerException(
                 fmt::format("ExprProgramGenerator: unsupported literal of type {}",

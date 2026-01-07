@@ -1695,12 +1695,6 @@ TEST_F(QueriesTest, db_commit) {
     }
 }
 
-int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 3;
-    });
-}
-
 TEST_F(QueriesTest, whereName) {
     const auto MATCH_QUERY = [](std::string_view name) -> std::string {
         return fmt::format("MATCH (n) WHERE n.name = \"{}\" RETURN n", name);
@@ -2382,4 +2376,72 @@ TEST_F(QueriesTest, isNotNullFilter) {
                                              propertyName, propertyName);
         test.operator()<Age>(matchQuery, propertyName);
     }
+}
+
+TEST_F(QueriesTest, isNullFilter) {
+    auto test = [this]<typename T>(std::string_view matchQuery,
+                                   std::string_view propertyName) -> void {
+        using Rows = LineContainer<NodeID>;
+
+        PropertyTypeID propID = getPropID(propertyName);
+
+        Rows expected;
+        {
+            for (const NodeID n : read().scanNodes()) {
+                const auto* prop = read().tryGetNodeProperty<T>(propID, n);
+                if (!prop) {
+                    expected.add({n});
+                }
+            }
+        }
+
+        Rows actual;
+        {
+            auto res = query(matchQuery, [&actual](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+
+                auto* es = findColumn(df, "n")->as<ColumnNodeIDs>();
+
+                ASSERT_TRUE(es);
+
+                for (auto & e : *es) {
+                    actual.add({e});
+                }
+            });
+
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(expected.equals(actual));
+    };
+
+    {
+        using Age = types::Int64;
+        std::string_view propertyName = "age";
+        std::string matchQuery = fmt::format("MATCH (n) WHERE n.{} IS NULL RETURN n",
+                                             propertyName);
+        test.operator()<Age>(matchQuery, propertyName);
+    }
+
+    {
+        using Name = types::String;
+        std::string_view propertyName = "name";
+        std::string matchQuery = fmt::format("MATCH (n) WHERE n.{} IS NULL RETURN n",
+                                             propertyName);
+        test.operator()<Name>(matchQuery, propertyName);
+    }
+
+    {
+        using Real = types::Bool;
+        std::string_view propertyName = "isReal";
+        std::string matchQuery = fmt::format("MATCH (n) WHERE n.{} IS NULL RETURN n",
+                                             propertyName);
+        test.operator()<Real>(matchQuery, propertyName);
+    }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 3;
+    });
 }
