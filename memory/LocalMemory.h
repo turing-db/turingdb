@@ -14,7 +14,7 @@
 #include "columns/ColumnOptVector.h"
 
 #include "metadata/PropertyType.h"
-#include "metadata/Null.h"
+#include "metadata/PropertyNull.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
 

@@ -5,8 +5,8 @@
 #include <ostream>
 
 #include "ID.h"
-#include "metadata/Null.h"
 #include "metadata/PropertyType.h"
+#include "metadata/PropertyNull.h"
 
 namespace db {
 
