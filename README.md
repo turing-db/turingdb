@@ -81,8 +81,8 @@ TuringDB was created to solve real-world performance challenges in critical indu
 
 ### Requirements
 TuringDB requires:
-- **Ubuntu Jammy** 22.04 LTS or later
-- **C++23** support by **GCC compiler** version >=11
+- **Linux Ubuntu Jammy** 22.04 LTS or later
+- **GCC Compiler** version >=11
 - **CMake** 3.10 or higher
 - **Git** for submodule management
 
@@ -239,7 +239,7 @@ TuringDB delivers exceptional performance on standard graph workloads 200X faste
 MATCH (n{displayName: ‘APOE-4’}) RETURN count(n)
 ```
 
-**Query for 1-hop**: ``` MATCH (n)—>(m) RETURN count(m) ```
+**Query for 1-hop**: ``` MATCH (n{displayName: ‘APOE-4’})-->(m) RETURN count(n) ```
 
 | Query Depth | Neo4j Mean | TuringDB Mean | Speedup |
 |------------|-----------|---------------|---------|
