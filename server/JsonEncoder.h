@@ -35,6 +35,18 @@ namespace db {
         return;                                         \
     }
 
+#define JSON_COLUMN_TYPE(Type, TypeName)     \
+    case ColumnVector<Type>::staticKind(): { \
+        writer.value(TypeName);              \
+    } break;                                 \
+    case ColumnOptVector<Type>::staticKind(): { \
+        writer.value(TypeName);                 \
+    } break;                                    \
+    case ColumnConst<Type>::staticKind(): {  \
+        writer.value(TypeName);              \
+    } break;                                 \
+
+
 class JsonEncoder {
 public:
     JsonEncoder() = delete;
@@ -63,48 +75,14 @@ public:
         for (const NamedColumn* namedCol : df.cols()) {
             const Column* col = namedCol->getColumn();
             switch (col->getKind()) {
-                case ColumnVector<EntityID>::staticKind():
-                case ColumnVector<NodeID>::staticKind():
-                case ColumnVector<EdgeID>::staticKind():
-                case ColumnVector<PropertyTypeID>::staticKind():
-                case ColumnVector<LabelID>::staticKind():
-                case ColumnVector<EdgeTypeID>::staticKind():
-                case ColumnVector<LabelSetID>::staticKind():
-                case ColumnVector<types::UInt64::Primitive>::staticKind(): {
-                    writer.value("UInt64");
-                } break;
-                case ColumnVector<types::Int64::Primitive>::staticKind(): {
-                    writer.value("Int64");
-                } break;
-                case ColumnVector<types::Double::Primitive>::staticKind(): {
-                    writer.value("Double");
-                } break;
-                case ColumnVector<types::Bool::Primitive>::staticKind(): {
-                    writer.value("Bool");
-                } break;
-                case ColumnVector<types::String::Primitive>::staticKind():
-                case ColumnVector<std::string>::staticKind():
-                case ColumnVector<ValueType>::staticKind():
-                case ColumnVector<ChangeID>::staticKind(): {
-                    writer.value("String");
-                } break;
-                case ColumnOptVector<types::UInt64::Primitive>::staticKind(): {
-                    writer.value("UInt64");
-                } break;
-                case ColumnOptVector<types::Int64::Primitive>::staticKind(): {
-                    writer.value("Int64");
-                } break;
-                case ColumnOptVector<types::Double::Primitive>::staticKind(): {
-                    writer.value("Double");
-                } break;
-                case ColumnOptVector<types::String::Primitive>::staticKind(): {
-                    writer.value("String");
-                } break;
-                case ColumnOptVector<types::Bool::Primitive>::staticKind(): {
-                    writer.value("Bool");
-                } break;
+                JSON_COLUMN_TYPE(EntityID, "UInt64")
+                JSON_COLUMN_TYPE(types::UInt64::Primitive, "Uint64")
+                JSON_COLUMN_TYPE(types::Int64::Primitive, "Int64")
+                JSON_COLUMN_TYPE(types::Double::Primitive, "Double")
+                JSON_COLUMN_TYPE(types::Bool::Primitive, "Bool")
+                JSON_COLUMN_TYPE(types::String::Primitive, "String")
                 default: {
-                    writer.value("String");
+                    bioassert(false, "Unexpected ColumnKind {}", col->getKind());
                 } break;
             }
         }
