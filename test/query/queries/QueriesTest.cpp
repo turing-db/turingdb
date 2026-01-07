@@ -2274,7 +2274,6 @@ TEST_F(QueriesTest, int64FilterOperandsDisjunction) {
 }
 
 TEST_F(QueriesTest, notEqualFilter) {
-
     auto testOperand = [this]<typename T>(std::string_view matchQuery,
                                           std::string_view propertyName, T::Primitive th1,
                                           auto comp1) -> void {
@@ -2332,5 +2331,55 @@ TEST_F(QueriesTest, notEqualFilter) {
         std::string matchQuery = fmt::format(R"(MATCH (n) WHERE n.{} <> "{}" RETURN n, n.{})",
                                              propertyName, threshold, propertyName);
         testOperand.operator()<DoB>(matchQuery, propertyName, threshold, std::not_equal_to<> {});
+    }
+}
+
+TEST_F(QueriesTest, isNotNullFilter) {
+    auto test = [this]<typename T>(std::string_view matchQuery,
+                                   std::string_view propertyName) -> void {
+        using Rows = LineContainer<NodeID, typename T::Primitive>;
+
+        PropertyTypeID propID = getPropID(propertyName);
+
+        Rows expected;
+        {
+            for (const NodeID n : read().scanNodes()) {
+                const auto* prop = read().tryGetNodeProperty<T>(propID, n);
+                if (prop) {
+                    expected.add({n, *prop});
+                }
+            }
+        }
+        ASSERT_NE(0, expected.size());
+
+        Rows actual;
+        {
+            auto res = query(matchQuery, [&actual, propertyName](const Dataframe* df) -> void {
+                ASSERT_TRUE(df);
+
+                auto* es = findColumn(df, "n")->as<ColumnNodeIDs>();
+                auto* props = findColumn(df, fmt::format("n.{}", propertyName))->as<ColumnOptVector<typename T::Primitive>>();
+
+                ASSERT_TRUE(es);
+                ASSERT_TRUE(props);
+                ASSERT_EQ(es->size(), props->size());
+
+                for (size_t row = 0; row < es->size(); row++) {
+                    actual.add({es->at(row), *props->at(row)});
+                }
+            });
+
+            ASSERT_TRUE(res);
+        }
+
+        EXPECT_TRUE(expected.equals(actual));
+    };
+
+    {
+        using Age = types::Int64;
+        std::string_view propertyName = "age";
+        std::string matchQuery = fmt::format("MATCH (n) WHERE n.{} IS NOT NULL RETURN n, n.{}",
+                                             propertyName, propertyName);
+        test.operator()<Age>(matchQuery, propertyName);
     }
 }
