@@ -1,5 +1,9 @@
 #include "LabelMap.h"
 
+#include "LabelSet.h"
+
+#include "TuringException.h"
+
 using namespace db;
 
 LabelMap::LabelMap() = default;
@@ -72,6 +76,11 @@ LabelID LabelMap::getOrCreate(std::string_view name) {
     }
 
     const size_t offset = _nameMap.size();
+    if (offset >= LabelSet::IntegerSize * LabelSet::IntegerCount) {
+        throw TuringException(fmt::format(
+            "Attempted to create LabelID {}, which exceeds graph label capacity.",
+            offset));
+    }
     const LabelID nextID {static_cast<LabelID::Type>(offset)};
     auto& pair = _container.emplace_back(nextID, std::make_unique<std::string>(name));
     _nameMap.emplace(std::string_view {*pair._name}, offset);
