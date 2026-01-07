@@ -3,10 +3,7 @@
   <img src="https://github.com/turing-db/turingdb/blob/update-readme/logo_spiral.png" width="250" alt="TuringDB logo">
 </p>
 
-# TuringDB Community Edition
 ## Blazingly Fast Column-Oriented Graph Database Engine
-
-
 
 [Website](https://turingdb.ai/) • [Documentation](https://docs.turingdb.ai/) • [Discord](https://discord.gg/dMM48ns5VY) • [Examples](https://github.com/turing-db/turingdb-examples)
 
