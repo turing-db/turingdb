@@ -12,8 +12,8 @@
 #include "ColumnOptMask.h"
 #include "columns/ColumnSet.h"
 
-#include "metadata/Null.h"
 #include "metadata/PropertyType.h"
+#include "metadata/PropertyNull.h"
 
 #include "BioAssert.h"
 
