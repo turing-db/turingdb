@@ -109,6 +109,15 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // For IS NULL or IS NOT NULL
+            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)) {
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid or compatible types: '{}' and '{}'",
                 EvaluatedTypeName::value(a),

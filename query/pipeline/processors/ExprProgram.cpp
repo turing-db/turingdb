@@ -184,6 +184,21 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                    \
     }
 
+#define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME) \
+    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)    \
+    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)        \
+                                                                                                     \
+    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)  \
+    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)      \
+                                                                                                     \
+    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)  \
+    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)      \
+                                                                                                     \
+    CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)  \
+    CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)      \
+                                                                                                     \
+    CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)      \
+    CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)          \
 
 ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
     ExprProgram* prog = new ExprProgram();
@@ -283,71 +298,25 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnConst<int64_t>, ColumnVector<int64_t>)
 
         // Property opts
-        EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
-        EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
+        INSTANTIATE_PROPERTY_OPERATOR(EQUAL_CASE)
+        INSTANTIATE_PROPERTY_OPERATOR(NOT_EQUAL_CASE)
+        INSTANTIATE_PROPERTY_OPERATOR(GREATER_THAN_CASE)
+        INSTANTIATE_PROPERTY_OPERATOR(LESS_THAN_CASE)
+        INSTANTIATE_PROPERTY_OPERATOR(GREATER_THAN_OR_EQUAL_CASE)
+        INSTANTIATE_PROPERTY_OPERATOR(LESS_THAN_OR_EQUAL_CASE)
 
-        EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
-        EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
+        // Special cases for IS NOT NULL and IS NULL
+        EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<PropertyNull>)
+        EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<PropertyNull>)
+        EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<PropertyNull>)
+        EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<PropertyNull>)
+        EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<PropertyNull>)
 
-        EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
-        EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
-
-        EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
-        EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
-
-        EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
-        EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
-
-        NOT_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
-        NOT_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
-
-        NOT_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
-        NOT_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
-
-        NOT_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
-        NOT_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
-
-        NOT_EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)
-        NOT_EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)
-
-        NOT_EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
-        NOT_EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
-
-        GREATER_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
-        GREATER_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
-
-        GREATER_THAN_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
-        GREATER_THAN_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
-
-        GREATER_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
-        GREATER_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
-
-        LESS_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
-        LESS_THAN_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
-
-        LESS_THAN_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
-        LESS_THAN_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
-
-        LESS_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
-        LESS_THAN_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
-
-        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
-        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
-
-        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
-        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
-
-        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
-        GREATER_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
-
-        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)
-        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)
-
-        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)
-        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)
-
-        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)
-        LESS_THAN_OR_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<PropertyNull>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<PropertyNull>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::Double::Primitive>, ColumnConst<PropertyNull>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::String::Primitive>, ColumnConst<PropertyNull>)
+        NOT_EQUAL_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnConst<PropertyNull>)
 
         // Boolean property ops
         AND_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)

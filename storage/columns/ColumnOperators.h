@@ -12,8 +12,10 @@
 #include "ColumnOptMask.h"
 #include "columns/ColumnSet.h"
 
-#include "BioAssert.h"
+#include "metadata/Null.h"
 #include "metadata/PropertyType.h"
+
+#include "BioAssert.h"
 
 namespace db {
 
@@ -191,6 +193,38 @@ public:
     INSTANTIATE_PROPERTY_PREDICATES(lessThan, optionalLT)
     INSTANTIATE_PROPERTY_PREDICATES(greaterThanOrEqual, optionalGTE)
     INSTANTIATE_PROPERTY_PREDICATES(lessThanOrEqual, optionalLTE)
+
+    // Implementation for IS NULL
+    template <typename T>
+        requires is_optional_v<T>
+    static void equal(ColumnOptMask* mask,
+                             const ColumnVector<T>* lhs,
+                             const ColumnConst<PropertyNull>*) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == std::nullopt;
+        }
+    }
+
+    // Implementation for IS NOT NULL
+    template <typename T>
+        requires is_optional_v<T>
+    static void notEqual(ColumnOptMask* mask,
+                             const ColumnVector<T>* lhs,
+                             const ColumnConst<PropertyNull>*) {
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] != std::nullopt;
+        }
+    }
 
     // 3-valued logic column operations
 

@@ -14,6 +14,7 @@
 #include "columns/ColumnOptVector.h"
 
 #include "metadata/PropertyType.h"
+#include "metadata/Null.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
 
@@ -49,17 +50,22 @@ public:
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
         MakeMemoryPool<ColumnConst<size_t>>::type,
+
         MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
+
+        MakeMemoryPool<ColumnConst<PropertyNull>>::type,
+
         MakeMemoryPool<ColumnVector<types::Int64::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::Bool::Primitive>>::type,
+
         MakeMemoryPool<ColumnVector<const CommitBuilder*>>::type,
         MakeMemoryPool<ColumnVector<const Change*>>::type,
         MakeMemoryPool<ColumnOptVector<types::Int64::Primitive>>::type,

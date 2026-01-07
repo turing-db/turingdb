@@ -19,7 +19,6 @@ public:
     {
     }
 
-
     explicit ColumnConst(T&& value)
         : Column(_staticKind),
           _value(std::forward<T>(value))

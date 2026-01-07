@@ -37,7 +37,7 @@ namespace {
     break;
 
 
-[[maybe_unused]] void applyMask(const Column* src,
+void applyMask(const Column* src,
                const ColumnMask* mask,
                Column* dest) {
     switch (src->getKind()) {
