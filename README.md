@@ -55,17 +55,11 @@ TuringDB was created to solve real-world performance challenges in critical indu
 - Massive parallelism for dashboards, AI pipelines, and batch processing
 - Each transaction executes on its own immutable snapshot. Guarantees Snapshot Isolation.
 
-### [**The First Git-like Versioning System for Graphs**](https://docs.turingdb.ai/concepts/zero_locking)
+### [**The First Git-like Versioning System for Graphs**](https://docs.turingdb.ai/concepts/commits)
 
 - Create and commit graph versions, maintain branches, merge changes, and time travel through history
 - Perfect for reproducibility, auditability, and regulatory compliance
 - Immutable snapshots ensure data integrity
-
-### [**Rich Graph Semantics & Metadata**](https://docs.turingdb.ai/concepts/commits)
-
-- Unlimited properties per node and edge (up to 1MB per node)
-- Store large text chunks and numerical values for comprehensive context
-- Ideal for LLM integration, digital twins, and multi-layer graphs
 
 ### [**Developer Friendly**](https://docs.turingdb.ai/query/cypher_subset)
 
@@ -276,6 +270,6 @@ See [LICENSE](https://www.notion.so/turingbio/LICENSE) for more details.
 
 **Star us on GitHub** - it helps the project grow!
 
-[⬆ Back to Top](https://github.com/turing-db)
+[⬆ Back to Top](https://github.com/turing-db/turingdb)
 
 </div>
