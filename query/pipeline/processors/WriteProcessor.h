@@ -98,7 +98,7 @@ private:
     /**
      * @warn NOT IMPLEMENTED
      */
-    void performUpdates();
+    void performUpdates() = delete;
 
     /**
      * @brief Adds @param numIters copies of each element of @ref _pendingNodes to @ref
@@ -106,6 +106,7 @@ private:
      * _writeBuffer::_pendingNodes for which each node can be found.
      */
     void createNodes(size_t numIters);
+
     /**
      * @brief Adds @param numIters copies of each element of @ref _pendingEdges to
      * @ref _writeBuffer. Fills @ref _output dataframe with the index in @ref
@@ -113,6 +114,7 @@ private:
      * @warn Requires @ref createNodes to have been called prior
      */
     void createEdges(size_t numIters);
+
     /**
      * @brief Transforms each column in @ref _output dataframe which has a tag belonging
      * to an element of @ref _pendingNodes or @ref _pendingEdges into an estimation of the

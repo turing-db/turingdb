@@ -301,13 +301,15 @@ void WriteProcessor::createNodes(size_t numIters) {
             }
         }
 
-        std::vector<NodeID>& raw = col->getRaw();
-
         // Populate the output column for this node with the index in the CWB which it
         // appears. These indexes are later transformed into "fake IDs" (an estimate as to
         // what the NodeID will be when it is committed) in @ref postProcessTempIDs.
-        raw.resize(raw.size() + numIters);
-        std::iota(col->begin(), col->end(), nextNodeID);
+
+        std::vector<NodeID>& raw = col->getRaw();
+        // Old size should always be 0 (asserted above), but add for safety 
+        size_t oldSize = raw.size();
+        raw.resize(oldSize + numIters);
+        std::iota(raw.begin() + oldSize, raw.end(), nextNodeID);
         nextNodeID += numIters;
     }
 }
