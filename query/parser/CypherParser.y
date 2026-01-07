@@ -205,6 +205,9 @@
 
 %token UNKNOWN
 
+%nonassoc IN
+%nonassoc REDUCE_PREC
+
 %type<db::Literal*> numLit literal
 %type<db::BoolLiteral*> boolLit
 %type<db::StringLiteral*> stringLit
@@ -819,7 +822,11 @@ propertyExpr
 atomExpr
     : pathExpr { $$ = $1; }
     | literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
-    | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
+
+    // Symbol precedence is needed to resolve conflicts with list comprehensions
+    // e.g. [x IN [1, 2, 3]] should be a list comprehension that generates : [1, 2, 3]
+    //      [2 IN [1, 2, 3]] should be a list of size 1: [true]
+    | symbol %prec REDUCE_PREC { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpr { scanner.notImplemented(@$, "CASE"); }
@@ -1148,28 +1155,7 @@ stringLit
 
 listLit
     : OBRACK CBRACK { scanner.notImplemented(@$, "Lists"); }
-    //| OBRACK exprChain CBRACK // Enabling this causes conflicts
-    // Instead using this: (simpler, too simple?)
-    | OBRACK listLitItems CBRACK { scanner.notImplemented(@$, "Lists"); }
-    ;
-
-listLitItems
-    : listLitItem
-    | listLitItems COMMA listLitItem
-    ;
-
-listLitItem
-    : literal
-    | parameter { scanner.notImplemented(@$, "Parameters"); }
-    | caseExpr { scanner.notImplemented(@$, "CASE"); }
-    | countFunc { scanner.notImplemented(@$, "COUNT"); }
-    | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
-    //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
-    | filterWith { scanner.notImplemented(@$, "Filters"); }
-    | parenthesizedExpr // Enabling this causes conflicts, not needed?
-    | functionInvocation { scanner.notImplemented(@$, "Function invocations"); }
-    | symbol
-    | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
+    | OBRACK exprChain CBRACK // Enabling this causes conflicts
     ;
 
 mapLit
