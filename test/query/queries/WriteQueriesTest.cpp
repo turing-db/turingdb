@@ -62,6 +62,15 @@ protected:
         _graph = _env->getSystemManager().getGraph(std::string {name});
         ASSERT_TRUE(_graph);
     }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            if (col->getName() == name) {
+                return col;
+            }
+        }
+        return nullptr;
+    }
 };
 
 TEST_F(WriteQueriesTest, scanNodesCreateNode) {
@@ -1108,4 +1117,44 @@ TEST_F(WriteQueriesTest, multipleCreates) {
     }
 
     ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(WriteQueriesTest, exceedChunk) {
+    setWorkingGraph("default");
+    newChange();
+
+    // Exceed a chunk
+    const size_t nodeCount = 65'536 + 1; // TODO: Find a way to access ChunkConfig
+
+    {
+        auto createNodePattern = [](const NodeID id) {
+            auto idstr = std::to_string(id.getValue());
+            return "(n" + idstr + ":Node {id: " + idstr + "})";
+        };
+
+        std::string createQuery = "CREATE ";
+        createQuery += createNodePattern(0);
+
+        for (NodeID n {1}; n < nodeCount; n++) {
+            createQuery += ", ";
+            createQuery += createNodePattern(n);
+        }
+
+        auto res = query(createQuery, [](const Dataframe*) {});
+        ASSERT_TRUE(res);
+
+        submitCurrentChange();
+    }
+
+    {
+        std::string_view matchQuery = "MATCH (n) RETURN COUNT(n) as COUNT";
+
+        auto res = query(matchQuery, [nodeCount](const Dataframe* df) {
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(nodeCount, count->getRaw());
+        });
+        ASSERT_TRUE(res);
+    }
 }
