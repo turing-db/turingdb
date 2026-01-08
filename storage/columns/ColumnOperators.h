@@ -51,7 +51,7 @@ concept OptionallyComparable =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
      || std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
-// Types that are semantically equivalent, but one or both may bew rapped in optional
+// Types that are semantically equivalent, but one or both may be wrapped in optional
 template <typename T, typename U>
 concept OptionallyEquivalent =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
@@ -458,31 +458,31 @@ private:
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static std::optional<bool> optionalEq(const T& a, const U& b) {
+    inline static std::optional<bool> optionalEq(const T& a, const U& b) {
         return optionalPredicate<std::equal_to<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static std::optional<bool> optionalGT(const T& a, const U& b) {
+    inline static std::optional<bool> optionalGT(const T& a, const U& b) {
         return optionalPredicate<std::greater<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static std::optional<bool> optionalLT(const T& a, const U& b) {
+    inline static std::optional<bool> optionalLT(const T& a, const U& b) {
         return optionalPredicate<std::less<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static std::optional<bool> optionalGTE(const T& a, const U& b) {
+    inline static std::optional<bool> optionalGTE(const T& a, const U& b) {
         return optionalPredicate<std::greater_equal<>>(a, b);
     }
 
     template <typename T, typename U>
         requires OptionallyComparable<T, U>
-    static std::optional<bool> optionalLTE(const T& a, const U& b) {
+    inline static std::optional<bool> optionalLTE(const T& a, const U& b) {
         return optionalPredicate<std::less_equal<>>(a, b);
     }
 
