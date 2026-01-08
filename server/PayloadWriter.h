@@ -199,6 +199,10 @@ public:
         _closingTokens.clear();
     }
 
+    size_t currentNestingLevel() const {
+        return _closingTokens.size();
+    }
+
 private:
     net::NetWriter* _writer {nullptr};
     const GraphMetadata* _metadata {nullptr};

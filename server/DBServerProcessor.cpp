@@ -196,6 +196,10 @@ void DBServerProcessor::query() {
         transactionInfo.change);
 
     if (!res.isOk()) {
+        while (payload.currentNestingLevel() > 1) {
+            payload.end();
+        }
+
         payload.key("error");
         const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
         payload.value(errorType);
@@ -391,6 +395,10 @@ void DBServerProcessor::list_loaded_graphs() {
                                &mem,
                                queryCallback);
     if (!res.isOk()) {
+        while (payload.currentNestingLevel() > 1) {
+            payload.end();
+        }
+
         payload.key("error");
         const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
         payload.value(errorType);
