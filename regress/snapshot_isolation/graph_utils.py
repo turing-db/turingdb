@@ -26,11 +26,17 @@ def setup_graph(client : TuringDB, graph_name : str) -> None:
   
   new_change(client)
 
+  node_id : int = 0
+  edge_id : int = 0
+
   for _ in range(NUM_NODES):
-    client.query(f"create (n:NEWNODE)")
+    client.query(f"create (n:NEWNODE {{id: {node_id}}})")
+    node_id += 1
 
   for _ in range(NUM_EDGES):
-    client.query(f"create (n:NEWNODE)-[:NEWEDGE]-(m:NEWNODE)")
+    client.query(f"create (n:NEWNODE {{id: {node_id}}})-[:NEWEDGE {{id: {edge_id}}}]-(m:NEWNODE {{id: {node_id + 1}}})")
+    edge_id += 1
+    node_id += 2
 
   submit_current_change(client)
 

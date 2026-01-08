@@ -15,14 +15,14 @@ def run(client: TuringDB) -> None:
 
   # Create an edge between nodes 2 and 3, submit the change onto main
   client.set_change(change=change_creator)
-  client.query("create (n @ 2)-[e:NEWEDGE]-(m @ 3)")
+  client.query("MATCH (n), (m) WHERE n.id = 2 AND m.id = 3 CREATE (n)-[e:NEWEDGE]->(m)")
   submit_current_change(client)
 
   # Other change attempts to delete 2, this is fine locally,
   # but fails when we try to submit, because we would inadvertently
   # delete the new edge above
   client.set_change(change=change_deletor)
-  client.query("delete nodes 2")
+  client.query("MATCH (n) WHERE n.id = 2 DELETE n")
   client.query("commit")
 
   # Try and submit the deletion: we should reject because we have
