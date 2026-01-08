@@ -33,6 +33,7 @@ add_subdirectory(count_simpledb)
 add_subdirectory(count_alias_simpledb)
 add_subdirectory(read_script)
 add_subdirectory(neo4j_import)
+add_subdirectory(wine_ontology)
 
 # Python SDK version to be used by uv
 set(PYTURINGDB "turingdb")
