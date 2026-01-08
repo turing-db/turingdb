@@ -12,6 +12,7 @@
 #include "Neo4JQueryManager.h"
 #include "GraphFileType.h"
 #include "TimerStat.h"
+#include "versioning/Change.h"
 
 using namespace db;
 
@@ -59,13 +60,12 @@ bool Neo4jImporter::fromDumpFileToJsonDir(JobSystem& jobSystem,
     return fromDumpFileToJsonDirImpl(jobSystem, graph, nodeCountPerQuery, edgeCountPerQuery, args);
 }
 
-
 bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
                                          Graph* graph,
                                          size_t nodeCountPerQuery,
                                          size_t edgeCountPerQuery,
                                          const UrlToJsonDirArgs& args) {
-    JsonParser parser(graph);
+    JsonParser parser;
     QueryManager manager;
     const FileUtils::Path jsonDir = args._workDir / "json";
     JobGroup jobs = jobSystem.newGroup();
@@ -213,7 +213,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
                                       std::size_t nodeCountPerFile,
                                       std::size_t edgeCountPerFile,
                                       const ImportJsonDirArgs& args) {
-    JsonParser parser(graph);
+    JsonParser parser;
 
     const FileUtils::Path statsPath = args._jsonDir / "stats.json";
     const FileUtils::Path nodeLabelsPath = args._jsonDir / "nodeLabels.json";
@@ -237,14 +237,18 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
 
         spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
 
+        std::unique_ptr<Change> change = graph->newChange();
+        ChangeAccessor changeAccessor = change->access();
+
         // Node Labels
         std::string nodeLabelsData;
         if (!FileUtils::readContent(nodeLabelsPath, nodeLabelsData)) {
             spdlog::error("Could not read node labels file");
             return false;
         }
+
         spdlog::info("Parsing node labels");
-        if (!parser.parseNodeLabels(nodeLabelsData)) {
+        if (!parser.parseNodeLabels(changeAccessor, nodeLabelsData)) {
             spdlog::error("Could not parse node labels");
             return false;
         }
@@ -256,7 +260,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
             return false;
         }
         spdlog::info("Parsing node label sets");
-        if (!parser.parseNodeLabelSets(nodeLabelSetsData)) {
+        if (!parser.parseNodeLabelSets(changeAccessor, nodeLabelSetsData)) {
             spdlog::error("Could not parse node label sets");
             return false;
         }
@@ -268,7 +272,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
             return false;
         }
         spdlog::info("Parsing node properties");
-        if (!parser.parseNodeProperties(nodePropertiesData)) {
+        if (!parser.parseNodeProperties(changeAccessor, nodePropertiesData)) {
             spdlog::error("Could not parse node properties");
             return false;
         }
@@ -280,7 +284,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
             return false;
         }
         spdlog::info("Parsing edge types");
-        if (!parser.parseEdgeTypes(edgeTypesData)) {
+        if (!parser.parseEdgeTypes(changeAccessor, edgeTypesData)) {
             spdlog::error("Could not parse edge types");
             return false;
         }
@@ -291,12 +295,16 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
             spdlog::error("Could not read edge properties file");
             return false;
         }
-        if (!parser.parseEdgeProperties(edgePropertiesData)) {
+        if (!parser.parseEdgeProperties(changeAccessor, edgePropertiesData)) {
             spdlog::error("Could not parse edge properties");
             return false;
         }
-    }
 
+        if (auto res = change->submit(jobSystem); !res) {
+            spdlog::error("Could not submit metadata change: {}", res.error().fmtMessage());
+            return false;
+        }
+    }
 
     // Query and parse nodes
     const size_t nodeSteps = stats.nodeCount / nodeCountPerFile
@@ -304,10 +312,9 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
 
     std::vector<SharedFuture<bool>> nodeResults(nodeSteps);
 
-    for (size_t i = 0; i < nodeSteps; i++) {
-        // Create the buffer that will hold the node info
-        DataPartBuilder& buf = parser.getCurrentDataBuffer();
+    std::unique_ptr<Change> nodesChange = graph->newChange();
 
+    for (size_t i = 0; i < nodeSteps; i++) {
         nodeResults[i] = jobs.submit<bool>(
             [&, i](Promise* p) {
                 auto* promise = p->cast<bool>();
@@ -328,15 +335,19 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
 
                 spdlog::info("Retrieving node range [{:>9}-{:<9}]",
                              i * nodeCountPerFile, upperRange);
-                promise->set_value(parser.parseNodes(data, buf));
-            });
 
-        if (i < nodeSteps - 1) {
-            parser.newDataBuffer();
-        }
+                ChangeAccessor changeAccessor = nodesChange->access();
+
+                if (!parser.parseNodes(changeAccessor, data)) {
+                    spdlog::error("Could not parse nodes");
+                    promise->set_value(false);
+                    return;
+                }
+
+                promise->set_value(true);
+            });
     }
 
-    // Wait for the end before pushing the datapart
     for (auto& nodeResult : nodeResults) {
         nodeResult.wait();
         if (!nodeResult.get()) {
@@ -346,12 +357,9 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
         }
     }
 
-    {
-        TimerStat t {"Build and push DataPart for nodes"};
-        if (auto res = parser.buildPending(jobSystem); !res) {
-            spdlog::error("Could not build pending dataparts: {}", res.error().fmtMessage());
-            return false;
-        }
+    if (auto res = nodesChange->submit(jobSystem); !res) {
+        spdlog::error("Could not submit nodes change: {}", res.error().fmtMessage());
+        return false;
     }
 
     // Query and parse edges
@@ -359,11 +367,9 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
                            + (size_t)((stats.edgeCount % edgeCountPerFile) != 0);
 
     std::vector<SharedFuture<bool>> edgeResults(edgeSteps);
+    std::unique_ptr<Change> edgeChange = graph->newChange();
 
     for (size_t i = 0; i < edgeSteps; i++) {
-        // Create the buffer that will hold the edge info
-        DataPartBuilder& buf = parser.newDataBuffer();
-
         edgeResults[i] = jobs.submit<bool>(
             [&, i](Promise* p) {
                 auto* promise = p->cast<bool>();
@@ -383,11 +389,19 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
                 const size_t upperRange = i * edgeCountPerFile + currentCount;
                 spdlog::info("Retrieving edge range [{:>9}-{:<9}]",
                              i * edgeCountPerFile, upperRange);
-                promise->set_value(parser.parseEdges(data, buf));
+
+                ChangeAccessor changeAccessor = edgeChange->access();
+
+                if (!parser.parseEdges(changeAccessor, data)) {
+                    spdlog::error("Could not parse edges");
+                    promise->set_value(false);
+                    return;
+                }
+
+                promise->set_value(true);
             });
     }
 
-    // Wait for the end before pushing the datapart
     for (auto& edgeResult : edgeResults) {
         edgeResult.wait();
         if (!edgeResult.get()) {
@@ -397,12 +411,9 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
         }
     }
 
-    {
-        TimerStat t {"Build and push DataPart for edges"};
-        if (auto res = parser.commit(*graph, jobSystem); !res) {
-            spdlog::error("Could not commit changes: {}", res.error().fmtMessage());
-            return false;
-        }
+    if (auto res = edgeChange->submit(jobSystem); !res) {
+        spdlog::error("Could not submit edges change: {}", res.error().fmtMessage());
+        return false;
     }
 
     return true;
