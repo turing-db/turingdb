@@ -1123,8 +1123,9 @@ TEST_F(WriteQueriesTest, exceedChunk) {
     setWorkingGraph("default");
     newChange();
 
-    // Exceed a chunk
+    // Create over 1 chunk of nodes
     const size_t nodeCount = 65'536 + 1; // TODO: Find a way to access ChunkConfig
+    const size_t edgeCount = 1'000;
 
     {
         auto createNodePattern = [](const NodeID id) {
@@ -1143,7 +1144,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         auto res = query(createQuery, [](const Dataframe*) {});
         ASSERT_TRUE(res);
 
-        submitCurrentChange();
+        ASSERT_TRUE(query("COMMIT", [](const Dataframe*) {}));
     }
 
     {
@@ -1157,4 +1158,19 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         });
         ASSERT_TRUE(res);
     }
+
+    // Now match against those nodes (more than 1 chunk) and create edges between them
+
+    for (size_t e {0}; e < edgeCount; e++) {
+        std::string query_str = fmt::format(
+            R"(MATCH (n:Node {{id: "{}"}}), (m:Node {{id: "{}"}}) CREATE (n)-[:Edge]->(m))",
+            e, e);
+        auto res = query(query_str, [](const Dataframe*) {});
+        if (!res) {
+            spdlog::error(res.getError());
+        }
+        ASSERT_TRUE(res);
+    }
+
+    submitCurrentChange();
 }
