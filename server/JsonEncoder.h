@@ -76,11 +76,20 @@ public:
             const Column* col = namedCol->getColumn();
             switch (col->getKind()) {
                 JSON_COLUMN_TYPE(EntityID, "UInt64")
-                JSON_COLUMN_TYPE(types::UInt64::Primitive, "Uint64")
+                JSON_COLUMN_TYPE(NodeID, "UInt64")
+                JSON_COLUMN_TYPE(EdgeID, "UInt64")
+                JSON_COLUMN_TYPE(LabelID, "UInt64")
+                JSON_COLUMN_TYPE(LabelSetID, "UInt32")
+                JSON_COLUMN_TYPE(EdgeTypeID, "UInt64")
+                JSON_COLUMN_TYPE(PropertyTypeID, "UInt16")
+                JSON_COLUMN_TYPE(ValueType, "String")
+                JSON_COLUMN_TYPE(ChangeID, "UInt64")
+                JSON_COLUMN_TYPE(types::UInt64::Primitive, "UInt64")
                 JSON_COLUMN_TYPE(types::Int64::Primitive, "Int64")
                 JSON_COLUMN_TYPE(types::Double::Primitive, "Double")
                 JSON_COLUMN_TYPE(types::Bool::Primitive, "Bool")
                 JSON_COLUMN_TYPE(types::String::Primitive, "String")
+                JSON_COLUMN_TYPE(std::string, "String")
                 default: {
                     bioassert(false, "Unexpected ColumnKind {}", col->getKind());
                 } break;
