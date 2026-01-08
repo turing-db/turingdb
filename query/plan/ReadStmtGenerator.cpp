@@ -496,12 +496,11 @@ void ReadStmtGenerator::placePredicateJoins() {
                     }
 
                     expr->setExprVarDecl(cached->_exprDecl);
-                    continue;
+                } else {
+                    GetPropertyWithNullNode* n = _tree->insertBefore<GetPropertyWithNullNode>(filter, expr->getPropName());
+                    n->setEntityVarDecl(entityDecl);
+                    n->setExpr(expr);
                 }
-
-                GetPropertyWithNullNode* n = _tree->insertBefore<GetPropertyWithNullNode>(filter, expr->getPropName());
-                n->setEntityVarDecl(entityDecl);
-                n->setExpr(expr);
 
             } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
@@ -516,12 +515,11 @@ void ReadStmtGenerator::placePredicateJoins() {
                     }
 
                     expr->setExprVarDecl(cached->_exprDecl);
-                    continue;
+                } else {
+                    GetEntityTypeNode* n = _tree->insertBefore<GetEntityTypeNode>(filter);
+                    n->setExpr(expr);
+                    n->setEntityVarDecl(entityDecl);
                 }
-
-                GetEntityTypeNode* n = _tree->insertBefore<GetEntityTypeNode>(filter);
-                n->setExpr(expr);
-                n->setEntityVarDecl(entityDecl);
 
             } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
                 // Symbol value should already be in a column in a block, no need to change anything
