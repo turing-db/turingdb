@@ -2,6 +2,7 @@
 #include <sstream>
 #include <iostream>
 
+#include <argparse.hpp>
 #include <spdlog/spdlog.h>
 
 #include "dump/GraphLoader.h"
@@ -21,9 +22,28 @@ using namespace db;
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("simpledb");
+
+    auto& argParser = toolInit.getArgParser();
+
+    std::string turingDirArg;
+    argParser.add_argument("-turing-dir")
+             .metavar("path")
+             .store_into(turingDirArg)
+             .help("Root Turing directory (defaults to SAMPLE_DIR/.turing)");
+
     toolInit.init(argc, argv);
 
-    const fs::Path turingDir = fs::Path(SAMPLE_DIR) / ".turing";
+    fs::Path turingDir;
+    if (!turingDirArg.empty()) {
+        turingDir = fs::Path(turingDirArg);
+        if (!turingDir.toAbsolute()) {
+            spdlog::error("Failed to get absolute path of turing directory {}", turingDirArg);
+            return EXIT_FAILURE;
+        }
+    } else {
+        turingDir = fs::Path(SAMPLE_DIR) / ".turing";
+    }
+
     if (turingDir.exists()) {
         turingDir.rm();
     }
@@ -31,7 +51,7 @@ int main(int argc, const char** argv) {
     const auto& outDir = fs::Path(toolInit.getOutputsDir()) / "simpledb";
 
     TuringConfig config;
-    config.setTuringDirectory(fs::Path(SAMPLE_DIR) / ".turing");
+    config.setTuringDirectory(turingDir);
 
     TuringDB db(&config);
     db.init();
