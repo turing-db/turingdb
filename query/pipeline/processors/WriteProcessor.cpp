@@ -307,7 +307,7 @@ void WriteProcessor::createNodes(size_t numIters) {
 
         std::vector<NodeID>& raw = col->getRaw();
         // Old size should always be 0 (asserted above), but add for safety 
-        size_t oldSize = raw.size();
+        const size_t oldSize = raw.size();
         raw.resize(oldSize + numIters);
         std::iota(raw.begin() + oldSize, raw.end(), nextNodeID);
         nextNodeID += numIters;
