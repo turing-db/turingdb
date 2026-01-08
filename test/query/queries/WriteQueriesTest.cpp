@@ -1124,7 +1124,8 @@ TEST_F(WriteQueriesTest, exceedChunk) {
     newChange();
 
     // Create over 1 chunk of nodes
-    const size_t nodeCount = 65'536 + 1; // TODO: Find a way to access ChunkConfig
+    const size_t chunkSize = 65'536;
+    const size_t nodeCount = chunkSize + 1; // TODO: Find a way to access ChunkConfig
     const size_t edgeCount = 1'000;
 
     {
@@ -1163,7 +1164,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
 
     for (size_t e {0}; e < edgeCount; e++) {
         std::string query_str = fmt::format(
-            R"(MATCH (n:Node {{id: "{}"}}), (m:Node {{id: "{}"}}) CREATE (n)-[:Edge]->(m))",
+            R"(MATCH (n:Node {{id: {}}}), (m:Node {{id: {}}}) CREATE (n)-[e:Edge]->(m) RETURN e)",
             e, e);
         auto res = query(query_str, [](const Dataframe*) {});
         if (!res) {

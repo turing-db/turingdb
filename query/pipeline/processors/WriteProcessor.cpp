@@ -1,6 +1,7 @@
 #include "WriteProcessor.h"
 
 #include <algorithm>
+#include <iostream>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -109,6 +110,7 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
     }
     throw FatalException("Failed to match against property value type.");
 }
+
 }
 
 WriteProcessor::WriteProcessor(ExprProgram* exprProg)
@@ -163,6 +165,11 @@ void WriteProcessor::reset() {
 }
 
 void WriteProcessor::execute() {
+    if (_input) {
+        fmt::println("DEBUG WRPX with input of size {}",
+                     _input->getDataframe()->getRowCount());
+        _input->getDataframe()->dump(std::cout);
+    }
     // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
     // meaning if we are deleting, we require an input. This may change.
     if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
@@ -335,7 +342,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              " column.", edge._tag.getValue()));
         }
 
-        bioassert(col->size() == 0, "pending edges column should be empty");
+        bioassert(col->size() == 0, "Pending edges column should be empty but is size {}", col->size());
 
         ColumnNodeIDs* srcCol = nullptr;
         const ColumnTag srcTag = edge._srcTag;
