@@ -2376,6 +2376,14 @@ TEST_F(QueriesTest, isNotNullFilter) {
                                              propertyName, propertyName);
         test.operator()<Age>(matchQuery, propertyName);
     }
+
+    {
+        using Name = types::String;
+        std::string_view propertyName = "name";
+        std::string matchQuery = fmt::format("MATCH (n) WHERE n.{} IS NOT NULL RETURN n, n.{}",
+                                             propertyName, propertyName);
+        test.operator()<Name>(matchQuery, propertyName);
+    }
 }
 
 TEST_F(QueriesTest, isNullFilter) {
