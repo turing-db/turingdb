@@ -736,8 +736,8 @@ comparisonSign
     | GT { $$ = BinaryOperator::GreaterThan; }
     | LT { $$ = BinaryOperator::LessThan; }
     | NOT_EQUAL { $$ = BinaryOperator::NotEqual; }
-    | IS { $$ = BinaryOperator::Equal; } // FIXME
-    | IS_NOT { $$ = BinaryOperator::NotEqual; } // FIXME
+    | IS { $$ = BinaryOperator::Equal; }
+    | IS_NOT { $$ = BinaryOperator::NotEqual; }
     | IN { $$ = BinaryOperator::In; }
     ;
 
