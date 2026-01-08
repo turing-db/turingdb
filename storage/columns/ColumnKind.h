@@ -88,6 +88,28 @@ public:
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, types::String::Primitive>) {
             return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<EntityID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<NodeID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<EdgeID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<ChangeID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<LabelID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<LabelSetID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<EdgeTypeID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<PropertyTypeID>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<size_t>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<ValueType>>) {
+            return __COUNTER__ - minKind;
+        } else if constexpr (std::is_same_v<T, std::optional<std::string>>) {
+            return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, std::optional<types::UInt64::Primitive>>) {
             return __COUNTER__ - minKind;
         } else if constexpr (std::is_same_v<T, std::optional<types::Int64::Primitive>>) {
