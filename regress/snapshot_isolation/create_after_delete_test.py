@@ -16,11 +16,11 @@ def run(client : TuringDB) -> None:
   # Perform a create command from 
   client.set_change(change=change_creator)
   # Try to create an edge between nodes 3 and 4: fine locally
-  client.query("create (n @ 3)-[e:NEWEDGE]-(m @ 4)")
+  client.query("MATCH (n), (m) WHERE n.id = 3 AND m.id = 4 CREATE (n)-[e:NEWEDGE]->(m)")
 
   # Try to delete node 3: fine locally, and submit
   client.set_change(change=change_deletor)
-  client.query("delete nodes 3")
+  client.query("MATCH (n) WHERE n.id = 3 DELETE n")
   submit_current_change(client)
 
   # Try and submit the change which created (3)-[NEWEDGE]-(4)
