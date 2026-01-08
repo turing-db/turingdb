@@ -11,9 +11,9 @@ t.set_graph('mygraph')
 change = t.query('CHANGE NEW')['changeID'][0]
 
 t.checkout(change=str(change))
-t.query("CREATE (:Person)")
-t.query("CREATE (:Person)")
-t.query("CREATE (:Person)")
+t.query("CREATE (:Person {id:0})")
+t.query("CREATE (:Person {id:1})")
+t.query("CREATE (:Person {id:2})")
 t.query("COMMIT")
 t.query("CHANGE SUBMIT")
 
@@ -21,7 +21,7 @@ t.query("CHANGE SUBMIT")
 t.checkout('head')
 change = t.query('CHANGE NEW')['changeID'][0]
 t.checkout(change=str(change))
-t.query('create (n @ 0)-[:GOODEDGE]-(m @ 1)-[:GOODEDGE]-(o @ 2)')
-t.query('change submit')
+t.query('MATCH (n), (m), (o) WHERE n.id = 0 AND m.id = 1 AND o.id = 2 CREATE (n)-[:GOODEDGE]->(m)-[:GOODEDGE]->(o)')
+t.query('CHANGE SUBMIT')
 
 print('* create_edges_inject: done')
