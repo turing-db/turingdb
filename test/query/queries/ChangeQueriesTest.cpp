@@ -3,6 +3,7 @@
 #include <initializer_list>
 #include <string_view>
 #include <cstdint>
+#include <range/v3/view/zip.hpp>
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -23,6 +24,9 @@
 #include "TuringTest.h"
 
 using namespace turing::test;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 class ChangeQueriesTest : public TuringTest {
 public:
@@ -1051,4 +1055,59 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
         }
         EXPECT_TRUE(expected.equals(actual));
     }
+}
+
+TEST_F(ChangeQueriesTest, historyWithDeletions) {
+    using HistoryCountColumn = ColumnVector<uint64_t>;
+
+    setWorkingGraph("default");
+
+    const size_t numNodes {4};
+
+    {
+        newChange();
+        for (size_t _ {0}; _ < numNodes; _++) {
+            ASSERT_TRUE(query("CREATE (n:Node)", emptyCallback));
+        }
+        submitCurrentChange();
+    }
+
+    {
+        newChange();
+        ASSERT_TRUE(query("MATCH (n) DELETE n", emptyCallback));
+        submitCurrentChange();
+    }
+
+    auto res = query("CALL db.history()", [](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* nodes = findColumn(df, "nodeCount")->as<HistoryCountColumn>();
+        auto* edges = findColumn(df, "edgeCount")->as<HistoryCountColumn>();
+        auto* parts = findColumn(df, "partCount")->as<HistoryCountColumn>();
+        ASSERT_TRUE(nodes && edges && parts);
+
+        {
+            HistoryCountColumn expectedNodeCounts {0, 4, 0};
+            ASSERT_EQ(expectedNodeCounts.size(), nodes->size());
+            for (auto [exp, act] : rv::zip(expectedNodeCounts, *nodes)) {
+                EXPECT_EQ(exp, act);
+            }
+        }
+
+        {
+            HistoryCountColumn expectedEdgeCounts {0, 0, 0};
+            ASSERT_EQ(expectedEdgeCounts.size(), edges->size());
+            for (auto [exp, act] : rv::zip(expectedEdgeCounts, *edges)) {
+                EXPECT_EQ(exp, act);
+            }
+        }
+
+        {
+            HistoryCountColumn expectedPartCounts {0, 1, 0};
+            ASSERT_EQ(expectedPartCounts.size(), parts->size());
+            for (auto [exp, act] : rv::zip(expectedPartCounts, *parts)) {
+                EXPECT_EQ(exp, act);
+            }
+        }
+    });
+    ASSERT_TRUE(res);
 }

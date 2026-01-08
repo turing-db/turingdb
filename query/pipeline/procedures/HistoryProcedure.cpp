@@ -1,12 +1,13 @@
 #include "HistoryProcedure.h"
 
-#include <iostream>
 #include <span>
 
 #include "ExecutionContext.h"
 #include "procedures/Procedure.h"
 #include "columns/ColumnVector.h"
 #include "DataPart.h"
+#include "reader/GraphReader.h"
+#include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
 #include "PipelineException.h"
@@ -72,29 +73,21 @@ void HistoryProcedure::execute(Procedure& proc) {
 
             for (size_t i = 0; i < remaining; ++i) {
                 const CommitView& commit = *data._it;
+                const GraphReader commitReader = commit.openTransaction().readGraph();
                 const CommitHash& hash = commit.hash();
                 const std::span parts = commit.dataparts();
-                const Tombstones& tombstones = commit.tombstones();
 
                 if (commitCol) {
                     commitCol->push_back(fmt::format("{:x}", hash.get()));
                 }
 
                 if (nodeCountCol) {
-                    size_t nodeCount = 0;
-                    for (const auto& part : parts) {
-                        nodeCount += part->getNodeContainerSize();
-                    }
-                    nodeCount -= tombstones.numNodes();
+                    size_t nodeCount = commitReader.getNodeCount();
                     nodeCountCol->push_back(nodeCount);
                 }
 
                 if (edgeCountCol) {
-                    size_t edgeCount = 0;
-                    for (const auto& part : parts) {
-                        edgeCount += part->getEdgeContainerSize();
-                    }
-                    edgeCount -= tombstones.numEdges();
+                    size_t edgeCount = commitReader.getEdgeCount();
                     edgeCountCol->push_back(edgeCount);
                 }
 
