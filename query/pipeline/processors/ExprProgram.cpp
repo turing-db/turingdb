@@ -46,8 +46,7 @@ constexpr ColumnKind::ColumnKindCode getPairKind(ColumnKind::ColumnKindCode lhs,
 constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
                                                ColumnKind::ColumnKindCode lhs,
                                                ColumnKind::ColumnKindCode rhs) {
-    // Use columnKindCount^2 as multiplier to ensure no collisions between operators.
-    // This must be >= max getPairKind() + 1.
+    // We need to jump for each operator over spaces that are ColumnKindCount^2 in length
     const auto columnKindCount = ColumnKind::getColumnKindCount();
     return op * columnKindCount * columnKindCount + getPairKind(lhs, rhs);
 }
