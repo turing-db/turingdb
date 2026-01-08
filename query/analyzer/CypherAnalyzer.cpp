@@ -62,7 +62,7 @@ void CypherAnalyzer::analyze() {
             break;
 
             case QueryCommand::Kind::LOAD_GML_QUERY:
-                analyze(static_cast<const LoadGMLQuery*>(query));
+                analyze(static_cast<LoadGMLQuery*>(query));
             break;
 
             case QueryCommand::Kind::CREATE_GRAPH_QUERY:
@@ -70,7 +70,7 @@ void CypherAnalyzer::analyze() {
             break;
 
             case QueryCommand::Kind::LOAD_NEO4J_QUERY:
-                analyze(static_cast<const LoadNeo4jQuery*>(query));
+                analyze(static_cast<LoadNeo4jQuery*>(query));
             break;
 
             case QueryCommand::Kind::S3_CONNECT_QUERY:
@@ -233,11 +233,13 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
     }
 }
 
-void CypherAnalyzer::analyze(const LoadNeo4jQuery* loadNeo4j) {
+void CypherAnalyzer::analyze(LoadNeo4jQuery* loadNeo4j) {
     std::string_view graphName = loadNeo4j->getGraphName();
     if (graphName.empty()) {
         graphName = loadNeo4j->getFilePath().basename();
     }
+
+    loadNeo4j->setGraphName(graphName);
 
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
@@ -250,11 +252,13 @@ void CypherAnalyzer::analyze(const LoadNeo4jQuery* loadNeo4j) {
     }
 }
 
-void CypherAnalyzer::analyze(const LoadGMLQuery* loadGML) {
+void CypherAnalyzer::analyze(LoadGMLQuery* loadGML) {
     std::string_view graphName = loadGML->getGraphName();
     if (graphName.empty()) {
         graphName = loadGML->getFilePath().basename();
     }
+
+    loadGML->setGraphName(graphName);
 
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
