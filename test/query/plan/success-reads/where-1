@@ -1,0 +1,67 @@
+/// QUERY
+MATCH (n), (m) WHERE m.isFrench AND NOT (n.isFrench = m.isFrench) RETURN n.name, m.name
+
+/// RESULT
+flowchart TD
+    0["`
+        __SCAN_NODES__
+    `"]
+    1["`
+        __VAR__
+        __name__: n
+    `"]
+    2["`
+        __FILTER_NODE__
+        __has predicate__
+        __dep__ _n_._isFrench_ (Bool)
+        __dep__ _m_._isFrench_ (Bool)
+    `"]
+    3["`
+        __SCAN_NODES__
+    `"]
+    4["`
+        __VAR__
+        __name__: m
+    `"]
+    5["`
+        __FILTER_NODE__
+        __has predicate__
+        __dep__ _m_._isFrench_ (Bool)
+    `"]
+    6["`
+        __GET_PROPERTY_WITH_NULL__
+        __var__ m
+        __prop__ isFrench
+    `"]
+    7["`
+        __GET_PROPERTY_WITH_NULL__
+        __var__ n
+        __prop__ isFrench
+    `"]
+    8["`
+        __CARTESIAN_PRODUCT__
+    `"]
+    9["`
+        __GET_PROPERTY_WITH_NULL__
+        __var__ n
+        __prop__ name
+    `"]
+    10["`
+        __GET_PROPERTY_WITH_NULL__
+        __var__ m
+        __prop__ name
+    `"]
+    11["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->7
+    1-->9
+    2-->1
+    3-->6
+    4-->8
+    5-->4
+    6-->5
+    7-->8
+    8-->2
+    9-->10
+    10-->11
