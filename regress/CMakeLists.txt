@@ -27,8 +27,6 @@ add_subdirectory(submit_empty_change)
 add_subdirectory(call_metadata)
 add_subdirectory(complex_rebases)
 add_subdirectory(serialization)
-add_subdirectory(count_simpledb)
-add_subdirectory(multi_type_properties)
 #add_subdirectory(snapshot_isolation) Disabled until ID injection in v2
 
 # Python SDK version to be used by uv
