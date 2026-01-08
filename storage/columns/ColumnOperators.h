@@ -435,7 +435,7 @@ private:
     template <typename Pred, typename T, typename U>
         requires OptionallyComparable<T, U>
               && std::predicate<Pred, unwrap_optional_t<T>, unwrap_optional_t<U>>
-    static std::optional<bool> optionalPredicate(const T& a, const U& b) {
+    inline static std::optional<bool> optionalPredicate(const T& a, const U& b) {
         if constexpr (is_optional_v<T>) {
             if (!a.has_value()) {
                 return std::nullopt;
