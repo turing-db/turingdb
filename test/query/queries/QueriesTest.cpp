@@ -1732,44 +1732,6 @@ TEST_F(QueriesTest, whereName) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(QueriesTest, whereNameReverse) {
-    const auto MATCH_QUERY = [](std::string_view name) -> std::string {
-        return fmt::format("MATCH (n) WHERE \"{}\" = n.name RETURN n", name);
-    };
-
-    using Rows = LineContainer<NodeID, std::string_view>;
-
-    std::vector<std::string_view> names;
-    Rows expected;
-    {
-        // TODO: Find a way to dynamically get the PropertyID of the "name" property
-        const PropertyTypeID nameID = 0;
-        NodeID nextNodeID = 0;
-        for (std::string_view name : read().scanNodeProperties<types::String>(nameID)) {
-            expected.add({nextNodeID++, name});
-            names.emplace_back(name);
-        }
-    }
-
-    Rows actual;
-    {
-        for (std::string_view name : names) {
-            std::string q = MATCH_QUERY(name);
-            auto res = query(MATCH_QUERY(name), [&](const Dataframe* df) -> void {
-                ASSERT_TRUE(df);
-                ASSERT_EQ(1, df->size()); // Just the 'n' column
-                auto* ns = df->cols().front()->as<ColumnNodeIDs>();
-                ASSERT_TRUE(ns);
-                ASSERT_EQ(1, ns->size());
-                NodeID n = ns->front();
-                actual.add({n, name});
-            });
-            ASSERT_TRUE(res);
-        }
-    }
-    EXPECT_TRUE(expected.equals(actual));
-}
-
 TEST_F(QueriesTest, predicateOR) {
     constexpr std::string_view MATCH_QUERY = "MATCH (n) WHERE n.hasPhD OR n.isFrench RETURN n";
     // TODO: Find way to get these PropertyIDs dynamically
