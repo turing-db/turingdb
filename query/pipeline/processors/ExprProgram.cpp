@@ -46,9 +46,10 @@ constexpr ColumnKind::ColumnKindCode getPairKind(ColumnKind::ColumnKindCode lhs,
 constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
                                                ColumnKind::ColumnKindCode lhs,
                                                ColumnKind::ColumnKindCode rhs) {
-    const auto internalCount = ColumnKind::getInternalTypeKindCount();
-    const auto basePairCount = ColumnKind::getBasePairColumnCount();
-    return op * basePairCount * internalCount + getPairKind(lhs, rhs);
+    // Use columnKindCount^2 as multiplier to ensure no collisions between operators.
+    // This must be >= max getPairKind() + 1.
+    const auto columnKindCount = ColumnKind::getColumnKindCount();
+    return op * columnKindCount * columnKindCount + getPairKind(lhs, rhs);
 }
 
 // Unary operator
