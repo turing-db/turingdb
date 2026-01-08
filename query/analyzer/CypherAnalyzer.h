@@ -41,8 +41,8 @@ public:
     void analyze(const ReturnStmt* returnSt);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
-    void analyze(const LoadGMLQuery* loadGML);
-    void analyze(const LoadNeo4jQuery* loadNeo4j);
+    void analyze(LoadGMLQuery* loadGML);
+    void analyze(LoadNeo4jQuery* loadNeo4j);
     void analyze(const S3ConnectQuery* s3Connect);
     void analyze(S3TransferQuery* s3Transfer);
 
