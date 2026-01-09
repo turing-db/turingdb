@@ -13,7 +13,7 @@ def main() -> None:
     print(f"Set graph {GRAPH_NAME}")
 
     result = client.query("MATCH (n) RETURN COUNT(n)")
-    count = result[0][0]
+    count = result["COUNT(n)"][0]
 
     assert count == EXPECTED_NODE_COUNT, f"Expected {EXPECTED_NODE_COUNT} nodes, got {count}"
     print(f"COUNT(n) returned {count} as expected")
