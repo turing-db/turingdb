@@ -724,7 +724,7 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
             break;
         }
         case JoinType::DIAMOND: {
-            throw PlannerException("Undirected Join Path On Common Successor Not Supported");
+            throw PlannerException("Common Successor Joins With Common Ancestor Unsupported");
         }
         case JoinType::PREDICATE: {
             throw PlannerException("Join On Predicates Not Been Supported");
