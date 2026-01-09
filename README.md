@@ -79,6 +79,19 @@ TuringDB was created to solve real-world performance challenges in critical indu
 
 ## Quickstart
 
+### Install TuringDB
+
+Using `pip`:    
+```bash
+pip install turingdb
+```
+
+or using the `uv`  package manager (you will need to create a project first):
+
+```bash
+uv add turingdb
+```
+
 ### Requirements
 TuringDB requires:
 - **Linux Ubuntu Jammy** 22.04 LTS or later
@@ -146,6 +159,17 @@ WHERE a.age > 25
 RETURN a.name, b.name
 
 ```
+
+
+### Visualise the graph you have created in TuringDB
+TuringDB has a high performance visualiser that you can download here: [**TuringDB Visualizer**](https://github.com/turing-db/turingdb-visualizer)
+
+#### Example of a biological interaction graph built in TuringDB:
+1. Choose on the top right the graph
+2. Search & select a node(s) of interest (magnifying glass button on the left)
+3. Then go to visualiser (network logo) and you can start exploring paths, expanding neighbours, inspect nodes (parameters, hyperlinks, and texts stored on the nodes)
+
+
 
 ### Python SDK
 
