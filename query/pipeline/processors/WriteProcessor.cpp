@@ -163,30 +163,6 @@ void WriteProcessor::reset() {
     markAsReset();
 }
 
-void WriteProcessor::execute() {
-    // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
-    // meaning if we are deleting, we require an input. This may change.
-    if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
-        if (!_input) {
-            throw PipelineException("Cannot delete pending entity: DELETE queries require a MATCH input.");
-        }
-        performDeletions();
-    }
-
-    if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
-        // Evaluate instructions so that property columns are populated with their
-        // evaluated value
-        _exprProgram->evaluateInstructions();
-        performCreations();
-    }
-
-    if (_input) {
-        _input->getPort()->consume();
-    }
-    _output.getPort()->writeData();
-    finish();
-}
-
 void WriteProcessor::performDeletions() {
     const GraphReader reader = _ctxt->getGraphView().read();
     const Dataframe* inDf = _input->getDataframe();
@@ -500,4 +476,28 @@ void WriteProcessor::performCreations() {
     createEdges(numIters);
 
     postProcessTempIDs();
+}
+
+void WriteProcessor::execute() {
+    // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
+    // meaning if we are deleting, we require an input. This may change.
+    if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
+        if (!_input) {
+            throw PipelineException("Cannot delete pending entity: DELETE queries require a MATCH input.");
+        }
+        performDeletions();
+    }
+
+    if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
+        // Evaluate instructions so that property columns are populated with their
+        // evaluated value
+        _exprProgram->evaluateInstructions();
+        performCreations();
+    }
+
+    if (_input) {
+        _input->getPort()->consume();
+    }
+    _output.getPort()->writeData();
+    finish();
 }
