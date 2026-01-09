@@ -1286,3 +1286,332 @@ TEST_F(CreateCommandTest, createSamePropertyNameNodeAndEdge) {
         ASSERT_TRUE(res);
     }
 }
+
+// =============================================================================
+// Segfault Probe Test - attempts to trigger crashes with malformed queries
+// =============================================================================
+
+TEST_F(CreateCommandTest, createSegfaultProbe) {
+    // This test probes various malformed CREATE queries to find crashes.
+    // If any query causes a segfault, the test will crash (demonstrating the bug).
+    // If all queries are handled gracefully (error or success), the code is robust.
+    setWorkingGraph("default");
+
+    // Crash vectors targeting different vulnerabilities:
+    const std::vector<std::string> crashVectors = {
+        // Empty pattern element - targets PatternElement::getRootEntity() calling .front() on empty vector
+        R"(CREATE ())",
+
+        // Edge without type - targets WriteStmtAnalyzer checking types->size() > 1 but not == 0
+        R"(CREATE (n:Node)-[e]->(m:Node))",
+        R"(CREATE (n:Node)-[]->(m:Node))",
+
+        // Truncated patterns - targets ChainView iterator accessing _it+1 out of bounds
+        R"(CREATE (a:A)-[e:E])",
+
+        // Empty/malformed labels
+        R"(CREATE (n:))",
+        R"(CREATE (:))",
+
+        // Multiple empty patterns
+        R"(CREATE (), ())",
+        R"(CREATE ()-[]->())",
+
+        // Edge to undefined node reference
+        R"(CREATE (n:Node)-[e:EDGE]->(undefined))",
+
+        // Self-referencing without definition
+        R"(CREATE (n)-[e:EDGE]->(n))",
+
+        // Extremely nested property access
+        R"(CREATE (n:Node{a:1,b:2,c:3,d:4,e:5,f:6,g:7,h:8,i:9,j:10}))",
+
+        // Edge with empty property map
+        R"(CREATE (n:Node)-[e:EDGE{}]->(m:Node))",
+
+        // Multiple edges same pattern
+        R"(CREATE (n:Node)-[e1:A]->(m:Node)-[e2:B]->(o:Node)-[e3:C]->(p:Node))",
+
+        // Circular reference attempt
+        R"(CREATE (n:Node)-[e:EDGE]->(n))",
+
+        // Very long chain
+        R"(CREATE (a:A)-[e1:R]->(b:B)-[e2:R]->(c:C)-[e3:R]->(d:D)-[e4:R]->(e:E)-[e5:R]->(f:F)-[e6:R]->(g:G)-[e7:R]->(h:H))",
+
+        // Backward edge without target
+        R"(CREATE (n:Node)<-[e:EDGE]-(m:Node))",
+
+        // Mixed directions
+        R"(CREATE (a:A)-[e1:R]->(b:B)<-[e2:R]-(c:C))",
+
+        // Property with special characters
+        R"(CREATE (n:Node{name:"\x00\x01\x02"}))",
+
+        // Empty string property
+        R"(CREATE (n:Node{name:""}))",
+
+        // Node without symbol
+        R"(CREATE (:Label{prop:1}))",
+
+        // Edge without symbol
+        R"(CREATE (n:Node)-[:TYPE]->(m:Node))",
+
+        // === MORE AGGRESSIVE VECTORS ===
+
+        // Extremely long label name (potential buffer overflow)
+        "CREATE (n:" + std::string(10000, 'A') + ")",
+
+        // Extremely long property name
+        "CREATE (n:Node{" + std::string(10000, 'x') + ":1})",
+
+        // Extremely long string value
+        R"(CREATE (n:Node{name:")" + std::string(100000, 'X') + R"("}))",
+
+        // Many labels on one node
+        "CREATE (n:A:B:C:D:E:F:G:H:I:J:K:L:M:N:O:P:Q:R:S:T:U:V:W:X:Y:Z)",
+
+        // Many properties on one node
+        "CREATE (n:Node{a:1,b:2,c:3,d:4,e:5,f:6,g:7,h:8,i:9,j:10,k:11,l:12,m:13,n:14,o:15,p:16,q:17,r:18,s:19,t:20})",
+
+        // Integer overflow attempt
+        R"(CREATE (n:Node{val:9999999999999999999999999999999999999999}))",
+
+        // Negative overflow
+        R"(CREATE (n:Node{val:-9999999999999999999999999999999999999999}))",
+
+        // Very long chain (50+ nodes)
+        []() {
+            std::string q = "CREATE (n0:Start)";
+            for (int i = 1; i < 50; i++) {
+                q += "-[e" + std::to_string(i) + ":R]->(n" + std::to_string(i) + ":Node)";
+            }
+            return q;
+        }(),
+
+        // Deeply nested parentheses (may cause parser issues)
+        R"(CREATE ((((((((((n:Node)))))))))))",
+
+        // Multiple commas
+        R"(CREATE (n:Node),,,)",
+
+        // Null bytes in identifier
+        std::string("CREATE (n") + '\0' + ":Node)",
+
+        // Very deep property nesting attempt
+        R"(CREATE (n:Node{a:{b:{c:{d:{e:1}}}}}}))",
+
+        // Unicode in identifiers
+        R"(CREATE (n:Nöde{näme:"välue"}))",
+
+        // Backslash sequences
+        R"(CREATE (n:Node{name:"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"}))",
+
+        // Quote injection attempt
+        R"(CREATE (n:Node{name:"test"injection"}))",
+
+        // Newlines in query
+        "CREATE\n(n:Node\n{name\n:\n\"test\"\n})",
+
+        // Tab characters
+        "CREATE\t(n:Node\t{name\t:\t\"test\"\t})",
+
+        // Only whitespace in pattern
+        R"(CREATE (   ))",
+
+        // Comment injection
+        R"(CREATE (n:Node) // comment)",
+        R"(CREATE (n:Node) /* comment */)",
+
+        // RETURN with non-existent variable
+        R"(CREATE (n:Node) RETURN nonexistent)",
+
+        // Multiple RETURN clauses
+        R"(CREATE (n:Node) RETURN n RETURN n)",
+
+        // Empty RETURN
+        R"(CREATE (n:Node) RETURN)",
+
+        // Property with same name as keyword
+        R"(CREATE (n:Node{CREATE:1, MATCH:2, RETURN:3}))",
+
+        // Self-referential pattern with same edge
+        R"(CREATE (n:Node)-[e:SELF]->(n)-[e:SELF]->(n))",
+
+        // === EXTREME EDGE CASES ===
+
+        // Very large number of comma-separated patterns (may exhaust parser stack)
+        []() {
+            std::string q = "CREATE ";
+            for (int i = 0; i < 500; i++) {
+                if (i > 0) q += ", ";
+                q += "(n" + std::to_string(i) + ":Node)";
+            }
+            return q;
+        }(),
+
+        // Massive chain (100 nodes) - deeper than 50 node test
+        []() {
+            std::string q = "CREATE (n0:Start)";
+            for (int i = 1; i < 100; i++) {
+                q += "-[e" + std::to_string(i) + ":R]->(n" + std::to_string(i) + ":N)";
+            }
+            return q;
+        }(),
+
+        // Very deeply nested brackets (100 levels)
+        []() {
+            std::string q = "CREATE ";
+            for (int i = 0; i < 100; i++) q += "(";
+            q += "n:Node";
+            for (int i = 0; i < 100; i++) q += ")";
+            return q;
+        }(),
+
+        // Maximum sized integer values
+        R"(CREATE (n:Node{val:9223372036854775807}))",  // INT64_MAX
+        R"(CREATE (n:Node{val:-9223372036854775808}))", // INT64_MIN
+
+        // Double with extreme precision
+        R"(CREATE (n:Node{val:3.141592653589793238462643383279502884197169399375105820974944592307816406286}))",
+
+        // Double edge case values
+        R"(CREATE (n:Node{val:1.7976931348623157e+308}))",  // DBL_MAX
+        R"(CREATE (n:Node{val:2.2250738585072014e-308}))",  // DBL_MIN
+
+        // Property name that's just an underscore
+        R"(CREATE (n:Node{_:1}))",
+
+        // Property name with leading number (should fail)
+        R"(CREATE (n:Node{123abc:1}))",
+
+        // Empty property key
+        R"(CREATE (n:Node{"":1}))",
+
+        // Label starting with number
+        R"(CREATE (n:123Label))",
+
+        // Very long single-line query (may hit line buffer limits)
+        "CREATE (n:Node{" + std::string(50000, 'a') + ":1})",
+
+        // Pattern with 1000 labels on single node
+        []() {
+            std::string q = "CREATE (n";
+            for (int i = 0; i < 1000; i++) {
+                q += ":L" + std::to_string(i);
+            }
+            q += ")";
+            return q;
+        }(),
+
+        // MATCH/CREATE combo edge cases
+        R"(MATCH (x) CREATE (n:Node)-[e:EDGE]->(x))",
+        R"(MATCH (x:NonExistent) CREATE (n:Node)-[e:EDGE]->(x))",
+
+        // WITH clause (if supported)
+        R"(CREATE (n:Node) WITH n CREATE (m:Node)-[e:EDGE]->(n))",
+
+        // Multiple CREATE clauses
+        R"(CREATE (n:Node) CREATE (m:Node))",
+
+        // CREATE with WHERE (invalid but interesting)
+        R"(CREATE (n:Node) WHERE n.val > 0)",
+
+        // Very specific edge type names
+        R"(CREATE (n:Node)-[e:_]->(m:Node))",
+        R"(CREATE (n:Node)-[e:a1234567890123456789012345678901234567890]->(m:Node))",
+
+        // Mixing valid and invalid in same query
+        R"(CREATE (n:Node), (m:), (o:Other))",
+
+        // Property with boolean edge cases
+        R"(CREATE (n:Node{t:true, f:false, t2:TRUE, f2:FALSE}))",
+
+        // Escape sequences in strings
+        R"(CREATE (n:Node{name:"\n\r\t\\"}))",
+        R"(CREATE (n:Node{name:"\u0000"}))",  // Unicode null
+        R"(CREATE (n:Node{name:"\x00"}))",    // Hex null
+
+        // Star pattern (hub with many spokes)
+        []() {
+            std::string q = "CREATE (hub:Hub)";
+            for (int i = 0; i < 100; i++) {
+                q += ", (hub)-[e" + std::to_string(i) + ":SPOKE]->(n" + std::to_string(i) + ":Spoke)";
+            }
+            return q;
+        }(),
+
+        // === EXECUTION-PHASE ATTACKS ===
+        // These pass parsing/analysis but may crash during execution
+
+        // Pattern with 5000 labels (triggered EXEC_ERROR before)
+        []() {
+            std::string q = "CREATE (n";
+            for (int i = 0; i < 5000; i++) {
+                q += ":L" + std::to_string(i);
+            }
+            q += ")";
+            return q;
+        }(),
+
+        // Extremely large star pattern (may exhaust execution resources)
+        []() {
+            std::string q = "CREATE (hub:Hub)";
+            for (int i = 0; i < 500; i++) {
+                q += ", (hub)-[e" + std::to_string(i) + ":SPOKE]->(n" + std::to_string(i) + ":S)";
+            }
+            return q;
+        }(),
+
+        // Self-loop chain (node pointing to itself multiple times)
+        R"(CREATE (n:Loop)-[e1:LOOP]->(n), (n)-[e2:LOOP]->(n), (n)-[e3:LOOP]->(n), (n)-[e4:LOOP]->(n), (n)-[e5:LOOP]->(n))",
+
+        // Very wide pattern (many parallel edges between same nodes)
+        []() {
+            std::string q = "CREATE (a:A), (b:B)";
+            for (int i = 0; i < 100; i++) {
+                q += ", (a)-[e" + std::to_string(i) + ":PARALLEL]->(b)";
+            }
+            return q;
+        }(),
+
+        // Chain with alternating directions
+        R"(CREATE (a:A)-[e1:R]->(b:B)<-[e2:R]-(c:C)-[e3:R]->(d:D)<-[e4:R]-(e:E)-[e5:R]->(f:F))",
+
+        // Create same label thousands of times
+        []() {
+            std::string q = "CREATE (n:SAME";
+            for (int i = 0; i < 100; i++) {
+                q += ":SAME";
+            }
+            q += ")";
+            return q;
+        }(),
+
+        // Properties with very long names and values
+        []() {
+            std::string longName(1000, 'p');
+            std::string longValue(10000, 'v');
+            return "CREATE (n:Node{" + longName + ":\"" + longValue + "\"})";
+        }(),
+
+        // Circular chain: a->b->c->d->e->a
+        R"(CREATE (a:C), (b:C), (c:C), (d:C), (e:C), (a)-[e1:NEXT]->(b), (b)-[e2:NEXT]->(c), (c)-[e3:NEXT]->(d), (d)-[e4:NEXT]->(e), (e)-[e5:NEXT]->(a))",
+
+        // Double reference with different labels
+        R"(CREATE (n:First:Second:Third{x:1})-[e:SELF]->(n))",
+    };
+
+    for (size_t i = 0; i < crashVectors.size(); ++i) {
+        const auto& crashQuery = crashVectors[i];
+        std::cerr << "Testing crash vector " << i << ": " << crashQuery.substr(0, 60) << "..." << std::endl;
+
+        newChange();
+        auto res = query(crashQuery, [](const Dataframe*) {});
+        // If we reach here, the query was handled (either succeeded or returned an error)
+        // A segfault would have killed the process before reaching this point
+        std::cerr << "  -> Handled gracefully (status: " << static_cast<int>(res.getStatus()) << ")" << std::endl;
+    }
+
+    // If we get here, all vectors were handled without crashing
+    std::cerr << "All " << crashVectors.size() << " crash vectors handled gracefully." << std::endl;
+}
