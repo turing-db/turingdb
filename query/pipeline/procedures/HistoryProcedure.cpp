@@ -74,7 +74,6 @@ void HistoryProcedure::execute(Procedure& proc) {
                 const CommitView& commit = *data._it;
                 const CommitHash& hash = commit.hash();
                 const std::span parts = commit.dataparts();
-                const Tombstones& tombstones = commit.tombstones();
 
                 if (commitCol) {
                     commitCol->push_back(fmt::format("{:x}", hash.get()));
@@ -85,7 +84,6 @@ void HistoryProcedure::execute(Procedure& proc) {
                     for (const auto& part : parts) {
                         nodeCount += part->getNodeContainerSize();
                     }
-                    nodeCount -= tombstones.numNodes();
                     nodeCountCol->push_back(nodeCount);
                 }
 
@@ -94,7 +92,6 @@ void HistoryProcedure::execute(Procedure& proc) {
                     for (const auto& part : parts) {
                         edgeCount += part->getEdgeContainerSize();
                     }
-                    edgeCount -= tombstones.numEdges();
                     edgeCountCol->push_back(edgeCount);
                 }
 

@@ -64,16 +64,6 @@ private:
     EdgeTombstones& edgeTombstones() { return _edgeTombstones; }
 };
 
-template <TypedInternalID IDT>
-bool Tombstones::contains(IDT id) const {
-    if constexpr (std::is_same_v<IDT, NodeID>) {
-        return containsNode(id);
-    }
-    else {
-        return containsEdge(id);
-    }
-}
-
 template <std::ranges::input_range Range>
     requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
 void Tombstones::addNodeTombstones(Range& nodes) {

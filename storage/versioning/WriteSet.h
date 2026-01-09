@@ -50,7 +50,8 @@ public:
 
     /**
      * @brief Performs set-theoretic union of @param set1 and @param set2, storing the
-     * result in @param set1
+     * result in @param set1.
+     * @warn Requires both @param set1 and @param set2 to be sorted and unique.
      */
     static void setUnion(WriteSet<IDT>& set1, const WriteSet<IDT>& set2);
 
