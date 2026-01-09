@@ -3,6 +3,13 @@
 #include <string_view>
 
 #include "TuringDB.h"
+
+// Macro for tests that fail due to known bugs (e.g., ANALYZE_ERROR).
+// Use this instead of DISABLED_ prefix so tests are visible in output.
+// When the bug is fixed, remove this macro and the test should pass.
+#define SKIP_KNOWN_BUG(bug_description) \
+    GTEST_SKIP() << "Known bug: " << bug_description
+
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
@@ -1657,7 +1664,8 @@ TEST_F(FilterPredicatesTest, cartesianProductTwoNodesFilter) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(FilterPredicatesTest, DISABLED_cartesianProductSameNodeDifferentProps) {
+TEST_F(FilterPredicatesTest, cartesianProductSameNodeDifferentProps) {
+    SKIP_KNOWN_BUG("Comparison of node IDs not supported");
     constexpr std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.hasPhD AND m.hasPhD AND n <> m RETURN n.name, m.name";
 
     using String = types::String::Primitive;
@@ -1828,7 +1836,8 @@ TEST_F(FilterPredicatesTest, noMatchingValue) {
 // PROPERTY COMPARISON BETWEEN ENTITIES
 // =============================================================================
 
-TEST_F(FilterPredicatesTest, DISABLED_nodePropertyEquality) {
+TEST_F(FilterPredicatesTest, nodePropertyEquality) {
+    SKIP_KNOWN_BUG("Node ID comparison not supported");
     constexpr std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.age = m.age AND n <> m RETURN n.name, m.name";
 
     using String = types::String::Primitive;
