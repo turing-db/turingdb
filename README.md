@@ -15,7 +15,7 @@
 [![Docs](https://img.shields.io/badge/Docs-docs.turingdb.ai-brightgreen?style=for-the-badge)](https://docs.turingdb.ai)
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/smallerspinnning.gif"/>
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/newbackgroundgif.gif"/>
 </p>
 
 ## What is TuringDB?
