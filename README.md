@@ -169,6 +169,11 @@ TuringDB has a high performance visualiser that you can download here: [**Turing
 2. Search & select a node(s) of interest (magnifying glass button on the left)
 3. Then go to visualiser (network logo) and you can start exploring paths, expanding neighbours, inspect nodes (parameters, hyperlinks, and texts stored on the nodes)
 
+<p align="center">
+  <img src="biologicalgraph.png"/>
+</p>
+
+
 
 
 ### Python SDK
