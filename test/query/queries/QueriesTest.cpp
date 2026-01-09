@@ -1180,7 +1180,7 @@ TEST_F(QueriesTest, blockedBinaryQuery) {
                                    [&](const Dataframe* df) -> void {});
     ASSERT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
-    EXPECT_EQ(res.getError(), std::string("Undirected Join Path On Common Successor Not Supported"));
+    EXPECT_EQ(res.getError(), std::string("Common Successor Joins With Common Ancestor Unsupported"));
 }
 
 TEST_F(QueriesTest, db_labels) {
