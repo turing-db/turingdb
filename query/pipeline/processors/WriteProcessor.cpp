@@ -155,8 +155,13 @@ void WriteProcessor::prepare(ExecutionContext* ctxt) {
     auto& tx = rawTx->get<PendingCommitWriteTx>();
     CommitBuilder* commitBuilder = tx.commitBuilder();
 
+    bioassert(commitBuilder, "Failed to get CommitBuilder in WriteProcessor");
+
     _metadataBuilder = &commitBuilder->metadata();
     _writeBuffer = &commitBuilder->writeBuffer();
+
+    bioassert(_metadataBuilder, "Failed to get MetadataBuilder in WriteProcessor");
+    bioassert(_writeBuffer, "Failed to get CommitWriteBuffer in WriteProcessor");
 }
 
 void WriteProcessor::reset() {
