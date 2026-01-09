@@ -1,16 +1,17 @@
 #pragma once
 
-#include "versioning/CommitResult.h"
-#include "writers/DataPartBuilder.h"
+#include <stddef.h>
+#include <string>
+#include <memory>
 
 namespace db {
 
-class Graph;
 class PropertyTypeMap;
 class LabelMap;
 class EdgeTypeMap;
 class IDMapper;
 class JobSystem;
+class ChangeAccessor;
 
 struct GraphStats {
     size_t nodeCount = 0;
@@ -27,31 +28,24 @@ public:
         Neo4j_4_Edges,
     };
 
-    explicit JsonParser(Graph* graph);
+    JsonParser();
+    ~JsonParser();
+
     JsonParser(const JsonParser&) = delete;
     JsonParser(JsonParser&&) = delete;
     JsonParser& operator=(const JsonParser&) = delete;
     JsonParser& operator=(JsonParser&&) = delete;
-    ~JsonParser();
 
-    CommitResult<void> buildPending(JobSystem& jobSystem);
     GraphStats parseStats(const std::string& data);
-    bool parseNodeLabels(const std::string& data);
-    bool parseNodeLabelSets(const std::string& data);
-    bool parseNodeProperties(const std::string& data);
-    bool parseEdgeTypes(const std::string& data);
-    bool parseEdgeProperties(const std::string& data);
-    bool parseNodes(const std::string& data, DataPartBuilder&);
-    bool parseEdges(const std::string& data, DataPartBuilder&);
-
-    DataPartBuilder& getCurrentDataBuffer();
-    DataPartBuilder& newDataBuffer();
-    CommitResult<void> commit(Graph& graph, JobSystem& jobSystem);
+    bool parseNodeLabels(ChangeAccessor& change, const std::string& data);
+    bool parseNodeLabelSets(ChangeAccessor& change, const std::string& data);
+    bool parseNodeProperties(ChangeAccessor& change, const std::string& data);
+    bool parseEdgeTypes(ChangeAccessor& change, const std::string& data);
+    bool parseEdgeProperties(ChangeAccessor& change, const std::string& data);
+    bool parseNodes(ChangeAccessor& change, const std::string& data);
+    bool parseEdges(ChangeAccessor& change, const std::string& data);
 
 private:
-    Graph* _graph {nullptr};
-    std::unique_ptr<Change> _change;
-    CommitBuilder* _commitBuilder {nullptr};
     std::unique_ptr<IDMapper> _nodeIDMapper;
 };
 
