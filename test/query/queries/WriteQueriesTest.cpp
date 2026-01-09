@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <optional>
 
+#include <range/v3/view/enumerate.hpp>
+
 #include "EdgeRecord.h"
 #include "TuringDB.h"
 #include "Graph.h"
@@ -18,6 +20,9 @@
 #include "TuringTest.h"
 
 using namespace turing::test;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 class WriteQueriesTest : public TuringTest {
     void initialize() override {
@@ -1121,13 +1126,13 @@ TEST_F(WriteQueriesTest, multipleCreates) {
 
 TEST_F(WriteQueriesTest, exceedChunk) {
     setWorkingGraph("default");
-    newChange();
 
     // Create over 1 chunk of nodes
     const size_t chunkSize = 65'536;
     const size_t nodeCount = chunkSize + 1; // TODO: Find a way to access ChunkConfig
     const size_t edgeCount = 1'000;
 
+    newChange();
     {
         auto createNodePattern = [](const NodeID id) {
             auto idstr = std::to_string(id.getValue());
@@ -1162,16 +1167,55 @@ TEST_F(WriteQueriesTest, exceedChunk) {
 
     // Now match against those nodes (more than 1 chunk) and create edges between them
 
-    for (size_t e {0}; e < edgeCount; e++) {
-        std::string query_str = fmt::format(
-            R"(MATCH (n:Node {{id: {}}}), (m:Node {{id: {}}}) CREATE (n)-[e:Edge]->(m))",
-            e, e + 1);
-        auto res = query(query_str, [](const Dataframe*) {});
-        if (!res) {
-            spdlog::error(res.getError());
+    {
+        for (size_t e {0}; e < edgeCount; e++) {
+            std::string query_str = fmt::format(
+                R"(MATCH (n:Node {{id: {}}}), (m:Node {{id: {}}}) CREATE (n)-[e:Edge]->(m) RETURN e)",
+                e, e + 1);
+            auto res = query(query_str, [e](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                ASSERT_TRUE(es);
+                ASSERT_EQ(1, es->size());
+                ASSERT_EQ(e, es->front());
+            });
+            if (!res) {
+                spdlog::error(res.getError());
+            }
+            ASSERT_TRUE(res);
         }
+
+    }
+    submitCurrentChange();
+
+    { // Verify correct number of edges
+        std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN COUNT(e) as COUNT";
+
+        auto res = query(matchQuery, [edgeCount](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(edgeCount, count->getRaw());
+        });
         ASSERT_TRUE(res);
     }
 
-    submitCurrentChange();
+    { // Verify edges have correct IDs
+        std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN e";
+
+        auto res = query(matchQuery, [edgeCount](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+            ASSERT_TRUE(es);
+            es->dump(std::cout);
+
+            EXPECT_EQ(edgeCount, es->size());
+
+            for (auto [exp, act] : rv::enumerate(*es)) {
+                EXPECT_EQ(exp, act);
+            }
+        });
+        ASSERT_TRUE(res);
+    }
 }
