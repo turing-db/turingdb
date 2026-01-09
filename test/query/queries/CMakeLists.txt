@@ -8,6 +8,7 @@ function(add_queries_gtest exe_name cpp_file)
 endfunction()
 
 add_queries_gtest(test_queries QueriesTest.cpp)
+add_queries_gtest(test_filter_predicates FilterPredicatesTest.cpp)
 add_queries_gtest(test_delete_queries DeleteQueriesTest.cpp)
 add_queries_gtest(test_write_queries WriteQueriesTest.cpp)
 add_queries_gtest(test_load_graph LoadGraphTest.cpp)
