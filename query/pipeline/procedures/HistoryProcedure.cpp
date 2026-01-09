@@ -1,13 +1,12 @@
 #include "HistoryProcedure.h"
 
+#include <iostream>
 #include <span>
 
 #include "ExecutionContext.h"
 #include "procedures/Procedure.h"
 #include "columns/ColumnVector.h"
 #include "DataPart.h"
-#include "reader/GraphReader.h"
-#include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
 #include "PipelineException.h"
@@ -71,12 +70,8 @@ void HistoryProcedure::execute(Procedure& proc) {
                 partCountCol->clear();
             }
 
-            size_t prevTotalNodeCount {0};
-            size_t prevTotalEdgeCount {0};
-
             for (size_t i = 0; i < remaining; ++i) {
                 const CommitView& commit = *data._it;
-                const GraphReader commitReader = commit.openTransaction().readGraph();
                 const CommitHash& hash = commit.hash();
                 const std::span parts = commit.dataparts();
 
@@ -85,21 +80,19 @@ void HistoryProcedure::execute(Procedure& proc) {
                 }
 
                 if (nodeCountCol) {
-                    const size_t totalNodeCount = commitReader.getNodeCount();
-                    const size_t thisPartNodeCount = totalNodeCount - prevTotalNodeCount;
-
-                    nodeCountCol->push_back(thisPartNodeCount);
-
-                    prevTotalNodeCount = totalNodeCount;
+                    size_t nodeCount = 0;
+                    for (const auto& part : parts) {
+                        nodeCount += part->getNodeContainerSize();
+                    }
+                    nodeCountCol->push_back(nodeCount);
                 }
 
                 if (edgeCountCol) {
-                    const size_t totalEdgeCount = commitReader.getEdgeCount();
-                    const size_t thisPartedgeCount = totalEdgeCount - prevTotalEdgeCount;
-
-                    edgeCountCol->push_back(thisPartedgeCount);
-
-                    prevTotalEdgeCount = totalEdgeCount;
+                    size_t edgeCount = 0;
+                    for (const auto& part : parts) {
+                        edgeCount += part->getEdgeContainerSize();
+                    }
+                    edgeCountCol->push_back(edgeCount);
                 }
 
                 if (partCountCol) {
