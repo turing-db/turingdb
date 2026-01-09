@@ -349,6 +349,12 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     // Forward only the projected columns to the next processor
     for (const auto& item : items) {
         NamedColumn* col = inDf->getColumn(item._tag);
+
+        if (NamedColumn* existingCol = outDf->getColumn(col->getTag())) {
+            // Column is already present, duplicate it under another name
+            col = NamedColumn::create(_dfMan, existingCol->getColumn(), _dfMan->allocTag());
+        }
+
         outDf->addColumn(col);
 
         if (!item._name.empty()) {

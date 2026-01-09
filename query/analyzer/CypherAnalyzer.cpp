@@ -5,6 +5,7 @@
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "ReadStmtAnalyzer.h"
+#include "SourceManager.h"
 #include "WriteStmtAnalyzer.h"
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
@@ -16,7 +17,10 @@
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
 #include "Projection.h"
+#include "decl/DeclContext.h"
+#include "decl/VarDecl.h"
 #include "expr/Expr.h"
+#include "expr/SymbolExpr.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
@@ -46,6 +50,7 @@ CypherAnalyzer::~CypherAnalyzer() {
 
 void CypherAnalyzer::analyze() {
     for (QueryCommand* query : _ast->queries()) {
+        _currentQuery = query;
         DeclContext* ctxt = query->getDeclContext();
 
         _exprAnalyzer->setDeclContext(ctxt);
@@ -154,11 +159,56 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     bool isAggregate = false;
     bool hasGroupingKeys = false;
 
-    for (Expr* item : projection->items()) {
+    if (projection->isReturningAll()) {
+        // Return all variables defined in the current query
+
+        const DeclContext* ctxt = _currentQuery->getDeclContext();
+        bioassert(ctxt, "Query context is invalid");
+
+        for (VarDecl* decl : *ctxt) {
+            if (decl->isUnnamed()) {
+                continue;
+            }
+
+            // Push at the front since only since '*' is only allowed the beginning of the return statement
+            projection->pushFrontDecl(decl);
+            projection->setName(decl, decl->getName());
+        }
+    }
+
+    const SourceManager* srcMan = _ast->getSourceManager();
+
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
+        if (!exprPtr) {
+            continue;
+        }
+
+        Expr* item = *exprPtr;
+        std::string_view name;
+
+        if (auto* symbol = dynamic_cast<SymbolExpr*>(item)) {
+            name = symbol->getName();
+        } else {
+            name = srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item));
+        }
+
         _exprAnalyzer->analyzeRootExpr(item);
+
+        if (name.empty()) {
+            continue;
+        }
+
+        if (projection->hasName(name)) {
+            continue; // Already added this name (added by wildcard)
+        }
+
+        projection->setName(item, name);
+
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();
     }
+
 
     if (isAggregate) {
         projection->setAggregate();

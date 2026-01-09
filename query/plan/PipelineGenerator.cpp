@@ -28,7 +28,6 @@
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "reader/GraphReader.h"
-#include "SourceManager.h"
 
 #include "processors/MaterializeProcessor.h"
 
@@ -648,21 +647,34 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
     // in which case, we can simply output the whole dataframe
     if (projNode) {
         std::vector<ProjectionItem> items;
-        for (const Expr* item : projNode->items()) {
-            const VarDecl* decl = item->getExprVarDecl();
+        for (const Projection::ReturnItem& item : projNode->items()) {
+            if (const auto* exprPtr = std::get_if<Expr*>(&item)) {
+                const Expr* item = *exprPtr;
+                const VarDecl* decl = item->getExprVarDecl();
 
-            if (!decl) {
-                throw PlannerException("Projection item does not have a variable declaration");
+                if (!decl) {
+                    throw PlannerException("Projection item does not have a variable declaration");
+                }
+
+                const ColumnTag tag = _declToColumn.at(decl);
+                const std::string_view* name = projNode->getName(item);
+                if (!name) {
+                    continue;
+                }
+
+                items.push_back({tag, *name});
+
+            } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
+                const VarDecl* decl = *declPtr;
+                const ColumnTag tag = _declToColumn.at(decl);
+                const std::string_view* name = projNode->getName(decl);
+
+                if (!name) {
+                    continue;
+                }
+
+                items.push_back({tag, *name});
             }
-
-            const ColumnTag tag = _declToColumn.at(decl);
-            const std::string_view name = item->getName();
-
-            const std::string_view repr = name.empty()
-                ? _sourceManager->getStringRepr((std::uintptr_t)item)
-                : name;
-
-            items.push_back({tag, repr});
         }
 
         _builder.addProjection(items);

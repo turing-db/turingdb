@@ -8,6 +8,7 @@ class CypherAST;
 class ReadStmtAnalyzer;
 class WriteStmtAnalyzer;
 class ExprAnalyzer;
+class QueryCommand;
 class SinglePartQuery;
 class LoadGraphQuery;
 class CreateGraphQuery;
@@ -55,6 +56,7 @@ private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
     const GraphMetadata& _graphMetadata;
+    const QueryCommand* _currentQuery {nullptr};
 
     std::unique_ptr<ExprAnalyzer> _exprAnalyzer;
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;

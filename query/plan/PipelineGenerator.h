@@ -11,7 +11,6 @@ class LocalMemory;
 
 namespace db {
 
-class SourceManager;
 class ProcedureBlueprintMap;
 class PlanGraph;
 class PipelineV2;
@@ -52,7 +51,6 @@ public:
                       const GraphView& view,
                       PipelineV2* pipeline,
                       LocalMemory* mem,
-                      SourceManager* sourceManager,
                       const ProcedureBlueprintMap& blueprints,
                       const QueryCallbackV2& callback)
         : _graph(graph),
@@ -60,7 +58,6 @@ public:
         _view(view),
         _pipeline(pipeline),
         _mem(mem),
-        _sourceManager(sourceManager),
         _callback(callback),
         _builder(mem, pipeline)
     {
@@ -90,7 +87,6 @@ private:
     GraphView _view;
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
-    SourceManager* _sourceManager {nullptr};
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
 

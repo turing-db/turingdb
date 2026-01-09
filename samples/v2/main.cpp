@@ -154,7 +154,6 @@ int main(int argc, char** argv) {
                                           view,
                                           &pipeline,
                                           &mem,
-                                          ast.getSourceManager(),
                                           *procedures,
                                           callback);
             try {

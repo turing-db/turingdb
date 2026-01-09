@@ -5,6 +5,7 @@
 #include "Projection.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
+#include "decl/DeclContext.h"
 #include "expr/Expr.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "ExprDependencies.h"
@@ -243,7 +244,13 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
     GetPropertyCache& getPropertyCache = _tree.getGetPropertyCache();
     GetEntityTypeCache& getEntityTypeCache = _tree.getGetEntityTypeCache();
 
-    for (Expr* item : proj->items()) {
+    for (const Projection::ReturnItem& returnItem : proj->items()) {
+        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
+        if (!exprPtr) {
+            continue;
+        }
+
+        Expr* item = *exprPtr;
         ExprDependencies deps;
         deps.genExprDependencies(*_variables, item);
 
