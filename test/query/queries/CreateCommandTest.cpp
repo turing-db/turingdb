@@ -1055,7 +1055,8 @@ TEST_F(CreateCommandTest, createTheSpiderWeb) {
     // All in a single CREATE statement with 16 patterns
     setWorkingGraph("default");
 
-    constexpr std::string_view CREATE_QUERY = R"(CREATE (spider:Arachnid{name:"Charlotte", legs:8, webs_spun:42}), (f1:Fly{name:"Buzz", doomed:true}), (f2:Fly{name:"Zippy", doomed:true}), (f3:Fly{name:"Whirr", doomed:true}), (f4:Fly{name:"Hummy", doomed:true}), (f5:Fly{name:"Flappy", doomed:true}), (spider)-[s1:HUNTS{method:"ambush"}]->(f1), (spider)-[s2:HUNTS{method:"trap"}]->(f2), (spider)-[s3:HUNTS{method:"chase"}]->(f3), (spider)-[s4:HUNTS{method:"lure"}]->(f4), (spider)-[s5:HUNTS{method:"patience"}]->(f5), (f1)-[p1:FLEES_TOWARD]->(f2), (f2)-[p2:FLEES_TOWARD]->(f3), (f3)-[p3:FLEES_TOWARD]->(f4), (f4)-[p4:FLEES_TOWARD]->(f5), (f5)-[p5:FLEES_TOWARD]->(f1) RETURN spider, f1, f2, f3, f4, f5)";
+    // Note: Using h1-h5 instead of s1-s5 because "s3" conflicts with the S3 keyword (case-insensitive lexer)
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (spider:Arachnid{name:"Charlotte", legs:8, webs_spun:42}), (f1:Fly{name:"Buzz", doomed:true}), (f2:Fly{name:"Zippy", doomed:true}), (f3:Fly{name:"Whirr", doomed:true}), (f4:Fly{name:"Hummy", doomed:true}), (f5:Fly{name:"Flappy", doomed:true}), (spider)-[h1:HUNTS{method:"ambush"}]->(f1), (spider)-[h2:HUNTS{method:"trap"}]->(f2), (spider)-[h3:HUNTS{method:"chase"}]->(f3), (spider)-[h4:HUNTS{method:"lure"}]->(f4), (spider)-[h5:HUNTS{method:"patience"}]->(f5), (f1)-[p1:FLEES_TOWARD]->(f2), (f2)-[p2:FLEES_TOWARD]->(f3), (f3)-[p3:FLEES_TOWARD]->(f4), (f4)-[p4:FLEES_TOWARD]->(f5), (f5)-[p5:FLEES_TOWARD]->(f1) RETURN spider, f1, f2, f3, f4, f5)";
 
     constexpr std::string_view MATCH_SPIDER_VICTIMS = R"(MATCH (s:Arachnid)-[h:HUNTS]->(f:Fly) RETURN s.name, h.method, f.name)";
     constexpr std::string_view MATCH_FLEE_CIRCLE = R"(MATCH (a:Fly)-[e:FLEES_TOWARD]->(b:Fly) RETURN a.name, b.name)";
