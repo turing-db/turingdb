@@ -2,8 +2,6 @@
 
 #include "CypherAST.h"
 
-#include "CompilerException.h"
-
 using namespace db;
 
 Projection::Projection()
@@ -19,11 +17,42 @@ Projection* Projection::create(CypherAST* ast) {
     return projection;
 }
 
-void Projection::add(Expr* expr) {
-    auto* items = std::get_if<Items>(&_items);
-    if (!items) {
-        throw CompilerException("Cannot add item to a projection that already holds '*'");
+void Projection::setName(const Expr* item, std::string_view name) {
+    _names[std::bit_cast<std::uintptr_t>(item)] = name;
+    _namesSet.emplace(name);
+}
+
+void Projection::setName(const VarDecl* item, std::string_view name) {
+    _names[std::bit_cast<std::uintptr_t>(item)] = name;
+    _namesSet.emplace(name);
+}
+
+void Projection::pushBackExpr(Expr* expr) {
+    _items.emplace_back(expr);
+}
+
+void Projection::pushFrontDecl(VarDecl* decl) {
+    _items.emplace_front(decl);
+}
+
+const std::string_view* Projection::getName(const Expr* item) const {
+    auto it = _names.find(std::bit_cast<std::uintptr_t>(item));
+    if (it == end(_names)) {
+        return nullptr;
     }
 
-    items->emplace_back(expr);
+    return &it->second;
+}
+
+const std::string_view* Projection::getName(const VarDecl* item) const {
+    auto it = _names.find(std::bit_cast<std::uintptr_t>(item));
+    if (it == end(_names)) {
+        return nullptr;
+    }
+
+    return &it->second;
+}
+
+bool Projection::hasName(const std::string_view& name) const {
+    return _namesSet.contains(name);
 }

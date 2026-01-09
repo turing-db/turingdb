@@ -390,6 +390,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
             throw PipelineException(fmt::format("projection variable {} not found in output column", item._name));
         }
 
+        if (NamedColumn* existingCol = outDf->getColumn(col->getTag())) {
+            // Column is already present, duplicate it under another name
+            col = NamedColumn::create(_dfMan, existingCol->getColumn(), _dfMan->allocTag());
+        }
+
         outDf->addColumn(col);
 
         if (!item._name.empty()) {

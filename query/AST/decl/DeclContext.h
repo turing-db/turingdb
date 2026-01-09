@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <unordered_map>
 #include <string_view>
 
@@ -12,6 +13,9 @@ class VarDecl;
 
 class DeclContext {
 public:
+    using DeclMap = std::unordered_map<std::string_view, VarDecl*>;
+    using Decls = std::vector<VarDecl*>;
+
     friend CypherAST;
     friend VarDecl;
 
@@ -24,9 +28,13 @@ public:
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
     VarDecl* createUnnamedVariable(CypherAST* ast, EvaluatedType type);
 
+    Decls::const_iterator begin() const { return _decls.begin(); }
+    Decls::const_iterator end() const { return _decls.end(); }
+
 private:
     DeclContext* _parent {nullptr};
-    std::unordered_map<std::string_view, VarDecl*> _declMap;
+    DeclMap _declMap;
+    Decls _decls;
 
     DeclContext(DeclContext* parent);
     ~DeclContext();

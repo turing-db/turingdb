@@ -461,9 +461,9 @@ opt_limitSSt
     ;
 
 projectionItems
-    : MULT { $$ = Projection::create(ast); $$->setAll(); LOC($$, @$); }
-    | projectionItem { $$ = Projection::create(ast); $$->add($1); LOC($$, @$); }
-    | projectionItems COMMA projectionItem { $$ = $1; $$->add($3); }
+    : MULT { $$ = Projection::create(ast); $$->setReturnAll(); LOC($$, @$); }
+    | projectionItem { $$ = Projection::create(ast); $$->pushBackExpr($1); LOC($$, @$); }
+    | projectionItems COMMA projectionItem { $$ = $1; $$->pushBackExpr($3); LOC($$, @$); }
     ;
 
 projectionItem
@@ -481,7 +481,7 @@ orderByItem
 
 orderBySSt
     : ORDER BY orderByItem { $$ = OrderBy::create(ast); $$->addItem($3); LOC($$, @$); }
-    | orderBySSt COMMA orderByItem { $$ = $1; $$->addItem($3); }
+    | orderBySSt COMMA orderByItem { $$ = $1; $$->addItem($3); LOC($$, @$); }
     ;
 
 singlePartQuery
@@ -524,12 +524,12 @@ commitQuery
 
 readingStatements
     : readingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
-    | readingStatements readingStatement { $$ = $1; $$->add($2); }
+    | readingStatements readingStatement { $$ = $1; $$->add($2); LOC($$, @$); }
     ;
 
 updatingStatements
     : updatingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
-    | updatingStatements updatingStatement { $$ = $1; $$->add($2); }
+    | updatingStatements updatingStatement { $$ = $1; $$->add($2); LOC($$, @$); }
     ;
  
 multiPartQuery
@@ -656,28 +656,28 @@ callCapture
     ;
 
 exprChain
-    : expr { $$ = ExprChain::create(ast); $$->add($1); }
-    | exprChain COMMA expr { $$ = $1; $$->add($3); }
+    : expr { $$ = ExprChain::create(ast); $$->add($1); LOC($$, @$); }
+    | exprChain COMMA expr { $$ = $1; $$->add($3); LOC($$, @$); }
     ;
 
 yieldClause
-    : YIELD yieldItems { $$ = YieldClause::create(ast); $$->setItems($2); }
-    | YIELD MULT { $$ = YieldClause::create(ast); }
+    : YIELD yieldItems { $$ = YieldClause::create(ast); $$->setItems($2); LOC($$, @$); }
+    | YIELD MULT { $$ = YieldClause::create(ast); LOC($$, @$); }
     ;
 
 parenExprChain
-    : OPAREN exprChain CPAREN { $$ = $2; }
-    | OPAREN CPAREN { $$ = ExprChain::create(ast); }
+    : OPAREN exprChain CPAREN { $$ = $2; LOC($$, @$); }
+    | OPAREN CPAREN { $$ = ExprChain::create(ast); LOC($$, @$); }
     ;
 
 yieldItems
-    : yieldItemChain { $$ = $1; }
-    | yieldItemChain whereClause { $$ = $1; $$->setWhere($2); }
+    : yieldItemChain { $$ = $1; LOC($$, @$); }
+    | yieldItemChain whereClause { $$ = $1; $$->setWhere($2); LOC($$, @$); }
     ;
 
 yieldItemChain
-    : yieldItem { $$ = YieldItems::create(ast); $$->add($1); }
-    | yieldItemChain COMMA yieldItem { $$ = $1; $$->add($3); }
+    : yieldItem { $$ = YieldItems::create(ast); $$->add($1); LOC($$, @$); }
+    | yieldItemChain COMMA yieldItem { $$ = $1; $$->add($3); LOC($$, @$); }
     ;
 
 yieldItem
