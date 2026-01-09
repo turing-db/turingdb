@@ -1,7 +1,6 @@
 #include "WriteProcessor.h"
 
 #include <algorithm>
-#include <iostream>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -165,11 +164,6 @@ void WriteProcessor::reset() {
 }
 
 void WriteProcessor::execute() {
-    if (_input) {
-        fmt::println("DEBUG WRPX with input of size {}",
-                     _input->getDataframe()->getRowCount());
-        _input->getDataframe()->dump(std::cout);
-    }
     // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
     // meaning if we are deleting, we require an input. This may change.
     if (!_deletedNodes.empty() || !_deletedEdges.empty()) {

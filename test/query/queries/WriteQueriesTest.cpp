@@ -1164,8 +1164,8 @@ TEST_F(WriteQueriesTest, exceedChunk) {
 
     for (size_t e {0}; e < edgeCount; e++) {
         std::string query_str = fmt::format(
-            R"(MATCH (n:Node {{id: {}}}), (m:Node {{id: {}}}) CREATE (n)-[e:Edge]->(m) RETURN e)",
-            e, e);
+            R"(MATCH (n:Node {{id: {}}}), (m:Node {{id: {}}}) CREATE (n)-[e:Edge]->(m))",
+            e, e + 1);
         auto res = query(query_str, [](const Dataframe*) {});
         if (!res) {
             spdlog::error(res.getError());
