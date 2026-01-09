@@ -121,7 +121,6 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                                   view,
                                   &pipeline,
                                   mem,
-                                  ast.getSourceManager(),
                                   *ctxt.getProcedures(),
                                   ctxt.getQueryCallback());
     try {

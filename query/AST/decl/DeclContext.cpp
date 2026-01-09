@@ -40,6 +40,7 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
     VarDecl* decl = getDecl(name);
     if (!decl) {
         decl = VarDecl::create(ast, this, name, type);
+        decl->setIsUnnamed(false);
     }
 
     if (decl->getType() != type) {
@@ -57,11 +58,14 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
 VarDecl* DeclContext::createUnnamedVariable(CypherAST* ast, EvaluatedType type) {
     std::string* name = ast->createString();
     name->assign("v" + std::to_string(_unnamedVarCounter++));
+    VarDecl* decl = VarDecl::create(ast, this, *name, type);
+    decl->setIsUnnamed(true);
 
-    return VarDecl::create(ast, this, *name, type);
+    return decl;
 }
 
 void DeclContext::addDecl(VarDecl* decl) {
     _declMap[decl->getName()] = decl;
+    _decls.push_back(decl);
 }
 

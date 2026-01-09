@@ -523,12 +523,20 @@ void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {
         out << "        Skip _" << std::hex << skip << "\n";
     }
 
-    if (projection->isAll()) {
+    if (projection->isReturningAll()) {
         out << "        ProjectAll true\n";
-    } else {
-        const auto& items = projection->items();
-        for (const auto& item : items) {
-            out << "        Item _" << std::hex << item << "\n";
+    }
+
+    const auto& items = projection->items();
+    for (const auto& item : items) {
+        if (const auto* exprPtr = std::get_if<Expr*>(&item)) {
+            const Expr* expr = *exprPtr;
+            out << "        Item _" << std::hex << expr << "\n";
+        } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
+            const VarDecl* decl = *declPtr;
+            out << "        Item VAR_" << decl << "\n";
+        } else {
+            throw TuringException("Unknown projection item type");
         }
     }
 
@@ -546,14 +554,8 @@ void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {
         dump(out, skip);
     }
 
-    if (projection->isAll()) {
+    if (projection->isReturningAll()) {
         return;
-    }
-
-    const auto& items = projection->items();
-    for (const auto& item : items) {
-        out << "    _" << std::hex << projection << " ||--o{ _" << std::hex << item << " : \"\"\n";
-        dump(out, item);
     }
 }
 
