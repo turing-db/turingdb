@@ -71,6 +71,9 @@ void HistoryProcedure::execute(Procedure& proc) {
                 partCountCol->clear();
             }
 
+            size_t prevTotalNodeCount {0};
+            size_t prevTotalEdgeCount {0};
+
             for (size_t i = 0; i < remaining; ++i) {
                 const CommitView& commit = *data._it;
                 const GraphReader commitReader = commit.openTransaction().readGraph();
@@ -82,13 +85,21 @@ void HistoryProcedure::execute(Procedure& proc) {
                 }
 
                 if (nodeCountCol) {
-                    size_t nodeCount = commitReader.getNodeCount();
-                    nodeCountCol->push_back(nodeCount);
+                    const size_t totalNodeCount = commitReader.getNodeCount();
+                    const size_t thisPartNodeCount = totalNodeCount - prevTotalNodeCount;
+
+                    nodeCountCol->push_back(thisPartNodeCount);
+
+                    prevTotalNodeCount = totalNodeCount;
                 }
 
                 if (edgeCountCol) {
-                    size_t edgeCount = commitReader.getEdgeCount();
-                    edgeCountCol->push_back(edgeCount);
+                    const size_t totalEdgeCount = commitReader.getEdgeCount();
+                    const size_t thisPartedgeCount = totalEdgeCount - prevTotalEdgeCount;
+
+                    edgeCountCol->push_back(thisPartedgeCount);
+
+                    prevTotalEdgeCount = totalEdgeCount;
                 }
 
                 if (partCountCol) {
