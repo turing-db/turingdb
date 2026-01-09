@@ -307,7 +307,6 @@ void WriteProcessor::createNodes(size_t numIters) {
         // what the NodeID will be when it is committed) in @ref postProcessTempIDs.
 
         std::vector<NodeID>& raw = col->getRaw();
-        // Old size should always be 0 (asserted above), but add for safety 
         const size_t oldSize = raw.size();
         raw.resize(oldSize + numIters);
         std::iota(raw.begin() + oldSize, raw.end(), nextNodeID);
@@ -336,7 +335,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                                              " column.", edge._tag.getValue()));
         }
 
-        bioassert(col->size() == 0, "Pending edges column should be empty but is size {}", col->size());
+        // bioassert(col->size() == 0, "Pending edges column should be empty but is size {}", col->size());
 
         ColumnNodeIDs* srcCol = nullptr;
         const ColumnTag srcTag = edge._srcTag;
@@ -432,13 +431,15 @@ void WriteProcessor::createEdges(size_t numIters) {
             }
         }
 
-        std::vector<EdgeID>& raw = col->getRaw();
 
         // Populate the output column for this edge with the index in the CWB which it
         // appears. These indexes are later transformed into "fake IDs" (an estimate as to
         // what the EdgeID will be when it is committed) in @ref postProcessFakeIDs.
-        raw.resize(raw.size() + numIters);
-        std::iota(col->begin(), col->end(), nextEdgeID);
+
+        std::vector<EdgeID>& raw = col->getRaw();
+        const size_t oldSize = raw.size();
+        raw.resize(oldSize + numIters);
+        std::iota(raw.begin() + oldSize, raw.end(), nextEdgeID);
         nextEdgeID += numIters;
     }
 }
