@@ -12,6 +12,7 @@
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
+#include "TuringConfig.h"
 
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
@@ -21,6 +22,7 @@ using namespace turing::test;
 class CreateCommandTest : public TuringTest {
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        _env->getConfig().setSyncedOnDisk(false);
         _env->getSystemManager().createGraph("default");
         _graph = _env->getSystemManager().createGraph(_graphName);
         SimpleGraph::createSimpleGraph(_graph);
