@@ -12,7 +12,7 @@
 [![Docs](https://img.shields.io/badge/Docs-docs.turingdb.ai-brightgreen?style=for-the-badge)](https://docs.turingdb.ai)
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/newbackgroundgif.gif"/>
+  <img src="https://github.com/turing-db/turingdb/blob/finalreadmefixes/img/newbackgroundgif.gif"/>
 </p>
 
 ## What is TuringDB?
@@ -114,7 +114,7 @@ TuringDB WebGL accelerated graph visualizer allows you to visualise large graphs
 3. Then go to visualiser (network logo) and you can start exploring paths, expanding neighbours, inspect nodes (parameters, hyperlinks, and texts stored on the nodes)
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/biologicalgraph.png"/>
+  <img src="https://github.com/turing-db/turingdb/blob/finalreadmefixes/img/biologicalgraph.png"/>
 </p>
 
 ### How to build
