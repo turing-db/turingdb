@@ -12,7 +12,7 @@
 [![Docs](https://img.shields.io/badge/Docs-docs.turingdb.ai-brightgreen?style=for-the-badge)](https://docs.turingdb.ai)
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/smallerspinnning.gif"/>
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/newbackgroundgif.gif"/>
 </p>
 
 ## What is TuringDB?
@@ -77,11 +77,17 @@ TuringDB requires:
 - **CMake** 3.10 or higher
 - **Git** for submodule management
 
-### How to install
+### Install TuringDB
 
-Very simple, just use the turingdb pip package:
+Using `pip`:    
 ```bash
 pip install turingdb
+```
+
+or using the `uv`  package manager (you will need to create a project first):
+
+```bash
+uv add turingdb
 ```
 And then it should be in your $PATH
 
@@ -99,9 +105,17 @@ turingdb -demon
 
 The turingdb REST API is running in both interactive and demon mode on http://localhost:6666 by default.
 
-### TuringDB Visualizer
+### Visualise the graph you have created in TuringDB
+TuringDB WebGL accelerated graph visualizer allows you to visualise large graphs in the browser: [**TuringDB Visualizer**](https://github.com/turing-db/turingdb-visualizer)
 
-TuringDB WebGL accelerated graph visualizer for visualizing large graphs in the browser: [TuringDB Visualizer](https://github.com/turing-db/turingdb-visualizer)
+#### Example of a biological interaction graph built in TuringDB:
+1. Choose on the top right the graph
+2. Search & select a node(s) of interest (magnifying glass button on the left)
+3. Then go to visualiser (network logo) and you can start exploring paths, expanding neighbours, inspect nodes (parameters, hyperlinks, and texts stored on the nodes)
+
+<p align="center">
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/biologicalgraph.png"/>
+</p>
 
 ### How to build
 
