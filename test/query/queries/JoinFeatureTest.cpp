@@ -1348,6 +1348,72 @@ TEST_F(JoinFeatureTest, multiJoin_sevenNodeChain) {
     // Very long chain - stresses join pipeline
 }
 
+// Test 48: Eight-join chain - nine nodes with comprehensive WHERE predicates
+// Pattern: (p1)-->(i1)<--(p2)-->(i2)<--(p3)-->(i3)<--(p4)-->(i4)<--(p5)
+// This creates 8 join points connecting 5 persons through 4 interests
+// No loop patterns - all variables are unique
+TEST_F(JoinFeatureTest, multiJoin_eightJoinChain) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (p1:Person)-->(i1:Interest)<--(p2:Person)-->(i2:Interest)<--(p3:Person)-->(i3:Interest)<--(p4:Person)-->(i4:Interest)<--(p5:Person)
+        WHERE p1.name <> p2.name
+          AND p2.name <> p3.name
+          AND p3.name <> p4.name
+          AND p4.name <> p5.name
+          AND p1.name <> p3.name
+          AND p1.name <> p4.name
+          AND p1.name <> p5.name
+          AND p2.name <> p4.name
+          AND p2.name <> p5.name
+          AND p3.name <> p5.name
+          AND i1.name <> i2.name
+          AND i2.name <> i3.name
+          AND i3.name <> i4.name
+          AND i1.name <> i3.name
+          AND i1.name <> i4.name
+          AND i2.name <> i4.name
+        RETURN p1.name, p2.name, p3.name, p4.name, p5.name,
+               i1.name, i2.name, i3.name, i4.name
+    )";
+
+    using String = types::String::Primitive;
+
+    size_t rowCount = 0;
+    std::set<std::tuple<String, String, String, String, String>> personCombinations;
+
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+
+        auto* p1Col = findColumn(df, "p1.name");
+        auto* p2Col = findColumn(df, "p2.name");
+        auto* p3Col = findColumn(df, "p3.name");
+        auto* p4Col = findColumn(df, "p4.name");
+        auto* p5Col = findColumn(df, "p5.name");
+
+        if (p1Col && p2Col && p3Col && p4Col && p5Col) {
+            auto* p1 = p1Col->as<ColumnOptVector<String>>();
+            auto* p2 = p2Col->as<ColumnOptVector<String>>();
+            auto* p3 = p3Col->as<ColumnOptVector<String>>();
+            auto* p4 = p4Col->as<ColumnOptVector<String>>();
+            auto* p5 = p5Col->as<ColumnOptVector<String>>();
+
+            if (p1 && p2 && p3 && p4 && p5) {
+                for (size_t i = 0; i < p1->size(); i++) {
+                    if (p1->at(i) && p2->at(i) && p3->at(i) && p4->at(i) && p5->at(i)) {
+                        personCombinations.insert({
+                            *p1->at(i), *p2->at(i), *p3->at(i), *p4->at(i), *p5->at(i)
+                        });
+                    }
+                }
+            }
+        }
+    });
+
+    ASSERT_TRUE(res);
+    // 8-join chain: 5 distinct persons connected through 4 distinct interests
+    // This is the most complex linear join pattern, stressing the join pipeline
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
