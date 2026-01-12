@@ -120,8 +120,6 @@ struct PropertyTypeDispatcher {
 
 }
 
-namespace db {
-
 ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
     if (!var) {
         throw FatalException("Attempted to get column for null variable");
@@ -133,8 +131,6 @@ ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
     }
     const ColumnTag tag = it->second;
     return tag;
-}
-
 }
 
 void PipelineGenerator::generate() {

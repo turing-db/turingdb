@@ -1,5 +1,7 @@
 #include "MaterializeProcessor.h"
 
+#include <ranges>
+
 #include "MaterializeData.h"
 
 #include "columns/ColumnOptVector.h"
@@ -158,11 +160,8 @@ void MaterializeProcessor::reset() {
 }
 
 void MaterializeProcessor::execute() {
-    _input.getPort()->consume();
-    _output.getPort()->writeData();
-    finish();
-
     const Dataframe::NamedColumns& output = _output.getDataframe()->cols();
+
     const MaterializeData::Indices& indices = _matData.getIndices();
     const MaterializeData::ColumnsPerStep& columnsPerStep = _matData.getColumnsPerStep();
     const size_t colCount = _matData.getColumnCount();
@@ -191,12 +190,15 @@ void MaterializeProcessor::execute() {
 
     for (size_t currentStep = lastStep; currentStep >= 0; --currentStep) {
         const MaterializeData::Columns& cols = columnsPerStep[currentStep];
+        fmt::print("\n");
+        for (const auto* c : cols) {
+            fmt::print("{} ", fmt::ptr(c));
+        } fmt::print("\n");
 
         // If last step, don't use the transform, just copy columns
         if (currentStep == lastStep) {
             // Copy columns in reverse order
-            for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
-                const Column* colPtr = *colIt;
+            for (const auto* colPtr : std::ranges::reverse_view(cols)) {
                 NamedColumn* destCol = output[currentColIndex];
                 copyChunk(colPtr, destCol->getColumn());
                 --currentColIndex;
@@ -206,9 +208,9 @@ void MaterializeProcessor::execute() {
         }
 
         // Else use transform on all columns of the current step
-        for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
-            const Column* colPtr = *colIt;
+        for (const auto* colPtr : std::ranges::reverse_view(cols)) {
             NamedColumn* destCol = output[currentColIndex];
+            spdlog::info("Destination has tag {}", destCol->getTag().getValue());
             copyTransformedChunk(&_transform, colPtr, destCol->getColumn());
             --currentColIndex;
         }
@@ -228,4 +230,8 @@ void MaterializeProcessor::execute() {
 #endif
         }
     }
+
+    _input.getPort()->consume();
+    _output.getPort()->writeData();
+    finish();
 }
