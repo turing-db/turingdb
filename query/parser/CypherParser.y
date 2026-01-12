@@ -197,7 +197,6 @@
 %token<std::string_view> ESC_LITERAL
 %token<std::string_view> STRING_LITERAL
 %token<std::string_view> ID
-%token<char> CHAR_LITERAL
 %token<int64_t> DIGIT
 %token<double> DOUBLE
 
@@ -205,7 +204,6 @@
 
 %type<db::Literal*> numLit literal
 %type<db::BoolLiteral*> boolLit
-%type<db::CharLiteral*> charLit
 %type<db::StringLiteral*> stringLit
 %type<db::MapLiteral*> mapLit
 %type<std::pair<db::Symbol*, db::Expr*>> mapPair
@@ -1112,7 +1110,6 @@ literal
     | numLit { $$ = $1; }
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
-    | charLit { $$ = $1; }
     | listLit { scanner.notImplemented(@$, "Lists"); }
     | mapLit { $$ = $1; }
     ;
@@ -1138,10 +1135,6 @@ numLit
 
 stringLit
     : STRING_LITERAL { $$ = StringLiteral::create(ast, $1); }
-    ;
-
-charLit
-    : CHAR_LITERAL { $$ = CharLiteral::create(ast, $1); }
     ;
 
 listLit

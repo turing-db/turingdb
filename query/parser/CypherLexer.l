@@ -153,13 +153,6 @@ using Token = db::YCypherParser::token;
 }
 
 
-'([^'\\\r\n]|\\.|\\)' {
-    /* Character literal */
-    yylval->emplace<char>(yytext[1]);
-    return Token::CHAR_LITERAL;
-}
-
-
 \"([^\"\\\r\n]|\\.)*\" {
     /* String literal */
     STORE_STRING(_offset + 1, yyleng - 2);
