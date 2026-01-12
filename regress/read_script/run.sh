@@ -1,0 +1,47 @@
+#!/bin/bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+cd $SCRIPT_DIR
+
+pkill turingdb
+rm -rf $SCRIPT_DIR/.turing
+
+# Run turingdb with commands piped to stdin:
+# 1. Create graph and set up change
+# 2. Checkout the change to enable writes
+# 3. Use 'read' command to execute the multi-line cypher script
+# 4. Submit the change
+cat << 'EOF' | turingdb -turing-dir $SCRIPT_DIR/.turing 2>&1
+CREATE GRAPH testgraph
+cd testgraph
+CHANGE NEW
+checkout change-0
+read test_script.cypher
+CHANGE SUBMIT
+quit
+EOF
+
+# Now start daemon to verify results via Python SDK
+turingdb -demon -turing-dir $SCRIPT_DIR/.turing
+
+# Give the daemon time to start
+sleep 1
+
+# Setup Python environment and verify results
+rm -f pyproject.toml
+uv init
+
+# Set PYTURINGDB if not already set (for running outside CMake)
+if [ -z "$PYTURINGDB" ]; then
+    export PYTURINGDB="turingdb"
+fi
+
+uv add $PYTURINGDB
+
+uv run main.py
+testres=$?
+
+pkill turingdb
+
+exit $testres
