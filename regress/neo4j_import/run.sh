@@ -7,11 +7,11 @@ cd $SCRIPT_DIR
 pkill turingdb
 rm -rf $SCRIPT_DIR/.turing
 
-# Import neo4j cyber-security-db using turing-import
-turing-import -neo4j-json $TURING_HOME/neo4j/cyber-security-db -db-path $SCRIPT_DIR/.turing/graphs
-
 # Create turing directory structure
 mkdir -p $SCRIPT_DIR/.turing/graphs
+
+# Import neo4j cyber-security-db using turing-import
+turing-import -neo4j-json $TURING_HOME/neo4j/cyber-security-db -db-path $SCRIPT_DIR/.turing/graphs
 
 # Rename the imported graph to cyber_security
 mv $SCRIPT_DIR/.turing/graphs/bindump/cyber-security-db $SCRIPT_DIR/.turing/graphs/cyber_security
