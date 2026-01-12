@@ -39,7 +39,7 @@ jobs:
         brew install curl openssl@3 zlib
         brew install bison flex
         brew install boost
-        brew install openblas
+        brew install openblas libomp
     - name: Configure cmake
       shell: bash
       run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
