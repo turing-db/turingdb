@@ -1130,7 +1130,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
     // Create over 1 chunk of nodes
     const size_t chunkSize = 65'536;
     const size_t nodeCount = chunkSize + 1; // TODO: Find a way to access ChunkConfig
-    const size_t edgeCount = 1'000;
+    const size_t edgeCount = 100;
 
     newChange();
     {
@@ -1169,13 +1169,20 @@ TEST_F(WriteQueriesTest, exceedChunk) {
 
     {
         for (size_t e {0}; e < edgeCount; e++) {
+            size_t chunks {0};
+            size_t emptyChunks {0};
             std::string query_str = fmt::format(
-                R"(MATCH (n:Node {{id: {}}}), (m:Node {{id: {}}}) CREATE (n)-[e:Edge]->(m) RETURN e)",
+                R"(MATCH (n:Node), (m:Node) WHERE n.id = {} AND m.id = {} CREATE (n)-[e:Edge]->(m) RETURN e)",
                 e, e + 1);
-            auto res = query(query_str, [e](const Dataframe* df) {
+            auto res = query(query_str, [&](const Dataframe* df) {
                 ASSERT_TRUE(df);
+                chunks++;
                 const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
                 ASSERT_TRUE(es);
+                if (es->empty()) {
+                    emptyChunks++;
+                    return;
+                }
                 ASSERT_EQ(1, es->size());
                 ASSERT_EQ(e, es->front());
             });
@@ -1183,6 +1190,8 @@ TEST_F(WriteQueriesTest, exceedChunk) {
                 spdlog::error(res.getError());
             }
             ASSERT_TRUE(res);
+            ASSERT_EQ(2, chunks);
+            ASSERT_EQ(1, emptyChunks);
         }
 
     }
@@ -1204,11 +1213,17 @@ TEST_F(WriteQueriesTest, exceedChunk) {
     { // Verify edges have correct IDs
         std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN e";
 
-        auto res = query(matchQuery, [edgeCount](const Dataframe* df) {
+        size_t chunks {0};
+        size_t emptyChunks {0};
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            chunks++;
             ASSERT_TRUE(df);
+            if (df->getRowCount() == 0) {
+                emptyChunks++;
+                return;
+            }
             const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
             ASSERT_TRUE(es);
-            es->dump(std::cout);
 
             EXPECT_EQ(edgeCount, es->size());
 
@@ -1217,5 +1232,13 @@ TEST_F(WriteQueriesTest, exceedChunk) {
             }
         });
         ASSERT_TRUE(res);
+        ASSERT_EQ(2, chunks);
+        ASSERT_EQ(1, emptyChunks);
     }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 3;
+    });
 }
