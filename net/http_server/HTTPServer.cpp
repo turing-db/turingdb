@@ -3,8 +3,7 @@
 #include <thread>
 #include <csignal>
 #include <netinet/in.h>
-#include <sys/epoll.h>
-#include <sys/signalfd.h>
+#include <unistd.h>
 #include <spdlog/spdlog.h>
 
 #include "AbstractThreadContext.h"
@@ -24,11 +23,16 @@ HTTPServer::~HTTPServer() {
 }
 
 FlowStatus HTTPServer::initialize() {
-    _serverSocket = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+    _serverSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
     if (_serverSocket == -1) {
         utils::logError("Create socket");
         return FlowStatus::CREATE_ERROR;
+    }
+
+    if (!utils::setNonBlock(_serverSocket)) {
+        utils::logError("SetNonBlock server socket");
+        return FlowStatus::OPT_NONBLOCK_ERR;
     }
 
     if (!utils::setReuseAddress(_serverSocket)) {
@@ -46,40 +50,33 @@ FlowStatus HTTPServer::initialize() {
         return FlowStatus::LISTEN_ERROR;
     }
 
-    _epollInstance = ::epoll_create1(0);
+    _epollInstance = utils::createEventInstance();
     _connections = std::make_unique<TCPConnectionStorage>(_maxConnections);
     _connections->initialize(std::move(_functions._createHttpParser));
     _serverConnection = _connections->alloc(_serverSocket);
 
     // Registering server socket in epoll list
-    utils::EpollEvent event {
-        .events = EPOLLIN | EPOLLET | EPOLLONESHOT,
-        .data = {.ptr = _serverConnection},
-    };
+    utils::EpollEvent event;
+    event.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+    event.data = _serverConnection;
 
     if (!utils::epollAdd(_epollInstance, _serverSocket, event)) {
         utils::logError("EpollAdd root");
         return FlowStatus::CTL_ERROR;
     }
 
-    // Registering sigint and sigterm as signals to listen to in the epoll list
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGTERM);
-    sigaddset(&mask, SIGINT);
+    // Registering sigint and sigterm as signals to listen to in the event loop
+    _signalFd = utils::createSignalFd(_epollInstance);
 
-    if (sigprocmask(SIG_BLOCK, &mask, 0)) {
-        utils::logError("Sig block setting");
-    }
-
-    _signalFd = signalfd(-1, &mask, 0);
-
-    event.events = EPOLLIN;
-    event.data.ptr = &_signalFd;
+#ifndef __APPLE__
+    // On Linux, signalfd returns a real fd that needs to be registered
+    event.events = utils::EVENT_IN;
+    event.data = &_signalFd;
     if (!utils::epollAdd(_epollInstance, _signalFd, event)) {
         utils::logError("EpollAdd server terminate");
         _status.store(FlowStatus::CTL_ERROR);
     }
+#endif
 
     // Storing actual address
     sockaddr_in actualAddr {};
@@ -157,7 +154,7 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
     threadContext->setThreadID(threadID);
 
     for (;;) {
-        const int nfds = epoll_wait(instance, events.data(), eventCount, -1);
+        const int nfds = utils::eventWait(instance, events.data(), eventCount, -1);
         if (nfds <= 0) {
             utils::logError("EpollWait");
             ctxt._status.store(FlowStatus::WAIT_ERROR);
@@ -166,11 +163,12 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
         for (int i = 0; i < nfds; i++) {
             utils::EpollEvent& ev = events[i];
 
-            if (!ctxt._running.load() || ev.data.ptr == &ctxt._signalFd) {
+            // On macOS, signals come with nullptr data; on Linux, they come with &signalFd
+            if (!ctxt._running.load() || ev.data == nullptr || ev.data == &ctxt._signalFd) {
                 return;
             }
 
-            auto* connection = static_cast<TCPConnection*>(ev.data.ptr);
+            auto* connection = static_cast<TCPConnection*>(ev.data);
 
             if (!connection) {
                 // Terminate requested, re-trigger the event to stop other threads

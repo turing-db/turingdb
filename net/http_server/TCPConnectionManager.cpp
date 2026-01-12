@@ -1,7 +1,6 @@
 #include "TCPConnectionManager.h"
 
 #include <cstdint>
-#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -18,16 +17,16 @@ TCPConnectionManager::TCPConnectionManager(ServerContext& ctxt)
 void TCPConnectionManager::process(AbstractThreadContext* threadContext,
                                    utils::EpollEvent& ev) {
     uint32_t eventType = ev.events;
-    auto& connection = *static_cast<TCPConnection*>(ev.data.ptr);
+    auto& connection = *static_cast<TCPConnection*>(ev.data);
     utils::Socket s = connection.getSocket();
 
     // Process Connection
-    if (eventType & (EPOLLRDHUP | EPOLLHUP)) {
+    if (eventType & (utils::EVENT_RDHUP | utils::EVENT_HUP)) {
         connection.close();
         return;
     }
 
-    if (eventType & EPOLLIN) {
+    if (eventType & utils::EVENT_IN) {
         auto inputWriter = connection.getInputBuffer().getWriter();
         const ssize_t bytesRead = ::recv(s, inputWriter.getBuffer(), inputWriter.getBufferSize(), 0);
         if (bytesRead <= 0) {
@@ -119,8 +118,8 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
         }
     }
 
-    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = &connection;
+    ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+    ev.data = &connection;
     if (!utils::epollMod(_ctxt._instance, s, ev)) {
         utils::logError("EpollMod existing connection");
         _ctxt.encounteredError(FlowStatus::CTL_ERROR);

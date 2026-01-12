@@ -1,9 +1,13 @@
 #pragma once
 
+#ifdef __APPLE__
+#include <sys/event.h>
+#else
+#include <sys/epoll.h>
+#endif
+
 #include <array>
 #include <cstdint>
-
-struct epoll_event;
 
 namespace net::utils {
 
@@ -13,10 +17,30 @@ using Socket = int;
 using ServerSocket = int;
 using DataSocket = int;
 using EpollInstance = int;
-using EpollEvent = ::epoll_event;
 using EpollSignal = int;
 using StringAddress = std::array<char, ADDR_LEN>;
 using UserData = void*;
+
+// Cross-platform event structure
+struct EpollEvent {
+    uint32_t events;
+    void* data;
+};
+
+// Cross-platform event flags
+#ifdef __APPLE__
+inline constexpr uint32_t EVENT_IN      = (1 << 0);
+inline constexpr uint32_t EVENT_RDHUP   = (1 << 1);
+inline constexpr uint32_t EVENT_HUP     = (1 << 2);
+inline constexpr uint32_t EVENT_ET      = (1 << 3);
+inline constexpr uint32_t EVENT_ONESHOT = (1 << 4);
+#else
+inline constexpr uint32_t EVENT_IN      = EPOLLIN;
+inline constexpr uint32_t EVENT_RDHUP   = EPOLLRDHUP;
+inline constexpr uint32_t EVENT_HUP     = EPOLLHUP;
+inline constexpr uint32_t EVENT_ET      = EPOLLET;
+inline constexpr uint32_t EVENT_ONESHOT = EPOLLONESHOT;
+#endif
 
 
 // @brief sets TCP_NODELAY on a socket
@@ -103,6 +127,11 @@ using UserData = void*;
 [[nodiscard]] bool epollMod(EpollInstance, Socket fd, EpollEvent&);
 [[nodiscard]] bool epollDel(EpollInstance, Socket fd, EpollEvent&);
 [[nodiscard]] StringAddress getStringAddress(uint32_t intAddr);
+
+// Cross-platform event loop functions
+[[nodiscard]] EpollInstance createEventInstance();
+[[nodiscard]] int eventWait(EpollInstance, EpollEvent*, int maxEvents, int timeout);
+[[nodiscard]] EpollSignal createSignalFd(EpollInstance instance);
 
 void logError(const char* title);
 }

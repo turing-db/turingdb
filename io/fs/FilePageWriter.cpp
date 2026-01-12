@@ -8,7 +8,11 @@
 using namespace fs;
 
 Result<FilePageWriter> FilePageWriter::open(const Path& path, size_t pageSize) {
+#ifdef __APPLE__
+    const int access = O_WRONLY | O_CREAT | O_TRUNC;
+#else
     const int access = O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT;
+#endif
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
@@ -16,6 +20,11 @@ Result<FilePageWriter> FilePageWriter::open(const Path& path, size_t pageSize) {
     if (fd < 0) {
         return Error::result(ErrorType::OPEN_FILE, errno);
     }
+
+#ifdef __APPLE__
+    // Disable caching on macOS (equivalent to O_DIRECT)
+    fcntl(fd, F_NOCACHE, 1);
+#endif
 
     return FilePageWriter {fd, pageSize};
 }
