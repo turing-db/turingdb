@@ -1191,6 +1191,8 @@ TEST_F(WriteQueriesTest, exceedChunk) {
             }
             ASSERT_TRUE(res);
             ASSERT_EQ(2, chunks);
+            // We should only ever get 1 empty chunk: the final filter result on the last
+            // row of CartesianProduct (we do not create an edge between those nodes)
             ASSERT_EQ(1, emptyChunks);
         }
 
@@ -1233,6 +1235,8 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         });
         ASSERT_TRUE(res);
         ASSERT_EQ(2, chunks);
+        // We should only ever get 1 empty chunk: the result of GetOutEdges on the second
+        // chunk of ScanNodes, which contains only 1 node with no edges
         ASSERT_EQ(1, emptyChunks);
     }
 }

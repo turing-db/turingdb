@@ -173,11 +173,11 @@ void FilterProcessor::execute() {
 
     _input.getPort()->consume();
 
-    if (destDF->getRowCount() != 0) {
-        _output.getPort()->writeData();
-    }
-
-    if ( _input.getPort()->isClosed()) {
+    // Only ever emit an empty chunk if our input is closed, to allow the next processor
+    // to proceed.
+    const bool haveOutput = destDF->getRowCount() != 0;
+    const bool inputClosed = _input.getPort()->isClosed();
+    if (haveOutput || inputClosed) {
         _output.getPort()->writeData();
     }
 

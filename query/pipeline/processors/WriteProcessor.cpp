@@ -283,6 +283,8 @@ void WriteProcessor::createNodes(size_t numIters) {
         raw.resize(oldSize + numIters);
         std::iota(raw.begin() + oldSize, raw.end(), nextNodeID);
         nextNodeID += numIters;
+
+        _wroteRows |= raw.size() > oldSize;
     }
 }
 
@@ -404,6 +406,8 @@ void WriteProcessor::createEdges(size_t numIters) {
         raw.resize(oldSize + numIters);
         std::iota(raw.begin() + oldSize, raw.end(), nextEdgeID);
         nextEdgeID += numIters;
+
+        _wroteRows |= raw.size() > oldSize;
     }
 }
 
@@ -418,8 +422,6 @@ void WriteProcessor::postProcessTempIDs() {
 
         std::vector<NodeID>& raw = col->getRaw();
         std::ranges::for_each(raw, [nextNodeID] (NodeID& fakeID) { fakeID += nextNodeID; });
-
-        _wroteRows |= raw.size() != 0;
     }
 
     const EdgeID nextEdgeID = _ctxt->getGraphView().read().getTotalEdgesAllocated();
@@ -431,8 +433,6 @@ void WriteProcessor::postProcessTempIDs() {
 
         std::vector<EdgeID>& raw = col->getRaw();
         std::ranges::for_each(raw, [nextEdgeID](EdgeID& fakeID) { fakeID += nextEdgeID; });
-
-        _wroteRows |= raw.size() != 0;
     }
 }
 
@@ -520,13 +520,10 @@ void WriteProcessor::execute() {
 
     // Set our output port as containing data if:
     // 1. We wrote rows to the output.
-    // 2. We had an input and its size was not 0
-    // 3. We had an input, but wrote no rows, but that input is now closed.
+    // 2. We had an input, but wrote no rows, but that input is now closed.
     // This emits an empty chunk iff our input was empty and is now closed.
-    const bool emptyInput = _input && _input->getDataframe()->getRowCount() == 0;
     const bool inputClosed = _input && _input->getPort()->isClosed();
-
-    if (_wroteRows || !emptyInput || inputClosed) {
+    if (_wroteRows || inputClosed) {
         _output.getPort()->writeData();
     }
 
