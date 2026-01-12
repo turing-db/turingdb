@@ -6,6 +6,7 @@
 #include "DebugDump.h"
 
 #include "BioAssert.h"
+#include "spdlog/fmt/bundled/format.h"
 
 namespace db {
 
@@ -121,7 +122,10 @@ public:
     }
 
     void dump(std::ostream& out) const override {
-        DebugDump::dumpString(out, "ColumnVector of size="+std::to_string(_data.size()));
+        const std::string str = fmt::format("Vec, sz={}", _data.size());
+        const std::string ptr = fmt::format("@{}", fmt::ptr(this));
+        DebugDump::dumpString(out, str);
+        DebugDump::dumpString(out, ptr);
         for (const auto& elem : _data) {
             DebugDump::dump(out, elem);
         }
