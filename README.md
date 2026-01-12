@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/logo_spiral.png" width="350" alt="TuringDB logo">
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/logo_spiral.png" width="350" alt="TuringDB logo">
 </p>
 
 ## A Blazingly Fast Column-Oriented Graph Database Engine
