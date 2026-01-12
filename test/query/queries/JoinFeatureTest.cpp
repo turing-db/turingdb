@@ -1414,6 +1414,256 @@ TEST_F(JoinFeatureTest, multiJoin_eightJoinChain) {
     // This is the most complex linear join pattern, stressing the join pipeline
 }
 
+// =============================================================================
+// CATEGORY 9: COMMA-SEPARATED MATCH PATTERNS
+// Tests using multiple match targets separated by commas (Cartesian products)
+// =============================================================================
+
+// Test 49: Two-way Cartesian - Person and Interest with property filter
+TEST_F(JoinFeatureTest, commaMatch_twoWayCartesian) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (p:Person), (i:Interest)
+        WHERE p.isFrench = true AND i.name = 'MegaHub'
+        RETURN p.name, i.name
+    )";
+
+    using String = types::String::Primitive;
+
+    std::set<String> frenchPersons;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* pCol = findColumn(df, "p.name");
+        if (pCol) {
+            auto* p = pCol->as<ColumnOptVector<String>>();
+            if (p) {
+                for (size_t i = 0; i < p->size(); i++) {
+                    if (p->at(i)) {
+                        frenchPersons.insert(*p->at(i));
+                    }
+                }
+            }
+        }
+    });
+    ASSERT_TRUE(res);
+    // French persons (A, B) combined with MegaHub interest
+}
+
+// Test 50: Three-way Cartesian - Person, Interest, Category
+TEST_F(JoinFeatureTest, commaMatch_threeWayCartesian) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (p:Person), (i:Interest), (c:Category)
+        WHERE p.name = 'A' AND i.name = 'Shared' AND c.name = 'Cat1'
+        RETURN p.name, i.name, c.name
+    )";
+
+    size_t rowCount = 0;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+    });
+    ASSERT_TRUE(res);
+    // Should return exactly 1 row: (A, Shared, Cat1)
+    EXPECT_EQ(rowCount, 1);
+}
+
+// Test 51: Path pattern combined with single node (comma-separated)
+TEST_F(JoinFeatureTest, commaMatch_pathWithSingleNode) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (a:Person)-->(i:Interest), (c:Category)
+        WHERE c.name = 'Cat1'
+        RETURN a.name, i.name, c.name
+    )";
+
+    size_t rowCount = 0;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+    });
+    ASSERT_TRUE(res);
+    // All Person->Interest pairs combined with Cat1
+}
+
+// Test 52: Two independent path patterns (comma-separated)
+TEST_F(JoinFeatureTest, commaMatch_twoIndependentPaths) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (a:Person)-->(i1:Interest), (b:Person)-->(i2:Interest)
+        WHERE a.name = 'A' AND b.name = 'B' AND i1.name <> i2.name
+        RETURN a.name, b.name, i1.name, i2.name
+    )";
+
+    using String = types::String::Primitive;
+
+    std::set<std::pair<String, String>> interestPairs;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* i1Col = findColumn(df, "i1.name");
+        auto* i2Col = findColumn(df, "i2.name");
+        if (i1Col && i2Col) {
+            auto* i1 = i1Col->as<ColumnOptVector<String>>();
+            auto* i2 = i2Col->as<ColumnOptVector<String>>();
+            if (i1 && i2) {
+                for (size_t i = 0; i < i1->size(); i++) {
+                    if (i1->at(i) && i2->at(i)) {
+                        interestPairs.insert({*i1->at(i), *i2->at(i)});
+                    }
+                }
+            }
+        }
+    });
+    ASSERT_TRUE(res);
+    // A's interests paired with B's interests (where different)
+}
+
+// Test 53: Four-way Cartesian with all different types
+TEST_F(JoinFeatureTest, commaMatch_fourWayCartesian) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (p:Person), (i:Interest), (c:Category), (city:City)
+        WHERE p.name = 'A' AND i.name = 'Shared' AND c.name = 'Cat1' AND city.name = 'Paris'
+        RETURN p.name, i.name, c.name, city.name
+    )";
+
+    size_t rowCount = 0;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+    });
+    ASSERT_TRUE(res);
+    // Should return exactly 1 row
+    EXPECT_EQ(rowCount, 1);
+}
+
+// Test 54: Cartesian with multiple inequality filters
+TEST_F(JoinFeatureTest, commaMatch_cartesianWithInequalities) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (p1:Person), (p2:Person), (p3:Person)
+        WHERE p1.name <> p2.name AND p2.name <> p3.name AND p1.name <> p3.name
+          AND p1.isFrench = true
+        RETURN p1.name, p2.name, p3.name
+    )";
+
+    using String = types::String::Primitive;
+
+    size_t rowCount = 0;
+    std::set<String> frenchLeaders;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+        auto* p1Col = findColumn(df, "p1.name");
+        if (p1Col) {
+            auto* p1 = p1Col->as<ColumnOptVector<String>>();
+            if (p1) {
+                for (size_t i = 0; i < p1->size(); i++) {
+                    if (p1->at(i)) {
+                        frenchLeaders.insert(*p1->at(i));
+                    }
+                }
+            }
+        }
+    });
+    ASSERT_TRUE(res);
+    // French persons (A, B) as p1, with 2 other distinct persons
+}
+
+// Test 55: Path and Cartesian combination with shared type
+TEST_F(JoinFeatureTest, commaMatch_pathAndCartesianMixed) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (a:Person)-->(i:Interest)-->(c:Category), (other:Person)
+        WHERE a.name <> other.name AND c.name = 'Cat1'
+        RETURN a.name, i.name, c.name, other.name
+    )";
+
+    size_t rowCount = 0;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+    });
+    ASSERT_TRUE(res);
+    // Person->Interest->Cat1 paths combined with other persons
+}
+
+// Test 56: Two paths with property-based join condition
+TEST_F(JoinFeatureTest, commaMatch_twoPathsPropertyJoin) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (a:Person)-->(i1:Interest), (b:Person)-->(i2:Interest)
+        WHERE a.isFrench = true AND b.isFrench = false
+          AND a.name <> b.name
+        RETURN a.name, b.name, i1.name, i2.name
+    )";
+
+    using String = types::String::Primitive;
+
+    std::set<std::pair<String, String>> personPairs;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* aCol = findColumn(df, "a.name");
+        auto* bCol = findColumn(df, "b.name");
+        if (aCol && bCol) {
+            auto* a = aCol->as<ColumnOptVector<String>>();
+            auto* b = bCol->as<ColumnOptVector<String>>();
+            if (a && b) {
+                for (size_t i = 0; i < a->size(); i++) {
+                    if (a->at(i) && b->at(i)) {
+                        personPairs.insert({*a->at(i), *b->at(i)});
+                    }
+                }
+            }
+        }
+    });
+    ASSERT_TRUE(res);
+    // French persons' interests paired with non-French persons' interests
+}
+
+// Test 57: Three paths combined (stress test for comma patterns)
+TEST_F(JoinFeatureTest, commaMatch_threePathsCombined) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (a:Person)-->(i1:Interest), (b:Person)-->(i2:Interest), (c:Person)-->(i3:Interest)
+        WHERE a.name = 'A' AND b.name = 'B' AND c.name = 'C'
+          AND i1.name <> i2.name AND i2.name <> i3.name AND i1.name <> i3.name
+        RETURN a.name, b.name, c.name, i1.name, i2.name, i3.name
+    )";
+
+    size_t rowCount = 0;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        rowCount += df->getRowCount();
+    });
+    ASSERT_TRUE(res);
+    // Three specific persons with three distinct interests
+}
+
+// Test 58: Cartesian with category chain and person
+TEST_F(JoinFeatureTest, commaMatch_categoryChainWithPerson) {
+    constexpr std::string_view QUERY = R"(
+        MATCH (i:Interest)-->(c:Category), (p:Person)
+        WHERE p.isFrench = true AND c.name = 'Cat2'
+        RETURN p.name, i.name, c.name
+    )";
+
+    using String = types::String::Primitive;
+
+    std::set<std::tuple<String, String, String>> results;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* pCol = findColumn(df, "p.name");
+        auto* iCol = findColumn(df, "i.name");
+        auto* cCol = findColumn(df, "c.name");
+        if (pCol && iCol && cCol) {
+            auto* p = pCol->as<ColumnOptVector<String>>();
+            auto* i = iCol->as<ColumnOptVector<String>>();
+            auto* c = cCol->as<ColumnOptVector<String>>();
+            if (p && i && c) {
+                for (size_t j = 0; j < p->size(); j++) {
+                    if (p->at(j) && i->at(j) && c->at(j)) {
+                        results.insert({*p->at(j), *i->at(j), *c->at(j)});
+                    }
+                }
+            }
+        }
+    });
+    ASSERT_TRUE(res);
+    // Interests in Cat2 combined with French persons
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
