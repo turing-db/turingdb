@@ -31,6 +31,7 @@ add_subdirectory(serialization)
 add_subdirectory(multi_type_properties)
 add_subdirectory(count_simpledb)
 add_subdirectory(count_alias_simpledb)
+add_subdirectory(read_script)
 
 # Python SDK version to be used by uv
 set(PYTURINGDB "turingdb")
