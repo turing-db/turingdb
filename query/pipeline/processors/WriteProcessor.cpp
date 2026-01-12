@@ -228,21 +228,12 @@ void WriteProcessor::createNodes(size_t numIters) {
 
     LabelSet lblset;
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
-        // Get the column in the output DF which will contain this node's IDs
-        if (!outDf->hasColumn(node._tag)) {
-            throw FatalException(
-                fmt::format("Could not get column in WriteProcessor "
-                            "output dataframe for PendingNode with tag {}.",
-                            node._tag.getValue()));
-        }
-        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
-        if (!col) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " pending nodes, but is not a NodeID"
-                                             " column.", node._tag.getValue()));
-        }
+        // This is checked for validity in the call to @ref setup
+        auto* col = outDf->getColumn(node._tag)->as<ColumnNodeIDs>();
 
-        bioassert(col->size() == 0, "pending node column should be empty");
+        // Always empty on first call, or has been cleared by @ref setup.
+        bioassert(col->size() == 0, "Pending nodes column should be empty but is size {}",
+                  col->size());
 
         const std::span labels = node._labels;
 
@@ -302,21 +293,12 @@ void WriteProcessor::createEdges(size_t numIters) {
     const Dataframe* outDf = _output.getDataframe();
 
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
-        if (!outDf->hasColumn(edge._tag)) {
-            throw FatalException(
-                fmt::format("Could not get column in WriteProcessor "
-                            "output dataframe for PendingEdge with tag {}.",
-                            edge._tag.getValue()));
-        }
-
+        // This is checked for validity in the call to @ref setup
         auto* col = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
-        if (!col) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " pending edges, but is not an EdgeID"
-                                             " column.", edge._tag.getValue()));
-        }
 
-        // bioassert(col->size() == 0, "Pending edges column should be empty but is size {}", col->size());
+        // Always empty on first call, or has been cleared by @ref setup.
+        bioassert(col->size() == 0, "Pending edges column should be empty but is size {}",
+                  col->size());
 
         ColumnNodeIDs* srcCol = nullptr;
         const ColumnTag srcTag = edge._srcTag;
@@ -430,45 +412,27 @@ void WriteProcessor::postProcessTempIDs() {
     Dataframe* out = _output.getDataframe();
 
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
-        // Get the column in the output DF which will contain this node's IDs
-        if (!out->hasColumn(node._tag)) {
-            throw FatalException(
-                fmt::format("Could not get column in WriteProcessor "
-                            "output dataframe for PendingNode with tag {}.",
-                            node._tag.getValue()));
-        }
+        // Get the column in the output DF which contains this edge's IDs
+        // This is checked for validity in the call to @ref setup
         auto* col = out->getColumn(node._tag)->as<ColumnNodeIDs>();
-        if (!col) {
-            throw FatalException(
-                fmt::format("Could not get column in WriteProcessor "
-                            "output dataframe for PendingNode with tag {}.",
-                            node._tag.getValue()));
-        }
 
         std::vector<NodeID>& raw = col->getRaw();
         std::ranges::for_each(raw, [nextNodeID] (NodeID& fakeID) { fakeID += nextNodeID; });
+
+        _wroteRows |= raw.size() != 0;
     }
 
     const EdgeID nextEdgeID = _ctxt->getGraphView().read().getTotalEdgesAllocated();
 
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
-        // Get the column in the output DF which will contain this edge's IDs
-        if (!out->hasColumn(edge._tag)) {
-            throw FatalException(
-                fmt::format("Could not get column in WriteProcessor "
-                            "output dataframe for PendingEdge with tag {}.",
-                            edge._tag.getValue()));
-        }
+        // Get the column in the output DF which contains this edge's IDs
+        // This is checked for validity in the call to @ref setup
         auto* col = out->getColumn(edge._tag)->as<ColumnEdgeIDs>();
-        if (!col) {
-            throw FatalException(
-                fmt::format("Could not get column in WriteProcessor "
-                            "output dataframe for PendingEdge with tag {}.",
-                            edge._tag.getValue()));
-        }
 
         std::vector<EdgeID>& raw = col->getRaw();
         std::ranges::for_each(raw, [nextEdgeID](EdgeID& fakeID) { fakeID += nextEdgeID; });
+
+        _wroteRows |= raw.size() != 0;
     }
 }
 
@@ -476,6 +440,9 @@ void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input, or just a single row if we
     // have no inputs
     const size_t numIters = _input ? _input->getDataframe()->getRowCount() : 1;
+    if (numIters == 0) {
+        return;
+    }
 
     createNodes(numIters);
     createEdges(numIters);
@@ -483,7 +450,54 @@ void WriteProcessor::performCreations() {
     postProcessTempIDs();
 }
 
+void WriteProcessor::setup() {
+    _wroteRows = false;
+
+    // Check the output dataframe that all the pending node/edge columns are present
+    const Dataframe* outDf = _output.getDataframe();
+
+    for (const auto& edge : _pendingEdges) {
+        if (!outDf->hasColumn(edge._tag)) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingEdge with tag {}.",
+                            edge._tag.getValue()));
+        }
+
+        auto* col = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
+        if (!col) { // @ref as<> performs dynamic_cast
+            throw FatalException(fmt::format("Column {} was marked as a column of"
+                                             " pending edges, but is not an EdgeID"
+                                             " column.", edge._tag.getValue()));
+        }
+        // Clear each column. They are non-empty in the case that this processor has been
+        // called previously, with a previous chunk input
+        col->clear();
+    }
+
+    for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
+        // Get the column in the output DF which will contain this node's IDs
+        if (!outDf->hasColumn(node._tag)) {
+            throw FatalException(
+                fmt::format("Could not get column in WriteProcessor "
+                            "output dataframe for PendingNode with tag {}.",
+                            node._tag.getValue()));
+        }
+        auto* col = _output.getDataframe()->getColumn(node._tag)->as<ColumnNodeIDs>();
+        if (!col) { // @ref as<> performs dynamic_cast
+            throw FatalException(fmt::format("Column {} was marked as a column of"
+                                             " pending nodes, but is not a NodeID"
+                                             " column.", node._tag.getValue()));
+        }
+        // Clear each column. They are non-empty in the case that this processor has been
+        // called previously, with a previous chunk input
+        col->clear();
+    }
+}
+
 void WriteProcessor::execute() {
+    setup();
+
     // NOTE: We currently do not have `CREATE (n) DELETE n` supported in PlanGraph,
     // meaning if we are deleting, we require an input. This may change.
     if (!_deletedNodes.empty() || !_deletedEdges.empty()) {
@@ -503,6 +517,20 @@ void WriteProcessor::execute() {
     if (_input) {
         _input->getPort()->consume();
     }
-    _output.getPort()->writeData();
+
+    // Set our output port as containing data if:
+    // 1. We wrote rows to the output.
+    // 2. We had an input and its size was not 0
+    // 3. We had an input, but wrote no rows, but that input is now closed.
+    // This emits an empty chunk iff our input was empty and is now closed.
+    const bool emptyInput = _input && _input->getDataframe()->getRowCount() == 0;
+    const bool inputClosed = _input && _input->getPort()->isClosed();
+
+    if (_wroteRows || !emptyInput || inputClosed) {
+        _output.getPort()->writeData();
+    }
+
+    // Since we perform at most CHUNK_SIZE iterations, we write at most CHUNK_SIZE rows.
+    // Hence we always finish in a single cycle, and always call @ref finish.
     finish();
 }

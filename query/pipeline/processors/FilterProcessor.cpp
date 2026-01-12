@@ -18,7 +18,6 @@
 #include "processors/ExprProgram.h"
 
 #include "FatalException.h"
-#include "processors/ExprProgram.h"
 
 using namespace db;
 
@@ -173,6 +172,14 @@ void FilterProcessor::execute() {
     }
 
     _input.getPort()->consume();
-    _output.getPort()->writeData();
+
+    if (destDF->getRowCount() != 0) {
+        _output.getPort()->writeData();
+    }
+
+    if ( _input.getPort()->isClosed()) {
+        _output.getPort()->writeData();
+    }
+
     finish();
 }
