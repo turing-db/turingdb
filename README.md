@@ -73,9 +73,35 @@ TuringDB was created to solve real-world performance challenges in critical indu
 ### Requirements
 TuringDB requires:
 - **Linux Ubuntu Jammy** 22.04 LTS or later
-- **GCC Compiler** version >=11
+- **GCC ** version >=11
 - **CMake** 3.10 or higher
 - **Git** for submodule management
+
+### How to install
+
+Very simple, just use the turingdb pip package:
+```bash
+pip install turingdb
+```
+And then it should be in your $PATH
+
+### How to run
+
+Run the turingdb binary to use turingdb in interactive mode in the current terminal:
+```bash
+turingdb
+```
+
+To run turingdb in the background as a daemon:
+```bash
+turingdb -demon
+```
+
+The turingdb REST API is running in both interactive and demon mode on http://localhost:6666 by default.
+
+### TuringDB Visualizer
+
+TuringDB WebGL accelerated graph visualizer for visualizing large graphs in the browser: [TuringDB Visualizer](https://github.com/turing-db/turingdb-visualizer)
 
 ### How to build
 
