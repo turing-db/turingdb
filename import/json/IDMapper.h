@@ -11,17 +11,12 @@ namespace db {
 
 class IDMapper {
 public:
-    struct NodeIdentifier {
-        NodeID nodeID;
-        size_t partIndex {};
-    };
-
-    void registerID(uint64_t rawID, size_t partIndex, NodeID dbID) {
+    void registerID(uint64_t rawID, NodeID dbID) {
         std::unique_lock guard(_lock);
-        _idMapper.emplace(rawID, NodeIdentifier{dbID, partIndex});
+        _idMapper.emplace(rawID, dbID);
     }
 
-    NodeIdentifier getID(uint64_t rawID) const {
+    NodeID getID(uint64_t rawID) const {
         std::shared_lock guard(_lock);
         return _idMapper.at(rawID);
     }
@@ -33,7 +28,7 @@ public:
 
 private:
     mutable RWSpinLock _lock;
-    std::unordered_map<uint64_t, NodeIdentifier> _idMapper;
+    std::unordered_map<uint64_t, NodeID> _idMapper;
 };
 
 }

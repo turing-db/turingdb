@@ -28,7 +28,8 @@ public:
 
     static std::unique_ptr<EdgeContainer> create(NodeID firstNodeID,
                                                  EdgeID  firstEdgeID,
-                                                 std::vector<EdgeRecord>&& outs);
+                                                 std::vector<EdgeRecord>&& outs,
+                                                 std::unordered_map<EdgeID, EdgeID>& tmpToFinalEdgeIDs);
 
     EdgeID getFirstEdgeID() const { return _firstEdgeID; }
     NodeID getFirstNodeID() const { return _firstNodeID; }
@@ -64,10 +65,6 @@ public:
         return &_outEdges[offset];
     }
 
-    const std::unordered_map<EdgeID, EdgeID>& getTmpToFinalEdgeIDs() const {
-        return _tmpToFinalEdgeIDs;
-    }
-
 private:
     friend EdgeIndexer;
     friend DataPartLoader;
@@ -80,9 +77,6 @@ private:
 
     EdgeRecords _outEdges;
     EdgeRecords _inEdges;
-
-    // TODO Remove for the new Unique ID system
-    std::unordered_map<EdgeID, EdgeID> _tmpToFinalEdgeIDs;
 
     EdgeContainer(NodeID firstNodeID,
                   EdgeID firstEdgeID,

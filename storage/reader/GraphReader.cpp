@@ -128,23 +128,6 @@ size_t GraphReader::getEdgePropertyCount(size_t datapartIndex,
     return 0;
 }
 
-NodeID GraphReader::getFinalNodeID(size_t partIndex, NodeID tmpID) const {
-    // TODO Update with a new Unique-Internal ID System.
-    // This implementation does not work if multiple nodes
-    // have the same temporary ID
-    if (partIndex >= _view.dataparts().size()) {
-        return NodeID {};
-    }
-
-    const auto& part = _view.dataparts()[partIndex];
-    auto it = part->_tmpToFinalNodeIDs.find(tmpID);
-    if (it == part->_tmpToFinalNodeIDs.end()) {
-        return NodeID {};
-    }
-
-    return it->second;
-}
-
 const GraphMetadata& GraphReader::getMetadata() const {
     return _view.metadata();
 }
