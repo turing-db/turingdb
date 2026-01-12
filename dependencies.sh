@@ -80,27 +80,6 @@ else
     fi
 fi
 
-# Install boost
-if [[ "$(uname)" != "Darwin" ]]; then
-    if command -v apt-get &> /dev/null; then
-        echo "Install boost"
-
-        # Try to install boost 1.83
-        set +e
-        sudo apt-get install -qqy libboost1.83-all-dev
-        boost_install_status=$?
-        set -e
-
-        # If not found, try to install boost 1.74
-        if [ $boost_install_status -ne 0 ]; then
-            sudo apt-get install -qqy libboost1.74-all-dev
-        fi
-    else
-        echo "apt-get not found. Please install boost manually."
-        exit 1
-    fi
-fi
-
 # Install BLAS
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew

@@ -1,10 +1,9 @@
 #include "Neo4jInstance.h"
 
-#include <boost/process.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <spdlog/spdlog.h>
-#include <stdlib.h>
 #include <thread>
 
 #include "FileUtils.h"
@@ -51,9 +50,9 @@ bool Neo4jInstance::setup() {
 
     // Decompress neo4j archive
     spdlog::info("Decompressing Neo4j archive {} in {}", neo4jArchive.string(), _neo4jDir.c_str());
-    const int tarRes = boost::process::system(
-        "/usr/bin/tar", "xf", neo4jArchive.string(), "-C", _neo4jDir.string(),
-        "--strip-components=1");
+    const std::string tarCmd = "/usr/bin/tar xf " + neo4jArchive.string() +
+                               " -C " + _neo4jDir.string() + " --strip-components=1";
+    const int tarRes = std::system(tarCmd.c_str());
 
     if (tarRes != 0) {
         spdlog::error("Failed to decompress Neo4j archive '{}'", neo4jArchive.c_str());
@@ -66,8 +65,8 @@ bool Neo4jInstance::setup() {
 bool Neo4jInstance::stop() {
     spdlog::info("Stopping Neo4j");
     if (FileUtils::exists(_neo4jDir)) {
-        const int stopRes =
-            boost::process::system(_neo4jBinary.string(), "stop");
+        const std::string stopCmd = _neo4jBinary.string() + " stop";
+        const int stopRes = std::system(stopCmd.c_str());
         if (stopRes != 0) {
             spdlog::error("Failed to stop Neo4j. Killing java process");
             killJava();
@@ -98,7 +97,7 @@ bool Neo4jInstance::isRunning() {
 }
 
 void Neo4jInstance::killJava() {
-    boost::process::system("pkill java");
+    std::system("pkill java");
 }
 
 bool Neo4jInstance::start() {
@@ -108,8 +107,9 @@ bool Neo4jInstance::start() {
     }
 
     // Setting initial password. This is required by Neo4j
-    boost::process::system(_neo4jAdminBinary.c_str(), "set-initial-password",
-                           "turing");
+    const std::string setPasswordCmd =
+        _neo4jAdminBinary.string() + " set-initial-password turing";
+    std::system(setPasswordCmd.c_str());
 
     // Start daemon
     spdlog::info("Starting Neo4j from binary {}", _neo4jBinary.c_str());
@@ -119,7 +119,8 @@ bool Neo4jInstance::start() {
         return false;
     }
 
-    const int startRes = boost::process::system(_neo4jBinary.string(), "start");
+    const std::string startCmd = _neo4jBinary.string() + " start";
+    const int startRes = std::system(startCmd.c_str());
     if (startRes != 0) {
         spdlog::error("Failed to start Neo4j");
         return false;
@@ -144,9 +145,10 @@ bool Neo4jInstance::importDumpedDB(
 
     const std::string dbName = dbFilePath.stem();
 
-    boost::process::system(_neo4jAdminBinary.string(), "load",
-                           "--database=neo4j", "--from=" + dbFilePath.string(),
-                           "--force");
+    const std::string loadCmd = _neo4jAdminBinary.string() + " load" +
+                                " --database=neo4j --from=" + dbFilePath.string() +
+                                " --force";
+    std::system(loadCmd.c_str());
 
     return true;
 }

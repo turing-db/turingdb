@@ -104,10 +104,6 @@ find_package(CURL REQUIRED)
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
-# Boost
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS system)
-
 # Faiss
 find_package(Faiss REQUIRED)
 
