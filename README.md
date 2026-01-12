@@ -71,6 +71,7 @@ TuringDB was created to solve real-world performance challenges in critical indu
 TuringDB delivers exceptional performance on standard graph workloads 200X faster than Neo4j:
 
 ###  Multi-hop Queries From a Set of Seed Nodes
+Specs: Machine with AMD EPYC 7232P 8-Core CPU and RAM 64G
 
 ```
 MATCH (n{displayName: ‘APOE-4’}) RETURN count(n)
