@@ -14,7 +14,7 @@ mkdir -p $SCRIPT_DIR/.turing/graphs
 turing-import -neo4j-json $TURING_HOME/neo4j/cyber-security-db -db-path $SCRIPT_DIR/.turing/graphs
 
 # Rename the imported graph to cyber_security
-mv $SCRIPT_DIR/.turing/graphs/bindump/cyber-security-db $SCRIPT_DIR/.turing/graphs/cyber_security
+mv $SCRIPT_DIR/.turing/graphs/cyber-security-db $SCRIPT_DIR/.turing/graphs/cyber_security
 
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 
