@@ -2,11 +2,19 @@
 
 #include <spdlog/spdlog.h>
 #include <arpa/inet.h>
+#include <csignal>
 #include <cstring>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <unistd.h>
+
+#ifdef __APPLE__
+#include <sys/event.h>
+#else
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
+#endif
 
 namespace net::utils {
 
@@ -36,15 +44,29 @@ bool setKeepAlive(DataSocket s, bool enable) {
 }
 
 bool setKeepAliveIdle(DataSocket s, int idleTime) {
+#ifdef __APPLE__
+    return setsockopt(s, IPPROTO_TCP, TCP_KEEPALIVE, &idleTime, sizeof(int)) != -1;
+#else
     return setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, &idleTime, sizeof(int)) != -1;
+#endif
 }
 
 bool setKeepAliveInterval(DataSocket s, int interval) {
+#ifdef __APPLE__
+    (void)s; (void)interval;  // Not available on macOS
+    return true;
+#else
     return setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(int)) != -1;
+#endif
 }
 
 bool setKeepAliveCount(DataSocket s, int count) {
+#ifdef __APPLE__
+    (void)s; (void)count;  // Not available on macOS
+    return true;
+#else
     return setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(int)) != -1;
+#endif
 }
 
 bool setNonBlock(Socket s, bool enable) {
@@ -76,15 +98,103 @@ bool listen(ServerSocket s) {
 }
 
 bool epollAdd(EpollInstance instance, Socket fd, EpollEvent& event) {
-    return epoll_ctl(instance, EPOLL_CTL_ADD, fd, &event) != -1;
+#ifdef __APPLE__
+    struct kevent kev;
+    uint16_t flags = EV_ADD;
+    if (event.events & EVENT_ET) flags |= EV_CLEAR;
+    if (event.events & EVENT_ONESHOT) flags |= EV_ONESHOT;
+    EV_SET(&kev, fd, EVFILT_READ, flags, 0, 0, event.data);
+    return kevent(instance, &kev, 1, nullptr, 0, nullptr) != -1;
+#else
+    epoll_event ev { .events = event.events, .data = {.ptr = event.data} };
+    return epoll_ctl(instance, EPOLL_CTL_ADD, fd, &ev) != -1;
+#endif
 }
 
 bool epollMod(EpollInstance instance, Socket fd, EpollEvent& event) {
-    return epoll_ctl(instance, EPOLL_CTL_MOD, fd, &event) != -1;
+#ifdef __APPLE__
+    struct kevent kev;
+    EV_SET(&kev, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
+    kevent(instance, &kev, 1, nullptr, 0, nullptr);
+    return epollAdd(instance, fd, event);
+#else
+    epoll_event ev { .events = event.events, .data = {.ptr = event.data} };
+    return epoll_ctl(instance, EPOLL_CTL_MOD, fd, &ev) != -1;
+#endif
 }
 
 bool epollDel(EpollInstance instance, Socket fd, EpollEvent& event) {
-    return epoll_ctl(instance, EPOLL_CTL_DEL, fd, &event) != -1;
+#ifdef __APPLE__
+    (void)event;
+    struct kevent kev;
+    EV_SET(&kev, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
+    kevent(instance, &kev, 1, nullptr, 0, nullptr);
+    return true;
+#else
+    epoll_event ev { .events = event.events, .data = {.ptr = event.data} };
+    return epoll_ctl(instance, EPOLL_CTL_DEL, fd, &ev) != -1;
+#endif
+}
+
+EpollInstance createEventInstance() {
+#ifdef __APPLE__
+    return kqueue();
+#else
+    return epoll_create1(0);
+#endif
+}
+
+int eventWait(EpollInstance instance, EpollEvent* events, int maxEvents, int timeout) {
+    constexpr int MAX_EVENTS = 64;
+    if (maxEvents > MAX_EVENTS) maxEvents = MAX_EVENTS;
+
+#ifdef __APPLE__
+    struct kevent kevents[MAX_EVENTS];
+    struct timespec* ts = nullptr;
+    struct timespec timeout_ts;
+    if (timeout >= 0) {
+        timeout_ts.tv_sec = timeout / 1000;
+        timeout_ts.tv_nsec = (timeout % 1000) * 1000000;
+        ts = &timeout_ts;
+    }
+    int n = kevent(instance, nullptr, 0, kevents, maxEvents, ts);
+    for (int i = 0; i < n; i++) {
+        events[i].events = 0;
+        events[i].data = kevents[i].udata;
+        if (kevents[i].filter == EVFILT_READ || kevents[i].filter == EVFILT_SIGNAL)
+            events[i].events |= EVENT_IN;
+        if (kevents[i].flags & EV_EOF)
+            events[i].events |= EVENT_RDHUP | EVENT_HUP;
+    }
+    return n;
+#else
+    // Convert our EpollEvent array to epoll_event array
+    epoll_event epollEvents[MAX_EVENTS];
+    int n = epoll_wait(instance, epollEvents, maxEvents, timeout);
+    for (int i = 0; i < n; i++) {
+        events[i].events = epollEvents[i].events;
+        events[i].data = epollEvents[i].data.ptr;
+    }
+    return n;
+#endif
+}
+
+EpollSignal createSignalFd(EpollInstance instance) {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGTERM);
+    sigaddset(&mask, SIGINT);
+    sigprocmask(SIG_BLOCK, &mask, nullptr);
+#ifdef __APPLE__
+    struct kevent kev[2];
+    EV_SET(&kev[0], SIGTERM, EVFILT_SIGNAL, EV_ADD, 0, 0, nullptr);
+    EV_SET(&kev[1], SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, nullptr);
+    kevent(instance, kev, 2, nullptr, 0, nullptr);
+    return -1;  // Sentinel: signals come through kqueue directly
+#else
+    (void)instance;
+    return signalfd(-1, &mask, 0);
+#endif
 }
 
 void logError(const char* title) {

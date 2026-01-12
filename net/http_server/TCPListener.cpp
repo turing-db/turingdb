@@ -2,8 +2,8 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <sys/epoll.h>
 #include <string_view>
+#include <unistd.h>
 
 #include "ServerContext.h"
 #include "TCPConnectionStorage.h"
@@ -38,16 +38,16 @@ void TCPListener::accept(utils::EpollEvent& ev) {
             _ctxt.encounteredError(FlowStatus::OPT_NODELAY_ERR);
         }
 
-        ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT | EPOLLRDHUP | EPOLLHUP;
-        ev.data.ptr = _ctxt._connections.alloc(s);
+        ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT | utils::EVENT_RDHUP | utils::EVENT_HUP;
+        ev.data = _ctxt._connections.alloc(s);
 
-        if (!ev.data.ptr) {
+        if (!ev.data) {
             ::send(s, busyResponse.data(), busyResponse.size(), 0);
             ::shutdown(s, SHUT_RDWR);
             ::close(s);
 
-            ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-            ev.data.ptr = &_ctxt._serverConnection;
+            ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+            ev.data = &_ctxt._serverConnection;
             if (!utils::epollMod(_ctxt._instance, _ctxt._socket, ev)) {
                 utils::logError("EpollMod server accept");
                 _ctxt.encounteredError(FlowStatus::CTL_ERROR);
@@ -61,8 +61,8 @@ void TCPListener::accept(utils::EpollEvent& ev) {
             _ctxt.encounteredError(FlowStatus::CTL_ERROR);
         }
 
-        ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-        ev.data.ptr = &_ctxt._serverConnection;
+        ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+        ev.data = &_ctxt._serverConnection;
         if (!utils::epollMod(_ctxt._instance, _ctxt._socket, ev)) {
             utils::logError("EpollMod server accept");
             _ctxt.encounteredError(FlowStatus::CTL_ERROR);
