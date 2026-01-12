@@ -78,7 +78,17 @@ private:
     PendingNodes _pendingNodes;
     PendingEdges _pendingEdges;
 
-    ExprProgram* _exprProgram;
+    ExprProgram* _exprProgram {nullptr};
+
+    bool _wroteRows {false};
+
+    /**
+     * @brief Set up logic called at the start of each call to @ref execute.
+     * @detail Clears all columns for pending nodes/edges. These columns should be empty
+     * at each call so that their size never excedes a chunk. Also checks that each column
+     * for pending nodes/edges are present in the output DF.
+     */
+    void setup();
 
     /**
      * @brief Adds nodes and edges which are marked to be deleted to the @ref
