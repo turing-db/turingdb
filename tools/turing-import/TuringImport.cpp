@@ -227,6 +227,9 @@ int main(int argc, const char** argv) {
 
     if (!cmpEnabled) {
         const fs::Path binDumpPath {folderPath};
+        if (binDumpPath.exists()) {
+            FileUtils::removeDirectory(binDumpPath.get());
+        }
         if (auto res = binDumpPath.mkdir(); !res) {
             spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
             return EXIT_FAILURE;
